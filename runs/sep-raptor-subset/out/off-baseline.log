@@ -1,8 +1,85 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+warning: 1 expected_fact(s) in runs/sep-raptor-subset/out/questions-off.toml cannot be scored by the keyword scorer and are excluded from every fact ratio:
+  comparative_mencius_xunzi_human_nature: "li"
+  Every token is under 3 alphanumeric chars. Spell the value out ("80 percent") or add surrounding words to make it matchable.
+loaded bank `sep-core-v1.1` — 21 questions, target corpus `raptor-subset-off`
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+Database:    /home/alexbryan/.sovereign/sovereign.db
+Indexes:     /home/alexbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (1930 chunks), apollo11-evidence (27 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth-ai (55242 chunks), commonwealth-ai-architecture (1275 chunks), dr-demo11-s (11 chunks), dr-demo6-v1 (65 chunks), dr-estate-demo13-warm (311 chunks), dr-estate-dr-1786978547 (8 chunks), dr-estate-dr-1786979346 (8 chunks), dr-estate-dr-1786980365 (4 chunks), dr-estate-dr-1786981410 (4 chunks), dr-estate-dr-1786998714 (1 chunks), dr-estate-dr-1786998798 (1 chunks), dr-estate-dr-1786998983 (1 chunks), dr-estate-dr-1786999115 (1 chunks), dr-estate-dr-1786999255 (1 chunks), dr-estate-dr-1786999483 (1 chunks), dr-estate-dr-1786999726 (1 chunks), dr-estate-dr-1786999926 (1 chunks), dr-estate-dr-1787000085 (1 chunks), dr-estate-dr-1787000199 (1 chunks), dr-estate-dr-1787000389 (1 chunks), dr-estate-dr-1787000571 (1 chunks), dr-estate-dr-1787000749 (4 chunks), dr-estate-dr-1787002572 (7 chunks), dr-estate-dr-1787002873 (9 chunks), dr-estate-dr-1787003198 (9 chunks), dr-estate-dr-1787003824 (11 chunks), dr-estate-dr-1787004151 (13 chunks), dr-estate-dr-1787004973 (13 chunks), dr-estate-dr-1787005212 (16 chunks), dr-estate-dr-1787011943 (13 chunks), dr-estate-dr-1787012323 (14 chunks), dr-estate-dr-1787015608 (12 chunks), dr-estate-dr-1787017142 (2 chunks), dr-estate-dr-1787017284 (2 chunks), dr-estate-dr-1787017455 (3 chunks), dr-estate-dr-1787017676 (2 chunks), dr-estate-dr-1787017819 (4 chunks), dr-estate-dr-1787018060 (4 chunks), dr-estate-dr-1787018313 (2 chunks), dr-estate-dr-1787018423 (3 chunks), dr-estate-dr-1787018682 (4 chunks), dr-estate-dr-1787063201 (2 chunks), dr-estate-dr-1787063383 (7 chunks), dr-estate-dr-1787065594 (3 chunks), dr-estate-dr-1787065743 (1 chunks), dr-estate-dr-1787065845 (7 chunks), dr-estate-dr-1787067721 (4 chunks), dr-estate-dr-1787068012 (2 chunks), dr-estate-dr-1787068173 (7 chunks), dr-estate-dr-1787071402 (4 chunks), dr-estate-dr-1787071940 (3 chunks), dr-estate-dr-1787072372 (4 chunks), dr-estate-dr-1787072775 (2 chunks), dr-estate-dr-1787073926 (4 chunks), dr-estate-dr-1787074338 (6 chunks), dr-estate-dr-1787083103 (1 chunks), dr-estate-dr-1787083178 (1 chunks), dr-estate-dr-1787083332 (1 chunks), dr-estate-dr-1787083495 (1 chunks), dr-estate-dr-1787084104 (1 chunks), dr-estate-dr-1787084256 (1 chunks), dr-estate-dr-1787084511 (1 chunks), dr-estate-dr-1787084599 (1 chunks), dr-estate-dr-1787084748 (1 chunks), dr-estate-dr-1787084913 (1 chunks), dr-estate-dr-1787085024 (1 chunks), dr-estate-dr-1787085202 (2 chunks), dr-estate-dr-1787088297 (1 chunks), dr-estate-dr-1787088578 (2 chunks), dr-estate-dr-1787088925 (4 chunks), dr-estate-dr-1787089794 (3 chunks), dr-estate-dr-1787095868 (6 chunks), dr-estate-dr-1787102104 (1 chunks), dr-estate-dr-1787102238 (1 chunks), dr-estate-dr-1787102358 (1 chunks), dr-estate-dr-1787102528 (1 chunks), dr-estate-dr-1787102765 (1 chunks), dr-estate-dr-1787104010 (1 chunks), dr-estate-dr-1787104191 (1 chunks), dr-estate-dr-1787104304 (1 chunks), dr-estate-dr-1787104463 (1 chunks), dr-estate-dr-1787104623 (1 chunks), dr-estate-dr-1787104761 (4 chunks), dr-estate-dr-1787107348 (1 chunks), dr-estate-dr-1787107424 (1 chunks), dr-estate-dr-1787109382 (1 chunks), dr-estate-dr-1787109516 (1 chunks), dr-estate-dr-1787109611 (1 chunks), dr-estate-dr-1787109699 (1 chunks), dr-estate-dr-1787109799 (1 chunks), dr-estate-dr-1787109981 (1 chunks), dr-estate-dr-1787110117 (1 chunks), dr-estate-dr-1787110310 (1 chunks), dr-estate-dr-1787110485 (1 chunks), dr-estate-dr-1787110636 (1 chunks), dr-estate-dr-1787110842 (1 chunks), dr-estate-dr-1787110968 (1 chunks), dr-estate-dr-1787111101 (2 chunks), dr-estate-dr-1787146175 (1 chunks), dr-estate-dr-1787146301 (1 chunks), dr-estate-dr-1787146555 (1 chunks), dr-estate-dr-1787146680 (1 chunks), dr-estate-dr-1787146793 (1 chunks), dr-estate-dr-1787146968 (1 chunks), dr-estate-dr-1787147131 (1 chunks), dr-estate-dr-1787147305 (1 chunks), dr-estate-dr-1787147413 (1 chunks), dr-estate-dr-1787147601 (1 chunks), dr-estate-dr-1787147802 (1 chunks), dr-estate-dr-1787147940 (1 chunks), dr-estate-dr-1787148073 (3 chunks), dr-estate-dr-1787156910 (1 chunks), dr-estate-dr-1787156998 (1 chunks), dr-estate-dr-1787157156 (1 chunks), dr-estate-dr-1787157338 (1 chunks), dr-estate-dr-1787157485 (1 chunks), dr-estate-dr-1787158498 (1 chunks), dr-estate-dr-1787158750 (1 chunks), dr-estate-dr-1787159191 (1 chunks), dr-estate-dr-1787159302 (1 chunks), dr-estate-dr-1787159472 (1 chunks), dr-estate-dr-1787159630 (1 chunks), dr-estate-dr-1787159744 (1 chunks), dr-estate-dr-1787159881 (4 chunks), dr-estate-dr-1787160121 (1 chunks), dr-estate-dr-1787160320 (1 chunks), dr-estate-dr-1787160455 (1 chunks), dr-estate-dr-1787160713 (8 chunks), dr-estate-dr-1787160895 (1 chunks), dr-estate-dr-1787161183 (1 chunks), dr-estate-dr-1787161530 (1 chunks), dr-estate-dr-1787161733 (1 chunks), dr-estate-dr-1787161801 (10 chunks), dr-estate-dr-1787162003 (1 chunks), dr-estate-dr-1787162189 (1 chunks), dr-estate-dr-1787162591 (1 chunks), dr-estate-dr-1787163421 (1 chunks), dr-estate-dr-1787163785 (8 chunks), dr-estate-dr-1787164070 (1 chunks), dr-estate-dr-1787164242 (4 chunks), dr-estate-dr-1787164757 (9 chunks), dr-estate-dr-1787166821 (8 chunks), dr-estate-dr-1787167481 (8 chunks), dr-estate-dr-1787167976 (7 chunks), dr-estate-dr-1787168451 (9 chunks), dr-estate-dr-1787169340 (5 chunks), dr-estate-dr-1787170073 (7 chunks), dr-estate-dr-1787170977 (8 chunks), dr-estate-dr-1787172060 (8 chunks), dr-estate-dr-1787172426 (9 chunks), dr-estate-dr-1787177799 (1 chunks), dr-estate-dr-1787177960 (1 chunks), dr-estate-dr-1787178095 (1 chunks), dr-estate-dr-1787178230 (1 chunks), dr-estate-dr-1787178353 (1 chunks), dr-estate-dr-1787178512 (1 chunks), dr-estate-dr-1787178648 (1 chunks), dr-estate-dr-1787178824 (1 chunks), dr-estate-dr-1787178938 (1 chunks), dr-estate-dr-1787179039 (1 chunks), dr-estate-dr-1787179196 (1 chunks), dr-estate-dr-1787179335 (1 chunks), dr-estate-dr-1787179450 (4 chunks), dr-estate-dr-1787241714 (1 chunks), dr-estate-dr-1787242079 (1 chunks), dr-estate-dr-1787242173 (1 chunks), dr-estate-dr-1787242254 (1 chunks), dr-estate-dr-1787242314 (1 chunks), dr-estate-dr-1787242401 (1 chunks), dr-estate-dr-1787242558 (1 chunks), dr-estate-dr-1787242739 (1 chunks), dr-estate-dr-1787242849 (1 chunks), dr-estate-dr-1787242976 (1 chunks), dr-estate-dr-1787243181 (1 chunks), dr-estate-dr-1787243315 (1 chunks), dr-estate-dr-1787243416 (3 chunks), dr-estate-dr-1787251781 (1 chunks), dr-estate-dr-1787251851 (1 chunks), dr-estate-dr-1787251967 (1 chunks), dr-estate-dr-1787252198 (1 chunks), dr-estate-dr-1787252289 (1 chunks), dr-estate-dr-1787252671 (1 chunks), dr-estate-dr-1787252817 (1 chunks), dr-estate-dr-1787252936 (1 chunks), dr-estate-dr-1787253176 (1 chunks), dr-estate-dr-1787253291 (1 chunks), dr-estate-dr-1787253393 (1 chunks), dr-estate-dr-1787253525 (1 chunks), dr-estate-dr-1787253628 (3 chunks), dr-estate-dr-1787259122 (1 chunks), dr-estate-dr-1787259198 (6 chunks), dr-estate-dr-1787259769 (5 chunks), dr-estate-dr-1787260135 (4 chunks), dr-estate-dr-1787260359 (8 chunks), dr-estate-dr-1787260761 (8 chunks), dr-estate-dr-1787262042 (2 chunks), dr-estate-dr-1787262188 (3 chunks), dr-estate-dr-1787262340 (6 chunks), dr-estate-dr-1787269990 (1 chunks), dr-estate-dr-1787270094 (1 chunks), dr-estate-dr-1787270229 (1 chunks), dr-estate-dr-1787270397 (1 chunks), dr-estate-dr-1787270518 (1 chunks), dr-estate-dr-1787270662 (1 chunks), dr-estate-dr-1787270819 (1 chunks), dr-estate-dr-1787272308 (1 chunks), dr-estate-dr-1787272389 (1 chunks), dr-estate-dr-1787272509 (1 chunks), dr-estate-dr-1787272636 (1 chunks), dr-estate-dr-1787272754 (1 chunks), dr-estate-dr-1787272859 (4 chunks), dr-estate-dr-1787277904 (1 chunks), dr-estate-dr-1787278000 (1 chunks), dr-estate-dr-1787278100 (1 chunks), dr-estate-dr-1787278200 (1 chunks), dr-estate-dr-1787278364 (1 chunks), dr-estate-dr-1787278514 (1 chunks), dr-estate-dr-1787278654 (1 chunks), dr-estate-dr-1787278811 (1 chunks), dr-estate-dr-1787278932 (1 chunks), dr-estate-dr-1787279027 (1 chunks), dr-estate-dr-1787279185 (1 chunks), dr-estate-dr-1787279319 (1 chunks), dr-estate-dr-1787279419 (2 chunks), dr-estate-dr-1787292599 (1 chunks), dr-estate-dr-1787292698 (1 chunks), dr-estate-dr-1787292790 (1 chunks), dr-estate-dr-1787292859 (1 chunks), dr-estate-dr-1787292941 (1 chunks), dr-estate-dr-1787293052 (1 chunks), dr-estate-dr-1787293201 (1 chunks), dr-estate-dr-1787293351 (1 chunks), dr-estate-dr-1787293436 (1 chunks), dr-estate-dr-1787293555 (1 chunks), dr-estate-dr-1787293689 (1 chunks), dr-estate-dr-1787293777 (1 chunks), dr-estate-dr-1787293892 (3 chunks), dr-estate-dr-1787295024 (2 chunks), dr-estate-dr-1787295150 (2 chunks), dr-estate-dr-1787295220 (2 chunks), dr-estate-dr-1787295265 (2 chunks), dr-estate-dr-1787295653 (2 chunks), dr-estate-dr-1787295769 (2 chunks), dr-estate-dr-1787295901 (2 chunks), dr-estate-dr-1787295975 (2 chunks), dr-estate-dr-1787296059 (2 chunks), dr-estate-dr-1787296169 (2 chunks), dr-estate-dr-1787296252 (2 chunks), dr-estate-dr-1787296312 (1 chunks), dr-estate-dr-1787296611 (8 chunks), dr-estate-dr-1787328165 (1 chunks), dr-estate-dr-1787328255 (1 chunks), dr-estate-dr-1787328320 (1 chunks), dr-estate-dr-1787328402 (1 chunks), dr-estate-dr-1787328620 (1 chunks), dr-estate-dr-1787328749 (1 chunks), dr-estate-dr-1787328887 (1 chunks), dr-estate-dr-1787329056 (1 chunks), dr-estate-dr-1787329161 (1 chunks), dr-estate-dr-1787329254 (1 chunks), dr-estate-dr-1787329381 (1 chunks), dr-estate-dr-1787329483 (1 chunks), dr-estate-dr-1787329594 (4 chunks), dr-estate-dr-1787336321 (1 chunks), dr-estate-dr-1787336457 (1 chunks), dr-estate-dr-1787336574 (1 chunks), dr-estate-dr-1787336692 (1 chunks), dr-estate-dr-1787336767 (1 chunks), dr-estate-dr-1787336869 (1 chunks), dr-estate-dr-1787337003 (1 chunks), dr-estate-dr-1787337115 (1 chunks), dr-estate-dr-1787337230 (1 chunks), dr-estate-dr-1787337330 (1 chunks), dr-estate-dr-1787337447 (1 chunks), dr-estate-dr-1787337552 (1 chunks), dr-estate-dr-1787337645 (2 chunks), dr-estate-dr-1787349621 (1 chunks), dr-estate-dr-1787349697 (1 chunks), dr-estate-dr-1787349828 (1 chunks), dr-estate-dr-1787349925 (1 chunks), dr-estate-dr-1787350030 (1 chunks), dr-estate-dr-1787350321 (1 chunks), dr-estate-dr-1787350502 (1 chunks), dr-estate-dr-1787350611 (1 chunks), dr-estate-dr-1787350746 (1 chunks), dr-estate-dr-1787350919 (1 chunks), dr-estate-dr-1787351076 (1 chunks), dr-estate-dr-1787351186 (1 chunks), dr-estate-dr-1787351331 (11 chunks), dr-estate-dr-1787534265 (11 chunks), dr-estate-dr-1787535219 (13 chunks), dr-estate-dr-1787541550 (13 chunks), dr-estate-dr-1787551476 (11 chunks), dr-estate-dr-1787593299 (36 chunks), dr-estate-dr-1787599534 (33 chunks), dr-estate-dr-1787604870 (39 chunks), dr-estate-dr-1787615808 (51 chunks), dr-estate-dr-1787620475 (98 chunks), dr-estate-dr-1787621438 (94 chunks), dr-estate-dr-1787633206 (55 chunks), dr-estate-dr-1787637348 (62 chunks), dr-estate-dr-1787638202 (54 chunks), dr-estate-dr-1787638773 (56 chunks), dr-estate-dr-1787639643 (62 chunks), dr-estate-dr-1787669880 (61 chunks), dr-estate-dr-1787670902 (59 chunks), dr-estate-dr-1787671857 (61 chunks), dr-estate-dr-1787672841 (58 chunks), dr-estate-dr-1787677412 (61 chunks), dr-estate-dr-1787678431 (58 chunks), dr-estate-dr-1787679284 (56 chunks), dr-estate-dr-1787680206 (62 chunks), dr-estate-dr-1787687833 (56 chunks), dr-estate-dr-1787688829 (56 chunks), dr-estate-dr-1787717901 (63 chunks), dr-estate-dr-1787724336 (57 chunks), dr-estate-dr-1787730496 (63 chunks), dr-estate-dr-1787742429 (57 chunks), dr-estate-dr-1787768404 (61 chunks), drift-target (36539 chunks), drift-target-arch-principles (59 chunks), drift-target-system-overview (53 chunks), enron-sample-multi-wide (8829 chunks), federalist-starter (31 chunks), films-e2e (8 chunks), folder-df-enrich-test-b88430ff035e (0 chunks), folder-df-enrich-txt-44de01f2d5ab (2 chunks), folder-df-fix-drive-4769b5117dd2 (2 chunks), folder-governance-corpus-09992144b2e8 (0 chunks), maple-house (24 chunks), raptor-subset-off (33884 chunks), raptor-subset-on (33884 chunks), semver (243 chunks), sep (187967 chunks), sf-assessor-roll (207792 chunks), studio-nb-test (2 chunks), tinyorders (5 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-5661e649fee2 (5 chunks), watched-77d1cf3d48fd (10 chunks), wessex-hoard (20 chunks), wessex-hoard-bare-35b-a (20 chunks), wessex-hoard-bare-probe (20 chunks), wessex-hoard-bare-probe3 (20 chunks), wessex-hoard-cut (20 chunks), wessex-hoard-ei3 (20 chunks), wessex-hoard-ei4-20260905T002248Z (20 chunks), wessex-hoard-ei4-20260905T002441Z (20 chunks), wikipedia (1896488 chunks), wikipedia-catalog (2048 chunks), wikipedia-ei7c (1896488 chunks), wikipedia-fetched (1757 chunks), wikipedia-newsworthy (14 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Wiki graph:  51781 articles, 7847320 edges
+[2m2026-09-05T08:33:46.917544Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1802
+[2m2026-09-05T08:33:46.927009Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1802
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1572640 canonical atoms across 1782 corpus(es)
+Bridge:      1 cross-corpus edges
+prod-pipeline mode — driving the production KnowledgeQuery retrieval pipeline per question (no synthesis).
+[router] "Reconstruct van Inwagen's consequence argument and" → DeepQuery (embed: sim=0.969 margin=0.025 nearest="Reconstruct van Inwagen's consequence argument." scope=None effort=Some(High))
+[2m2026-09-05T08:34:29.164479Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "What is the distinction between epistemic and meta" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:31.500824Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Reconstruct Locke's memory criterion of personal i" → DeepQuery (coarse=REASONING, confidence=0.00)
+[2m2026-09-05T08:34:34.386622Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "How do reliabilist analyses of knowledge handle Ge" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:36.039793Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Reconstruct the new evil demon problem and explain" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:37.117858Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "What is the distinction between phenomenal and acc" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:38.251951Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "What is Chalmers's hard problem of consciousness, " → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:39.982497Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Compare narrow and wide content, and explain how B" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:41.717779Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What are the main positions on whether the doctrin" → DeepQuery (coarse=REASONING, confidence=0.00)
+[2m2026-09-05T08:34:43.305448Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Reconstruct Aristotle's function argument for virt" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:46.796936Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Reconstruct Kripke's causal-historical theory of r" → DeepQuery (embed: sim=0.958 margin=0.025 nearest="What does Kripke claim about reference and natural kinds?" scope=None effort=Some(High))
+[2m2026-09-05T08:34:48.548431Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is Putnam's twin earth thought experiment, an" → DeepQuery (coarse=REASONING, confidence=0.00)
+[2m2026-09-05T08:34:50.983664Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "State Gödel's two incompleteness theorems and expl" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:53.479140Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Reconstruct Rawls's original-position argument for" → DeepQuery (embed: sim=0.924 margin=0.022 nearest="Reconstruct van Inwagen's consequence argument." scope=None effort=Some(High))
+[2m2026-09-05T08:34:55.895815Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Compare Berlin's negative and positive conceptions" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:34:57.787883Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Reconstruct the no-miracles argument for scientifi" → DeepQuery (embed: sim=0.947 margin=0.015 nearest="Reconstruct the qualia-physicalism debate; what are the strongest moves on each …" scope=None effort=None)
+[2m2026-09-05T08:34:58.898053Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Compare Hume's and Kant's accounts of causation, a" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:35:01.730064Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Reconstruct Aristotle's hylomorphic account of sub" → DeepQuery (coarse=REASONING, confidence=0.00)
+[2m2026-09-05T08:35:05.369858Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "What is Husserl's transcendental reduction (the ep" → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:35:10.461026Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "Compare Mencius's and Xunzi's accounts of human na" → DeepQuery (embed: sim=0.942 margin=0.036 nearest="Compare Mencius and Xunzi on human nature." scope=None effort=Some(High))
+[2m2026-09-05T08:35:13.996934Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
+[router] "What are the four principles of biomedical ethics " → DeepQuery (coarse=REASONING, confidence=1.00)
+[2m2026-09-05T08:35:16.881736Z[0m [33m WARN[0m atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn [3mcorpus[0m[2m=[0m"raptor-subset-off" [3merror[0m[2m=[0mno v2 atlas store for raptor-subset-off at /home/alexbryan/.svrnmesh/indexes/raptor-subset-off/atlas (need atoms.lance + edges.csr); rebuild with `sovereign atlas migrate-all`
 {
   "bank_name": "sep-core-v1.1",
   "corpus": "raptor-subset-off",
   "limit": 10,
-  "started_at_unix": 1788602964,
+  "started_at_unix": 1788597267,
   "results": [
     {
       "question_id": "argument_consequence_against_compatibilism",
@@ -106,7 +183,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 6727,
+      "search_ms": 1663,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -175,17 +252,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "moral-arguments-god",
-          "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
-          "score": 0.83528155,
-          "snippet": "[Atlas highlights] Argument: The Argument for Dualism via Epistemic Possibility [from raptor-subset-off]   P1. There are ways the world couldn't have been metaphysically impossible that cannot be ruled out by epistemic reasoning alone.   P2. Empirical evidence is needed to rule out some metaphysical impossibilities that are epistemically possible.   C. Therefore, we cannot identify information or sentential contents with sets of metaphysically possible worlds; a distinction between modalities is required.  Defining intentional distinction (raptor-subset-off): \"Therefore we can only appeal to a…"
+          "title": "modality-varieties",
+          "url": "https://plato.stanford.edu/entries/modality-varieties/",
+          "score": 0.050767418,
+          "snippet": "modality-varieties  Philosophers have paid more attention to the examples given by Kripke than to other possible cases of the necessary a posteriori, and for that reason the discussion in the rest of this section will mostly focus on Kripke’s cases. Two strategies for explaining these examples can be distinguished. Dualists about metaphysical and epistemic modality (dualists, for short) hold that the phenomena reflect a deep and fundamental distinction between two kinds of modality. Monists, by contrast, believe that all the data can ultimately be explained by appeal to a single kind of modali…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "reasons-agent",
-          "url": "https://plato.stanford.edu/entries/reasons-agent/",
-          "score": 0.68047756,
-          "snippet": "[Atlas highlights] [Saul Kripke (raptor-subset-off)]: \"‘Hesperus = Phos phorus’ is necessarily tru e if true at all bec ause ‘Hesperus’ and ‘Pho sphorus’ are proper name s for the same object. Like other names, Kr ipke maintains, they ar e rigid:\" Argument: Berlin's distinction between negative and positive liberty [from raptor-subset-off]   P1. Liberty is often interpreted in terms of the absence or presence of something.   P2. The first case involves an absence (of obstacles, barriers, constraints).   P3. The second case involves a presence (control, self-mastery).   C. These correspond to t…"
+          "title": "physicalism",
+          "url": "https://plato.stanford.edu/entries/physicalism/",
+          "score": 0.049483046,
+          "snippet": "physicalism  How might a physicalist respond to Kripke’s argument? As with the knowledge argument, there are many responses but here I will mention only two. The first response is to insist that Kripke’s argument neglects the distinction between a priori and a posteriori physicalism. Kripke often does say that according to the dispositionalist, one should be able to ‘read off’ truths about meaning from truths a physicalist can accept. (For a proposal like this, see Horwich 2000.) One problem with this proposal is, as we have seen, that its background account of the necessary a posteriori is co…"
         }
       ],
       "source_score": {
@@ -204,18 +281,18 @@
           "rigid designator",
           "necessary a posteriori",
           "Kripke",
-          "metaphysical possibility",
-          "epistemic possibility",
           "natural kind"
         ],
         "missing": [
+          "metaphysical possibility",
+          "epistemic possibility",
           "water is H2O"
         ],
         "total_expected": 7,
-        "ratio": 0.85714287
+        "ratio": 0.5714286
       },
       "embed_ms": 0,
-      "search_ms": 3315,
+      "search_ms": 2168,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -325,7 +402,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2685,
+      "search_ms": 2080,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -394,17 +471,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "addams-jane",
-          "url": "https://plato.stanford.edu/entries/addams-jane/",
-          "score": 1.2504292,
-          "snippet": "[Atlas highlights] Defining Theory of demonstration (raptor-subset-off): \"the theory of demonstration... was considered the culmination of logic, bringing all the other parts of the discipline to bear on the task of developing scientific knowledge.\" Defining common knowledge (raptor-subset-off): \"Common knowledge is a phenomenon which underwrites much of social life.\" Defining epistemic paradox (raptor-subset-off): \"Epistemic paradoxes are riddles that turn on the concept of knowledge (episteme is Greek for knowledge). Typically, there are conflicting, well-credentia led answers to these quest…"
+          "title": "knowledge-analysis",
+          "url": "https://plato.stanford.edu/entries/knowledge-analysis/",
+          "score": 0.05108856,
+          "snippet": "knowledge-analysis  Do approaches like Simple K-Reliabilism or the Simple Causal Theory fare any better than the JTB theory with respect to Gettier cases? Although some proponents have suggested they do—see e.g., Dretske 1985: 179; Plantinga 1993: 48—many of the standard counterexamples to the JTB theory appear to refute these views as well. Consider again the case of the barn facades. Henry sees a real barn, and that’s why he believes there is a barn nearby. This belief is formed by perceptual processes, which are by-and-large reliable: only rarely do they lead him into false beliefs. So it l…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "qualia-knowledge",
-          "url": "https://plato.stanford.edu/entries/qualia-knowledge/",
-          "score": 1.0536232,
-          "snippet": "[Atlas highlights] Argument: lottery paradox (Kyburg) [from raptor-subset-off]   P1. Each ticket in a large lottery has very high probability of losing.   P2. For each individual ticket, one can rationally believe it will lose.   P3. If one believes each ticket loses for all tickets simultaneously, one concludes no ticket wins.   C. Rational belief in the conjunction of many individually highly probable claims leads to an absurd conclusion that contradicts known facts about lotteries.  Defining a priori knowledge (raptor-subset-off): \"Kant introduced the notion of a priori knowledge in contras…"
+          "title": "reliabilism",
+          "url": "https://plato.stanford.edu/entries/reliabilism/",
+          "score": 0.04028472,
+          "snippet": "reliabilism  How do such accounts handle Gettier cases? Sosa 2007: 94–97 discusses Lehrer’s (1965) Nogot/Havit case, in which a subject S truly believes that someone here owns a Ford, but he only does so on the basis of Nogot’s misleading testimony. Sosa claims that while S holds this belief because of the exercise of an epistemic competence, S’s belief isn’t correct because of the exercise of an epistemic competence. This explanation raises important questions about how to understand the relevant “because of” relation here: what exactly is the difference between a true belief being held becau…"
         }
       ],
       "source_score": {
@@ -422,18 +499,19 @@
         "matched": [
           "Gettier",
           "reliabilism",
-          "lottery paradox",
           "justified true belief",
           "process reliabilism",
           "safety",
           "sensitivity"
         ],
-        "missing": [],
+        "missing": [
+          "lottery paradox"
+        ],
         "total_expected": 7,
-        "ratio": 1.0
+        "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2388,
+      "search_ms": 1460,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -542,7 +620,7 @@
         "ratio": 0.71428573
       },
       "embed_ms": 0,
-      "search_ms": 1260,
+      "search_ms": 887,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -611,17 +689,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "fine-tuning",
-          "url": "https://plato.stanford.edu/entries/fine-tuning/",
-          "score": 4.5262704,
-          "snippet": "[Atlas highlights] Argument: Argument against Created Eternity [from raptor-subset-off]   P1. Everything that depends entirely for its being on something else is produced by that thing from nothing (ex nihilo).   P2. The world depends entirely for its being on God.   P3. Therefore, the world must be produced from nothing.   P4. If produced from nothing, it arises either out of matter or out of a point of origin.   P5. It cannot arise out of nothing as out of matter.   P6. Thus, it must arise out of nothing as a point of origin.   P7. Arising from a point of origin implies having being after no…"
+          "title": "physicalism",
+          "url": "https://plato.stanford.edu/entries/physicalism/",
+          "score": 0.05847538,
+          "snippet": "physicalism  As with the knowledge argument, the issues surrounding Kripke’s argument are very much wide open. But it is important to note that most philosophers don’t consider the issues of intentionality as seriously as the issue of qualia when it comes to physicalism. In different vocabularies, for example, both Block (1995) and Chalmers (1996) distinguish between the intentional aspects of the mind or consciousness, and the phenomenal aspects or qualia, and suggest that it is really the latter that is the central issue. As Chalmers notes (1996; p. 24), echoing Chomsky’s famous distinction,…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "reasons-agent",
-          "url": "https://plato.stanford.edu/entries/reasons-agent/",
-          "score": 4.5061245,
-          "snippet": "[Atlas highlights] Argument: Von Neumann's Argument against HV [from raptor-subset-off]   P1. If A and B are self-adjoint operators, any real linear combination C = αA + βB is also a self-adjoint operator.   C. QM cannot be supplemented by an HV theory (under specific assumptions).  [haecceitism (raptor-subset-off)]: \"An affirmative answer to these questions entails haecceitim, according to which the world couliffer non-qualitativey withoudiffering qualitativey.\" Argument: Reductio argument against eternally unactualized potencies [from raptor-subset-off]   P1. Assume a thing has contrary pote…"
+          "title": "consciousness-intentionality",
+          "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
+          "score": 0.054852985,
+          "snippet": "consciousness-intentionality  But what is the relationship between various kinds of information access and consciousness in the phenomenal, experiential sense? Block distinguishes the notions of phenomenal and access consciousness, arguing that a mental representation’s being poised or broadcast for use in reasoning and rational control of action is neither conceptually necessary nor sufficient for the state’s being phenomenally conscious. Similarly he distinguishes phenomenal consciousness from what he calls “monitoring consciousness”—where this has to do with one’s capacity to represent one’…"
         }
       ],
       "source_score": {
@@ -637,6 +715,7 @@
       },
       "fact_score": {
         "matched": [
+          "Block",
           "phenomenal consciousness",
           "access consciousness",
           "Mary's room",
@@ -644,14 +723,12 @@
           "what it is like",
           "knowledge argument"
         ],
-        "missing": [
-          "Block"
-        ],
+        "missing": [],
         "total_expected": 7,
-        "ratio": 0.85714287
+        "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1737,
+      "search_ms": 854,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -720,36 +797,36 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "justice-distributive",
-          "url": "https://plato.stanford.edu/entries/justice-distributive/",
-          "score": 0.7084,
-          "snippet": "[Atlas highlights] Argument: The problem of predication as identity [from raptor-subset-off]   P1. If assertively uttering 'S is P' asserts that A is A, then the content is trivial and uninformative.   P2. Assertive utterances appear informative.   C. Therefore, if predication at root is identity, it must be an informative identity—identity of denotation in diversity of intension—for assertions to have cognitive value.  Argument: The General Problem of Pure Reason [from raptor-subset-off]   P1. Metaphysics relies on concepts that connect things a priori (not derived from experience).   P2. Hum…"
+          "title": "perception-problem",
+          "url": "https://plato.stanford.edu/entries/perception-problem/",
+          "score": 0.022222225,
+          "snippet": "perception-problem  There are various different naive realist approaches to illusion (see e.g., Fish (2009: Chapter 6), Brewer (2008, 2011: Chapter 5), Kalderon (2011), Genone (2014), French and Phillips (2020)). When it comes to the argument from illusion, the naive realist (like the intentionalist) rejects the Phenomenal Principle. So how does naive realism differ from intentionalism about illusions? In two respects: first, naive realists can maintain that illusory experiences are fundamentally direct presentations of the world. Second, the naive realist can explain the character of such ill…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "nonidentity-problem",
-          "url": "https://plato.stanford.edu/entries/nonidentity-problem/",
-          "score": 0.7449248,
-          "snippet": "[Atlas highlights] [nonidentity problem (raptor-subset-off)]: \"the agent’s only alternatives to bringing that person into the flawed existence are to bring no one into existence at all or to bring a different person – a nonidentical but better off person – into existence in place of\" Defining nonidentity problem (raptor-subset-off): \"The nonidentity problem is the problem of resolving this apparent paradox.\" Argument: The Problem of Divine Language [from raptor-subset-off]   P1. God is absolutely simple and transcendent (no distinctions between essence/existence or properties).   P2. We cannot…"
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.049143177,
+          "snippet": "consciousness  The nature of the relevant proto-psychic aspect remains unclear, and such theories face a dilemma if offered in hope of answering the Hard Problem. Either the proto-psychic properties involve the sort of qualitative phenomenal feel that generates the Hard Problem or they do not. If they do, it is difficult to understand how they could possibly occur as ubiquitous properties of reality. How could an electron or a quark have any such experiential feel? However, if the proto-psychic properties do not involve any such feel, it is not clear how they are any better able than physical …"
         }
       ],
       "source_score": {
         "matched": [
+          "consciousness",
           "qualia-knowledge"
         ],
         "missing": [
-          "consciousness",
           "physicalism"
         ],
         "total_expected": 3,
-        "ratio": 0.33333334
+        "ratio": 0.6666667
       },
       "fact_score": {
         "matched": [
+          "hard problem",
           "phenomenal consciousness"
         ],
         "missing": [
-          "hard problem",
           "Chalmers",
           "illusionism",
           "Frankish",
@@ -757,10 +834,10 @@
           "easy problems"
         ],
         "total_expected": 7,
-        "ratio": 0.14285715
+        "ratio": 0.2857143
       },
       "embed_ms": 0,
-      "search_ms": 2405,
+      "search_ms": 1504,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -829,17 +906,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "content-teleological",
-          "url": "https://plato.stanford.edu/entries/content-teleological/",
-          "score": 1.0227406,
-          "snippet": "[Atlas highlights] Defining teleological theories of mental content (raptor-subset-off): \"According to teleological theories, the contents of mental representations depend, at least in part, on functions...\" [teleological theories of mental content (raptor-subset-off)]: \"Teleological theoriesofmentalcontentdonotentailthat... Billmust...bethinkingthatsometeleologicalfunctions pertain\" [teleological theories of mental content (raptor-subset-off)]: \"According to teleological theories, the(contents of mental representations depend, at leastin part, on functions...\" Argument: Price's Response to th…"
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.055681817,
+          "snippet": "content-narrow  Burge’s most famous example involves the concept of arthritis. He considers an individual who is unaware that arthritis is a disease specifically of the joints. His subject believes that he has arthritis in his thigh. This belief is false, since one cannot have arthritis in the thigh. However, Burge argues, in a world in which all the intrinsic facts about the subject were exactly the same as they actually are, but in which the term ‘arthritis’ is generally used in the subject’s community to refer to rheumatoid ailments in general, the subject’s belief would have a different co…"
         },
         {
           "corpus_id": "raptor-subset-off",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
-          "score": 0.99926144,
-          "snippet": "[Atlas highlights] Argument: Arthritis Argument (Burge) [from raptor-subset-off]   P1. Larry believes he has arthritis in his thigh; this belief is false because arthritis affects joints only.   P2. In a counterfactual world where 'arthritis' includes rheumatoid ailments, Larry would hold a true belief about the same condition but it wouldn't be an 'arthritis-belief'.   P3. The difference between actual and counterfactual situations lies solely in linguistic community usage.   C. Therefore, beliefs are individuated by social/linguistic factors external to the individual's biological boundaries…"
+          "score": 0.047139786,
+          "snippet": "content-externalism  If this is correct, Larry’s beliefs vary between actual and counterfactual situations. Larry, however, is identical in both situations. The only difference lies in the differing natures of his linguistic communities—specifically, the differing uses of the word-form, “arthritis”. As in Putnam’s thought-experiment, the difference in meaning again stems from a difference in extension of a term, resulting in different truth-conditions, truth-makers, and the like. But in Putnam’s case, the differences stem from differences in the natural environment. In Burge’s thought experime…"
         }
       ],
       "source_score": {
@@ -860,15 +937,16 @@
           "Burge",
           "arthritis",
           "content externalism",
-          "twin earth",
+          "twin earth"
+        ],
+        "missing": [
           "individualism"
         ],
-        "missing": [],
         "total_expected": 7,
-        "ratio": 1.0
+        "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2434,
+      "search_ms": 1489,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -979,7 +1057,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 1231,
+      "search_ms": 874,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1048,17 +1126,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "corruption",
-          "url": "https://plato.stanford.edu/entries/corruption/",
-          "score": 6.67109,
-          "snippet": "[Atlas highlights] Argument: The Argument for Reflexivity as the Condition of Mind [from raptor-subset-off]   P1. Vocal gestures allow individuals to hear their own utterances in the way that others hear them (reflexivity).   P2. This reflexivity allows one to speak to oneself and internalize the responses of others.   P3. Mentality comes into being when an organism is able to point out meanings to itself.   C. Reflexiveness—the turning back of experience upon himself—is the essential condition within the social process for the development of mind.  Argument: Argument for Four Elements from Co…"
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.06103405,
+          "snippet": "aristotle-ethics  Though the general point of view expressed in each work is the same, there are many subtle differences in organization and content as well. Clearly, one is a re-working of the other, and although no single piece of evidence shows conclusively what their order is, it is widely assumed that the Nicomachean Ethics is a later and improved version of the Eudemian Ethics. (Not all of the Eudemian Ethics was revised: its Books IV, V, and VI re-appear as V, VI, VII of the Nicomachean Ethics.) Perhaps the most telling indication of this ordering is that in several instances the Nicoma…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "al-baghdadi",
-          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
-          "score": 4.332821,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-off)]: \"if combination has taken place, the compound must be uniform—any part of such a compound is the same as the whole\" Argument: The Function Argument [from raptor-subset-off]   P1. Our good lies in the dominance of reason.   P2. The detailed studies of particular virtues reveal how each involves the right kind of ordering of the soul.   C. Aristotle's approach is similar to Plato's hierarchical ordering but without Platonic metaphysics.  [Aristotle (raptor-subset-off)]: \"Since a definition does not assert or deny, Aristotle probably intends us …"
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.060180996,
+          "snippet": "ethics-virtue  Whether virtue ethics can be expected to grow into “virtue politics”—i.e. to extend from moral philosophy into political philosophy—is not so clear. Gisela Striker (2006) has argued that Aristotle’s ethics cannot be understood adequately without attending to its place in his politics. That suggests that at least those virtue ethicists who take their inspiration from Aristotle should have resources to offer for the development of virtue politics. But, while Plato and Aristotle can be great inspirations as far as virtue ethics is concerned, neither, on the face of it, are attracti…"
         }
       ],
       "source_score": {
@@ -1075,21 +1153,21 @@
       "fact_score": {
         "matched": [
           "function argument",
-          "ergon",
           "eudaimonia",
           "virtue",
           "After Virtue",
-          "practice",
           "tradition"
         ],
         "missing": [
-          "MacIntyre"
+          "ergon",
+          "MacIntyre",
+          "practice"
         ],
         "total_expected": 8,
-        "ratio": 0.875
+        "ratio": 0.625
       },
       "embed_ms": 0,
-      "search_ms": 4870,
+      "search_ms": 3268,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1158,17 +1236,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "bruno",
-          "url": "https://plato.stanford.edu/entries/bruno/",
-          "score": 2.9726262,
-          "snippet": "[Atlas highlights] Defining natural law (raptor-subset-off): \"Reality, including eternal moral truths, is a matter of phusis. Even though there is clearly a great degree of variety in conventions from one city to another (something ancient Greeks became increasingly aware o\" Defining imagination (raptor-subset-off): \"To imagine is to represent without aiming at things as they actually, presently, and subjectively are.\" [Saul Kripke (raptor-subset-off)]: \"an identity statement in w hich both designators are r igid must be necessarily tr ue if it is true at al l,\" Defining Umbrella View (raptor-…"
+          "title": "descriptions",
+          "url": "https://plato.stanford.edu/entries/descriptions/",
+          "score": 0.04509804,
+          "snippet": "descriptions  Kripke’s positive proposal—suggestion really—was that names are associated with a causal chain; there is an initial baptism of an individual (e.g., Albert Einstein as ‘Albert Einstein’) and that referent is passed along to other users of the name. Likewise the referent of ‘Aristotle’ is not fixed by some description, but by a causal chain linking our use of ‘Aristotle’ with some historical individual. (This is not the place for an extended discussion of this proposal, but see Devitt 1981 and Salmon 1991 for development of this idea and Evans (1973, 1980) for criticism.)"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "moral-arguments-god",
-          "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
-          "score": 2.3484998,
-          "snippet": "[Atlas highlights] [Edmund Burke (raptor-subset-off)]: \"\"man is made for Speculation and action; and when he pursues his nature he succeeds best in both.\"\" Argument: Hobbes’s theory of reasoning as computation [from raptor-subset-off]   P1. To compute is to collect the sum of things added together or know the remainder when one thing is taken from another.   C. Reasoning is therefore the same as adding or subtracting names and ideas (e.g., forming propositions by adding subject and predicate).  Argument: The Performative Theory of Truth (Strawson) [from raptor-subset-off]   P1. The function of…"
+          "title": "reference",
+          "url": "https://plato.stanford.edu/entries/reference/",
+          "score": 0.05230076,
+          "snippet": "reference  As Kripke points out, complications arise due to the fact that we can apparently re-use names. So, I may have come across the name ‘Napoleon’ via a chain of use leading back to the most famous of French generals. Having heard the name, I may now decide to call my cat, who likes to imperiously survey the domain of my apartment, ‘Napoleon’. When I use the name in this way, my intentions make it the case, Kripke claims, that I have introduced a new name, or at least a new use of the name. This is in spite of the fact that there is a very real sense in which I inherited the name from a …"
         }
       ],
       "source_score": {
@@ -1186,18 +1264,18 @@
           "causal-historical",
           "Kripke",
           "rigid designator",
+          "initial baptism",
           "qua-problem",
           "descriptivism"
         ],
         "missing": [
-          "initial baptism",
           "reference borrowing"
         ],
         "total_expected": 7,
-        "ratio": 0.71428573
+        "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2534,
+      "search_ms": 1649,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1266,17 +1344,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "content-teleological",
-          "url": "https://plato.stanford.edu/entries/content-teleological/",
-          "score": 1.2216544,
-          "snippet": "[Atlas highlights] [Hilary Putnam (raptor-subset-off) — contested]: \"many philosophers have been convinced by some influential arguments that, in the most ordinary or typical sense of ‘content’, most or even all of the contents of our mental states are broad rather than narrow.\" [teleological theories of mental content (raptor-subset-off)]: \"Teleological theories share the strategy of explaining the norms... as deriving from so-called functional 'norms'\" [teleological theories of mental content (raptor-subset-off)]: \"According to teleological theories, the(contents of mental representations de…"
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.050571725,
+          "snippet": "content-externalism  Idealism. Content externalism is sometimes portrayed as a thesis whose truth precludes idealism in at least some of its major forms (see Rowlands 2003, for example). However, it is not clear that this is really the case. For example, even a Berkeleian idealist could accept Putnam’s twin earth arguments if thus inclined. All that is required for Putnam’s argument to work is a distinction between the way water and twater appear and their underlying structures. This is something the Berkeleian idealist can, it seems, accommodate. For example, the Berkeleian idealist can expla…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "justice-virtue",
-          "url": "https://plato.stanford.edu/entries/justice-virtue/",
-          "score": 0.68379545,
-          "snippet": "[Atlas highlights] Argument: Heinz dilemma thought experiment [from raptor-subset-off]   P1. A man named Heinz is tempted to steal a life-saving drug for his sick wife.   C. Boys are more likely to think in terms of right action (justice), while girls see it as a world of relationships and responsibility.  Argument: The Fire Thought Experiment (Famous Fire Cause) [from raptor-subset-off]   P1. One must choose between saving Archbishop Fénelon (benefactor to humanity) or one's parent.   P2. Justice demands impartiality for the greater good.   C. We should save Fénelon rather than our parent.  A…"
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.03989464,
+          "snippet": "content-narrow  Among the earliest and most influential arguments for broad content were Hilary Putnam’s arguments in such essays as “The Meaning of ‘Meaning’” (1975). Putnam’s arguments were not designed specifically with mental content in mind. They applied in the first instance to linguistic content, more specifically to the reference of terms in a natural language. However, they have been widely applied to mental content. I will first discuss Putnam’s argument concerning linguistic content, and then note how it can be extended to mental content."
         }
       ],
       "source_score": {
@@ -1306,7 +1384,7 @@
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2448,
+      "search_ms": 1538,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1375,30 +1453,30 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "federalism",
-          "url": "https://plato.stanford.edu/entries/federalism/",
-          "score": 1.5276952,
-          "snippet": "[Atlas highlights] Defining Kurt Gödel (raptor-subset-off): \"The natural number corresponding to a sequence w = < w0,…, wk > of symbols is where pk is the k+1st prime. It is called its Gödel number and denoted by w⟩.\" Defining Gödel's two incompleteness theorems (raptor-subset-off): \"They concern the limits of provability in formal axiomatic theories.\" Defining Hilbert's Program (raptor-subset-off): \"It calls for a formalization of all of mathematics in axiomatic form, together with a proof that this axiomatization of mathematics is consistent. The consistency proof itself was to be carried ou…"
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.048100356,
+          "snippet": "goedel-incompleteness  Of the various fields of philosophy, Gödel’s theorems are obviously most immediately relevant for the philosophy of mathematics. To begin with, they pose, at least prima facie, serious problems for Hilbert’s program (this issue is discussed in some detail in the section on the impact of incompleteness in the entry on  Hilbert’s Program).  Then again, they have important consequences for intuitionism (see the entry on  intuitionism in the philosophy of mathematics)  (see also Gödel 1933, 1941; Raatikainen 2005)."
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "goedel",
-          "url": "https://plato.stanford.edu/entries/goedel/",
-          "score": 0.5737964,
-          "snippet": "[Atlas highlights] [Kurt Gödel (raptor-subset-off)]: \"the notion: computable function of finite type is int roduced\" [Gentzen (raptor-subset-off)]: \"actual proofs are not based on axi oms expressed in a logical lan guage... The most typical feature is instead that theo rems make their claims under some assump tions.\" [Gödel (raptor-subset-off)]: \"Godel proved the impossibility of a complete formaliZation of elementary arithmetic\" Defining Finitism (raptor-subset-off): \"Bernays suggests that in finitary mathematics, only 'primitive intuitive cognitions come into play.'\" [Gentzen (raptor-subset-…"
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.048857808,
+          "snippet": "hilbert-program  There has been some debate over the impact of  Gödel’s incompleteness theorems on Hilbert’s Program, and whether it was the first or the second incompleteness theorem that delivered the coup de grâce. Undoubtedly the opinion of those most directly involved in the developments were convinced that the theorems did have a decisive impact. Gödel announced the second incompleteness theorem in an abstract published in October 1930: no consistency proof of systems such as Principia,  Zermelo-Fraenkel set theory, or the systems investigated by Ackermann and von Neumann is possible by …"
         }
       ],
       "source_score": {
         "matched": [
           "goedel-incompleteness",
-          "goedel"
+          "goedel",
+          "hilbert-program"
         ],
         "missing": [
-          "hilbert-program",
           "frege-hilbert"
         ],
         "total_expected": 4,
-        "ratio": 0.5
+        "ratio": 0.75
       },
       "fact_score": {
         "matched": [
@@ -1417,7 +1495,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3248,
+      "search_ms": 2136,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1527,7 +1605,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2917,
+      "search_ms": 2182,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1596,17 +1674,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "liberalism",
-          "url": "https://plato.stanford.edu/entries/liberalism/",
-          "score": 0.92066735,
-          "snippet": "[Atlas highlights] Argument: Berlin's distinction between negative and positive liberty [from raptor-subset-off]   P1. Liberty is often interpreted in terms of the absence or presence of something.   P2. The first case involves an absence (of obstacles, barriers, constraints).   P3. The second case involves a presence (control, self-mastery).   C. These correspond to two distinct concepts: negative liberty and positive liberty respectively.  [Isaiah Berlin (raptor-subset-off)]: \"negative and positive liberty are not merely two distict kinds of liberty; they can beseen as rival, incompatibie in…"
+          "title": "liberty-positive-negative",
+          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
+          "score": 0.06882908,
+          "snippet": "liberty-positive-negative  On MacCallum’s analysis, then, there is no simple dichotomy between positive and negative liberty; rather, we should recognize that there is a whole range of possible interpretations or ‘conceptions’ of the single concept of liberty. Indeed, as MacCallum says and as Berlin seems implicitly to admit, a number of classic authors cannot be placed unequivocally in one or the other of the two camps. Locke, for example, is normally thought of as one of the fathers or classical liberalism and therefore as a staunch defender of the negative concept of freedom. He indeed stat…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "liberalism",
-          "url": "https://plato.stanford.edu/entries/liberalism/",
-          "score": 0.2609301,
-          "snippet": "[Atlas highlights] [negative conception of liberty (raptor-subset-off)]: \"Thus, in contrast to the ordinary negative conception, on the republican conception the mere possibility of arbitrary interference is a limitation of liberty.\" [Isaiah Berlin (raptor-subset-off)]: \"'All our categories are, in theory, subject to change' (2002b, 144, note 1).\" [Isaiah Berlin (raptor-subset-off)]: \"Philosophy, however, was for Berlin concerned with questions which not only could not at present be answered, but for which no clearly proper method of discovering an answer was known.\"  liberalism  Green’s auton…"
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.05777778,
+          "snippet": "berlin  This account is subject to serious and plausible objections, on both historical and conceptual grounds. But beyond the considerable debates concerning the conceptual validity and historical accuracy of Berlin’s account (extensively documented in Harris 2002 and Crowder 2016), there is considerable misunderstanding of Berlin’s own attitudes to the concepts he discussed, and of the goals of his lecture. Berlin has often been interpreted, not entirely unreasonably, as a staunch enemy of the concept of positive liberty. This was simply false, and elides opposition to distortions of positiv…"
         }
       ],
       "source_score": {
@@ -1634,7 +1712,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2438,
+      "search_ms": 1548,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1744,7 +1822,7 @@
         "ratio": 0.5555556
       },
       "embed_ms": 0,
-      "search_ms": 1293,
+      "search_ms": 1076,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1813,29 +1891,29 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "hume",
-          "url": "https://plato.stanford.edu/entries/hume/",
-          "score": 3.5918758,
-          "snippet": "[Atlas highlights] Defining correlation does not imply causation (raptor-subset-off): \"a high correlation between cartoon viewing and violent playground behavior is evidence that (by itself) simply underdetermines what we should believe about the causal relationship between the two.\" [David Hume (raptor-subset-off)]: \"Hume argued that a necessary condition was that agents all know what behaviour to expect from one another.\" Defining nonidentity problem (raptor-subset-off): \"The nonidentity problem is the problem of resolving this apparent paradox.\" [nonidentity problem (raptor-subset-off)]: \"c…"
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.06904762,
+          "snippet": "kant-hume-causality  It is only in the second edition of the Critique that Kant gives such a prominent place to Hume and his “objection” to causality, serving to introduce what Kant now calls “the general problem of pure reason”. By contrast, the name of Hume does not appear in either the Introduction or the Transcendental Analytic in the first (A) edition (1781): it appears only in the Transcendental Doctrine of Method at the very end of the book, in a discussion of “skepticism” versus “dogmatism” in metaphysics (where Hume’s skepticism about causation, in particular, is finally explicitly di…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "logic-combinatory",
-          "url": "https://plato.stanford.edu/entries/logic-combinatory/",
-          "score": 1.7408327,
-          "snippet": "[Atlas highlights] Defining causation (raptor-subset-off): \"We—agents, persons, enduring things—are causes with a very special property: we initiate causal chains, but nothing and no one caus es us to do this.\" [David Hume (raptor-subset-off)]: \"our actions have a constant union with our motives, tempes, and circumstances\" [David Hume (raptor-subset-off)]: \"supposition that there is some further power or energy in matter... fundamental source of confusion\" [Gottfried Wilhelm Leibniz (raptor-subset-off)]: \"So, physical influx would entail the natural mortality of sub stance, a view that Leibniz…"
+          "title": "causation-law",
+          "url": "https://plato.stanford.edu/entries/causation-law/",
+          "score": 0.035576392,
+          "snippet": "causation-law  Because Hume’s analysis takes “the glue” out of the causal relation—a cause doesn’t make its effect occur, it is only regularly followed by its effect—it is commonly classified as skeptical. And in a sense it is, if one treats the making-things-happen “glue” to be essential to any relation properly called “causal”. But Hume’s views are not radical enough to count as skeptical in the sense intended by legal theoreticians. For Hume gives what Saul Kripke calls a “skeptical solution” to the problem of causation (1982: 66–68): Hume doesn’t deny that causation exists, but he reduces …"
         }
       ],
       "source_score": {
         "matched": [
-          "hume",
           "kant-hume-causality"
         ],
         "missing": [
+          "hume",
           "kant"
         ],
         "total_expected": 3,
-        "ratio": 0.6666667
+        "ratio": 0.33333334
       },
       "fact_score": {
         "matched": [
@@ -1854,7 +1932,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3225,
+      "search_ms": 2574,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -1923,17 +2001,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "corruption",
-          "url": "https://plato.stanford.edu/entries/corruption/",
-          "score": 4.3526154,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-off)]: \"poetry delivers universal truths in a readily graspaible form, unlike, for example, history, which deals merely with particula facts\" Defining intrinsic property (raptor-subset-off): \"An intrinsic property of an individual is a property that does not depend at all on their environment.\" [Aristotle (raptor-subset-off)]: \"In Book III of the Nicomachean Ethics, Aristotle says that... we have the powe\" Argument: Classical descriptivism of proper names [from raptor-subset-off]   P1. (i) A speaker must be thinking of a name N as the (unique) F.   …"
+          "title": "aristotle-psychology",
+          "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
+          "score": 0.05142684,
+          "snippet": "aristotle-psychology  In the same way, then, the presence of the soul explains why this matter is the matter of a human being, as opposed to some other kind of thing. Now, this way of looking at soul-body relations as a special case of form-matter relations treats reference to the soul as an integral part of any complete explanation of a living being, of any kind. To this degree, Aristotle thinks that Plato and other dualists are right to stress the importance of the soul in explanations of living beings. At the same time, he sees their commitment to the separability of the soul from the body …"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "object",
-          "url": "https://plato.stanford.edu/entries/object/",
-          "score": 2.2553701,
-          "snippet": "[Atlas highlights] Argument: Limit–Unlimited account of multiplicity and alterity [from raptor-subset-off]   P1. The One generates both continuous (undivided) and discrete (defined at each halt in progression).   P2. Everything below the supra-essential dyad is a mixture of determination (Limit/peras) and indeterminacy (the Unlimited/apeiron).   P3. This includes gods, Forms within Model, and all sublunary things.   P4. All things therefore partake in opposition.   C. Iamblichus introduced the Limit–Unlimited pair to explain genesis of multiplicity: Limit provides definition/intelligibility; U…"
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.04408015,
+          "snippet": "aristotle  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Aristotle, commentators on |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: biology |  Aristotle, General Topics: categories |  Aristotle, General Topics: ethics |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: political theory |  Aristotle, General Topics: psychology |  Aristotle, General Topics: rhetoric |  Aristotle, Special Topics: causality |  Aristotle, Special To…"
         }
       ],
       "source_score": {
@@ -1962,7 +2040,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 3440,
+      "search_ms": 2628,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -2031,17 +2109,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "knowledge-analysis",
-          "url": "https://plato.stanford.edu/entries/knowledge-analysis/",
-          "score": 2.1159713,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-off)]: \"if forc eistak entob equiva lentto th eq uantit yof vi sviv a– rathe rtha nthe q uanti tyo fm otio nas Desca rtesh adim plied – then, inc ases uch ast hosehigh lighted by th eBrief Dem onstrat ion,no violatio nof th epri\" Defining Being and Time (raptor-subset-off): \"Also called care, this non-intentional openness replaced Husserlian intentionality.\" [Gottfried Wilhelm Leibniz (raptor-subset-off)]: \"in th eHPN, Lebn iz arges tha tthe law sof th eTMA yiel dthe Hu ygens-Wre nlawsof impac twhe ntakentogeth erwith th econ tingent…"
+          "title": "heidegger",
+          "url": "https://plato.stanford.edu/entries/heidegger/",
+          "score": 0.05550041,
+          "snippet": "heidegger  One might reasonably depict the earliest period of Heidegger's philosophical work, in Freiburg (1915–23) and Marburg (1923–6), before he commenced the writing of Being and Time itself, as the pre-history of that seminal text (although for an alternative analysis that stresses not only a back-and-forth movement in Heidegger's earliest thought between theology and philosophy, but also the continuity between that earliest thought and the later philosophy, see van Buren 1994, 2005). Viewed in relation to Being and Time, the central philosophical theme in these early years is Heidegger's…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "phenomenology-mg",
-          "url": "https://plato.stanford.edu/entries/phenomenology-mg/",
-          "score": 1.9241209,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-off)]: \"properly speaking, God performs a miracle when he does something that surpasses the forces he has given to creatures and conserves in them.\" Argument: Argument from the Riddle of Induction (Emeralds) [from raptor-subset-off]   P1. Consider two possibilities: all emeralds are green or all emeralds are grue(t).   P2. If all emeralds are green, the natural projection rule asserts this immediately and remains correct.   P3. If all emeralds are grue, a blue emerald appears at time t; the natural projection rule then correctly conj…"
+          "title": "husserl",
+          "url": "https://plato.stanford.edu/entries/husserl/",
+          "score": 0.05045492,
+          "snippet": "husserl  An externalist reading (or rational reconstruction) of Husserl’s theory of content might, however, be taken to conflict with the methodological constraints posed by the phenomenological epoché, which—together with the dynamic method and eidetic reduction—builds the essential core of the transcendental-phenomenological method introduced in Ideas."
         }
       ],
       "source_score": {
@@ -2070,7 +2148,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 5220,
+      "search_ms": 4805,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -2139,17 +2217,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "original-position",
-          "url": "https://plato.stanford.edu/entries/original-position/",
-          "score": 0.9204428,
-          "snippet": "[Atlas highlights] [early Mohists (raptor-subset-off)]: \"the core idea was to identify clear, objective f (models, standards) that serve as paradigms.\" [early Mohists (raptor-subset-off)]: \"the core idea was that we can identify clear, objective models (f) which serve as paradigms.\" Defining early Mohists (raptor-subset-off): \"The Mohist conception of knowledge is just a type of reliable capacity.\" Defining corruption (raptor-subset-off): \"Corruption is the abuse of power by a public official for private gain — but this definition fails to capture non-public-office corruption like bettors brib…"
+          "title": "xunzi",
+          "url": "https://plato.stanford.edu/entries/xunzi/",
+          "score": 0.049193546,
+          "snippet": "xunzi  In effect, both Xunzi and Mencius argued that human beings all have the capacity to become good, even though some people develop this capacity and others do not (Graham 1989: 250; Shun 1997: 222–31). The main differences, only recently appreciated, are that they were not operating with the same implicit definitions of xing, and Xunzi’s recommendations for moral self-cultivation—that is, how to overcome one’s inherently detestable nature—were more complex than Mencius’s, as we shall see. Because of Mencius’s subsequent prestige, it was commonly supposed that Xunzi’s definition of xing wa…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "alexander",
-          "url": "https://plato.stanford.edu/entries/alexander/",
-          "score": 0.94979423,
-          "snippet": "[Atlas highlights] [Xunzi (raptor-subset-off)]: \"the rituals of the sage kings confirm the distinctions that we are bound to make by nature\" Defining that which makes humans human (raptor-subset-off): \"\"that which makes humans human\" (ren zhi suoyi wei ren zhe); any competing ritual code would necessarily fail\" [Xunzi (raptor-subset-off)]: \"self-cultivation in the Xunzian style is inconceivable without looking outwards.\" Argument: Mencius's Response on Human Nature [from raptor-subset-off]   P1. Human nature contains germs/sprouts of ethical virtues (natural dispositions).   C. Ethical reactio…"
+          "title": "comparphil-chiwes",
+          "url": "https://plato.stanford.edu/entries/comparphil-chiwes/",
+          "score": 0.037250824,
+          "snippet": "comparphil-chiwes  The differences between Mencius’ and Xunzi’s theories are substantial and raise sophisticated philosophical issues that remain relevant to this day. Xunzi launched a vigorous critique of Mencius’ claim for the existence of natural tendencies that form the basis for development of a good person. In arguing against Mencius, he presupposes a strict separation between that which is given in human nature and that which must be developed through deliberate effort. Mencius’ conception of human nature, on the other hand, presupposes that what is in human nature can be something that…"
         }
       ],
       "source_score": {
@@ -2166,22 +2244,22 @@
           "Mencius",
           "Xunzi",
           "human nature",
+          "xing",
           "ritual",
           "moral cultivation",
           "Confucian"
         ],
         "missing": [
-          "xing",
           "four sprouts"
         ],
         "unscorable": [
           "li"
         ],
         "total_expected": 9,
-        "ratio": 0.75
+        "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3361,
+      "search_ms": 3012,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -2250,17 +2328,17 @@
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "feminist-bioethics",
-          "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
-          "score": 1.9184114,
-          "snippet": "[Atlas highlights] [Feminist Ethics (raptor-subset-off)]: \"More specifically, feminist ethicists aim to understand, criticize, and correct: (1) the binary view of gender...\" Defining Virtue ethics (raptor-subset-off): \"It may, initially, be identified as the one that emphasizes the virtues, or moral character, in contrast to the approach that emphasizes duties or rules (deontology) or that emphasizes the consequences of actions (conson\" Defining naturalness (raptor-subset-off): \"Naturalness is a condition of no fine-tuning in a rather different sense which applies to theories in quantum field …"
+          "title": "theory-bioethics",
+          "url": "https://plato.stanford.edu/entries/theory-bioethics/",
+          "score": 0.052507237,
+          "snippet": "theory-bioethics  Finally, Beauchamp and Childress themselves recently acknowledge two misunderstandings of their four principles framework. The first misunderstanding is that the framework represents American individualism, with the principle of autonomy taking priority. Their response is, first, to contest any connection between American individualism and a respect for autonomy. Further, they emphasize that their framework’s principles are all only prima facie binding. The second misunderstanding is that the framework downplays the virtues. It has been argued that medical ethics should be un…"
         },
         {
           "corpus_id": "raptor-subset-off",
-          "title": "fine-tuning",
-          "url": "https://plato.stanford.edu/entries/fine-tuning/",
-          "score": 0.79491556,
-          "snippet": "[Atlas highlights] Defining evolutionary ethics (raptor-subset-off): \"Alexander’s ethical system is a kind of evolutionary ethics, akin to that of Leslie Stephen. By applying evolution to ethics...\" Defining common morality (raptor-subset-off): \"The content of the common morality is dictated by the primary objectives of morality, which include... the amelioration of human misery.\" [design hypothesis D (raptor-subset-off)]: \"life friendly conditions are highly improbable if there is no divine designer... Thus, the conditional probability P(R| ¬ D) should be set close to zero\" [Feminist bioethic…"
+          "title": "feminist-bioethics",
+          "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
+          "score": 0.0432192,
+          "snippet": "feminist-bioethics  Feminist critique also addresses the fundamental theory of mainstream bioethics. Feminist-friendly bioethicists have noted systemic weaknesses in the explanatory framework that grounds the bioethical analysis of research and clinical practices and increasingly also of public health measures. Critics fault both the abstract character of much bioethical theory and inattention to such key components of morality as the contexts that frame health care and the relational networks that inform patient decision making. The tendency to ground theory in a set of abstract principles th…"
         }
       ],
       "source_score": {
@@ -2274,23 +2352,23 @@
       },
       "fact_score": {
         "matched": [
+          "autonomy",
           "justice",
           "Beauchamp",
           "Childress",
           "casuistry"
         ],
         "missing": [
-          "autonomy",
           "beneficence",
           "non-maleficence",
           "principlism",
           "particularism"
         ],
         "total_expected": 9,
-        "ratio": 0.44444445
+        "ratio": 0.5555556
       },
       "embed_ms": 0,
-      "search_ms": 2303,
+      "search_ms": 1899,
       "corpora_hit": [
         "raptor-subset-off"
       ],
@@ -2298,3 +2376,5 @@
     }
   ]
 }
+wrote run JSON to runs/sep-raptor-subset/out/off-baseline.json
+retrieval-pipeline ledger: clean (0 violations)

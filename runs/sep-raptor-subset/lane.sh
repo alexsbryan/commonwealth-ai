@@ -49,11 +49,25 @@ run () { # arm run_ix corpus raptor_env
   grep -q "prod-pipeline mode" "${tag}.log" \
     || echo "INSTRUMENT_FAIL_${arm}_${ix}: not prod-pipeline mode"
   # Yield, per §18.3: the walk's own counters, not inferred from the score.
-  local seeds appended carried
-  seeds=$(grep -oE "summary_seeds=[0-9]+" "${tag}.log" | cut -d= -f2 | paste -sd+ | bc 2>/dev/null)
-  appended=$(grep -oE "summaries_appended=[0-9]+" "${tag}.log" | cut -d= -f2 | paste -sd+ | bc 2>/dev/null)
-  carried=$(grep -c "Summary atoms appended late and reserved" "${tag}.log")
-  echo "YIELD_${arm}_${ix}: summary_seeds=${seeds:-0} summaries_appended=${appended:-0} late_append_calls=${carried:-0}"
+  # STRIP ANSI FIRST. `tracing` writes escapes BETWEEN the field name and the
+  # `=`, so a naive `summary_seeds=[0-9]+` matches nothing and returns a clean,
+  # plausible ZERO — indistinguishable from "the walk reached no Summary",
+  # which is the exact finding this lane exists to measure. Cost me a false
+  # result in round 1; the sed is the fix (§18.4, validate the instrument).
+  python3 - "${tag}.log" "${arm}" "${ix}" <<'PYEOF'
+import re, sys
+ansi = re.compile(r"\x1b\[[0-9;]*m")
+txt = ansi.sub("", open(sys.argv[1], errors="replace").read())
+lines = [l for l in txt.splitlines() if "ground: walk ledger" in l]
+def tot(f): return sum(int(m) for l in lines for m in re.findall(rf"\b{f}=(\d+)", l))
+kinds = {}
+for l in lines:
+    k = re.search(r'kind="([a-z]+)"', l)
+    if k: kinds[k.group(1)] = kinds.get(k.group(1), 0) + 1
+print(f"YIELD_{sys.argv[2]}_{sys.argv[3]}: walks={len(lines)} seeds={tot('seeds')} "
+      f"summary_seeds={tot('summary_seeds')} suppressed={tot('summary_expansions_suppressed')} "
+      f"summaries_appended={tot('summaries_appended')} rows={kinds}")
+PYEOF
   python3 - "$tag" <<'PYEOF'
 import json, sys
 try:

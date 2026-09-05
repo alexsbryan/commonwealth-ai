@@ -2,7 +2,7 @@
   "bank_name": "sep-core-v1.1",
   "corpus": "raptor-subset-on",
   "limit": 10,
-  "started_at_unix": 1788603094,
+  "started_at_unix": 1788597647,
   "results": [
     {
       "question_id": "argument_consequence_against_compatibilism",
@@ -106,7 +106,7 @@
         "ratio": 0.71428573
       },
       "embed_ms": 0,
-      "search_ms": 6719,
+      "search_ms": 6111,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -119,103 +119,104 @@
       "retrieved": [
         {
           "corpus_id": "raptor-subset-on",
-          "title": "moral-arguments-god",
-          "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
-          "score": 0.83528155,
-          "snippet": "[Atlas highlights] Defining intentional distinction (raptor-subset-on): \"Therefore we can only appeal to an intermediate distinction, which is precisely that which Henry defines as intentional.\" Argument: Sreenivasan's Distinction between Creating and Making [from raptor-subset-on]   P1. Only creating generates an absolute property right (which only God can do).   P2. Making is analogous to creating but creates a weaker, non-absolute right.   C. Humans have limited property rights over what they make through labor, avoiding the absolutism Waldron attributed to Tully.  Argument: Functional dist…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.59049284,
+          "snippet": "The passages argue that possible-worlds semantics, rooted in Tarskian model theory and Carnap's work, provides a framework for evaluating truth conditions by relativizing them to specific worlds. This approach allows for the definition of objective modal notions and essential properties through quantification over sets of possible individuals and propositions. Furthermore, it enables actualist and haecceitist metaphysical interpretations to reinterpret these semantic structures while avoiding possibilism."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reasons-agent",
-          "url": "https://plato.stanford.edu/entries/reasons-agent/",
-          "score": 0.68047744,
-          "snippet": "[Atlas highlights] Argument: The Distinction Argument for Physicalism vs Materialism [from raptor-subset-on]   P1. Materialists historically defined matter as 'an inert, senseless substance' (Berkeley).   P2. Physics shows forces like gravity are physical but not material in this traditional sense.   P3. Therefore, using 'physicalism' distances one from the scientifically irrelevant thesis of materialism.   C. 'Physicalism' is a better term than 'materialism' to emphasize connection to physics and avoid historical baggage.  [Saul Kripke (raptor-subset-on)]: \"an identity statement in w hich bot…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.56304425,
+          "snippet": "The text examines metaepistemological debates concerning the nature of epistemic facts, contrasting realist views that posit mind-independent truths with idealism and various forms of relativism. It argues that epistemic judgments may function prescriptively or express non-representational mental states rather than describing objective reality. Furthermore, it highlights tensions between orthodox epistemology and experimental results regarding knowledge attributions in contexts involving shifting stakes or environmental luck."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reference",
-          "url": "https://plato.stanford.edu/entries/reference/",
-          "score": 0.7283259,
-          "snippet": "[Atlas highlights] Argument: The Necessary A Posteriori Argument [from raptor-subset-on]   P1. Properties like having atomic number 79 are essential to gold (it couldn't exist without them).   P2. Therefore, 'Gold has atomic number 7' is a necessary truth.   C. However, knowing this fact requires empirical evidence; thus it is a necessary but not a priori truth.  [Saul Kripke (raptor-subset-on)]: \"A prioricity... is an epistemological notion... This kind of necessity [metaphysical] has nothing to do with what is known or believed.\" [Saul Kripke (raptor-subset-on)]: \"Kripke used such reference-…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.55469024,
+          "snippet": "The Kripke-Putnam arguments challenge descriptivism by demonstrating that natural kind terms function as rigid designators, thereby supporting semantic externalism and essentialist conclusions. This position is defended through modal and epistemological reasoning regarding reference fixing, though it faces objections concerning empty terms and the alleged question-begging nature of deriving metaphysical facts from semantics."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reference",
-          "url": "https://plato.stanford.edu/entries/reference/",
-          "score": 0.6720275,
-          "snippet": "[Atlas highlights] [Saul Kripke (raptor-subset-on)]: \"genuine linguistic reference—or what he calls ‘semantic reference’—needs to run purely via conve\" Argument: Jaspers's distinction between primary and secondary delusions [from raptor-subset-on]   P1. Delusions expressed with unexceptional syntax but inaccurate content are comprehensible.   P2. Primary delusions, in contrast to secondary ones, are distinguished by their meaninglessness: attributing meaning to them is a misapplication of the hermeneutic approach.   C. Some delusions (primary) are meaningless utterances whose intelligibility c…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5473326,
+          "snippet": "Kripke argues that identity statements involving rigid designators, such as proper names for the same object, are necessarily true if they are true at all. This contrasts with non-rigid descriptions like 'the brightest non-lunar object in the evening sky,' which designate contingent truths because the described property could have belonged to a different entity. The concept of rigidity extends beyond simple naming to include kind terms and standard measurements, revealing how necessary identities can be established through contingent means."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "rigid-designators",
-          "url": "https://plato.stanford.edu/entries/rigid-designators/",
-          "score": 0.4390909,
-          "snippet": "[Atlas highlights] Argument: Distinction between Civil Disobedience and Related Concepts [from raptor-subset-on]   P1. Civil disobedience involves public, non-violent breach of law by citizens to communicate moral dissent.   P2. Rule departure involves officials not discharging duties but usually without violating codified law.   C. The two practices are distinct in practitioner identity (citizen vs official) and legality.   rigid-designators  It is not obvious that rigidity and its attending transworld identity run up against anti-realism, nor against any substantive essentialism or its gains…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.53158325,
+          "snippet": "The passages argue that rigid designators establish necessary truths about identity and essence across possible worlds, distinguishing this concept from descriptivism and counterpart theory. This framework applies to proper names, natural kinds, and theoretical identities, allowing for a posteriori knowledge of contingent discoveries like the identity of Hesperus and Phosphorus. While Kripke's view defends direct reference without qualitative criteria, it faces ongoing debate regarding its coherence with essentialism and alternative semantic accounts."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "prior",
-          "url": "https://plato.stanford.edu/entries/prior/",
-          "score": 0.33430353,
-          "snippet": "[Atlas highlights] [Saul Kripke (raptor-subset-on)]: \"‘Jacques Chirac’ i n (9) is rigi d for in al l possibl e worl ds it refers t o on e an d th e sam e concr ete indiv idual,\" [Kripke (raptor-subset-on) — contested]: \"Their conjun ction is, in DeRose’ s term, abomina ble: “George knows tha t he has hand s, bu t h e doesn’t kno w th at he’s no t the handless victi m of a Cartesi an demo n”.\" [Saul Kripke (raptor-subset-on)]: \"K ripk e ’s wo rk h as g iv en u s reas ons fo r thi nk in gt ha ta po sterio rt rut hs c an b em et ap hy sic al ly n ec es sa ry\"  prior  The text of Prior’s Wellingto…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.53042406,
+          "snippet": "Early phenomenologists advanced a metaphysical realist and essentialist ontology characterized by the distinction between objects and states of affairs. This framework sparked debate regarding whether all meaningful sentences refer to ontologically independent states of affairs, with Reinach arguing for their universal existence while Daubert proposed that cognized states of affairs depend on mental acts."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "linguistics",
-          "url": "https://plato.stanford.edu/entries/linguistics/",
-          "score": 0.3649633,
-          "snippet": "[Atlas highlights] [Kripke (raptor-subset-on)]: \"The concept of pai n is necessarily tie d to the phenom enal nature of the pa in sensation, whe reas the concept of go ld is not tied to th e colour yello w.\" Argument: Distinction between knowing and believing based on challenges [from raptor-subset-on]   P1. One who claims to know may be challenged to explain how they know.   P2. Someone who claims to believe may be challenged to explain why they believe.   P3. Failing the 'how' challenge implies the subject does not know; failing the 'why' challenge implies they oughtn't to believe, but still…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.52997136,
+          "snippet": "Kant argues that while Hume correctly identifies the lack of empirical basis for causal necessity, he erroneously reduces it to subjective custom; Kant contends instead that causality and necessary connection are a priori categories contributed by the mind. This transcendental framework allows pure concepts to convert subjective perceptions into objective experience with strict universality, thereby grounding scientific knowledge in principles rather than mere induction."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "rigid-designators",
-          "url": "https://plato.stanford.edu/entries/rigid-designators/",
-          "score": 0.36163634,
-          "snippet": "[Atlas highlights] Argument: The distinction between natural and artificial signs in poetry [from raptor-subset-on]   P1. Painting and music use natural signs (resemblance) and are restricted to space/time respectively.   P2. Poetry uses primarily artificial signs rather than natural ones.   C. Because it uses artificial signs, poetry's content is not fundamentally constrained by the properties of its signs, allowing it to represent anything and reach deeper truth than other arts.  Argument: The distinction between general principle and particular laws [from raptor-subset-on]   P1. Particular …"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.52984077,
+          "snippet": "The text examines the philosophical debate regarding whether modal concepts like metaphysical and epistemic necessity are distinct or reducible to a single fundamental notion. It contrasts dualist positions, which maintain that these notions have divergent extensions as argued by Kripke, with monist approaches such as two-dimensional semantics developed by Chalmers, Jackson, and Stalnaker. The discussion further explores strategies for defining various kinds of necessity in terms of more basic ones to achieve a unified theory."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reasons-agent",
-          "url": "https://plato.stanford.edu/entries/reasons-agent/",
-          "score": 0.21520618,
-          "snippet": "[Atlas highlights] Defining maximal epistemic possibility (raptor-subset-on): \"A scenario is then defined to be a maximally specific epistematic possibility, an epistemic possibility with no de tail left unspecified.\" [Saul Kripke (raptor-subset-on)]: \"According to Kripke, there is no need to posit that definite descriptions ever refer; instead, we can explain away their apparent referential properties by noting that... speakers will typically have targets in mind for\"  reasons-agent  For a start, the distinction helps frame a challenge to the traditional assumption that what separates so-call…"
+          "title": "modality-varieties",
+          "url": "https://plato.stanford.edu/entries/modality-varieties/",
+          "score": 0.050767418,
+          "snippet": "modality-varieties  Philosophers have paid more attention to the examples given by Kripke than to other possible cases of the necessary a posteriori, and for that reason the discussion in the rest of this section will mostly focus on Kripke’s cases. Two strategies for explaining these examples can be distinguished. Dualists about metaphysical and epistemic modality (dualists, for short) hold that the phenomena reflect a deep and fundamental distinction between two kinds of modality. Monists, by contrast, believe that all the data can ultimately be explained by appeal to a single kind of modali…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "natural-kinds",
-          "url": "https://plato.stanford.edu/entries/natural-kinds/",
-          "score": 0.15335028,
-          "snippet": "[Atlas highlights] [Kripke (raptor-subset-on)]: \"Consequently it looks as i f a non-trivial metaphysical fact—that ther e ar e necessar y trut hs kno wabl e o nl y a poster io ri—is a consequence of Kri p ke ’s semant ics for natu ral k ind ter ms.\" [Kripke (raptor-subset-on)]: \"any identity statement relating two r igid desi gnator s i s necess arily true. Hence identit y stat ements involvin g natu ral kind terms expr ess neces sar y trut hs, e ven if kno wabl e onl y a poster io ri.\"  natural-kinds  Above we saw that an identity statement conjoining two rigid designators expresses a necessa…"
+          "title": "physicalism",
+          "url": "https://plato.stanford.edu/entries/physicalism/",
+          "score": 0.049483046,
+          "snippet": "physicalism  How might a physicalist respond to Kripke’s argument? As with the knowledge argument, there are many responses but here I will mention only two. The first response is to insist that Kripke’s argument neglects the distinction between a priori and a posteriori physicalism. Kripke often does say that according to the dispositionalist, one should be able to ‘read off’ truths about meaning from truths a physicalist can accept. (For a proposal like this, see Horwich 2000.) One problem with this proposal is, as we have seen, that its background account of the necessary a posteriori is co…"
         }
       ],
       "source_score": {
         "matched": [
-          "rigid-designators",
-          "natural-kinds"
+          "modality-varieties"
         ],
         "missing": [
-          "modality-varieties",
+          "rigid-designators",
+          "natural-kinds",
           "possible-worlds"
         ],
         "total_expected": 4,
-        "ratio": 0.5
+        "ratio": 0.25
       },
       "fact_score": {
         "matched": [
           "rigid designator",
           "necessary a posteriori",
           "Kripke",
-          "metaphysical possibility",
-          "epistemic possibility",
-          "water is H2O",
           "natural kind"
         ],
-        "missing": [],
+        "missing": [
+          "metaphysical possibility",
+          "epistemic possibility",
+          "water is H2O"
+        ],
         "total_expected": 7,
-        "ratio": 1.0
+        "ratio": 0.5714286
       },
       "embed_ms": 0,
-      "search_ms": 3333,
+      "search_ms": 3022,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -270,6 +271,13 @@
         },
         {
           "corpus_id": "raptor-subset-on",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.04858361,
+          "snippet": "reid-memory-identity  Reid’s second criticism is his most famous and is often referred to as the case of the Brave Officer:"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
           "title": "locke",
           "url": "https://plato.stanford.edu/entries/locke/",
           "score": 0.046284158,
@@ -281,13 +289,6 @@
           "url": "https://plato.stanford.edu/entries/locke-political/",
           "score": 0.034457833,
           "snippet": "locke-political  For a more general introduction to Locke’s history and background, the argument of the Two Treatises, and the Letter Concerning Toleration, see  Section 1,  Section 4, and  Section 5,  respectively, of the main entry on  John Locke  in this encyclopedia. The present entry focuses on eight central concepts in Locke’s political philosophy."
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "reid-memory-identity",
-          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
-          "score": 0.045112785,
-          "snippet": "reid-memory-identity  Reid is most interested in episodic memory. Though Reid does not use the contemporary terminology, his theory draws upon both the distinction between episodic and semantic memory and the Previous Awareness Condition on episodic memory. As he puts the matter:"
         },
         {
           "corpus_id": "raptor-subset-on",
@@ -324,7 +325,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2818,
+      "search_ms": 2897,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -344,75 +345,75 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "addams-jane",
-          "url": "https://plato.stanford.edu/entries/addams-jane/",
-          "score": 1.2504292,
-          "snippet": "[Atlas highlights] Defining a posteriori knowledge (raptor-subset-on): \"In contrast, a posteriori knowledge depends on experiences such as empirical observations.\" [Theory of demonstration (raptor-subset-on)]: \"this body of philosophical literature corresponds to modern Philosophy of Science.\" Defining common knowledge (raptor-subset-on): \"Common knowledge is a phenomenon which underwrites much of social life.\" Defining mutual knowledge (raptor-subset-on): \"A proposition A is mutual knowledge among a set of agents if each agent knows that A.\" Defining epistemic paradox (raptor-subset-on): \"Epi…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6340159,
+          "snippet": "The passage traces the evolution of epistemological responses to Gettier cases, which challenged the traditional Justified True Belief analysis by demonstrating that justification does not preclude epistemic luck. Various strategies were proposed to resolve this issue, including strengthening justification conditions, adopting reliability or causal theories, and introducing anti-luck constraints, though some philosophers argued these efforts failed due to Zagzebski's inescapability argument. Consequently, alternative approaches such as contextualism emerged to address the perceived lack of pro…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "qualia-knowledge",
-          "url": "https://plato.stanford.edu/entries/qualia-knowledge/",
-          "score": 1.0029471,
-          "snippet": "[Atlas highlights] Defining sensitive knowledge (raptor-subset-on): \"Sensitive knowledge is not certain: it is what we learn through our senses, it presents effects but not causes.\" Defining a priori knowledge (raptor-subset-on): \"Kant introduced the notion of a priori knowledge in contrast to a posteriori... to allow for the existence of knowledge that did not rely on experience.\" Argument: No False Lemmas Objection [from raptor-subset-on]   P1. (iv) states: In Gettier’s cases, the justified true belief is inferred from a justified false belief. So condition (iv) explains why it isn’t knowled…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6273022,
+          "snippet": "The text analyzes the traditional Justified True Belief (JTB) account of knowledge, arguing that it is insufficient due to Gettier cases where justified true beliefs result from epistemic luck. To address this deficiency, various modal conditions are proposed as necessary additions, including sensitivity, safety, relevant alternatives, and reliability. These approaches aim to distinguish genuine knowledge from lucky guesses by requiring that belief tracks truth or rules out specific counterfactual errors."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "epistemic-paradoxes",
-          "url": "https://plato.stanford.edu/entries/epistemic-paradoxes/",
-          "score": 0.4543653,
-          "snippet": "[Atlas highlights] [Chisholm’s Paradox (raptor-subset-on)]: \"If Adam and Noah could be incrementally different... we must accept that Adam and Noah could “swap” their respective qualitative properties.\" Defining Chisholm’s Paradox (raptor-subset-on): \"Chisholm's Paradox purports to establish that a particular individual might have had different qualitative properties... and through iteration... precisely the qualitative properties some other individual actually has.\"  epistemic-paradoxes  In the twentieth century, suspicions about conceptual pathology were strongest for the liar paradox: Is ‘T…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6156079,
+          "snippet": "The passages analyze process reliabilism, primarily associated with Alvin Goldman, as a theory where justification depends on the reliability of belief-forming mechanisms. This framework faces significant objections such as the clairvoyance problem raised by Laurence BonJour and the New Evil Demon Problem, prompting refinements like hybrid approaches and virtue epistemology. Virtue reliabilism further develops this discourse by defining knowledge through stable cognitive competences aimed at truth rather than mere process reliability."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "epistemic-paradoxes",
-          "url": "https://plato.stanford.edu/entries/epistemic-paradoxes/",
-          "score": 0.44824454,
-          "snippet": "[Atlas highlights] Argument: Derivation of Knowledge Axioms from Possibility Sets [from raptor-subset-on]   P1. Knowledge is defined by Proposition 2.2: K_i(A) contains worlds where H_i(omega) is a subset of A.   P2. Possibility sets are taken as the primitive notion for knowledge.   C. The standard axioms of knowledge (K1–K5) follow logically from this definition.  [knowledge (raptor-subset-on)]: \"This knowledge-based account of assertion has recently been supported by work on our nextradical possibility skeptic syllogizes from this surrender: For any contingent proposition, there is a lotter…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.60453254,
+          "snippet": "The passages outline the development of reliabilism, a theory positing that epistemic justification depends on the reliability of belief-forming processes. It details Alvin Goldman's foundational contributions and addresses major challenges such as the generality problem, clairvoyance cases, and the New Evil Demon Problem through various refinements like two-stage reliabilism and evidentialist hybrids. The text also explores extensions into social epistemology, formal measures of credence accuracy, and virtue-based approaches to knowledge."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "chisholm",
-          "url": "https://plato.stanford.edu/entries/chisholm/",
-          "score": 0.3530944,
-          "snippet": "chisholm  Principle (C) seems to imply that it is evident to him that there is a unicorn. Principle (C′) does not have this implication. The fact that the appearance occurs within this wider context defeats its prima facie epistemic status. Although (C′) is less bold than (C), it does help to explain how we can have knowledge of the sensible characteristics of external objects."
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5947229,
+          "snippet": "The text surveys process reliabilism as a theory of justification, outlining its foundational principles and addressing major objections such as the clairvoyance and generality problems. It examines various responses to these challenges, including hybrid approaches that combine reliabilist elements with evidentialism, and explores recent developments like virtue reliabilism and normality-based reliability assessments."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "doing-allowing",
-          "url": "https://plato.stanford.edu/entries/doing-allowing/",
-          "score": 0.3364,
-          "snippet": "[Atlas highlights] Argument: Kyburg's Lottery Paradox Argument [from raptor-subset-on]   P1. An acceptance rule permits rational belief in any proposition with a probability of at least .99.   P2. In a lottery with 100 tickets and one winner, the probability that ticket n is a loser is high enough to license belief (for each n).   P3. The principle of agglomeration states: If you rationally believe p AND q then you rationally believe BOTH p AND q.   C. By applying agglomeration repeatedly to beliefs about individual losing tickets, one arrives at the justified belief that all tickets will lose…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5787683,
+          "snippet": "The text examines the Gettier problem, which demonstrates that justified true belief is insufficient for knowledge, prompting debates over additional conditions like reliability or justification. It contrasts internalist and externalist approaches to epistemology, particularly regarding how agents can justify beliefs against skeptical hypotheses such as being a brain in a vat. Various responses to skepticism are evaluated, including relevant alternatives theory, Moorean arguments, contextualism, and defeasibility theories."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.571466,
+          "snippet": "The passages examine various challenges to reliabilist theories of justification, including the clairvoyance objection by BonJour and the new evil demon problem. They explore potential responses such as approved-list reliabilism, normality-based approaches, and virtue epistemology while addressing issues like process generality and epistemic defeat."
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "knowledge-analysis",
           "url": "https://plato.stanford.edu/entries/knowledge-analysis/",
-          "score": 0.32388777,
-          "snippet": "[Atlas highlights] Argument: Zagzebski's Recipe for Constructing Gettier Cases [from raptor-subset-on]   P1. Imagine a case where faculties work properly in an appropriate environment but yield a false belief (e.g., Mary sees brother instead of husband).   P2. This creates a situation with proper function and justification but without knowledge.   C. Any non-redundant addition to JTB leaves the Gettier problem unsolved.   knowledge-analysis  Another move in a similar spirit to K-Reliabilism replaces the justification clause in the JTB theory with a condition requiring a causal connection betwe…"
+          "score": 0.05108856,
+          "snippet": "knowledge-analysis  Do approaches like Simple K-Reliabilism or the Simple Causal Theory fare any better than the JTB theory with respect to Gettier cases? Although some proponents have suggested they do—see e.g., Dretske 1985: 179; Plantinga 1993: 48—many of the standard counterexamples to the JTB theory appear to refute these views as well. Consider again the case of the barn facades. Henry sees a real barn, and that’s why he believes there is a barn nearby. This belief is formed by perceptual processes, which are by-and-large reliable: only rarely do they lead him into false beliefs. So it l…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "goedel-incompleteness",
-          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
-          "score": 0.171563,
-          "snippet": "[Atlas highlights] Argument: Lottery Paradox Argument against Closure of Rational Belief [from raptor-subset-on]   P1. An observer has rational belief for each of a million players that they will lose (based on high credence).   P2. It is certain someone wins, so the observer rationally believes 'someone wins'.   P3. Rational belief cannot include contradictions; thus it is not rational to believe 'no one wins'.   C. Therefore, rational belief is not closed under conjunction.   goedel-incompleteness  The idea of the proof: If there were such a formula of the language of \\(F\\), an easy applicat…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "computational-complexity",
-          "url": "https://plato.stanford.edu/entries/computational-complexity/",
-          "score": 0.14866528,
-          "snippet": "computational-complexity  On this basis one might indeed fear that the intuitions about feasibly computable functions codified by the Cobham-Edmonds thesis exhibit the same kind of instability as do intuitively acceptable principles about feasibly constructible numbers. To see that this is not the case, however, observe that we compare the growth rates of \\(f,g: \\mathbb{N} \\rightarrow \\mathbb{N}\\) not by the standard ordering \\(\\lt\\) on the natural numbers but rather the following ordering \\(\\prec\\):  \\[  O(f(n)) \\prec O(g(n)) \\text{ if and only if there exists }   n_0,c \\in \\mathbb{N} \\text{ …"
+          "title": "reliabilism",
+          "url": "https://plato.stanford.edu/entries/reliabilism/",
+          "score": 0.04028472,
+          "snippet": "reliabilism  How do such accounts handle Gettier cases? Sosa 2007: 94–97 discusses Lehrer’s (1965) Nogot/Havit case, in which a subject S truly believes that someone here owns a Ford, but he only does so on the basis of Nogot’s misleading testimony. Sosa claims that while S holds this belief because of the exercise of an epistemic competence, S’s belief isn’t correct because of the exercise of an epistemic competence. This explanation raises important questions about how to understand the relevant “because of” relation here: what exactly is the difference between a true belief being held becau…"
         }
       ],
       "source_score": {
         "matched": [
           "knowledge-analysis",
-          "epistemic-paradoxes"
+          "reliabilism"
         ],
         "missing": [
-          "reliabilism"
+          "epistemic-paradoxes"
         ],
         "total_expected": 3,
         "ratio": 0.6666667
@@ -421,18 +422,19 @@
         "matched": [
           "Gettier",
           "reliabilism",
-          "lottery paradox",
           "justified true belief",
           "process reliabilism",
           "safety",
           "sensitivity"
         ],
-        "missing": [],
+        "missing": [
+          "lottery paradox"
+        ],
         "total_expected": 7,
-        "ratio": 1.0
+        "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2410,
+      "search_ms": 2067,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -540,7 +542,7 @@
         "ratio": 0.71428573
       },
       "embed_ms": 0,
-      "search_ms": 1203,
+      "search_ms": 1241,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -588,52 +590,54 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "fine-tuning",
-          "url": "https://plato.stanford.edu/entries/fine-tuning/",
-          "score": 4.468676,
-          "snippet": "[Atlas highlights] Argument: Argument against counterpart theory based on ordinary language comfort [from raptor-subset-on]   P1. Ordinary speakers use names rigidly, presupposing identity between past/future selves.   P2. Counterpart theory replaces this with 'momentary creatures endowed with similar properties'.   P3. \"You'll be around tomorrow\" expresses the hope that *you* (the same individual) exist in the future.   C. The reductive assent does not convey the appropriate opinion about what ordinary speakers are talking about; it fails to satisfy the original hope.  Argument: Argument agai…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5734744,
+          "snippet": "The passages analyze the Knowledge Argument by examining whether Mary acquires new knowledge or merely new abilities and concepts upon experiencing color. Various philosophers propose that this epistemic progress involves acquiring phenomenal concepts, recognizing experiences, or utilizing indexical references rather than learning new factual propositions about physical reality. The debate centers on defining these mental states through frameworks such as representationalism, ability hypotheses, and distinctions between deferential versus non-deferential concept possession."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reasons-agent",
-          "url": "https://plato.stanford.edu/entries/reasons-agent/",
-          "score": 4.5061245,
-          "snippet": "[Atlas highlights] Argument: pro-realist argument against anti-realism [from raptor-subset-on]   P1. Metaepistemological anti-realism, in one or more forms, is implausible or incoherent.   P2. Therefore, a realist position holds up better by contrast.   C. A realist metaepistemology (such as absolutism) should be accepted over anti-realist alternatives.  Argument: Velleman's Argument against Euthanasia [from raptor-subset-on]   P1. A person’s well-being can only matter if she is of intrinsic value.   P2. Rational nature is the source of her intrinsic value.   C. It is impermissible to violate …"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.56319135,
+          "snippet": "The passages examine various arguments for physicalism, including the knowledge argument and Kripke's critique of necessary a posteriori truths, alongside responses such as the ability hypothesis and distinctions between a priori and a posteriori physicalism. It also analyzes the Argument from Causal Closure, noting that while it is dominant in contemporary literature, its success is contested by anti-physicalist objections regarding overdetermination and exclusion principles."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "prior",
-          "url": "https://plato.stanford.edu/entries/prior/",
-          "score": 3.6627367,
-          "snippet": "[Atlas highlights] Argument: The Argument for the Unity of Sciences via Metaphysics [from raptor-subset-on]   P1. Natural philosophy (metaphysics) investigates general and constant causes called 'forms'.   P2. Forms represent the most general properties of matter.   P3. This investigation provides the basis for a unified system of sciences.   C. There is a unity of the sciences grounded in materialism, with metaphysics at its core.  Argument: Paneth's Argument against End-of-Analysis Thesis [from raptor-subset-on]   P1. Chemical explanation requires invoking constituents actually present in a …"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5555889,
+          "snippet": "The passages examine epiphenomenalism, the view that mental events are caused by physical brain states but exert no causal influence on physical behavior. Proponents support this claim using arguments from causal closure of the physical domain and neuroscientific evidence suggesting neural activity precedes conscious awareness or voluntary control. Opponents counter with objections based on natural selection requiring functional consciousness, the obvious impact of feelings on action, and critiques of experimental methodologies."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberty-positive-negative",
-          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
-          "score": 3.6139328,
-          "snippet": "[Atlas highlights] Argument: The Intentionality Argument Against PCEs [from raptor-subset-on]   P1. P1: The brain evolved for survival such that all experience or awareness is necessarily intentional.   P2. P2: Consciousness is always consciousness of something to a subject and hence contains dualistic content.   C. There can be no experiences free of any content (no PCEs).  Argument: Argument against Vivacity as Demarcation Criterion [from raptor-subset-on]   P1. Vivacity is standardly used to distinguish imagination (vivid) from supposition (not vivid).   P2. Amy Kind argues vivacity is phil…"
+          "title": "physicalism",
+          "url": "https://plato.stanford.edu/entries/physicalism/",
+          "score": 0.05847538,
+          "snippet": "physicalism  As with the knowledge argument, the issues surrounding Kripke’s argument are very much wide open. But it is important to note that most philosophers don’t consider the issues of intentionality as seriously as the issue of qualia when it comes to physicalism. In different vocabularies, for example, both Block (1995) and Chalmers (1996) distinguish between the intentional aspects of the mind or consciousness, and the phenomenal aspects or qualia, and suggest that it is really the latter that is the central issue. As Chalmers notes (1996; p. 24), echoing Chomsky’s famous distinction,…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "computational-complexity",
-          "url": "https://plato.stanford.edu/entries/computational-complexity/",
-          "score": 3.033774,
-          "snippet": "[Atlas highlights] Argument: Argument for the existence of higher-order Gestalten through comparison [from raptor-subset-on]   P1. Gestalten can be compared to one another due to their relational nature.   C. Therefore, comparing Gestalten gives rise to increasingly higher order Gestalt qualities.  Argument: Argument Against the Both Interpretation [from raptor-subset-on]   P1. The Both Interpretation defines the neutral as both mental and material.   P2. This definition conflates neutral monism with dualaspect theory (often viewed as dualism).   C. The Both Interpretation is less preferable t…"
+          "title": "consciousness-intentionality",
+          "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
+          "score": 0.054852985,
+          "snippet": "consciousness-intentionality  But what is the relationship between various kinds of information access and consciousness in the phenomenal, experiential sense? Block distinguishes the notions of phenomenal and access consciousness, arguing that a mental representation’s being poised or broadcast for use in reasoning and rational control of action is neither conceptually necessary nor sufficient for the state’s being phenomenally conscious. Similarly he distinguishes phenomenal consciousness from what he calls “monitoring consciousness”—where this has to do with one’s capacity to represent one’…"
         }
       ],
       "source_score": {
-        "matched": [],
-        "missing": [
-          "consciousness",
-          "qualia-knowledge",
+        "matched": [
           "physicalism"
         ],
+        "missing": [
+          "consciousness",
+          "qualia-knowledge"
+        ],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 0.33333334
       },
       "fact_score": {
         "matched": [
+          "Block",
           "phenomenal consciousness",
           "access consciousness",
           "Mary's room",
@@ -641,14 +645,12 @@
           "what it is like",
           "knowledge argument"
         ],
-        "missing": [
-          "Block"
-        ],
+        "missing": [],
         "total_expected": 7,
-        "ratio": 0.85714287
+        "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 1655,
+      "search_ms": 1127,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -682,71 +684,72 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "justice-distributive",
-          "url": "https://plato.stanford.edu/entries/justice-distributive/",
-          "score": 0.70840013,
-          "snippet": "[Atlas highlights] [Tversky and Kahneman problem (raptor-subset-on) — contested]: \"The disconcerting implication of this study is that ethical responses may be strongly influenced manner cases described framed.\" Argument: The General Problem of Pure Reason [from raptor-subset-on]   P1. Metaphysics relies on concepts that connect things a priori (not derived from experience).   P2. Hume questioned the validity of such connections, specifically regarding causality.   P3. However, Hume did not recognize these as instances of synthetic a priori judgments in general.   C. Kant seeks to solve 'How a…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5538374,
+          "snippet": "The argument from hallucination challenges naive realism by asserting that veridical and indistinguishable hallucinatory experiences share a common nature, thereby supporting the Common Kind Claim. Naive realists counter this with disjunctivism, which denies such sameness despite subjective indistinguishability or causal matching. Critics like Martin argue that modified causal arguments and screening-off problems undermine disjunctivist defenses."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "nonidentity-problem",
-          "url": "https://plato.stanford.edu/entries/nonidentity-problem/",
-          "score": 0.7449248,
-          "snippet": "[Atlas highlights] Argument: The Problem of Divine Language [from raptor-subset-on]   P1. God is absolutely simple and transcendent (no distinctions between essence/existence or properties).   P2. We cannot affirm anything positive about God because no affirmation can be appropriate to a transcendent being.   P3. It is better to deny properties of God (negative theology).   C. There must be a way to speak meaningfully of God without altering the sense of words, leading to analogical solutions.  [nonidentity problem (raptor-subset-on)]: \"the agent’s only alternatives to bringing that person int…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.532909,
+          "snippet": "The text analyzes the Problem of Perception by contrasting sense-datum theory, which posits non-ordinary entities as objects of direct awareness to account for illusion and hallucination, with naive realist disjunctivism, which rejects the Common Kind Claim. It details how various philosophical theories attempt to resolve perceptual issues through different ontological commitments regarding experience and intentionality. The discussion highlights historical developments in these views, including objections to sense-data such as indeterminacy concerns."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "intentionality",
-          "url": "https://plato.stanford.edu/entries/intentionality/",
-          "score": 0.5683333,
-          "snippet": "[Atlas highlights] Argument: Problem of Locally Co-instantiated Properties [from raptor-subset-on]   P1. P1: In some environments, property A (being a fly) and property B (being small, dark, moving) are always co-instantiated.   P2. P2: If it was adaptive for the frog to snap at flies, it was equally adaptive for it to snap at things that are small, dark, and moving.   P3. P3: The content of representation depends on the function of the detection mechanism.   C. The content is indeterminate between 'there's a fly' and 'there's something small, dark, and moving', which undermines naturalized co…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51501626,
+          "snippet": "The Knowledge Argument, primarily formulated by Frank Jackson using the thought experiment of Mary the neurophysiologist, claims that physicalism is false because it cannot account for all facts about consciousness. The reasoning posits that although Mary possesses complete physical knowledge regarding color vision while isolated in a black-and-white room, she acquires new non-physical knowledge upon experiencing color for the first time after her release. This distinction between physical and phenomenal concepts supports the conclusion that not all information is physical."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.5965292,
-          "snippet": "[Atlas highlights] [Chalmers (raptor-subset-on)]: \"So the narrow content of my thought that the lakes contain water does not rule out Twin Eart\" Argument: The Problem of Universal Proofs in Mathematics [from raptor-subset-on]   P1. Mathematicians proved theorems (e.g., alternando) separately for number, lines, planes, and solids.   P2. A single general or universal proof now exists for all these categories.   P3. Science concerns a specific genus or kind.   C. There is no clear determinate kind comprising both numbers and magnitudes to serve as the subject of this universal science.  Argument:…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51164895,
+          "snippet": "The text outlines various philosophical arguments concerning perception, including the argument from illusion and hallucination. It references specific principles such as Robinson's Phenomenal Principle and explores answers to fundamental questions about objects and character in perceptual experience."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "epiphenomenalism",
-          "url": "https://plato.stanford.edu/entries/epiphenomenalism/",
-          "score": 0.4806678,
-          "snippet": "[Atlas highlights] Defining Gettier problem (raptor-subset-on): \"This is known as the Gettier problem. Some philosophers attempt to solve the Gettier problem by adding a fourth condition...\" Argument: Problem of Pierre Menard (Identity Crisis) [from raptor-subset-on]   P1. Pierre Menard writes text word-for-word identical to Cervantes's Don Quixote.   P2. Menard and Cervantes are distinct authors creating distinct characters despite sharing all textual properties.   P3. Neo-Meinongian identity criteria tie object identity to the set of corresponding properties.   C. If identity depends solely …"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5105408,
+          "snippet": "Ducasse and Chisholm advance Adverbialism as a framework to explain experiential phenomenology while sidestepping the metaphysical complications of sense-datum theory. Critics contend that this approach is flawed because it abandons the Phenomenal Principle, thereby failing to adequately account for object-directness or the simultaneous presence of multiple properties."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "reliabilism",
-          "url": "https://plato.stanford.edu/entries/reliabilism/",
-          "score": 0.43666336,
-          "snippet": "[Atlas highlights] Defining Disjunction Problem (raptor-subset-on): \"With respect to the crude causal theory... the name applies because the theory entails disjunctive contents when it should not.\" Argument: The Logical Problem of Ineffability [from raptor-subset-on]   P1. To assert that something (X) is ineffable is to make a statement about X.   P2. Making any statement about X contradicts the definition of X as ineffable (indescribable).   C. Therefore, it is logically incoherent to claim that God or mystical reality is ineffable.   Objections:     - Silence Response: Avoid speech altogethe…"
+          "title": "perception-problem",
+          "url": "https://plato.stanford.edu/entries/perception-problem/",
+          "score": 0.022222225,
+          "snippet": "perception-problem  There are various different naive realist approaches to illusion (see e.g., Fish (2009: Chapter 6), Brewer (2008, 2011: Chapter 5), Kalderon (2011), Genone (2014), French and Phillips (2020)). When it comes to the argument from illusion, the naive realist (like the intentionalist) rejects the Phenomenal Principle. So how does naive realism differ from intentionalism about illusions? In two respects: first, naive realists can maintain that illusory experiences are fundamentally direct presentations of the world. Second, the naive realist can explain the character of such ill…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "neutral-monism",
-          "url": "https://plato.stanford.edu/entries/neutral-monism/",
-          "score": 0.4590209,
-          "snippet": "[Atlas highlights] [David Chalmers (raptor-subset-on)]: \"the ideas of the memory are muchmore lively and strong than thoseof the imagination\" Argument: Problem of Indiscriminable Objects [from raptor-subset-on]   P1. Creationism holds that a fictional object exists only if an author performs an act of creation/generation for it.   P2. Intuitively, there were thousands of minor characters (e.g., dwarves in Tolkien's War) who participated in the narrative.   C. Therefore, Creationism must posit that Tolkien performed thousands of distinct acts of dwarf-creation, which is counterintuitive or impl…"
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.049143177,
+          "snippet": "consciousness  The nature of the relevant proto-psychic aspect remains unclear, and such theories face a dilemma if offered in hope of answering the Hard Problem. Either the proto-psychic properties involve the sort of qualitative phenomenal feel that generates the Hard Problem or they do not. If they do, it is difficult to understand how they could possibly occur as ubiquitous properties of reality. How could an electron or a quark have any such experiential feel? However, if the proto-psychic properties do not involve any such feel, it is not clear how they are any better able than physical …"
         }
       ],
       "source_score": {
-        "matched": [],
+        "matched": [
+          "consciousness"
+        ],
         "missing": [
-          "consciousness",
           "qualia-knowledge",
           "physicalism"
         ],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 0.33333334
       },
       "fact_score": {
         "matched": [
-          "Chalmers",
+          "hard problem",
           "phenomenal consciousness"
         ],
         "missing": [
-          "hard problem",
+          "Chalmers",
           "illusionism",
           "Frankish",
           "explanatory gap",
@@ -756,7 +759,7 @@
         "ratio": 0.2857143
       },
       "embed_ms": 0,
-      "search_ms": 2351,
+      "search_ms": 2008,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -769,73 +772,73 @@
       "retrieved": [
         {
           "corpus_id": "raptor-subset-on",
-          "title": "content-teleological",
-          "url": "https://plato.stanford.edu/entries/content-teleological/",
-          "score": 1.0227405,
-          "snippet": "[Atlas highlights] [narrow mental content (raptor-subset-on)]: \"A state with content is a state that represents some part or aspect of the word; its content is the way it represents the world as being.\" Defining representational theory of thought (raptor-subset-on): \"On a representational theory of thought, this involves a representation of blossoms forming.\" Argument: The solution to the Humean problem [from raptor-subset-on]   P1. Hume raised a doubt regarding cause and effect (the crux metaphysicorum).   P2. This concept is one of the pure concepts of the understanding.   P3. These concepts…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.61579436,
+          "snippet": "The passages explore the philosophical concept of narrow content, contrasting it with broad content through thought experiments like Putnam's Twin Earth and Fodor's mapping conception. Narrow content is defined as a function from contexts or environments to truth conditions, aiming to capture what Oscar and his twin share despite differing external referents. The discussion further refines this by incorporating parameters for agents, times, and specific brain structures to address limitations in determining precise semantic values."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6093848,
+          "snippet": "The text argues that narrow mental content is determined solely by an individual's intrinsic properties, distinct from broad content which depends on external factors like the environment. Using Putnam’s Twin Earth thought experiment involving Oscar and Twin Oscar, it demonstrates that identical internal states can correspond to different referents (H2O vs. XYZ), thereby challenging the sufficiency of intrinsic properties for determining meaning. The discussion further explores attempts to define diagonal propositions or perceptual analogies as potential candidates for narrow content while hig…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.59908044,
+          "snippet": "Burge utilizes the arthritis example to illustrate how an individual can possess a concept despite holding false beliefs about its specific application, such as locating it in non-joint areas. This scenario is linked to Putnam's notion of the linguistic division of labor, which posits that semantic deference allows laypeople to rely on experts for word reference without needing specialized knowledge themselves. Segal critiques this view by arguing that attributing the concept of arthritis to someone who misunderstands its fundamental nature is counterintuitive."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.57634515,
+          "snippet": "The passages examine the philosophical debate between narrow mental content, defined by intrinsic properties independent of environment, and broad externalist views advanced by Hilary Putnam and Tyler Burge. Key arguments utilize thought experiments like Twin Earth to challenge whether internal states alone determine meaning, while also exploring theoretical frameworks such as conceptual role semantics and diagonal propositions to address these limitations. Critics argue that attributing concepts based on semantic deference or false beliefs is counterintuitive, highlighting ongoing controversi…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5737242,
+          "snippet": "Content externalism posits that mental content depends on individuation factors outside the individual, a view historically contextualized by figures like Sartre and Wittgenstein but most famously defended through Putnam's Twin Earth and Burge's Arthritis thought experiments. Critics challenge these arguments via methodological objections or propose distinctions between wide and narrow contents to preserve internalist intuitions. The debate extends to implications for idealism, self-knowledge, and physicalism."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.56932485,
+          "snippet": "The text examines the philosophical debate surrounding narrow mental content, which is defined as content independent of environmental factors, contrasting it with broad externalist views advanced by figures like Hilary Putnam and Tyler Burge. It explores various theoretical approaches to defining narrow content, including descriptive, conceptual role, mapping, and diagonal proposition theories, while also addressing criticisms regarding their efficacy and fundamental status. Ultimately, the passage highlights that narrow content remains a controversial concept due to differing interpretations…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.56819546,
+          "snippet": "The text examines various philosophical arguments concerning narrow versus broad content, highlighting debates over causal explanation and the intrinsic nature of mental properties. It evaluates multiple theoretical frameworks for defining narrow content, including conceptual role semantics, diagonal propositions, and epistemic strategies, while critically assessing their respective limitations regarding truth conditions and circularity. Key figures such as Putnam, Burge, Fodor, Chalmers, and Stalnaker are central to these discussions on how mental states relate to external environments."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.502537,
+          "snippet": "Empirical research across developmental, comparative, and cross-cultural psychology challenges the view that folk psychology is an innate, universal human capacity. Evidence of significant socio-cultural variation in theory of mind development suggests that these competencies are shaped by ambient narratives and early social experiences rather than internalized rules or biological universals."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.055681817,
+          "snippet": "content-narrow  Burge’s most famous example involves the concept of arthritis. He considers an individual who is unaware that arthritis is a disease specifically of the joints. His subject believes that he has arthritis in his thigh. This belief is false, since one cannot have arthritis in the thigh. However, Burge argues, in a world in which all the intrinsic facts about the subject were exactly the same as they actually are, but in which the term ‘arthritis’ is generally used in the subject’s community to refer to rheumatoid ailments in general, the subject’s belief would have a different co…"
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
-          "score": 0.99926156,
-          "snippet": "[Atlas highlights] Argument: The Arthritis Argument (via Burge) [from raptor-subset-on]   P1. A subject believes he has arthritis in his thigh.   P2. In reality, arthritis is a disease of joints; thus the belief is false.   P3. If intrinsic facts were identical but 'arthritis' meant rheumatoid ailments generally, the belief would be true.   C. Therefore, mental content depends on community usage and social environment, not just intrinsic properties.  Argument: Arthritis Argument (Burge) [from raptor-subset-on]   P1. Larry believes he has arthritis in his thigh; this belief is false because art…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "justice-virtue",
-          "url": "https://plato.stanford.edu/entries/justice-virtue/",
-          "score": 0.5272353,
-          "snippet": "[Atlas highlights] [Burge, Tyler (raptor-subset-on)]: \"Burge (1979) believes that externalism refutes individualistic theorys of intentional mental states.\" Argument: The Fire Thought Experiment (Famous Fire Cause) [from raptor-subset-on]   P1. One must choose between saving Archbishop Fénelon (benefactor to humanity) or one's parent.   P2. Justice demands impartiality for the greater good.   C. We should save Fénelon rather than our parent.  Argument: Heinz dilemma thought experiment [from raptor-subset-on]   P1. A man named Heinz is tempted to steal a life-saving drug for his sick wife.   C.…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.52699167,
-          "snippet": "[Atlas highlights] Defining bourgeois thought (raptor-subset-on): \"modern philosophy is always confronted with the issue of there being a 'content' necessary for the application of its formal principles.\" Argument: Bradwardine's Solution to the Liar [from raptor-subset-on]   P1. (P2) A proposition signifies everything which follows from its content (the Converse Bradwardine Principle).   P2. The Liar sentence 'What I am saying is false' implies that it is not true (or similar logical consequence).   C. Since insolubles signify more than at first appears, and not all of what they signify can be…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.4663481,
-          "snippet": "[Atlas highlights] Argument: Negative answer to the Entscheidungsproblem [from raptor-subset-on]   P1. The characteristic functions of sets representing halting/normal forms for Turing machines, lambda terms, and general recursive systems are not computable.   P2. If validity V were decidable relative to these models, membership in those undecidable sets would also be decidable.   C. Therefore, there is no procedure that can decide the universality or satisfiability (validity) of a given logical expression using finitely many operations.  Defining causal-informational theory of content (raptor…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.42794392,
-          "snippet": "[Atlas highlights] [Lukács (raptor-subset-on)]: \"the inevitable desire to communicate meaning drives people to adopt different means of communication... enable persons to overcome their separateness by relating to each other in terms of other spheres of reality\" Argument: The Bias Objection to the Impartial Spectator [from raptor-subset-on]   P1. 1. The impartial spectator develops within us as part of our efforts to align feelings with those of people immediately around us.   P2. 2. Our feelings are notoriously shaped by our societies and their biases.   C. Therefore, it is unlikely that the …"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "lukacs",
-          "url": "https://plato.stanford.edu/entries/lukacs/",
-          "score": 0.27970102,
-          "snippet": "[Atlas highlights] Argument: Externalism about mental content (Kripke/Putnam/Burge) [from raptor-subset-on]   P1. The reference and truth conditions of expressions are not determined by what is 'in one's head' but by causal relations to substances or community usage.   P2. The content of a thought determines its reference and truth conditions.   C. Therefore, the content of one's thought is also not determined individualisticallly but is externally bound up with natural substances and linguistic communities.   lukacs  Rather, Hegel’s thought suggests a conception of political praxis that ackno…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "kant-hume-causality",
-          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
-          "score": 0.22015819,
-          "snippet": "[Atlas highlights] Argument: The Blindspot Solution to the Surprise Test Paradox [from raptor-subset-on]   P1. If a proposition is a personal blindspot for someone, they cannot furnish good grounds for others to share it.   P2. The teacher's announcement entails that the specific date of the test will be a blindspot for the student on that day.   P3. Therefore, non-surprisees (like colleagues) or even the student at other times can understand why the surprise occurs.   C. The paradox dissolves because knowledge of the announcement is lost when Friday arrives and no earlier test has occurred; t…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "natural-kinds",
-          "url": "https://plato.stanford.edu/entries/natural-kinds/",
-          "score": 0.17748043,
-          "snippet": "[Atlas highlights] Argument: Russell's solution to the mind-body problem via neutral monism [from raptor-subset-on]   P1. The 'hard problem' arises because at the end of a purely physical chain of causes something mysteriously new (an experience) appears.   P2. Matter and bodies are nothing but collections of neutral elements or events.   P3. Therefore matter does not produce sensations; rather both arise from causal relations among neutral entities.   C. Mind-body causation is reduced to causal relations among events/elements, closing the chasm between material process and perception.   natur…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.2695442,
-          "snippet": "[Atlas highlights] Argument: Proof that John belongs to the extension of being happy [from raptor-subset-on]   P1. John falls under the concept being happy (Hj).   P2. The definition: x ∈ εG iff Gx, for any object x and concept G.   C. Therefore, j ∈ εH — John is a member of the extension of the concept being happy.  Argument: Galileo's Thought Experiment on Falling Bodies [from raptor-subset-on]   P1. Aristotle predicts heavier objects fall faster than lighter ones.   P2. Imagine a composite object made of a heavy (fast) object and a light (slow) object tied together.   P3. The composite is h…"
+          "score": 0.047139786,
+          "snippet": "content-externalism  If this is correct, Larry’s beliefs vary between actual and counterfactual situations. Larry, however, is identical in both situations. The only difference lies in the differing natures of his linguistic communities—specifically, the differing uses of the word-form, “arthritis”. As in Putnam’s thought-experiment, the difference in meaning again stems from a difference in extension of a term, resulting in different truth-conditions, truth-makers, and the like. But in Putnam’s case, the differences stem from differences in the natural environment. In Burge’s thought experime…"
         }
       ],
       "source_score": {
@@ -852,20 +855,20 @@
       "fact_score": {
         "matched": [
           "narrow content",
+          "wide content",
           "Burge",
           "arthritis",
           "content externalism",
-          "twin earth",
-          "individualism"
+          "twin earth"
         ],
         "missing": [
-          "wide content"
+          "individualism"
         ],
         "total_expected": 7,
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2358,
+      "search_ms": 2063,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -976,7 +979,7 @@
         "ratio": 0.71428573
       },
       "embed_ms": 0,
-      "search_ms": 1220,
+      "search_ms": 1233,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -989,103 +992,104 @@
       "retrieved": [
         {
           "corpus_id": "raptor-subset-on",
-          "title": "corruption",
-          "url": "https://plato.stanford.edu/entries/corruption/",
-          "score": 6.671089,
-          "snippet": "[Atlas highlights] Argument: Hagedoorn's sampling argument for drift (1921) [from raptor-subset-on]   P1. Some traits are trivial and cannot be accounted for as useful by natural selection.   P2. Variability in a population is reduced when new populations lack variability of the original or when random sampling selects only a small fraction of individuals to reproduce.   C. Random sampling processes can reduce variation within populations without selective explanation, accounting for stable but non-adaptive traits.  Argument: Astell's argument for female rationality and education [from raptor-…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5667351,
+          "snippet": "Aristotle distinguishes between intellectual and ethical virtues, defining the latter as a golden mean determined by practical reason rather than rigid rules. He argues that while ethics lacks precise theoretical guides, true virtue requires the guidance of practical wisdom to navigate specific circumstances. Ultimately, Aristotle posits that the highest human good is found in the life of philosophical contemplation, which surpasses political or merely ethical living."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "al-baghdadi",
-          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
-          "score": 4.332822,
-          "snippet": "[Atlas highlights] Argument: Equivalence argument for PRA strength [from raptor-subset-on]   P1. Taking axioms of Q and induction restricted to existential formulas (Σ01-formulas) yields essentially the same system as PRA.   C. PRA is sufficient for developing syntax because it captures this equivalent arithmetical strength first showed by Parsons 1970.  [miracle argument (raptor-subset-on)]: \"The argument from corroboration thus runs as follows. The fact that one and the same thig is apparently revealed by distinct modessuggests tha\" Argument: Basic Argument for Theological Fatalism [from rap…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.54661626,
+          "snippet": "Aristotle posits that the highest human good is eudaimonia, achieved primarily through philosophical contemplation rather than political activity or mere ethical living. He supports this by distinguishing intellectual from ethical virtues and arguing that theoretical wisdom offers a self-sufficient, divine-like perfection superior to practical engagement. Additionally, he contextualizes other aspects of life, such as friendship and pleasure, as secondary to this ultimate pursuit of virtue and reason."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "fine-tuning",
-          "url": "https://plato.stanford.edu/entries/fine-tuning/",
-          "score": 4.3133245,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-on)]: \"they must be re-interpreted and systematized, and, where that does not suffice, some must be rejected outright\" Argument: Counterexample Argument for Limits of Theorems [from raptor-subset-on]   P1. Presburger arithmetic (addition only) and Skolem's theory (multiplication only) are complete.   P2. Tarski showed the first-order theory of real closed fields is complete and decidable.   P3. Gödel’s theorem requires a certain amount of elementary arithmetic (both addition and multiplication).   C. Therefore, there exist non-trivial theories to wh…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.53422695,
+          "snippet": "Virtue ethics defines virtues as entrenched character dispositions that enable agents to act and feel appropriately, requiring practical wisdom (phronesis) developed through experience to navigate complex moral situations. This framework connects virtuous action to eudaimonia, understood as a value-laden form of flourishing or true happiness rather than mere pleasure. The text addresses various theoretical challenges, including the distinction between rational motivation and emotional inclination, while rejecting objections such as egoism and self-effacement."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "prior",
-          "url": "https://plato.stanford.edu/entries/prior/",
-          "score": 3.2994955,
-          "snippet": "[Atlas highlights] Argument: Argument for infinite containment in the continuum [from raptor-subset-on]   P1. The division of the continuum is completed such that it contains an actual infinity of parts.   P2. Each part itself includes an infinity of parts.   C. An infinite can be greater than another by including it (answering Bradwardine's objection).  [Aristotle (raptor-subset-on)]: \"a deduciton is ‘an arguement in which when certian things are lained down somethign else follows of necessuty in virture of their bein gso’ (APr. 24b18–20).\" [Aristotle (raptor-subset-on)]: \"The theory treats m…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.52323717,
+          "snippet": "Philippa Foot advances ethical naturalism and virtue ethics, arguing that morality is grounded in facts about human nature and the requirements for flourishing rather than consequentialist or noncognitivist frameworks. She contends that virtues are essential traits beneficial to human life and that moral reasoning must distinguish between negative rights and positive duties while recognizing natural norms inherent in biological functions."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberty-positive-negative",
-          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
-          "score": 3.641478,
-          "snippet": "[Atlas highlights] Argument: The argument for vicissitude as retributive justice [from raptor-subset-on]   P1. Souls are punished or rewarded based on their conduct in previous incarnations (e.g., behaving like a pig).   P2. Providence imposes perpetual change (vicissitude) on natural things.   P3. This cycle ensures that moral conduct has cosmic consequences across reincarnations.   C. Retributive justice prevails in the universe through the mechanism of metempsychosis and vicissitude.  [Consequence Argument (raptor-subset-on)]: \"The ConsequenceArgument(section3.1)makesastrongcasefortheincomp…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5184164,
+          "snippet": "Virtue ethics, rooted in the works of Plato, Aristotle, Mencius, and Confucius, emphasizes moral character over rules or consequences. The field has evolved from a neo-Aristotelian dominance into diverse frameworks including eudaimonist, agent-based, target-centered, and Platonistic approaches. These variations differ on how virtues relate to human flourishing, agent motivations, and specific contexts while maintaining that virtue is central to ethical life."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "addams-jane",
-          "url": "https://plato.stanford.edu/entries/addams-jane/",
-          "score": 2.8168375,
-          "snippet": "[Atlas highlights] Argument: Argument for Non-Comparative Harm via Adverse Conditions [from raptor-subset-on]   P1. Bringing a person into existence can cause them to experience pain, discomfort, or disability (adverse conditions).   P2. These adverse conditions are bad states for the child regardless of whether they are worse off than any alternative non-existent state.   C. The act harms the child through this non-comparative mechanism, which retains moral relevance.  Argument: Argument for Normal Form Requirement [from raptor-subset-on]   P1. If a definition D satisfies Conservativeness and…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51342154,
+          "snippet": "Aristotle argues that the ultimate human good is eudaimonia, defined as excellent rational activity in accordance with virtue. He extends this ethical framework to political theory by asserting that the polis exists to promote human flourishing through distributive justice and legitimate governance structures. Consequently, he evaluates various forms of government based on their capacity to facilitate living well while accounting for practical human tendencies."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "atheism-agnosticism",
-          "url": "https://plato.stanford.edu/entries/atheism-agnosticism/",
-          "score": 2.1616366,
-          "snippet": "[Atlas highlights] Argument: Davidson's argument for events [from raptor-subset-on]   P1. Adverbial modification cannot be adequately captured without positing an event as implicit argument.   P2. 'John walked slowly' states there is an event which, together with John, is argument of walk and to which 'slowly' applies.   C. Events exist as implicit arguments in the semantic structure of natural language sentences.   Objections:     - Kim 1976 alternative semantics: There are alternatives to Davidson's adverbial semantics that do not posit implicit arguments like events.     - Copley & Harley 2…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.50523436,
+          "snippet": "Ancient moral theory is characterized as an agent-centered framework that prioritizes the character and psychological state of the moral agent over specific actions. This tradition relies on distinct psychological models, such as Socrates' tripartite soul or Aristotle's rational mean states, to define virtue and explain how individuals achieve eudaimonia through harmony with reason and nature."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "haecceitism",
-          "url": "https://plato.stanford.edu/entries/haecceitism/",
-          "score": 1.5926634,
-          "snippet": "[Atlas highlights] Argument: The Usufruct Argument for Constitutional Expiration [from raptor-subset-on]   P1. The earth belongs in usufruct only to the living (premise).   P2. Usufruct implies an obligation not to leave property worse than received.   P3. Political constitutions and laws are forms of collective property/debt.   C. Therefore, every constitution should naturally expire after a generation (19 years) so that future generations are not bound by past acts.  Argument: contractarian argument for consequentialism [from raptor-subset-on]   P1. Informed people are rational and impartial…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.50444824,
+          "snippet": "Adam Smith advances a moral sentimentalism grounded in phenomenology and particularism, distinguishing his virtue ethics from Kantian rule-based systems and utilitarian reductionism. He argues that moral judgment arises from social interaction via the impartial spectator, rejecting tribalist limits while acknowledging the influence of custom and culture on normative guides. This framework supports a political philosophy where government encourages virtue by refraining from coercion, aligning with an enlightened but distinct form of libertarianism."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "aristotle-mathematics",
-          "url": "https://plato.stanford.edu/entries/aristotle-mathematics/",
-          "score": 1.6721854,
-          "snippet": "[Atlas highlights] Argument: Alston's Doxastic Practice Argument for Rationality [from raptor-subset-on]   P1. Belief-forming processes (doxastic practices) like sense-perception and deduction are socially established and unavoidable.   P2. The justification for any doxistic practice is epistemically circular, meaning its reliability cannot be established independently of the practice itself.   C. It is a matter of practical rationality to engage in these practices as long as there is no good reason to believe they are unreliable.   Objections:     - Kvanvig's Critique on Rationality: Alston e…"
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.06103405,
+          "snippet": "aristotle-ethics  Though the general point of view expressed in each work is the same, there are many subtle differences in organization and content as well. Clearly, one is a re-working of the other, and although no single piece of evidence shows conclusively what their order is, it is widely assumed that the Nicomachean Ethics is a later and improved version of the Eudemian Ethics. (Not all of the Eudemian Ethics was revised: its Books IV, V, and VI re-appear as V, VI, VII of the Nicomachean Ethics.) Perhaps the most telling indication of this ordering is that in several instances the Nicoma…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "freewill",
-          "url": "https://plato.stanford.edu/entries/freewill/",
-          "score": 1.6182959,
-          "snippet": "[Atlas highlights] Argument: Solidarity Argument for Cross-Generational Responsibility [from raptor-subset-on]   P1. Community solidarity and high levels of cross-generational identification exist within a group.   P2. Group members take pride in their ancestors' deeds.   C. The group is morally responsible for harms brought about by those earlier generations.   Objections:     - Agency Objection (Bratman): Solidarity does not provide the interaction-based agency required for traditional moral responsibility.     - Causation vs. Benefit Distinction: Benefiting from past harm is distinct from c…"
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.060180996,
+          "snippet": "ethics-virtue  Whether virtue ethics can be expected to grow into “virtue politics”—i.e. to extend from moral philosophy into political philosophy—is not so clear. Gisela Striker (2006) has argued that Aristotle’s ethics cannot be understood adequately without attending to its place in his politics. That suggests that at least those virtue ethicists who take their inspiration from Aristotle should have resources to offer for the development of virtue politics. But, while Plato and Aristotle can be great inspirations as far as virtue ethics is concerned, neither, on the face of it, are attracti…"
         }
       ],
       "source_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "ethics-virtue",
-          "aristotle-ethics",
+          "aristotle-ethics"
+        ],
+        "missing": [
           "communitarianism"
         ],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 0.6666667
       },
       "fact_score": {
         "matched": [
           "function argument",
-          "ergon",
+          "eudaimonia",
           "virtue",
           "After Virtue",
-          "practice",
           "tradition"
         ],
         "missing": [
-          "eudaimonia",
-          "MacIntyre"
+          "ergon",
+          "MacIntyre",
+          "practice"
         ],
         "total_expected": 8,
-        "ratio": 0.75
+        "ratio": 0.625
       },
       "embed_ms": 0,
-      "search_ms": 4895,
+      "search_ms": 4512,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1098,82 +1102,82 @@
       "retrieved": [
         {
           "corpus_id": "raptor-subset-on",
-          "title": "bruno",
-          "url": "https://plato.stanford.edu/entries/bruno/",
-          "score": 2.9726255,
-          "snippet": "[Atlas highlights] [Umbrella View (raptor-subset-on)]: \"the Umbrella View involves both a substantive metaphysical thesis and a semantic thesis.\" Defining Heliocentric theory (raptor-subset-on): \"Dismissing contemporary claims that Copernicus’s hypothesis was merely a convenient computational device, Bruno announced that it disproved the traditional Aristotelian-Ptolemaic picture of the cosmos.\" Defining imagination (raptor-subset-on): \"To imagine is to represent without aiming at things as they actually, presently, and subjectively are.\" [Computational complexity theory (raptor-subset-on)]: \"…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5202727,
+          "snippet": "The passages argue that rigid designators and transworld identity are distinct from essentialism and realism, defending the view that names refer to specific individuals across possible worlds without requiring qualitative criteria of identity. This position is contrasted with counterpart theory, which reduces modal discourse by treating cross-world references as relations between similar entities rather than direct identification. While Kripke's arguments for rigidity have gained significant traction against objections regarding reference stability, debates continue concerning the explanatory…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "moral-arguments-god",
-          "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
-          "score": 2.3484998,
-          "snippet": "[Atlas highlights] Defining error theory (raptor-subset-on): \"Error theories... hold that moral sentences express propositions, and hence are true or false, but that these propositions are all false.\" Defining Crude Causal Theory (raptor-subset-on): \"According to the crude causal theory, a mental representation R represents that an F is present if and only if Rs are often caused by an F’s being present.\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"there is no shape exact and real... One will always find there inequalities to Infinity. That comes about because matter is actually subdivided…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51333284,
+          "snippet": "The text evaluates competing theories of reference for impure indexicals, contrasting Gricean intentionalist approaches with descriptivist constraints. It examines whether speaker intentions or semantic meanings primarily determine reference, while addressing the 'Humpty Dumpty' problem where excessive reliance on mental states threatens to remove substantive limits on meaning."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "rigid-designators",
-          "url": "https://plato.stanford.edu/entries/rigid-designators/",
-          "score": 1.9805173,
-          "snippet": "[Atlas highlights] Defining unfair advantage theory (raptor-subset-on): \"crime involves taking an unfair advantage over the law-abiding, and that punishment removes that unfair advantage.\" [Edmund Burke (raptor-subset-on)]: \"the relation between sovereign and the governed had for a primary purpose the protection of the latter's civil interests.\" [Edmund Burke (raptor-subset-on)]: \"this participation was a precondition of the practical thought which made Burke famous in his own time...\" [Edmund Burke (raptor-subset-on)]: \"The roles of thinker and party spokesman consort ill: and there were boun…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51082844,
+          "snippet": "The passages argue that rigid designators establish necessary truths about identity and essence across possible worlds, distinguishing this concept from descriptivism and counterpart theory. This framework applies to proper names, natural kinds, and theoretical identities, allowing for a posteriori knowledge of contingent discoveries like the identity of Hesperus and Phosphorus. While Kripke's view defends direct reference without qualitative criteria, it faces ongoing debate regarding its coherence with essentialism and alternative semantic accounts."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "qm-modal",
-          "url": "https://plato.stanford.edu/entries/qm-modal/",
-          "score": 1.9564205,
-          "snippet": "[Atlas highlights] [P.F. Strawson (raptor-subset-on)]: \"what it is to hold a person morally responsible for wrong conduct is nothing more than the propensity towards, or the sustaining of,a moral reactive attitude likeindignation.\" [Kripke (raptor-subset-on) — contested]: \"Their conjun ction is, in DeRose’ s term, abomina ble: “George knows tha t he has hand s, bu t h e doesn’t kno w th at he’s no t the handless victi m of a Cartesi an demo n”.\" Defining Stoic theory (raptor-subset-on): \"the faculties of the mind are simply things the mind can do.\" [Saul Kripke (raptor-subset-on)]: \"K ripk e ’…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5035009,
+          "snippet": "Kripke argues that identity statements involving rigid designators, such as proper names for the same object, are necessarily true if they are true at all. This contrasts with non-rigid descriptions like 'the brightest non-lunar object in the evening sky,' which designate contingent truths because the described property could have belonged to a different entity. The concept of rigidity extends beyond simple naming to include kind terms and standard measurements, revealing how necessary identities can be established through contingent means."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "risk",
-          "url": "https://plato.stanford.edu/entries/risk/",
-          "score": 2.2509072,
-          "snippet": "[Atlas highlights] Defining duplicitous exclusion theory (raptor-subset-on): \"Corruption of democracies occurs under two conditions: (1) this norm is violated and; (2) violators claim to be complying with the norm.\" [Saul Kripke (raptor-subset-on)]: \"On the basis of such considerations, Kripke rejects this proposal for accommoda\" [Mapping theory (raptor-subset-on) — contested]: \"The chief difficulty with this proposal is that it has the consequence that every token with a given broad content... But mental states with a particular broad content can be very unlike one another...\" Defining verifi…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.49396017,
+          "snippet": "The text surveys competing theories of linguistic reference, primarily contrasting descriptivism with Millianism and the causal theory. It further examines indexicals through traditional descriptive accounts and Kaplan's character-based framework to address issues like multiple bearers and context sensitivity. These models are evaluated for their ability to explain how terms fix reference via conventions, mental states, or contextual salience."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.4874905,
+          "snippet": "The text argues that the descriptive theory of names faces significant difficulties, particularly when handling negative existentials and counterfactual scenarios involving historical figures like Aristotle. It explores various semantic strategies to address these issues, including restricted quantifier notation, choice functions, and relativization to events, while citing contributions from scholars such as Neale, Devitt, Sterelney, Heim, and Fara."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.48393273,
+          "snippet": "The text critiques the descriptive theory of names by outlining objections regarding ambiguity, unwanted necessity, and lack of a principled basis. It examines Searle's bundle-of-properties proposal as an attempt to resolve these issues but highlights that Kripke and others argue it fails because reference is determined by causal chains rather than associated descriptions."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.48336565,
+          "snippet": "The text contrasts classical descriptivism with Millian and Kripkean critiques regarding the rigid designation of proper names, while analyzing indexicals through Kaplan's framework to show how context determines meaning. It further evaluates competing theories such as intentionalism and causal accounts for impure indexicals, addressing issues like speaker intentions versus semantic constraints. Finally, it maps these diverse philosophical models against skeptical views from figures like Quine and Davidson that challenge the determinacy of linguistic reference."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "descriptions",
+          "url": "https://plato.stanford.edu/entries/descriptions/",
+          "score": 0.04509804,
+          "snippet": "descriptions  Kripke’s positive proposal—suggestion really—was that names are associated with a causal chain; there is an initial baptism of an individual (e.g., Albert Einstein as ‘Albert Einstein’) and that referent is passed along to other users of the name. Likewise the referent of ‘Aristotle’ is not fixed by some description, but by a causal chain linking our use of ‘Aristotle’ with some historical individual. (This is not the place for an extended discussion of this proposal, but see Devitt 1981 and Salmon 1991 for development of this idea and Evans (1973, 1980) for criticism.)"
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "reference",
           "url": "https://plato.stanford.edu/entries/reference/",
-          "score": 1.7873666,
-          "snippet": "[Atlas highlights] Defining double exemplar theory (raptor-subset-on): \"Truth is the result of the comparison between two exemplars: the Aristotelian universal obtained by abstraction... and the archetype present in the divine mind.\" [Edmund Burke (raptor-subset-on)]: \"people should prefer the conclusions that accorded with their natual feelings. The complement... was a criterion for conduct... what tended to make people better and happier.\" Defining substantive-good theory (raptor-subset-on): \"\"substantive-good theories…which hold that there are standards…not entirely dependent on the desires…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "risk",
-          "url": "https://plato.stanford.edu/entries/risk/",
-          "score": 1.1666268,
-          "snippet": "[Atlas highlights] [Saul Kripke (raptor-subset-on)]: \"genuine linguistic reference—or what he calls ‘semantic reference’—needs to run purely via conve\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"the ability of, say, the balls A and B to act on one another in virtue of their relative motion, should not be lost at all... so that after a collision they should continue to have the same ability to act on one another\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"no eye... has a sure criterion for tellingfrom the phenomena where there is motion, how much motion thereis and of what sort it i…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "knowledge-analysis",
-          "url": "https://plato.stanford.edu/entries/knowledge-analysis/",
-          "score": 1.0767072,
-          "snippet": "[Atlas highlights] Defining Cobham-Edmonds thesis (raptor-subset-on): \"feasibility is thus a notion which applies not to individual natural numbers n, but either to time complexity functions...\" [Saul Kripke (raptor-subset-on)]: \"According to Kripke, there is no need to posit that definite descriptions ever refer; instead, we can explain away their apparent referential properties by noting that... speakers will typically have targets in mind for\" [Edmund Burke (raptor-subset-on) — contested]: \"Amongst these a belief in a continuing popular sovereignty... he would have found dangerously naive\" …"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "dispositions",
-          "url": "https://plato.stanford.edu/entries/dispositions/",
-          "score": 0.8900921,
-          "snippet": "[Atlas highlights] [direct reference (raptor-subset-on)]: \"For direct reference theorists, to say that Hesperus = Phosphorus is to say no more and no less than to say that Hesperus = Hesperus.\" Argument: Russell's Theory of Descriptions (Intensional) [from raptor-subset-on]   P1. A definite description term like 'the y such that phi(y)' has no independent meaning but translates contextually.   P2. [lambda x psi(x)](iota y phi(y)) abbreviates exists y[forall z(phi(z) equiv z=y) ^ psi(y)].   P3. If the existence and uniqueness condition fails, the atomic proposition is false.   C. Negations can …"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "causation-law",
-          "url": "https://plato.stanford.edu/entries/causation-law/",
-          "score": 0.87247926,
-          "snippet": "[Atlas highlights] Defining Ockham Theorem (raptor-subset-on): \"an inductive method is mind change optimal if and only if... [it] must be the simplest one, in the sense of having the maximum simplicity rank.\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"space out of the world must needs be imaginary [but] … The case is the same with empty space within the world; which I also take to be imaginary\" Argument: Naturalized Theory of Prophecy and Providence [from raptor-subset-on]   P1. The active intellect is a cosmic principle that mediates divine overflow.   P2. Human prophecy occurs when a p…"
+          "score": 0.05230076,
+          "snippet": "reference  As Kripke points out, complications arise due to the fact that we can apparently re-use names. So, I may have come across the name ‘Napoleon’ via a chain of use leading back to the most famous of French generals. Having heard the name, I may now decide to call my cat, who likes to imperiously survey the domain of my apartment, ‘Napoleon’. When I use the name in this way, my intentions make it the case, Kripke claims, that I have introduced a new name, or at least a new use of the name. This is in spite of the fact that there is a very real sense in which I inherited the name from a …"
         }
       ],
       "source_score": {
         "matched": [
-          "rigid-designators",
-          "reference"
+          "reference",
+          "descriptions"
         ],
         "missing": [
-          "descriptions"
+          "rigid-designators"
         ],
         "total_expected": 3,
         "ratio": 0.6666667
@@ -1183,18 +1187,18 @@
           "causal-historical",
           "Kripke",
           "rigid designator",
-          "qua-problem"
-        ],
-        "missing": [
           "initial baptism",
-          "reference borrowing",
+          "qua-problem",
           "descriptivism"
         ],
+        "missing": [
+          "reference borrowing"
+        ],
         "total_expected": 7,
-        "ratio": 0.5714286
+        "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2502,
+      "search_ms": 2226,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1221,59 +1225,59 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "content-teleological",
-          "url": "https://plato.stanford.edu/entries/content-teleological/",
-          "score": 1.2216544,
-          "snippet": "[Atlas highlights] Argument: Socrates' Claim about the Art of Love [from raptor-subset-on]   P1. \"The only thing I say I know,\" Socrates says in Symposium, \"is the art of love.\"   P2. There is an etymological connection between erôs (love) and erôtan (to ask).   C. Therefore, Socrates knows the art of love because he knows how to elenctically question.  [Hilary Putnam (raptor-subset-on)]: \"Th e id ea th at al l an d on ly t he ap ri ori trut hs ar e nece ssar y w as thro wn i nto seri ous do ubt b y t h e wo rk o f phi loso phers incl udi ng Hil ary Pu tn am (1 972 ) a nd S au l Kr ipk e (1 98…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5683992,
+          "snippet": "The passages examine the philosophical debate between narrow mental content, defined by intrinsic properties independent of environment, and broad externalist views advanced by Hilary Putnam and Tyler Burge. Key arguments utilize thought experiments like Twin Earth to challenge whether internal states alone determine meaning, while also exploring theoretical frameworks such as conceptual role semantics and diagonal propositions to address these limitations. Critics argue that attributing concepts based on semantic deference or false beliefs is counterintuitive, highlighting ongoing controversi…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "justice-virtue",
-          "url": "https://plato.stanford.edu/entries/justice-virtue/",
-          "score": 0.68379545,
-          "snippet": "[Atlas highlights] Argument: Argument for infinite containment in the continuum [from raptor-subset-on]   P1. The division of the continuum is completed such that it contains an actual infinity of parts.   P2. Each part itself includes an infinity of parts.   C. An infinite can be greater than another by including it (answering Bradwardine's objection).  Argument: Underdetermination of Mental Architecture Argument [from raptor-subset-on]   P1. Some philosophers argue the mind consists of independent modules with specific input/output links.   P2. Inference about these architectures relies on c…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.55571514,
+          "snippet": "Content externalism posits that mental content depends on individuation factors outside the individual, a view historically contextualized by figures like Sartre and Wittgenstein but most famously defended through Putnam's Twin Earth and Burge's Arthritis thought experiments. Critics challenge these arguments via methodological objections or propose distinctions between wide and narrow contents to preserve internalist intuitions. The debate extends to implications for idealism, self-knowledge, and physicalism."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.53161114,
+          "snippet": "Burge utilizes the arthritis example to illustrate how an individual can possess a concept despite holding false beliefs about its specific application, such as locating it in non-joint areas. This scenario is linked to Putnam's notion of the linguistic division of labor, which posits that semantic deference allows laypeople to rely on experts for word reference without needing specialized knowledge themselves. Segal critiques this view by arguing that attributing the concept of arthritis to someone who misunderstands its fundamental nature is counterintuitive."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5172063,
+          "snippet": "Thomas Reid argues that conception is the fundamental intellectual faculty providing intentional content, directly opposing the 'Way of Ideas' and Hume's representationalism which he views as epistemologically flawed. He further develops a direct theory of memory where past events are immediate objects, thereby refuting Locke’s psychological continuity account and establishing personal identity on first principles rather than circular reasoning."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51340187,
+          "snippet": "The argument challenges traditional internalist psychiatry by advocating for extended mind theories that integrate external artifacts into cognitive functions. It utilizes the Otto and Inga thought experiment to demonstrate that tools such as notebooks act as functional equivalents to biological memory rather than mere compensatory devices. This perspective asserts that psychological capacities are not strictly confined to intracranial processes."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.50227773,
+          "snippet": "The text evaluates competing theories of reference for impure indexicals, contrasting Gricean intentionalist approaches with descriptivist constraints. It examines whether speaker intentions or semantic meanings primarily determine reference, while addressing the 'Humpty Dumpty' problem where excessive reliance on mental states threatens to remove substantive limits on meaning."
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "content-externalism",
           "url": "https://plato.stanford.edu/entries/content-externalism/",
-          "score": 0.8511964,
-          "snippet": "[Atlas highlights] Argument: Twin Earth Argument (Putnam) [from raptor-subset-on]   P1. You and your twin on Twin Earth are molecule-for-molecule duplicates with identical internal states.   P2. On Earth 'water' refers to H2O; on Twin Earth 'twater' (called 'water') has different molecular structure.   P3. The reference, truth-makers, and truth-conditions for the word 'water' differ between you and your twin.   C. Therefore, if sentences have different meanings due to external factors, then beliefs/thoughts individuated by those contents also vary despite identical internal states. Thus, menta…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "moral-arguments-god",
-          "url": "https://plato.stanford.edu/entries/moral-arguments-god/",
-          "score": 0.35184097,
-          "snippet": "[Atlas highlights] Defining narrow content (raptor-subset-on): \"There is, some have argued, another type of content—narrow content—that is immune to these kinds of arguments.\" [Lukács (raptor-subset-on)]: \"the inevitable desire to communicate meaning drives people to adopt different means of communication... enable persons to overcome their separateness by relating to each other in terms of other spheres of reality\" Defining truth content (raptor-subset-on): \"criticism is charged with the task of revealing what Benjamin calls the “truth content of a work of art”, which is intimately bound up w…"
+          "score": 0.050571725,
+          "snippet": "content-externalism  Idealism. Content externalism is sometimes portrayed as a thesis whose truth precludes idealism in at least some of its major forms (see Rowlands 2003, for example). However, it is not clear that this is really the case. For example, even a Berkeleian idealist could accept Putnam’s twin earth arguments if thus inclined. All that is required for Putnam’s argument to work is a distinction between the way water and twater appear and their underlying structures. This is something the Berkeleian idealist can, it seems, accommodate. For example, the Berkeleian idealist can expla…"
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "content-narrow",
           "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.47585487,
-          "snippet": "[Atlas highlights] [Hilary Putnam (raptor-subset-on)]: \"phenomenal consciousness cannot imply any intentionality or content.\" Defining causal-informational theory of content (raptor-subset-on): \"RED has the content red is present because it is supposed to carry the information that red is present\" Defining assertoric content (raptor-subset-on): \"a speaker who could classify sufficiently detailed possible states of affairs into those that render any statement like these 'correct' and those that render it incorrect, may be said to know the assertoric content of th\"  content-narrow  Of course, br…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "content-narrow",
-          "url": "https://plato.stanford.edu/entries/content-narrow/",
-          "score": 0.40578824,
-          "snippet": "[Atlas highlights] Defining bourgeois thought (raptor-subset-on): \"modern philosophy is always confronted with the issue of there being a 'content' necessary for the application of its formal principles.\" Defining social totality (raptor-subset-on): \"it is not the primacy of economic motives in historical explanation that constitutes the decisive difference between Marxism and bourgeois thought, but the point of view of totality.\" Defining cognitive content (raptor-subset-on): \"\"The notion of 'cognitive content' for Kant has two sharply distinct senses...\"\"  content-narrow  White (1982) and Fo…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "lukacs",
-          "url": "https://plato.stanford.edu/entries/lukacs/",
-          "score": 0.31803727,
-          "snippet": "[Atlas highlights] Argument: Argument for the unity of experience requiring a single seat in the brain [from raptor-subset-on]   P1. The soul is one and indivisible, not double.   C. Therefore, the part of the body to which it is most immediately joined should also be single and not divided into a pair of similar parts.   Objections:     - Zinn's split-brain experiment: Animals with large pineal glands lack superior powers like imagination and memory, contradicting its role as the sole seat of these faculties.     - Lamettrie's rejection: The thesis that unity of experience requires a correspo…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "kant-hume-causality",
-          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
-          "score": 0.30150002,
-          "snippet": "[Atlas highlights] [Putnam (raptor-subset-on)]: \"Given that the molecular structure was unknown even to the experts, the descriptive resources available... were identical. Nonetheless, their references using 'water' differed.\" [teleological theories of mental content (raptor-subset-on) — contested]: \"they are, in principle, unable to deal with contents that cannot have impacted on fitness, or not in any suitably selective way.\" Argument: Twin Earth Argument (Semantic) [from raptor-subset-on]   P1. On Twin Earth, there exists XYZ with all manifest properties identical to H2O on Earth.   P2. Ear…"
+          "score": 0.03989464,
+          "snippet": "content-narrow  Among the earliest and most influential arguments for broad content were Hilary Putnam’s arguments in such essays as “The Meaning of ‘Meaning’” (1975). Putnam’s arguments were not designed specifically with mental content in mind. They applied in the first instance to linguistic content, more specifically to the reference of terms in a natural language. However, they have been widely applied to mental content. I will first discuss Putnam’s argument concerning linguistic content, and then note how it can be extended to mental content."
         }
       ],
       "source_score": {
@@ -1293,17 +1297,17 @@
           "Putnam",
           "XYZ",
           "water",
-          "meanings just ain't in the head",
-          "semantic externalism"
+          "semantic externalism",
+          "wide content"
         ],
         "missing": [
-          "wide content"
+          "meanings just ain't in the head"
         ],
         "total_expected": 7,
         "ratio": 0.85714287
       },
       "embed_ms": 0,
-      "search_ms": 2376,
+      "search_ms": 2404,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1344,54 +1348,54 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "federalism",
-          "url": "https://plato.stanford.edu/entries/federalism/",
-          "score": 1.5276954,
-          "snippet": "[Atlas highlights] Defining Euclidean geometry (raptor-subset-on): \"Before the 19th century only one geometry was studied... and that was Euclidean geometry.\" Defining Kurt Gödel (raptor-subset-on): \"The natural number corresponding to a sequence w = < w0,…, wk > of symbols is where pk is the k+1st prime. It is called its Gödel number and denoted by w⟩.\" Defining Hilbert's Program (raptor-subset-on): \"It calls for a formalization of all of mathematics in axiomatic form, together with a proof that this axiomatization of mathematics is consistent. The consistency proof itself was to be carried o…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.66360813,
+          "snippet": "Gödel's incompleteness theorems demonstrate that any consistent formal system capable of expressing elementary arithmetic is inherently incomplete and cannot prove its own consistency. These limitations are established through arithmetization of syntax, diagonalization, and Gödel numbering to construct self-referential undecidable sentences. The findings also imply the undefinability of truth within such systems and have significant philosophical implications regarding mechanism and mathematical objectivity."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6626636,
+          "snippet": "Gödel's incompleteness theorems, which demonstrate that truth is undefinable within formal systems and challenge Hilbert’s program, were met with mixed reception ranging from quick assimilation to significant misunderstanding. While some contemporaries like Finsler and Post had anticipated aspects of these results or questioned their generality, the mathematical community eventually validated the proofs through detailed work by figures such as Hilbert and Bernays. Beyond technical logic, the theorems sparked enduring epistemological debates regarding mechanism, human cognition, and philosophic…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6606025,
+          "snippet": "Gödel introduces various logical frameworks and consistency conditions, including ω-consistency for the First Incompleteness Theorem and well-orderings of variables to satisfy formulas. He demonstrates that non-standard models arise from completeness and compactness in Peano Arithmetic, while also establishing a definable well-ordering within the constructible universe L to support the Axiom of Choice. Additionally, he explores speed-up phenomena across higher-type systems and formalizes absoluteness through satisfaction predicates."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6555736,
+          "snippet": "The passages outline the formal foundations and implications of Gödel's incompleteness theorems, emphasizing how precise arithmetic axioms and lemmas like diagonalization establish the limits of consistency proofs. These results demonstrate that certain truths are unprovable within formal systems, leading to broader conclusions about undecidability in logic and Diophantine equations. Furthermore, these mathematical constraints are interpreted philosophically to argue against mechanism and support the objective existence of mathematical facts."
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "goedel-incompleteness",
           "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
-          "score": 0.61212033,
-          "snippet": "[Atlas highlights] Defining conservativity program (raptor-subset-on): \"Formalized mathematics was to be considered by analogy with theoretical physics. The ultimate justification... lies in its conservativity over 'real' mathematics.\" [Gentzen (raptor-subset-on)]: \"instances of the rule of cut can be eliminated from derivations by permuting them upward ... and can therefore be deleted.\" Argument: Completeness Theorem Proof by Degree Reduction [from raptor-subset-on]   P1. Any formula can be reduced to normal form with quantifiers at the beginning.   P2. If completeness holds for degree k, it …"
+          "score": 0.048100356,
+          "snippet": "goedel-incompleteness  Of the various fields of philosophy, Gödel’s theorems are obviously most immediately relevant for the philosophy of mathematics. To begin with, they pose, at least prima facie, serious problems for Hilbert’s program (this issue is discussed in some detail in the section on the impact of incompleteness in the entry on  Hilbert’s Program).  Then again, they have important consequences for intuitionism (see the entry on  intuitionism in the philosophy of mathematics)  (see also Gödel 1933, 1941; Raatikainen 2005)."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "goedel",
-          "url": "https://plato.stanford.edu/entries/goedel/",
-          "score": 0.5285495,
-          "snippet": "[Atlas highlights] [David Hilbert (raptor-subset-on)]: \"The defined relation is simply the abstract structure, or as Hilbert puts it the “scaffolding”, shared by any such n-tuple.\" [David Hilbert (raptor-subset-on)]: \"[I]t is surely obvious that every theory is only a scaffolding or schema of concepts together with their nece\" [Gentzen (raptor-subset-on)]: \"actual proofs are not based on axi oms expressed in a logical lan guage... The most typical feature is instead that theo rems make their claims under some assump tions.\" [Kurt Gödel (raptor-subset-on)]: \"the notion: computable function of f…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "proof-theory",
-          "url": "https://plato.stanford.edu/entries/proof-theory/",
-          "score": 0.45957005,
-          "snippet": "[Atlas highlights] [Gödel (raptor-subset-on)]: \"Contrary to Gödel’s “artificial” unprovable formula... Gentzen’s transfinite induction principle is a principle of “ordinary” mathematics.\" [Gödel (raptor-subset-on)]: \"Recursive functions have the important property that, for each given set of values of the arguments, the value of the function can be computed by a finite proceure.\" [Gentzen (raptor-subset-on)]: \"Thus, there are no derivable sequents with all assumptions true and the conclusion false.\" [Kurt Gödel (raptor-subset-on)]: \"The second incompleteness theorem (G2) says that says that un…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "civil-disobedience",
-          "url": "https://plato.stanford.edu/entries/civil-disobedience/",
-          "score": 0.35572812,
-          "snippet": "[Atlas highlights] [Gentzen and Gödel (raptor-subset-on)]: \"every formula in D is either a su bformula of an elem ent Γ or of A.\" [Deliberative democracy (raptor-subset-on)]: \"Agents engaged in civil disobedience can enhance democratic legitimacy in a number of ways...\" [Kurt Gödel (raptor-subset-on)]: \"In Theorem V of his paper, Gödel proves that any number theoretic predicate whi ch is primitive recursive is nume ralwise expre ssible i n P.\" [Kurt Gödel (raptor-subset-on)]: \"Gödel constructs a fi xed poi nt i n t he course of provi ng t he i nc ompl eteness t h eore m , but he doe s not stat…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "recursive-functions",
-          "url": "https://plato.stanford.edu/entries/recursive-functions/",
-          "score": 0.30754215,
-          "snippet": "[Atlas highlights] [Gödel (raptor-subset-on)]: \"such a calculatio n may be understo od as a derivat ion in quanti fier-firs t-orde r logi c\" Argument: Discovery of the Incompleteness Theore ms (via Gödel's account) [from raptor-subset-on]   P1. To reduce consistency for analysis to arithmetic, one needs a truth definition for arithmetic.   P2. A truth definition leads to paradoxes like the Liar and Berry’s paradox.   C. Arithmetic truth is not co-extensive with provability; hence the First Incompleteness T heorem holds when replacing truth with provability.  [Incompleteness Theorems (raptor-su…"
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.048857808,
+          "snippet": "hilbert-program  There has been some debate over the impact of  Gödel’s incompleteness theorems on Hilbert’s Program, and whether it was the first or the second incompleteness theorem that delivered the coup de grâce. Undoubtedly the opinion of those most directly involved in the developments were convinced that the theorems did have a decisive impact. Gödel announced the second incompleteness theorem in an abstract published in October 1930: no consistency proof of systems such as Principia,  Zermelo-Fraenkel set theory, or the systems investigated by Ackermann and von Neumann is possible by …"
         }
       ],
       "source_score": {
         "matched": [
           "goedel-incompleteness",
-          "goedel"
+          "hilbert-program"
         ],
         "missing": [
-          "hilbert-program",
+          "goedel",
           "frege-hilbert"
         ],
         "total_expected": 4,
@@ -1414,7 +1418,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3185,
+      "search_ms": 3073,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1523,7 +1527,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2702,
+      "search_ms": 2962,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1543,52 +1547,52 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberalism",
-          "url": "https://plato.stanford.edu/entries/liberalism/",
-          "score": 0.8736658,
-          "snippet": "[Atlas highlights] Defining negative conception of liberty (raptor-subset-on): \"On this view, the opposite of freedom is domination. To be unfree is to be 'subject to the potentially capricious will or the potentially idiosyncratic judgement of another'\" [Isaiah Berlin (raptor-subset-on)]: \"For Berlin and those who follow him, then, the heart of liberty is the absence of coercio\" Defining positive liberty (raptor-subset-on): \"Positive liberty is the possibility of acting — or the fact of acting — in such a way as to take care of one’s life and realise one’s fundamental purposes.\" Argument: Ber…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6029554,
+          "snippet": "Isaiah Berlin argues for the primacy of negative liberty over positive liberty, contending that the latter's association with rational self-rule and a singular public interest threatens ethical pluralism. He posits that while national belonging addresses basic human needs, it must not be conflated with political freedom to avoid authoritarian outcomes. Consequently, society should prioritize negative liberty as essential for allowing individuals to pursue diverse genuine values without imposing a single conception of the good."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberalism",
-          "url": "https://plato.stanford.edu/entries/liberalism/",
-          "score": 0.2609301,
-          "snippet": "[Atlas highlights] [Isaiah Berlin (raptor-subset-on)]: \"'All our categories are, in theory, subject to change' (2002b, 144, note 1).\" [Isaiah Berlin (raptor-subset-on)]: \"Philosophy, however, was for Berlin concerned with questions which not only could not at present be answered, but for which no clearly proper method of discovering an answer was known.\" [negative conception of liberty (raptor-subset-on)]: \"Thus, in contrast to the ordinary negative conception, on the republican conception the mere possibility of arbitrary interference is a limitation of liberty.\"  liberalism  Green’s autonomy…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5807227,
+          "snippet": "Isaiah Berlin advocates for value pluralism and negative liberty, arguing that genuine values are numerous, incompatible, and incommensurable. He supports this by asserting that ethical conflicts stem from empirical human experience rather than scientific determinism, necessitating a liberal political framework to protect individual freedom without imposing a single conception of the good."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberty-positive-negative",
-          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
-          "score": 0.34420562,
-          "snippet": "[Atlas highlights] [Isaiah Berlin (raptor-subset-on)]: \"Berlin’s account sometimes focused on a attack on the Enlightenment’s benevolent and optimistic liberalism by nationalists and reactionaries...\" [Isaiah Berlin (raptor-subset-on)]: \"there is a limit on the variation – just as the human face may vary greatly... while remaining recognisably human...\" [Isaiah Berlin (raptor-subset-on)]: \"Rather, they are human creations, and derive their authority from this fact.\"  liberty-positive-negative  We have seen that advocates of a negative conception of freedom tend to count only obstacles that are…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.55079484,
+          "snippet": "The concept of liberty is fundamentally analyzed through the distinction between negative and positive senses, a framework established by Isaiah Berlin but subject to various interpretations regarding freedom as non-domination or triadic relations. Scholars debate whether these differing concepts represent incompatible ideals or stem from a shared underlying agreement on the variables of agent, constraint, and purpose. This ongoing discourse highlights how definitions shift based on philosophical priorities such as autonomy, coercion, and structural oppression."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "berlin",
-          "url": "https://plato.stanford.edu/entries/berlin/",
-          "score": 0.26255178,
-          "snippet": "[Atlas highlights] [Isaiah Berlin (raptor-subset-on)]: \"Rousseau transformed the concept of the self’s will from what the empirical individual actually desires to what the individual as citizen ought to desire\" [Two Concepts of Liberty (raptor-subset-on)]: \"Two Concepts of Liberty, and Berlin’s liberalism, are therefore based not on championing negative liberty against positive liberty, but on advocating individualism, empiricism and plural\"  berlin  This account is subject to serious and plausible objections, on both historical and conceptual grounds. But beyond the considerable debates conce…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.49273375,
+          "snippet": "Mill advances a perfectionist liberal framework where the harm principle serves as the primary, though not absolute or strictly necessary, basis for restricting individual liberties to prevent harm to others. He distinguishes basic liberties from liberty in general, arguing that these protections are justified by their role in fostering deliberative capacities and human happiness rather than being intrinsic goods. This approach rejects state paternalism while allowing for specific exceptions, such as prohibiting self-enslavement, thereby contrasting with theories of political neutrality."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "berlin",
-          "url": "https://plato.stanford.edu/entries/berlin/",
-          "score": 0.22450916,
-          "snippet": "[Atlas highlights] Defining moral liberty (raptor-subset-on): \"human beings have moral liberty... endowed with power to produce our actions\" [Isaiah Berlin (raptor-subset-on)]: \"'realistic' had come t mean 'harsh an brutal, not shrinkng from wht s usually consdered immoral'\" [Isaiah Berlin (raptor-subset-on)]: \"The first princiiple of Berlins politcal ethcs was to oppose such subordinatn, whch Berln viewed as th essenc of fanatism.\" [Isaiah Berlin (raptor-subset-on)]: \"Such a sense is qualitative rather than quantitaive, specific rather than general, for all that it may be built on past experi…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.46345374,
+          "snippet": "Liberalism is characterized by significant internal fragmentation regarding core concepts such as liberty, the role of government, and the nature of value. Key debates distinguish between negative and positive conceptions of freedom, comprehensive versus political doctrines, and perfectionist or pluralist theories of the good against contractualist frameworks. These theoretical divisions extend to practical issues concerning cultural accommodation, non-intervention in illiberal states, and the scope of liberal principles across different communities."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "hume-freewill",
-          "url": "https://plato.stanford.edu/entries/hume-freewill/",
-          "score": 0.17258914,
-          "snippet": "[Atlas highlights] [Isaiah Berlin (raptor-subset-on)]: \"The quest for certainty was self-defeating: to restrict oneself to saying only that which could be said without any doubt or fear of being mistaken was to sentence oneself to silence.\" [Isaiah Berlin (raptor-subset-on)]: \"We study nature from without, culture from within. In the humanities the scholar’s own ways of thinking... is part of the object of study.\" [Isaiah Berlin (raptor-subset-on)]: \"The sciences are concerned with types, the humanities with individuals. Scientists concentrate on similarities and look for regularities;\"  hume-…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.46267548,
+          "snippet": "Isaiah Berlin advanced a theory of value pluralism asserting that genuine values are numerous, often incompatible, and incommensurable, requiring individuals to make difficult choices between equally ultimate ends. He supported this claim by arguing that such conflicts are rooted in empirical human experience rather than scientific determinism or historical inevitability, thereby necessitating liberalism as the political framework that protects individual liberty against coercion. Although he viewed values as objective creations of human nature, his position remained distinct from relativism b…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "liberty-positive-negative",
-          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
-          "score": 0.230255,
-          "snippet": "[Atlas highlights] [Isaiah Berlin (raptor-subset-on)]: \"Nor would such an alteration truly move beyond moral evaluation; for strenuous attempts to be morall\" [Isaiah Berlin (raptor-subset-on)]: \"A belief in historical inevitability served as an ‘alibi’ for evading responsibiliy and blame, and for commiting enormities i\" [Isaiah Berlin (raptor-subset-on)]: \"Berlin further suggested that acceptance of determinism – that is, the complete abandonment of the concept of human free wil\" [Isaiah Berlin (raptor-subset-on)]: \"If individuals are wholly determined by unalterable forces, it makes no more s…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.4533754,
+          "snippet": "Isaiah Berlin advanced the concepts of value pluralism and liberalism, arguing that they are interconnected yet distinct frameworks where pluralism supports individual freedom by acknowledging incommensurable values. His thought draws on historical figures like Machiavelli and Herder to critique monism, while his political ethics emphasize pragmatism over utopian abstractions. Contemporary debates often struggle with defining these terms clearly or conflating them with relativism."
         },
         {
           "corpus_id": "raptor-subset-on",
@@ -1608,12 +1612,13 @@
       "source_score": {
         "matched": [
           "liberty-positive-negative",
-          "berlin",
+          "berlin"
+        ],
+        "missing": [
           "liberalism"
         ],
-        "missing": [],
         "total_expected": 3,
-        "ratio": 1.0
+        "ratio": 0.6666667
       },
       "fact_score": {
         "matched": [
@@ -1630,7 +1635,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 2342,
+      "search_ms": 2015,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1739,7 +1744,7 @@
         "ratio": 0.5555556
       },
       "embed_ms": 0,
-      "search_ms": 1247,
+      "search_ms": 1267,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1801,33 +1806,33 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "hume",
-          "url": "https://plato.stanford.edu/entries/hume/",
-          "score": 3.537771,
-          "snippet": "[Atlas highlights] [Kant (raptor-subset-on)]: \"\"no event has occurred that could have been more decisive for the fate of this science than the attack made upon it by David Hume\"\" Defining insolubilia (raptor-subset-on): \"The medieval name for paradoxes like the famous Liar Paradox was 'insolubles' or insolubilia, though besides semantic paradoxes, they included epistemic paradoxes.\" Defining Decision problem (raptor-subset-on): \"Central to the development of computational complexity theory is the notion of a decision problem. Such a problem corresponds to a set X in which we w ish to decide me…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.60749227,
+          "snippet": "The passages argue that Kant's transcendental deduction is unsound due to the 'bottom-up' problem arising from non-conceptualism and a corresponding 'top-down' metaphysical issue. These flaws suggest that categories do not necessarily apply to all objects, allowing for categorial anarchy and undermining the objectivity of empirical judgments against skeptical challenges."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "logic-combinatory",
-          "url": "https://plato.stanford.edu/entries/logic-combinatory/",
-          "score": 1.7408327,
-          "snippet": "[Atlas highlights] [David Hume (raptor-subset-on)]: \"doctrine of liberty or chance... would remove this connection between agent and action\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"So, physical influx would entail the natural mortality of sub stance, a view that Leibniz wholly rejects.\" [David Hume (raptor-subset-on)]: \"supposition that there is some further power or energy in matter... fundamental source of confusion\" [David Hume (raptor-subset-on)]: \"apparent irregularities... entirely due to the influence of contrary or concealed causes\" [Gottfried Wilhelm Leibniz (raptor-subset-on…"
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.06904762,
+          "snippet": "kant-hume-causality  It is only in the second edition of the Critique that Kant gives such a prominent place to Hume and his “objection” to causality, serving to introduce what Kant now calls “the general problem of pure reason”. By contrast, the name of Hume does not appear in either the Introduction or the Transcendental Analytic in the first (A) edition (1781): it appears only in the Transcendental Doctrine of Method at the very end of the book, in a discussion of “skepticism” versus “dogmatism” in metaphysics (where Hume’s skepticism about causation, in particular, is finally explicitly di…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "gadamer-aesthetics",
-          "url": "https://plato.stanford.edu/entries/gadamer-aesthetics/",
-          "score": 1.6300534,
-          "snippet": "[Atlas highlights] Defining family resemblance accounts (raptor-subset-on): \"Philosophers influenced by the moderate Wittgensteinian stricttures discussed above have offered family resemblance accounts of art, which, as they purport to be non-definitions, may be usefully considered at this point.\" Defining Disjunction Problem (raptor-subset-on): \"With respect to the crude causal theory... the name applies because the theory entails disjunctive contents when it should not.\" [counterfactual account of causation (raptor-subset-on)]: \"most widely accepted contemporary accounts of causation imply t…"
+          "title": "causation-law",
+          "url": "https://plato.stanford.edu/entries/causation-law/",
+          "score": 0.035576392,
+          "snippet": "causation-law  Because Hume’s analysis takes “the glue” out of the causal relation—a cause doesn’t make its effect occur, it is only regularly followed by its effect—it is commonly classified as skeptical. And in a sense it is, if one treats the making-things-happen “glue” to be essential to any relation properly called “causal”. But Hume’s views are not radical enough to count as skeptical in the sense intended by legal theoreticians. For Hume gives what Saul Kripke calls a “skeptical solution” to the problem of causation (1982: 66–68): Hume doesn’t deny that causation exists, but he reduces …"
         }
       ],
       "source_score": {
         "matched": [
-          "hume"
+          "kant-hume-causality"
         ],
         "missing": [
-          "kant",
-          "kant-hume-causality"
+          "hume",
+          "kant"
         ],
         "total_expected": 3,
         "ratio": 0.33333334
@@ -1849,7 +1854,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3271,
+      "search_ms": 3008,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1890,56 +1895,57 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "corruption",
-          "url": "https://plato.stanford.edu/entries/corruption/",
-          "score": 4.291423,
-          "snippet": "[Atlas highlights] Argument: Smith's Account of Sympathy vs. Hume's Contagion Model [from raptor-subset-on]   P1. Hume holds a 'contagion' account where sympathy consists in feeling what others actually feel.   P2. Smith holds a 'projective' account where we imagine how we would feel in another's circumstances.   C. Our projected feelings may not match the other person's actual feelings, allowing for moral adjustment and virtue through mutual emotional regulation rather than mere contagion.  Defining tripartition of the soul (raptor-subset-on): \"Plato famously divided the soul into three parts…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6106832,
+          "snippet": "Aristotle argues that primary substances are hylomorphic compounds whose essence is identified with their form rather than matter, as form alone satisfies the criteria of separability and being a 'this something.' This view resolves ontological issues regarding unity and predication by establishing form as the explanatory principle for why particular entities exist as specific species. Consequently, while individual substances depend on substantial forms for their actuality, scientific knowledge targets these universal essences."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "object",
-          "url": "https://plato.stanford.edu/entries/object/",
-          "score": 2.2553701,
-          "snippet": "[Atlas highlights] [Kant (raptor-subset-on)]: \"That from the earliest times logic has traveled a secure course can be seen from the fact that since the time of Aristotle it has not had to go a single step backwards…What is further remarkable about logic is that until\" Argument: Argument against image-based account of imagination [from raptor-subset-on]   P1. Historical orthodoxy held imagining just is holding a mental image (Descartes, Hume).   P2. Berkeley's puzzle suggests non-imagistic hypothetical attitudes exist.   P3. Walton asserts imagining can occur without imagery.   C. Propositional…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6036315,
+          "snippet": "Aristotle's hylomorphism posits that physical objects are compounds of matter and form, a doctrine developed to explain natural change and substantial generation. While initially presented as distinct causes, the relationship between these principles becomes complex when applied to individuation and essential nature, leading to scholarly debate over whether forms are essentially matter-involving."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "exploitation",
-          "url": "https://plato.stanford.edu/entries/exploitation/",
-          "score": 1.9552406,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-on)]: \"the highest kind of good must be one que is not desirable for the sake o f anything else.\" [Aristotle (raptor-subset-on)]: \"Neither theoretical nor practical inquiry starts from scratch.\" [Aristotle (raptor-subset-on)]: \"If his analysis of change is correct, when some water changes into some air, there must be something underlying, some substrate, which persists through the change...\" Argument: Critique of the Unity of Intellect Doctrine [from raptor-subset-on]   P1. If all humans share one intellect (unity doctrine), then upon physical death…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.58067155,
+          "snippet": "Aristotle advances the claim that substance is fundamentally defined by form as actuality, which serves as the explanatory principle for unity and predication while resolving ontological issues. He supports this by arguing that essence corresponds to universal forms rather than matter, establishing a hierarchy where actuality takes precedence over potentiality as the defining end of things. Furthermore, he posits a single primary mover to unify celestial and sublunary realms through desire."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "schelling",
-          "url": "https://plato.stanford.edu/entries/schelling/",
-          "score": 1.9480088,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-on)]: \"phainomena provide both an impetus to philosophize and one of its more extravagant impulses\" Defining necessitation dualism (raptor-subset-on): \"Property dualism says that (a) every particular is a physical particular but (b) some particulars (e.g. human beings) have psychological properties wholly distinct from any phyical properties.\" [Neoplatonist commentators (raptor-subset-on)]: \"The light spreads out from its source, but does not diminish its source...Israeli accounts for the increasing corporeality and particularity and imperfection of…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.55909455,
+          "snippet": "Aristotle investigates the soul and its faculties, such as nutrition, perception, mind, and desire, primarily through a hylomorphic framework that explains psychic activities as forms of change. While this approach successfully models perception and thinking by describing how the soul receives intelligible or sensible forms, it faces significant interpretive challenges regarding the nature of an unmixed intellect and the precise mechanics of cognitive isomorphism. Ultimately, Aristotle integrates these capacities with desire to provide a comprehensive account of purposive animal motion."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "empiricism-ancient-medieval",
-          "url": "https://plato.stanford.edu/entries/empiricism-ancient-medieval/",
-          "score": 1.5339905,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-on)]: \"So their desires are insufficient for action. Consequently, he concludes, desire alone... cannot explain purposive action.\" Argument: Argument for the superiority of the philosophical life over the political life [from raptor-subset-on]   P1. The happiest kind of life is one that exercises theoretical wisdom (1178a23–b7).   P2. A philosopher's standard requires less external equipment than a political leader's.   P3. Ethical virtues like magnificence require great resources, but intellectual virtue does not.   C. Therefore, the life of a phil…"
+          "title": "aristotle-psychology",
+          "url": "https://plato.stanford.edu/entries/aristotle-psychology/",
+          "score": 0.05142684,
+          "snippet": "aristotle-psychology  In the same way, then, the presence of the soul explains why this matter is the matter of a human being, as opposed to some other kind of thing. Now, this way of looking at soul-body relations as a special case of form-matter relations treats reference to the soul as an integral part of any complete explanation of a living being, of any kind. To this degree, Aristotle thinks that Plato and other dualists are right to stress the importance of the soul in explanations of living beings. At the same time, he sees their commitment to the separability of the soul from the body …"
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "aristotle",
           "url": "https://plato.stanford.edu/entries/aristotle/",
-          "score": 1.3266125,
-          "snippet": "[Atlas highlights] [Aristotle (raptor-subset-on)]: \"he assumes, first, that there is some feature F which all and only humans have in common and, second, that F explains the other features.\" [Aristotle (raptor-subset-on)]: \"little of Aristotle’s extant writing confirms to the demands for scientific presentation laid down in the posterior analytics.\" [Aristotle (raptor-subset-on)]: \"being rational asymmetrically explains being capable of grammar... being rational has a better claim to being the essence than does being capable of grammar.\" [Aristotle (raptor-subset-on)]: \"dialectic puts us on th…"
+          "score": 0.04408015,
+          "snippet": "aristotle  Arabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Aristotle, commentators on |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: biology |  Aristotle, General Topics: categories |  Aristotle, General Topics: ethics |  Aristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: political theory |  Aristotle, General Topics: psychology |  Aristotle, General Topics: rhetoric |  Aristotle, Special Topics: causality |  Aristotle, Special To…"
         }
       ],
       "source_score": {
-        "matched": [],
+        "matched": [
+          "aristotle-psychology"
+        ],
         "missing": [
           "aristotle-metaphysics",
-          "aristotle-psychology",
           "form-matter"
         ],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 0.33333334
       },
       "fact_score": {
         "matched": [
@@ -1957,7 +1963,7 @@
         "ratio": 1.0
       },
       "embed_ms": 0,
-      "search_ms": 3396,
+      "search_ms": 3206,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -1991,63 +1997,62 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "knowledge-analysis",
-          "url": "https://plato.stanford.edu/entries/knowledge-analysis/",
-          "score": 2.1159708,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"if forc eistak entob equiva lentto th eq uantit yof vi sviv a– rathe rtha nthe q uanti tyo fm otio nas Desca rtesh adim plied – then, inc ases uch ast hosehigh lighted by th eBrief Dem onstrat ion,no violatio nof th epri\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"it violate sthe princi pleof th eequality of caus eand ef fect.\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"in th ear gument o fth eBrief Dem onstratio n, Lebn izfoun da dev astating critcism not only of Cartesi anphysic sbut als oof Ear lyLeib nizian phy…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.62561065,
+          "snippet": "Heidegger argues that Western philosophy has forgotten the question of Being, necessitating a fundamental ontology grounded in Dasein's pre-ontological understanding. He characterizes human existence as being-in-the-world, defined by thrownness, projection, and being-with-others, while critiquing Cartesian subject-object dualism. Ultimately, his work seeks to uncover the temporal or event-based conditions that make intelligibility possible."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "phenomenology-mg",
-          "url": "https://plato.stanford.edu/entries/phenomenology-mg/",
-          "score": 1.9241211,
-          "snippet": "[Atlas highlights] Argument: Argument from the Riddle of Induction (Emeralds) [from raptor-subset-on]   P1. Consider two possibilities: all emeralds are green or all emeralds are grue(t).   P2. If all emeralds are green, the natural projection rule asserts this immediately and remains correct.   P3. If all emeralds are grue, a blue emerald appears at time t; the natural projection rule then correctly conjectures 'all emeralds are grue'.   P4. The gruesome rule projects grue predicates regardless of evidence, failing to converge if all emerals are actually green.   C. Means-ends analysis recomm…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6062954,
+          "snippet": "Heidegger argues that Dasein's existence is fundamentally grounded in temporality, which serves as the transcendental condition for spatiality, care, and intelligibility. This framework posits that existential structures such as thrownness, projection, and fallenness are constituted by temporal ecstases rather than linear succession. Consequently, objective space and theoretical time are derived from or dependent upon this primordial Dasein-time."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "analogy-medieval",
-          "url": "https://plato.stanford.edu/entries/analogy-medieval/",
-          "score": 1.3552507,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"\"if we were to imagine that there are atoms... it would follow that there would be a change through a leap\"\" Argument: Argument from the Gendered Concept of Genius [from raptor-subset-on]   P1. The concept of genius is attributed primarily to men by theorists like Rousseau and Kant.   P2. Genius requires both strong intellect (masculine) and sensitivity/creativity (feminine).   P3. Male artists are credited with possessing both traits, while women's creativity is dismissed as natural display or temperament.   C. Women have bee…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5660309,
+          "snippet": "Martin Heidegger argues that Western philosophy has forgotten the question of Being, necessitating a fundamental ontology grounded in Dasein's pre-ontological understanding and temporality. His work evolves from analyzing Dasein as care within being-in-the-world to defining authentic existence through dwelling within the fourfold, which safeguards the truth of Being against the oblivion caused by modern technology. This shift emphasizes an appropriation-based understanding that abandons traditional subjectivity in favor of poetic habitation and relationality."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "logic-combinatory",
-          "url": "https://plato.stanford.edu/entries/logic-combinatory/",
-          "score": 1.3269268,
-          "snippet": "[Atlas highlights] [Martin Heidegger (raptor-subset-on)]: \"“‘De-severing’ amounts to making the farness vanish—that is, making the remoteness of something disappear, bringing it close” (Being and Time: 23: 139).\" Defining ordinal analysis (raptor-subset-on): \"An ordinal analysis of a system T is given if: (a) one can produce an ordinal notation system which mimics the ordinals less than some ordinal αT so that (b) it can be proved finitarily that the formalization TI(αT) of t\" Defining Categorical Analysis (raptor-subset-on): \"An agent S has the ability to choose or do otherw than φ at time t …"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5293385,
+          "snippet": "Heidegger's philosophy evolves from analyzing Dasein's spatial Being-in-the-world to defining human essence as dwelling within the fourfold, which involves safeguarding the truth of Being. This later thought, articulated in works like Contributions and Building Dwelling Thinking, shifts focus toward an appropriation-based understanding that abandons traditional subjectivity. The central claim is that authentic existence requires sheltering this truth through a unified practice of staying with things."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.51764053,
+          "snippet": "The text references Martin Heidegger's philosophical work, specifically citing concepts from Being and Time regarding Dasein as care. It characterizes Dasein ontologically as the 'between,' highlighting its fundamental structure of existence within a specific spatial or relational context."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "heidegger",
+          "url": "https://plato.stanford.edu/entries/heidegger/",
+          "score": 0.05550041,
+          "snippet": "heidegger  One might reasonably depict the earliest period of Heidegger's philosophical work, in Freiburg (1915–23) and Marburg (1923–6), before he commenced the writing of Being and Time itself, as the pre-history of that seminal text (although for an alternative analysis that stresses not only a back-and-forth movement in Heidegger's earliest thought between theology and philosophy, but also the continuity between that earliest thought and the later philosophy, see van Buren 1994, 2005). Viewed in relation to Being and Time, the central philosophical theme in these early years is Heidegger's…"
         },
         {
           "corpus_id": "raptor-subset-on",
           "title": "husserl",
           "url": "https://plato.stanford.edu/entries/husserl/",
-          "score": 1.2008598,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"matter “resists being moved through a certain natural inertia it has… so that it is not indifferent to motion and rest,” but requires more active force for motion in proportion to its size\" Argument: Argument for God's existence from the universe [from raptor-subset-on]   P1. We can deduce a creator exists when we see its creation (e.g., a sculptor from a statue).   P2. The universe is an effect/creation.   P3. Therefore, there must be a first principle and cause of all things called God.   C. God exists as the necessary first…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "phylogenetic-inference",
-          "url": "https://plato.stanford.edu/entries/phylogenetic-inference/",
-          "score": 0.7974829,
-          "snippet": "[Atlas highlights] [Edmund Husserl (raptor-subset-on)]: \"scientific conceptions owe their (sub-)propositional content and thus their reference to reality to the prescientific notions\" [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"his own conception of force could preserve the intelligibility that was the great hallmark of mechanism, while nonetheless improving upon the work of those such as Huygens, Descartes and Galileo.\" [Edmund Husserl (raptor-subset-on)]: \"the lifeworld can be looked upon as the rational structure underlying his (or her) “natural attitude”.\" [Gottfried Wilhelm Leibniz (…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "cosmological-argument",
-          "url": "https://plato.stanford.edu/entries/cosmological-argument/",
-          "score": 0.48165634,
-          "snippet": "[Atlas highlights] [Gottfried Wilhelm Leibniz (raptor-subset-on)]: \"no eye... has a sure criterion for tellingfrom the phenomena where there is motion, how much motion thereis and of what sort it is, or even whether God moves everything aroundit\" Argument: Event-based conditional analysis of descriptive anaphora [from raptor-subset-on]   P1. Conditionals can be analyzed event-based (situation based) rather than propositionally.   P2. In such analyses, the truth conditions depend on minimal events associated with the antecedent.   C. The uniqueness constraint is satisfied because each individua…"
+          "score": 0.05045492,
+          "snippet": "husserl  An externalist reading (or rational reconstruction) of Husserl’s theory of content might, however, be taken to conflict with the methodological constraints posed by the phenomenological epoché, which—together with the dynamic method and eidetic reduction—builds the essential core of the transcendental-phenomenological method introduced in Ideas."
         }
       ],
       "source_score": {
         "matched": [
-          "husserl"
-        ],
-        "missing": [
+          "husserl",
           "heidegger"
         ],
+        "missing": [],
         "total_expected": 2,
-        "ratio": 0.5
+        "ratio": 1.0
       },
       "fact_score": {
         "matched": [
@@ -2057,15 +2062,16 @@
           "phenomenology",
           "Heidegger",
           "being-in-the-world",
-          "Dasein",
+          "Dasein"
+        ],
+        "missing": [
           "ready-to-hand"
         ],
-        "missing": [],
         "total_expected": 8,
-        "ratio": 1.0
+        "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 5158,
+      "search_ms": 5140,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -2099,60 +2105,60 @@
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "original-position",
-          "url": "https://plato.stanford.edu/entries/original-position/",
-          "score": 0.9204428,
-          "snippet": "[Atlas highlights] Defining corruption (raptor-subset-on): \"Corruption is the abuse of power by a public official for private gain — but this definition fails to capture non-public-office corruption like bettors bribing boxers or citizens lying in court testimony.\" [early Mohists (raptor-subset-on)]: \"we compare it to the 'three models': deeds of the sage kings, perceptual experience and practical benefit.\" [early Mohists (raptor-subset-on)]: \"the core idea was that we can identify clear, objective models (f) which serve as paradigms.\" [Mencius (raptor-subset-on)]: \"Mencius is best known for h…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.6569452,
+          "snippet": "Xunzi argues that rituals (li) are not arbitrary social conventions but essential frameworks for moral development, emotional expression, and political order because they align with fundamental human nature and cosmic constancies. He contends that proper ritual implementation fosters internal harmony and external stability, rendering advanced military technology inferior to a ruler who exalts morality. Furthermore, Xunzi dismisses the supernatural efficacy of religious ceremonies, attributing societal disasters to bad governance rather than heavenly portents."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "alexander",
-          "url": "https://plato.stanford.edu/entries/alexander/",
-          "score": 0.9497941,
-          "snippet": "[Atlas highlights] [Xunzi (raptor-subset-on)]: \"self-cultivation in the Xunzian style is inconceivable without looking outwards.\" Argument: Mencius's Response on Human Nature [from raptor-subset-on]   P1. Human nature contains germs/sprouts of ethical virtues (natural dispositions).   C. Ethical reactions like compassion for a child about to fall into a well are innate, not neutral.   Objections:     - Rival theorists' objection  [Xunzi (raptor-subset-on)]: \"The three-year mourning period is a rite established with reference to feelings; it is the means by which one conveys the acme of one’s s…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.58318645,
+          "snippet": "Xunzi, a major Confucian philosopher known for his theory that human nature is inherently evil, argued that moral goodness is achieved through conscious effort and education rather than innate virtue. His influence extended to key political figures like Han Fei and Li Si, though his reputation fluctuated significantly throughout Chinese history before experiencing modern revival."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "doing-allowing",
-          "url": "https://plato.stanford.edu/entries/doing-allowing/",
-          "score": 0.5502599,
-          "snippet": "[Atlas highlights] [early Mohists (raptor-subset-on)]: \"The sources of doubt lie not in the nature of the cognitive subject but in contingent features of particular circumstances.\" Defining Hybrid theory views (raptor-subset-on): \"Many contemporary views of mindreading are hybrid theory views according to which both theorizing and simulating play a role in the understanding of others’ mental states.\" [Lawrence Lessig (raptor-subset-on)]: \"\"the US democratic political process and, indeed, Congress itself, is institutionally corrupt\"\" Argument: Argument for the First Principle of Human Knowledge…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.54501396,
+          "snippet": "Early Chinese thinkers like the Mohists and Xunzi established rigorous logical standards for ethical judgment and linguistic consistency, which were later adapted to reinforce Confucian social order. While some scholars debate the coexistence of mysticism and reason in this tradition, the texts emphasize that naming conventions are normative tools derived from sage-kings rather than individual reasoning."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "mencius",
-          "url": "https://plato.stanford.edu/entries/mencius/",
-          "score": 0.5072105,
-          "snippet": "[Atlas highlights] [Mencius (raptor-subset-on)]: \"When they thereupon sink into crime, to go and punish the people is to trap them. When there are benevolent persons in positions of authority, how is it possible for them to trap the people?\" [Xunzi (raptor-subset-on)]: \"The former is impossible, and therefore a waste of time to attempt, but the latter is open to all who try.\" [Xunzi (raptor-subset-on)]: \"by focusing exclusively on the material costs... Mo Di and his followers failed to recognize the psychological utility\" Defining family resemblance accounts (raptor-subset-on): \"Philosophers i…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.544021,
+          "snippet": "Hume argues that moral distinctions arise from sentiments of approval or disapproval triggered by qualities useful or agreeable to oneself and others, rather than from reason alone. He further contends that religious belief is grounded in an observation of nature's contrivance and the misery of human existence, which serves as a more effective motivator for piety than abstract theological arguments."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "content-teleological",
-          "url": "https://plato.stanford.edu/entries/content-teleological/",
-          "score": 0.47496822,
-          "snippet": "[Atlas highlights] [Mohism (raptor-subset-on)]: \"names of different types, three in particular: unrestricted (da), classifing (lei), and prate (si).\" [corruption (raptor-subset-on)]: \"an action is corrupt by virtue of having a corrupting effect on a person’s moral character or on an institutional process or purpose.\" [Xunzi (raptor-subset-on)]: \"No human being, not even a sage, can know Heaven, but we can learn Heaven’s Way\" [corruption (raptor-subset-on) — contested]: \"the causal theory presupposes a normative teleological conception of institutions according to which the purposes of institut…"
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.5375512,
+          "snippet": "David Hume advocates for an empirical science of human nature modeled on Newtonian principles, asserting that mental operations and causal inferences are grounded in custom, habit, and associative laws rather than reason. He further argues that moral distinctions originate from sentiments such as sympathy regulated by a general point of view, refuting rationalist and egoistic theories."
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "althusser",
-          "url": "https://plato.stanford.edu/entries/althusser/",
-          "score": 0.451309,
-          "snippet": "[Atlas highlights] Argument: Revised role of philosophy in science and politics [from raptor-subset-on]   P1. Scientists use ideological concepts to frame investigations.   P2. Science can correct ideological thinking about political means and ends by showing what is impossible given socio-economic relations.   C. Materialist philosophers must communicate scientific knowledge to politicians/public to shift ideology from idealist to materialist.  [corruption (raptor-subset-on) — contested]: \"A controversial feature of the causal account is that organizations that are entirely morally and legall…"
+          "title": "xunzi",
+          "url": "https://plato.stanford.edu/entries/xunzi/",
+          "score": 0.049193546,
+          "snippet": "xunzi  In effect, both Xunzi and Mencius argued that human beings all have the capacity to become good, even though some people develop this capacity and others do not (Graham 1989: 250; Shun 1997: 222–31). The main differences, only recently appreciated, are that they were not operating with the same implicit definitions of xing, and Xunzi’s recommendations for moral self-cultivation—that is, how to overcome one’s inherently detestable nature—were more complex than Mencius’s, as we shall see. Because of Mencius’s subsequent prestige, it was commonly supposed that Xunzi’s definition of xing wa…"
         },
         {
           "corpus_id": "raptor-subset-on",
-          "title": "chinese-logic-language",
-          "url": "https://plato.stanford.edu/entries/chinese-logic-language/",
-          "score": 0.3521167,
-          "snippet": "[Atlas highlights] [Xunzi (raptor-subset-on)]: \"Hence hair-splitting wordings and invention of names on your own authority... are to be pronounced the worst of subversions\" [Xunzi (raptor-subset-on)]: \"the correctness conditions of language... must be determined by convention. Since these conventions are ultimately arbitrary, they cannot be established by the Mohists’ methods of discourse or argumentation.\" [early Mohists (raptor-subset-on)]: \"killing robber-people isn’t murdering people and not caring about them isn’t failing to practice inclusive care.\" [Mohism (raptor-subset-on)]: \"The Mohi…"
+          "title": "comparphil-chiwes",
+          "url": "https://plato.stanford.edu/entries/comparphil-chiwes/",
+          "score": 0.037250824,
+          "snippet": "comparphil-chiwes  The differences between Mencius’ and Xunzi’s theories are substantial and raise sophisticated philosophical issues that remain relevant to this day. Xunzi launched a vigorous critique of Mencius’ claim for the existence of natural tendencies that form the basis for development of a good person. In arguing against Mencius, he presupposes a strict separation between that which is given in human nature and that which must be developed through deliberate effort. Mencius’ conception of human nature, on the other hand, presupposes that what is in human nature can be something that…"
         }
       ],
       "source_score": {
         "matched": [
-          "mencius"
+          "xunzi"
         ],
         "missing": [
-          "xunzi"
+          "mencius"
         ],
         "total_expected": 2,
         "ratio": 0.5
@@ -2177,7 +2183,7 @@
         "ratio": 0.875
       },
       "embed_ms": 0,
-      "search_ms": 3389,
+      "search_ms": 3078,
       "corpora_hit": [
         "raptor-subset-on"
       ],
@@ -2197,81 +2203,81 @@
         },
         {
           "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.4724513,
+          "snippet": "Consequentialist theories, including utilitarianism and its variants like rule utilitarianism, attempt to address criticisms regarding value ranking, justice, and moral demandingness by incorporating pluralistic frameworks and indirect strategies. Proponents justify these complex structures through criteria such as informed rational choice under impartiality while shifting focus from actual to expected consequences to handle epistemological challenges. These approaches strive to reconcile the principle of impartial maximization with intuitive moral constraints like rights and personal relation…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.47036323,
+          "snippet": "The text explores moral epistemology by examining W. D. Ross's intuitionism, which posits that prima facie duties are self-evident principles derived from mature folk morality through critical reflection. It contrasts this with Jackson's argument that ethical properties are descriptive and necessarily co-extensive with purely descriptive predicates, thereby grounding ethics in factual reality. Additionally, the passages reference moral particularists like Dancy and Audi's emphasis on episodic intuitions as key methodological tools for navigating conflicting moral opinions."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.45130047,
+          "snippet": "The text examines various critiques of physicalism, including structuralist and attitudinal views, while highlighting Noam Chomsky's methodological argument that the project is either misleadingly framed or distinct from naturalistic inquiry. It also presents The Argument from Methodological Naturalism as a key justification for physicalism based on rational metaphysical commitments to scientific methods. Finally, it considers responses involving objective perspectives suggested by Thomas Nagel and Bernard Williams."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.45063296,
+          "snippet": "The text examines various forms of consequentialism, contrasting hedonistic and preference-based theories with pluralist approaches to address criticisms regarding value, interpersonal comparisons, and demandingness. It explores indirect strategies like rule utilitarianism and satisficing models as responses to objections concerning moral obligations, rights, and the complexity of utility calculation. Ultimately, it highlights how different versions attempt to reconcile impartial maximization with intuitive moral constraints such as promise-keeping and personal relationships."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.4420338,
+          "snippet": "Philippa Foot advances ethical naturalism and virtue ethics, arguing that morality is grounded in facts about human nature and the requirements for flourishing rather than consequentialist or noncognitivist frameworks. She contends that virtues are essential traits beneficial to human life and that moral reasoning must distinguish between negative rights and positive duties while recognizing natural norms inherent in biological functions."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.43924335,
+          "snippet": "Richard Price argues that moral principles are necessary, eternal truths independent of divine will or self-interest, and that recognizing these duties inherently motivates action. He distinguishes between prima facie and actual duties to resolve conflicts, asserting that obligations arise from changed circumstances rather than mere acts of will, while maintaining a libertarian view of agent-causation."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "raptor-subset-on",
+          "url": null,
+          "score": 0.43600306,
+          "snippet": "Jeremy Bentham advances the principle of utility as both a descriptive account of human motivation and the normative standard for determining right and wrong. He defines this principle by its tendency to augment or diminish happiness, ultimately arguing that moral worth is determined by actions' capacity to promote general happiness rather than abstract rights. While acknowledging psychological complexities in individual motives, Bentham maintains that utility serves as the ultimate appeal for all ethical questions."
+        },
+        {
+          "corpus_id": "raptor-subset-on",
+          "title": "theory-bioethics",
+          "url": "https://plato.stanford.edu/entries/theory-bioethics/",
+          "score": 0.052507237,
+          "snippet": "theory-bioethics  Finally, Beauchamp and Childress themselves recently acknowledge two misunderstandings of their four principles framework. The first misunderstanding is that the framework represents American individualism, with the principle of autonomy taking priority. Their response is, first, to contest any connection between American individualism and a respect for autonomy. Further, they emphasize that their framework’s principles are all only prima facie binding. The second misunderstanding is that the framework downplays the virtues. It has been argued that medical ethics should be un…"
+        },
+        {
+          "corpus_id": "raptor-subset-on",
           "title": "feminist-bioethics",
           "url": "https://plato.stanford.edu/entries/feminist-bioethics/",
-          "score": 1.9184114,
-          "snippet": "[Atlas highlights] Defining naturalness (raptor-subset-on): \"Naturalness is a condition of no fine-tuning in a rather different sense which applies to theories in quantum field theory.\" Defining Virtue ethics (raptor-subset-on): \"It may, initially, be identified as the one that emphasizes the virtues, or moral character, in contrast to the approach that emphasizes duties or rules (deontology) or that emphasizes the consequences of actions (conson\" Defining first principles (raptor-subset-on): \"Reid calls these variously 'first principles, principles of common sense, common notions, [or] self-e…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "fine-tuning",
-          "url": "https://plato.stanford.edu/entries/fine-tuning/",
-          "score": 0.79491544,
-          "snippet": "[Atlas highlights] Defining common morality (raptor-subset-on): \"The content of the common morality is dictated by the primary objectives of morality, which include... the amelioration of human misery.\" [Feminist bioethics (raptor-subset-on)]: \"This engagement has produced a body of work that problematizes the constra\" [teleological argument (raptor-subset-on)]: \"A classic response... is to infer the existence of a cosmic designer who created life friendly conditions\" [design hypothesis D (raptor-subset-on)]: \"life friendly conditions are highly improbable if there is no divine designer... Thu…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "liberty-positive-negative",
-          "url": "https://plato.stanford.edu/entries/liberty-positive-negative/",
-          "score": 0.8305055,
-          "snippet": "[Atlas highlights] Defining narrative ethics (raptor-subset-on): \"Narrative ethics emerged in response to an impartialist ethics, one working on the assumption that ethics is mainly a matter of 'right conduct among strangers'.\" Defining Contractarian ethics (raptor-subset-on): \"the view 'that moral norms derive their normative force from th\" [Feminist bioethics (raptor-subset-on)]: \"This is distinct from its (already strong) international focus: a feminist consciousness not simply of the way that bioethical issues diversify betwee countries, but of the globa economic an political system.\" Defi…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "laozi",
-          "url": "https://plato.stanford.edu/entries/laozi/",
-          "score": 0.6985877,
-          "snippet": "[Atlas highlights] [Feminist bioethics (raptor-subset-on)]: \"care responsibilities are increasingly falling back onto families... in which responsibility for the care of dependent members is assumed to lie with women members\" Defining Care ethics (raptor-subset-on): \"A century before care ethics would become a strain of academic feminist ethics, Cooper urged that both masculine reason and feminine sympath are needed to be worked into the training of children.\" [Feminist bioethics (raptor-subset-on)]: \"that the availability of genetic testing and screening technologies... exerts pressure on wom…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "rawls",
-          "url": "https://plato.stanford.edu/entries/rawls/",
-          "score": 0.6111892,
-          "snippet": "[Atlas highlights] Argument: Locke's Theory of Punishment in the State of Nature [from raptor-subset-on]   P1. The fundamental law of nature is that mankind be preserved.   P2. This law would 'be in vain' with no human power to enforce it.   P3. Therefore, it is legitimate for individuals to punish violations even before government exists.   C. Individuals have a right to use coercive force (punish) against violators in the state of nature.  [Beauchamp & Childress 1979 (raptor-subset-on)]: \"Importantly, this common morality is historicist... However, unlike many historicist accounts, the commo…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "addams-jane",
-          "url": "https://plato.stanford.edu/entries/addams-jane/",
-          "score": 0.5283643,
-          "snippet": "[Atlas highlights] [bioethics (raptor-subset-on)]: \"A feminist approach might invoke standpoint theory, which would draw upon the insights of the most disadvantaged in society.\" Defining secondary principles (raptor-subset-on): \"Mill believes, agents should for the most part follow these principles automatically and without recourse to the utilitarian first principle. However, they should periodically step back and review...\" Defining burdened virtue (raptor-subset-on): \"the burdened virtues include all those traits that make a contribution to human flourishing—if they succeed in doing so at a…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "moral-psych-emp",
-          "url": "https://plato.stanford.edu/entries/moral-psych-emp/",
-          "score": 0.2371765,
-          "snippet": "[Atlas highlights] [Beauchamp and Childress (raptor-subset-on)]: \"informed consent serves autonomy, it ought to be autonomously waiverable (Beauchamp and Childress 2008, 106).\"  moral-psych-emp  Recently, proponents of virtue ethics have been increasingly proposing a suggestive solution to this problem: virtue is a skill acquired through effortful practice, so virtue is a kind of expertise (Annas 2011; Bloomfield 2000, 2001, 2014; Jacobson 2005; Russell 2015; Snow 2010; Sosa 2009; Stichter 2007, 2011; for reservations, see Doris, in preparation). The virtuous are expert at morality and—given t…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "reid",
-          "url": "https://plato.stanford.edu/entries/reid/",
-          "score": 0.15564708,
-          "snippet": "reid  Despite the fact that he offers a rich set of moral first principles, as a moral sense theorist Reid does not intend to systematize a network of moral obligations through his first principles. He writes, “A system of morals is not like a system of geometry, where the subsequent parts derive their evidence from the preceding, and one chain of reasoning is carried on from the beginning;... [instead it] resembles more a system of botany, or mineralogy, where the subsequent parts depend not for their evidence upon the preceding, and the arrangement is made to facilitate apprehension and memo…"
-        },
-        {
-          "corpus_id": "raptor-subset-on",
-          "title": "mathematics-constructive",
-          "url": "https://plato.stanford.edu/entries/mathematics-constructive/",
-          "score": 0.14700001,
-          "snippet": "[Atlas highlights] Argument: Argument against Real Definition of Object [from raptor-subset-on]   P1. Object may not have a real definition because its nature cannot be captured by 'To be an object is to be Φ' or 'It is essential to objects that Φ'.   P2. The potential contrast class (e.g., properties) might be natural, but 'object' itself might not be.   C. One might think that object doesn't have a real definition.   mathematics-constructive  for some detachable subset \\(D\\) of \\(2^*\\). Every detachable subset of \\(2^*\\) is a \\(\\mathsf{c}\\)-subset. On the other hand, by a \\(\\Pi^{0}_1\\)-subse…"
+          "score": 0.0432192,
+          "snippet": "feminist-bioethics  Feminist critique also addresses the fundamental theory of mainstream bioethics. Feminist-friendly bioethicists have noted systemic weaknesses in the explanatory framework that grounds the bioethical analysis of research and clinical practices and increasingly also of public health measures. Critics fault both the abstract character of much bioethical theory and inattention to such key components of morality as the contexts that frame health care and the relational networks that inform patient decision making. The tendency to ground theory in a set of abstract principles th…"
         }
       ],
       "source_score": {
         "matched": [
+          "theory-bioethics",
           "feminist-bioethics"
         ],
-        "missing": [
-          "theory-bioethics"
-        ],
+        "missing": [],
         "total_expected": 2,
-        "ratio": 0.5
+        "ratio": 1.0
       },
       "fact_score": {
         "matched": [
           "autonomy",
+          "justice",
           "Beauchamp",
           "Childress",
           "casuistry"
@@ -2279,15 +2285,14 @@
         "missing": [
           "beneficence",
           "non-maleficence",
-          "justice",
           "principlism",
           "particularism"
         ],
         "total_expected": 9,
-        "ratio": 0.44444445
+        "ratio": 0.5555556
       },
       "embed_ms": 0,
-      "search_ms": 2282,
+      "search_ms": 2010,
       "corpora_hit": [
         "raptor-subset-on"
       ],
