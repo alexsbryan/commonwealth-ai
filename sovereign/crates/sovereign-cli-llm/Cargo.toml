@@ -124,7 +124,7 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
-dirs = "5"
+dirs = "6"
 chrono = { workspace = true }
 sha2 = { workspace = true }
 # `meshapp publish/install` pack/unpack bundle artifacts (tar over zstd, like
@@ -133,11 +133,11 @@ tar = "0.4"
 zstd = "0.13"
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
+which = "8"
 hostname = { workspace = true }
 hex = "0.4"
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
-rand = "0.9"
+rand = "0.10"
 # ── `awareness`-only, and off in every ordinary build ──
 # `awareness_cmd` moved here from `sovereign-cli` on 2026-08-21 (nc-26)
 # together with the three dependencies only it needs. All three are optional
@@ -151,7 +151,7 @@ rand = "0.9"
 corpus-engine-atos = { workspace = true, optional = true }
 # Direct SQLite reads in `awareness_cmd/{entities,reset,timeline}`. Production
 # paths go through StateStore; the diagnostic CLI reads the file.
-rusqlite = { version = "0.35", features = ["bundled"], optional = true }
+rusqlite = { version = "0.40", features = ["bundled"], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
