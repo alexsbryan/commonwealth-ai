@@ -51,9 +51,37 @@ SRC = INDEXES / "sep"
 DSTS = [INDEXES / "raptor-subset-off", INDEXES / "raptor-subset-on"]
 BENCH = Path(__file__).resolve().parents[2] / "sovereign/bench/sep"
 # Articles beyond the bank's own, so retrieval has to discriminate rather than
-# hit the only thing present. 3x the bank is enough to make a wrong article
-# reachable and small enough to stay a fixture.
+# hit the only thing present.
 PADDING_FACTOR = 3
+
+# THE INDICES, and they are the load-bearing part of this file.
+#
+# `CorpusIndex::search` (corpus-engine/src/index/search.rs:350) gates BOTH
+# retrieval legs on an index being PRESENT:
+#
+#     let do_vector = !q.is_empty() && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
+#     let do_fts    = !sanitized.is_empty() && fts_indexed;
+#
+# and `gate_info` reads those two flags off `list_indices()`: an index whose
+# columns include `embedding` for the first, one including `content` or `title`
+# for the second. `lance.write_dataset` copies ROWS, NOT INDICES, so a subset
+# built by copying has neither — and above FLAT_SCAN_THRESHOLD (10,000) rows
+# that turns BOTH legs off. Measured on the first build of this fixture:
+# 33,884 chunks, `sources 0/66`, `facts 0/158`, every question zero, exit 0,
+# and the report still printed the `vec+fts` tag. Nothing warned.
+#
+# `svrn corpus optimize` does NOT repair it — it folds new rows into EXISTING
+# indexes and skips the index pass when there are none ("already maintained").
+# So the fixture builds the same three indices the real ingest builds, mirrored
+# from `sep` rather than guessed:
+#     embedding_idx  IVF_PQ    on `embedding`
+#     content_idx    Inverted  on `content`
+#     title_idx      Inverted  on `title`
+# and then ASSERTS both legs are live, in the same terms `gate_info` uses. A
+# fixture that cannot retrieve must not be buildable (ARCH §7: structural, not
+# remembered).
+IVF_PARTITIONS = 256
+IVF_SUB_VECTORS = 64
 
 
 def bank_articles() -> set[str]:
@@ -64,6 +92,44 @@ def bank_articles() -> set[str]:
         for m in re.finditer(r"expected_sources\s*=\s*\[([^\]]*)\]", t):
             arts |= set(re.findall(r'"([^"]+)"', m.group(1)))
     return {a for a in arts if a}
+
+
+def build_indices(table_path) -> None:
+    """Build the three indices `CorpusIndex::search` gates on, then prove it.
+
+    Mirrored from `sep` (`embedding_idx` IVF_PQ, `content_idx` / `title_idx`
+    Inverted) rather than invented, so the fixture retrieves through the same
+    machinery the control does. The assertion at the end is in the exact terms
+    `gate_info` reads — a column named `embedding` for the vector leg, one
+    named `content` or `title` for the full-text leg — because "the index build
+    ran" and "the search will use it" are different claims and only the second
+    one matters.
+    """
+    ds = lance.dataset(str(table_path))
+    n = ds.count_rows()
+    print(f"building indices over {n} rows (this is the step a plain copy skips)")
+    ds.create_index(
+        "embedding",
+        index_type="IVF_PQ",
+        num_partitions=IVF_PARTITIONS,
+        num_sub_vectors=IVF_SUB_VECTORS,
+        replace=True,
+    )
+    for col in ("content", "title"):
+        ds.create_scalar_index(col, index_type="INVERTED", replace=True)
+
+    ds = lance.dataset(str(table_path))
+    cols = {c for i in ds.list_indices() for c in i.get("fields", [])}
+    ivf_built = "embedding" in cols
+    fts_built = bool({"content", "title"} & cols)
+    print(f"  indices on: {sorted(cols)}  ivf_built={ivf_built} fts_built={fts_built}")
+    if not (ivf_built and fts_built):
+        raise SystemExit(
+            f"REFUSING to leave a fixture whose retrieval is dead: "
+            f"ivf_built={ivf_built} fts_built={fts_built}. Both legs of "
+            f"`CorpusIndex::search` gate on these and a subset without them "
+            f"scores zero on every question without warning."
+        )
 
 
 def checkpoint_articles() -> set[str]:
@@ -137,6 +203,7 @@ def main() -> int:
     sub = full.filter(mask)
     print(f"chunks: {sub.num_rows} of {chunks.count_rows()}")
     lance.write_dataset(sub, str(DST / "chunks.lance"), mode="create")
+    build_indices(DST / "chunks.lance")
 
     # 2. corpus meta — copied, so the embed model + dim are the parent's
     meta = json.loads((SRC / "_corpus_meta.json").read_text())
