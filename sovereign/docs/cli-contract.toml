@@ -926,11 +926,30 @@ flags = [
 path = "bench atlas"
 binary = "llm"
 classification = "daemon"
+# `--smoke-subset <id>` runs exactly the ids `sovereign/bench/smoke.toml`
+# declares for each selected bank under that subset. Declared here because
+# `svrn quality check`'s six sampled lanes drive these two verbs through it,
+# so the flag is now part of a shipped surface rather than a bench-local
+# convenience — and because it REFUSES rather than defaulting: a selected
+# bank with no row in the subset exits 2 instead of running whole.
+[[command]]
+path = "bench all"
+binary = "llm"
+classification = "daemon"
+flags = [{ name = "--smoke-subset", takes_value = true }]
+[[command]]
+path = "bench chaos-monkey run"
+binary = "llm"
+classification = "daemon"
+flags = [{ name = "--smoke-subset", takes_value = true }]
 [[command]]
 path = "eval run"
 binary = "llm"
 classification = "daemon"
-flags = [{ name = "--daemon", takes_value = true }]
+flags = [
+  { name = "--daemon", takes_value = true },
+  { name = "--smoke-subset", takes_value = true },
+]
 
 # mcp — internal diagnostics, default build.
 [[command]]

@@ -461,7 +461,17 @@ Throughput + correctness benchmarks for enrichment LLM tasks. Operates against t
 
 | Subcommand | Description |
 |---|---|
+| `all` | Discover every bank under `--bench-root` and run the retrieval / routing / enrichment / synth surfaces against committed per-lane baselines |
 | `atlas` | Run atlas Phase 1 + short-call tasks against the loaded primary model |
+| `chaos-monkey run` | Score grounded honesty against a pressure bank — present, absent-adjacent, out-of-domain, distractor and trap probes |
+
+`all` and `chaos-monkey run` both take `--smoke-subset <id>`: run exactly the
+item ids `sovereign/bench/smoke.toml` declares for each selected bank under
+that subset. Unlike `--sample-questions N` / `--limit N`, which count off the
+front of a bank and so pick a different set as the bank grows, the subset is
+declared by id and a selected bank with no row REFUSES the run (exit 2) rather
+than going whole. `svrn quality check`'s six sampled lanes drive both verbs
+through it.
 
 See [BENCHMARKING.md](BENCHMARKING.md) for the broader embed-throughput runbook.
 

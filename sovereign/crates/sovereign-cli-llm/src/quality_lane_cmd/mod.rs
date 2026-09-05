@@ -29,6 +29,7 @@
 //! baseline comparison, which is a could-not-judge on the baseline rows and
 //! changes nothing about the absolute ones.
 
+pub(crate) mod bench_lane;
 pub(crate) mod chat_ask;
 pub(crate) mod throughput;
 
@@ -161,6 +162,7 @@ pub(crate) fn reason(text: String) -> Reason {
 pub async fn run(args: &[String]) -> i32 {
     let lane = args.first().map(String::as_str).unwrap_or("");
     match lane {
+        "bench" => bench_lane::run(&args[1..]).await,
         "chat-ask" => chat_ask::run(&args[1..]).await,
         "throughput" => throughput::run(&args[1..]).await,
         "--help" | "-h" | "" => {
@@ -173,6 +175,11 @@ pub async fn run(args: &[String]) -> i32 {
             println!("  throughput The engine's own numbers: scripts/throughput_probe.py");
             println!("             over four arms, plus two plain end-to-end turns.");
             println!();
+            println!("  bench      One of the six existing bench lanes, run unchanged and");
+            println!("             read for CATASTROPHE — errored items, empty answers, an");
+            println!("             all-zero tally, a refusal on an answerable probe, a");
+            println!("             confabulation on an absent one. Scores are tracked.");
+            println!();
             println!("Normally driven by `svrn quality check`, which reads the trailing");
             println!("Judgement line each lane prints last.");
             i32::from(lane.is_empty())
@@ -180,7 +187,9 @@ pub async fn run(args: &[String]) -> i32 {
         other => {
             // Refused, never defaulted to a lane the operator did not ask
             // for (ARCH §18.3).
-            eprintln!("svrn quality lane: no lane `{other}`. Declared: chat-ask, throughput");
+            eprintln!(
+                "svrn quality lane: no lane `{other}`. Declared: bench, chat-ask, throughput"
+            );
             2
         }
     }

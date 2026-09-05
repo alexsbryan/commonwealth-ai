@@ -403,7 +403,12 @@ fn smoke_subset_ids(repo: &Path) -> Result<Vec<String>, String> {
                 .collect()
         })
         .unwrap_or_default();
+    // Sorted and DEDUPED: one subset spans several banks, so `retrieval-prod-v1`
+    // appears once per bank row. The fingerprint wants the SET of subsets this
+    // stack runs, and a bank count leaking into it would move the fingerprint
+    // every time a subset gained a bank without changing which items run.
     ids.sort();
+    ids.dedup();
     Ok(ids)
 }
 
@@ -1192,9 +1197,13 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
         // Well-formed: sorted ids.
         std::fs::write(
             bench.join("smoke.toml"),
-            "[[subset]]\nsubset_id = \"z1\"\n[[subset]]\nsubset_id = \"a1\"\n",
+            "[[subset]]\nsubset_id = \"z1\"\n[[subset]]\nsubset_id = \"a1\"\n\
+             [[subset]]\nsubset_id = \"z1\"\n",
         )
         .unwrap();
+        // Sorted, and the repeat of `z1` (one subset, two banks) counts once:
+        // the fingerprint wants which subsets ran, not how many banks each
+        // spans.
         assert_eq!(
             smoke_subset_ids(tmp.path()),
             Ok(vec!["a1".into(), "z1".into()])

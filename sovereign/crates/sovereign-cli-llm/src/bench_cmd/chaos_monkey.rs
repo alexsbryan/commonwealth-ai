@@ -104,6 +104,13 @@ struct Args {
     /// Defaults to `<out stem>.transcripts.jsonl` next to --out.
     transcripts: PathBuf,
     limit: Option<usize>,
+    /// `--smoke-subset <subset_id>`: run exactly the probe ids
+    /// `sovereign/bench/smoke.toml` declares for this bank under that
+    /// subset. Not `--limit`: a positional prefix count picks a DIFFERENT
+    /// set of probes as the bank grows, and the shape of a chaos subset is
+    /// the whole point — two present, two absent-adjacent, one out-of-domain,
+    /// one distractor. `--limit 6` on this bank is six present probes.
+    smoke_subset: Option<String>,
     /// True-baseline control: bypass the whole Runtime (router, retrieval,
     /// synthesis prompt) and send the bare question to the model. Measures the
     /// naked model so the delta vs the normal run = our prompting+retrieval
@@ -185,6 +192,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut transcripts: Option<PathBuf> = None;
     let mut limit = None;
+    let mut smoke_subset: Option<String> = None;
     let mut naked = false;
     let mut grounding_verify = false;
     let mut gv_shadow = false;
@@ -225,6 +233,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
                         .map_err(|_| "--limit must be a usize")?,
                 )
             }
+            "--smoke-subset" => smoke_subset = Some(val!("--smoke-subset").to_string()),
             "--naked" => naked = true,
             "--warm-atlas" => warm_atlas = true,
             "--grounding-verify" => grounding_verify = true,
@@ -309,7 +318,18 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         manifest,
         out,
         transcripts,
-        limit,
+        limit: match (limit, &smoke_subset) {
+            // Two deciders for "which probes run" (§10.6). Refused rather
+            // than composed: a subset of a prefix is neither the subset the
+            // file declares nor the prefix the flag names.
+            (Some(_), Some(_)) => {
+                return Err(
+                    "--limit and --smoke-subset both decide which probes run; pass one".into(),
+                )
+            }
+            (l, _) => l,
+        },
+        smoke_subset,
         naked,
         grounding_verify,
         gv_shadow,
@@ -351,7 +371,7 @@ async fn run(rest: &[String]) -> i32 {
     // answering discipline so the bench measures the SAME path the tool ships.
     globals.custom_instructions = args.custom_instructions.clone();
 
-    let bank = match ChaosBank::load(&args.bank) {
+    let mut bank = match ChaosBank::load(&args.bank) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("error: {e}");
@@ -643,6 +663,35 @@ async fn run(rest: &[String]) -> i32 {
             }
         }
     };
+
+    // The DECLARED subset, applied before `--limit`'s prefix count. The two
+    // are mutually exclusive at parse time, so this cannot be a subset of a
+    // prefix of a bank.
+    if let Some(subset) = args.smoke_subset.as_deref() {
+        let sel = match crate::bench_cmd::smoke_subset::selection_for(subset, &args.bank) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("chaos-monkey: {e}");
+                return 2;
+            }
+        };
+        let missing = sel.check_all_present(bank.questions.iter().map(|q| q.id.as_str()));
+        if !missing.is_empty() {
+            eprintln!(
+                "chaos-monkey: subset `{subset}` names {} probe id(s) bank `{}` does not have:                  {}. A subset that silently shrank is a lane that quietly stopped checking                  something",
+                missing.len(),
+                args.bank.display(),
+                missing.join(", ")
+            );
+            return 2;
+        }
+        let before = bank.questions.len();
+        bank.questions.retain(|q| sel.keeps(&q.id));
+        eprintln!(
+            "chaos-monkey: smoke subset `{subset}` — {} of {before} probe(s)",
+            bank.questions.len()
+        );
+    }
 
     let take = args.limit.unwrap_or(bank.questions.len());
     let mut rows = Vec::new();

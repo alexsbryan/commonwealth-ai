@@ -84,3 +84,151 @@ preconditions = [
 ]
 baseline_dir = "sovereign/bench/quality-check/baselines/throughput"
 bank = "sovereign/bench/quality-check/throughput.toml"
+
+# ── The six sampled lanes ───────────────────────────────────────────
+#
+# These already existed and already ran. What they never did was SAY a
+# verdict: `bench all` exits 1 for regressed, stale AND missing-baseline;
+# `knowledge-gym` exits 3 for "below 0.9"; `chaos-monkey` exits 4 for
+# "measured nothing". So each is wrapped by `quality lane bench`, which runs
+# the verb UNCHANGED and reads the report it writes.
+#
+# The whole inner command line lives here, as data. `{report}` is the file
+# the wrapper tells the verb to write; `{ids:<subset_id>}` expands to the ids
+# `sovereign/bench/smoke.toml` declares, each repeated after the flag before
+# it, so a curated list never lives in two files.
+#
+# WHICH items each runs is `sovereign/bench/smoke.toml` — one file, reviewed
+# in one place, and its `subset_id`s are in the run fingerprint.
+#
+# HARD on CATASTROPHE ONLY. At six probes and ten questions a one-item flip
+# is 12-20 points and a tolerance band is noise (RUNBOOK §6), so the scores
+# are tracked with no band and the gating rows are the ones no sample size
+# makes ambiguous: an errored item, an empty answer, an all-zero tally, an
+# abstention on an answerable probe, a confabulation on an absent one. Drift
+# is the nightly's question — `scripts/sovereign-ci-bench.sh` runs the full
+# banks against committed per-lane baselines.
+
+[[lane]]
+id = "routing"
+kind = "invariant"
+enforcement = "hard"
+est_secs = 120
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
+    "svrn", "bench", "all",
+    "--bench-root", "sovereign/bench",
+    "--routing-only",
+    "--filter", "routing/cells_v1",
+    "--smoke-subset", "routing-v1",
+    "--report", "{report}",
+]
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
+bank = "sovereign/bench/routing/cells_v1.toml"
+
+# Two commands, because no single `--filter` selects sep AND wikipedia and
+# inventing a filter language to make it one would be a worse trade than
+# running the verb twice.
+[[lane]]
+id = "retrieval-prod"
+kind = "invariant"
+enforcement = "hard"
+est_secs = 90
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
+    "svrn", "bench", "all",
+    "--bench-root", "sovereign/bench",
+    "--filter", "sep/questions",
+    "--prod-pipeline", "--isolate",
+    "--smoke-subset", "retrieval-prod-v1",
+    "--report", "{report}",
+    "--",
+    "svrn", "bench", "all",
+    "--bench-root", "sovereign/bench",
+    "--filter", "wikipedia/questions",
+    "--prod-pipeline", "--isolate",
+    "--smoke-subset", "retrieval-prod-v1",
+    "--report", "{report}",
+]
+preconditions = [
+    "port-listening:9741",
+    "slot-decodes:primary",
+    "corpus-installed:sep",
+    "corpus-installed:wikipedia",
+]
+bank = "sovereign/bench/sep/questions.toml"
+
+# In-process: this one reads the corpus's own atoms.json and runs no model,
+# which is why a full golden costs 30 s rather than minutes.
+[[lane]]
+id = "enrichment-f1"
+kind = "invariant"
+enforcement = "hard"
+est_secs = 30
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "enrichment-f1", "--reader", "bench-all", "--",
+    "svrn", "bench", "all",
+    "--bench-root", "sovereign/bench",
+    "--filter", "literary/bk-book-1",
+    "--smoke-subset", "enrichment-f1-v1",
+    "--report", "{report}",
+]
+preconditions = ["corpus-installed:brothers-karamazov-book-1"]
+bank = "sovereign/bench/literary/bk-book-1.toml"
+
+[[lane]]
+id = "chaos-monkey"
+kind = "judged"
+enforcement = "hard"
+est_secs = 240
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
+    "svrn", "bench", "chaos-monkey", "run",
+    "--bank", "sovereign/bench/chaos_monkey/secret_agent.toml",
+    "--manifest", "sovereign/bench/chaos_monkey/manifest.toml",
+    "--corpus", "chaos-secret-agent",
+    "--smoke-subset", "chaos-monkey-v1",
+    "--out", "{report}",
+]
+preconditions = [
+    "port-listening:9741",
+    "slot-decodes:primary",
+    "corpus-installed:chaos-secret-agent",
+]
+bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
+
+# The one lane of the six that ALREADY selected by id (`--fixture <slug>`,
+# repeatable), so it gets no new flag — `{ids:…}` expands the declared slugs
+# into that existing door.
+[[lane]]
+id = "knowledge-gym"
+kind = "judged"
+enforcement = "hard"
+est_secs = 180
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "knowledge-gym", "--reader", "knowledge-gym", "--",
+    "svrn", "knowledge-gym", "run", "--json",
+    "--fixture", "{ids:knowledge-gym-v1}",
+]
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
+
+[[lane]]
+id = "synth"
+kind = "judged"
+enforcement = "hard"
+est_secs = 180
+command = [
+    "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
+    "svrn", "bench", "all",
+    "--bench-root", "sovereign/bench",
+    "--synth",
+    "--filter", "sep/questions",
+    "--smoke-subset", "synth-v1",
+    "--report", "{report}",
+]
+preconditions = [
+    "port-listening:9741",
+    "slot-decodes:primary",
+    "corpus-installed:sep",
+]
+bank = "sovereign/bench/sep/questions.toml"

@@ -6,11 +6,27 @@
 
 ```bash
 scripts/sovereign-ci-bench.sh            # full release/nightly gate (~2–4h on the 35B)
-scripts/sovereign-ci-bench.sh --quick    # pre-push lean tier (~35–40 min)
 scripts/sovereign-ci-bench.sh --update-baseline   # re-capture baselines after an intended change
+svrn quality check                       # the ~30-minute curated breakage check
 ```
 
-`--quick` down-samples the slow lanes (`--sample-questions` on synth, one agent-coding problem, `--max-turns` on the multi-turn bank) to a stratified, whole-unit subset — high signal-per-minute for local iteration. Lanes: deterministic ones (recall, atom-F1, routing) are **hard** (build-breaking); synth answer-equiv is **soft**; chaos/mechanism/multi-turn/governance are **tracked** runs each paired with a **hard `bench gate <lane>`** that fails only on regression vs a committed baseline. **Invariant:** a sampled lane's baseline is *cap-specific* (it covers a different subset than the full run) — change a sample size or `MULTITURN_MAX_TURNS` and you must re-capture that lane's baseline or its hard gate false-fires. Lane structure + the corrected-stack config live in [`CI_GATE_HANDOFF.md`](CI_GATE_HANDOFF.md).
+**This script is the FULL run.** The lean tier that used to live here as
+`--quick` is now `svrn quality check`, and the move is not a rename: `--quick`
+down-sampled by COUNT (`--sample-questions 5`, one agent-coding problem, a
+`--max-turns` cap), which is what made the invariant below bite — a sampled
+lane's baseline is *cap-specific*, so moving a cap false-fires that lane's hard
+gate against a subset it never ran. The check declares its subsets by ID in
+[`smoke.toml`](smoke.toml), reports four verdicts per lane rather than an exit
+code, and writes a durable table to `target/quality-check/<stamp>/summary.json`.
+`--quick` wrote nothing: `target/ci-bench` is empty on this host.
+
+Lanes here: deterministic ones (recall, atom-F1, routing) are **hard**
+(build-breaking); synth answer-equiv is **soft**; chaos/mechanism/multi-turn/
+governance are **tracked** runs each paired with a **hard `bench gate <lane>`**
+that fails only on regression vs a committed baseline. **Invariant:** change
+`MULTITURN_MAX_TURNS` and you must re-capture that lane's baseline or its hard
+gate false-fires. Lane structure + the corrected-stack config live in
+[`CI_GATE_HANDOFF.md`](CI_GATE_HANDOFF.md).
 
 ### What this gate does NOT cover (read before trusting a green)
 

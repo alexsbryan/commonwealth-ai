@@ -297,10 +297,15 @@ The bar for reflecting on drift tools is *lower* than for code-intelligence tool
 **There is ONE comprehensive bench: `scripts/sovereign-ci-bench.sh`.** It does not reinvent measurement — it *composes* the ~20 `svrn bench` subcommands, the two gyms and `sovereign-agent-bench` into lanes with a single PASS/FAIL. Three tiers:
 
 ```bash
-./scripts/sovereign-ci-bench.sh --quick      # ~35-40m — the pre-push tier
+svrn quality check                           # ~30m — the curated pre-push breakage check
 ./scripts/sovereign-ci-bench.sh --no-synth   # HARD lanes only; skips ~55m of judge lanes
 ./scripts/sovereign-ci-bench.sh              # full run, 4h budget
 ```
+
+The lean tier is no longer a flag on this script. `--quick` down-sampled by
+COUNT and wrote nothing durable; `svrn quality check` declares its item subsets
+by id in `sovereign/bench/smoke.toml`, says four verdicts per lane, and persists
+`target/quality-check/<stamp>/summary.json`.
 
 **Read the lane KIND before you read the verdict** (gate policy at `scripts/sovereign-ci-bench.sh:10-30`):
 

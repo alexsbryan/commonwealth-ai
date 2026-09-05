@@ -82,6 +82,7 @@ const RUN_HELP: Help = Help {
             ("--isolate",      "Per-corpus isolation (with --synth or --prod-pipeline). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
             ("--prod-pipeline", "Bench-prod parity mode. Each question drives the PRODUCTION KnowledgeQuery retrieval pipeline in-process (context build → kq_pipeline() 19 steps → merge/truncate) via Runtime::retrieve_evidence and scores the returned evidence pool — no synthesis pass. Measures the pipeline chat surfaces actually run, unlike the default raw-index mode. Deterministic (intent pinned to KnowledgeQuery)."),
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
+            ("--smoke-subset <id>", "Run exactly the question ids `sovereign/bench/smoke.toml` declares for this bank under subset <id>. DECLARED, not sampled: a stale id refuses the run rather than shrinking it. Mutually exclusive with --sample-questions."),
             ("--sample-questions <N>", "Lean-QA cap (with --synth): down-sample the bank to at most N questions, round-robin across category so every archetype stays represented. Trades exhaustiveness for wall time; the sampled run is advisory (not baseline-comparable). No-op in retrieval/routing modes."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
@@ -237,6 +238,12 @@ struct RunArgs {
     /// few min). No-op in retrieval/routing modes, whose HARD gates need
     /// stable question-set denominators. See `sample_stratified`.
     sample_questions: Option<usize>,
+    /// `--smoke-subset <subset_id>`: run exactly the ids
+    /// `sovereign/bench/smoke.toml` declares for THIS bank under that
+    /// subset. Not a count — see `bench_cmd::smoke_subset` for why the two
+    /// are different instruments and why this one is mutually exclusive with
+    /// `--sample-questions`.
+    smoke_subset: Option<String>,
     /// Total-turn budget for `--threads` mode (lean-QA lever for multi-turn
     /// banks). The --threads lane costs ~one chat call per TURN, and thread
     /// lengths vary widely (this repo's bank: 2–21 turns), so a turn budget
@@ -285,6 +292,7 @@ impl Default for RunArgs {
             judge_trials: 1,
             isolate: false,
             sample_questions: None,
+            smoke_subset: None,
             max_turns: None,
             atlas_seed: atlas_ann::SeedMode::Cosine,
             prod_pipeline: false,
@@ -405,6 +413,14 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--sample-questions" => {
                 i += 1;
                 a.sample_questions = rest.get(i).and_then(|s| s.parse().ok());
+            }
+            "--smoke-subset" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --smoke-subset needs a subset id");
+                    return 2;
+                };
+                a.smoke_subset = Some(v.clone());
             }
             "--max-turns" => {
                 i += 1;
@@ -649,6 +665,44 @@ async fn cmd_run(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // The DECLARED subset, before any sampling. Applies in every mode —
+    // retrieval, routing and synth — because the quality check drives all
+    // three and each one's subset is written down in the same file.
+    if let Some(subset) = a.smoke_subset.as_deref() {
+        if a.sample_questions.is_some() {
+            // Two deciders for "which questions run" (§10.6). Refused rather
+            // than resolved by precedence: whichever one lost would be a
+            // silent half of the curation.
+            eprintln!(
+                "error: --smoke-subset and --sample-questions both decide which questions run;                  pass one"
+            );
+            return 2;
+        }
+        let sel = match crate::bench_cmd::smoke_subset::selection_for(subset, &a.bank) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        };
+        let missing = sel.check_all_present(bank.questions.iter().map(|q| q.id.as_str()));
+        if !missing.is_empty() {
+            eprintln!(
+                "error: subset `{subset}` names {} id(s) bank `{}` does not have: {}.                  A subset that silently shrank is a lane that quietly stopped checking something",
+                missing.len(),
+                a.bank.display(),
+                missing.join(", ")
+            );
+            return 2;
+        }
+        let before = bank.questions.len();
+        bank.questions.retain(|q| sel.keeps(&q.id));
+        eprintln!(
+            "smoke subset `{subset}`: {} of {before} question(s) from {}",
+            bank.questions.len(),
+            a.bank.display()
+        );
+    }
     // Lean-QA sampling: only in synth mode (the slow lane). Retrieval/routing
     // keep the full set so their HARD-gate denominators stay stable.
     if a.synth {

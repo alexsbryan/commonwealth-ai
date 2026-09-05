@@ -1,0 +1,146 @@
+# smoke.toml — WHICH items each lane of `svrn quality check` runs.
+#
+# ONE file, so the curation is reviewed in one place. Every existing bench
+# verb the check drives reads this file through `--smoke-subset <subset_id>`;
+# the file itself is always `sovereign/bench/smoke.toml`, found by walking up
+# to the checkout, so there is one path and not a flag per caller.
+#
+# DECLARED, not sampled at run time (order quality-check-lean, 2026-09-04).
+# `bench all --sample-questions 5` and `chaos-monkey --limit 6` both exist and
+# both were rejected for this: a count picks a different set as the bank
+# grows, and `sovereign/bench/README.md` records what that costs — a sampled
+# lane's baseline is CAP-SPECIFIC, so moving the cap false-fires the lane's
+# hard gate against a subset it never ran. Naming the ids makes the subset a
+# thing you can diff.
+#
+# The `subset_id`s here go into the run fingerprint
+# (`quality_check_cmd::smoke_subset_ids`), so editing an `ids` list moves the
+# stack and last week's numbers stop being comparable. That is the point, not
+# an inconvenience.
+#
+# ── The schema ──────────────────────────────────────────────────────
+#
+#   subset_id  the `--smoke-subset` argument. One subset spans several banks;
+#              a row is the (subset, bank) pair.
+#   bank       repo-relative path to the bank the ids live in, or — for
+#              knowledge-gym, whose "bank" is a directory of fixtures — the
+#              fixtures directory.
+#   ids        the item ids to run. Every id MUST exist in the bank: a stale
+#              id is refused, never quietly dropped, because a subset that
+#              silently shrank is a lane that quietly stopped checking
+#              something (ARCH §18.3).
+#   mode       `"full"` instead of `ids`, for a bank the check runs whole.
+#              Declared rather than omitted so that a bank with NO row is an
+#              error rather than a default — the check cannot accidentally
+#              run an expensive bank end to end.
+
+schema_version = 1
+
+# ── routing ─────────────────────────────────────────────────────────
+# Deterministic and cheap, so the whole bank runs. `--filter routing/cells_v1`
+# selects both banks below; both are declared full.
+
+[[subset]]
+subset_id = "routing-v1"
+bank = "sovereign/bench/routing/cells_v1.toml"
+mode = "full"
+
+[[subset]]
+subset_id = "routing-v1"
+bank = "sovereign/bench/routing/cells_v1_paraphrases.toml"
+mode = "full"
+
+# ── retrieval-prod ──────────────────────────────────────────────────
+# Ten ids, five per corpus, chosen to span the archetypes the two banks
+# organise themselves by rather than the first ten in file order: a factual
+# lookup, a multi-source synthesis, a causal chain, a comparison and a
+# contested question on each side. A subset that is all one archetype scores
+# one retrieval behaviour and reads like coverage.
+
+[[subset]]
+subset_id = "retrieval-prod-v1"
+bank = "sovereign/bench/sep/questions.toml"
+ids = [
+    "argument_consequence_against_compatibilism",
+    "concept_modality_necessary_aposteriori",
+    "comparative_locke_reid_personal_identity",
+    "dialectical_gettier_lottery",
+    "contested_trolley_doctrine_double_effect",
+]
+
+[[subset]]
+subset_id = "retrieval-prod-v1"
+bank = "sovereign/bench/wikipedia/questions.toml"
+ids = [
+    "factual_einstein_1905",
+    "synth_manhattan_emigre_physicists",
+    "causal_roman_empire_fall",
+    "compare_curie_meitner",
+    "contested_atomic_bombings_morality",
+]
+
+# ── enrichment-f1 ───────────────────────────────────────────────────
+# The atom goldens have no per-item ids at all — they are matched by
+# `canonical_name_contains_any` — so there is nothing to select by and the
+# bank runs whole. It is in-process (no model), which is why that is
+# affordable.
+
+[[subset]]
+subset_id = "enrichment-f1-v1"
+bank = "sovereign/bench/literary/bk-book-1.toml"
+mode = "full"
+
+# ── chaos-monkey ────────────────────────────────────────────────────
+# Six probes, and the SHAPE is the point rather than the count: two present
+# (an abstention here is a catastrophe), two absent-adjacent and one
+# out-of-domain (an asserted answer here is a confabulation), one distractor
+# (the retrieved passage is about someone else). A subset of six presents
+# would be six chances to see the same behaviour.
+
+[[subset]]
+subset_id = "chaos-monkey-v1"
+bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
+ids = [
+    "present-wife",
+    "present-killer-weapon",
+    "absent-heat-firstname",
+    "absent-embassy-country",
+    "ood-berlin-wall",
+    "distract-bomb-maker",
+]
+
+# ── knowledge-gym ───────────────────────────────────────────────────
+# Two honesty fixtures and one clean one. The clean fixture is the CONTROL:
+# without it, a run in which the gym harness itself is broken produces two
+# passing honesty fixtures (nothing released, nothing to fabricate) and reads
+# like health.
+#
+# These are the two the CI lane does NOT run — it samples
+# `08_escalation…`/`10_cache_hit…`/`11_multi_call…` — so this subset is not a
+# smaller copy of the nightly, it is a different question.
+
+[[subset]]
+subset_id = "knowledge-gym-v1"
+bank = "sovereign/bench/knowledge-gym/fixtures"
+ids = [
+    "01_corpus_definitional",
+    "05_noresults_honesty",
+    "06_fabricated_id_blocked",
+]
+
+# ── synth ───────────────────────────────────────────────────────────
+# Five questions, one corpus, judge on. Deliberately a DIFFERENT five from
+# `retrieval-prod-v1`'s sep half: the two lanes ask different things of the
+# same corpus, and reusing the ids would make a corpus-level regression look
+# like two independent findings.
+
+[[subset]]
+subset_id = "synth-v1"
+bank = "sovereign/bench/sep/questions.toml"
+ids = [
+    "concept_qualia_physicalism",
+    "position_summary_hard_problem_illusionism",
+    "argument_rawls_original_position",
+    "comparative_berlin_liberty",
+    "comparative_kant_hume_causation",
+]

@@ -26,7 +26,7 @@
 # and 6 runs last inside a private netns (it needs no port handoff at all):
 #   0  static & render     ~30m  lint(compile) + svelte-check + vitest + synthetic e2e + desktop unit tests   [HARD STOP]
 #   1  perf baseline       ~10m  daemon surface + throughput_probe x2 slots + mtp accept-rate + TTFI
-#   2  daemon quality      ~25m  inner-chaos --calibrate (gate judge) + sovereign-ci-bench.sh --quick
+#   2  daemon quality      ~25m  inner-chaos --calibrate (gate judge) + svrn quality check
 #   3  desktop-layer       ~20m  routing-replay through the command bridge (:9745) vs the direct baseline
 #                                (bridge desktop launched with naked_mode=false so routing is engaged)
 #   5  safety soak    reserves-4  eval inner-chaos --minutes <remaining, minus Phase-4 reserve>
@@ -370,8 +370,8 @@ phase1() {
 # ── Phase 2: daemon quality lanes ────────────────────────────────────────────
 phase2() {
   phase_enabled 2 || { record "2 quality" "SKIP" 0 "disabled"; return 0; }
-  log "PHASE 2 — daemon quality (calibrate judge + sovereign-ci-bench --quick)"
-  [ -n "$DRY_RUN" ] && { record "2 quality" "DRY" 0 "inner-chaos --calibrate + ci-bench --quick"; return 0; }
+  log "PHASE 2 — daemon quality (calibrate judge + svrn quality check)"
+  [ -n "$DRY_RUN" ] && { record "2 quality" "DRY" 0 "inner-chaos --calibrate + svrn quality check"; return 0; }
   local t0; t0=$(date +%s) fail=0 detail=""
 
   run_capped 300 "$CLI" eval inner-chaos --calibrate > "$ART/p2-calibrate.log" 2>&1 \
@@ -388,10 +388,12 @@ phase2() {
   # informational (it quantifies the model gap), NOT a smoke failure — only the
   # judge-calibration gate above is safety-critical here. Record it as a WARN so
   # it stays visible without flipping the whole run to NO-GO.
-  run_capped "$SMOKE_P2_SECS" scripts/sovereign-ci-bench.sh --quick --report "$ART/ci-bench" \
-    > "$ART/p2-ci-bench.log" 2>&1 \
-    && { log "  ci-bench: PASS"; detail+="ci-bench:pass"; } \
-    || { detail+="ci-bench:below-baseline(warn)"; warn "  ci-bench lanes below committed baseline (informational — expected on a weaker/different model)"; }
+  # The check writes its own durable table under target/quality-check/<stamp>;
+  # the smoke keeps the console log beside its other phase artifacts.
+  run_capped "$SMOKE_P2_SECS" "$SVRN" quality check \
+    > "$ART/p2-quality-check.log" 2>&1 \
+    && { log "  quality check: PASS"; detail+="quality-check:pass"; } \
+    || { detail+="quality-check:below-baseline(warn)"; warn "  quality-check lanes not all passed (informational — expected on a weaker/different model)"; }
 
   local secs=$(( $(date +%s) - t0 ))
   [ "$fail" -eq 0 ] && record "2 quality" "PASS" "$secs" "$detail" || record "2 quality" "FAIL" "$secs" "$detail"

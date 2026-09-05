@@ -20,6 +20,7 @@
 //! scoring. The retrieval lane has no `--rebuild` semantics — the
 //! index is owned by the daemon, not `bench all`.
 
+use super::smoke_subset;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -79,6 +80,14 @@ const HELP: Help = Help {
                  `svrn eval run --synth` instead of bare retrieval. Most faithful proxy for \
                  desktop-chat propagation — same `runtime.handle_message_stream` entry point. Costs \
                  one LLM chat call per question. Synth baselines stored at `baselines/<bench>-synth/`.",
+            ),
+            (
+                "--smoke-subset <id>",
+                "Run exactly the ids `sovereign/bench/smoke.toml` declares for each selected bank \
+                 under subset <id>, forwarded to every `eval run` this verb spawns (routing and \
+                 retrieval/synth alike). DECLARED, not sampled: a bank with no row REFUSES the \
+                 run rather than going whole, and a stale id refuses rather than shrinking the \
+                 lane. Inert on the enrichment surface, whose goldens have no per-item ids.",
             ),
             (
                 "--sample-questions <N>",
@@ -262,6 +271,19 @@ struct Opts {
     /// denominators. A sampled synth run is advisory, not baseline-comparable.
     #[arg(long)]
     sample_questions: Option<usize>,
+    /// `--smoke-subset <subset_id>` — forwarded verbatim to every `eval run`
+    /// this verb spawns, on the routing path as well as the retrieval/synth
+    /// one. The subset is DECLARED in `sovereign/bench/smoke.toml` per bank,
+    /// so one flag covers however many banks `--filter` selected and each
+    /// gets its own declared ids.
+    ///
+    /// The enrichment surface takes no subprocess and has no per-item ids to
+    /// select by (its goldens are matched by name fragments), so the flag is
+    /// inert there — which is why `smoke.toml` still carries a
+    /// `mode = "full"` row for it: the curation is reviewable in one place
+    /// even where nothing is filtered.
+    #[arg(long)]
+    smoke_subset: Option<String>,
     /// When true, retrieval-lane benches drive the FULL chat pipeline
     /// (intent classifier → router → search tools → synthesis) via
     /// `svrn eval run --synth` instead of the bare embed→search
@@ -387,6 +409,32 @@ pub async fn cmd_all(args: &[String]) -> i32 {
         return 1;
     }
 
+    // Every SELECTED bank must have a row in the named subset — including
+    // the enrichment surface, where the flag then filters nothing.
+    //
+    // Validating here rather than only inside the `eval run` subprocess is
+    // what keeps a misconfiguration from arriving as a lane FAILURE: a
+    // subprocess that exits 2 becomes a `stale` outcome with a note, which
+    // reads as "this lane broke" rather than "this command line was wrong".
+    // And it is the only thing that makes the enrichment row load-bearing —
+    // otherwise a bank nobody declared would run whole and pass.
+    if let Some(subset) = opts.smoke_subset.as_deref() {
+        let mut undeclared = Vec::new();
+        for b in &filtered {
+            if let Err(e) = smoke_subset::selection_for(subset, &b.bench_path) {
+                undeclared.push(e);
+            }
+        }
+        if !undeclared.is_empty() {
+            eprintln!(
+                "error: --smoke-subset {subset}: {} selected bank(s) are not declared:\n  {}",
+                undeclared.len(),
+                undeclared.join("\n  ")
+            );
+            return 2;
+        }
+    }
+
     eprintln!(
         "discovered {} bench{}",
         filtered.len(),
@@ -505,17 +553,20 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         Err(e) => return outcome_subprocess_fail(bench, format!("current_exe: {e}")),
     };
 
-    let status = Command::new(&exe)
-        .args([
-            "eval",
-            "run",
-            "--bank",
-            bench.bench_path.to_str().unwrap_or(""),
-            "--routing-only",
-            "--output",
-            out_json.to_str().unwrap_or(""),
-        ])
-        .status();
+    let mut cmd_args: Vec<&str> = vec![
+        "eval",
+        "run",
+        "--bank",
+        bench.bench_path.to_str().unwrap_or(""),
+        "--routing-only",
+        "--output",
+        out_json.to_str().unwrap_or(""),
+    ];
+    if let Some(subset) = opts.smoke_subset.as_deref() {
+        cmd_args.push("--smoke-subset");
+        cmd_args.push(subset);
+    }
+    let status = Command::new(&exe).args(&cmd_args).status();
     match status {
         Ok(s) if s.success() => {}
         Ok(s) => {
@@ -806,6 +857,10 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             cmd_args.push("--sample-questions");
             cmd_args.push(s);
         }
+    }
+    if let Some(subset) = opts.smoke_subset.as_deref() {
+        cmd_args.push("--smoke-subset");
+        cmd_args.push(subset);
     }
     if opts.prod_pipeline {
         cmd_args.push("--prod-pipeline");
