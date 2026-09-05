@@ -188,14 +188,14 @@ bank = "sovereign/bench/literary/bk-book-1.toml"
 id = "chaos-monkey"
 kind = "judged"
 enforcement = "hard"
-est_secs = 800
+est_secs = 500
 command = [
     "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
     "svrn", "bench", "chaos-monkey", "run",
     "--bank", "sovereign/bench/chaos_monkey/secret_agent.toml",
     "--manifest", "sovereign/bench/chaos_monkey/manifest.toml",
     "--corpus", "chaos-secret-agent",
-    "--smoke-subset", "chaos-monkey-v1",
+    "--smoke-subset", "chaos-monkey-v2",
     "--out", "{report}",
 ]
 preconditions = [

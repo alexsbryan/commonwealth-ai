@@ -13,10 +13,16 @@
 # hard gate against a subset it never ran. Naming the ids makes the subset a
 # thing you can diff.
 #
-# The `subset_id`s here go into the run fingerprint
-# (`quality_check_cmd::smoke_subset_ids`), so editing an `ids` list moves the
-# stack and last week's numbers stop being comparable. That is the point, not
-# an inconvenience.
+# TWO THINGS FROM THIS FILE GO INTO THE RUN FINGERPRINT, and the second
+# exists because the first is not enough. `smoke_subset_ids` contributes the
+# subset NAMES; `smoke_selection_digest` contributes what the rows actually
+# select — every (subset_id, bank, mode/ids) triple, sorted, comments and key
+# order excluded. Without the digest, cutting a subset from six ids to four
+# leaves every name and every bank hash unchanged, so a four-item run would
+# compare against a six-item baseline as if they were the same measurement —
+# the exact trap `sovereign/bench/README.md` records for cap-specific
+# baselines. So editing an `ids` list moves the stack and last week's numbers
+# stop being comparable. That is the point, not an inconvenience.
 #
 # ── The schema ──────────────────────────────────────────────────────
 #
@@ -91,19 +97,39 @@ bank = "sovereign/bench/literary/bk-book-1.toml"
 mode = "full"
 
 # ── chaos-monkey ────────────────────────────────────────────────────
-# Six probes, and the SHAPE is the point rather than the count: two present
-# (an abstention here is a catastrophe), two absent-adjacent and one
-# out-of-domain (an asserted answer here is a confabulation), one distractor
-# (the retrieved passage is about someone else). A subset of six presents
-# would be six chances to see the same behaviour.
+# FOUR probes, one of each pressure kind, and the SHAPE is the point rather
+# than the count: present (an abstention here is a catastrophe),
+# absent-adjacent and out-of-domain (an asserted answer here is a
+# confabulation), distractor (the retrieved passage is about someone else).
+# A subset of four presents would be four chances to see one behaviour.
+#
+# CUT from six on 2026-09-04, under the order's "cut chaos-monkey down (not
+# out) and re-measure once" clause. The first full `svrn quality check` came
+# to 1,745 s of an 1,800 s budget with SIX probes here — inside the budget
+# only because `synth` was SKIP(budget) and never ran, which is not eight
+# lanes fitting in thirty minutes. This lane was 726 s of that, the largest
+# single item and 3x its own opening estimate.
+#
+# The cut keeps ONE probe of each kind rather than two of the cheap ones,
+# because the four kinds carry different catastrophe rules and dropping a
+# kind drops a rule. Where two of a kind existed, the survivor is the one
+# that has DISCRIMINATED on this stack: `absent-embassy-country` is the probe
+# that answered "the **Russian** embassy" with `asserted_value_grounded:
+# false` on 2026-09-04, and a probe every run passes is a probe that tests
+# nothing.
+#
+# The subset id is `-v2` because the selection changed. That rename is for
+# the reader; the structural half is `quality_check_cmd::
+# smoke_selection_digest`, which puts the ids themselves in the run
+# fingerprint — before it existed, editing this list left every subset id
+# and every bank hash unchanged, so a four-probe run would have compared
+# against a six-probe baseline.
 
 [[subset]]
-subset_id = "chaos-monkey-v1"
+subset_id = "chaos-monkey-v2"
 bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
 ids = [
-    "present-wife",
     "present-killer-weapon",
-    "absent-heat-firstname",
     "absent-embassy-country",
     "ood-berlin-wall",
     "distract-bomb-maker",

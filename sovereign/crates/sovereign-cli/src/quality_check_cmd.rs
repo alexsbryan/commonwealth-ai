@@ -412,6 +412,85 @@ fn smoke_subset_ids(repo: &Path) -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
+/// A digest of what `smoke.toml`'s rows actually SELECT — every
+/// (subset_id, bank, mode/ids) triple, canonicalised and sorted.
+///
+/// The subset IDs alone are not enough, and the gap is the exact trap the
+/// ci-bench README records for its cap-specific baselines. Cut
+/// `chaos-monkey-v1` from six probes to four and every id in
+/// [`smoke_subset_ids`] is unchanged, every bank hash is unchanged (the bank
+/// file was not touched), so the fingerprint is unchanged — and last week's
+/// six-probe baseline is then compared against a four-probe run as if they
+/// were the same measurement. Renaming the subset on every edit would work
+/// and is a thing to remember; this is the same rule made structural
+/// (ARCH §10).
+///
+/// Comments and key ORDER are deliberately not in the digest: only what is
+/// selected. A reworded comment must not orphan a baseline.
+fn smoke_selection_digest(repo: &Path) -> Result<String, String> {
+    let path = repo.join("sovereign/bench/smoke.toml");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok("absent".to_string()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let doc: toml::Value = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    // A malformed row REFUSES the run rather than digesting to a
+    // placeholder. Two different unreadable files must not hash the same,
+    // and "the fingerprint could not read this row" is not a stack anything
+    // should be compared against (ARCH §18.3) — the same rule
+    // `smoke_subset_ids` applies to a file that will not parse at all.
+    let mut rows: Vec<String> = Vec::new();
+    // A file with NO `subset` key declares no subsets, which is a real state
+    // and the one `smoke_subset_ids` answers `Ok(vec![])` for. A `subset`
+    // key that is not an array is a MALFORMED file, and reading it as "none
+    // declared" is the substitution this function exists to avoid.
+    let empty: Vec<toml::Value> = Vec::new();
+    let subsets = match doc.get("subset") {
+        None => &empty,
+        Some(v) => v
+            .as_array()
+            .ok_or_else(|| format!("{}: `subset` must be an array of tables", path.display()))?,
+    };
+    for r in subsets {
+        let id = r
+            .get("subset_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("{}: a [[subset]] row has no subset_id", path.display()))?;
+        let bank = r
+            .get("bank")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("{}: subset `{id}` has a row with no bank", path.display()))?;
+        let what = match (r.get("mode").and_then(|v| v.as_str()), r.get("ids")) {
+            (Some(m), None) => format!("mode={m}"),
+            (None, Some(ids)) => {
+                let arr = ids.as_array().ok_or_else(|| {
+                    format!("{}: `ids` for {bank} must be an array", path.display())
+                })?;
+                let mut v: Vec<&str> = arr.iter().filter_map(|x| x.as_str()).collect();
+                if v.len() != arr.len() {
+                    return Err(format!(
+                        "{}: `ids` for {bank} holds a non-string",
+                        path.display()
+                    ));
+                }
+                v.sort_unstable();
+                format!("ids={}", v.join(","))
+            }
+            _ => {
+                return Err(format!(
+                    "{}: the row for {bank} in subset `{id}` must declare EITHER \
+                     mode = \"full\" OR an `ids` list, not both and not neither",
+                    path.display()
+                ))
+            }
+        };
+        rows.push(format!("{id}|{bank}|{what}"));
+    }
+    rows.sort();
+    Ok(short_hash(rows.join("\n").as_bytes()))
+}
+
 async fn compute_fingerprint(
     repo: &Path,
     lanes: &[LaneSpec],
@@ -431,6 +510,7 @@ async fn compute_fingerprint(
     }
     let mut canonical = format!("primary={primary}\nfast={fast}\nembed={embed}\n");
     canonical.push_str(&format!("smoke={}\n", smoke_subsets.join(",")));
+    canonical.push_str(&format!("smoke-sel={}\n", smoke_selection_digest(repo)?));
     for (lane, hash) in &banks {
         canonical.push_str(&format!("bank:{lane}={hash}\n"));
     }
@@ -1208,6 +1288,72 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
             smoke_subset_ids(tmp.path()),
             Ok(vec!["a1".into(), "z1".into()])
         );
+    }
+
+    /// The subset IDs cannot see a cut. Cutting `chaos-monkey-v1` from six
+    /// probes to four leaves every id and every bank hash unchanged, so
+    /// without this digest the fingerprint would match a baseline captured
+    /// on the six.
+    #[test]
+    fn changing_which_ids_a_subset_selects_moves_the_fingerprint() {
+        let write = |dir: &Path, body: &str| {
+            let bench = dir.join("sovereign/bench");
+            std::fs::create_dir_all(&bench).unwrap();
+            std::fs::create_dir_all(dir.join("quality")).unwrap();
+            std::fs::write(bench.join("smoke.toml"), body).unwrap();
+        };
+        let six = tempfile::tempdir().unwrap();
+        let four = tempfile::tempdir().unwrap();
+        let reordered = tempfile::tempdir().unwrap();
+        let commented = tempfile::tempdir().unwrap();
+        write(
+            six.path(),
+            "[[subset]]\nsubset_id = \"c\"\nbank = \"b/c/d.toml\"\nids = [\"a\",\"b\",\"e\"]\n",
+        );
+        write(
+            four.path(),
+            "[[subset]]\nsubset_id = \"c\"\nbank = \"b/c/d.toml\"\nids = [\"a\",\"b\"]\n",
+        );
+        write(
+            reordered.path(),
+            "[[subset]]\nsubset_id = \"c\"\nbank = \"b/c/d.toml\"\nids = [\"e\",\"b\",\"a\"]\n",
+        );
+        write(
+            commented.path(),
+            "# a reworded comment\n[[subset]]\nsubset_id = \"c\"\nbank = \"b/c/d.toml\"\nids = [\"a\",\"b\",\"e\"]\n",
+        );
+        // Same subset ids on both sides — the digest is the only thing that
+        // separates them.
+        assert_eq!(smoke_subset_ids(six.path()), smoke_subset_ids(four.path()));
+        let d6 = smoke_selection_digest(six.path()).unwrap();
+        assert_ne!(d6, smoke_selection_digest(four.path()).unwrap());
+        // Order and comments are NOT the selection: they must not orphan a
+        // baseline.
+        assert_eq!(d6, smoke_selection_digest(reordered.path()).unwrap());
+        assert_eq!(d6, smoke_selection_digest(commented.path()).unwrap());
+        // Absent is a named answer, not a hash of nothing.
+        let none = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(none.path().join("sovereign/bench")).unwrap();
+        assert_eq!(
+            smoke_selection_digest(none.path()),
+            Ok("absent".to_string())
+        );
+        // A malformed row REFUSES rather than digesting to a placeholder:
+        // two unreadable files must not hash the same.
+        let bad = tempfile::tempdir().unwrap();
+        write(
+            bad.path(),
+            "[[subset]]\nsubset_id = \"c\"\nbank = \"b/c/d.toml\"\n",
+        );
+        let err = smoke_selection_digest(bad.path()).unwrap_err();
+        assert!(err.contains("must declare EITHER"), "{err}");
+        write(
+            bad.path(),
+            "[[subset]]\nbank = \"b/c/d.toml\"\nmode = \"full\"\n",
+        );
+        assert!(smoke_selection_digest(bad.path())
+            .unwrap_err()
+            .contains("no subset_id"));
     }
 
     #[test]
