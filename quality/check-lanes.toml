@@ -33,7 +33,8 @@
 #                 RUNNING dispatcher, never to PATH.
 #   preconditions optional; a CLOSED set (quality_check_cmd::Precondition):
 #                 `port-listening:<port>`, `slot-decodes:<slot>`,
-#                 `corpus-installed:<id>`, `binary:<name>`. An unmet one is
+#                 `corpus-installed:<id>`, `binary:<name>`,
+#                 `host-quiet:<max 1-min load>`. An unmet one is
 #                 could-not-judge NAMING it, and the lane does not run.
 #   baseline_dir  optional; `<dir>/<fingerprint>/latest.json` is this lane's
 #                 baseline for the current stack. A lane with none compares
@@ -89,6 +90,13 @@ preconditions = [
     "slot-decodes:primary",
     "slot-decodes:fast",
     "binary:python3",
+    # EVERY row of this lane is wall-clock (TTFT, decode tok/s), so the whole
+    # lane is could-not-judge on a contended host rather than failed. Run 1
+    # measured 17.8 tok/s against a 50 tok/s bar at load 32 and called it a
+    # FAILURE; the bar was fine and the machine was busy (note d596639c).
+    # chat-ask declares the same rule at ROW level, in its own bank, because
+    # only one of its seventeen rows is wall-clock.
+    "host-quiet:4",
 ]
 baseline_dir = "sovereign/bench/quality-check/baselines/throughput"
 bank = "sovereign/bench/quality-check/throughput.toml"
@@ -224,14 +232,14 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 id = "synth"
 kind = "judged"
 enforcement = "hard"
-est_secs = 560
+est_secs = 430
 command = [
     "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
     "--bench-root", "sovereign/bench",
     "--synth",
     "--filter", "sep/questions",
-    "--smoke-subset", "synth-v1",
+    "--smoke-subset", "synth-v2",
     "--report", "{report}",
 ]
 preconditions = [

@@ -21,6 +21,48 @@
 
 schema_version = 1
 
+# ── The formula, declared ONCE ───────────────────────────────────────
+# ceiling = max(1.5 x median, median + ceiling_floor_ms)
+#
+# The multiplier alone has no floor, and on a small stage that is not a bar
+# but a coin toss: `retrieval` has a 193 ms median, so 1.5x put the ceiling at
+# 290 ms and run 2 failed the whole lane on `retrieval 298 ms > 290` — eight
+# milliseconds, on a stage whose own run-to-run spread is larger than that.
+# The additive term is what a ceiling on a fast stage needs; the multiplicative
+# term is what a slow one needs. `max` takes whichever is the weaker claim,
+# because a bar is a promise not to fire on noise.
+#
+# 250 ms is ~1.3x the retrieval median — chosen so the smallest stage gets a
+# band wider than its observed jitter, and small enough to be invisible on
+# every stage above ~500 ms. It binds ONLY on retrieval today: at the medians
+# below the derived ceilings are retrieval 443 (was 290), draft 33,860,
+# citation 11,601, audit 13,431, total 47,592 — four unchanged to within
+# rounding, which is the check that this replaced the arithmetic and not the
+# bars.
+#
+# One number, one place. The five hand-computed `*_ms` ceilings this replaced
+# were the same formula applied five times by hand (ARCH §10.6), and the one
+# that mattered was the one where 1.5x was the wrong rule.
+ceiling_floor_ms = 250
+
+# ── The precondition the ceilings row declares ───────────────────────
+# A wall-clock bar measured on a contended host is could-not-judge, never
+# failed (ARCH §18.3): the same binary and the same bank decoded at 50.7
+# tok/s at 1-minute load 3.7 and 17.8 tok/s at load 32 on this machine — a
+# 2.8x spread no threshold absorbs without going blind on the quiet case.
+#
+# Declared HERE rather than in `quality/check-lanes.toml` because it guards
+# ONE ROW. The lane's other sixteen rows — route, gate outcome, both halves
+# answered, not abstained, useful — are claims about the ANSWER, and a busy
+# machine does not change them; making the whole lane could-not-judge under
+# load would throw away the signal the lane exists for. `throughput`, whose
+# every row IS wall-clock, declares `host-quiet:4` at lane level instead.
+# Two scopes, one rule — read against the same
+# `sovereign_cli_shared::host_load` number.
+#
+# 4.0 is the bound the quiet measurement was taken under (1-min load 3.69).
+host_quiet_max_load = 4.0
+
 [bank]
 id = "chat-ask"
 # Ingested FROM SOURCE each run into `qc-arch-tour-<fingerprint8>`, which is
@@ -103,14 +145,18 @@ control_flat = "I don't have enough information in the provided passages to answ
 # new ceiling. So a loaded host WILL redden `per-stage ceilings`, and that
 # is a property of the bar as specified, not a defect in the lane. Raising
 # one is an operator decision, made here, with the reason.
+# ── Pre-registered MEDIANS, per model stem ───────────────────────────
+# The measurement, not the bar: the bar is derived from these by the formula
+# above. Re-set here is re-setting what was MEASURED, which is a claim a run
+# can contradict — editing a ceiling directly was not.
 [ceilings."Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"]
-retrieval_ms = 290
-draft_ms = 33860
+retrieval_median_ms = 193
+draft_median_ms = 22573
 draft_calls = 1
-citation_ms = 11600
-audit_ms = 13430
+citation_median_ms = 7734
+audit_median_ms = 8954
 audit_calls = 12
-total_ms = 47590
+total_median_ms = 31728
 
 # ── The two questions ───────────────────────────────────────────────
 

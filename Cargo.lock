@@ -12323,6 +12323,7 @@ dependencies = [
  "corpus-engine-scip",
  "dirs 5.0.1",
  "kernel-types",
+ "libc",
  "oicp-client",
  "reqwest 0.12.28",
  "serde",

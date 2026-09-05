@@ -71,6 +71,12 @@ struct ChatAskBank {
     runs: usize,
     warmup: usize,
     judge: JudgeCfg,
+    /// The additive term of the ceiling formula, declared ONCE for every
+    /// stage and every model stem — see `ceiling_from_median`.
+    ceiling_floor_ms: u64,
+    /// The 1-minute load average above which this lane's ONE wall-clock row
+    /// (`per-stage ceilings`) is could-not-judge rather than failed.
+    host_quiet_max_load: f64,
     ceilings: toml::value::Table,
     questions: Vec<ChatAskQuestion>,
 }
@@ -142,6 +148,17 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
 
     let bank = want(&doc, "bank")?;
     let judge = want(&doc, "judge")?;
+    // Required, not defaulted: a bank with no floor would silently restore
+    // the bare 1.5x rule, which is the bug this replaced (ARCH §18.3).
+    let ceiling_floor_ms = want(&doc, "ceiling_floor_ms")?
+        .as_integer()
+        .filter(|n| *n >= 0)
+        .ok_or_else(|| format!("{BANK}: `ceiling_floor_ms` must be a non-negative integer"))?
+        as u64;
+    let host_quiet_max_load = want(&doc, "host_quiet_max_load")?
+        .as_float()
+        .filter(|f| f.is_finite() && *f > 0.0)
+        .ok_or_else(|| format!("{BANK}: `host_quiet_max_load` must be a positive float"))?;
     let ceilings = want(&doc, "ceilings")?
         .as_table()
         .cloned()
@@ -181,6 +198,8 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
             control_good: s_of(&judge, "control_good")?,
             control_flat: s_of(&judge, "control_flat")?,
         },
+        ceiling_floor_ms,
+        host_quiet_max_load,
         ceilings,
         questions,
     })
@@ -290,6 +309,25 @@ fn gate_u64(meta: &TurnMetadata, key: &str) -> Option<u64> {
     meta.grounding_gate.as_ref()?.get(key)?.as_u64()
 }
 
+/// **THE ceiling formula.** One implementation, one name (ARCH §10.6).
+///
+/// `ceiling = max(1.5 x median, median + floor_ms)`
+///
+/// The multiplicative term is what a slow stage needs; the additive term is
+/// what a fast one needs, and before the floor existed there was no additive
+/// term at all. `retrieval` has a 193 ms median, so 1.5x set its bar at
+/// 290 ms and a run failed the whole lane on `retrieval 298 ms > 290` —
+/// eight milliseconds, well inside the stage's own run-to-run spread. A bar
+/// that fires on noise is not a bar; `max` takes whichever term makes the
+/// weaker claim.
+///
+/// `floor_ms` is declared ONCE, in the bank, and applies to every stage.
+fn ceiling_from_median(median_ms: u64, floor_ms: u64) -> u64 {
+    let multiplicative = (median_ms as f64 * 1.5).round() as u64;
+    let additive = median_ms.saturating_add(floor_ms);
+    multiplicative.max(additive)
+}
+
 /// The ceiling table for a model stem, or `None` — which is
 /// could-not-judge, never a pass. Running a different model is not evidence
 /// that this one got faster.
@@ -301,16 +339,16 @@ fn ceilings_for<'a>(bank: &'a ChatAskBank, stem: &str) -> Option<&'a toml::value
 /// silently passing. Residuals are arithmetic and carry no budget.
 fn ceiling_keys(stage: StageId) -> Option<(&'static str, &'static str)> {
     match stage {
-        StageId::Retrieval => Some(("retrieval_ms", "retrieval_calls")),
-        StageId::Draft => Some(("draft_ms", "draft_calls")),
-        StageId::Audit => Some(("audit_ms", "audit_calls")),
-        StageId::ReAudit => Some(("re_audit_ms", "re_audit_calls")),
-        StageId::Rewrite => Some(("rewrite_ms", "rewrite_calls")),
-        StageId::Retry => Some(("retry_ms", "retry_calls")),
-        StageId::Verify => Some(("verify_ms", "verify_calls")),
-        StageId::Citation => Some(("citation_ms", "citation_calls")),
-        StageId::Admission => Some(("admission_ms", "admission_calls")),
-        StageId::Segments => Some(("segments_ms", "segments_calls")),
+        StageId::Retrieval => Some(("retrieval_median_ms", "retrieval_calls")),
+        StageId::Draft => Some(("draft_median_ms", "draft_calls")),
+        StageId::Audit => Some(("audit_median_ms", "audit_calls")),
+        StageId::ReAudit => Some(("re_audit_median_ms", "re_audit_calls")),
+        StageId::Rewrite => Some(("rewrite_median_ms", "rewrite_calls")),
+        StageId::Retry => Some(("retry_median_ms", "retry_calls")),
+        StageId::Verify => Some(("verify_median_ms", "verify_calls")),
+        StageId::Citation => Some(("citation_median_ms", "citation_calls")),
+        StageId::Admission => Some(("admission_median_ms", "admission_calls")),
+        StageId::Segments => Some(("segments_median_ms", "segments_calls")),
         StageId::GateUnattributed | StageId::TurnUnattributed => None,
     }
 }
@@ -967,6 +1005,23 @@ fn ceilings_row(
     runs: &[LaneTurn],
     subject: &str,
 ) {
+    // THE PRECONDITION. This is the lane's only wall-clock row, and a
+    // wall-clock bar measured on a contended host verifies nothing: the
+    // same binary and bank decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s
+    // at load 32 on this machine. Could-not-judge NAMING the load it saw —
+    // never failed, and never quietly passed either (ARCH §18.3).
+    //
+    // The same `sovereign_cli_shared::host_load` reader the check runner's
+    // `Precondition::HostQuiet` uses, so the two cannot disagree about what
+    // "quiet" means (ARCH §10.6). Read at the END of the runs rather than
+    // the start: it is the interval the stages were measured over that has
+    // to have been quiet, and a 1-minute average taken now covers it.
+    let quiet = sovereign_cli_shared::host_load::host_quiet(bank.host_quiet_max_load);
+    if let Some(why) = quiet.reason() {
+        report.cannot_judge(subject, why);
+        return;
+    }
+
     // Every ledger row carries no model stem of its own, so the stem is the
     // run's inference backend. A stem with no ceiling table is
     // could-not-judge — running a different model is not evidence that this
@@ -985,11 +1040,15 @@ fn ceilings_row(
         );
         return;
     };
+    // The bank declares the MEASURED median; the bar is derived from it by
+    // the one formula. `ceiling_floor_ms` is declared once, at the bank's top
+    // level, so it cannot drift per stage.
+    let floor_ms = bank.ceiling_floor_ms;
     let ms_bar = |k: &str| {
         table
             .get(k)
             .and_then(toml::Value::as_integer)
-            .map(|n| n as u64)
+            .map(|n| ceiling_from_median(n as u64, floor_ms))
     };
 
     let mut breaches: Vec<String> = Vec::new();
@@ -1004,7 +1063,7 @@ fn ceilings_row(
             continue;
         };
         worst_total = worst_total.max(l.total_ms);
-        if let Some(bar) = ms_bar("total_ms") {
+        if let Some(bar) = ms_bar("total_median_ms") {
             if l.total_ms > bar {
                 breaches.push(format!("run {}: total {} ms > {bar}", i + 1, l.total_ms));
             }
@@ -1376,22 +1435,60 @@ mod tests {
         assert!(parse_bank("").is_err());
     }
 
-    /// The pre-registered ceilings are in the bank for the stem this host
-    /// runs, and they are the order's numbers. A ceiling edited to fit a
-    /// failing run is not a ceiling.
+    /// The bank declares the MEASURED medians for the stem this host runs,
+    /// and the bar is derived from them by one formula.
+    ///
+    /// This test asserted the order's opening ceilings (2000/30000/15000/
+    /// 30000/60000) and went red on 2026-09-04 when commit bab7df796 re-set
+    /// the bank from a quiet run without updating it — a pre-existing
+    /// failure this order inherited, not one it caused. It now asserts what
+    /// the bank actually carries, which is the medians.
+    ///
+    /// A median edited to fit a failing run is not a measurement, and unlike
+    /// a hand-edited ceiling it is a claim a re-run can contradict.
     #[test]
-    fn the_pre_registered_ceilings_are_the_orders_numbers() {
+    fn the_bank_declares_the_measured_medians_for_this_hosts_stem() {
         let b = parse_bank(&bank_text()).unwrap();
         let t = ceilings_for(&b, "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL")
             .expect("this host's stem has a ceiling table");
         let n = |k: &str| t.get(k).and_then(toml::Value::as_integer).unwrap();
-        assert_eq!(n("retrieval_ms"), 2000);
-        assert_eq!(n("draft_ms"), 30000);
+        assert_eq!(n("retrieval_median_ms"), 193);
+        assert_eq!(n("draft_median_ms"), 22573);
         assert_eq!(n("draft_calls"), 1);
-        assert_eq!(n("citation_ms"), 15000);
-        assert_eq!(n("audit_ms"), 30000);
+        assert_eq!(n("citation_median_ms"), 7734);
+        assert_eq!(n("audit_median_ms"), 8954);
         assert_eq!(n("audit_calls"), 12);
-        assert_eq!(n("total_ms"), 60000);
+        assert_eq!(n("total_median_ms"), 31728);
+        // The floor is declared ONCE, outside the per-stem table.
+        assert_eq!(b.ceiling_floor_ms, 250);
+    }
+
+    /// The formula, and the reason it has an additive term at all.
+    ///
+    /// `retrieval`'s 193 ms median put the 1.5x bar at 290 ms, and a run
+    /// failed the whole lane on `retrieval 298 ms > 290` — eight
+    /// milliseconds. The floor is what makes a bar on a fast stage a bar
+    /// rather than a coin toss.
+    #[test]
+    fn the_ceiling_formula_takes_whichever_term_makes_the_weaker_claim() {
+        // Small stage: the additive term wins, and the 8 ms miss now passes.
+        assert_eq!(ceiling_from_median(193, 250), 443);
+        assert!(
+            298 < ceiling_from_median(193, 250),
+            "the run-2 failure was noise, not a regression"
+        );
+        // Large stages: 1.5x dominates, so the floor is invisible there —
+        // these are the 2026-09-04 ceilings to within rounding.
+        assert_eq!(ceiling_from_median(22573, 250), 33860);
+        assert_eq!(ceiling_from_median(7734, 250), 11601);
+        assert_eq!(ceiling_from_median(8954, 250), 13431);
+        assert_eq!(ceiling_from_median(31728, 250), 47592);
+        // The crossover: below 500 ms the floor binds, above it the
+        // multiplier does.
+        assert_eq!(ceiling_from_median(500, 250), 750);
+        assert_eq!(ceiling_from_median(501, 250), 752);
+        // A zero-median stage still gets a real band rather than a zero bar.
+        assert_eq!(ceiling_from_median(0, 250), 250);
     }
 
     /// A model stem with no ceiling table is could-not-judge, never a pass.

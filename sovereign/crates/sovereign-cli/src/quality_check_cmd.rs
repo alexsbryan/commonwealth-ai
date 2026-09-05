@@ -134,7 +134,9 @@ impl LaneKind {
 /// (ARCH §2 — closed sets are enums). An open `Vec<String>` of shell
 /// snippets is how a precondition plane becomes a second, untested
 /// orchestrator; this one is five variants and each has exactly one probe.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// No `Eq`: `HostQuiet` carries a declared load bound, and `f64` has none.
+// The bound is compared, never used as a key.
+#[derive(Debug, Clone, PartialEq)]
 enum Precondition {
     /// Something accepts TCP on this loopback port.
     PortListening(u16),
@@ -151,6 +153,31 @@ enum Precondition {
     /// An executable of this name is reachable — beside the running
     /// dispatcher first, then on PATH.
     Binary(String),
+    /// The host's 1-minute load average is at or under this bound.
+    ///
+    /// **The precondition every WALL-CLOCK lane declares.** A latency bar
+    /// measured on a contended box is could-not-judge, never failed: the
+    /// same binary, the same bank and the same bar produced 50.7 tok/s at
+    /// load 3.7 and 17.8 tok/s at load 32 on this host — a 2.8x spread that
+    /// no threshold can absorb without going blind on the quiet case
+    /// (note d596639c). Widening the bar to cover the loaded host is the
+    /// alternative this rejects.
+    ///
+    /// `describe()` names the load it SAW, so the could-not-judge reason
+    /// carries the evidence rather than restating the rule.
+    ///
+    /// WHAT THIS DOES NOT CHECK, said plainly rather than discovered later:
+    /// the order also asked for "no other decode in flight on the daemon".
+    /// This host's daemon serves no such field — `/status` carries
+    /// `inference.resident[]` and `process.rss_mb`, and there is no queue or
+    /// slot-depth route on it (checked 2026-09-05 against the full route
+    /// list). Reading load alone is therefore a NAMED substitution, not a
+    /// silent one (ARCH §18.3): a second decode driven by a peer session
+    /// raises this host's load average, so the instrument is correlated but
+    /// not equivalent, and a decode arriving from a mesh peer with no local
+    /// CPU cost would not be seen. Closing that gap needs a daemon-side
+    /// queue-depth field and is not in this order's seam.
+    HostQuiet(f64),
 }
 
 impl Precondition {
@@ -172,9 +199,18 @@ impl Precondition {
             "slot-decodes" => Ok(Precondition::SlotDecodes(arg.to_string())),
             "corpus-installed" => Ok(Precondition::CorpusInstalled(arg.to_string())),
             "binary" => Ok(Precondition::Binary(arg.to_string())),
+            "host-quiet" => {
+                let max = arg
+                    .parse::<f64>()
+                    .map_err(|_| format!("`{arg}` is not a load bound"))?;
+                if !(max.is_finite() && max > 0.0) {
+                    return Err(format!("`{arg}` is not a positive load bound"));
+                }
+                Ok(Precondition::HostQuiet(max))
+            }
             other => Err(format!(
                 "`{other}` is not a precondition kind (port-listening, \
-                 slot-decodes, corpus-installed, binary)"
+                 slot-decodes, corpus-installed, binary, host-quiet)"
             )),
         }
     }
@@ -188,9 +224,27 @@ impl Precondition {
             }
             Precondition::CorpusInstalled(c) => format!("corpus `{c}` is not installed"),
             Precondition::Binary(b) => format!("binary `{b}` is not on this host"),
+            // ONE reader, in `sovereign_cli_shared::host_load` — the
+            // chat-ask lane judges its `per-stage ceilings` row against the
+            // same number in another process (ARCH §10.6).
+            // `describe` is only reached for an UNMET precondition, so a
+            // `None` reason here means the load fell back under the bound
+            // between the check and the render. Say THAT — "the host is
+            // quiet" inside an unmet-precondition reason would read as a
+            // contradiction and hide a real race (ARCH §18.3).
+            Precondition::HostQuiet(max) => sovereign_cli_shared::host_load::host_quiet(*max)
+                .reason()
+                .unwrap_or_else(|| {
+                    format!(
+                        "the 1-minute load average fell back under {max:.1} between the \
+                         check and this message; the lane did not run"
+                    )
+                }),
         }
     }
 }
+
+
 
 /// One declared lane.
 #[derive(Debug, Clone)]
@@ -565,6 +619,13 @@ async fn slot_decodes(base: &str, slot: &str) -> bool {
     resp.status().is_success()
 }
 
+/// The `HostQuiet` predicate, split out so a test can drive it against a
+/// bound no host beats and one no host exceeds — the two ends that show it
+/// reads the machine rather than returning a constant (ARCH §18.1).
+fn check_host_quiet(max_load: f64) -> bool {
+    sovereign_cli_shared::host_load::host_quiet(max_load).is_quiet()
+}
+
 async fn check_precondition(p: &Precondition, base: &str) -> bool {
     let ok = match p {
         Precondition::PortListening(port) => std::net::TcpStream::connect_timeout(
@@ -578,6 +639,10 @@ async fn check_precondition(p: &Precondition, base: &str) -> bool {
             inspect_corpus_state(id) != CorpusState::Unindexed
         }
         Precondition::Binary(name) => locate_binary(name).is_some(),
+        // A host that reports no load average cannot be shown quiet, and
+        // assuming it is would make the guard a rubber stamp on exactly the
+        // platform it cannot see.
+        Precondition::HostQuiet(max) => check_host_quiet(*max),
     };
     tracing::debug!(precondition = ?p, ok, "quality check: precondition");
     ok
@@ -1241,10 +1306,51 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
             "port-listening",
             "port-listening:",
             "port-listening:no",
+            "host-quiet",
+            "host-quiet:",
+            "host-quiet:busy",
+            // A load bound must be positive: zero would make the lane
+            // permanently could-not-judge and read like a broken probe.
+            "host-quiet:0",
+            "host-quiet:-1",
             "sudo:rm",
         ] {
             assert!(Precondition::parse(junk).is_err(), "{junk}");
         }
+    }
+
+    /// `host-quiet` parses its bound, and the could-not-judge reason NAMES
+    /// the load it saw rather than restating the rule.
+    ///
+    /// The row this guards is the reason run 1 called a 17.8 tok/s decode a
+    /// FAILURE against a 50 tok/s bar at load 32. The bar was right and the
+    /// machine was busy (note d596639c); a wall-clock verdict on a contended
+    /// host is could-not-judge (ARCH §18.3).
+    #[test]
+    fn host_quiet_parses_a_bound_and_its_reason_names_the_load() {
+        assert_eq!(
+            Precondition::parse("host-quiet:4"),
+            Ok(Precondition::HostQuiet(4.0))
+        );
+        assert_eq!(
+            Precondition::parse("host-quiet:1.5"),
+            Ok(Precondition::HostQuiet(1.5))
+        );
+
+        // On a host that reports a load average (macOS and Linux both do),
+        // `describe` either names the observed load against the bound or
+        // says the host is quiet — never a bare "precondition failed".
+        let described = Precondition::HostQuiet(0.001).describe();
+        assert!(
+            described.contains("load average") || described.contains("quiet"),
+            "the reason must speak about load: {described}"
+        );
+
+        // A bound no real host beats is unmet; one no host exceeds is met.
+        // Together these show the predicate actually reads the machine
+        // rather than answering a constant.
+        assert!(!check_host_quiet(0.0000001));
+        assert!(check_host_quiet(1.0e9));
     }
 
     /// `svrn` in a lane command means THIS dispatcher. A PATH lookup here
