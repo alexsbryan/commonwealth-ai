@@ -849,6 +849,17 @@ identical schema for a full index or a shard.
 │                                        # articles.lance holds the 51,781 IN-SCOPE ones. A
 │                                        # surface that counts atoms will show the drop; it
 │                                        # is a correction, not a loss.
+│                                        # KNOWN STALE, deliberately left: the meta-atlas's
+│                                        # wikipedia anchors (1,526,998 of its 1,572,640 —
+│                                        # 97%) predate the v2 re-key and resolve to no atom
+│                                        # until the builder learns the wiki store. They fail
+│                                        # CLOSED — a miss, never a wrong atom — and
+│                                        # `rebuild_for_corpus` cannot fix them: it reads
+│                                        # `atoms.json` via `read_atlas_atoms`, which a
+│                                        # wiki-class store has none of, so a rebuild would
+│                                        # delete 97% of a shared 3.2 GB artifact and add
+│                                        # zero. Backlog:
+│                                        # meta-atlas-builder-cannot-read-wiki-class-store.
 │       ├── edges.lance/                 # row per (source, section, target) wikilink, with
 │                                        # `link_text` + `source_section_path` — the two
 │                                        # per-edge STRINGS `neighbors_for_axis` filters on
