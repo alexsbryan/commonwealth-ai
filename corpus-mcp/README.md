@@ -78,6 +78,28 @@ the atlas it produces against that fixture's `truth.json`, beside the
 daemon-built corpus of the same name — the control it must not fall below.
 Without those variables the leg reports NEVER-RAN by name; it is not skipped.
 
+**Which chat model, and why it matters more than it should.** A thinking
+model whose chain of thought does not close inside the output budget returns
+an EMPTY `content` from an OpenAI-compatible endpoint, not an error:
+llama-server puts the reasoning in `reasoning_content` and only fills
+`content` once thinking terminates. Phase 1 then reports `<empty response>`
+and the run spends its whole budget for nothing. Measured 2026-09-04 on
+`Qwen3.5-4B-UD-MTP-Q6_K_XL` over `llama-server`: 2 of 3 chapters failed the
+first pass that way, and the auto-retry recovered them only by going terse at
+double the budget, making a 20-chapter ingest a multi-hour proposition. The
+same endpoint, model and schema, two requests apart:
+
+    max_tokens 64    -> content ""                       (64 tokens spent)
+    max_tokens 16384 -> content {"capital": "Paris"}     (166 tokens, stop)
+
+So the endpoint honours `response_format: json_schema` perfectly well — the
+JSON came back conforming — and the failure is the model's thinking budget,
+not the schema. Pick a chat model that terminates its reasoning on a
+schema-constrained extraction, or raise `--max-output-tokens` until it does.
+`Qwen3.6-35B-A3B` does close: the daemon-built control extracts all 20
+chapters in 20 calls and ~350 s. This is a property of the model you point
+`--chat-url` at, and the verb reports it rather than working around it.
+
 Data root: the same derivation every sovereign binary uses
 (`SOVEREIGN_DATA_DIR`, else `~/.svrnmesh`), or `--data-dir`. Serving reads
 `<root>/indexes/<corpus>/` and writes nothing. `ingest` writes: the recipe to

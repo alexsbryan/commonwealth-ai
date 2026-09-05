@@ -254,6 +254,27 @@ lane names an owner and a scheduled measurement before it is accepted.
    because it wants a second llama-server and tens of minutes; unset it
    reports NEVER-RAN by name rather than passing quietly.
 
+   **The endpoint is proven; the recall number is not yet taken.** One
+   chapter through the whole verb against two bare `llama-server` processes
+   (chat + embed) returns rc 0 and the acceptance PASSes: v2 store,
+   `atoms_ann.lance` seed table 11/11 resolved, `ontology.json`, 17 atoms,
+   8 enrichment steps, and `ask` answering with 17/17 cited passages, with
+   both degradations printed. What the 20-chapter run against the bar needs
+   is a chat model whose reasoning TERMINATES on a schema-constrained
+   extraction. A thinking model that does not returns an empty `content`
+   rather than an error — llama-server holds the reasoning in
+   `reasoning_content` and fills `content` only once thinking closes — so an
+   exhausted budget reads as `<empty response>` at phase 1. Measured
+   2026-09-04 on `Qwen3.5-4B-UD-MTP-Q6_K_XL`: 2 of 3 chapters failed the
+   first pass that way, recovered only by the terse retry at double budget,
+   putting a 20-chapter ingest into hours. The same endpoint returned
+   conforming JSON for a schema at a 16,384-token budget and an empty string
+   for the identical request at 64, so the endpoint's `json_schema` support
+   is not in question — the model's budget is. The bar is therefore taken on
+   `Qwen3.6-35B-A3B`, the engine the control was built on, through the run
+   channel (`runs/ei5b-stage2/`), twice, because one run is not a
+   measurement.
+
    One caveat the step surfaced and did not own, the sibling of step 4's.
    §6 row 3 asks the map to name `coin` / `attribution` **and** a `Tension` or
    `Grounds` edge. The `attribution` half holds: the seed table populates all
