@@ -59,7 +59,11 @@ status    = "active"
 #       detected a tampered line on disk and converged a second peer. Composing
 #       canon would have measured API ERGONOMICS, not correctness.
 #       REPLACED BY 1f' — the convergence-ceiling test, below.
-#   2   route mesh work through the rail (measurement-gated)
+#   2a  the ceiling, measured + watched red   b55b9179e 73a273dd1 DONE  +423
+#   2b  twelve free namespaces off the wire   4747d6fa6          DONE  -461
+#   2f  chunk the exchange (NEW, earned by 2a's measurement)      OPEN
+#   2d  mesh-measurements onto the rail                           OPEN
+#   2c+2e the projection + delete the 10s push (ONE order)        OPEN
 #   3   triage the application layer (unscoped until 2 settles)
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
@@ -122,9 +126,35 @@ status       = "open"
 #     +550  1f  <- DESCOPED, see the ladder. Was the largest single line in
 #           the plan and it is no longer spent.
 #   -------
-#   -4,354  LANDED. Floor is -3,800, so it CLEARS BY 554 with nothing
-#           outstanding but Phase 2, whose two largest rungs (2b, 2e) are
-#           DELETIONS. This bar is no longer at risk from either direction.
+#   -4,354  LANDED THROUGH S.
+#   -------
+#           PHASE 2 SO FAR, recounted from git per commit, .rs only:
+#     +296  2a  b55b9179e  the convergence ceiling, watched red
+#     +127  2a  73a273dd1  the seal moves it only once the lines are deleted
+#     -461  2b  4747d6fa6  twelve free namespaces off the wire, five deleted
+#   -------
+#   -4,392  LANDED THROUGH 2b.
+#     +485  the 2a bench  ccfc21e90  commonwealth-api/examples/rail_read_cost.rs
+#   -------
+#   -3,907  LANDED. Floor is -3,800, so it CLEARS BY 107.
+#
+# THE MARGIN IS ~107, NOT ~592, AND THE EARLIER FIGURE WAS AN ARITHMETIC
+# ERROR RATHER THAN A DRIFT. A 2026-09-04 handoff recorded ~-4,732 by
+# subtracting 2b's deletion WITHOUT adding 2a's +423. The pair nets -38, not
+# -378. Recount, per commit, `git show --numstat --format="" <sha> -- '*.rs'`:
+# that is the instrument this bar now uses and it is reproducible.
+#
+# The bar is NOT at risk: 2e is Phase 2's other large deletion (Step 4 alone
+# is ~195 lines, plus the gauge, the receiver, the dead registry route and
+# Tier D). But it is no longer true that this bar cannot lose from either
+# direction, and a rung that overruns now shows up in the margin immediately.
+#
+# THE BENCH WAS A DELIBERATE +485 AGAINST THIS BAR. It is 2a's instrument and
+# it existed only in a session-scoped tmp directory — one GC from lost, and
+# recovered by hand. An instrument that cannot be re-run makes every number it
+# produced a claim rather than a measurement (§18.4). Its binary-search arm
+# re-derives the byte ceiling when the op envelope changes, which is what
+# stops 9,599 from becoming a number somebody has to remember.
 #
 # Dropping 1f is not how this bar was won — Phase 1 cleared the floor on its
 # own actuals before the descope, and the descope was a signal decision rather
