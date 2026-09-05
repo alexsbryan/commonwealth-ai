@@ -1,0 +1,6 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+streaming chunk metadata from LanceDB...
+streamed 1896488 chunk records in 1862 ms
+building columnar link graph into /home/alexbryan/dev/commonwealth-ai/.wiki-rebuild-scratch/full/atlas ...
+error: build: wiki atom id collision: entity-6b8aef7e6205164a is both "Jigsaw puzzle" and "Jigsaw Puzzle" in corpus wikipedia — widen wiki_atom_id before rebuilding
