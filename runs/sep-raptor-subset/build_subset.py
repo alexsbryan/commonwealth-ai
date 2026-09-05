@@ -66,6 +66,37 @@ def bank_articles() -> set[str]:
     return {a for a in arts if a}
 
 
+def checkpoint_articles() -> set[str]:
+    """Articles the surviving RAPTOR tree covers — ALWAYS kept.
+
+    `_raptor_checkpoint` is the only place `evidence_chunk_ids` and
+    `children_node_ids` still exist (`conv_raptor_nodes` is empty in both
+    stores), so it is the ONLY real-data case for the writer's evidence and
+    `Composes` paths. A subset that samples articles without pinning these
+    drops the tree by luck of the draw — which is exactly what the first build
+    did: 37 of 37 evidence-bearing nodes filtered out, and the projection
+    reported `0 with evidence, 0 with children` while looking entirely healthy.
+    Keeping them is not a special case for one article; it is the rule that the
+    fixture must contain the evidence it exists to exercise.
+    """
+    ck = SRC / "_raptor_checkpoint"
+    if not ck.is_dir():
+        return set()
+    ids = set()
+    for f in ck.glob("level-*/cluster-*.json"):
+        try:
+            ids.add(json.loads(f.read_text())["node_id"])
+        except Exception:
+            continue
+    if not ids:
+        return set()
+    rap = lance.dataset(str(SRC / "raptor_summaries.lance"))
+    t = rap.to_table(columns=["node_id", "conv_uuid"]).to_pylist()
+    arts = {r["conv_uuid"].rstrip("/").rsplit("/", 1)[-1] for r in t if r["node_id"] in ids}
+    print(f"checkpoint pins {len(arts)} article(s) with a real tree: {sorted(arts)}")
+    return arts
+
+
 def main() -> int:
     if not SRC.is_dir():
         print(f"error: {SRC} not found", file=sys.stderr)
@@ -76,7 +107,7 @@ def main() -> int:
                   file=sys.stderr)
             return 1
 
-    wanted = bank_articles()
+    wanted = bank_articles() | checkpoint_articles()
     chunks = lance.dataset(str(SRC / "chunks.lance"))
     titles_tbl = chunks.to_table(columns=["title"])
     all_titles = sorted(set(t for t in titles_tbl.column("title").to_pylist() if t))
