@@ -1195,6 +1195,14 @@ mod tests {
     }
 
     impl AtlasProvider for FixtureAtlas {
+        // Named, not defaulted, exactly as the trait requires: a fixture that
+        // borrowed "atom-class" would let a test assert against a store it is
+        // not, which is the silent-identical-arms failure the required method
+        // exists to make visible.
+        fn provider_class(&self) -> &'static str {
+            "fixture-class"
+        }
+
         fn atlas_corpus_id(&self) -> &str {
             "fixture"
         }

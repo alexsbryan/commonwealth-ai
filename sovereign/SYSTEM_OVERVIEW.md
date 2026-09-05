@@ -7156,9 +7156,17 @@ this order did not touch `quality/baselines/`.
 
 | File | Before | After | Delta | Why |
 |---|---|---|---|---|
-| `corpus-engine-vocab/src/atoms.rs` | 1914 | 2062 | +148 (slack 50) | The `Summary` struct, the `AtomType::Summary` arm and its eleven fan-out arms, `AtomId::summary_content_hash`, `AtomType::grain()`, and the schema-2.5 note. |
-| `corpus-engine/src/enrichment/atlas/ground.rs` | 1165 | 1570 | +405 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). |
-| `corpus-engine/src/enrichment/atlas/context.rs` | 2168 | 2220 | +52 (slack 50) | The `Summary` arm of `render_atom_entry` plus its fixture. Two lines over slack, and the arm is the difference between a kind the map seeds on and a kind the renderer silently drops — see the write-side entry above. |
+| `corpus-engine/src/enrichment/atlas/ground.rs` | 1165 | 1578 | +413 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). |
+| `corpus-engine/src/enrichment/atlas/context.rs` | 2168 | 2230 | +62 (slack 50) | The `Summary` arm of `render_atom_entry` plus its fixture. Twelve lines over slack, and the arm is the difference between a kind the map seeds on and a kind the renderer silently drops — see the write-side entry above. |
+
+`corpus-engine-vocab/src/atoms.rs` was the third row here (+148 for the
+`Summary` struct, the enum arm and its fan-out, `summary_content_hash` and
+`grain()`). It is GONE from arch-gate, and not because anything was trimmed:
+the 2026-09-05 rebase brought in a carve of that file's test module into
+`atoms/tests.rs`, which took ~550 lines out from under this order's growth.
+Recorded rather than quietly dropped — the row was real when it was written,
+and the reason it stopped failing is somebody else's split, not this branch's
+restraint.
 
 Worth stating plainly: **most of the second number is test**. `ground.rs`'s
 non-test growth is about 60 lines; the rest is the fixture that keeps the

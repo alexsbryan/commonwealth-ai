@@ -299,11 +299,18 @@ mod ledger {
             ..crate::runtime::Lane::none()
         };
         let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        // ei-7a: the walk hands its `Summary` rollups OUT here rather than
+        // appending them, because rung 8 is before reweight and rerank. This
+        // helper discards them — it asserts on the step's ledger, not on the
+        // late append — but the sink has to exist for the walk to have
+        // somewhere to put them.
+        let mut summaries = Vec::new();
         let scope = [corpus.to_string()];
         rt.apply_atlas_grounding(
             "what does alpha say about beta",
             &vec_for("what does alpha say about beta"),
             &mut chunks,
+            &mut summaries,
             "test",
             None,
             Some(&scope),
