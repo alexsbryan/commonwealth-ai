@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "The neutral kernel — identity and provenance types owned by no product domain. Layer 0, beside oicp-types. Four deps (serde, getrandom, hex, blake3); depends on no product crate, by construction."
+description = "The neutral kernel — identity and provenance types owned by no product domain. Layer 0, beside oicp-types. Four deps by default (serde, getrandom, hex, blake3) with two optional readers behind features; depends on no product crate, by construction."
 
 # Minted 2026-08-20 for noun-convergence rung nc-1-kernel. The finding that
 # made this a rung: the types all three product domains speak numbered 23, and
@@ -28,6 +28,11 @@ getrandom = "0.3"
 # Hex for the wire forms of ContentHash and the id family. Deliberately a dep
 # rather than a sixth hand-rolled encoder — the census found five already.
 hex = "0.4"
+# OPTIONAL, behind `quality-registry`: the parser for
+# `quality/instruments.toml`. One schema read by three programs must be one
+# parser (ARCH §10.6), and the parser needs a TOML reader. Optional so the
+# four-dep budget above is what a lift of this leaf actually pays.
+toml = { workspace = true, optional = true }
 # The ONE content-hash implementation (ARCH §10.6). Carrying the algorithm
 # here rather than only the digest is what stops the four incompatible
 # `content_hash: String` encodings from being re-derived a fifth time; the
@@ -43,20 +48,31 @@ blake3 = "1"
 serde_json = { workspace = true, optional = true }
 
 [features]
+# The instrument-registry schema (`kernel_types::quality`), read by
+# `xtask instrument-gate`, `svrn quality map` and `svrn posture`. Off by
+# default for the same reason `wire-fixture` is: a third party lifting this
+# leaf gets the four-dep kernel, not the monorepo's quality plumbing.
+quality-registry = ["dep:toml"]
 # The runtime wire-fixture decider (`kernel_types::wire`). Off by default;
 # the module is also compiled under `cfg(test)` from the dev-dependency, so
 # this crate's own tests never need the feature.
 wire-fixture = ["dep:serde_json"]
 
 [dev-dependencies]
-# NO `toml`, `syn` or `quote`. They were here for the requirements-registry
-# generator and the workspace-wide `covers:` tag scanner, which read the REPO
-# ROOT and therefore could not survive a lift of this crate — it is a GLOBAL
+# NO `syn` or `quote`. They were here for the requirements-registry generator
+# and the workspace-wide `covers:` tag scanner, which read the REPO ROOT and
+# therefore could not survive a lift of this crate — it is a GLOBAL
 # `[[package_leaf]]`, so every declared package carries it and its tests. Both
 # moved to `corpus-engine/xtask/tests/` on 2026-09-04 after the commonwealth
 # lift failed on exactly those two (`490 passed, 2 failed`, both leaf-side).
 # The dev surface of a liftable leaf is part of its contract: keep it to what
 # a third party with only this directory can actually run.
+#
+# `toml` came BACK on 2026-09-04 and passes that test where the other two did
+# not: `kernel_types::quality` parses instrument-registry TEXT handed to it by
+# a caller, and its tests parse inline strings. Nothing here opens a path, so a
+# lift keeps working. Same version as the runtime optional dep above.
+toml = { workspace = true }
 #
 # Wire-form assertions only. Not a runtime dep of the kernel.
 serde_json = { workspace = true }
