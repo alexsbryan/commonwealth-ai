@@ -15,7 +15,7 @@
 //! the orchestrating entry points (`prepare_knowledge_context`,
 //! `retrieve_candidates`) and the small snapshot helpers they share.
 
-mod atlas_grounding;
+pub(crate) mod atlas_grounding;
 mod atom_enum;
 mod boosts;
 mod conv_tiered;
@@ -181,6 +181,7 @@ impl Runtime {
             peer_attribution,
             local_hits,
             unavailable_corpora,
+            atlas_summaries,
             ..
         } = pipeline_state;
 
@@ -323,7 +324,7 @@ impl Runtime {
                 )
                 .await;
                 // Then RESERVE them to the head of the pool — the same
-                // `reserve_raptor_chunks` the early path gets for free at
+                // `reserve_summary_chunks` the early path gets for free at
                 // `cap_and_reserve` (pipeline step 13). Late injection lands
                 // AFTER that step, so until now late-injected summaries were
                 // the only RAPTOR chunks in the system with no reserve at
@@ -334,8 +335,19 @@ impl Runtime {
                 // zero of eight, and the bench's own truncate drops the same
                 // tail. Reserving is ORDER-ONLY: the chunk SET is untouched,
                 // so nothing retrieval found is lost from `chunks`.
-                all_chunks = reserve_raptor_chunks(std::mem::take(&mut all_chunks));
+                all_chunks = reserve_summary_chunks(std::mem::take(&mut all_chunks));
             }
+            // ei-7a: the SAME late position, for the summaries the atlas walk
+            // reached at rung 8. Two producers, one placement — the injector
+            // above is what this replaces, and running them side by side is
+            // how the two arms of the lane are switched (the injector is
+            // env-gated; the walk's summaries arrive only when a corpus's
+            // atlases actually carry `Summary` atoms).
+            crate::runtime::retrieval::atlas_grounding::append_atlas_summaries(
+                &mut all_chunks,
+                &atlas_summaries,
+                "DeepQuery",
+            );
             let conv_briefing = self
                 .build_conv_briefing_block(&all_chunks, &display_categories, &lane)
                 .await;

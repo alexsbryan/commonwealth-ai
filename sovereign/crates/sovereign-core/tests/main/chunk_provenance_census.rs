@@ -72,6 +72,16 @@ const MANUFACTURED: &[(&str, &str)] = &[
         "raptor_summary",
         "model-authored summary; may orient, may not be quoted",
     ),
+    // ei-7a. The SAME rollup text, reached by the atlas walk instead of by the
+    // injector above — one grain, two producers, kept apart here so the census
+    // says which path put a summary in the pool. It comes off this list the
+    // day a Summary atom's text is fetched back through a `CorpusIndex` door
+    // rather than carried on the atom; today it is not index content at all,
+    // because a summary is prose a model wrote ABOUT the index.
+    (
+        "atlas_summary",
+        "a walked Summary atom's text; not an indexed row",
+    ),
 ];
 
 /// Acquisition doors for stores that are NOT a corpus index.

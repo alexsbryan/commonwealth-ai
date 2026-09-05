@@ -1071,7 +1071,7 @@ mod formatter_stream_section_tests {
         summary.provenance =
             corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary");
         let leaf = chunk("sep", "free-will", "Leaf passage body.", None, None);
-        // Summary FIRST in the vector (reserve_raptor_chunks order) —
+        // Summary FIRST in the vector (reserve_summary_chunks order) —
         // the section order must still put passages first.
         let out = format_scored_chunks_with_kinds(&[summary, leaf], 4096, None, None, None, None);
         let overview_at = out.find("## Source overviews").expect("overview section");

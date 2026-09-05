@@ -1720,6 +1720,60 @@ means one thing.
   follows, so every seed table written under `1` is stale by definition
   and rebuilds.
 
+  **The write side and the carry landed 2026-09-04.** Three pieces, each
+  reaching an existing surface rather than minting one (ARCH §19):
+
+  - `sovereign_tools::summary_atoms::write_summary_atoms` (`svrn enrich
+    summary-atoms <corpus>`) projects the EXISTING
+    `raptor_summaries.lance` rows into `Summary` atoms in the corpus's
+    per-article atlases. **No RAPTOR pass and no re-embed** (operator,
+    2026-09-04: "we already have the RAPTOR summaries"): the stored
+    1024-d vector becomes the seed row, because a fresh embed would be a
+    second decider for the seed space (§10.6). It reads rows through
+    `corpus_engine::scan_raptor_summaries` (new, the write-side
+    counterpart to `search_raptor_summaries`), maps `conv_uuid` to an
+    article through `raptor_article_title` (the derivation MOVED DOWN out
+    of `raptor_scored_chunk`, which is now a caller), turns that into an
+    atlas id through `ground::candidate_atlas_ids` — the one home of that
+    derivation, so the write side cannot pick a different atlas than the
+    read side walks — and appends through `append_atoms_and_edges` +
+    `AnnSeedTable::append_rows` (new: an APPEND, so a corpus's Entity
+    seeds are not re-embedded to admit a Summary). It stamps the
+    population marker afterwards, without which the next backfill sees a
+    schema-1 marker, rebuilds the table and deletes the appended rows.
+    Idempotent on the atom id, which is what makes the append safe.
+    Evidence chunks and `Composes` edges come from
+    `_raptor_checkpoint` and are written only where that tree still has
+    the node; `no_tree_row` counts the rest and is printed as a
+    degradation, never defaulted to zero (§18.3). No `EvidenceFor` edge
+    is emitted: an `Edge` is atom → atom and a chunk is not an atom, so
+    the chunk evidence rides on `Summary::evidence` where
+    `AtomEnvelope::evidence` and `resolve_evidence` already read it.
+
+  - `render_atom_entry` gained a `Summary` arm. Without it the kind is
+    UNSEEDABLE however the map names it — `seed_population` derives it
+    into the `thematic` row's population and the renderer drops it — the
+    same silent-substitution shape the `Position` / `State` arms were
+    added to close.
+
+  - The CARRY. `apply_atlas_grounding` hands `Grounding::summaries` out
+    through a `summaries_out` parameter into
+    `PipelineState::atlas_summaries` (a threaded step product, like
+    `title_expand_titles`), and `append_atlas_summaries` appends them as
+    virtual chunks at the LATE site `raptor_grounding.rs` occupies today
+    — `retrieval/mod.rs` for deep, `prepare_knowledge_query_plan` for KQ
+    — never at rung 8, which is the early position that cost the 14
+    points. `reserve_raptor_chunks` became
+    `reserve_summary_chunks` and keys on `ChunkProvenance::grain() ==
+    Grain::Summary` instead of `metadata["source"] == "raptor"`: two
+    producers now put a rollup in the pool (`raptor_summary` and
+    `atlas_summary`) and the string tag answered for only one, so a
+    walked summary would have been tail-appended and cut by the same
+    budget that admitted 0 of 8 on `summary_proof_theory`. One grain, two
+    producers — the producer stays distinguishable in the trace and in
+    `metadata["summary_producer"]`. `merge_select` is unchanged; its pin
+    already reads the grain.
+
   `raptor_grounding.rs` is NOT retired. The order that added the kind
   would have deleted it once both lanes were within band, and the lanes
   cannot judge it on this box: `conv_raptor_nodes` is EMPTY in both
@@ -7104,6 +7158,7 @@ this order did not touch `quality/baselines/`.
 |---|---|---|---|---|
 | `corpus-engine-vocab/src/atoms.rs` | 1914 | 2062 | +148 (slack 50) | The `Summary` struct, the `AtomType::Summary` arm and its eleven fan-out arms, `AtomId::summary_content_hash`, `AtomType::grain()`, and the schema-2.5 note. |
 | `corpus-engine/src/enrichment/atlas/ground.rs` | 1165 | 1570 | +405 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). |
+| `corpus-engine/src/enrichment/atlas/context.rs` | 2168 | 2220 | +52 (slack 50) | The `Summary` arm of `render_atom_entry` plus its fixture. Two lines over slack, and the arm is the difference between a kind the map seeds on and a kind the renderer silently drops — see the write-side entry above. |
 
 Worth stating plainly: **most of the second number is test**. `ground.rs`'s
 non-test growth is about 60 lines; the rest is the fixture that keeps the
@@ -7111,12 +7166,16 @@ failing input runnable — an in-memory `AtlasProvider`, a leaf-grain arm that
 REPRODUCES the −14pt displacement, and the Summary arm that refuses it. That
 fixture is the evidence for the whole order, and the alternative to carrying it
 is a guard nobody has watched fail (§18.1). If the band wants it elsewhere the
-split is `ground.rs`'s tests into a sibling `ground/tests.rs`, which is a
-mechanical move and a clean backlog item.
+split is `ground.rs`'s test module into a sibling file beside it, which is a
+mechanical move and a clean backlog item. (Named in prose and not as a path:
+docs-gate reads a backticked path as a CITATION and checks it resolves, so
+writing a file that does not exist yet as though it did makes the narrative
+cite a fiction — caught by the gate on 2026-09-05, in this very row.)
 
 `atoms.rs` is the closed set's home and grows once per kind. It has now grown
 twice — `Asset` at 2.1, `Summary` at 2.5 — and the natural split when it next
-crosses is one module per kind under `atoms/`, not a line trim.
+crosses is one module per kind inside the atoms module, not a line trim. (Again
+in prose, for the docs-gate reason above.)
 
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 

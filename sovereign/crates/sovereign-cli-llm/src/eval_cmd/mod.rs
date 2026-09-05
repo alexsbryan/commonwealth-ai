@@ -879,6 +879,20 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
         }
     } else {
+        // The default arm announces itself too (ei-7a). `--synth` and
+        // `--prod-pipeline` each print what they are, and this one printed
+        // nothing — so a run that fell through to raw-index mode looked
+        // exactly like one that drove the production pipeline, in the output
+        // and in the file. That matters most for an A/B over atlas grounding:
+        // ONLY `--prod-pipeline` reaches `apply_atlas_grounding`, so a
+        // two-arm comparison run in this mode is one arm run twice, and
+        // nothing in the artifact says so (ARCH §18.3, §18.4 — validate the
+        // instrument before the result).
+        eprintln!(
+            "raw-index mode — searching the bank corpus directly (no retrieval \
+             pipeline, so NO atlas grounding and no RAPTOR injection). Use \
+             --prod-pipeline for the pipeline chat actually runs."
+        );
         match runner::run_bank(
             &session,
             &bank,

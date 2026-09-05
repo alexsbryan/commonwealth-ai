@@ -37,6 +37,7 @@ pub mod mem_tree;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
+pub mod summary_atoms;
 pub mod summary_verify;
 pub use sovereign_tools_base::read_csv;
 pub use sovereign_tools_base::vector_mean;

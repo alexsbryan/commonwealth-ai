@@ -385,6 +385,18 @@ pub struct PipelineState<'ctx> {
     /// `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6 and note 89d5f75a: the
     /// signal existed at the point of loss and died before the answer surface.
     pub unavailable_corpora: Vec<CorpusUnavailable>,
+    /// ei-7a. The `Summary` atoms the atlas walk reached, carried from rung 8
+    /// to the LATE append site (`retrieval/mod.rs` for deep,
+    /// `prepare_knowledge_query_plan` for KQ) rather than appended where the
+    /// walk found them.
+    ///
+    /// A threaded step product exactly like `title_expand_titles` above, and
+    /// for the same reason: the step that PRODUCES it and the step that
+    /// CONSUMES it are not adjacent, and the thing in between (reweight,
+    /// rerank, cap) is precisely what must not see it. Empty when the walk
+    /// reached no Summary — which, on a corpus whose atlases carry none, is
+    /// the honest and expected value.
+    pub atlas_summaries: Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
@@ -458,6 +470,7 @@ impl<'ctx> PipelineState<'ctx> {
             demand_plan: None,
             searched_corpora: Vec::new(),
             unavailable_corpora: Vec::new(),
+            atlas_summaries: Vec::new(),
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
@@ -1631,6 +1644,7 @@ fn step_atlas_grounding<'a, 'ctx>(
                 st.message,
                 &st.embedding,
                 &mut st.chunks,
+                &mut st.atlas_summaries,
                 st.label,
                 st.scope,
                 st.enabled_corpora,
@@ -2045,7 +2059,7 @@ fn step_cap_and_reserve<'a, 'ctx>(
         // plain truncate drops them wholesale (the synth-boundary bug:
         // injected N, survived 0). Pin them; same for RAPTOR summaries.
         st.chunks = reserve_atom_enum_chunks(take(&mut st.chunks));
-        st.chunks = reserve_raptor_chunks(take(&mut st.chunks));
+        st.chunks = reserve_summary_chunks(take(&mut st.chunks));
         audit_pipeline_stage(&st.chunks, "after_cap_and_reserve", st.message);
         StepOutcome::default()
     })

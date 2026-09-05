@@ -1441,6 +1441,26 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
             }
             Some((article_slug.to_string(), text))
         }
+        // ei-7a. The seed population derives `Summary` from the `thematic`
+        // row's seed kinds, and a kind a map names as a seed that this
+        // function cannot render is a population the writer derives and then
+        // silently drops — the substitution §18.3 forbids, and exactly what
+        // the Position/State arms above were added to prevent. Article-scoped
+        // like every other non-Entity kind: a summary carries no name
+        // retrieval matches sources on.
+        //
+        // The level is in the text because it is the one navigational fact
+        // that distinguishes two summaries of the same article (level 0
+        // summarises chunks; higher levels summarise summaries), and the
+        // retiring injector's `min_level` knob was built on exactly that
+        // distinction.
+        AtomEnvelope::Summary(sum) => {
+            let mut text = format!("[Summary L{}] {}", sum.level, sum.text);
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
         AtomEnvelope::ArgumentReconstruction(a) => {
             let mut text = String::with_capacity(256);
             text.push_str("[Argument: ");
@@ -2174,5 +2194,37 @@ mod store_io_tests {
             None,
             "no symbol mentioned → no named seed (conceptual path takes over)",
         );
+    }
+
+    /// ei-7a. `seed_population` puts `Summary` in the `thematic` row's seed
+    /// kinds, and `render_atom_entry` is the fan-out that decides whether a
+    /// kind can enter the bag at all. A `None` here makes the kind UNSEEDABLE
+    /// however the map names it — the writer derives a population and the
+    /// renderer silently drops half of it, which is the substitution ARCH
+    /// §18.3 forbids and which the Position/State arms were added to prevent.
+    ///
+    /// Both directions: the arm renders, AND it renders the level, which is
+    /// the only thing distinguishing two summaries of one article.
+    #[test]
+    fn a_summary_atom_renders_into_the_seed_bag() {
+        use crate::enrichment::atlas::atoms::{AtomId, Summary};
+        use crate::enrichment::pipeline::atlas::EnrichmentDepth;
+        let atom = AtomEnvelope::Summary(Summary {
+            id: AtomId::summary_content_hash("node-1", "sep"),
+            node_id: "node-1".into(),
+            level: 2,
+            text: "polynomial time is the standard for feasible computation".into(),
+            evidence: Vec::new(),
+            children: Vec::new(),
+            enrichment_depth: EnrichmentDepth::extracted_default(),
+        });
+        let (name, text) =
+            render_atom_entry(&atom, "computational-complexity").expect("Summary must render");
+        assert_eq!(
+            name, "computational-complexity",
+            "article-scoped, like every other non-Entity kind"
+        );
+        assert!(text.contains("[Summary L2]"), "got {text}");
+        assert!(text.contains("polynomial time"));
     }
 }

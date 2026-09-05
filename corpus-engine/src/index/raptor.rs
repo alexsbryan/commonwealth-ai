@@ -125,6 +125,117 @@ fn raptor_summary_schema(dim: usize) -> SchemaRef {
     ]))
 }
 
+/// The article title a RAPTOR node belongs to, derived from its `conv_uuid`.
+///
+/// SEP's `conv_uuid` is the entry URL
+/// (`https://plato.stanford.edu/entries/abduction/`), and the last non-empty
+/// path segment (`abduction`) is the title every chunk of that article
+/// carries — which is what
+/// [`candidate_atlas_ids`](crate::enrichment::atlas::ground::candidate_atlas_ids)
+/// turns into the per-article atlas id. A `conv_uuid` that is not a URL comes
+/// back unchanged, which is the right answer for a folder/vault corpus whose
+/// `conv_uuid` is already a note name.
+///
+/// This lived inline in `sovereign-core`'s `raptor_scored_chunk` until ei-7a
+/// needed the same derivation on the WRITE side. Two copies of it would be two
+/// answers to "which article is this summary about" (ARCH §10.6), and this
+/// crate — the one that owns the summary table — is the lower of the two, so
+/// it is the decider and the injector is now a caller.
+pub fn raptor_article_title(conv_uuid: &str) -> String {
+    let trimmed = conv_uuid.trim_end_matches('/');
+    trimmed
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(trimmed)
+        .to_string()
+}
+
+/// Every row of a corpus's `raptor_summaries.lance`, embeddings included.
+///
+/// The WRITE-side counterpart to [`search_raptor_summaries`]: ei-7a projects
+/// these rows into `Summary` atoms, and it must reuse the STORED vector rather
+/// than re-embed the summary text — a second embed would be a second decider
+/// for the seed space (ARCH §10.6) and would silently cost the exact
+/// correspondence the ANN seed table depends on.
+///
+/// Deliberately a full scan with no query vector: there is no "nearest" here,
+/// the caller wants all of them. Returns `Ok(vec![])` (never `Err`) when the
+/// table is absent or has no committed version, matching
+/// [`search_raptor_summaries`]'s absence semantics; a table that IS there and
+/// fails to read is an `Err`, because a torn read during a projection write
+/// must not look like an empty tree.
+pub async fn scan_raptor_summaries(corpus_dir: &Path) -> Result<Vec<RaptorSummaryRow>> {
+    if !lance_path(corpus_dir).exists() {
+        return Ok(Vec::new());
+    }
+    let db = lancedb::connect(corpus_dir.to_str().ok_or_else(|| {
+        Error::Database("raptor scan: corpus dir path is not valid UTF-8".into())
+    })?)
+    .execute()
+    .await
+    .map_err(|e| Error::Database(format!("raptor scan: connect: {e}")))?;
+    let table = match db.open_table(RAPTOR_TABLE).execute().await {
+        Ok(t) => t,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let batches: Vec<RecordBatch> = table
+        .query()
+        .execute()
+        .await
+        .map_err(|e| Error::Database(format!("raptor scan: execute: {e}")))?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|e| Error::Database(format!("raptor scan: collect: {e}")))?;
+
+    let mut out = Vec::new();
+    for batch in &batches {
+        let node_ids = batch
+            .column_by_name("node_id")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+        let conv_uuids = batch
+            .column_by_name("conv_uuid")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+        let levels = batch
+            .column_by_name("level")
+            .and_then(|c| c.as_any().downcast_ref::<Int32Array>());
+        let summaries = batch
+            .column_by_name("summary")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+        let emb_col = batch
+            .column_by_name("embedding")
+            .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+        let (Some(node_ids), Some(conv_uuids), Some(levels), Some(summaries), Some(emb_col)) =
+            (node_ids, conv_uuids, levels, summaries, emb_col)
+        else {
+            return Err(Error::Database(
+                "raptor scan: table is missing one of node_id/conv_uuid/level/summary/embedding"
+                    .into(),
+            ));
+        };
+        for i in 0..batch.num_rows() {
+            let embedding = if emb_col.is_null(i) {
+                Vec::new()
+            } else {
+                emb_col
+                    .value(i)
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .map(|a| a.values().to_vec())
+                    .unwrap_or_default()
+            };
+            out.push(RaptorSummaryRow {
+                node_id: node_ids.value(i).to_string(),
+                conv_uuid: conv_uuids.value(i).to_string(),
+                level: levels.value(i) as i64,
+                summary: summaries.value(i).to_string(),
+                embedding,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// Read the freshness sidecar, if present and parseable. `None` when the
 /// table has never been built or the sidecar is missing/corrupt — the caller
 /// treats that as "no index, use the scan."
@@ -448,6 +559,78 @@ mod tests {
                 embedding: emb(i),
             })
             .collect()
+    }
+
+    /// The `conv_uuid` -> article derivation, in every shape the corpora on
+    /// disk actually carry. It moved DOWN here from `raptor_scored_chunk` so
+    /// the writer and the injector cannot answer differently (§10.6), which
+    /// only helps if it answers the same for both.
+    #[test]
+    fn the_article_title_is_the_last_path_segment_or_the_id_itself() {
+        assert_eq!(
+            raptor_article_title("https://plato.stanford.edu/entries/abduction/"),
+            "abduction",
+            "SEP's shape, with the trailing slash"
+        );
+        assert_eq!(
+            raptor_article_title("https://plato.stanford.edu/entries/kant-hume-causality"),
+            "kant-hume-causality",
+            "and without it"
+        );
+        // A folder/vault corpus's conv_uuid is a note name, not a URL. It is
+        // ALREADY the title, and mangling it would send the writer looking for
+        // an atlas that cannot exist.
+        assert_eq!(
+            raptor_article_title("Parable of Yakumo.md"),
+            "Parable of Yakumo.md"
+        );
+        // A degenerate id yields the EMPTY string, and that is the safe
+        // answer rather than a missing one: `candidate_atlas_ids` filters an
+        // empty title, so such a row falls back to the corpus's own atlas
+        // instead of addressing an article that does not exist. Pinned
+        // because the temptation on reading this fn is to "fix" it into
+        // returning the input, which would mint `<corpus>-/` as an atlas id.
+        assert_eq!(raptor_article_title("/"), "");
+        assert_eq!(raptor_article_title(""), "");
+    }
+
+    /// The scan is the WRITE side's reader, and the one invariant it must hold
+    /// is that the vector comes back BIT-IDENTICAL: ei-7a reuses the stored
+    /// embedding as the atlas seed row precisely so there is one vector per
+    /// summary and not two (§10.6). A lossy round-trip here would be invisible
+    /// — the seeds would still be written, just to slightly the wrong place.
+    #[tokio::test]
+    async fn the_scan_returns_every_row_with_its_vector_unchanged() {
+        let dir = tempdir().unwrap();
+        let corpus = dir.path();
+        let written = rows(12);
+        build_raptor_index(corpus, &written, 99).await.unwrap();
+
+        let mut back = scan_raptor_summaries(corpus).await.unwrap();
+        assert_eq!(back.len(), 12);
+        back.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+        let mut expect = written.clone();
+        expect.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+        for (got, want) in back.iter().zip(&expect) {
+            assert_eq!(got.node_id, want.node_id);
+            assert_eq!(got.conv_uuid, want.conv_uuid);
+            assert_eq!(got.level, want.level);
+            assert_eq!(got.summary, want.summary);
+            assert_eq!(
+                got.embedding, want.embedding,
+                "the stored vector must round-trip exactly, or the seed table \
+                 and the summary index disagree about where this node is"
+            );
+        }
+    }
+
+    /// A corpus with no table is an ABSENCE and comes back as an empty vec,
+    /// not an error — the same reading `search_raptor_summaries` gives, so a
+    /// caller cannot get two answers to "is there a summary table here".
+    #[tokio::test]
+    async fn a_missing_table_scans_to_empty_rather_than_erroring() {
+        let dir = tempdir().unwrap();
+        assert!(scan_raptor_summaries(dir.path()).await.unwrap().is_empty());
     }
 
     #[tokio::test]

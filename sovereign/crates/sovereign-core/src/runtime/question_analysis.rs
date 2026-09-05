@@ -740,18 +740,26 @@ pub(crate) fn reserve_atom_enum_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredCh
     reserved
 }
 
-/// Reserve RAPTOR collapsed-tree summary chunks (metadata `source=raptor`)
-/// ahead of the `KQ_MERGED_LIMIT` truncate — same rationale as
-/// `reserve_atom_enum_chunks`: the grounding step deliberately selected the
-/// top-M summaries by cosine; the cross-corpus sort must not silently demote
-/// them below base chunks. No-op when nothing is tagged `source=raptor`.
-pub(crate) fn reserve_raptor_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
-    let is_raptor = |c: &ScoredChunk| {
-        c.metadata
-            .get("source")
-            .map(|s| s == "raptor")
-            .unwrap_or(false)
-    };
+/// Reserve SUMMARY-grain chunks ahead of the `KQ_MERGED_LIMIT` truncate —
+/// same rationale as `reserve_atom_enum_chunks`: the grounding step
+/// deliberately selected the top-M summaries; the cross-corpus sort must not
+/// silently demote them below base chunks. No-op when the pool holds none.
+///
+/// **The predicate is the typed grain, not `metadata["source"] == "raptor"`
+/// (ei-7a).** Two producers now put a rollup in the pool — the retiring
+/// injector (`raptor_grounding.rs`, producer `raptor_summary`) and the walk's
+/// own late append (producer `atlas_summary`) — and "is this a summary?" must
+/// have ONE answer for both (ARCH §10.6). The string tag answered only for the
+/// first, so an atlas-walked summary would have been appended at the tail and
+/// then cut by the very budget this function exists to protect: the same
+/// defect measured on `summary_proof_theory` (pool=40, admitted=28,
+/// raptor_admitted=0 of 8; invariant 3035f3a4), reintroduced under a new name.
+/// `ChunkProvenance::grain()` is the typed fact that replaced that compare;
+/// this is the fourth site to stop making it.
+///
+/// Order-only, as before: the chunk SET is unchanged.
+pub(crate) fn reserve_summary_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
+    let is_raptor = |c: &ScoredChunk| c.provenance.grain() == kernel_types::Grain::Summary;
     if !chunks.iter().any(is_raptor) {
         return chunks;
     }
@@ -859,7 +867,7 @@ pub(crate) fn project_retrieved_chunks(
 /// sit behind every leaf, so the prompt char budget cuts them first and the
 /// bench's pool truncate drops the same tail. Late-inject was therefore de
 /// facto DISABLING raptor grounding on big-pool turns, not making it neutral.
-/// Both sites now call [`reserve_raptor_chunks`] after injecting — the same
+/// Both sites now call [`reserve_summary_chunks`] after injecting — the same
 /// reserve the early path gets at `cap_and_reserve` (pipeline step 13), which
 /// late injection lands after. Post-rerank TIMING is what buys leaf-ranking
 /// neutrality and it is unchanged; only the within-pool ORDER moved, and the

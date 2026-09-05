@@ -293,15 +293,11 @@ pub(super) fn raptor_scored_chunk(
     score: f32,
     node_id: String,
 ) -> corpus_engine::ScoredChunk {
-    let title = {
-        let trimmed = conv_uuid.trim_end_matches('/');
-        trimmed
-            .rsplit('/')
-            .next()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(trimmed)
-            .to_string()
-    };
+    // The derivation moved DOWN to `corpus_engine::index::raptor` in ei-7a,
+    // where the summary table itself lives, because the Summary-atom writer
+    // needs the same answer on the write side. One decider, one name (§10.6);
+    // this site is now a caller.
+    let title = corpus_engine::index::raptor::raptor_article_title(&conv_uuid);
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("source".to_string(), "raptor".to_string());
     metadata.insert("raptor_level".to_string(), level.to_string());

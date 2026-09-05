@@ -406,6 +406,7 @@ impl Runtime {
             meta_atlas_hits,
             demand_plan,
             unavailable_corpora,
+            atlas_summaries,
             ..
         } = pipeline_state;
 
@@ -1091,7 +1092,7 @@ impl Runtime {
         // QA-neutral. Injection TIMING (post-rerank) is what buys leaf-ranking
         // neutrality; tail PLACEMENT was never load-bearing for it, and it is
         // what cost the summaries their seat. So reserve them to the head via
-        // the same `reserve_raptor_chunks` the early path already gets at
+        // the same `reserve_summary_chunks` the early path already gets at
         // `cap_and_reserve` (pipeline step 13, which late injection lands
         // after). Order-only: the chunk SET is unchanged.
         if raptor_late_inject_enabled() {
@@ -1103,8 +1104,17 @@ impl Runtime {
                 &lane,
             )
             .await;
-            chunks = reserve_raptor_chunks(std::mem::take(&mut chunks));
+            chunks = reserve_summary_chunks(std::mem::take(&mut chunks));
         }
+        // ei-7a: the atlas walk's own summaries, at the SAME late position and
+        // for the same reason — see `append_atlas_summaries`. The injector
+        // above and this call are the two arms of the port; when the injector
+        // retires, this is what remains.
+        crate::runtime::retrieval::atlas_grounding::append_atlas_summaries(
+            &mut chunks,
+            &atlas_summaries,
+            "KnowledgeQuery",
+        );
         // 4d-agentic. Bounded agentic evidence loop (prototype, env-gated
         // SOVEREIGN_AGENTIC_KQ=1). When the evidence fails a fast
         // forced-choice sufficiency check, the model formulates 1-3

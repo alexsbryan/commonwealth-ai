@@ -142,8 +142,8 @@ pub use filters::{
     DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
 };
 pub use index::raptor::{
-    build_raptor_index, read_raptor_meta, search_raptor_summaries, RaptorHit, RaptorIndexMeta,
-    RaptorSummaryRow,
+    build_raptor_index, raptor_article_title, read_raptor_meta, scan_raptor_summaries,
+    search_raptor_summaries, RaptorHit, RaptorIndexMeta, RaptorSummaryRow,
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,

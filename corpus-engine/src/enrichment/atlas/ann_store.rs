@@ -257,6 +257,69 @@ impl AnnSeedTable {
         Ok(Self { table })
     }
 
+    /// Add `rows` to the table under `dir`, creating it when there is none.
+    ///
+    /// The seed table is written ONCE at backfill from an embedder
+    /// ([`build_persistent_ann_seed_table`](super::context::build_persistent_ann_seed_table)),
+    /// which is right for atoms whose vector is produced at write time. ei-7a's
+    /// `Summary` atoms are the case that does not fit: their vectors already
+    /// exist in `raptor_summaries.lance` and re-embedding them would be a
+    /// SECOND decider for the seed space (§10.6) — so they are added to
+    /// whatever table the atlas already has instead of forcing a full re-embed
+    /// of every Entity beside them.
+    ///
+    /// Appending, not replacing: an existing table keeps every row it had. The
+    /// caller owns de-duplication — a `key` written twice is two rows, and the
+    /// walk would then see the same atom twice. `write_summary_atoms` gets this
+    /// for free by refusing to re-project a node whose atom is already in
+    /// `atoms.json`.
+    pub async fn append_rows(dir: &Path, rows: &[(String, Vec<f32>)]) -> Result<usize, String> {
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        if !dir.is_dir() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("create ANN table dir: {e}"))?;
+            Self::build(dir, rows).await?;
+            return Ok(rows.len());
+        }
+        let existing = match Self::open(dir).await {
+            Ok(t) => t,
+            // A directory with no committed `seeds` table (a torn or aborted
+            // build) is not an append target — say so rather than silently
+            // creating a second table beside the wreckage (§18.3).
+            Err(e) => return Err(format!("ANN table dir exists but is not readable ({e})")),
+        };
+        let dim = rows[0].1.len();
+        if dim == 0 {
+            return Err("append_rows: zero-dim embedding".into());
+        }
+        if rows.iter().any(|(_, e)| e.len() != dim) {
+            return Err("append_rows: rows do not share one embedding dimension".into());
+        }
+        let schema = existing
+            .table
+            .schema()
+            .await
+            .map_err(|e| format!("append_rows: read schema: {e}"))?;
+        let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_str()).collect();
+        let emb_arr = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            rows.iter().map(|(_, e)| Some(e.iter().map(|&v| Some(v)))),
+            dim as i32,
+        );
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![Arc::new(StringArray::from(keys)), Arc::new(emb_arr)],
+        )
+        .map_err(|e| format!("append_rows record batch (dim mismatch with the table?): {e}"))?;
+        existing
+            .table
+            .add(vec![batch])
+            .execute()
+            .await
+            .map_err(|e| format!("append_rows add: {e}"))?;
+        Ok(rows.len())
+    }
+
     /// Open a table previously [`build`](Self::build)t under `dir` — the
     /// production path: the ANN seed table is built ONCE at backfill (so the
     /// `resolve_atom_id_from_entry` join runs at build time, not per query) and
@@ -415,6 +478,100 @@ impl AnnSeedTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `append_rows` on a directory that has no table CREATES one, and on one
+    /// that does ADDS to it — keeping every row it had.
+    ///
+    /// The second half is the load-bearing one. ei-7a adds a `Summary` seed to
+    /// an atlas whose Entity seeds were embedded at backfill; if the append
+    /// replaced the table, those Entity seeds would be silently deleted and
+    /// the corpus would lose its baseline grounding surface to gain a summary.
+    /// Nothing would error and the row count would still look plausible.
+    #[tokio::test]
+    async fn append_creates_then_adds_without_losing_what_was_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let table_dir = dir.path().join("atoms_ann.lance");
+
+        // No table yet: the append creates one.
+        let n = AnnSeedTable::append_rows(
+            &table_dir,
+            &[("entity-1".to_string(), vec![1.0_f32, 0.0, 0.0])],
+        )
+        .await
+        .unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(ann_table_rows(dir.path()).await, Some(1));
+
+        // Table present: the append adds, and the first row survives.
+        let n = AnnSeedTable::append_rows(
+            &table_dir,
+            &[
+                ("summary-a".to_string(), vec![0.0, 1.0, 0.0]),
+                ("summary-b".to_string(), vec![0.0, 0.0, 1.0]),
+            ],
+        )
+        .await
+        .unwrap();
+        assert_eq!(n, 2);
+
+        let keys: std::collections::BTreeSet<String> = AnnSeedTable::open(&table_dir)
+            .await
+            .unwrap()
+            .all_rows()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(
+            keys,
+            ["entity-1", "summary-a", "summary-b"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<std::collections::BTreeSet<_>>(),
+            "the pre-existing Entity seed must still be there"
+        );
+    }
+
+    /// A width mismatch REFUSES rather than writing a table the walk cannot
+    /// query. Two embed models on one atlas is the failure this guards, and
+    /// it is exactly the shape that produces a plausible table and nonsense
+    /// rankings (§18.3 — refuse, never substitute).
+    #[tokio::test]
+    async fn appending_a_different_width_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let table_dir = dir.path().join("atoms_ann.lance");
+        AnnSeedTable::append_rows(&table_dir, &[("a".to_string(), vec![1.0_f32, 0.0, 0.0])])
+            .await
+            .unwrap();
+        let err = AnnSeedTable::append_rows(&table_dir, &[("b".to_string(), vec![1.0_f32, 0.0])])
+            .await
+            .unwrap_err();
+        assert!(!err.is_empty(), "the refusal must say something");
+        // And the good row is untouched.
+        assert_eq!(ann_table_rows(dir.path()).await, Some(1));
+    }
+
+    /// Rows that do not share one width are refused as a SET, before anything
+    /// is written — a partial append would leave the table half in one space.
+    #[tokio::test]
+    async fn a_ragged_batch_is_refused_before_anything_is_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let table_dir = dir.path().join("atoms_ann.lance");
+        AnnSeedTable::append_rows(&table_dir, &[("a".to_string(), vec![1.0_f32, 0.0, 0.0])])
+            .await
+            .unwrap();
+        AnnSeedTable::append_rows(
+            &table_dir,
+            &[
+                ("b".to_string(), vec![0.0_f32, 1.0, 0.0]),
+                ("c".to_string(), vec![0.0_f32, 1.0]),
+            ],
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(ann_table_rows(dir.path()).await, Some(1));
+    }
 
     /// build -> persist -> reopen -> query: the production lifecycle (ANN table
     /// is written once at backfill, reopened read-only at runtime). Proves

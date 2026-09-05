@@ -65,11 +65,23 @@ impl Runtime {
         let acquired = index.acquire_chunks(&[chunk_id]).await.ok()?;
         acquired.into_iter().next()
     }
+    /// `summaries_out` carries ei-7a's rollups OUT of the walk instead of
+    /// appending them here. That is the whole point of the parameter: this
+    /// function runs at pipeline rung 8, BEFORE reweight/rerank, and a summary
+    /// entering there is the −14pt displacement the late-injection design was
+    /// built to avoid (`project_raptor_retrieval_grounding`). The walk reaches
+    /// the Summary atoms; the LATE site appends them. Both facts have to be
+    /// true at once, which is why they are two places.
+    ///
+    /// It is APPENDED to, never cleared, so a caller that grounds twice in a
+    /// turn accumulates rather than losing the first walk's summaries.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn apply_atlas_grounding(
         &self,
         query_text: &str,
         embedding: &[f32],
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        summaries_out: &mut Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
         label: &str,
         scope: Option<&str>,
         enabled_corpora: Option<&[String]>,
@@ -302,6 +314,19 @@ impl Runtime {
             );
         }
 
+        // ei-7a: hand the walk's rollups to the caller. Counted here rather
+        // than only at the append site, because "the walk reached none" and
+        // "the late site dropped them" are different facts and only two
+        // numbers can tell them apart (ARCH §18.3).
+        if !grounding.summaries.is_empty() {
+            tracing::info!(
+                label,
+                summaries = grounding.summaries.len(),
+                "atlas-grounding: Summary atoms carried out for late append"
+            );
+            summaries_out.extend(grounding.summaries.iter().cloned());
+        }
+
         let before = chunks.len();
         let fetcher = RuntimeEvidenceFetcher {
             runtime: self,
@@ -420,6 +445,90 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
     }
 }
 
+/// One walked [`SummaryNode`] as a virtual chunk, for the LATE append site.
+///
+/// The sibling of `raptor_grounding::raptor_scored_chunk` and deliberately
+/// NOT in that file: `raptor_grounding.rs` is the injector this port retires,
+/// and a constructor the walk depends on must not be deleted with it.
+///
+/// The differences from the injector's chunk are the two that matter:
+///
+/// - `ChunkProvenance::manufactured_summary("atlas_summary")` — same typed
+///   grain (`Grain::Summary`, so `reserve_summary_chunks` and every
+///   quotability gate treat it identically), different PRODUCER, so a trace
+///   or a ledger can say which of the two paths put a rollup in the pool.
+/// - `atom_id` in the metadata rather than `raptor_node_id`: the atlas atom is
+///   what this came from, and it is the handle that resolves back to the
+///   atom's own evidence chunks.
+///
+/// `metadata["source"] = "raptor"` is kept for one reason: the FORMATTERS and
+/// the bench's own accounting still read that tag to label a summary in the
+/// prompt, and a rollup that the prompt cannot label is worse than one whose
+/// tag is a legacy name. The RESERVE decision no longer reads it (§10.6).
+pub(crate) fn atlas_summary_chunk(
+    node: &corpus_engine::enrichment::atlas::ground::SummaryNode,
+) -> corpus_engine::ScoredChunk {
+    let corpus_id = node.site.chunk_corpus().as_str().to_string();
+    let mut metadata = std::collections::HashMap::new();
+    metadata.insert("source".to_string(), "raptor".to_string());
+    metadata.insert("summary_producer".to_string(), "atlas_summary".to_string());
+    if !node.atom_id.is_empty() {
+        metadata.insert("atom_id".to_string(), node.atom_id.clone());
+    }
+    corpus_engine::ScoredChunk {
+        content: node.text.clone(),
+        // The article when the site has one (`sep-abduction` -> `abduction`),
+        // else the corpus's own name: the title is what the prompt labels the
+        // passage with, and a summary with no label reads as an orphan.
+        title: Some(
+            node.site
+                .article()
+                .map(str::to_string)
+                .unwrap_or_else(|| node.site.chunk_corpus().as_str().to_string()),
+        ),
+        url: None,
+        corpus_id,
+        score: node.score,
+        metadata,
+        chunk_id: None,
+        source_doc_id: None,
+        vector_distance: Some(1.0 - node.score),
+        provenance: corpus_engine::index::ChunkProvenance::manufactured_summary("atlas_summary"),
+    }
+}
+
+/// Append `summaries` to `chunks` at the LATE position, then reserve every
+/// summary-grain chunk to the head — the two halves of the placement the
+/// injector's own history proved are both required (injection TIMING buys
+/// leaf-ranking neutrality; head PLACEMENT is what keeps the char budget from
+/// cutting them straight back out). Returns how many were appended.
+///
+/// Deliberately does the reserve itself rather than leaving it to the caller:
+/// the one time it was left to a caller, the summaries were appended at the
+/// tail and admitted at zero for four months.
+pub(crate) fn append_atlas_summaries(
+    chunks: &mut Vec<corpus_engine::ScoredChunk>,
+    summaries: &[corpus_engine::enrichment::atlas::ground::SummaryNode],
+    label: &str,
+) -> usize {
+    if summaries.is_empty() {
+        return 0;
+    }
+    for node in summaries {
+        chunks.push(atlas_summary_chunk(node));
+    }
+    let appended = summaries.len();
+    let taken = std::mem::take(chunks);
+    *chunks = crate::runtime::question_analysis::reserve_summary_chunks(taken);
+    tracing::info!(
+        label,
+        appended,
+        pool = chunks.len(),
+        "atlas-grounding: Summary atoms appended late and reserved"
+    );
+    appended
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +577,96 @@ mod tests {
             candidate_atlas_ids("wikipedia", None),
             vec!["wikipedia".to_string()]
         );
+    }
+}
+
+#[cfg(test)]
+mod atlas_summary_append_tests {
+    use super::{append_atlas_summaries, atlas_summary_chunk};
+    use corpus_engine::enrichment::atlas::evidence_site::EvidenceSite;
+    use corpus_engine::enrichment::atlas::ground::SummaryNode;
+    use corpus_engine::index::ChunkProvenance;
+    use corpus_engine::ScoredChunk;
+
+    fn leaf(i: usize) -> ScoredChunk {
+        ScoredChunk {
+            content: format!("leaf {i}"),
+            title: Some("abduction".into()),
+            url: None,
+            corpus_id: "sep".into(),
+            score: 0.9,
+            metadata: Default::default(),
+            chunk_id: Some(i as u64),
+            source_doc_id: None,
+            vector_distance: Some(0.1),
+            // A real acquired LEAF: `Grain::Leaf`, so the reserve's grain
+            // predicate must NOT pick it up. Using a manufactured summary here
+            // would make every assertion below vacuous.
+            provenance: ChunkProvenance::acquired_from_estate("sep"),
+        }
+    }
+
+    fn node(score: f32) -> SummaryNode {
+        SummaryNode {
+            atom_id: "summary-abcdef0123456789".into(),
+            site: EvidenceSite::derive("sep-abduction"),
+            text: "a rollup".into(),
+            score,
+        }
+    }
+
+    /// The failure this whole placement exists to prevent, in the direction it
+    /// actually happened: a summary appended at the TAIL of a full pool is cut
+    /// by the char budget and the pool truncate before the prompt ever sees it
+    /// (measured on `summary_proof_theory`: pool=40, admitted=28,
+    /// raptor_admitted=0 of 8; invariant 3035f3a4). So the append must leave
+    /// the summary at the HEAD.
+    #[test]
+    fn a_late_appended_summary_lands_at_the_head_not_the_tail() {
+        let mut pool: Vec<ScoredChunk> = (0..5).map(leaf).collect();
+        let appended = append_atlas_summaries(&mut pool, &[node(0.5)], "test");
+        assert_eq!(appended, 1);
+        assert_eq!(pool.len(), 6, "the chunk SET must be unchanged in size");
+        assert_eq!(
+            pool[0].provenance.producer(),
+            Some("atlas_summary"),
+            "the summary must be first, or the budget cuts it"
+        );
+        // Order-only: every leaf is still present, in its original order.
+        let leaves: Vec<&str> = pool[1..].iter().map(|c| c.content.as_str()).collect();
+        assert_eq!(
+            leaves,
+            vec!["leaf 0", "leaf 1", "leaf 2", "leaf 3", "leaf 4"]
+        );
+    }
+
+    /// The other direction (§18.6): with no summaries the pool is returned
+    /// untouched — no reserve, no reorder, no allocation of a different order.
+    /// A "fix" that reordered every pool would be invisible in the test above
+    /// and would perturb every lane that has no summaries at all.
+    #[test]
+    fn a_walk_that_reached_no_summary_leaves_the_pool_alone() {
+        let mut pool: Vec<ScoredChunk> = (0..5).map(leaf).collect();
+        let before: Vec<String> = pool.iter().map(|c| c.content.clone()).collect();
+        let appended = append_atlas_summaries(&mut pool, &[], "test");
+        assert_eq!(appended, 0);
+        let after: Vec<String> = pool.iter().map(|c| c.content.clone()).collect();
+        assert_eq!(before, after);
+    }
+
+    /// The chunk carries the SUMMARY grain (so every quotability gate and the
+    /// reserve treat it as one) and its OWN producer (so a trace can say which
+    /// of the two paths put it in the pool). Both halves matter: one grain,
+    /// two producers.
+    #[test]
+    fn the_summary_chunk_is_summary_grain_with_its_own_producer() {
+        let c = atlas_summary_chunk(&node(0.7));
+        assert_eq!(c.provenance.grain(), kernel_types::Grain::Summary);
+        assert_eq!(c.provenance.producer(), Some("atlas_summary"));
+        // The chunk is attributed to the corpus that HOLDS the chunks, not to
+        // the per-article atlas id — the same corpus a fetched chunk of that
+        // article would carry, so the per-corpus ledgers stay comparable.
+        assert_eq!(c.corpus_id, "sep");
+        assert_eq!(c.title.as_deref(), Some("abduction"));
     }
 }
