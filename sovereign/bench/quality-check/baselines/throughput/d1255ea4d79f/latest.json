@@ -1,0 +1,76 @@
+{
+  "lane": "throughput",
+  "captured_at": "2026-09-05T04:30:35.031415+00:00",
+  "model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+  "model_attribution": {
+    "file_stem": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+    "quant": "IQ4_NL"
+  },
+  "metrics": {
+    "e2e.total_latency_ms": {
+      "value": 22343.0,
+      "direction": "lower_is_better",
+      "tolerance": 0.3
+    },
+    "fast/long.decode_tps": {
+      "value": 60.376496572738695,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "fast/long.prefill_tps": {
+      "value": 815.2627305319398,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "fast/long.ttft_ms": {
+      "value": 3668.7559580313978,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "fast/short.decode_tps": {
+      "value": 45.12630836523226,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "fast/short.prefill_tps": {
+      "value": 171.42415582509227,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "fast/short.ttft_ms": {
+      "value": 385.0099169649184,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "primary/long.decode_tps": {
+      "value": 63.49036482953803,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "primary/long.prefill_tps": {
+      "value": 251.6577067557817,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "primary/long.ttft_ms": {
+      "value": 31916.368084028363,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    },
+    "primary/short.decode_tps": {
+      "value": 45.68071116252884,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "primary/short.prefill_tps": {
+      "value": 205.39285902288856,
+      "direction": "higher_is_better",
+      "tolerance": 0.25
+    },
+    "primary/short.ttft_ms": {
+      "value": 321.3354169856757,
+      "direction": "lower_is_better",
+      "tolerance": 0.25
+    }
+  }
+}
