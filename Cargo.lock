@@ -1890,21 +1890,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "commonwealth-agent-tools"
-version = "0.6.0"
-dependencies = [
- "async-trait",
- "proc-macro2",
- "serde",
- "serde_json",
- "syn 2.0.118",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "commonwealth-api"
 version = "0.6.0"
 dependencies = [
@@ -2077,24 +2062,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "commonwealth-tdd"
-version = "0.6.0"
-dependencies = [
- "async-trait",
- "commonwealth-agent-tools",
- "kernel-types",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -12082,14 +12049,14 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
- "commonwealth-agent-tools",
- "commonwealth-tdd",
  "futures",
  "regex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-agent-tools",
+ "sovereign-tdd",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12097,6 +12064,21 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sovereign-agent-tools"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "proc-macro2",
+ "serde",
+ "serde_json",
+ "syn 2.0.118",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -12185,7 +12167,6 @@ dependencies = [
  "commonwealth-api",
  "commonwealth-core",
  "commonwealth-state",
- "commonwealth-tdd",
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
@@ -12208,6 +12189,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-runtime-recipe",
  "sovereign-store",
+ "sovereign-tdd",
  "sovereign-tools",
  "sovereign-work-atlas",
  "sovereign-workflow",
@@ -12743,7 +12725,6 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "commonwealth-tdd",
  "commonwealth-transport",
  "corpus-engine",
  "corpus-engine-notes",
@@ -12762,6 +12743,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-runtime-recipe",
  "sovereign-store",
+ "sovereign-tdd",
  "sovereign-tools",
  "sovereign-workflow-host",
  "tempfile",
@@ -12808,6 +12790,24 @@ dependencies = [
  "sovereign-workflow",
  "sovereign-workflow-host",
  "tokio",
+]
+
+[[package]]
+name = "sovereign-tdd"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "kernel-types",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sovereign-agent-tools",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

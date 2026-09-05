@@ -22,7 +22,7 @@ process; variance is the resource, tests are the only honest judge.
 ## Convenience task wrappers
 
 Most callers won't build a `Trial` by hand — they use one of the
-preset task wrappers in `commonwealth_tdd::tasks`:
+preset task wrappers in `sovereign_tdd::tasks`:
 
 | Task | What it does | Polarity |
 |---|---|---|
@@ -31,19 +31,19 @@ preset task wrappers in `commonwealth_tdd::tasks`:
 | [`split_file`] | Generate a structural `max_file_size` test, then drive it | MaximizePassing |
 | [`bdd_cycle`] | Natural-language intent → synthesized test → driven implementation | Both (composed) |
 
-Tasks are 20–50 line files in `crates/commonwealth-tdd/src/tasks/`.
+Tasks are 20–50 line files in `crates/sovereign-tdd/src/tasks/`.
 Adding a new task = adding one file. No new core machinery.
 
 ## Where it lives
 
-- **`commonwealth-tdd` crate** — the loop (`trial.rs`), the
+- **`sovereign-tdd` crate** — the loop (`trial.rs`), the
   `ChatBackend` trait + `Workdir` gate, the shared primitives
   (`EditAction`, `apply_edit`, `snapshot_dir`, `run_tests`), and
   the `tasks/` directory of convenience wrappers.
 - **`sovereign-server`** — HTTP at `POST /v1/solve` and
   `POST /v1/cycle/bdd`; MCP tools `tdd_solve` and `tdd_bdd_cycle`.
 - **`sovereign-agent-bench`** — `search` runner is a thin adapter
-  over `commonwealth_tdd::run_trial`.
+  over `sovereign_tdd::run_trial`.
 
 ## Workdir safety
 

@@ -49,9 +49,8 @@
 1619	corpus-engine/src/wikipedia_graph.rs
 2912	oicp-client/src/lib.rs
 1269	oicp-types/src/scoring.rs
-2053	sovereign/crates/commonwealth-agent-tools/src/executor.rs
-1480	sovereign/crates/commonwealth-tdd/src/trial.rs
 2891	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
+2053	sovereign/crates/sovereign-agent-tools/src/executor.rs
 2806	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1416	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
 1343	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
@@ -162,6 +161,7 @@
 1522	sovereign/crates/sovereign-store/src/postgres.rs
 1311	sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs
 1552	sovereign/crates/sovereign-store/tests/main/store_tests.rs
+1480	sovereign/crates/sovereign-tdd/src/trial.rs
 1618	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
 1475	sovereign/crates/sovereign-tools/src/code/session_state.rs
 1421	sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs

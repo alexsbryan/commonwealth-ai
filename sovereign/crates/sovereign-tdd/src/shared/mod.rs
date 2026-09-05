@@ -5,7 +5,7 @@
 //! `src/witness/test_result_parser.rs` so the TDD machine owns the
 //! load-bearing primitives (EditAction, apply, snapshot, test
 //! discovery, output parsing). Bench keeps working by depending on
-//! `commonwealth-tdd` and re-exporting from here.
+//! `sovereign-tdd` and re-exporting from here.
 //!
 //! Design notes (preserved from the 2026-05-24 search-not-agent
 //! session — these are invariants, not preferences):

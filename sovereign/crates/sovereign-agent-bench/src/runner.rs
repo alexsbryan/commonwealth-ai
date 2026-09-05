@@ -7,8 +7,8 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use commonwealth_agent_tools::{RoleModelMap, WorkdirScale};
 use serde::{Deserialize, Serialize};
+use sovereign_agent_tools::{RoleModelMap, WorkdirScale};
 use tempfile::TempDir;
 use thiserror::Error;
 
@@ -177,7 +177,7 @@ pub struct ToolCallRecord {
     /// runner. Lets cross-agent rollups slice by canonical kind
     /// instead of agent-specific tool names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub canonical_kind: Option<commonwealth_agent_tools::PrimitiveKind>,
+    pub canonical_kind: Option<sovereign_agent_tools::PrimitiveKind>,
 }
 
 /// Read-only context handed to the runner. The runner sees the workdir
@@ -215,7 +215,7 @@ pub(crate) struct AgentRunContext {
     /// runner threads it into `ExecCtx.syntax_validator` so
     /// `exec_build` can short-circuit on broken syntax with cargo-
     /// shape feedback in <50ms instead of the full subprocess.
-    pub syntax_validator: Option<commonwealth_agent_tools::syntax::DynSyntaxValidator>,
+    pub syntax_validator: Option<sovereign_agent_tools::syntax::DynSyntaxValidator>,
     /// Per-role model overrides. Empty (default) → every role uses
     /// `model_handle`, which is PR-2 behavior. Populated by the CLI
     /// from `--planner-model` / `--implementer-model` /
@@ -227,7 +227,7 @@ pub(crate) struct AgentRunContext {
     pub role_model_map: RoleModelMap,
     /// Scaffold or repository? One distinction, from which the prompt
     /// preamble sizes AND the role profiles derive. See
-    /// `commonwealth_agent_tools::WorkdirScale` for the measurements.
+    /// `sovereign_agent_tools::WorkdirScale` for the measurements.
     pub workdir_scale: WorkdirScale,
 }
 
@@ -364,7 +364,7 @@ pub(crate) fn context_for(
     wall_seconds_override: Option<u64>,
     role_model_map: RoleModelMap,
 ) -> AgentRunContext {
-    use commonwealth_agent_tools::syntax::{
+    use sovereign_agent_tools::syntax::{
         DynSyntaxValidator, PythonSyntaxValidator, RustSyntaxValidator,
     };
     use std::sync::Arc;
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn context_for_threads_role_model_map() {
-        use commonwealth_agent_tools::Role;
+        use sovereign_agent_tools::Role;
         let workdir = tempfile::tempdir().unwrap();
         let mut map = RoleModelMap::new();
         map.set(Role::Planner, Some("commonwealth/coder".into()));

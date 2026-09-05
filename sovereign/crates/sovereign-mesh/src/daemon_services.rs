@@ -267,7 +267,7 @@ pub struct HeadlessServices {
     pub knowledge_view_http: axum::Router,
     /// Ring 2 extension — `/v1/solve/jobs*`, the daemon-hosted TDD solver.
     /// Hosted only here because only this bootstrap owns the job table and the
-    /// `commonwealth-tdd` dependency.
+    /// `sovereign-tdd` dependency.
     pub solve_http: axum::Router,
 }
 

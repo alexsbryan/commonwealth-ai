@@ -14,7 +14,7 @@ default = ["dev-routes", "net-tools"]
 # on the assumption "one person owns this box":
 #
 #   POST /v1/solve, /v1/cycle/bdd   client-supplied `test_command` reaching
-#                                   `sh -c` (commonwealth-tdd), inside the
+#                                   `sh -c` (sovereign-tdd), inside the
 #                                   authed router — any tenant key is a shell
 #   POST /v1/documents/upload       ingests an ABSOLUTE server-side path, so
 #   POST /v1/corpora/upload         any tenant can read any file the process
@@ -80,7 +80,7 @@ sovereign-workflow-host = { workspace = true }
 # TDD-machine backend — HTTP + MCP transports dispatch through this
 # crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
 # phase 7e.
-commonwealth-tdd = { workspace = true }
+sovereign-tdd = { workspace = true }
 # Dial-by-key client access (Track M) — pulls the iroh feature into
 # default builds of this binary; everything else stays runtime-gated
 # behind `[iroh] enabled`.

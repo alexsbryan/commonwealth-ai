@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Search-not-agent runner — thin adapter over
-//! [`commonwealth_tdd::run_trial`].
+//! [`sovereign_tdd::run_trial`].
 //!
-//! The actual solver loop lives in `commonwealth-tdd::trial` (the
+//! The actual solver loop lives in `sovereign-tdd::trial` (the
 //! collapsed surface as of 2026-05-24). This module just maps the
-//! bench's `AgentRunContext` → `commonwealth_tdd::Trial` with
+//! bench's `AgentRunContext` → `sovereign_tdd::Trial` with
 //! `Polarity::MaximizePassing` (the Green-equivalent default),
 //! dispatches, and maps `TrialResult` back to `AgentRunArtifact`.
 //! All loop semantics — parallel candidates, monotonic gating,
-//! stall detection — are validated by `commonwealth-tdd`'s own
+//! stall detection — are validated by `sovereign-tdd`'s own
 //! test suite.
 
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use tracing::warn;
 
-use commonwealth_tdd::{
+use sovereign_tdd::{
     run_trial, ChatBackend, Polarity, ReqwestChatBackend, Trial, TrialConfig, TrialStatus, Workdir,
 };
 
@@ -56,7 +56,7 @@ impl Default for SearchRunner {
 }
 
 /// Initialize a fresh git repo + commit the scaffold so the
-/// commonwealth-tdd Workdir gate accepts the bench's scratch dir.
+/// sovereign-tdd Workdir gate accepts the bench's scratch dir.
 /// Idempotent — if the dir is already a git repo we just return.
 fn git_init_scaffold(path: &std::path::Path) -> std::io::Result<()> {
     use std::process::Command;
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn search_runner_accepts_custom_backend() {
-        use commonwealth_tdd::DeterministicChatBackend;
+        use sovereign_tdd::DeterministicChatBackend;
         let _r = SearchRunner::with_backend(Arc::new(DeterministicChatBackend::from_strs(Vec::<
             String,
         >::new(

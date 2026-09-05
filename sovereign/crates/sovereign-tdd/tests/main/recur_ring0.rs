@@ -8,11 +8,11 @@
 //! is what makes the restart and determinism bars meaningful: nothing in
 //! the evaluator remembers the sequence.
 
-use commonwealth_tdd::recur::{
+use kernel_types::Verdict;
+use sovereign_tdd::recur::{
     driver::delivered_to, Decider, Driver, DriverConfig, EvalRequest, EvalResponse, Event,
     GoalCatalog, GoalId, GoalPath, ScriptedEvaluator, StackState,
 };
-use kernel_types::Verdict;
 use std::path::PathBuf;
 
 use crate::recur_fixture::{count, fixture, g, pytest_available, root_path, strip_paths};

@@ -71,12 +71,10 @@
 24	sovereign/bench/agent-coding/problems/2.2-group-anagrams/scaffold::tests
 4	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold
 45	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold::tests
-2762	sovereign/crates/commonwealth-agent-tools
-1750	sovereign/crates/commonwealth-agent-tools::tests
-4887	sovereign/crates/commonwealth-tdd
-3825	sovereign/crates/commonwealth-tdd::tests
 6940	sovereign/crates/sovereign-agent-bench
 2947	sovereign/crates/sovereign-agent-bench::tests
+2762	sovereign/crates/sovereign-agent-tools
+1750	sovereign/crates/sovereign-agent-tools::tests
 1768	sovereign/crates/sovereign-atos
 786	sovereign/crates/sovereign-atos::tests
 569	sovereign/crates/sovereign-authoring-harness
@@ -121,6 +119,8 @@
 1431	sovereign/crates/sovereign-server::tests
 6735	sovereign/crates/sovereign-store
 2278	sovereign/crates/sovereign-store::tests
+4887	sovereign/crates/sovereign-tdd
+3825	sovereign/crates/sovereign-tdd::tests
 22	sovereign/crates/sovereign-time
 41627	sovereign/crates/sovereign-tools
 24596	sovereign/crates/sovereign-tools::tests

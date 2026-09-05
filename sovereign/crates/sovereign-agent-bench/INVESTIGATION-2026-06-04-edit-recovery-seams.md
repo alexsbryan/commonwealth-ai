@@ -64,10 +64,10 @@ amplifies *any* glitch, from either source, into a 0.
 
 ## What was built (all unit-tested, UNCOMMITTED in-tree)
 
-Crates: `commonwealth-agent-tools` (executor + roles) and
+Crates: `sovereign-agent-tools` (executor + roles) and
 `sovereign-agent-bench` (runner). Rebuild: `cargo build --release -p
 sovereign-cli` (agent-bench runs IN-PROCESS in sovereign-cli). Tests:
-`cargo test -p commonwealth-agent-tools -p sovereign-agent-bench --lib`.
+`cargo test -p sovereign-agent-tools -p sovereign-agent-bench --lib`.
 
 - **`executor.rs::syntax_gate_with_gutter_recovery`** — generalized
   post-failure recovery: tries caller-supplied candidates, then

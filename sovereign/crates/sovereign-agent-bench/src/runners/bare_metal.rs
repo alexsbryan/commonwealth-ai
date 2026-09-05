@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use commonwealth_agent_tools::executor::ExecCtx;
+use sovereign_agent_tools::executor::ExecCtx;
 
 use crate::runner::{
     AgentRunArtifact, AgentRunContext, AgentRunError, AgentRunner, ChatRequestRecord, ExitReason,

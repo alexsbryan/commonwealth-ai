@@ -472,9 +472,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-agent-bench/src/judge.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-agent-bench/src/cli/replay.rs", Class::LocalDaemon, 1),
 
-    // ---- commonwealth-tdd (LocalDaemon — TDD loop against the daemon) ----
-    ("sovereign/crates/commonwealth-tdd/src/backend.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/commonwealth-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
+    // ---- sovereign-tdd (LocalDaemon — TDD loop against the daemon) ----
+    ("sovereign/crates/sovereign-tdd/src/backend.rs", Class::LocalDaemon, 2),
+    ("sovereign/crates/sovereign-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-compute ----
     // client: loopback back to the host daemon; supervisor: heartbeat

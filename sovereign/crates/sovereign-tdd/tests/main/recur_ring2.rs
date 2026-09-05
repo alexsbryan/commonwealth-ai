@@ -4,7 +4,7 @@
 //! http://localhost:9741) with `RECUR_MODEL` resident (default the 4B fast
 //! slot). Run explicitly:
 //!
-//!   cargo test -p commonwealth-tdd --test main recur_ring2 -- --ignored --nocapture
+//!   cargo test -p sovereign-tdd --test main recur_ring2 -- --ignored --nocapture
 //!
 //! Bars (order `.sovereign/features/rec-1-explicit-stack`): prefix family
 //! (1 LEARNED then HIT on every later ask), grammar (0 unparseable), restore
@@ -13,12 +13,12 @@
 //! existing solve loop on the same fixture.
 
 use crate::recur_fixture::{fixture, g, pytest_available, root_path, strip_paths};
-use commonwealth_tdd::recur::{
+use sovereign_tdd::recur::{
     driver::delivered_to, AskRecord, Driver, DriverConfig, Event, GoalCatalog, ModelConfig,
     ModelEvaluator, RECUR_MODEL_INSTRUCTION,
 };
-use commonwealth_tdd::tasks::make_passing::{make_failing_tests_pass, MakePassingArgs};
-use commonwealth_tdd::{run_trial, ReqwestChatBackend, TrialConfig};
+use sovereign_tdd::tasks::make_passing::{make_failing_tests_pass, MakePassingArgs};
+use sovereign_tdd::{run_trial, ReqwestChatBackend, TrialConfig};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

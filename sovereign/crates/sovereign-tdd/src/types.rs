@@ -48,7 +48,7 @@ pub struct Trial {
     /// lights-out trial-2 (2026-05-24 N=5 probe). None disables
     /// validation; the bench adapter wires the language-appropriate
     /// validator from `AgentRunContext.syntax_validator`.
-    pub syntax_validator: Option<commonwealth_agent_tools::syntax::DynSyntaxValidator>,
+    pub syntax_validator: Option<sovereign_agent_tools::syntax::DynSyntaxValidator>,
 }
 
 /// Acceptance-predicate polarity. The loop is the same shape under

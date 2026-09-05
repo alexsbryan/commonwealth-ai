@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use commonwealth_tdd::{DirtyWorkdir, Workdir};
+use sovereign_tdd::{DirtyWorkdir, Workdir};
 
 fn fresh_repo() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().unwrap();

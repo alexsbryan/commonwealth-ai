@@ -22,23 +22,23 @@
 use std::path::Path;
 use std::time::Duration;
 
-use commonwealth_agent_tools::executor::{execute, ExecCtx};
-use commonwealth_agent_tools::{
+use serde_json::{json, Value};
+use sovereign_agent_tools::executor::{execute, ExecCtx};
+use sovereign_agent_tools::{
     PatchFileArgs, Primitive, ReplaceFunctionArgs, ToolError, WriteFileArgs,
 };
-use serde_json::{json, Value};
 use tokio::process::Command;
 
 /// The edit-action schema, response parser, workdir snapshotter,
-/// source-file discovery and prompt renderer are `commonwealth_tdd`'s.
+/// source-file discovery and prompt renderer are `sovereign_tdd`'s.
 /// Re-exported here because both runners import them through
 /// `runners::shared` — this module is now the bench's adapter over
 /// the TDD machine's primitives rather than a second copy of them.
-pub use commonwealth_tdd::shared::{discover_source_file, render_with_line_numbers, snapshot_dir};
-pub use commonwealth_tdd::{EditAction, ParsedResponse, TestRunResult};
+pub use sovereign_tdd::shared::{discover_source_file, render_with_line_numbers, snapshot_dir};
+pub use sovereign_tdd::{EditAction, ParsedResponse, TestRunResult};
 
 /// Parse a model turn into an edit action + source block, declining
-/// `commonwealth_tdd`'s header-inference fallback.
+/// `sovereign_tdd`'s header-inference fallback.
 ///
 /// The PARSING is tdd's. The ACCEPTANCE POLICY is the bench's, and
 /// they differ on purpose. tdd will infer an edit shape from a bare
@@ -60,7 +60,7 @@ pub use commonwealth_tdd::{EditAction, ParsedResponse, TestRunResult};
 /// silently changes bench scores. Adopting the fallback deliberately
 /// is filed as `bench-adopt-header-inference-fallback`.
 pub(crate) fn parse_response(content: &str) -> Option<ParsedResponse> {
-    let parsed = commonwealth_tdd::shared::parse_response(content)?;
+    let parsed = sovereign_tdd::shared::parse_response(content)?;
     if parsed.inferred {
         return None;
     }
@@ -159,7 +159,7 @@ pub(crate) async fn apply_edit(
         // patch_lines and insert_before only, and bench problems are
         // single-file while a relocation is by definition two. There
         // is also no MoveLines primitive in the executor to dispatch
-        // to — commonwealth-tdd applies it with direct filesystem
+        // to — sovereign-tdd applies it with direct filesystem
         // work. So refuse and name the reason rather than substitute
         // a shape the model was never offered (§18.3): a silent
         // rewrite here would score an out-of-contract response as if
@@ -404,7 +404,7 @@ if c == "<"
     fn parse_response_declines_tdd_header_inference() {
         let content = "```python\ndef tokenize(s):\n    return s.split()\n```";
         // tdd infers an action from the bare block ...
-        let inferred = commonwealth_tdd::shared::parse_response(content)
+        let inferred = sovereign_tdd::shared::parse_response(content)
             .expect("tdd infers an action from a bare source block");
         assert!(
             inferred.inferred,

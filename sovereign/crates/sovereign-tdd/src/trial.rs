@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use commonwealth_agent_tools::executor::ExecCtx;
 use serde_json::{json, Value};
+use sovereign_agent_tools::executor::ExecCtx;
 use tokio::task::JoinSet;
 
 use crate::backend::ChatBackend;
@@ -651,7 +651,7 @@ async fn try_candidate(
     messages: Vec<Value>,
     temperature: f32,
     base_workdir: PathBuf,
-    syntax_validator: Option<commonwealth_agent_tools::syntax::DynSyntaxValidator>,
+    syntax_validator: Option<sovereign_agent_tools::syntax::DynSyntaxValidator>,
     timeout: std::time::Duration,
     emit_max_tokens: u32,
 ) -> CandidateOutcome {
@@ -911,7 +911,7 @@ fn resolve_edit_target(
         EditAction::RewriteFunction { name } => {
             for f in source_files {
                 if let Ok(content) = std::fs::read_to_string(workdir.join(f)) {
-                    if commonwealth_agent_tools::executor::find_function_bounds(&content, name)
+                    if sovereign_agent_tools::executor::find_function_bounds(&content, name)
                         .is_some()
                     {
                         return Some(f.clone());

@@ -18,9 +18,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_tdd::tasks::framework::{detect_framework, Framework};
-use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
-use commonwealth_tdd::{run_trial, tasks::split_file, ReqwestChatBackend, TrialConfig, Workdir};
+use sovereign_tdd::tasks::framework::{detect_framework, Framework};
+use sovereign_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
+use sovereign_tdd::{run_trial, tasks::split_file, ReqwestChatBackend, TrialConfig, Workdir};
 
 #[derive(Default)]
 struct Args {
@@ -69,7 +69,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                tracing_subscriber::EnvFilter::new("commonwealth_tdd=info,probe_multi_file=info")
+                tracing_subscriber::EnvFilter::new("sovereign_tdd=info,probe_multi_file=info")
             }),
         )
         .init();

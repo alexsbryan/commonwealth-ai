@@ -49,7 +49,7 @@ in the agent-bench / canonical-tools layer must satisfy:
 5. **Glassbox** (ARCH §0.1, §9). Every adapter translation, every
    primitive execution, every role transition emits a
    `tracing::info!` or `debug!` event. Operator reading
-   `RUST_LOG=commonwealth_agent_tools=debug,sovereign_agent_bench
+   `RUST_LOG=sovereign_agent_tools=debug,sovereign_agent_bench
    ::runners::native=debug` can reconstruct the whole loop.
 
 6. **Don't coach to test** (user, 2026-05-21). Discipline that's
@@ -267,7 +267,7 @@ spans if receipts demand).
 
 ## 2026-05-21 night — PR 2 role layer + multi-language primitives
 
-Built on top of PR 1 (`commonwealth-agent-tools` canonical crate +
+Built on top of PR 1 (`sovereign-agent-tools` canonical crate +
 single-role native runner). PR 1 measured that *tool naming alone*
 (rebrand `bash` → `cargo_build`) did NOT close the verify-discipline
 gap on 2.1/3.2 — 35B primary still wrote `src/lib.rs` 3× without
@@ -291,7 +291,7 @@ instead of writing). The workdir state lands in the initial user
 message; Implementer doesn't need a separate inspect tool.
 
 Profiles are data (TOML-shaped, defaults compiled in at
-`commonwealth-agent-tools::role::profile::default_profile_for`).
+`sovereign-agent-tools::role::profile::default_profile_for`).
 Operator tuning of the Evaluator's voice or the Planner's
 verbosity doesn't require a code change.
 
@@ -370,7 +370,7 @@ target, not a regression.
 
 **File map (PR 2 additions):**
 
-- `sovereign/crates/commonwealth-agent-tools/src/role/mod.rs` —
+- `sovereign/crates/sovereign-agent-tools/src/role/mod.rs` —
   `Role` closed enum + re-exports
 - `.../src/role/profile.rs` — `RoleProfile` + compiled-in defaults
   + tool-subset / forced-first-tool tests
@@ -496,7 +496,7 @@ adapters, update §4.18 in the same PR per ARCH §1.1.
 
 ```bash
 # All tests green:
-cargo test -p commonwealth-agent-tools -p sovereign-agent-bench --lib --quiet
+cargo test -p sovereign-agent-tools -p sovereign-agent-bench --lib --quiet
 
 # Single-trial smoke (role-aware native):
 ./target/release/sovereign-agent-bench run \

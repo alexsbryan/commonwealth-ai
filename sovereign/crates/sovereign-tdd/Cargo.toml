@@ -1,5 +1,5 @@
 [package]
-name = "commonwealth-tdd"
+name = "sovereign-tdd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ description = "TDD-machine backend: red-green-refactor solver loop for any harne
 # extension (`@svrnmesh/pi-tdd`) calls the HTTP routes.
 #
 # Bottom of the dep graph for the TDD surface: depends on
-# `commonwealth-agent-tools` (executor + primitives) so it can apply
+# `sovereign-agent-tools` (executor + primitives) so it can apply
 # model-emitted edits to candidate workdirs, but does NOT depend on
 # sovereign-core, sovereign-server, or any inference crate — those
 # call into the registry, not the other way around.
@@ -26,7 +26,7 @@ path = "src/lib.rs"
 # the bench's search runner already uses; staying on a shared
 # executor means the TDD machine and the bench can never drift in
 # how an EditAction maps to a write.
-commonwealth-agent-tools = { workspace = true }
+sovereign-agent-tools = { workspace = true }
 
 # The four verdicts + rank(), for the rec-1 explicit-stack driver fold.
 kernel-types = { workspace = true }

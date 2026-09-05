@@ -265,8 +265,8 @@ crates/
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder — Pass/Fail policy + render over corpus-engine harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib shared by the desktop bridge + `meshapp dev` (§5)
 ├── sovereign-agent-bench    # Eleven-problem agent-coding battery
-├── commonwealth-agent-tools # Canonical agent-tool primitives (cross-runner contract)
-└── commonwealth-tdd         # Unified TDD solver loop (HTTP + MCP transports)
+├── sovereign-agent-tools    # Canonical agent-tool primitives (cross-runner contract)
+└── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
 Top-level: `modes/` (skills — recipe-author, inner-work),
@@ -2304,7 +2304,7 @@ last-token pooling + the query instruction-prefix (and thus matches the cache).
 
 **Synthesis role layer (`role.rs`).** The knowledge-turn path is organized as
 three data-defined roles — the synthesis-side counterpart to the agent-loop
-roles in `commonwealth-agent-tools/src/role/`, lifting the same
+roles in `sovereign-agent-tools/src/role/`, lifting the same
 `RoleProfile`/`RoleModelMap` shape (ARCH §6: profiles are *data*). **Router**
 classifies + resolves the route (mechanism: `EmbedRouter` +
 `resolve_synthesis_route`); **Synthesizer** assembles the grounded answer
@@ -3600,8 +3600,10 @@ anchor rubrics on three dimensions per problem (9/problem, 99 max). CLI:
 `svrn agent-bench <run|list|show>`. Dispatch via
 `AgentRunnerRegistry`.
 
-`sovereign/crates/commonwealth-agent-tools/` — canonical tool
-surface. Ten primitives (`inspect_workdir` polymorphic over
+`sovereign/crates/sovereign-agent-tools/` — canonical tool
+surface. (Was `commonwealth-agent-tools` until cw-lift 3a,
+2026-09-04; layer was already `capabilities`, the name was the
+only thing wrong.) Ten primitives (`inspect_workdir` polymorphic over
 file/dir/find/grep, `write_file`, `patch_file`, `replace_function`,
 `build`, `smoke`, `agent_done`, `agent_plan`,
 `handoff_to_evaluator`, `handoff_to_implementer`); every runner
@@ -3610,15 +3612,21 @@ role layer (Planner / Implementer / Evaluator) operating on the
 same model weights via different prompts + tool subsets + forced
 first tools.
 
-`sovereign/crates/commonwealth-tdd/` — unified solver loop for any
-TDD-shaped workflow. One function `run_trial(Trial) → TrialResult`
+`sovereign/crates/sovereign-tdd/` — unified solver loop for any
+TDD-shaped workflow. (Was `commonwealth-tdd`, and sat in the
+`mesh-api` layer beside `commonwealth-api`, until cw-lift 3a
+(2026-09-04): it has no commonwealth dependency of any kind and
+backs two shipped MCP tools, so it is a `capabilities` crate. The
+MCP tool ids `tdd_solve` / `tdd_bdd_cycle` are a wire surface and
+did NOT rename — pinned by
+`routes_mcp::tests::tdd_tool_ids_are_frozen_wire_names`.) One function `run_trial(Trial) → TrialResult`
 with `Polarity::{MaximizePassing, GenerateOneFailing}`
 (`run_trial_observed` adds a per-round observer for live progress).
 `tasks::solve` is the verbless goal entry: failing tests → fix;
 none → pin-then-green via `bdd_cycle`; explicit verbs `fix` / `pin`
 / `split`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
 
-`commonwealth-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Ring 2 (2026-09-03): `model.rs` puts the daemon's local model behind the same trait with three wire levers — `stable_prefix_len` (the instruction is one pinned family), `lark_grammar` (moves are a closed set; push/split/edit draw from catalog-minus-stack, the goal's own parts, and tracked non-test files), `assistant_prefix` (closes the think block this family's template opens). Measured on the 4B: 5 runs byte-identical, 35/35 prefix hits, 9/9 restore-fidelity, 9 of 11 fixture tests green in ~14 s where the flat solve loop stalled at 0/11 in 285 s. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
+`sovereign-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Ring 2 (2026-09-03): `model.rs` puts the daemon's local model behind the same trait with three wire levers — `stable_prefix_len` (the instruction is one pinned family), `lark_grammar` (moves are a closed set; push/split/edit draw from catalog-minus-stack, the goal's own parts, and tracked non-test files), `assistant_prefix` (closes the think block this family's template opens). Measured on the 4B: 5 runs byte-identical, 35/35 prefix hits, 9/9 restore-fidelity, 9 of 11 fixture tests green in ~14 s where the flat solve loop stalled at 0/11 in 285 s. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
 
 **SOLVE surface** (`docs/specs/SOLVE_UX.md`) — the daemon hosts the
 solver as an async job API on `:9741`: `POST /v1/solve/jobs` (202 +
@@ -6151,7 +6159,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 |------|----------|--------------|
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
-| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `commonwealth-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
+| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `sovereign-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
@@ -6695,7 +6703,7 @@ only its loud rows is the silent-absorb this section exists to prevent — total
 | `commonwealth-api/src/admission.rs` | 1,439 | 1,447 | +8 |
 | `corpus-engine/src/enrichment/governance_view.rs` | 1,380 | 1,407 | +27 |
 | `corpus-engine/src/sharding.rs` | 2,648 | 2,649 | +1 |
-| `commonwealth-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
+| `sovereign-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
 | `sovereign-cli-daemon/src/daemon_cmd/mod.rs` | 1,407 | 1,416 | +9 |
 | `sovereign-cli-shared/src/cli_contract.rs` | 1,607 | 1,617 | +10 |
 | `sovereign-cli/tests/main/cli_contract_journeys.rs` | 1,201 | 1,217 | +16 |

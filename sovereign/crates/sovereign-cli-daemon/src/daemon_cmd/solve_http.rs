@@ -10,7 +10,7 @@
 //! ```
 //!
 //! The surface is a thin job host over
-//! [`commonwealth_tdd::tasks::solve`] — it adds queuing, live round
+//! [`sovereign_tdd::tasks::solve`] — it adds queuing, live round
 //! events, and cancellation, and deliberately NO solver behavior.
 //! The backend is the daemon's own `/v1/chat/completions` over
 //! loopback, so the solver runs against whatever model the daemon
@@ -34,11 +34,9 @@ use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-use commonwealth_tdd::tasks::framework::{detect_framework, has_playwright_config, Framework};
-use commonwealth_tdd::tasks::solve::{
-    solve, SolveArgs, SolveOutcome, SolveRoundObserver, SolveVerb,
-};
-use commonwealth_tdd::{
+use sovereign_tdd::tasks::framework::{detect_framework, has_playwright_config, Framework};
+use sovereign_tdd::tasks::solve::{solve, SolveArgs, SolveOutcome, SolveRoundObserver, SolveVerb};
+use sovereign_tdd::{
     ChatBackend, DirtyWorkdir, ReqwestChatBackend, RoundSummary, TrialResult, TrialStatus, Workdir,
 };
 

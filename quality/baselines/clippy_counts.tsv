@@ -3,7 +3,6 @@
 #   cargo run -p xtask -- lint-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- lint-gate --tighten
-1	commonwealth-agent-tools/clippy::cognitive_complexity
 18	commonwealth-api/clippy::cognitive_complexity
 4	commonwealth-api/clippy::too_many_lines
 2	commonwealth-api/clippy::unnecessary_sort_by
@@ -23,10 +22,6 @@
 6	commonwealth-knowledge/clippy::unwrap_used
 2	commonwealth-state/clippy::cognitive_complexity
 7	commonwealth-state/clippy::unwrap_used
-1	commonwealth-tdd/clippy::cognitive_complexity
-18	commonwealth-tdd/clippy::expect_used
-1	commonwealth-tdd/clippy::too_many_lines
-16	commonwealth-tdd/clippy::unwrap_used
 2	commonwealth-test-harness/clippy::expect_used
 15	commonwealth-test-harness/clippy::unwrap_used
 10	commonwealth-transport/clippy::expect_used
@@ -62,6 +57,7 @@
 3	sovereign-agent-bench/clippy::too_many_lines
 14	sovereign-agent-bench/clippy::unwrap_used
 1	sovereign-agent-bench/dead_code
+1	sovereign-agent-tools/clippy::cognitive_complexity
 1	sovereign-cli-daemon/clippy::assertions_on_constants
 12	sovereign-cli-daemon/clippy::cognitive_complexity
 17	sovereign-cli-daemon/clippy::expect_used
@@ -175,6 +171,10 @@
 2	sovereign-store/clippy::expect_used
 1	sovereign-store/clippy::unnecessary_sort_by
 46	sovereign-store/clippy::unwrap_used
+1	sovereign-tdd/clippy::cognitive_complexity
+18	sovereign-tdd/clippy::expect_used
+1	sovereign-tdd/clippy::too_many_lines
+16	sovereign-tdd/clippy::unwrap_used
 1	sovereign-tools-base/clippy::cognitive_complexity
 1	sovereign-tools-base/clippy::double_ended_iterator_last
 1	sovereign-tools-base/clippy::expect_used

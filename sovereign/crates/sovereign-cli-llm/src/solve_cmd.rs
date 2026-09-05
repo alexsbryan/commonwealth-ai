@@ -38,7 +38,7 @@ EXIT CODE: 0 on reached/improved, 1 on stalled/no_baseline/errored,
 130 on cancelled.
 "#;
 
-/// Mirror of `commonwealth-tdd`'s Playwright default command (the
+/// Mirror of `sovereign-tdd`'s Playwright default command (the
 /// CLI is a thin HTTP client and doesn't link the engine crate).
 /// If they drift the daemon still profiles correctly — it keys off
 /// the `playwright test` substring, present in both.

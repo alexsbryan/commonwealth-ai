@@ -410,8 +410,8 @@ Read from [`ARCH_LAYERS.toml`](./ARCH_LAYERS.toml) — the same file `cargo xtas
 | 1 | **knowledge** | `corpus-engine` · `corpus-engine-*` |
 | 2 | **mesh-foundation** | `commonwealth-core` · `commonwealth-state` · `commonwealth-transport` · `commonwealth-discovery` · `commonwealth-inference` · `commonwealth-knowledge` · `commonwealth-app` |
 | 3 | **runtime** | `sovereign-core` · `sovereign-inference` · `sovereign-store` · `sovereign-workflow` · `sovereign-tools-base` · `sovereign-recipe-author` · `sovereign-compute` · `sovereign-gliner` |
-| 4 | **capabilities** | `sovereign-tools` · `sovereign-enrichment-catalog` · `sovereign-work-atlas` · `sovereign-workflow-host` · `sovereign-atos` · `sovereign-eval` · `sovereign-meshapp` · `sovereign-authoring-harness` · `commonwealth-agent-tools` |
-| 5 | **mesh-api** | `commonwealth-api` · `commonwealth-test-harness` · `commonwealth-tdd` · `sovereign-mesh` |
+| 4 | **capabilities** | `sovereign-tools` · `sovereign-enrichment-catalog` · `sovereign-work-atlas` · `sovereign-workflow-host` · `sovereign-atos` · `sovereign-eval` · `sovereign-meshapp` · `sovereign-authoring-harness` · `sovereign-agent-tools` |
+| 5 | **mesh-api** | `commonwealth-api` · `commonwealth-test-harness` · `sovereign-tdd` · `sovereign-mesh` |
 | 6 | **hosts** | `sovereign-cli*` · `sovereign-server` · `sovereign-desktop` · `sovereign-pipeline` · `sovereign-agent-bench` · `sovereign-studio` · `commonwealth-daemon` · `oicp-conformance` · `xtask` |
 
 **Back of house** — outside the ordered stack, not on top of it; may observe every layer, and nothing may depend on it: `sovereign-eval` · `sovereign-cli-dev` · `sovereign-agent-bench` · `sovereign-atos` · `corpus-engine-atos` · `corpus-engine-archaeology` · `xtask`.

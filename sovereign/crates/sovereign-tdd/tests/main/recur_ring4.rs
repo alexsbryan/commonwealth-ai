@@ -15,14 +15,14 @@
 //! oracle (`cargo test`, so a compile error is the failure), and the merge.
 
 use crate::recur_fixture::{count, g, root_path, sh};
-use commonwealth_tdd::recur::{
+use kernel_types::Verdict;
+use sovereign_tdd::recur::{
     driver::delivered_to, Driver, DriverConfig, EvalRequest, EvalResponse, Event, ScriptedEvaluator,
 };
-use commonwealth_tdd::recur::{
+use sovereign_tdd::recur::{
     GoalCatalog, ModelConfig, ModelEvaluator, RECUR_MODEL_INSTRUCTION_RUST,
 };
-use commonwealth_tdd::{Language, Workdir};
-use kernel_types::Verdict;
+use sovereign_tdd::{Language, Workdir};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -136,7 +136,7 @@ fn script(req: &EvalRequest) -> EvalResponse {
 /// sharing that run (measured: 3 of them failed with it in the default
 /// suite, 0 without, and all 3 pass in isolation).
 ///
-///     cargo test -p commonwealth-tdd --test main recur_ring4 -- --ignored --nocapture
+///     cargo test -p sovereign-tdd --test main recur_ring4 -- --ignored --nocapture
 #[tokio::test]
 #[ignore = "spawns cargo; run it with the other rec-1 rings"]
 async fn ring4_a_clean_merge_of_two_green_branches_does_not_compile() {
@@ -218,9 +218,9 @@ async fn ring4_a_clean_merge_of_two_green_branches_does_not_compile() {
     );
 }
 
-fn root_path_for(goal: &str) -> commonwealth_tdd::recur::GoalPath {
+fn root_path_for(goal: &str) -> sovereign_tdd::recur::GoalPath {
     let _ = root_path();
-    commonwealth_tdd::recur::GoalPath::root(g(goal))
+    sovereign_tdd::recur::GoalPath::root(g(goal))
 }
 
 // ── the model arm ────────────────────────────────────────────────────────

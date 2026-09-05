@@ -9,7 +9,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_tdd::{
+use sovereign_tdd::{
     run_trial, DeterministicChatBackend, Polarity, Trial, TrialConfig, TrialStatus, Workdir,
 };
 

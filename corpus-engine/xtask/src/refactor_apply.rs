@@ -30,7 +30,7 @@
 //! mod tests;"""
 //! ```
 //!
-//! Pairing note: `commonwealth-tdd`'s `EditAction::MoveLines` mirrors
+//! Pairing note: `sovereign-tdd`'s `EditAction::MoveLines` mirrors
 //! these semantics for MODEL-driven rounds. This verb exists so the same
 //! recipe executes with NO model at all. If the two ever diverge, the
 //! tests in this file and in tdd's apply.rs are the two halves of the

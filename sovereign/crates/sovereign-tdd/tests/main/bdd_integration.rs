@@ -8,8 +8,8 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
-use commonwealth_tdd::{DeterministicChatBackend, TrialConfig, TrialStatus, Workdir};
+use sovereign_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
+use sovereign_tdd::{DeterministicChatBackend, TrialConfig, TrialStatus, Workdir};
 
 fn init_git(path: &Path) {
     let _ = Command::new("git")
@@ -119,7 +119,7 @@ def test_add_positive():
 def add(a, b):
     return a + b
 ```"#;
-    let backend: Arc<dyn commonwealth_tdd::ChatBackend> =
+    let backend: Arc<dyn sovereign_tdd::ChatBackend> =
         Arc::new(DeterministicChatBackend::from_strs(vec![
             synthesis.to_string(),
             green.to_string(),

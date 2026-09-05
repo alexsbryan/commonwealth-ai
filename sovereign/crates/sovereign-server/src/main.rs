@@ -730,8 +730,8 @@ async fn main() {
     let tdd_state = {
         let tdd_provider_url = std::env::var("SOVEREIGN_TDD_PROVIDER_URL")
             .unwrap_or_else(|_| format!("http://{}", config.server.bind));
-        let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> = Arc::new(
-            commonwealth_tdd::ReqwestChatBackend::new(format!("{tdd_provider_url}/v1")),
+        let tdd_backend: Arc<dyn sovereign_tdd::ChatBackend> = Arc::new(
+            sovereign_tdd::ReqwestChatBackend::new(format!("{tdd_provider_url}/v1")),
         );
         routes_tdd::TddState(Arc::clone(&tdd_backend))
     };

@@ -21,11 +21,11 @@ use axum::routing::post;
 use axum::Router;
 use serde::Deserialize;
 
-use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
-use commonwealth_tdd::{
+use serde::Serialize;
+use sovereign_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
+use sovereign_tdd::{
     run_trial, ChatBackend, DirtyWorkdir, Polarity, Trial, TrialConfig, TrialResult, Workdir,
 };
-use serde::Serialize;
 
 /// Extension state inserted by `main.rs`. Just the backend; the
 /// loop is a free function so there's no per-request state to
@@ -248,7 +248,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
-    use commonwealth_tdd::DeterministicChatBackend;
+    use sovereign_tdd::DeterministicChatBackend;
     use std::process::Command;
     use tower::ServiceExt;
 

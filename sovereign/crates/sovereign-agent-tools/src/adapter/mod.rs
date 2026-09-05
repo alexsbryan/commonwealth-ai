@@ -12,7 +12,7 @@
 //!
 //! The adapter does NOT execute tools. Pi's executor is pi itself
 //! (its built-in subprocess tool layer); native's executor is
-//! `commonwealth_agent_tools::executor::execute` invoked by the
+//! `sovereign_agent_tools::executor::execute` invoked by the
 //! agent loop. The adapter's job is normalization only.
 
 pub mod native;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! # commonwealth-tdd
+//! # sovereign-tdd
 //!
 //! Unified TDD solver loop. One [`run_trial`](trial::run_trial)
 //! function that takes a [`Trial`](types::Trial) and returns a

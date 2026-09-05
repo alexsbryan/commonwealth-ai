@@ -60,7 +60,7 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # ingest poller; already transitive via sovereign-mesh, made explicit
 # here because the type is named in the daemon's own bootstrap.
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
-commonwealth-tdd = { workspace = true }
+sovereign-tdd = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }

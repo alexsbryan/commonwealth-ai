@@ -106,7 +106,7 @@ impl ExecCtx {
 /// Dispatch a parsed `Primitive` to its executor.
 pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, ToolError> {
     let id = prim.kind().id();
-    info!(primitive = id, "commonwealth_agent_tools::executor: invoke");
+    info!(primitive = id, "sovereign_agent_tools::executor: invoke");
     let result = match prim {
         Primitive::InspectWorkdir(intent) => exec_inspect(ctx, intent).await,
         Primitive::WriteFile(args) => exec_write_file(ctx, args).await,
@@ -123,12 +123,12 @@ pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, Tool
         Ok(r) => info!(
             primitive = id,
             ok = r.ok,
-            "commonwealth_agent_tools::executor: ran"
+            "sovereign_agent_tools::executor: ran"
         ),
         Err(e) => info!(
             primitive = id,
             error = %e,
-            "commonwealth_agent_tools::executor: failed"
+            "sovereign_agent_tools::executor: failed"
         ),
     }
     result
@@ -307,7 +307,7 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
                 path = %args.path,
                 existing_lines,
                 threshold = LARGE_FILE_REWRITE_THRESHOLD_LINES,
-                "commonwealth_agent_tools::executor: write_file rejected — large existing file, use patch_file"
+                "sovereign_agent_tools::executor: write_file rejected — large existing file, use patch_file"
             );
             return Err(ToolError::WriteFileTooLarge {
                 path: args.path.clone(),
@@ -913,7 +913,7 @@ async fn exec_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
             let stdout_tail = validator.render_errors(&errors);
             tracing::info!(
                 error_count = errors.len(),
-                "commonwealth_agent_tools::executor: pre-build syntax check rejected workdir"
+                "sovereign_agent_tools::executor: pre-build syntax check rejected workdir"
             );
             return Ok(ToolResult::ok(json!({
                 "ok": false,
@@ -1431,7 +1431,7 @@ fn syntax_gate_with_gutter_recovery(
                 primitive,
                 repair = "caller-candidate",
                 language = validator.language_id(),
-                "commonwealth_agent_tools::executor: recovered write — a caller-supplied repair candidate parsed clean"
+                "sovereign_agent_tools::executor: recovered write — a caller-supplied repair candidate parsed clean"
             );
             return Ok(Some(cand.clone()));
         }
@@ -1453,7 +1453,7 @@ fn syntax_gate_with_gutter_recovery(
                     primitive,
                     repair = label,
                     language = validator.language_id(),
-                    "commonwealth_agent_tools::executor: recovered write — repaired a model formatting artifact the syntax check rejected"
+                    "sovereign_agent_tools::executor: recovered write — repaired a model formatting artifact the syntax check rejected"
                 );
                 return Ok(Some(candidate));
             }
@@ -1466,7 +1466,7 @@ fn syntax_gate_with_gutter_recovery(
         language,
         error_count = errors.len(),
         primitive,
-        "commonwealth_agent_tools::executor: pre-write syntax check rejected"
+        "sovereign_agent_tools::executor: pre-write syntax check rejected"
     );
     Err(ToolError::SyntaxRejected {
         primitive,

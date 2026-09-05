@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Synthesis-layer role vocabulary — the data-driven counterpart to the
-//! agent-loop role layer in `commonwealth-agent-tools/src/role/`.
+//! agent-loop role layer in `sovereign-agent-tools/src/role/`.
 //!
 //! A [`Role`] is a closed enum of the cognitive operations the runtime performs
 //! on a knowledge turn. Where the agent-loop roles (Planner/Implementer/

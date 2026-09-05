@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
 
-use commonwealth_agent_tools::{RoleModelMap, WorkdirScale};
+use sovereign_agent_tools::{RoleModelMap, WorkdirScale};
 
 use crate::problem::{
     BudgetCfg, Category, Problem, ProblemMeta, PromptCfg, ScoringCfg, ScoringDimCfg, ScoringMode,

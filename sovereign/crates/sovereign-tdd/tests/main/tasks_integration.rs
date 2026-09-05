@@ -8,11 +8,11 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_tdd::tasks::framework::Framework;
-use commonwealth_tdd::tasks::make_passing::MakePassingArgs;
-use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
-use commonwealth_tdd::tasks::write_failing_test::WriteFailingTestArgs;
-use commonwealth_tdd::{
+use sovereign_tdd::tasks::framework::Framework;
+use sovereign_tdd::tasks::make_passing::MakePassingArgs;
+use sovereign_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
+use sovereign_tdd::tasks::write_failing_test::WriteFailingTestArgs;
+use sovereign_tdd::{
     run_trial,
     tasks::{make_failing_tests_pass, split_file, write_failing_test},
     DeterministicChatBackend, TrialConfig, TrialStatus, Workdir,

@@ -2,12 +2,12 @@
 //! Apply a [`ParsedResponse`] to a workdir via the shared executor.
 //!
 //! Routes each [`EditAction`] variant to its matching
-//! [`commonwealth_agent_tools::Primitive`]. Same code path the bench
+//! [`sovereign_agent_tools::Primitive`]. Same code path the bench
 //! search runner uses today — so the TDD machine and the bench can
 //! never drift in how a model emission maps to a write.
 
-use commonwealth_agent_tools::executor::{execute, ExecCtx};
-use commonwealth_agent_tools::{
+use sovereign_agent_tools::executor::{execute, ExecCtx};
+use sovereign_agent_tools::{
     PatchFileArgs, Primitive, ReplaceFunctionArgs, ToolError, WriteFileArgs,
 };
 

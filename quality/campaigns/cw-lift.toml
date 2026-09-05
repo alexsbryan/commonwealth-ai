@@ -488,10 +488,12 @@ status       = "open"
 # UPDATE 2026-09-04, rung 3a LANDED: the crate is `sovereign-tdd` and lives at
 # `sovereign/crates/sovereign-tdd/`, so the name-prefix count no longer sees
 # it and this particular false positive is gone by construction. That does NOT
-# retire 3e — counting by prefix is still the wrong rule, and it will report a
+# retire the closeout rung (3e, renumbered 3c by ce733a82f) — counting by
+# prefix is still the wrong rule, and it will report a
 # false positive again the moment another crate is misnamed. The paragraph
 # above is kept as the record of what the reading was before the rename. The
-# instrument, floor and target below are UNTOUCHED by 3a; 3e re-derives them.
+# instrument, floor and target below are UNTOUCHED by 3a; the closeout
+# rung re-derives them.
 #
 # K2 DOES NOT AIM AT THIS BAR. It says AppState (2,654 lines, 44 crossing refs)
 # cannot be cut without a ~300-line shim, so local and mesh state are fused.

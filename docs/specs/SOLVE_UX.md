@@ -3,7 +3,7 @@
 Status: built + live-verified 2026-07-07, both paths. Daemon job
 host in `sovereign-cli-daemon/src/daemon_cmd/solve_http.rs` (+ MCP
 tools in `solve_tools.rs`, CLI in `sovereign-cli-llm/src/solve_cmd.rs`,
-composition in `commonwealth-tdd/src/tasks/solve.rs`). Fix path:
+composition in `sovereign-tdd/src/tasks/solve.rs`). Fix path:
 failing tests → reached with a minimal diff, rounds streamed live.
 Pin-then-green path: no tests → synthesized failing tests → reached
 (one round per stage live). Two engine fixes made the second path
@@ -77,7 +77,7 @@ CLI: `sovereign solve <workdir> "goal" [--watch]`.
 
 ## Implementation notes (for the builder, not the user)
 
-Daemon links `commonwealth-tdd` (leaf crate); backend = its own /v1
+Daemon links `sovereign-tdd` (leaf crate); backend = its own /v1
 chat endpoint. Default path = `tasks::bdd_cycle` composition (failing
 tests → MaximizePassing; none → Red then green). `run_trial` gains
 one optional round-observer hook — the only engine change. In-memory

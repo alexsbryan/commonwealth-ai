@@ -16,8 +16,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
-use commonwealth_tdd::{ReqwestChatBackend, TrialConfig, Workdir};
+use sovereign_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
+use sovereign_tdd::{ReqwestChatBackend, TrialConfig, Workdir};
 
 #[derive(Default)]
 struct Args {
@@ -61,7 +61,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                tracing_subscriber::EnvFilter::new("commonwealth_tdd=info,probe_bdd=info")
+                tracing_subscriber::EnvFilter::new("sovereign_tdd=info,probe_bdd=info")
             }),
         )
         .init();

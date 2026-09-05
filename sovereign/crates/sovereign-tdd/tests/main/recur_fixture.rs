@@ -7,8 +7,8 @@
 
 #![allow(dead_code)]
 
-use commonwealth_tdd::recur::{Event, GoalId, GoalPath, StackState};
-use commonwealth_tdd::Workdir;
+use sovereign_tdd::recur::{Event, GoalId, GoalPath, StackState};
+use sovereign_tdd::Workdir;
 use std::path::Path;
 use std::process::Command;
 
