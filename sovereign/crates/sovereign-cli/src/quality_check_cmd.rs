@@ -244,8 +244,6 @@ impl Precondition {
     }
 }
 
-
-
 /// One declared lane.
 #[derive(Debug, Clone)]
 struct LaneSpec {
