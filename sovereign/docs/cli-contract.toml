@@ -588,6 +588,31 @@ feature = "dev-tools"
 path = "posture"
 binary = "dispatcher"
 feature = "dev-tools"
+# quality — the curated 30-minute breakage check. `posture` above reads
+# artifacts other commands wrote; this one RUNS the lanes declared in
+# `quality/check-lanes.toml` and writes the table to
+# `target/quality-check/<stamp>/summary.json`. Two subcommands: `check` (the
+# runner, in the dispatcher, no model) and `lane` (one lane, exec'd into the
+# `sovereign-cli-llm` sibling because every lane drives inference, ingests a
+# corpus or runs a judge). Classification "daemon": a lane's preconditions
+# probe the local daemon and its questions go through it.
+[[command]]
+path = "quality check"
+binary = "dispatcher"
+feature = "dev-tools"
+classification = "daemon"
+flags = [
+  { name = "--lane", takes_value = true },
+  { name = "--budget-secs", takes_value = true },
+  { name = "--mint" },
+  { name = "--lane-table", takes_value = true },
+]
+[[command]]
+path = "quality lane"
+binary = "llm"
+feature = "dev-tools"
+classification = "daemon"
+
 # deep-research — the thin local-only research loop (T1): gated corpus +
 # web search, custody-stamped fetch, gap-audited rounds. In-process in the
 # dispatcher under dev-tools; needs the local daemon's embed + draft
@@ -3377,6 +3402,13 @@ subsystem here and the least likely to be renamed out from under this."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "refresh: sovereign drift detect"
+
+[[journey.step]]
+run = "quality check --budget-secs 0"
+note = """The BUDGET RULE is the assertable half of `quality check`. Driving a real lane here is a ten-minute model run inside a journey lane, which is not a journey, and `--help` would assert only that a help string exists. With no budget every lane is could-not-judge NAMING the shortfall and the run exits 4 — nothing ran, so nothing was verified, which is never a pass (the same claim as `sovereign-test.sh`'s zero-test exit). The step also proves `quality/check-lanes.toml` parsed, since a lane has to be read before it can be skipped, and it costs about a second."""
+[journey.step.expect]
+exit = 4
+stdout_contains = "out of budget"
 
 [[journey.step]]
 run = "tools call work_in_flight --scope= --match_mode=file"

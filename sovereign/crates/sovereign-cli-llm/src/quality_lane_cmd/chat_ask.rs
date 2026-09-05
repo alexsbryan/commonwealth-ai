@@ -50,7 +50,6 @@ use kernel_types::Judgement;
 use sovereign_contracts::types::projection::TurnMetadata;
 use sovereign_contracts::types::{StageId, TurnMode};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_eval::chaos_monkey::score::AgentAction;
 use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
@@ -63,7 +62,7 @@ const PROVIDER_CTX: u32 = 8192;
 
 // ─── The bank ───────────────────────────────────────────────────────
 
-struct Bank {
+struct ChatAskBank {
     fixture: PathBuf,
     corpus_prefix: String,
     declared_chunks: usize,
@@ -73,7 +72,7 @@ struct Bank {
     warmup: usize,
     judge: JudgeCfg,
     ceilings: toml::value::Table,
-    questions: Vec<Question>,
+    questions: Vec<ChatAskQuestion>,
 }
 
 struct JudgeCfg {
@@ -86,7 +85,7 @@ struct JudgeCfg {
     control_flat: String,
 }
 
-struct Question {
+struct ChatAskQuestion {
     id: String,
     text: String,
     expected_route: String,
@@ -94,10 +93,19 @@ struct Question {
     must_locate: Vec<String>,
 }
 
-/// Parse the bank. Every field is REQUIRED: a bank that half-parses would
+/// Parse the bank. `ChatAsk`-prefixed because the concept ratchet found
+/// `Bank`, `Question` and `TurnResult` already defined elsewhere in this
+/// crate (`bench_cmd::routing_replay`, `eval_cmd::bank`, `book_report`,
+/// `eval_cmd::runner_threads`) and in `corpus-engine-vocab`. None of them is
+/// this concept — an eval bank's question carries a category and a gold
+/// answer, this one carries a route, a gate-action set and coverage spans —
+/// so these are named apart rather than converged, which is the other half
+/// of the pre-flight rule.
+///
+/// Every field is REQUIRED: a bank that half-parses would
 /// silently drop an assertion, and a dropped assertion reads exactly like a
 /// passing one.
-fn parse_bank(text: &str) -> Result<Bank, String> {
+fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
     let doc: toml::Value = toml::from_str(text).map_err(|e| format!("{BANK}: {e}"))?;
     let want = |t: &toml::Value, k: &str| -> Result<toml::Value, String> {
         t.get(k)
@@ -145,7 +153,7 @@ fn parse_bank(text: &str) -> Result<Bank, String> {
         .ok_or_else(|| format!("{BANK}: no [[question]] entries"))?;
     let mut questions = Vec::new();
     for q in questions_raw {
-        questions.push(Question {
+        questions.push(ChatAskQuestion {
             id: s_of(q, "id")?,
             text: s_of(q, "text")?,
             expected_route: s_of(q, "expected_route")?,
@@ -153,7 +161,7 @@ fn parse_bank(text: &str) -> Result<Bank, String> {
             must_locate: strs(q, "must_locate")?,
         });
     }
-    Ok(Bank {
+    Ok(ChatAskBank {
         fixture: PathBuf::from(s_of(&bank, "fixture")?),
         corpus_prefix: s_of(&bank, "corpus_prefix")?,
         declared_chunks: usize::try_from(n_of(&bank, "declared_chunks")?)
@@ -221,14 +229,14 @@ fn median(mut xs: Vec<f64>) -> Option<f64> {
 
 // ─── One turn ───────────────────────────────────────────────────────
 
-struct TurnResult {
+struct LaneTurn {
     visible: String,
     metadata: Option<TurnMetadata>,
     source_origins: Vec<String>,
     wall_ms: u64,
 }
 
-async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<TurnResult, String> {
+async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<LaneTurn, String> {
     // The DAEMON mints the conversation and validates the corpus allow-list
     // against what it has installed — same door `chat ask` uses, so a lane
     // cannot pass an allow-list the product would refuse.
@@ -249,7 +257,7 @@ async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<T
         .as_ref()
         .map(|p| p.sources.iter().map(|s| s.origin.clone()).collect())
         .unwrap_or_default();
-    Ok(TurnResult {
+    Ok(LaneTurn {
         visible,
         metadata: outcome.metadata,
         source_origins,
@@ -280,7 +288,7 @@ fn gate_u64(meta: &TurnMetadata, key: &str) -> Option<u64> {
 /// The ceiling table for a model stem, or `None` — which is
 /// could-not-judge, never a pass. Running a different model is not evidence
 /// that this one got faster.
-fn ceilings_for<'a>(bank: &'a Bank, stem: &str) -> Option<&'a toml::value::Table> {
+fn ceilings_for<'a>(bank: &'a ChatAskBank, stem: &str) -> Option<&'a toml::value::Table> {
     bank.ceilings.get(stem)?.as_table()
 }
 
@@ -382,9 +390,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let calibrated = calibration_row(&mut report, &bank, judge.as_ref()).await;
 
     let client = TurnClient::new(&base);
-    let mut per_question: Vec<(String, Vec<TurnResult>)> = Vec::new();
+    let mut per_question: Vec<(String, Vec<LaneTurn>)> = Vec::new();
     for q in &bank.questions {
-        let mut kept: Vec<TurnResult> = Vec::new();
+        let mut kept: Vec<LaneTurn> = Vec::new();
         let total = bank.warmup + bank.runs;
         for i in 0..total {
             match ask_once(&client, &corpus, &q.text).await {
@@ -437,7 +445,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 }
 
 /// Ingest the fixture from source and assert what came out.
-async fn ingest_row(report: &mut LaneReport, repo: &Path, bank: &Bank, corpus: &str) -> bool {
+async fn ingest_row(
+    report: &mut LaneReport,
+    repo: &Path,
+    bank: &ChatAskBank,
+    corpus: &str,
+) -> bool {
     let fixture = repo.join(&bank.fixture);
     if !fixture.is_file() {
         report.cannot_judge(
@@ -534,7 +547,7 @@ async fn ingest_row(report: &mut LaneReport, repo: &Path, bank: &Bank, corpus: &
 /// through, and say whether the instrument separates.
 async fn calibration_row(
     report: &mut LaneReport,
-    bank: &Bank,
+    bank: &ChatAskBank,
     judge: &dyn InferenceProvider,
 ) -> bool {
     let q = "According to the Architecture Tour, what is the runtime pipeline, \
@@ -570,9 +583,9 @@ async fn calibration_row(
 /// Every per-question row. Each is named and each has a failing input.
 async fn assert_question(
     report: &mut LaneReport,
-    bank: &Bank,
-    q: &Question,
-    runs: &[TurnResult],
+    bank: &ChatAskBank,
+    q: &ChatAskQuestion,
+    runs: &[LaneTurn],
     corpus: &str,
     judge: &dyn InferenceProvider,
     calibrated: bool,
@@ -727,23 +740,17 @@ async fn assert_question(
     // The production gate's OWN decision, through the one decider
     // (`bench_cmd::chaos_monkey::action_from_gate_signal`). No second
     // abstention detector lives here.
-    let actions_typed: Vec<Option<AgentAction>> = runs
+    // `sovereign-eval` is back-of-house and `bench_cmd` is the only module
+    // in this crate allowed to name it, so this asks for the DECISION and
+    // not for the harness's `AgentAction` vocabulary. Still one decider.
+    let actions_typed: Vec<Option<bool>> = runs
         .iter()
         .map(|r| {
             let gate_action = r.metadata.as_ref().and_then(|m| gate_str(m, "action"));
-            crate::bench_cmd::chaos_monkey::action_from_gate_signal(
-                false,
-                false,
-                None,
-                gate_action,
-                &r.visible,
-            )
+            crate::bench_cmd::chaos_monkey::abstained_from_gate_signal(gate_action, &r.visible)
         })
         .collect();
-    let abstained = actions_typed
-        .iter()
-        .filter(|a| **a == Some(AgentAction::Abstained))
-        .count();
+    let abstained = actions_typed.iter().filter(|a| **a == Some(true)).count();
     // `None` means the turn carried no gate signal at all. `chaos_monkey`
     // reaches for a judge there; this lane does NOT, because it only ever
     // asks GROUNDED turns — a missing gate signal here is a broken run, not
@@ -812,9 +819,9 @@ async fn assert_question(
 /// for the model stem that produced it.
 fn ceilings_row(
     report: &mut LaneReport,
-    bank: &Bank,
-    q: &Question,
-    runs: &[TurnResult],
+    bank: &ChatAskBank,
+    q: &ChatAskQuestion,
+    runs: &[LaneTurn],
     subject: &str,
 ) {
     // Every ledger row carries no model stem of its own, so the stem is the
@@ -925,11 +932,7 @@ fn ceilings_row(
 /// **A run with no baseline for its fingerprint is could-not-judge
 /// (first-run) and writes NOTHING.** `--mint` is the only door, because a
 /// baseline minted from a run nobody watched is a bar nobody set.
-fn baseline_row(
-    report: &mut LaneReport,
-    ctx: &LaneCtx,
-    per_question: &[(String, Vec<TurnResult>)],
-) {
+fn baseline_row(report: &mut LaneReport, ctx: &LaneCtx, per_question: &[(String, Vec<LaneTurn>)]) {
     let stages: Vec<(String, u64)> = per_question
         .iter()
         .flat_map(|(qid, runs)| {

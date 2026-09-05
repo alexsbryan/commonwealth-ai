@@ -853,6 +853,22 @@ async fn run(rest: &[String]) -> i32 {
 /// The honesty truth for a RELEASED self-decline is not here — it lives in
 /// the value-presence axis (blatant_confab / the partition). This function
 /// answers "did the system decline", not "was the decline honest".
+/// Did the turn ABSTAIN? `None` when it carried no gate signal at all.
+///
+/// The boolean face of [`action_from_gate_signal`], for callers OUTSIDE
+/// `bench_cmd`. `AgentAction` is `sovereign_eval`'s type and
+/// `sovereign-eval` is back-of-house (`quality/ARCH_LAYERS.toml`
+/// `backstage`): `bench_cmd` is the only module in this crate allowed to
+/// name it, pinned by `backstage_boundary::
+/// bench_cmd_is_the_only_module_naming_the_eval_harness`. A product module
+/// that needs the abstention DECISION does not need the eval harness's
+/// vocabulary to get it — so it asks here and gets a `bool`, and the one
+/// decider stays one.
+pub(crate) fn abstained_from_gate_signal(gate_action: Option<&str>, visible: &str) -> Option<bool> {
+    action_from_gate_signal(false, false, None, gate_action, visible)
+        .map(|a| a == AgentAction::Abstained)
+}
+
 pub(crate) fn action_from_gate_signal(
     gated: bool,
     typed_verdict: bool,

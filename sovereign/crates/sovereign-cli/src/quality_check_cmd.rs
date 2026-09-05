@@ -67,8 +67,16 @@ const POLL: Duration = Duration::from_millis(250);
 const LANE_TABLE: &str = "quality/check-lanes.toml";
 
 /// How a lane's verdict is allowed to affect the run's exit code.
+///
+/// `Lane`-prefixed deliberately. `xtask`'s `quality_cmd::Enforcement` asks a
+/// near-identical question of the RATCHETS (`Hard` | `Advisory`), and the
+/// concept ratchet caught the collision. They are not converged because the
+/// members differ — this one is ci-bench's HARD/SOFT/TRACKED lane tiering,
+/// which `sovereign/bench` already speaks — and because converging them
+/// would mean a host depending on a back-of-house binary. Named apart, and
+/// said so (the pre-flight rule for a noun already defined elsewhere).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Enforcement {
+enum LaneEnforcement {
     /// Not passed → the run fails.
     Hard,
     /// Recorded in the table; never breaks the build.
@@ -79,20 +87,20 @@ enum Enforcement {
     Tracked,
 }
 
-impl Enforcement {
-    fn parse(s: &str) -> Option<Enforcement> {
+impl LaneEnforcement {
+    fn parse(s: &str) -> Option<LaneEnforcement> {
         match s {
-            "hard" => Some(Enforcement::Hard),
-            "soft" => Some(Enforcement::Soft),
-            "tracked" => Some(Enforcement::Tracked),
+            "hard" => Some(LaneEnforcement::Hard),
+            "soft" => Some(LaneEnforcement::Soft),
+            "tracked" => Some(LaneEnforcement::Tracked),
             _ => None,
         }
     }
     const fn as_str(self) -> &'static str {
         match self {
-            Enforcement::Hard => "hard",
-            Enforcement::Soft => "soft",
-            Enforcement::Tracked => "tracked",
+            LaneEnforcement::Hard => "hard",
+            LaneEnforcement::Soft => "soft",
+            LaneEnforcement::Tracked => "tracked",
         }
     }
 }
@@ -189,7 +197,7 @@ impl Precondition {
 struct LaneSpec {
     id: String,
     kind: LaneKind,
-    enforcement: Enforcement,
+    enforcement: LaneEnforcement,
     est_secs: u64,
     command: Vec<String>,
     preconditions: Vec<Precondition>,
@@ -233,7 +241,7 @@ fn parse_lane_table(text: &str) -> Result<Vec<LaneSpec>, String> {
         let enforcement = l
             .get("enforcement")
             .and_then(|v| v.as_str())
-            .and_then(Enforcement::parse)
+            .and_then(LaneEnforcement::parse)
             .ok_or_else(|| at("`enforcement` must be `hard`, `soft` or `tracked`"))?;
         let est_secs = l
             .get("est_secs")
@@ -979,7 +987,7 @@ pub async fn run(args: &[String]) -> i32 {
         return 4;
     }
     let hard_red = lanes.iter().zip(rows.iter()).any(|(l, j)| {
-        l.enforcement == Enforcement::Hard && j.verdict() != kernel_types::Verdict::Passed
+        l.enforcement == LaneEnforcement::Hard && j.verdict() != kernel_types::Verdict::Passed
     });
     i32::from(hard_red)
 }
@@ -1091,7 +1099,7 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
         let lanes = parse_lane_table(TABLE).expect("parses");
         assert_eq!(lanes.len(), 1);
         assert_eq!(lanes[0].id, "chat-ask");
-        assert_eq!(lanes[0].enforcement, Enforcement::Hard);
+        assert_eq!(lanes[0].enforcement, LaneEnforcement::Hard);
         assert_eq!(lanes[0].kind, LaneKind::Judged);
         assert_eq!(
             lanes[0].preconditions,

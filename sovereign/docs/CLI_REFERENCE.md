@@ -806,6 +806,30 @@ One read-only table: artifact age + verdict for every posture-bearing quality su
 
 Added 2026-07-30 because the per-subsystem posture tools only answer when asked, and in practice none were: the drift and arch reports had both been weeks stale with nothing anywhere aggregating that fact. This verb is the aggregation — the one place a neglected corner shows up on its own.
 
+### `svrn quality`
+
+The curated breakage check — the lean tier `./scripts/sovereign-ci-bench.sh --quick` was in name only. `posture` above reads artifacts other commands wrote; this one RUNS the lanes and writes the table.
+
+```
+svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint] [--lane-table PATH]
+svrn quality lane <id>
+```
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `--lane` | Run only this lane (repeatable). An unknown id is refused and the declared lanes are named — never ignored, and never silently widened to the whole suite | every declared lane |
+| `--budget-secs` | Total wall budget. A lane with under 60 s of runway is could-not-judge, not a pass (the rule ci-bench's `run_lane` already used) | 1800 |
+| `--mint` | Permit a lane to write a baseline for this stack fingerprint. Without it a first run against a new stack writes NONE | off |
+| `--lane-table` | Read a different lane table | `quality/check-lanes.toml` |
+
+Lanes are DATA in `quality/check-lanes.toml` — id, kind, enforcement, est_secs, argv, preconditions, baseline dir, bank. Each runs as a subprocess and states its own verdict on its LAST stdout line, as a `kernel_types::Judgement` (`{"subject","verdict","reason","as_of"}`); a lane that prints no such line is **never-ran**, with the exit code as the reason. Preconditions are a closed set — `port-listening:<port>`, `slot-decodes:<slot>` (a real one-token decode, not `/v1/models`'s self-reported `loaded`), `corpus-installed:<id>`, `binary:<name>` — and an unmet one is could-not-judge NAMING it, never a pass.
+
+Every run prints the stack fingerprint first (primary / fast / embed model stems, smoke subset ids, each lane bank's hash) and then how many lanes have a comparable baseline for it, and writes `target/quality-check/<stamp>/summary.json` with per-lane seconds beside each lane's captured stdout and stderr. Exit 1 when any HARD lane is not passed; exit 4 when nothing ran at all.
+
+`quality lane <id>` runs one lane directly, printing its own named rows — the same command the runner drives per lane. The lanes live in the `sovereign-cli-llm` sibling because each drives inference, ingests a corpus or runs a judge; the runner itself touches no model. `--features dev-tools`.
+
+**`chat-ask`** is the focus lane: it ingests `docs/ARCHITECTURE_TOUR.md` from source into a per-fingerprint corpus (that ingest IS the document-ingest lane — chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads each turn's own ledger through `chat ask --format json`. Rows: ingest · judge calibrated · ledger present · route · per-stage ceilings · per-stage baseline · gate outcome · both halves answered · not abstained · useful. Ceilings are pre-registered per model stem in `sovereign/bench/quality-check/chat-ask.toml`, and a stem with no table there is could-not-judge rather than a pass.
+
 ### `svrn deep-research`
 
 The thin local-only research loop (T1): ask a question, and the loop runs gated rounds over your local estate corpora plus web search — every search and fetch flows through one run-scoped, fail-closed budget decider, fetched pages are custody-stamped by code (public-web), and each round's draft is gap-audited (four verdicts: passed / failed / could-not-judge / never-ran) with the audit's gaps driving the next round's queries. The final report carries verdict stamps and `[Source: …]` citation handles per claim; invented citations are structurally impossible because the draft's URL allow-list is set by the loop.
