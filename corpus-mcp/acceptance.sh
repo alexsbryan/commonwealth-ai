@@ -693,6 +693,12 @@ done
 # anything — the thing it exists to prove.
 PULL_ROOT="${PULL_ROOT:-$repo/test-artifacts/ei6-pull-root}"
 PULL_CORPUS="${PULL_CORPUS:-$CORPUS}"
+# Minutes `serve` will wait for the pull before refusing. Empty = the binary's
+# own default (30). The probe run sets it low deliberately, so that a snapshot
+# discarded into a rebuild is stopped by corpus-mcp's OWN refusal rather than
+# by whatever cap the run was launched under — the difference between testing
+# the fix and testing the cgroup.
+PULL_DEADLINE_MINS="${PULL_DEADLINE_MINS:-}"
 if [[ -z "${ACCEPT_PULL:-}" ]]; then
   echo "acceptance: pull-if-absent -> NEVER-RAN (opt-in; ~875 MB of egress). To run it:"
   echo "acceptance:   ACCEPT_PULL=1 $0"
@@ -704,10 +710,6 @@ else
   # root from the env var, so the flag alone would put the two halves of one
   # corpus in two roots. `corpus ingest` refuses that disagreement by name; here
   # we simply set the thing both halves read.
-  { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
-    echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-    printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_search","arguments":{"query":"%s","corpus":"%s"}}}\n' "$QUERY" "$PULL_CORPUS"
-    echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
   # The serve's stderr goes BESIDE THE ROOT and not into $work, which the EXIT
   # trap deletes. Run 20260905T181423Z was killed 93 minutes into this leg and
   # left no diagnostic at all: the one line naming what the pull had decided to
@@ -715,10 +717,23 @@ else
   # from file mtimes. A leg whose evidence does not survive the leg is not
   # instrumented (ARCH §9). This is the longest and least predictable step in
   # the script; it is the last one whose output should be disposable.
+  #
+  # These three are set OUTSIDE the brace group below on purpose. Set inside
+  # it they would live in the pipeline's left-hand SUBSHELL, invisible to the
+  # command on the right — and the `echo` would be fed to corpus-mcp as a
+  # malformed JSON-RPC line. Caught here rather than in a run; it is the same
+  # shape as the `${VAR:+…}` prefix bug that ate leg 2 at run 20260905T181053Z.
   pull_err="${PULL_ROOT%/}.pull.err"
   echo "acceptance: pull-if-absent -> serve stderr streaming to $pull_err (survives a kill)"
+  deadline_flag=()
+  [[ -n "$PULL_DEADLINE_MINS" ]] && deadline_flag=(--pull-deadline-mins "$PULL_DEADLINE_MINS")
+  { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
+    echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_search","arguments":{"query":"%s","corpus":"%s"}}}\n' "$QUERY" "$PULL_CORPUS"
+    echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
   } | SOVEREIGN_DATA_DIR="$PULL_ROOT" "$CORPUS_MCP" serve \
         --base-url "http://127.0.0.1:$PORT/v1" --corpus "$PULL_CORPUS" \
+        "${deadline_flag[@]}" \
         >"$work/pull.jsonl" 2>"$pull_err" \
     || { cat "$pull_err" >&2; fail "serve on a cold root exited non-zero"; }
   grep -q 'is not installed — pulling the prebuilt snapshot' "$pull_err" \

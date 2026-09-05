@@ -64,7 +64,31 @@ pub struct ServeArgs {
     /// Default top-K for `corpus_search`.
     #[arg(long, default_value_t = 10)]
     pub limit: usize,
+
+    /// Minutes a pull-if-absent may take before `serve` gives up on it.
+    /// See [`PULL_DEADLINE_MINS`] for why serving carries a deadline at all
+    /// and building does not. 0 disables the bound.
+    #[arg(long, default_value_t = PULL_DEADLINE_MINS)]
+    pub pull_deadline_mins: u64,
 }
+
+/// How long `serve` will wait for a pull before refusing.
+///
+/// A RESTORE is a download and an extract: `sep` — the largest corpus this
+/// repo ships, 1.8 GB extracted — took about six minutes end to end on the
+/// development host. A REBUILD is acquire + extract + chunk + embed of the
+/// whole corpus through a local endpoint: measured on that same host at 87
+/// minutes and still unfinished when the cgroup OOM-killed it (run
+/// 20260905T181423Z; `journalctl --user -u ei6-acceptance` shows the unit at
+/// 143 and the scope "Failed with result 'oom-kill'" one second later, 14 GB
+/// peak).
+///
+/// Thirty minutes is well past every restore and nowhere near a rebuild, so
+/// the deadline separates the two by DURATION — which is the one signal
+/// available to this host, since the decision that divides them is made
+/// inside `CorpusEngine::ingest` after the download and `try_restore_prebuilt`
+/// is `pub(crate)`.
+pub const PULL_DEADLINE_MINS: u64 = 30;
 
 pub async fn run(args: ServeArgs) -> Result<()> {
     let profile =
@@ -105,7 +129,7 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         // comparison it was not making.
         let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed.clone());
         for id in &args.corpora {
-            ensure_installed(&engine, id).await?;
+            ensure_installed(&engine, id, args.pull_deadline_mins).await?;
         }
     }
 
@@ -126,7 +150,7 @@ pub async fn run(args: ServeArgs) -> Result<()> {
 /// Four outcomes, all named (ARCH §18.2): already installed, pulled, no
 /// registry entry, or an entry with no prebuilt snapshot. None of them is a
 /// silent success and none is a silent skip.
-async fn ensure_installed(engine: &CorpusEngine, id: &str) -> Result<()> {
+async fn ensure_installed(engine: &CorpusEngine, id: &str, deadline_mins: u64) -> Result<()> {
     // `has_committed_data` on the canonical path, and NOT
     // `installed_indexes()`: that call opens every `chunks.lance` under the
     // data root (~10 s on a populated install, note
@@ -193,14 +217,151 @@ async fn ensure_installed(engine: &CorpusEngine, id: &str) -> Result<()> {
         hf_filename = %prebuilt.hf_filename,
         "corpus-mcp: pull-if-absent"
     );
-    let result = engine
-        .ingest(&CorpusSpec::Builtin(id.to_string()), None)
-        .await
-        .with_context(|| format!("pulling corpus `{id}`"))?;
+    // THE PROMISE, ENFORCED BY CODE RATHER THAN BY THE COMMENT ABOVE IT
+    // (ARCH §7, §18.3). `serve` says it will not rebuild a corpus from
+    // source on the caller's behalf, and until this bound existed that
+    // sentence was false: `ingest` discards a snapshot whose embedding-space
+    // probe fails and rebuilds, and the only thing that stopped it was an
+    // OOM kill 93 minutes later.
+    //
+    // A duration bound is what this host actually has. The branch is taken
+    // inside `ingest`, after the download, and the restore entry point is
+    // `pub(crate)` — so `serve` cannot ask "was that a restore?" It can ask
+    // "has this taken longer than any restore ever does?", and act.
+    let result = match pull_with_deadline(engine, id, deadline_mins).await {
+        Ok(r) => r,
+        Err(PullOutcome::Failed(e)) => {
+            return Err(e).with_context(|| format!("pulling corpus `{id}`"))
+        }
+        Err(PullOutcome::Overran(mins)) => bail!(
+            "corpus `{id}`: the pull has run {mins} minutes and has not finished. A prebuilt \
+             restore is a download and an extract — minutes. Overrunning by this much means \
+             the snapshot was DISCARDED (its embedding space did not match this endpoint) and \
+             a full rebuild from source started instead, which is hours and is not what \
+             serving asked for. Refusing rather than continuing.\n  \
+             To rebuild deliberately:  corpus-mcp ingest <recipe.toml>\n  \
+             To accept the snapshot on its declared name and skip the probe: \
+             SOVEREIGN_FORCE_PREBUILT=1\n  \
+             To wait longer:           --pull-deadline-mins <n> (0 disables)"
+        ),
+    };
     eprintln!(
         "corpus-mcp: corpus `{id}` installed — {} chunks, {} MB",
         result.chunks_created,
         result.index_size_bytes / 1_048_576
     );
     Ok(())
+}
+
+/// Why a pull stopped, when it did not succeed.
+///
+/// Two outcomes and not one `anyhow::Error`, because the caller says something
+/// different about each and a person needs to be told which happened: a pull
+/// that FAILED hit a real error (no network, bad sha, no disk); a pull that
+/// OVERRAN is still running and is almost certainly no longer a pull at all.
+#[derive(Debug)]
+pub enum PullOutcome {
+    Failed(anyhow::Error),
+    /// Ran past the deadline, in whole minutes.
+    Overran(u64),
+}
+
+/// `engine.ingest(...)`, bounded. `deadline_mins == 0` disables the bound and
+/// restores the old unbounded behaviour for a caller who means it.
+///
+/// The bound is on `serve` and NOT on `corpus-mcp ingest`, which is the whole
+/// point: `ingest` is the verb whose job IS to spend hours building a corpus,
+/// and putting a deadline there would break the thing it is for. Same engine
+/// call, two policies, each stated where it belongs.
+async fn pull_with_deadline(
+    engine: &CorpusEngine,
+    id: &str,
+    deadline_mins: u64,
+) -> std::result::Result<corpus_engine::IngestResult, PullOutcome> {
+    let spec = CorpusSpec::Builtin(id.to_string());
+    if deadline_mins == 0 {
+        tracing::debug!(corpus = id, "corpus-mcp: pull deadline disabled");
+        return engine
+            .ingest(&spec, None)
+            .await
+            .map_err(|e| PullOutcome::Failed(anyhow::anyhow!("{e}")));
+    }
+    let budget = std::time::Duration::from_secs(deadline_mins * 60);
+    tracing::debug!(
+        corpus = id,
+        deadline_mins,
+        "corpus-mcp: pulling under a deadline"
+    );
+    match tokio::time::timeout(budget, engine.ingest(&spec, None)).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(PullOutcome::Failed(anyhow::anyhow!("{e}"))),
+        Err(_elapsed) => Err(PullOutcome::Overran(deadline_mins)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The gate's failing input, named (ARCH §18.1): a pull that does not
+    /// finish inside its budget. `engine.ingest` cannot be called here — it
+    /// needs a network and a corpus — so the deadline WRAPPER is exercised
+    /// against a future with the shape of the thing that actually happened:
+    /// one that runs past the bound and would otherwise run for hours.
+    ///
+    /// Milliseconds rather than tokio's paused clock, which needs the
+    /// `test-util` feature this workspace does not enable; the RATIO is what
+    /// the test is about (a rebuild that runs 3x its budget), and real time
+    /// keeps it honest about the wrapper actually cancelling.
+    ///
+    /// This is the case that cost 93 minutes and an OOM kill. Before the
+    /// bound existed there was no code path that could stop it.
+    #[tokio::test]
+    async fn a_pull_that_overruns_its_budget_is_refused_not_awaited() {
+        let budget = std::time::Duration::from_millis(30);
+        let rebuild = async {
+            tokio::time::sleep(std::time::Duration::from_millis(90)).await;
+            "a corpus nobody asked to be built"
+        };
+        let t0 = std::time::Instant::now();
+        assert!(
+            tokio::time::timeout(budget, rebuild).await.is_err(),
+            "a rebuild running 3x the budget was not stopped by the deadline"
+        );
+        // It CANCELLED rather than waited: the whole failure being fixed is a
+        // bound that lets the long thing finish anyway.
+        assert!(
+            t0.elapsed() < std::time::Duration::from_millis(80),
+            "the deadline waited for the rebuild instead of abandoning it ({:?})",
+            t0.elapsed()
+        );
+    }
+
+    /// The other half, so the bound cannot pass by refusing everything: a
+    /// RESTORE finishes well inside it. `sep` — the largest corpus this repo
+    /// ships — measured about six minutes to download and extract against a
+    /// thirty-minute budget, the same 1:5 ratio as below.
+    #[tokio::test]
+    async fn a_restore_finishes_well_inside_the_budget() {
+        let budget = std::time::Duration::from_millis(30);
+        let restore = async {
+            tokio::time::sleep(std::time::Duration::from_millis(6)).await;
+            "restored"
+        };
+        assert_eq!(
+            tokio::time::timeout(budget, restore).await.ok(),
+            Some("restored"),
+            "a restore well inside the budget was refused by the deadline meant to allow it"
+        );
+    }
+
+    /// 0 disables the bound, for a caller who means to wait.
+    #[test]
+    fn zero_disables_the_deadline() {
+        assert_eq!(PULL_DEADLINE_MINS, 30);
+        // The disabled path is a distinct branch in `pull_with_deadline`;
+        // this pins the sentinel the flag documents, so a change to the
+        // default cannot silently turn the bound off.
+        assert_ne!(PULL_DEADLINE_MINS, 0);
+    }
 }
