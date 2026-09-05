@@ -24,10 +24,24 @@
 //! 3. **Per crate, not per workspace.** Growth is attributable; one crate's
 //!    diet cannot pay for another's expansion.
 //!
+//! SCRIPT DIRECTORIES COUNT TOO, since 2026-09-04. The workspace runs about
+//! +622k / −179k over 90 days and this gate could only see the Rust half of
+//! it — so a campaign that deleted 107 lines of shell in one day registered on
+//! nothing. `scripts/` and the desktop's e2e script tree are now keys of their
+//! own over `.sh`/`.py`/`.mjs`/`.ts`, with the same comments-and-blanks-excluded
+//! rule and the same shrink-only ceiling.
+//!
+//! They are ONE key each, with no `::tests` half: for a directory of harnesses
+//! the whole directory is tooling, and a "production vs test" split there would
+//! be a distinction the gate invents rather than one the tree makes.
+//!
 //! What it does NOT claim: lines are a proxy. The quantity that matters is how
 //! many distinct things a reader must hold, and `concept-gate` is the ratchet
 //! for that. A rising concept count is the more serious signal; this is the
-//! cheap daily one.
+//! cheap daily one. And the Python approximation is stated rather than hidden:
+//! a `"""docstring"""` counts as code, because tracking string state across a
+//! whole file to save a few lines would make the counter the thing most likely
+//! to be wrong.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -36,6 +50,17 @@ use crate::common;
 
 /// Suffix marking the test half of a crate's key.
 const TEST_SUFFIX: &str = "::tests";
+
+/// Script trees measured as keys of their own. Repo-relative, so the key a
+/// failure prints is the path a reader chases — the same contract the crate
+/// keys keep.
+const SCRIPT_DIRS: [&str; 2] = [
+    "scripts",
+    "sovereign/crates/sovereign-desktop/tests/e2e/scripts",
+];
+
+/// Extensions counted inside a [`SCRIPT_DIRS`] tree.
+const SCRIPT_EXTS: [&str; 4] = ["sh", "py", "mjs", "ts"];
 
 pub fn run(args: &[String]) -> i32 {
     // `--root <path>`: measure a DIFFERENT checkout. This is what makes the
@@ -60,7 +85,7 @@ pub fn run(args: &[String]) -> i32 {
         .map(|w| w[1].clone())
         .collect();
     let baseline_path = common::baselines_dir(&root).join("lines.tsv");
-    let what = "code lines per crate — comments and blanks excluded, \
+    let what = "code lines per crate and per script tree — comments and blanks excluded, \
                 `<crate>::tests` counted separately (may only shrink)";
 
     let scope = match common::SourceTree::discover(&root) {
@@ -108,8 +133,9 @@ pub fn run(args: &[String]) -> i32 {
         for key in &accept {
             let Some(&now) = current.get(key.as_str()) else {
                 eprintln!(
-                    "error: --accept {key}: no such crate key. Keys are repo-relative crate \
-                     directories as printed by this gate (add `{TEST_SUFFIX}` for the test half)."
+                    "error: --accept {key}: no such key. Keys are repo-relative crate \
+                     directories, or one of the script trees {SCRIPT_DIRS:?}, exactly as \
+                     printed by this gate (add `{TEST_SUFFIX}` for a crate's test half)."
                 );
                 return 1;
             };
@@ -231,9 +257,16 @@ fn verify(current: &BTreeMap<String, usize>, baseline: &BTreeMap<String, usize>)
     }
 }
 
-/// `<crate>` → code lines, `<crate>::tests` → test lines.
+/// `<crate>` → code lines, `<crate>::tests` → test lines, plus one key per
+/// [`SCRIPT_DIRS`] tree.
 fn measure(root: &Path, scope: &common::SourceTree) -> BTreeMap<String, usize> {
     let mut out: BTreeMap<String, usize> = BTreeMap::new();
+    for dir in SCRIPT_DIRS {
+        let n = measure_scripts(&root.join(dir), scope, root);
+        if n > 0 {
+            out.insert(dir.to_string(), n);
+        }
+    }
     let mut files: Vec<PathBuf> = Vec::new();
     collect_rs(root, root, scope, &mut files);
     for path in files {
@@ -253,6 +286,57 @@ fn measure(root: &Path, scope: &common::SourceTree) -> BTreeMap<String, usize> {
         }
     }
     out
+}
+
+/// Code lines under one script tree. A missing tree contributes 0 and the key
+/// is then absent from the map entirely — which `--tighten` reads as "cleared"
+/// rather than as a ceiling of zero nothing can ever meet.
+fn measure_scripts(dir: &Path, scope: &common::SourceTree, root: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut total = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if !scope.excludes_dir(&common::rel_path(&path, root)) {
+                total += measure_scripts(&path, scope, root);
+            }
+            continue;
+        }
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        if !SCRIPT_EXTS.contains(&ext) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        total += count_script(&text, ext);
+    }
+    total
+}
+
+/// Blank lines and comment-only lines are worth zero here too. `#` for
+/// sh/py (a shebang included — it is a line the reader does not read), `//`
+/// and `/* … */` for mjs/ts.
+fn count_script(text: &str, ext: &str) -> usize {
+    let hash = ext == "sh" || ext == "py";
+    let mut code = 0usize;
+    let mut in_block = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if hash {
+            if t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            code += 1;
+        } else if !is_noise(t, &mut in_block) {
+            code += 1;
+        }
+    }
+    code
 }
 
 /// `<crate-dir>/tests/…` and `<crate-dir>/benches/…` are test mass whole.
@@ -365,6 +449,42 @@ mod tests {
         assert!(in_test_tree("a/tests/main.rs", "a"));
         assert!(in_test_tree("a/benches/b.rs", "a"));
         assert!(!in_test_tree("a/src/lib.rs", "a"));
+    }
+
+    /// Both comment styles, and the Python approximation the module doc
+    /// states: a docstring counts as code.
+    #[test]
+    fn script_comments_and_blanks_are_not_code() {
+        assert_eq!(
+            count_script("#!/bin/sh\n\n# a note\nset -e\necho hi\n", "sh"),
+            2
+        );
+        assert_eq!(count_script("# c\nimport os\n\nx = 1\n", "py"), 2);
+        assert_eq!(
+            count_script(
+                "// c\nconst a = 1;\n/* block\n   still */\nconst b = 2;\n",
+                "mjs"
+            ),
+            2
+        );
+        // Stated, not hidden: the docstring is code to this counter.
+        assert_eq!(
+            count_script("def f():\n    \"\"\"doc\"\"\"\n    return 1\n", "py"),
+            3
+        );
+    }
+
+    /// The two trees are keys, and only the four declared extensions count —
+    /// a `.md` or a `.json` beside a harness is not shell.
+    #[test]
+    fn only_the_declared_script_extensions_count() {
+        for ext in ["sh", "py", "mjs", "ts"] {
+            assert!(SCRIPT_EXTS.contains(&ext), "{ext}");
+        }
+        for ext in ["md", "json", "toml", "rs"] {
+            assert!(!SCRIPT_EXTS.contains(&ext), "{ext}");
+        }
+        assert_eq!(SCRIPT_DIRS.len(), 2);
     }
 
     #[test]

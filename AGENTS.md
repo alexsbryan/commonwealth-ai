@@ -336,10 +336,11 @@ carried a size term, and the workspace runs about +622k / -179k over 90 days
 (`quality/DELETION.md`) — 29 lines deleted per 100 added.
 
 - `cargo xtask size-gate` — code lines per crate, comments and blanks
-  excluded, `<crate>::tests` counted apart with its own ceiling. Raise ONE
-  crate with `size-gate --accept <crate>` and say in the commit what the
-  lines bought; `--update-baseline` on a working tree is the absorb-everyone
-  trap above, and `--root <path>` is there so the re-pin recipe works.
+  excluded, `<crate>::tests` counted apart, plus a key each for `scripts/` and
+  the desktop e2e script tree (`.sh/.py/.mjs/.ts`). Raise ONE key with
+  `size-gate --accept <key>` and say in the commit what the lines bought;
+  `--update-baseline` on a working tree is the absorb-everyone trap above, and
+  `--root <path>` is there so the re-pin recipe works.
 - `scripts/deletion-manifest.py --verify` — the deletion campaign's own
   ratchet, which was written but never wired to anything and had lost about
   155k lines to two growing lanes before this.

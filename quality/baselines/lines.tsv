@@ -1,4 +1,4 @@
-# size-gate baseline — code lines per crate — comments and blanks excluded, `<crate>::tests` counted separately (may only shrink).
+# size-gate baseline — code lines per crate and per script tree — comments and blanks excluded, `<crate>::tests` counted separately (may only shrink).
 # MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
@@ -55,6 +55,7 @@
 173	oplog::tests
 255	quality/arch-layers
 313	quality/arch-layers::tests
+36113	scripts
 356	serving-policy
 418	serving-policy::tests
 1611	sovereign-mobile/src-tauri
@@ -97,6 +98,7 @@
 41428	sovereign/crates/sovereign-core::tests
 18702	sovereign/crates/sovereign-desktop/src-tauri
 4997	sovereign/crates/sovereign-desktop/src-tauri::tests
+9235	sovereign/crates/sovereign-desktop/tests/e2e/scripts
 6383	sovereign/crates/sovereign-enrichment-build
 1157	sovereign/crates/sovereign-enrichment-build::tests
 243	sovereign/crates/sovereign-enrichment-catalog
