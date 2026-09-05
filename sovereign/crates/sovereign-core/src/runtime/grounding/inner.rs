@@ -227,12 +227,17 @@ pub(crate) async fn gate_answer_inner(
         // working as designed — and the fix is a row, not a smaller residual.
         let citation_started = std::time::Instant::now();
         let citation_outcome = citation::citation_grounded_answer(
-            &**inference,
+            inference,
             question,
             chunks,
             locators,
             targets,
             crate::slot_policy::posture_of(base_request),
+            // The AUDIT PASS's own threshold. The citation stage judges support
+            // with the gate's calibrated probe and compares it in the audit's
+            // terms (`violation_prob = 1 - support`), so there is one threshold
+            // for "is this claim supported", not a second one here (§10.6).
+            tau,
         )
         .await;
         crate::runtime::stage_ledger::Stage::new(
@@ -240,9 +245,20 @@ pub(crate) async fn gate_answer_inner(
             sovereign_contracts::types::StackOwner::Incumbent,
         )
         .cause(sovereign_contracts::types::StageCause::EveryTurn)
+        // ONE extraction call. The stage also spends one calibrated support
+        // probe per PART, and those are counted where they belong — under
+        // `chunk_judge` in `gate_call_n`, the same mechanism the audit pass's
+        // per-claim loop reports. Restating them here would be a second count
+        // of one quantity (§10.6); the census is the one that can tell the
+        // two registers apart, which is what it exists for.
         .calls(1)
         .record(citation_started.elapsed().as_millis() as u64);
-        if let citation::CitationOutcome::Grounded { answer, quotes } = citation_outcome {
+        if let citation::CitationOutcome::Grounded {
+            answer,
+            quotes,
+            evidence_window_dropped,
+        } = citation_outcome
+        {
             let quote_chars: usize = quotes.iter().map(|q| q.text.len()).sum();
             let located = quotes.iter().filter(|q| q.locator.is_some()).count();
             // The released passages as STRUCTURED rows, so a reading surface
@@ -476,6 +492,12 @@ pub(crate) async fn gate_answer_inner(
                     // only across chunks all release with no locator by design
                     // (see `gate_evidence_locators`).
                     "located": located,
+                    // Chunks the citation stage's passage budget dropped. A
+                    // release composed over a truncated window is reported as
+                    // such, because a part's absence over evidence nobody saw
+                    // is could-not-judge and never "the passages do not
+                    // answer" (§18.3, and `citation::PASSAGE_CHAR_BUDGET`).
+                    "evidence_window_dropped": evidence_window_dropped,
                     // The openable passages, in release order. Rides the meta
                     // blob because the epistemic assembler already receives it
                     // — no new parameter through the handler chain for data

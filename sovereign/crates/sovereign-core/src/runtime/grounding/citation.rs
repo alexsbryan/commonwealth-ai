@@ -30,6 +30,7 @@ use crate::oicp::ShardingPrivacy;
 use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CitationTarget, CompletionRequest, Speed};
+use std::sync::Arc;
 
 use super::call_census::gate_call;
 use super::config::dbg;
@@ -45,7 +46,9 @@ use self::quote_match::{
 /// truncation — that truncation was itself a measured cause of missed answers
 /// (the gold token sat at offset ~1900 of a ~2000-char chunk); whole trailing
 /// chunks are dropped if the joined set exceeds this. ~28k chars ≈ 7k tokens,
-/// inside the 32k-context primary with room for the question + output.
+/// inside the 32k-context primary with room for the question + output. A drop
+/// is REPORTED, never silent (§18.3): an absence declared over a truncated
+/// window is could-not-judge, not "the passages do not answer".
 const PASSAGE_CHAR_BUDGET: usize = 28_000;
 
 /// Minimum verbatim word-run accepted as a real quote when the full normalised
@@ -108,6 +111,8 @@ pub enum CitationOutcome {
     Grounded {
         answer: String,
         quotes: Vec<GroundedQuote>,
+        /// Chunks [`PASSAGE_CHAR_BUDGET`] kept out of the window.
+        evidence_window_dropped: usize,
     },
     /// The model found no passage to quote (or quoted one not in the
     /// passages) — honest abstention.
@@ -121,14 +126,15 @@ pub enum CitationOutcome {
 /// Ask the model to quote the supporting sentence and answer from it, then
 /// verify the quote is verbatim in the passages. See module docs.
 pub async fn citation_grounded_answer(
-    inference: &dyn InferenceProvider,
+    inference: &Arc<dyn InferenceProvider>,
     question: &str,
     chunks: &[String],
     locators: &[Option<String>],
     targets: &[Option<CitationTarget>],
     posture: ShardingPrivacy,
+    tau: f64,
 ) -> CitationOutcome {
-    let passages = build_passages(chunks);
+    let (passages, evidence_window_dropped) = build_passages(chunks);
     if passages.is_empty() {
         return CitationOutcome::Abstain;
     }
@@ -191,7 +197,7 @@ pub async fn citation_grounded_answer(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    let resp = match gate_call(inference, &req, GateCallMechanism::Citation).await {
+    let resp = match gate_call(&**inference, &req, GateCallMechanism::Citation).await {
         Ok(r) => r.text,
         Err(e) => {
             dbg(&format!(
@@ -211,6 +217,7 @@ pub async fn citation_grounded_answer(
             "question": &q,
             "multiquote": multiquote,
             "n_chunks": chunks.len(),
+            "evidence_window_dropped": evidence_window_dropped,
             "passage_chars": passages.chars().count(),
             "passages": &passages,
             "reply": &resp,
@@ -223,7 +230,17 @@ pub async fn citation_grounded_answer(
     if multiquote {
         let parts = parse_parts(&resp);
         if !parts.is_empty() {
-            return multiquote_outcome(&parts, chunks, locators, targets);
+            return multiquote_outcome(
+                inference,
+                &parts,
+                chunks,
+                locators,
+                targets,
+                posture,
+                tau,
+                evidence_window_dropped,
+            )
+            .await;
         }
         dbg("citation: multiquote — reply carried no PART block, using single-pair parse");
     }
@@ -247,7 +264,7 @@ pub async fn citation_grounded_answer(
     // mid-token — append that run, copying only from the source (quote-first for
     // the answer, chunks for the quote). Skips the NONE sentinels — an
     // abstention has nothing to complete.
-    match verify_pair(None, &quote, &answer, chunks) {
+    match verify_pair(inference, None, &quote, &answer, chunks, posture, tau).await {
         Ok((quote, answer, chunk)) => CitationOutcome::Grounded {
             answer,
             quotes: vec![GroundedQuote {
@@ -255,6 +272,7 @@ pub async fn citation_grounded_answer(
                 locator: locator_at(locators, chunk),
                 target: target_at(targets, chunk),
             }],
+            evidence_window_dropped,
         },
         Err(_) => CitationOutcome::Abstain,
     }
@@ -289,12 +307,10 @@ fn target_at(targets: &[Option<CitationTarget>], chunk: Option<usize>) -> Option
     targets.get(chunk?)?.clone()
 }
 
-/// Why a `(quote, answer)` pair did not ground. The three are NOT
-/// interchangeable and the release text depends on telling them apart: two of
-/// them are evidence that the passages do not answer the part, and one is only
-/// evidence that WE could not confirm it (ARCH_PRINCIPLES §18.2 — four
-/// verdicts, not two; §18.3 — absence is reported, never defaulted, and never
-/// invented).
+/// Why a `(quote, answer)` pair did not ground. The four are NOT
+/// interchangeable and the release depends on telling them apart: three are
+/// evidence about the window the model was shown, one is the absence of a
+/// verdict (§18.2 — four verdicts, not two; §18.3 — absence is reported).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PairRefusal {
     /// The model answered `NONE` — it read the passages and reported an
@@ -303,28 +319,36 @@ pub(super) enum PairRefusal {
     /// The quote is nowhere in the passages. The model had no supporting text
     /// to copy, which is itself evidence the passages do not carry the answer.
     QuoteNotFound,
-    /// The quote IS verbatim in the passages and the model answered from it,
-    /// but `answer_supported_by_quote` could not confirm the answer against
-    /// it. This says nothing whatever about the corpus — see
-    /// `multiquote_outcome`.
+    /// The quote is verbatim and the pair was refused anyway: the exact-value
+    /// veto, or the calibrated probe past `tau`. A verdict ABOUT this evidence,
+    /// which is why it may now be NAMED (7a8a2e97, a4f8f2a95).
     Unsupported,
+    /// No verdict exists: the probe did not answer. Falls through — the gate
+    /// is a quality lever, not an availability risk.
+    CouldNotJudge,
 }
 
 /// Repair and then verify ONE `(quote, answer)` pair against the passages.
-/// `Ok` iff the quote is verbatim in the chunks AND the answer is supported by
-/// that quote — i.e. this is *the* grounding decision, and both the
-/// single-sentence and the multi-quote contract call it, so a part of a compound
-/// answer is held to exactly the same bar as a whole one (ARCH_PRINCIPLES §10.6:
-/// one decider, one name). `part` labels the glassbox line when the caller is
-/// grounding several parts; `None` on the single-quote path keeps that output
-/// byte-identical to what it has always emitted.
-fn verify_pair(
+/// `Ok` iff the quote is verbatim in the chunks AND the evidence supports the
+/// answer — i.e. this is *the* grounding decision, and both the single-sentence
+/// and the multi-quote contract call it, so a part of a compound answer is held
+/// to exactly the same bar as a whole one (ARCH_PRINCIPLES §10.6: one decider,
+/// one name). `part` labels the glassbox line when the caller is grounding
+/// several parts.
+///
+/// `tau` is the AUDIT PASS's own threshold (`GroundingProfile::tau`,
+/// `config.rs:609`, from `grounding_gate_threshold`, `config.rs:56`), applied
+/// in its own terms — `violation_prob = 1 - support`, released iff
+/// `violation_prob < tau`. No second threshold here (§10.6).
+async fn verify_pair(
+    inference: &Arc<dyn InferenceProvider>,
     part: Option<&str>,
     quote: &str,
     answer: &str,
     chunks: &[String],
+    posture: ShardingPrivacy,
+    tau: f64,
 ) -> Result<(String, String, Option<usize>), PairRefusal> {
-    let label = part.map(|p| format!("[part {p}] ")).unwrap_or_default();
     let (quote, answer) = (quote.to_string(), answer.to_string());
     let sentinel = is_none(&quote) || is_none(&answer);
     let quote = match (!sentinel)
@@ -403,59 +427,59 @@ fn verify_pair(
     // (b) actually SUPPORT the answer — the model can copy a real-but-
     // insufficient sentence and still confabulate the value (measured: quoted an
     // embassy sentence, answered "Russian embassy" — a country the text
-    // withholds). Glassbox via tracing (a detached daemon's eprintln is lost —
-    // only the tracing subscriber reaches daemon.err and the desktop panel).
+    // withholds).
     let none = is_none(&quote) || is_none(&answer);
     let found = (!none)
         .then(|| locate_quote_in_chunks(&quote, chunks))
         .flatten();
     let quote_present = found.is_some();
-    // Support is checked against the quote FIRST, then widened to the chunk
-    // the quote matched in. Quote-local-only was a measured false-demotion
-    // surface (2026-08-10, chaos-saltgrass present-stolen-object, 4
-    // consecutive runs): the draft answered "The Lyle-Hannett chronometer"
-    // and quoted the adjacent sentence "…the chronometer was gone…" — the
-    // maker's name sits one sentence earlier IN THE SAME CHUNK, verbatim,
-    // yet the part was dropped and released as "The passages do not
-    // answer: …", replacing a correct draft with a wrong verdict. Widening
-    // to the MATCHED CHUNK keeps the anti-confabulation guard intact: the
-    // embassy case this check was built on (quoted an embassy sentence,
-    // answered "Russian embassy" — a country the text withholds) still
-    // fails, because the value is absent from the whole chunk, not just
-    // the quote. Same repair family as
-    // `verify_answer_against_turn_evidence` (the 600-char split): verify
-    // against what the evidence holds, not against the narrower rendering.
-    // `AcrossChunks` matches keep the quote-local rule — there is no
-    // single chunk to widen into.
-    let answer_in_quote = quote_present && answer_supported_by_quote(&answer, &quote);
-    let answer_in_matched_chunk = !answer_in_quote
-        && match &found {
-            Some(QuoteMatch::Exact { chunk, .. }) | Some(QuoteMatch::Partial { chunk }) => chunks
-                .get(*chunk)
-                .map(|c| answer_supported_by_quote(&answer, c))
-                .unwrap_or(false),
-            _ => false,
-        };
-    let supported = answer_in_quote || answer_in_matched_chunk;
-    dbg(&format!(
-        "citation: {label}quote={:?} answer={:?} | present={} match={} answer_in_quote={} answer_in_matched_chunk={} → {}",
-        quote.chars().take(100).collect::<String>(),
-        answer.chars().take(50).collect::<String>(),
+    let evidence = evidence_for(&found, &quote, chunks);
+    // The exact-value VETO (§7.6) first: it may REFUSE, never APPROVE.
+    let veto = (!none && quote_present)
+        .then(|| numeric_veto(&answer, &quote, evidence))
+        .flatten();
+    // The support DECIDER: the gate's OWN calibrated probe, the register
+    // `verify_grounding`'s per-claim loop runs — no second, weaker decider for
+    // a question the gate already decides (§10.6), open text judged by a judge
+    // and not a keyword conjunction (§2.4). Measured on the primary 2026-09-04:
+    // #57 paraphrase 0.9993, embassy 0.0043. `None` is judge failure —
+    // could-not-judge, never absence (§18.2, §18.3).
+    let support = if none || !quote_present || veto.is_some() {
+        None
+    } else {
+        super::judge::claim_chunk_support(inference, evidence, &answer, posture).await
+    };
+    let judge_unavailable = !none && quote_present && veto.is_none() && support.is_none();
+    let violation_prob = support.map(|s| 1.0 - s);
+    let supported = violation_prob.is_some_and(|vp| vp < tau);
+    let decision = match (none, quote_present, veto.is_some(), judge_unavailable) {
+        (true, ..) => "declared-none",
+        (_, false, ..) => "quote-not-found",
+        (.., true, _) => "vetoed (exact value)",
+        (.., true) => "could-not-judge (probe unavailable)",
+        _ if supported => "GROUNDED",
+        _ => "unsupported",
+    };
+    let match_kind = match &found {
+        Some(QuoteMatch::Exact { chunk, .. }) => format!("exact(chunk {chunk})"),
+        Some(QuoteMatch::Partial { chunk }) => format!("partial-run(chunk {chunk})"),
+        Some(QuoteMatch::AcrossChunks) => "across-chunks".to_string(),
+        None => "none".to_string(),
+    };
+    // Glassbox (§9.1): the decision and the numbers behind it. Only tracing
+    // reaches daemon.err — a detached daemon eats eprintln.
+    tracing::debug!(
+        target: "grounding_gate",
+        part = part.unwrap_or("-"),
         quote_present,
-        match &found {
-            Some(QuoteMatch::Exact { chunk, .. }) => format!("exact(chunk {chunk})"),
-            Some(QuoteMatch::Partial { chunk }) => format!("partial-run(chunk {chunk})"),
-            Some(QuoteMatch::AcrossChunks) => "across-chunks".to_string(),
-            None => "none".to_string(),
-        },
-        answer_in_quote,
-        answer_in_matched_chunk,
-        if !none && quote_present && supported {
-            "GROUNDED"
-        } else {
-            "abstain (fall through to legacy)"
-        }
-    ));
+        r#match = %match_kind,
+        support = support.map(|v| format!("{v:.3}")),
+        violation_prob = violation_prob.map(|v| format!("{v:.3}")),
+        tau,
+        veto = veto.as_deref(),
+        decision,
+        "citation: pair verdict"
+    );
     if super::config::audit_forensics_path().is_some() {
         super::gate::audit_forensics(&serde_json::json!({
             "kind": "citation_part",
@@ -465,15 +489,14 @@ fn verify_pair(
             "answer": &answer,
             "sentinel_none": none,
             "quote_present": quote_present,
-            "match": match &found {
-                Some(QuoteMatch::Exact { chunk, .. }) => format!("exact(chunk {chunk})"),
-                Some(QuoteMatch::Partial { chunk }) => format!("partial-run(chunk {chunk})"),
-                Some(QuoteMatch::AcrossChunks) => "across-chunks".to_string(),
-                None => "none".to_string(),
-            },
-            "answer_in_quote": answer_in_quote,
-            "answer_in_matched_chunk": answer_in_matched_chunk,
-            "grounded": !none && quote_present && supported,
+            "match": &match_kind,
+            "evidence": evidence,
+            "support": support,
+            "violation_prob": violation_prob,
+            "tau": tau,
+            "veto": &veto,
+            "decision": decision,
+            "grounded": !none && quote_present && veto.is_none() && supported,
         }));
     }
     if none {
@@ -482,7 +505,10 @@ fn verify_pair(
     if !quote_present {
         return Err(PairRefusal::QuoteNotFound);
     }
-    if !supported {
+    if judge_unavailable {
+        return Err(PairRefusal::CouldNotJudge);
+    }
+    if veto.is_some() || !supported {
         return Err(PairRefusal::Unsupported);
     }
     // ONE rule decides both what gets printed and whether it may be attributed,
@@ -569,39 +595,51 @@ fn parse_parts(resp: &str) -> Vec<(String, String, String)> {
 /// is an absence, and absence is reported, never defaulted
 /// (ARCH_PRINCIPLES §18.3). All parts ungrounded → `Abstain`, exactly as the
 /// single-sentence contract would have done, so the floor is unchanged.
-fn multiquote_outcome(
+#[allow(clippy::too_many_arguments)]
+async fn multiquote_outcome(
+    inference: &Arc<dyn InferenceProvider>,
     parts: &[(String, String, String)],
     chunks: &[String],
     locators: &[Option<String>],
     targets: &[Option<CitationTarget>],
+    posture: ShardingPrivacy,
+    tau: f64,
+    evidence_window_dropped: usize,
 ) -> CitationOutcome {
     let mut grounded: Vec<(String, String, String, Option<usize>)> = Vec::new();
     let mut unanswered: Vec<String> = Vec::new();
-    let mut unconfirmed: Vec<String> = Vec::new();
+    let mut could_not_judge: Vec<String> = Vec::new();
     for (label, quote, answer) in parts {
-        match verify_pair(Some(label), quote, answer, chunks) {
+        match verify_pair(inference, Some(label), quote, answer, chunks, posture, tau).await {
             Ok((quote, answer, chunk)) => grounded.push((label.clone(), quote, answer, chunk)),
-            // The model read the passages and reported an absence, or found no
-            // sentence to copy at all. Both are evidence about the CORPUS, so
-            // both may be named as unanswered below.
-            Err(PairRefusal::DeclaredNone) | Err(PairRefusal::QuoteNotFound) => {
-                unanswered.push(label.clone())
+            // Three verdicts ABOUT the window the model was shown, all
+            // nameable — which they are only because the decider is now the
+            // audit's own judge (under the conjunction the third was a
+            // fabricated absence, 7a8a2e97, quarantined by a4f8f2a95).
+            Err(PairRefusal::DeclaredNone)
+            | Err(PairRefusal::QuoteNotFound)
+            | Err(PairRefusal::Unsupported) => {
+                // …unless the window was truncated: then "the passages do
+                // not answer" is a claim about evidence nobody looked at.
+                if evidence_window_dropped > 0 {
+                    could_not_judge.push(label.clone())
+                } else {
+                    unanswered.push(label.clone())
+                }
             }
-            // The quote is verbatim in the passages and the model answered from
-            // it; only our word-overlap check could not confirm the paraphrase.
-            Err(PairRefusal::Unsupported) => unconfirmed.push(label.clone()),
+            // No verdict exists for this part.
+            Err(PairRefusal::CouldNotJudge) => could_not_judge.push(label.clone()),
         }
     }
     dbg(&format!(
-        "citation: multiquote parts={} grounded={} unanswered={:?} unconfirmed={:?} → {}",
+        "citation: multiquote parts={} grounded={} unanswered={unanswered:?} \
+         could_not_judge={could_not_judge:?} → {}",
         parts.len(),
         grounded.len(),
-        unanswered,
-        unconfirmed,
         if grounded.is_empty() {
             "abstain (fall through to legacy)"
-        } else if !unconfirmed.is_empty() {
-            "abstain (unconfirmed part — fall through to legacy)"
+        } else if !could_not_judge.is_empty() {
+            "abstain (a part could not be judged — fall through to legacy)"
         } else {
             "GROUNDED"
         }
@@ -609,44 +647,18 @@ fn multiquote_outcome(
     if grounded.is_empty() {
         return CitationOutcome::Abstain;
     }
-    // A part we could not CONFIRM is not a part the passages do not answer, and
-    // the composed release has no way to say the difference: its only vocabulary
-    // for a missing part is "The passages do not answer: <part>", which is a
-    // claim about the corpus that `answer_supported_by_quote` never tested.
-    //
-    // MEASURED, 2026-09-04, arch-tour-fixture Q1 ("what is the runtime pipeline,
-    // and what role does the grounding gate play?"), 2 of 5 warm runs: the model
-    // returned a correct PART block for the gate's role, quoting the
-    // `02-journey.svg` alt text — `quote_present=true, match=exact(chunk 4)` —
-    // and answered from it accurately. `answer_supported_by_quote` is a
-    // conjunction over EVERY content word of the answer, and 6 of that answer's
-    // 27 were not literal in the quote: `claims` (source: "claim"), `from`,
-    // `synthesized` (source: "Synthesis"), `either`, `checking` (source:
-    // "re-check"), `additionally`. Connectives and morphological variants —
-    // which a multi-sentence explanatory answer is guaranteed to contain, so the
-    // check's pass probability decays with answer LENGTH. The part was dropped
-    // and the turn released "The passages do not answer: Role of the grounding
-    // gate" over a 1,584-char draft that answered it in full, with the evidence
-    // sitting at passage [2] of 20 in the very window the model was shown.
-    //
-    // So: fall through to the legacy ladder instead, which audits the DRAFT
-    // claim by claim — the same path a draft one line longer already takes (the
-    // citation contract only runs below `profile.longform_chars`, 1,800), and
-    // the path that produced the correct answer on the other 3 of those 5 runs.
-    // Nothing here weakens a check: `answer_supported_by_quote` is untouched and
-    // still refuses the pair, so the anti-confabulation guard the citation path
-    // was built on is exactly as strict as it was (ARCH_PRINCIPLES §18.2 — a
-    // could-not-judge is its own verdict, not a failure; §18.3 — absence is
-    // reported, never invented).
-    if !unconfirmed.is_empty() {
+    // The release has one vocabulary for a missing part — "The passages do not
+    // answer: <part>" — and a part nobody could judge has not earned it
+    // (§18.3). Fall through to the ladder that audits the draft instead.
+    if !could_not_judge.is_empty() {
         tracing::debug!(
+            target: "grounding_gate",
             parts = parts.len(),
             grounded = grounded.len(),
-            unconfirmed = ?unconfirmed,
+            could_not_judge = ?could_not_judge,
             unanswered = ?unanswered,
-            "citation multiquote: a part's quote verified but its answer could not be \
-             confirmed against it — falling through to the legacy ladder rather than \
-             releasing \"the passages do not answer\" for a part the passages may answer"
+            evidence_window_dropped,
+            "citation multiquote: a part could not be judged — falling through"
         );
         return CitationOutcome::Abstain;
     }
@@ -671,62 +683,46 @@ fn multiquote_outcome(
             target: target_at(targets, chunk),
         })
         .collect();
-    CitationOutcome::Grounded { answer, quotes }
+    CitationOutcome::Grounded {
+        answer,
+        quotes,
+        evidence_window_dropped,
+    }
 }
 
-/// Is the answer's content actually in the cited quote? Closes the gap between
-/// "the quote is real" and "the quote supports THIS answer". Uses only a *light*
-/// function-word stop — content words like "chief"/"inspector"/"doctor" are
-/// kept (the all-chunks value check's STOP-list wrongly dropped them, which is
-/// what killed correct title answers), so the asserted value must genuinely
-/// appear in the sentence the model copied.
-fn answer_supported_by_quote(answer: &str, quote: &str) -> bool {
-    const TINY_STOP: &[&str] = &[
-        "the", "of", "a", "an", "is", "was", "to", "in", "and", "by", "at", "on", "with", "for",
-    ];
-    let q = normalize(quote);
-    let words: Vec<String> = answer
-        .to_lowercase()
+/// WHICH text the support question is asked against: the matched CHUNK when
+/// the quote matched inside one, else the quote. One accessor (§10.6), read by
+/// veto and probe alike. Quote-local-only was a measured false-demotion
+/// (2026-08-10, chaos-saltgrass, 4 runs); widening keeps the guard, the
+/// embassy value being absent from the whole chunk too.
+fn evidence_for<'a>(found: &Option<QuoteMatch>, quote: &'a str, chunks: &'a [String]) -> &'a str {
+    match found {
+        Some(QuoteMatch::Exact { chunk, .. }) | Some(QuoteMatch::Partial { chunk }) => {
+            chunks.get(*chunk).map(String::as_str).unwrap_or(quote)
+        }
+        _ => quote,
+    }
+}
+
+/// The exact-value VETO: the first COMPLETE number token in `answer` absent
+/// from the evidence as a complete number token, else `None`. A veto, not a
+/// decider (§7.6): it may only REFUSE. Containment is not enough — "289494"
+/// against "…NARA fileUnit 28949423" is a prefix of a different number
+/// (2026-07-01). `SOVEREIGN_EXACTVAL_FIX=0` disables it, as it always has.
+fn numeric_veto(answer: &str, quote: &str, evidence: &str) -> Option<String> {
+    if !super::config::exactval_fix_enabled() {
+        return None;
+    }
+    let (q, e) = (normalize(quote), normalize(evidence));
+    answer
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| {
-            // Pure-digit answers ("4", a single-chunk count) are valid COMPLETE
-            // number tokens — the >=2-char rule (there to drop tiny stopwords)
-            // must not swallow them, or a single-digit answer can never ground
-            // via the citation path and always falls through to the noisier
-            // legacy vp ladder. Observed 2026-07-08: answer "4" vs quote
-            // "…chunks_created >= 4;" logged present=true but answer_in_quote=false
-            // → false abstain → the "sources don't cover it" evidence-denial. The
-            // !is_empty guard matters: chars().all() is vacuously true for the
-            // empty strings split() emits between consecutive delimiters.
-            let pure_digit = !w.is_empty() && w.chars().all(|c| c.is_ascii_digit());
-            pure_digit || (w.chars().count() >= 2 && !TINY_STOP.contains(w))
+        .find(|w| {
+            !w.is_empty()
+                && w.chars().all(|c| c.is_ascii_digit())
+                && !quote_has_number_token(&q, w)
+                && !quote_has_number_token(&e, w)
         })
-        .map(String::from)
-        .collect();
-    !words.is_empty()
-        && words.iter().all(|w| {
-            if w.chars().all(|c| c.is_ascii_digit()) && super::config::exactval_fix_enabled() {
-                // Numeric value: it must be a COMPLETE number token in the quote,
-                // not a partial digit-run of a longer number. Plain substring
-                // containment accepts a TRUNCATED value — the model answered
-                // "289494" citing a quote that reads "…NARA fileUnit 28949423",
-                // and "289494" is a prefix substring of "28949423", so it slipped
-                // through as grounded. A prefix of a number is a different number.
-                quote_has_number_token(&q, w)
-            } else {
-                // Space-tolerant containment: the MTP copy channel drops spaces
-                // ("18seconds" for the quote's "18 seconds"; the measured
-                // "dancinggirls") — a mis-spaced COPY of quote text is grounded
-                // content wearing a typo, and `respace_answer_from_quote`
-                // repairs the surface after verification. A compound absent
-                // from the quote even space-blind ("50minutes" with no
-                // "50 minutes" anywhere) still fails.
-                q.contains(w.as_str())
-                    || q.split_whitespace()
-                        .collect::<String>()
-                        .contains(w.as_str())
-            }
-        })
+        .map(str::to_string)
 }
 
 /// Repair space-dropped copies: any answer word (≥6 chars) that is absent from
@@ -819,22 +815,26 @@ fn quote_has_number_token(normalized_quote: &str, num: &str) -> bool {
         .any(|tok| tok == num)
 }
 
-/// Number the chunks and join them, full text, up to the budget.
-fn build_passages(chunks: &[String]) -> String {
+/// Number the chunks and join them, full text, up to the budget. Returns the
+/// window AND how many trailing chunks the budget dropped (§18.3, and see
+/// [`PASSAGE_CHAR_BUDGET`]).
+fn build_passages(chunks: &[String]) -> (String, usize) {
     let mut out = String::new();
     let mut used = 0usize;
+    let mut dropped = 0usize;
     for (i, c) in chunks.iter().enumerate() {
         let c = c.trim();
         if c.is_empty() {
             continue;
         }
         if !out.is_empty() && used + c.len() > PASSAGE_CHAR_BUDGET {
+            dropped = chunks.len() - i;
             break;
         }
         out.push_str(&format!("[{}] {}\n\n", i + 1, c));
         used += c.len();
     }
-    out.trim_end().to_string()
+    (out.trim_end().to_string(), dropped)
 }
 
 /// `None` when neither label is present (unparseable → inconclusive). The quote

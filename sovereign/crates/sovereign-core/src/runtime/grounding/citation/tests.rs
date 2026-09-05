@@ -1,4 +1,63 @@
 use super::*;
+use crate::traits::InferenceProvider;
+
+/// The gate's OWN scripted judge (`grounding::tests::GateMock`), reused rather
+/// than re-derived beside it (ARCH §19): it answers every forced-choice
+/// support call with a fixed A/B distribution and asserts the P4-D OICP
+/// envelope on the way through, so these tests drive the real
+/// `claim_chunk_support` register — the same one the audit pass runs.
+/// `None` = the judge does not answer.
+fn judge(support: Option<bool>) -> Arc<dyn InferenceProvider> {
+    Arc::new(super::super::tests::GateMock { support })
+}
+
+/// The AUDIT PASS's threshold, read from the one place the gate reads it —
+/// never a literal here, or this file would own a second threshold for a
+/// question the gate already has one for (§10.6).
+fn tau() -> f64 {
+    super::super::config::grounding_gate_threshold()
+}
+
+/// The multi-quote contract under a scripted judge. `dropped` is the passage
+/// budget's drop count for the window these parts were extracted from.
+async fn outcome(
+    support: Option<bool>,
+    parts: &[(String, String, String)],
+    chunks: &[String],
+    dropped: usize,
+) -> CitationOutcome {
+    multiquote_outcome(
+        &judge(support),
+        parts,
+        chunks,
+        &[],
+        &[],
+        ShardingPrivacy::LocalOnly,
+        tau(),
+        dropped,
+    )
+    .await
+}
+
+/// One pair under a scripted judge.
+async fn pair(
+    support: Option<bool>,
+    part: Option<&str>,
+    quote: &str,
+    answer: &str,
+    chunks: &[String],
+) -> Result<(String, String, Option<usize>), PairRefusal> {
+    verify_pair(
+        &judge(support),
+        part,
+        quote,
+        answer,
+        chunks,
+        ShardingPrivacy::LocalOnly,
+        tau(),
+    )
+    .await
+}
 
 fn chunks() -> Vec<String> {
     vec![
@@ -71,76 +130,119 @@ fn fabricated_quote_rejected() {
     .is_none());
 }
 
+/// **The exact-value VETO, and only the veto** (ARCH §7.6). Every other
+/// assertion this test used to carry — "Chief Inspector" is in its quote,
+/// "Russian embassy" is not — was a word-overlap assertion about
+/// `answer_supported_by_quote`, which no longer exists: those questions are
+/// the calibrated probe's now, and a keyword conjunction never answered them
+/// (it refused a correct paraphrase whenever it carried a connective).
 #[test]
-fn answer_must_be_in_its_own_quote() {
-    // Title/name answers — present in their quote (the light stop keeps
-    // "chief"/"inspector"/"doctor", unlike the all-chunks value check).
-    assert!(answer_supported_by_quote(
-        "Chief Inspector",
-        "Chief Inspector Heat of the Special Crimes Department changed his tone."
-    ));
-    assert!(answer_supported_by_quote(
-        "the Doctor",
-        "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc."
-    ));
-    // The measured moat break: a confabulated value ("Russian") pinned to a
-    // real-but-insufficient quote that never names the country.
-    assert!(!answer_supported_by_quote(
-        "Russian embassy",
-        "Ever since the time of the late Baron Stott-Wartenheim, employed by the Embassy."
-    ));
-    // Space-dropped copies are grounded content wearing a typo: verification
-    // is space-tolerant (the old space-strict rule turned a CORRECT
-    // lighthouse answer into a decline), and respace_answer_from_quote
-    // repairs the surface from the quote before release.
-    assert!(answer_supported_by_quote(
-        "dancinggirls",
-        "photographs of more or less undressed dancing girls in the window"
-    ));
+fn the_exact_value_veto_refuses_a_number_the_evidence_does_not_carry() {
+    let quote =
+        "U.S. Air Force Project Blue Book UFO case file (15 scanned pages; NARA fileUnit 28949423).";
+    // Measured 2026-07-01: "289494" is a prefix SUBSTRING of "28949423" and a
+    // DIFFERENT number. Plain containment shipped it as grounded.
     assert_eq!(
-        respace_answer_from_quote(
-            "dancinggirls",
-            "photographs of more or less undressed dancing girls in the window"
-        )
-        .as_deref(),
-        Some("dancing girls")
+        numeric_veto("289494", quote, quote).as_deref(),
+        Some("289494")
     );
-    // Numeric truncation (measured 2026-07-01): a TRUNCATED number must not
-    // ground against a quote that contains a *longer* number sharing its
-    // leading digits. "289494" is a prefix substring of "28949423" but a
-    // different value.
-    assert!(!answer_supported_by_quote(
-            "289494",
-            "U.S. Air Force Project Blue Book UFO case file (15 scanned pages; NARA fileUnit 28949423)."
-        ));
-    // The complete, correct number still grounds.
-    assert!(answer_supported_by_quote(
-            "28949423",
-            "U.S. Air Force Project Blue Book UFO case file (15 scanned pages; NARA fileUnit 28949423)."
-        ));
-    // A whole-token year grounds normally.
-    assert!(answer_supported_by_quote(
-        "Deloitte 2025",
-        "review of Deloitte's performance during the engagement for the 2025 audit"
-    ));
-    // Single-digit answer (measured 2026-07-08 class-A evidence-denial): "4"
-    // is a valid COMPLETE number token in the quote. The old >=2-char word
-    // filter dropped it, emptied the word list, and returned false → a false
-    // abstain that surfaced as "the sources don't cover it".
-    assert!(answer_supported_by_quote(
-        "4",
-        "assert!(result.chunks_created >= 4);"
-    ));
-    // …but a single digit that is NOT a complete token in the quote (or is a
-    // prefix of a longer number) still fails — no free pass from the exemption.
-    assert!(!answer_supported_by_quote(
-        "5",
-        "assert!(result.chunks_created >= 4);"
-    ));
-    assert!(!answer_supported_by_quote(
-        "2",
-        "the NARA fileUnit 28949423 has 24 pages"
-    ));
+    // The complete, correct number is not vetoed.
+    assert_eq!(numeric_veto("28949423", quote, quote), None);
+    // A whole-token year, and a single digit that IS a complete token, pass.
+    assert_eq!(
+        numeric_veto(
+            "Deloitte 2025",
+            "review of Deloitte's performance during the engagement for the 2025 audit",
+            "review of Deloitte's performance during the engagement for the 2025 audit"
+        ),
+        None
+    );
+    let code = "assert!(result.chunks_created >= 4);";
+    assert_eq!(numeric_veto("4", code, code), None);
+    assert_eq!(numeric_veto("5", code, code).as_deref(), Some("5"));
+    // Non-numeric answers are none of the veto's business — it may refuse a
+    // number, and it may never have an opinion about anything else.
+    assert_eq!(
+        numeric_veto("Chief Inspector", "the parlour", "the parlour"),
+        None
+    );
+    assert_eq!(
+        numeric_veto("Russian embassy", "the parlour", "the parlour"),
+        None
+    );
+    // The evidence is read WIDENED, exactly as the probe reads it: a number in
+    // the matched chunk but not in the quote is carried by the evidence.
+    assert_eq!(numeric_veto("4", "the count was recorded", code), None);
+}
+
+/// **A veto may REFUSE; it may never APPROVE.** The pair below is numerically
+/// clean, so the veto has nothing to say — and the pair is still refused,
+/// because the decision belongs to the calibrated probe. Watched: flip the
+/// judge to `Some(true)` and this test fails.
+#[tokio::test]
+async fn a_clean_veto_does_not_approve_what_the_probe_refuses() {
+    let c = chunks();
+    let quote = "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.";
+    assert_eq!(
+        numeric_veto("the Doctor", quote, quote),
+        None,
+        "premise: no number, so the veto abstains"
+    );
+    assert_eq!(
+        pair(Some(false), None, quote, "the Doctor", &c).await,
+        Err(PairRefusal::Unsupported),
+        "a silent veto must not become an approval"
+    );
+}
+
+/// **The support question is asked against the matched CHUNK, not the quote
+/// alone** — the Lyle-Hannett widening, now a named decision rather than a
+/// second call. Pure, so the rule is checkable without a model.
+#[test]
+fn the_support_question_is_asked_against_the_matched_chunk() {
+    let c = chunks();
+    let q = "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.";
+    let exact = locate_quote_in_chunks(q, &c);
+    assert!(matches!(exact, Some(QuoteMatch::Exact { .. })), "premise");
+    assert_eq!(
+        evidence_for(&exact, q, &c),
+        c[1].as_str(),
+        "an exact match widens to its whole chunk"
+    );
+    assert_eq!(
+        evidence_for(&Some(QuoteMatch::Partial { chunk: 0 }), q, &c),
+        c[0].as_str(),
+        "a partial run widens to the chunk it ran in"
+    );
+    assert_eq!(
+        evidence_for(&Some(QuoteMatch::AcrossChunks), q, &c),
+        q,
+        "a straddle has no single chunk to widen into"
+    );
+    assert_eq!(evidence_for(&None, q, &c), q, "no match, no widening");
+    assert_eq!(
+        evidence_for(&Some(QuoteMatch::Partial { chunk: 99 }), q, &c),
+        q,
+        "an out-of-range index falls back to the quote rather than panicking"
+    );
+}
+
+/// **The passage budget reports what it drops.** A silent drop turns a budget
+/// into a manufacturer of absences (§18.3).
+#[test]
+fn the_passage_budget_reports_what_it_dropped() {
+    let small: Vec<String> = vec!["a".repeat(40), "b".repeat(40)];
+    let (window, dropped) = build_passages(&small);
+    assert_eq!(dropped, 0, "nothing near the budget drops nothing");
+    assert!(window.contains(&"b".repeat(40)));
+
+    let big: Vec<String> = (0..4).map(|_| "x".repeat(PASSAGE_CHAR_BUDGET)).collect();
+    let (window, dropped) = build_passages(&big);
+    assert_eq!(dropped, 3, "three of four chunks never reached the model");
+    assert!(
+        window.chars().count() < 2 * PASSAGE_CHAR_BUDGET,
+        "only the first chunk is rendered"
+    );
 }
 
 // ── mid-token stop compensation (probed deterministically 2026-07-01:
@@ -262,7 +364,10 @@ fn space_dropped_lighthouse_answer_respaces_from_quote() {
     // probe4 verbatim: correct values, spaces eaten by the copy channel.
     let quote = "The light's characteristic signal is one white flash every 18                      seconds, visible for 21 nautical miles in clear weather.";
     let ans = "one white flash every 18seconds; 21nauticalmiles";
-    assert!(answer_supported_by_quote(ans, quote));
+    // The veto has nothing to say: "18seconds" is not a number TOKEN, so a
+    // space-dropped copy is never refused as a wrong value (it is the probe's
+    // to judge, on the respaced surface).
+    assert_eq!(numeric_veto(ans, quote, quote), None);
     assert_eq!(
         respace_answer_from_quote(ans, quote).as_deref(),
         Some("one white flash every 18 seconds; 21 nautical miles")
@@ -273,8 +378,10 @@ fn space_dropped_lighthouse_answer_respaces_from_quote() {
 fn fabricated_compound_still_fails_space_blind() {
     // "50minutes" has no "50 minutes" in the quote either way.
     let quote = "The sighting was reported at dawn and lasted briefly.";
-    assert!(!answer_supported_by_quote("50minutes", quote));
     assert_eq!(respace_answer_from_quote("50minutes", quote), None);
+    // And the repair does not invent a value the veto would then wave through:
+    // there is no number token to check, so nothing is approved here either.
+    assert_eq!(numeric_veto("50minutes", quote, quote), None);
 }
 
 #[test]
@@ -319,8 +426,8 @@ fn reply_without_part_labels_yields_no_parts() {
     assert!(parse_parts(r).is_empty());
 }
 
-#[test]
-fn grounds_the_answerable_part_and_names_the_rest() {
+#[tokio::test]
+async fn grounds_the_answerable_part_and_names_the_rest() {
     // This is the compound-inn-and-innkeeper shape: part one is verbatim
     // in the passages, part two is simply not there.
     let parts = vec![
@@ -335,8 +442,8 @@ fn grounds_the_answerable_part_and_names_the_rest() {
             "NONE".to_string(),
         ),
     ];
-    match multiquote_outcome(&parts, &chunks(), &[], &[]) {
-        CitationOutcome::Grounded { answer, quotes } => {
+    match outcome(Some(true), &parts, &chunks(), 0).await {
+        CitationOutcome::Grounded { answer, quotes, .. } => {
             assert!(
                 answer.contains("the Doctor"),
                 "grounded half must ship: {answer}"
@@ -361,24 +468,23 @@ fn grounds_the_answerable_part_and_names_the_rest() {
     }
 }
 
-/// **The issue-#57 refusal, replayed as a fixture.** Verbatim inputs from the
-/// captured turn (`SOVEREIGN_GATE_AUDIT_FORENSICS`, 2026-09-04,
-/// `arch-tour-fixture` Q1, reproduced 2/5 warm runs): the model returned a
-/// correct `PART` block for the gate's role, quoting the `02-journey.svg` alt
-/// text — which `locate_quote_in_chunks` matches EXACT — and answered from it
-/// accurately. `answer_supported_by_quote` still refuses that pair, because 6
-/// of the answer's 27 content words are not literal in the quote (`claims` vs
-/// "claim", `synthesized` vs "Synthesis", `checking` vs "re-check", plus
-/// `from`, `either`, `additionally`).
+/// **The issue-#57 refusal, replayed as a fixture — and now GROUNDED.**
+/// Verbatim inputs from the captured turn (`SOVEREIGN_GATE_AUDIT_FORENSICS`,
+/// 2026-09-04, `arch-tour-fixture` Q1, reproduced 2/5 warm runs): the model
+/// returned a correct `PART` block for the gate's role, quoting the
+/// `02-journey.svg` alt text — which `locate_quote_in_chunks` matches EXACT —
+/// and answered from it accurately.
 ///
-/// What must NOT happen is what happened: releasing "The passages do not
+/// `answer_supported_by_quote` refused that pair, because 6 of the answer's 27
+/// content words are not literal in the quote (`claims` vs "claim",
+/// `synthesized` vs "Synthesis", `checking` vs "re-check", plus `from`,
+/// `either`, `additionally`), and the turn released "The passages do not
 /// answer: Role of the grounding gate" over evidence sitting at passage [2] of
-/// the model's own window. A part we could not CONFIRM is not a part the
-/// passages do not answer, so the contract falls through to the legacy ladder,
-/// which audits the draft — the same path a draft one line past
-/// `profile.longform_chars` already takes.
-#[test]
-fn an_unconfirmable_part_falls_through_instead_of_claiming_the_passages_are_silent() {
+/// the model's own window. a4f8f2a95 stopped the sentence by quarantining the
+/// refusal; this order removes the refusal. A calibrated judge shown the
+/// chunk and the paraphrase says supported, and the part ships.
+#[tokio::test]
+async fn the_issue_57_paraphrase_grounds_against_its_own_quote() {
     let chunk = "A message flows through Router (what kind of ask), Retrieval (search all \
          your sources — local corpora, mesh peers, your docs), and Synthesis (draft an \
          answer), then reaches the grounding gate, which extracts each claim and checks \
@@ -392,44 +498,137 @@ fn an_unconfirmable_part_falls_through_instead_of_claiming_the_passages_are_sile
          re-checking, or honestly abstain; additionally, the model never originates a \
          number."
         .to_string();
-
-    // The premise the fixture rests on: the quote IS in the passages, and the
-    // support check still refuses the pair. If either flips, this test is
-    // measuring something else.
     assert!(
         locate_quote_in_chunks(&quote, std::slice::from_ref(&chunk)).is_some(),
         "premise: the quote is verbatim in the evidence"
     );
-    assert_eq!(
-        verify_pair(
-            Some("Role of the grounding gate"),
-            &quote,
-            &answer,
-            &[chunk.clone()]
-        ),
-        Err(PairRefusal::Unsupported),
-        "premise: the anti-confabulation bar is unchanged and still refuses this paraphrase"
-    );
+    let cs = vec![chunk];
+    let (_, released, _) = pair(
+        Some(true),
+        Some("Role of the grounding gate"),
+        &quote,
+        &answer,
+        &cs,
+    )
+    .await
+    .expect("a correct paraphrase of a verbatim quote must ground");
+    assert_eq!(released, answer, "the model's answer ships unaltered");
 
+    // The compound turn: both halves release, and NOTHING is claimed absent.
     let parts = vec![
         (
             "Runtime pipeline".to_string(),
-            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
-            "the Doctor".to_string(),
+            "A message flows through Router (what kind of ask), Retrieval (search all \
+             your sources — local corpora, mesh peers, your docs), and Synthesis (draft an \
+             answer), then reaches the grounding gate, which extracts each claim and checks \
+             it against the sealed evidence."
+                .to_string(),
+            "Router, Retrieval, Synthesis, then the grounding gate.".to_string(),
         ),
         ("Role of the grounding gate".to_string(), quote, answer),
     ];
-    let mut cs = chunks();
-    cs.push(chunk);
-    match multiquote_outcome(&parts, &cs, &[], &[]) {
-        CitationOutcome::Abstain => {}
-        CitationOutcome::Grounded { answer, .. } => {
-            panic!("an unconfirmable part must not be released as an absence: {answer}")
+    match outcome(Some(true), &parts, &cs, 0).await {
+        CitationOutcome::Grounded { answer, quotes, .. } => {
+            assert!(
+                !answer.contains("The passages do not answer"),
+                "neither half is absent: {answer}"
+            );
+            assert_eq!(quotes.len(), 2, "one span per grounded part");
         }
-        CitationOutcome::Inconclusive => {
-            panic!("expected fall-through to the legacy ladder, got Inconclusive")
-        }
+        other => panic!(
+            "both halves are answerable from this window; got {}",
+            match other {
+                CitationOutcome::Abstain => "Abstain",
+                CitationOutcome::Inconclusive => "Inconclusive",
+                _ => unreachable!(),
+            }
+        ),
     }
+}
+
+/// **SABOTAGE, watched (§18.1, §18.6).** Make the decider say yes to
+/// everything and the anti-confabulation moat opens: the embassy pair — a real
+/// quote, an answer naming a country the text withholds — ships. This is the
+/// negative control for every "grounds" assertion in this file: they all run
+/// on `Some(true)`, so without this test a probe wired to approve
+/// unconditionally would leave the whole file green.
+#[tokio::test]
+async fn a_probe_that_approves_everything_releases_the_confabulation() {
+    let c = chunks();
+    let quote = "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.";
+    assert_eq!(
+        pair(Some(false), None, quote, "Russian ambassador", &c).await,
+        Err(PairRefusal::Unsupported),
+        "a calibrated refusal demotes the pair"
+    );
+    assert!(
+        pair(Some(true), None, quote, "Russian ambassador", &c)
+            .await
+            .is_ok(),
+        "and a probe that approves everything releases it — which is what the \
+         chaos absent-probe controls are watching for"
+    );
+}
+
+/// **The probe did not answer.** Nothing was established in either direction,
+/// so the part is could-not-judge and the turn falls through to the legacy
+/// ladder — never "the passages do not answer" (§18.2, §18.3), and never a
+/// silent release either (the gate is a quality lever, not an availability
+/// risk, so the DRAFT still gets audited downstream).
+#[tokio::test]
+async fn a_probe_that_does_not_answer_is_could_not_judge_not_an_absence() {
+    let c = chunks();
+    let quote = "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.";
+    assert_eq!(
+        pair(None, None, quote, "the Doctor", &c).await,
+        Err(PairRefusal::CouldNotJudge)
+    );
+    let parts = vec![(
+        "the nickname".to_string(),
+        quote.to_string(),
+        "the Doctor".to_string(),
+    )];
+    assert!(
+        matches!(outcome(None, &parts, &c, 0).await, CitationOutcome::Abstain),
+        "an unjudged part must not compose a release"
+    );
+}
+
+/// **Truncation is could-not-judge, not absence (§18.3).** The same parts, the
+/// same verdicts — but the window dropped chunks, so the passages the model
+/// was shown are not the passages retrieved, and "the passages do not answer"
+/// is a claim about evidence nobody looked at. Watched: set `dropped` to 0 and
+/// this test fails on the released sentence.
+#[tokio::test]
+async fn a_declared_absence_over_a_truncated_window_is_could_not_judge() {
+    let parts = vec![
+        (
+            "the nickname".to_string(),
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
+            "the Doctor".to_string(),
+        ),
+        (
+            "Verloc's first name".to_string(),
+            "NONE".to_string(),
+            "NONE".to_string(),
+        ),
+    ];
+    // Untruncated, the absence is real evidence and is NAMED.
+    match outcome(Some(true), &parts, &chunks(), 0).await {
+        CitationOutcome::Grounded { answer, .. } => assert!(
+            answer.contains("The passages do not answer"),
+            "over a whole window an absence is evidence: {answer}"
+        ),
+        _ => panic!("the grounded half must ship"),
+    }
+    // Truncated, the same absence establishes nothing.
+    assert!(
+        matches!(
+            outcome(Some(true), &parts, &chunks(), 7).await,
+            CitationOutcome::Abstain
+        ),
+        "an absence over a window with 7 chunks dropped must not be released as one"
+    );
 }
 
 /// The guard for the fix above: a part the model itself declared `NONE`, and a
@@ -437,9 +636,9 @@ fn an_unconfirmable_part_falls_through_instead_of_claiming_the_passages_are_sile
 /// corpus — they must still be named, and the grounded sibling must still ship.
 /// This is the measured multi-quote gain (`SOVEREIGN_CITATION_MULTIQUOTE`,
 /// 2026-08-05: citation releases 0 -> 3 on the saltgrass compound bank), and
-/// the fall-through must not quietly take it back.
-#[test]
-fn a_declared_absence_is_still_named_and_its_grounded_sibling_still_ships() {
+/// no later refinement may quietly take it back.
+#[tokio::test]
+async fn a_declared_absence_is_still_named_and_its_grounded_sibling_still_ships() {
     let parts = vec![
         (
             "the nickname".to_string(),
@@ -457,7 +656,7 @@ fn a_declared_absence_is_still_named_and_its_grounded_sibling_still_ships() {
             "Russian ambassador".to_string(),
         ),
     ];
-    match multiquote_outcome(&parts, &chunks(), &[], &[]) {
+    match outcome(Some(true), &parts, &chunks(), 0).await {
         CitationOutcome::Grounded { answer, .. } => {
             assert!(answer.contains("the Doctor"), "{answer}");
             assert!(answer.contains("The passages do not answer"), "{answer}");
@@ -468,12 +667,12 @@ fn a_declared_absence_is_still_named_and_its_grounded_sibling_still_ships() {
                 "a fabricated quote must not ship: {answer}"
             );
         }
-        _ => panic!("a declared absence must not trigger the fall-through"),
+        _ => panic!("a declared absence must not suppress its grounded sibling"),
     }
 }
 
-#[test]
-fn all_parts_ungrounded_abstains() {
+#[tokio::test]
+async fn all_parts_ungrounded_abstains() {
     // Floor unchanged: when nothing grounds, the multi-quote contract
     // abstains exactly as the single-sentence one does.
     let parts = vec![
@@ -481,13 +680,13 @@ fn all_parts_ungrounded_abstains() {
         ("b".to_string(), "NONE".to_string(), "NONE".to_string()),
     ];
     assert!(matches!(
-        multiquote_outcome(&parts, &chunks(), &[], &[]),
+        outcome(Some(true), &parts, &chunks(), 0).await,
         CitationOutcome::Abstain
     ));
 }
 
-#[test]
-fn a_part_whose_quote_is_not_verbatim_cannot_enter() {
+#[tokio::test]
+async fn a_part_whose_quote_is_not_verbatim_cannot_enter() {
     // The new door is not a fabrication bypass: each part clears the same
     // verify_pair bar, so an invented quote is refused even when a sibling
     // part grounds cleanly.
@@ -503,7 +702,7 @@ fn a_part_whose_quote_is_not_verbatim_cannot_enter() {
             "Russian ambassador".to_string(),
         ),
     ];
-    match multiquote_outcome(&parts, &chunks(), &[], &[]) {
+    match outcome(Some(true), &parts, &chunks(), 0).await {
         CitationOutcome::Grounded { answer, .. } => {
             assert!(answer.contains("the Doctor"));
             assert!(
@@ -517,8 +716,8 @@ fn a_part_whose_quote_is_not_verbatim_cannot_enter() {
     }
 }
 
-#[test]
-fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_is_insufficient() {
+#[tokio::test]
+async fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_is_insufficient() {
     // THE LYLE-HANNETT SHAPE (measured 2026-08-10, chaos-saltgrass
     // present-stolen-object, 4 consecutive runs): the draft answers with
     // the full proper name, quotes the ADJACENT sentence that refers back
@@ -537,7 +736,7 @@ fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_is_insu
             .to_string(),
         "The Lyle-Hannett chronometer".to_string(),
     )];
-    match multiquote_outcome(&parts, &[chunk], &[], &[]) {
+    match outcome(Some(true), &parts, &[chunk], 0).await {
         CitationOutcome::Grounded { answer, .. } => {
             assert!(
                 answer.contains("Lyle-Hannett chronometer"),
@@ -552,11 +751,12 @@ fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_is_insu
     }
 }
 
-#[test]
-fn the_chunk_widening_is_not_a_confabulation_bypass() {
-    // The embassy guard this check was built on: a REAL quote, an answer
-    // value the text withholds — absent from the quote AND from the whole
-    // matched chunk. The widening must leave this demoted.
+#[tokio::test]
+async fn a_refused_probe_demotes_the_whole_compound_release() {
+    // The embassy guard the support check was built on: a REAL quote, an
+    // answer value the text withholds. The probe refuses it, and one refused
+    // part is enough — the compound release must not ship the confabulation
+    // under a sibling's citation.
     let parts = vec![(
         "his posting".to_string(),
         "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
@@ -564,15 +764,15 @@ fn the_chunk_widening_is_not_a_confabulation_bypass() {
     )];
     assert!(
         matches!(
-            multiquote_outcome(&parts, &chunks(), &[], &[]),
+            outcome(Some(false), &parts, &chunks(), 0).await,
             CitationOutcome::Abstain
         ),
-        "a value absent from the matched chunk must still be refused"
+        "a value the calibrated probe will not back must still be refused"
     );
 }
 
-#[test]
-fn every_grounded_part_keeps_its_own_quote() {
+#[tokio::test]
+async fn every_grounded_part_keeps_its_own_quote() {
     // Regression, measured on the first arm-C run 2026-08-05: the two
     // verified sentences were joined into ONE string, so the post-hoc
     // quote_verification pass — which checks a `"..."` span as a single
@@ -592,7 +792,7 @@ fn every_grounded_part_keeps_its_own_quote() {
             "Chief Inspector".to_string(),
         ),
     ];
-    match multiquote_outcome(&parts, &chunks(), &[], &[]) {
+    match outcome(Some(true), &parts, &chunks(), 0).await {
         CitationOutcome::Grounded { quotes, .. } => {
             assert_eq!(quotes.len(), 2, "one span per grounded part");
             // Each is independently verbatim in the passages — which is
@@ -644,8 +844,8 @@ fn a_quote_inside_one_chunk_reports_that_chunk() {
 /// ride a span the downstream strict re-check will keep. A run-only match
 /// grounds — the decision is unchanged — but the model's span is not a
 /// contiguous source substring, so it ships bare.
-#[test]
-fn a_run_only_match_grounds_but_is_never_attributed() {
+#[tokio::test]
+async fn a_run_only_match_grounds_but_is_never_attributed() {
     let c = vec![
         "Tabb greased the eastern pawls before the gulls woke properly that morning.".to_string(),
     ];
@@ -659,8 +859,9 @@ fn a_run_only_match_grounds_but_is_never_attributed() {
         ),
         "a run-only match must not be reported as exact"
     );
-    let (released, _answer, chunk) =
-        verify_pair(None, spliced, "the eastern pawls", &c).expect("still grounds");
+    let (released, _answer, chunk) = pair(Some(true), None, spliced, "the eastern pawls", &c)
+        .await
+        .expect("still grounds");
     assert_eq!(
         chunk, None,
         "a partial run carries no chunk, hence no locator"
@@ -677,14 +878,16 @@ fn a_run_only_match_grounds_but_is_never_attributed() {
 /// chunk index — the sole licence to print a locator — is source text, so
 /// the post-hoc pass cannot demote it. This is the regression that shipped
 /// `CHAPTER III — [unverified excerpt: …]` on 2026-08-05.
-#[test]
-fn an_attributed_quote_survives_the_strict_post_hoc_recheck() {
+#[tokio::test]
+async fn an_attributed_quote_survives_the_strict_post_hoc_recheck() {
     let c = chunks();
     // Case-garbled copy: the citation path's test is case-insensitive, the
     // post-hoc one is not. Before the source span was released, this pair
     // grounded, earned a locator, and was then demoted downstream.
     let garbled = "ALEXANDER OSSIPON, ANARCHIST, NICKNAMED THE DOCTOR, SAT NEAR MR VERLOC.";
-    let (released, answer, chunk) = verify_pair(None, garbled, "the doctor", &c).expect("grounds");
+    let (released, answer, chunk) = pair(Some(true), None, garbled, "the doctor", &c)
+        .await
+        .expect("grounds");
     assert!(chunk.is_some(), "a whole-quote match is attributable");
     assert_eq!(
         released, "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",

@@ -168,8 +168,15 @@ fn targets_stay_aligned_with_the_chunks_they_name() {
 /// Prompt-routing mock for the gate's judge calls: claim
 /// extraction returns a fixed claim; every forced-choice support
 /// check returns `support` (as a logprob A/B distribution).
-struct GateMock {
-    support: bool,
+///
+/// `support: None` is the judge that does NOT answer — the reply is not a
+/// forced-choice distribution at all, so `forced_choice_ab` returns `None` and
+/// the caller sees a could-not-judge rather than a refusal. Visible to the
+/// whole `grounding` tree (`pub(super)`) because the citation stage's probe is
+/// this same register and must be tested against this same fake, not a second
+/// one beside it (ARCH §19, §10.6).
+pub(super) struct GateMock {
+    pub(super) support: Option<bool>,
 }
 
 #[async_trait::async_trait]
@@ -203,10 +210,11 @@ impl crate::traits::InferenceProvider for GateMock {
             .map(|s| s.to_string().contains("x_forced_choice"))
             .unwrap_or(false)
         {
-            if self.support {
-                r#"{"A": 0.98, "B": 0.02}"#.to_string()
-            } else {
-                r#"{"A": 0.02, "B": 0.98}"#.to_string()
+            match self.support {
+                Some(true) => r#"{"A": 0.98, "B": 0.02}"#.to_string(),
+                Some(false) => r#"{"A": 0.02, "B": 0.98}"#.to_string(),
+                // Not a distribution: the judge did not answer.
+                None => "I cannot judge this.".to_string(),
             }
         } else if request.prompt.contains("single central factual claim") {
             "The shop is located on Crescent Lane.".to_string()
@@ -407,7 +415,9 @@ fn refinement_evidence() -> EvidenceContext {
 /// not a refusal (ARCH §18.5).
 #[tokio::test]
 async fn unknown_provenance_in_mixed_universe_refuses() {
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     let mut evidence = refinement_evidence();
     evidence
@@ -892,7 +902,9 @@ async fn no_claim_pure_decline_release_becomes_abstention() {
 /// instrument on the path you will read it from).
 #[tokio::test]
 async fn a_real_gate_turn_names_every_call_it_made() {
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let outcome = gate_answer(
         &inference,
         "Where is the shop?",
@@ -999,8 +1011,9 @@ async fn no_claim_caveated_gk_answer_still_releases() {
 /// caller (collaboration refinement) keeps the verified original.
 #[tokio::test]
 async fn verify_only_failure_is_abstained_no_retry() {
-    let inference: Arc<dyn crate::traits::InferenceProvider> =
-        Arc::new(GateMock { support: false });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(false),
+    });
     let profile = GateSurface::Refinement.profile();
     assert!(!profile.retry);
     let outcome = gate_answer(
@@ -1034,7 +1047,9 @@ async fn verify_only_failure_is_abstained_no_retry() {
 /// Supported claims release unchanged under verify-only.
 #[tokio::test]
 async fn verify_only_supported_claim_releases() {
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     let draft = "The shop is on Harbour Row.".to_string();
     let outcome = gate_answer(
@@ -1087,7 +1102,9 @@ fn evidence_with_native(verdict: crate::types::GroundingVerdict) -> EvidenceCont
 #[tokio::test]
 async fn native_telemetry_rides_a_released_turn() {
     use sovereign_contracts::types::GroundingDecision;
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     // 0.25 is exactly representable in binary32, so the f32 → f64
     // widening into JSON is lossless and this assert can be exact.
@@ -1129,7 +1146,9 @@ async fn native_telemetry_rides_a_released_turn() {
 #[tokio::test]
 async fn native_telemetry_rides_the_longform_ladder() {
     use sovereign_contracts::types::GroundingDecision;
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     let pivot = std::env::var("SOVEREIGN_LONGFORM_CHARS")
         .ok()
@@ -1198,8 +1217,9 @@ async fn tombstoned_repair_releases_the_audited_draft_with_its_claims_marked() {
     if std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR").is_ok() {
         return; // the knob is set in this environment; default not under test
     }
-    let inference: Arc<dyn crate::traits::InferenceProvider> =
-        Arc::new(GateMock { support: false });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(false),
+    });
     let profile = GateSurface::KnowledgeQuery.profile();
     assert!(
         profile.retry,
@@ -1930,8 +1950,9 @@ fn the_claim_search_bound_is_one_process_wide_permit() {
 
 #[tokio::test]
 async fn a_verify_only_surface_keeps_its_own_action_name() {
-    let inference: Arc<dyn crate::traits::InferenceProvider> =
-        Arc::new(GateMock { support: false });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(false),
+    });
     let profile = GateSurface::Refinement.profile();
     assert!(!profile.retry, "refinement is the verify-only surface");
     let outcome = gate_answer(
@@ -1956,7 +1977,9 @@ async fn a_verify_only_surface_keeps_its_own_action_name() {
 #[tokio::test]
 async fn native_telemetry_states_absence_rather_than_omitting_it() {
     use sovereign_contracts::types::GroundingDecision;
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     let outcome = gate_answer(
         &inference,
@@ -2012,7 +2035,9 @@ async fn drain_frames(
 #[tokio::test]
 async fn short_path_progress_frames_on_release() {
     use crate::types::NarrationPhase;
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     let (tx, rx) = tokio::sync::mpsc::channel(16);
     let outcome = gate_answer_with_progress(
@@ -2060,8 +2085,9 @@ async fn short_path_progress_frames_on_release() {
 #[tokio::test]
 async fn short_path_progress_frames_on_abstention() {
     use crate::types::NarrationPhase;
-    let inference: Arc<dyn crate::traits::InferenceProvider> =
-        Arc::new(GateMock { support: false });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(false),
+    });
     let profile = GateSurface::Refinement.profile();
     assert!(!profile.retry);
     let (tx, rx) = tokio::sync::mpsc::channel(16);
@@ -2107,7 +2133,9 @@ async fn short_path_progress_frames_on_abstention() {
 #[tokio::test]
 async fn longform_progress_frames_stamp_each_claim() {
     use crate::types::NarrationPhase;
-    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock { support: true });
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
     let profile = GateSurface::Refinement.profile();
     // Force the per-claim ladder regardless of the profile's pivot
     // (and of any SOVEREIGN_LONGFORM_CHARS ambient override — the
@@ -2240,4 +2268,116 @@ fn verification_note_dedupes_caps_and_stays_unquoted() {
     assert!(note.contains(&format!("{}…", "x".repeat(160))));
     // Plain language — never judge vocabulary.
     assert!(!note.to_lowercase().contains("fabricated"));
+}
+
+// ── the long-form path selector is a BUDGET, not a cliff ───────────────
+
+/// The same sentence, grown two characters, to a target length.
+fn draft_of(n: usize) -> String {
+    let mut s = String::from("The shop sits on Harbour Row, by the quay. ");
+    while s.chars().count() < n {
+        s.push_str("The quay is old and the tea is good. ");
+    }
+    s.chars().take(n).collect()
+}
+
+/// **`profile.longform_chars` may change what a turn COSTS; it must never
+/// change what a turn SAYS.**
+///
+/// The measured cliff (note 7a8a2e97, 2026-09-04): the citation contract runs
+/// only below the pivot, and the two refusing drafts on the arch-tour fixture
+/// were 1,584 and 1,565 chars — a draft one line longer took the audit ladder,
+/// kept its draft, and released a good answer, which is the whole reason the
+/// defect read as intermittent (2 of 5 warm runs). A path selector that
+/// decides the ANSWER is a cliff; one that decides only the ROUTE is a budget.
+///
+/// So: the same content at `pivot - 1` and `pivot + 1` characters must release
+/// the same holding. The `mode` assertion is what keeps this from being
+/// vacuous (§18.1) — it proves the two runs genuinely took different paths.
+#[tokio::test]
+async fn the_longform_pivot_changes_the_route_and_not_the_holding() {
+    // Not a literal ladder: the pivot is read from the profile, so moving it
+    // moves the rungs. The equality is the note — 1,799/1,801 is the ladder
+    // this test was written as, and a moved pivot should be a deliberate act.
+    let pivot = GateSurface::KnowledgeQuery.profile().longform_chars;
+    assert_eq!(
+        pivot, 1_800,
+        "the ladder in the order is 1,799/1,801; a moved pivot needs its own ledger row"
+    );
+    assert!(
+        std::env::var("SOVEREIGN_LONGFORM_CHARS").is_err(),
+        "the env override would move the pivot out from under this test"
+    );
+
+    let below = draft_of(pivot - 1);
+    let above = draft_of(pivot + 1);
+    assert_eq!(below.chars().count(), 1_799);
+    assert_eq!(above.chars().count(), 1_801);
+    assert!(
+        above.starts_with(&below),
+        "the two drafts must be the SAME content, two characters apart"
+    );
+
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
+    let profile = GateSurface::KnowledgeQuery.profile();
+    let run = |draft: String| {
+        let inference = inference.clone();
+        let profile = profile;
+        async move {
+            gate_answer(
+                &inference,
+                "Where is the shop?",
+                draft,
+                &refinement_evidence(),
+                &CompletionRequest::default(),
+                &profile,
+            )
+            .await
+        }
+    };
+    let short = run(below.clone()).await;
+    let long = run(above.clone()).await;
+
+    // The routes really did differ — otherwise the equalities below prove
+    // nothing at all.
+    assert_eq!(
+        short.meta.get("mode").and_then(|m| m.as_str()),
+        Some("single_claim"),
+        "one character under the pivot must take the short path"
+    );
+    assert_eq!(
+        long.meta.get("mode").and_then(|m| m.as_str()),
+        Some("per_claim"),
+        "one character over the pivot must take the audit ladder"
+    );
+
+    // …and the holding is the same one on both sides.
+    assert_eq!(
+        short.answer.judgement().verdict(),
+        long.answer.judgement().verdict(),
+        "the pivot decided the route; it must not decide the verdict"
+    );
+    assert_eq!(
+        short.answer.text(),
+        below,
+        "the short path releases the draft it was given"
+    );
+    assert_eq!(
+        long.answer.text(),
+        above,
+        "and so does the audit path — no half of this content is refused on \
+         one side of the pivot and released on the other"
+    );
+    assert_eq!(
+        short.claims.iter().all(|c| c.supported),
+        long.claims.iter().all(|c| c.supported),
+        "and the same evidence supports it on both sides"
+    );
+    assert!(
+        !short.answer.text().contains("The passages do not answer")
+            && !long.answer.text().contains("The passages do not answer"),
+        "neither route may manufacture an absence over evidence both were shown"
+    );
 }
