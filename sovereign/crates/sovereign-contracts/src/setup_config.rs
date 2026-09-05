@@ -972,6 +972,26 @@ impl ModelsSection {
             .map(str::to_string)
     }
 
+    /// The FAST slot's GGUF filename stem — the model that slot actually
+    /// serves.
+    ///
+    /// Reads through [`Self::fast_path`], so a config with no distinct fast
+    /// model answers with the PRIMARY's stem: that is what the fast slot
+    /// serves on such a host, and answering `None` would say "no model" about
+    /// a slot that decodes. Callers that need "is a fast model configured at
+    /// all" want [`Self::has_explicit_fast`], which is the different question.
+    ///
+    /// Lives beside [`Self::primary_stem`] and [`Self::embed_stem`] rather
+    /// than being re-derived at a call site, for the reason `primary_stem`'s
+    /// own doc records: that chain was copy-pasted at six sites and had to be
+    /// updated in lockstep to stay right (§10.6).
+    pub fn fast_stem(&self) -> Option<String> {
+        self.fast_path()
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string)
+    }
+
     /// The embed GGUF's filename stem. See [`Self::primary_stem`].
     pub fn embed_stem(&self) -> Option<String> {
         self.embed

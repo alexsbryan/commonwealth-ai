@@ -599,6 +599,7 @@ mod tests {
             baseline_captured: None,
             baseline_age_days: None,
             levers: vec![],
+            tally: None,
             note: None,
         };
         let s = enrichment_summary(&o);
@@ -627,6 +628,7 @@ mod tests {
             baseline_captured: None,
             baseline_age_days: None,
             levers: vec!["mechanism".into()],
+            tally: None,
             note: None,
         };
         let s = enrichment_summary(&o);

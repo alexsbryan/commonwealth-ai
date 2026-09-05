@@ -1,0 +1,129 @@
+# throughput.toml — the throughput lane's bank.
+#
+# WRAPS `scripts/throughput_probe.py --json`; it is not re-implemented here.
+# That probe has existed since the heterogeneous-distribution experiment and
+# already measures TTFT, decode t/s, inter-token latency, prefill t/s and
+# greedy fidelity from a real SSE stream. Its ONLY caller today is
+# `scripts/desktop-smoke.sh::perf_probe`, which compares it against a
+# gitignored baseline directory that does not exist on this host — so in the
+# whole repo it has never compared anything to anything (ARCH §19: the
+# instrument existed, the comparison did not).
+#
+# Every number below is PRE-REGISTERED. The two HARD bars are the order's,
+# from a measured 430 ms / 50.0 tok/s on the primary slot; every other arm is
+# TRACKED with `bars_deferred`, which is a DECLARED absence and not the same
+# thing as a missing bar table (see `bars_deferred` below).
+
+schema_version = 1
+
+[bank]
+id = "throughput"
+# Repo-relative. The lane refuses if it is not on disk rather than falling
+# back to a probe of its own (ARCH §18.3).
+probe = "scripts/throughput_probe.py"
+
+# ── The long-prompt arms ────────────────────────────────────────────
+#
+# Measured on this host 2026-09-04, and the reason the long arms are shaped
+# the way they are:
+#
+#   5,917-token prompt, COLD:  TTFT 44,727 ms, prefill  132 tok/s
+#   the same prompt, REPEATED: TTFT    375 ms, prefill 1,648 tok/s
+#
+# The daemon prefix-caches. So a long arm run the ordinary way — one warm-up
+# then three measured trials of the same prompt — measures the CACHE and
+# reports a prefill figure 12x the real one. The long arms therefore run
+# `warmup = 0, trials = 1` against a prompt SALTED with the run's nanos in
+# its first bytes, which is what makes the cold prefill structural rather
+# than hoped-for (ARCH §10). One cold trial is n=1 and is TRACKED for that
+# reason (ARCH §18.5) — it is a number to watch, never a bar to gate on.
+[long]
+# Deterministic filler. The prompt is `<salt>\n` + this seed repeated to
+# `chars`, so the only thing that varies between runs is the salt.
+seed = """\
+A mixture-of-experts transformer routes each token through a learned gate \
+that selects a small subset of expert feed-forward blocks, so only a \
+fraction of the total parameter count activates per token while the model \
+keeps the capacity of the whole. \
+"""
+tail = "\nSummarise the passage above in exactly one sentence."
+
+# ── The arms ────────────────────────────────────────────────────────
+#
+# `bars.<model stem>` is a HARD table: a stem present here gates. An arm with
+# NO table for the stem the daemon is serving is could-not-judge NAMING the
+# stem — running a different model is not evidence that this one got faster,
+# the same rule the chat-ask bank's ceilings use.
+#
+# `bars_deferred = true` is the OTHER answer, and the distinction is the
+# point: it says an operator looked at this arm and has not set its numbers
+# yet, so the arm records and does not gate. An arm that is merely missing a
+# stem row cannot reach that verdict, so a stem swap can never be mistaken
+# for a deliberate deferral.
+
+[[arm]]
+id = "primary/short"
+slot = "primary"
+prompt = "default"          # the probe's own default prompt
+trials = 3
+warmup = 1
+max_tokens = 128
+# The order's pre-registered bars, from 430 ms / 50.0 tok/s measured
+# 2026-09-04 before any lane code existed.
+[arm.bars."Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"]
+ttft_ms_max = 1000
+decode_tps_min = 40
+
+[[arm]]
+id = "fast/short"
+slot = "fast"
+prompt = "default"
+trials = 3
+warmup = 1
+max_tokens = 128
+# Measured 385 ms / 48.2 tok/s on 2026-09-04, but the order leaves the fast
+# slot's bars to the operator to set from the first run — so this arm
+# records and does not gate, and says so.
+bars_deferred = true
+
+[[arm]]
+id = "primary/long"
+slot = "primary"
+prompt = "long"
+# ~8,000 tokens. Measured 5.42 chars/token on this tokenizer, so 43,400
+# chars. `prompt_tokens_min/max` is the check that the TOKENIZER did not
+# change under us: a prompt that suddenly costs 3,000 tokens is not the arm
+# this baseline was captured against.
+chars = 43400
+prompt_tokens_min = 7000
+prompt_tokens_max = 9000
+trials = 1
+warmup = 0
+max_tokens = 64
+bars_deferred = true
+
+[[arm]]
+id = "fast/long"
+slot = "fast"
+prompt = "long"
+# ~3,000 tokens, not 8,000: the fast slot advertises an 8,000-token window,
+# and an 8k prompt plus its output does not fit inside it. A long arm that
+# is refused by the context window measures the window, not the prefill.
+chars = 16000
+prompt_tokens_min = 2400
+prompt_tokens_max = 3600
+trials = 1
+warmup = 0
+max_tokens = 64
+bars_deferred = true
+
+# ── The end-to-end arm ──────────────────────────────────────────────
+#
+# The probe talks to `/v1/chat/completions` and so measures the ENGINE. This
+# arm goes through the runtime — router, policy, synthesis — with no corpus
+# attached, and records `provenance.total_latency_ms`. A turn that errors or
+# comes back empty is a catastrophe and fails HARD; the latency itself is
+# TRACKED, because the order pre-registered no bar for it.
+[e2e]
+question = "In one sentence, what is a compiler?"
+runs = 2

@@ -42,7 +42,7 @@ mod flywheel;
 mod gate;
 mod governance;
 mod judge_replay;
-mod lane_baseline;
+pub(crate) mod lane_baseline;
 pub(crate) mod live_runner;
 mod mechanism_fidelity;
 mod model_resolve;

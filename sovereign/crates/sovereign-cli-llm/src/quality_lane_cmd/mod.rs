@@ -30,6 +30,7 @@
 //! changes nothing about the absolute ones.
 
 pub(crate) mod chat_ask;
+pub(crate) mod throughput;
 
 use std::path::PathBuf;
 
@@ -119,6 +120,15 @@ impl LaneReport {
         self.push(Judgement::could_not_judge(subject, reason(why)));
     }
 
+    /// The rows so far. A lane's row-shaping functions are where its rules
+    /// live, so a test asserts on the VERDICTS they produced rather than on
+    /// the prose they printed — the coupling `scripts/lib/ci-bench-verdict.sh`
+    /// is made of.
+    #[cfg(test)]
+    pub fn rows_for_test(&self) -> &[Judgement] {
+        &self.rows
+    }
+
     /// Print the rows, the honesty footer, and the trailing verdict line.
     /// Returns the process exit code.
     ///
@@ -152,12 +162,16 @@ pub async fn run(args: &[String]) -> i32 {
     let lane = args.first().map(String::as_str).unwrap_or("");
     match lane {
         "chat-ask" => chat_ask::run(&args[1..]).await,
+        "throughput" => throughput::run(&args[1..]).await,
         "--help" | "-h" | "" => {
             println!("Usage: svrn quality lane <id>");
             println!();
             println!("  chat-ask   The focus lane: ingest the Architecture Tour, ask two");
             println!("             questions three warm times each, and assert the route,");
             println!("             the per-stage ceilings, the gate outcome and usefulness.");
+            println!();
+            println!("  throughput The engine's own numbers: scripts/throughput_probe.py");
+            println!("             over four arms, plus two plain end-to-end turns.");
             println!();
             println!("Normally driven by `svrn quality check`, which reads the trailing");
             println!("Judgement line each lane prints last.");
@@ -166,7 +180,7 @@ pub async fn run(args: &[String]) -> i32 {
         other => {
             // Refused, never defaulted to a lane the operator did not ask
             // for (ARCH §18.3).
-            eprintln!("svrn quality lane: no lane `{other}`. Declared: chat-ask");
+            eprintln!("svrn quality lane: no lane `{other}`. Declared: chat-ask, throughput");
             2
         }
     }

@@ -54,6 +54,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 DESKTOP_DIR="$REPO_ROOT/sovereign/crates/sovereign-desktop"
 CLI="$REPO_ROOT/target/debug/sovereign-cli-llm"
+# The DISPATCHER, not the sibling: `quality check` is in-process in
+# `sovereign-cli` and needs its `dev-tools` feature.
+SVRN="$REPO_ROOT/target/debug/sovereign-cli"
 DESKTOP_BIN="$REPO_ROOT/target/debug/sovereign-desktop"
 # NOTE: this is a real filename on this host, not a family name — the `_XL`
 # suffix is load-bearing. It was missing until 2026-08-04, which cost an
@@ -90,9 +93,10 @@ TARGET_PRIMARY="$SHIPPED_PRIMARY"   # --primary <path> overrides (e.g. run the 2
 # P5 consumes whatever budget remains (min SMOKE_P5_MIN_SECS).
 : "${SMOKE_P5_MIN_SECS:=600}"
 : "${SMOKE_P6_SECS:=900}"
-# perf tolerance bands (regression if breached)
-: "${PERF_TPS_DROP_PCT:=15}"     # decode tok/s may not drop >15%
-: "${PERF_TTFT_RISE_PCT:=30}"    # TTFT may not rise >30%
+# The perf tolerance bands (PERF_TPS_DROP_PCT / PERF_TTFT_RISE_PCT) moved into
+# `sovereign/bench/quality-check/throughput.toml` as pre-registered per-stem
+# BARS, which is the difference between a threshold written down before the
+# run and one an env var can move after it.
 : "${SAFETY_DROP_ABS:=0.05}"     # safety_number may not drop >0.05
 
 while [ $# -gt 0 ]; do
@@ -118,8 +122,7 @@ OVERALL_RC=0
 BRIDGE_PID=""
 
 # quick-mode shrinks the sampling knobs (a smoke wants signal, not precision)
-if [ -n "$QUICK" ]; then PERF_MAXTOK=128; PERF_TRIALS=3; ROUTE_LIMIT=10
-else PERF_MAXTOK=256; PERF_TRIALS=5; ROUTE_LIMIT=20; fi
+if [ -n "$QUICK" ]; then ROUTE_LIMIT=10; else ROUTE_LIMIT=20; fi
 # capturing a baseline should traverse every phase, so Phase 0 must not hard-stop.
 [ -n "$CAPTURE_BASELINE" ] && CONTINUE="1"
 
@@ -333,33 +336,6 @@ phase0() {
 }
 
 # ── Phase 1: perf baseline ───────────────────────────────────────────────────
-perf_probe() {  # perf_probe <slot-label> <model>
-  local label="$1" model="$2"                       # NB: separate line — a single
-  local out="$ART/perf-$label.json"                 # `local a=$1 b=$ART/$a` expands
-  local base="$BASELINE/perf-$label.json"           # $a before it is assigned (set -u dies)
-  scripts/throughput_probe.py --model "$model" --max-tokens "$PERF_MAXTOK" \
-    --trials "$PERF_TRIALS" --warmup 1 --label "$label" --json > "$out" 2>>"$ART/p1-perf.err" || return 3
-  if [ -n "$CAPTURE_BASELINE" ] || [ ! -f "$base" ]; then cp "$out" "$base"; echo "captured"; return 0; fi
-  python3 - "$base" "$out" "$PERF_TPS_DROP_PCT" "$PERF_TTFT_RISE_PCT" <<'PY'
-import json,sys
-b=json.load(open(sys.argv[1])); c=json.load(open(sys.argv[2]))
-tps_drop=float(sys.argv[3]); ttft_rise=float(sys.argv[4])
-def g(d,*k):
-    for kk in k:
-        if kk in d and d[kk] is not None: return float(d[kk])
-    return None
-btps,ctps=g(b,"decode_tps","tok_per_s","decode_tok_s"),g(c,"decode_tps","tok_per_s","decode_tok_s")
-bttft,cttft=g(b,"ttft_ms","ttft"),g(c,"ttft_ms","ttft")
-msgs=[]; bad=False
-if btps and ctps and ctps < btps*(1-tps_drop/100):
-    bad=True; msgs.append(f"tok/s {ctps:.1f} vs {btps:.1f} (-{100*(btps-ctps)/btps:.0f}%)")
-if bttft and cttft and cttft > bttft*(1+ttft_rise/100):
-    bad=True; msgs.append(f"TTFT {cttft:.0f}ms vs {bttft:.0f}ms (+{100*(cttft-bttft)/bttft:.0f}%)")
-print(("REGRESS " if bad else "ok ")+"; ".join(msgs) if msgs else ("REGRESS" if bad else "ok"))
-sys.exit(1 if bad else 0)
-PY
-}
-
 phase1() {
   phase_enabled 1 || { record "1 perf" "SKIP" 0 "disabled"; return 0; }
   log "PHASE 1 — perf baseline (throughput + TTFT + MTP + TTFI)"
@@ -368,10 +344,18 @@ phase1() {
   sovereign/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
     && log "  daemon surface: up" || { warn "  smoke-attach probes failed (non-fatal)"; detail+="attach? "; }
 
-  # primary (thoughtful 35B) probe is the gate; fast slot is best-effort
-  # (a config may not advertise a fast slot — that must not fail the smoke).
-  local r; r=$(perf_probe primary primary); [ $? -ne 0 ] && { fail=1; detail+="primary:$r "; } || detail+="primary:$r "
-  r=$(perf_probe fast fast);              [ $? -ne 0 ] && { detail+="fast:unavail "; warn "  fast slot probe unavailable (non-fatal)"; } || detail+="fast:$r "
+  # The throughput lane of `svrn quality check` owns this now. It runs the
+  # same `scripts/throughput_probe.py`, over four declared arms instead of
+  # two, against PRE-REGISTERED bars in `sovereign/bench/quality-check/
+  # throughput.toml` and a per-stack baseline that is committed — where the
+  # comparison this block used to do read a gitignored `$BASELINE` directory
+  # that does not exist on a fresh checkout, so on this host it captured on
+  # every run and compared on none of them.
+  if run_capped 400 "$SVRN" quality check --lane throughput > "$ART/p1-throughput.log" 2>&1; then
+    log "  throughput lane: PASS"; detail+="throughput:pass "
+  else
+    fail=1; detail+="throughput:fail "; err "  throughput lane failed — see $ART/p1-throughput.log"
+  fi
 
   run_capped 180 scripts/mtp-probe.sh --n 5 --max-tokens 200 > "$ART/p1-mtp.log" 2>&1 \
     && log "  mtp accept-rate: recorded" || warn "  mtp-probe failed (non-fatal)"

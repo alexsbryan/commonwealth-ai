@@ -135,6 +135,20 @@ pub struct BenchOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrieval: Option<RetrievalOutcome>,
     pub levers: Vec<String>,
+    /// How many items were scored and how many of them landed — the tally,
+    /// as DATA.
+    ///
+    /// Populated on the ROUTING surface only, and that is the whole point:
+    /// the retrieval and enrichment surfaces carry their own per-item rows
+    /// into the report (`retrieval.current.results[]`, the enrichment
+    /// phases' `expected`/`matched`), so a reader can count them. Routing
+    /// carries neither — `run_routing_only` drops the per-question rows and
+    /// puts the count in `note` PROSE. A downstream check that wants "did
+    /// this lane score zero" then has to grep an English sentence nobody
+    /// promised to keep, which is what `scripts/lib/ci-bench-verdict.sh` is
+    /// made of and what the quality-check runner exists to stop doing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tally: Option<BenchTally>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Capture date (YYYY-MM-DD) of the baseline this run was diffed
@@ -170,6 +184,16 @@ pub enum BenchStatus {
     MissingBaseline,
     /// Couldn't run — corpus missing, subprocess failed, etc.
     Stale,
+}
+
+/// A scored/landed pair. `scored` is the denominator the lane actually
+/// judged, so `scored == 0` says "this lane measured nothing" and
+/// `correct == 0` with `scored > 0` says "it measured, and everything
+/// missed" — two different verdicts that one number cannot carry.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BenchTally {
+    pub scored: usize,
+    pub correct: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -416,6 +440,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
+                tally: None,
                 baseline_captured: None,
                 baseline_age_days: None,
                 note: Some(format!("rebuild failed: {e}")),
@@ -447,6 +472,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             enrichment: None,
             retrieval: None,
             levers: bench.levers.clone(),
+            tally: None,
             baseline_captured: None,
             baseline_age_days: None,
             note: Some(stale_hint(&bench)),
@@ -610,6 +636,10 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         enrichment: None,
         retrieval: None,
         levers: bench.levers.clone(),
+        tally: Some(BenchTally {
+            scored: total,
+            correct,
+        }),
         baseline_captured: None,
         baseline_age_days: None,
         note,
@@ -674,6 +704,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
+                tally: None,
                 baseline_captured: None,
                 baseline_age_days: None,
                 note: Some(format!("score_corpus failed: {e}")),
@@ -729,6 +760,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         enrichment: Some(EnrichmentOutcome { current, baseline }),
         retrieval: None,
         levers: bench.levers.clone(),
+        tally: None,
         baseline_captured: None,
         baseline_age_days: None,
         note,
@@ -860,6 +892,7 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         enrichment: None,
         retrieval: Some(RetrievalOutcome { current, baseline }),
         levers: bench.levers.clone(),
+        tally: None,
         baseline_captured: None,
         baseline_age_days: None,
         note: None,
@@ -894,6 +927,7 @@ fn outcome_subprocess_fail(bench: &DiscoveredBench, msg: String) -> BenchOutcome
         enrichment: None,
         retrieval: None,
         levers: bench.levers.clone(),
+        tally: None,
         baseline_captured: None,
         baseline_age_days: None,
         note: Some(msg),
@@ -1376,6 +1410,7 @@ mod tests {
             enrichment: None,
             retrieval: None,
             levers: vec![],
+            tally: None,
             baseline_captured: None,
             baseline_age_days: None,
             note: None,
