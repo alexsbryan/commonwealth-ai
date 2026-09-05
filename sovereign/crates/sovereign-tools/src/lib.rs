@@ -144,7 +144,6 @@ pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
 pub use knowledge_lookup::{
     Evidence, EvidenceId, EvidenceKind, KindCounts, KnowledgeLookupResponse, KnowledgeLookupTool,
-    SYSTEM_PROMPT as KNOWLEDGE_LOOKUP_SYSTEM_PROMPT,
     TOOL_DESCRIPTION as KNOWLEDGE_LOOKUP_TOOL_DESCRIPTION,
 };
 pub use recipe_author::{
