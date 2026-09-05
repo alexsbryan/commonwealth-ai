@@ -45,15 +45,25 @@ exit-0-and-wrong failure in its purest form.
 
 So the check is **structural, not remembered** (ARCH §10, §7): `run.sh` refuses
 to start when `$SCLI` — or the `sovereign-cli-llm` sibling the dispatcher execs
-for `atlas` — has an mtime older than the commit date of the tree it is
-launched at. Watched failing 2026-09-05 against exactly that stale binary:
+for `atlas` — is older than **the newest commit that touches what the binary is
+built from** (`git log -1 -- '*.rs' '*Cargo.toml' 'Cargo.lock'`). Watched
+failing 2026-09-05 against exactly the stale binary:
 
 ```
-REFUSING: sovereign-cli built 2026-09-04T15:11:40-07:00, BEFORE HEAD 8f3c129fa
-(2026-09-05T04:50:16-07:00) — rebuild: cargo build -p sovereign-cli -p
-sovereign-cli-llm --features corpus-engine/treesitter,sovereign-cli/dev-tools,\
-sovereign-cli/code-intel,sovereign-cli/awareness
+REFUSING: sovereign-cli built 2026-09-04T15:11:40-07:00, BEFORE the newest
+source commit 7f60a09bd (2026-09-05T04:27:54-07:00) — rebuild: cargo build -p
+sovereign-cli -p sovereign-cli-llm --features corpus-engine/treesitter,\
+sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness
 ```
+
+**The first version of this guard keyed on HEAD's date and was wrong**, and it
+refused the seat's first launch attempt: the staging commit touched only shell
+and markdown, so the binary was current and the guard said stale. That is the
+guard working (it refused rather than ran) and the rule being wrong. The
+reference is the newest *source* commit precisely so a docs- or
+scaffolding-only commit cannot invent staleness, while a Rust change still
+does. Both directions are watched: the current binary passes, the
+2026-09-04 15:11 binary still refuses.
 
 The binary this run uses is built by that exact command and is recorded, with
 its mtime, in `DONE`.
@@ -131,7 +141,7 @@ failing on 2026-09-05:
 
 | Refusal | Trigger |
 |---|---|
-| stale binary | `$SCLI` or its `-llm` sibling older than HEAD's commit date |
+| stale binary | `$SCLI` or its `-llm` sibling older than the newest Rust/manifest commit |
 | missing binary | `$SCLI` or the sibling absent |
 | busy box | `pgrep -x cargo/rustc` ≠ 0, **or** MemAvailable < 60 GB. `ALLOW_BUSY_BOX=1` overrides and the override is named in `DONE` |
 | no daemon | nothing answering `/v1/models`, or no pid to watch |
@@ -171,7 +181,27 @@ was not OOM-killed" is evidence rather than an absence of evidence.
 | `runs/ei-3b-sep-backfill/measure_rss.sh` | the VmHWM peak-RSS instrument (shape reused from `.wiki-rebuild-scratch/measure.sh`) |
 
 A marker is written only after the batch's per-corpus ledger lines are durable,
-so a marker means resume from that point is exact.
+so a marker means resume from that point is exact. Markers, `DONE`, `run.log`
+and `sampler.log` are cleared at the START of every invocation — before the
+refusals — so `DONE` always describes the invocation that wrote it and a
+refusal's `DONE` is never read beside a previous run's markers. The ledger is
+never touched here; it is the durable record, which is what makes clearing the
+rest free.
+
+## The wrapper's own machinery, watched working
+
+The driver has been exercised for real. The wrapper around it had not been, so
+it was run against a stub that prints the driver's `progress:` shape and costs
+no GPU (`DRIVER=` is overridable for exactly this, and the battery never sets
+it). Three findings, all fixed:
+
+| Path | Verdict |
+|---|---|
+| per-leg batch numbering | **was wrong** — leg 2's `tail -n +1` re-read leg 1's progress lines and reported six batches for three. Each leg now tails from the log's current end. 3 and 3. |
+| leg 1 fails → leg 2 must not start | passes — `state: smoke-failed`, `leg1=1`, `leg2=-`, zero leg-2 markers |
+| the OOM stop condition | passes — watched firing against a throwaway pid (`WATCH_PID=`, test-only): "DAEMON GONE after leg 1 batch 2", driver killed, `state: oom-stop`, `daemon_alive: false`, and the DO-NOT-RESTART line |
+
+A stop condition nobody has seen fire is not a stop condition (ARCH §18.1).
 
 ## Resume
 

@@ -55,7 +55,11 @@ set -uo pipefail
 
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
-DRIVER="$REPO/sovereign/bench/sep_atlas/backfill_index.sh"
+# Overridable ONLY so the wrapper's own machinery — markers, sampler, the
+# per-batch daemon check — can be exercised against a stub that prints
+# `progress:` lines and costs no GPU. The battery never sets it (ARCH §18.4:
+# validate the instrument before the result).
+DRIVER=${DRIVER:-$REPO/sovereign/bench/sep_atlas/backfill_index.sh}
 LEDGER="$REPO/sovereign/bench/sep_atlas/backfill-index.jsonl"
 
 # The driver defaults SCLI to its OWN repo's target/debug. Pinning it here as
@@ -95,6 +99,14 @@ refuse() { # reason... ; exit 1 after writing DONE
   exit 1
 }
 
+# A stale marker or DONE from an earlier invocation would be read as this run's,
+# so they are cleared HERE — before the refusals — and a refusal's own DONE is
+# therefore never read alongside a previous run's markers. The LEDGER is the
+# durable record and is never touched: it is what resume reads, and it is why
+# clearing these costs nothing.
+rm -rf "$MARKERS"; mkdir -p "$MARKERS"
+: > "$SAMPLER"; : > "$RUN_LOG"; rm -f "$DONE" "$HERE/.stop"
+
 # ── preconditions (each one is a refusal, never a warning) ──────────────────
 [[ -x "$DRIVER" ]] || refuse "no driver at $DRIVER"
 [[ -x "$SCLI" ]]   || refuse "no sovereign-cli at $SCLI — build it, or set SCLI"
@@ -103,12 +115,21 @@ refuse() { # reason... ; exit 1 after writing DONE
 # directory, so BOTH must postdate the commit. `%ct` is the commit date of the
 # tree this run is launched at; a binary older than it cannot contain it.
 HEAD_SHA=$(git -C "$REPO" rev-parse --short HEAD)
-head_ct=$(git -C "$REPO" log -1 --format=%ct)
+# The question is "was this binary built after the last SOURCE change?", not
+# "after the last commit". Comparing against HEAD refuses on a docs- or
+# scaffolding-only commit — which is what this very staging commit is, and the
+# stub run caught it refusing a binary that was in fact current (ARCH §18.4:
+# the instrument is validated before the result, and this one failed the test
+# it was written to pass). So the reference is the newest commit touching Rust
+# sources or the manifests that pick their versions.
+SRC_SHA=$(git -C "$REPO" log -1 --format=%h -- '*.rs' '*Cargo.toml' 'Cargo.lock')
+src_ct=$(git -C "$REPO" log -1 --format=%ct -- '*.rs' '*Cargo.toml' 'Cargo.lock')
+: "${src_ct:=$(git -C "$REPO" log -1 --format=%ct)}"
 for b in "$SCLI" "$(dirname "$SCLI")/sovereign-cli-llm"; do
   [[ -x "$b" ]] || refuse "missing sibling binary $b (the dispatcher execs it for \`atlas\`)"
   b_mt=$(stat -c %Y "$b")
-  if (( b_mt < head_ct )); then
-    refuse "$(basename "$b") built $(date -d "@$b_mt" -Is), BEFORE HEAD $HEAD_SHA ($(date -d "@$head_ct" -Is)) — rebuild: cargo build -p sovereign-cli -p sovereign-cli-llm --features corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
+  if (( b_mt < src_ct )); then
+    refuse "$(basename "$b") built $(date -d "@$b_mt" -Is), BEFORE the newest source commit $SRC_SHA ($(date -d "@$src_ct" -Is)) — rebuild: cargo build -p sovereign-cli -p sovereign-cli-llm --features corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
   fi
 done
 
@@ -130,8 +151,13 @@ BUSY_NOTE=${BUSY_NOTE:-clean}
 curl -fsS -m 5 "$DAEMON/v1/models" >/dev/null 2>&1 \
   || refuse "no daemon answering at $DAEMON/v1/models — starting one is the seat's call"
 
-DPID=$(pgrep -f 'sovereign-cli-daemon' | head -1)
+# `WATCH_PID` exists ONLY so the stop condition can be watched firing against a
+# throwaway process. The battery never sets it; unset, the watched pid is the
+# daemon's own. A stop condition nobody has seen fire is not a stop condition
+# (ARCH §18.1).
+DPID=${WATCH_PID:-$(pgrep -f 'sovereign-cli-daemon' | head -1)}
 [[ -n "$DPID" ]] || refuse "daemon answers HTTP but no pid found to watch"
+[[ -n "${WATCH_PID:-}" ]] && echo "WARNING: watching WATCH_PID=$DPID, not the daemon (test mode)" >&2
 
 # The claim is the order's ("claim take daemon:<node>:backfill"). `claim may-i`
 # is banked-broken on this host, so a failure here is NAMED and does not stop
@@ -145,12 +171,6 @@ if command -v sovereign >/dev/null 2>&1; then
     CLAIM_STATE="FAILED (banked: claim surface broken 2026-09-04; seat's window is the interlock)"
   fi
 fi
-
-# A stale marker from an earlier invocation would be read as this run's, so the
-# directory is emptied rather than added to. The LEDGER is the durable record
-# and is never touched here — it is what resume reads.
-rm -rf "$MARKERS"; mkdir -p "$MARKERS"
-: > "$SAMPLER"; : > "$RUN_LOG"; rm -f "$DONE" "$HERE/.stop"
 
 started=$(date -Is)
 t_start=$(date +%s)
@@ -176,7 +196,7 @@ finish() {
     echo "driver_exit:    $rc"
     echo "leg1_smoke_rc:  $LEG1_RC"
     echo "leg2_sweep_rc:  $LEG2_RC"
-    echo "head:           $HEAD_SHA"
+    echo "head:           $HEAD_SHA (newest source commit $SRC_SHA)"
     echo "scli:           $SCLI ($(date -d "@$(stat -c %Y "$SCLI")" -Is))"
     echo "box_at_start:   $BUSY_NOTE"
     echo "started:        $started"
@@ -213,7 +233,7 @@ trap finish EXIT
 {
   echo "=== ei-3b-sep-backfill ==="
   echo "started:  $started"
-  echo "head:     $HEAD_SHA"
+  echo "head:     $HEAD_SHA (newest source commit $SRC_SHA)"
   echo "scli:     $SCLI ($(date -d "@$(stat -c %Y "$SCLI")" -Is))"
   echo "daemon:   $DAEMON (pid $DPID)"
   echo "claim:    $CLAIM_STATE"
@@ -226,14 +246,18 @@ trap finish EXIT
 run_leg() { # <leg-name> <driver args...>
   local leg=$1; shift
   echo "=== leg $leg: $DRIVER $* ===" | tee -a "$RUN_LOG"
+  # Both legs append to ONE run log, so the tail must start at the log's
+  # CURRENT end. Starting at line 1 made leg 2 re-read leg 1's `progress:`
+  # lines and report six batches for three (caught by the stub run, ARCH §18.4).
+  local from=$(( $(wc -l < "$RUN_LOG") + 1 ))
   "$DRIVER" "$@" >>"$RUN_LOG" 2>&1 &
   local drv=$!
-  echo "  driver pid $drv — batches marked in $MARKERS"
+  echo "  driver pid $drv — batches marked in $MARKERS (log from line $from)"
 
   # `tail --pid` ends when the driver does; the loop sees each line as it lands.
   # It runs in a subshell (pipeline), so the stop decision is communicated out
   # through `$HERE/.stop`, not a variable.
-  tail -n +1 -F --pid="$drv" "$RUN_LOG" 2>/dev/null | {
+  tail -n +"$from" -F --pid="$drv" "$RUN_LOG" 2>/dev/null | {
     local batch=0
     while IFS= read -r line; do
       case "$line" in
