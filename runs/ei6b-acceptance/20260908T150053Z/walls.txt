@@ -1,0 +1,2 @@
+build wall=26s
+acceptance wall=4535s

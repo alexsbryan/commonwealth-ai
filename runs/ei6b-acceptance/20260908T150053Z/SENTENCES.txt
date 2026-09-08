@@ -1,0 +1,7 @@
+corpus-mcp: embed quirks `Qwen3Embedding` for model stem `Qwen3-Embedding-0.6B-Q8_0` — documents and queries are prepared the way this corpus was built
+corpus-mcp: embed quirks `Qwen3Embedding` for model stem `Qwen3-Embedding-0.6B-Q8_0` — documents and queries are prepared the way this corpus was built
+acceptance: corpus ingest(wessex-hoard-bare-ei6b) -> ok in 4522s
+--- THE BAR: truth.json recall, one scorer over both atlases ---
+  control  : truth.json recall 21/21 = 1.0000  (49 attribution atoms produced)
+  candidate: truth.json recall 17/21 = 0.8095  (35 attribution atoms produced)
+acceptance: FAIL — truth.json recall below the daemon-built control (the classes are named above)
