@@ -1294,25 +1294,31 @@ id = "daemon-soak-report"
 kind = "probe"
 claim = "invariant"
 command = "scripts/daemon-soak-report.sh"
-cost_secs = "unmeasured"
+cost_secs = 2.7
+enforcement = "tracked"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "daemon-soak-report-selftest"
+runs_in = ["run-if-stale"]
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+load_bearing = [
+  { flag = "the daemon's own exit receipts, not supervisor.log", why = "the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08" },
+  { flag = "a portable `date` and `stat`", why = "both readers were GNU-only and both failed SILENTLY on darwin: `stat -c %Y /proc/$PID` substituted now for the start time so every daemon read `up 0h0m`, and an empty 24h cutoff left the restart rate as `?`. A green from this report on a mac meant nothing before 2026-09-08" },
+]
+
+# The negative control the row above had none of. A PAIR that differs in one
+# thing — the age of eight exit receipts — where the verdict has to flip.
+[[instrument]]
+id = "daemon-soak-report-selftest"
+kind = "control"
+claim = "invariant"
+command = "scripts/daemon-soak-report.sh --self-test"
+cost_secs = 0.2
 enforcement = "tracked"
 fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["by-hand"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
-
-[[instrument]]
-id = "daemon-supervised"
-kind = "suite"
-claim = "invariant"
-command = "scripts/daemon-supervised.sh"
-cost_secs = "unmeasured"
-enforcement = "tracked"
-fidelity = "F4"
-baseline = { kind = "none" }
-negative_control = "none"
-runs_in = ["by-hand"]
+runs_in = ["run-if-stale"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
@@ -1326,10 +1332,34 @@ fidelity = "F3"
 preconditions = ["binary:podman", "host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["by-hand"]
+runs_in = ["weekly:soak", "by-hand"]
 doc = "commonwealth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "the podman backend", why = "real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled" },
+  { flag = "`continue-on-error: true` on the weekly job", why = ".github/workflows/mesh-soak-nightly.yml:35 — the job is advisory, so a red soak does not fail the workflow. `runs_in` says it is scheduled and this says what the schedule can do about a failure, which is nothing" },
+  { flag = "the declared `binary:podman` precondition matches no code path", why = "the script compares BACKEND only against \"local\" (mesh-soak.sh:126,133) and its own comments say \"all rootless, no podman\" (:63,:836). MESH_QA.md:100 documents MESH_SOAK_BACKEND=podman, which would just skip the netns re-exec and run on the bare host. Left as declared rather than silently corrected: which of the doc, the script and this row is wrong is a mesh-QA decision, not a registry edit" },
+]
+
+# Layer 3 of the mesh QA stack. `mesh-soak.sh`'s header names three layers —
+# in-process DST, this script, and the SLO gate — and the gate was in NO
+# registry until 2026-09-08. It is not a shape `instrument-gate` extracts
+# (`"$CLI" mesh soak-gate ...` is neither a script path, an `npm run` target
+# nor a cargo subcommand), so the closure loop could not have found it.
+[[instrument]]
+id = "mesh-soak-gate"
+kind = "bench"
+claim = "invariant"
+command = "sovereign mesh soak-gate mesh-soak-findings.jsonl"
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "metrics", path = ".github/mesh-slo-baseline.json" }
+negative_control = "none"
+runs_in = ["weekly:soak", "by-hand"]
+doc = "commonwealth/docs/MESH_QA.md"
+load_bearing = [
+  { flag = "BOTH of its invocations swallow the exit code", why = "mesh-soak.sh:1248 ends `|| true` and only runs under --gate, which the weekly workflow does not pass; mesh-soak-nightly.yml:107-108 runs it as its own step and also ends `|| true`. It is declared `advisory` because that is what it IS, not because someone decided it should be — `cmd_soak_gate` exits 1 on regression and nothing reads it" },
+  { flag = "the baseline is named three different things and none is committed", why = "mesh-soak.sh looks for $ROOT/mesh-soak-baseline.json (gitignored, .gitignore:175), the workflow passes .github/mesh-slo-baseline.json, MESH_QA.md:132 says mesh-slo-baseline.json. A gate against a baseline that does not exist gates nothing" },
 ]
 
 # ── The rest of what the gate's first run found ──────────────────────
@@ -1907,6 +1937,10 @@ why = "prints the mutant bank; adjudicates nothing"
 [[not_instrument]]
 key = "npm:report:ttfi:save-baseline"
 why = "a `cp` that promotes a report to a baseline — a ratchet MOVE, not a measurement"
+
+[[not_instrument]]
+key = "scripts/daemon-supervised.sh"
+why = "it RUNS the daemon, it does not verify one — a 40-line `while :; do daemon run; done` that relaunches on the memory-watch exit-102 and listener-watch exit-104 paths where systemd cannot reach (the daemon must live inside the vulkan toolbox for GPU access). It was an `[[instrument]]` with `runs_in = [\"by-hand\"]` until 2026-09-08, which read as a soak nothing schedules; it is the SUBJECT's service manager, and `daemon-soak.sh`'s guards case is what verifies the contract it implements. `memory_watch.rs:28,94,116` and `daemon_cmd/mod.rs:322` name it as the arming mechanism, so the script stays"
 
 [[not_instrument]]
 key = "scripts/build-desktop-linux.sh"
