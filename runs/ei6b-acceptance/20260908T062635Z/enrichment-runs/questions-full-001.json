@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "custom_atlas",
+  "questions_by_chapter": [
+    {
+      "chapter_id": "sec_00009",
+      "questions": [
+        "Which continental mint produced this degraded standard sceatta?"
+      ],
+      "thematic_carriers": [
+        "Series E \"porcupine\" sceatta"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00009",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Series E \"porcupine\" sceatta",
+            "entity_type": "sceatta",
+            "description": "A billon sceatta of the Series E group, degraded standard, struck at an unidentified continental mint.",
+            "anchor": "billon sceatta of the Series E group",
+            "attributes": {
+              "metal": "billon",
+              "weight": 0.88,
+              "catalogue_ref": "Wessex Down 7"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Which continental mint produced this degraded standard sceatta?",
+            "anchor": "unidentified continental mint"
+          }
+        ]
+      }
+    }
+  ],
+  "failures": [
+    {
+      "chapter_id": "sec_00001",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00002",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00003",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00004",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: {\\n  \\\"section_id\\\": \\\"sec_00004\\\",\\n  \\\"questions_raised\\\": [\\n    {\\n      | response[head]: { \"section_id\": \"sec_00004\", \"questions_raised\": [ {",
+      "raw_response_head": "{\n  \"section_id\": \"sec_00004\",\n  \"questions_raised\": [\n    {",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00005",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00006",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00007",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: {\\n  \\\"section_id\\\": \\\"sec_00007\\\",\\n  \\\"questions_raised\\\": [\\n    {\\n      \\\"content\\\": \\\"Where are the remaining specimens of this mancus type located?\\\",\\n      \\\"anchor\\\": \\\"specimen is known outside\\\"\\n    }\\n  ],\\n  | response[head]: { \"section_id\": \"sec_00007\", \"questions_raised\": [ { \"content\": \"Where are the remaining specimens of this mancus type located?\", \"anchor\": \"specimen is known outside\" } ], \"entities_introduced\": [ { …",
+      "raw_response_head": "{\n  \"section_id\": \"sec_00007\",\n  \"questions_raised\": [\n    {\n      \"content\": \"Where are the remaining specimens of this mancus type located?\",\n      \"anchor\": \"specimen is known outside\"\n    }\n  ],\n  \"entities_introduced\": [\n    {\n      \"canonical_name\": \"Coenwulf mancus\",\n      \"entity_type\": \"coin\",\n      \"attributes\": {\n        \"ruler\": \"Coenwulf\",\n        \"mint\": \"Lundenwic\",\n        \"denomination\": \"mancus\",\n        \"metal\": \"gold\",",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00008",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00010",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00011",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00012",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00013",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00014",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00015",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00016",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00017",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00018",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00019",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    },
+    {
+      "chapter_id": "sec_00020",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    }
+  ],
+  "written_at": "2026-09-08T06:57:01.600484991+00:00"
+}

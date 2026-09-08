@@ -1,0 +1,1817 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "custom_atlas",
+  "questions_by_chapter": [
+    {
+      "chapter_id": "sec_00001",
+      "questions": [
+        "Did the innovation of royal names on coinage spread to other kingdoms?"
+      ],
+      "reveals": "The innovation of placing the ruler's name on coins did not immediately take.",
+      "thematic_carriers": [
+        "Aldfrith of Northumbria",
+        "Series Y sceattas",
+        "Eoforwic"
+      ],
+      "plot": "Aldfrith ruled Northumbria from 685 until his death in 704.",
+      "section_extraction": {
+        "section_id": "sec_00001",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Aldfrith of Northumbria",
+            "entity_type": "ruler",
+            "description": "Ruled Northumbria from 685 until his death in 704.",
+            "anchor": "Aldfrith ruled Northumbria"
+          },
+          {
+            "canonical_name": "Series Y sceattas",
+            "entity_type": "sceatta",
+            "description": "The coinage of Aldfrith struck at Eoforwic.",
+            "anchor": "Series Y sceattas of Eoforwic",
+            "attributes": {
+              "mint": "Eoforwic",
+              "denomination": "sceatta",
+              "metal": "silver",
+              "struck": "685–704"
+            }
+          },
+          {
+            "canonical_name": "Eoforwic",
+            "entity_type": "mint",
+            "description": "A mint where Series Y sceattas were struck.",
+            "anchor": "Series Y sceattas of Eoforwic"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Aldfrith of Northumbria",
+              "Series Y sceattas"
+            ],
+            "label": "first English king to place his own name on",
+            "anchor": "first English king to place his own name"
+          }
+        ],
+        "events": [
+          {
+            "description": "Aldfrith ruled Northumbria from 685 until his death in 704.",
+            "participants": [
+              "Aldfrith of Northumbria"
+            ],
+            "anchor": "ruled Northumbria from 685 until his death"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The innovation of placing the ruler's name on coins did not immediately take.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "The innovation did not immediately take",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "Literary sources are unusually full for a Northumbrian ruler of the period.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "literary sources are unusually full",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The unusually full literary sources are part of why his coinage can be dated at all closely.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "part of why his coinage can be dated",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Did the innovation of royal names on coinage spread to other kingdoms?",
+            "anchor": "innovation did not immediately take"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00002",
+      "questions": [
+        "How does the East Anglian reform compare to later Mercian practices?"
+      ],
+      "reveals": "The end of Beonna's reign is not recorded in written sources and is inferred from his coinage.",
+      "thematic_carriers": [
+        "Beonna of East Anglia",
+        "Beonna's coinage",
+        "Efe",
+        "debased sceattas"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00002",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Beonna of East Anglia",
+            "entity_type": "ruler",
+            "description": "Ruler of the East Angles whose reign began around 749 and whose end is inferred from his coinage.",
+            "anchor": "Beonna ruled the East Angles"
+          },
+          {
+            "canonical_name": "Beonna's coinage",
+            "entity_type": "coin",
+            "description": "The earliest English coinage struck to a deliberately reformed weight and fineness standard.",
+            "anchor": "That coinage is the earliest English",
+            "attributes": {
+              "ruler": "Beonna of East Anglia",
+              "metal": "silver",
+              "struck": "about 749"
+            }
+          },
+          {
+            "canonical_name": "Efe",
+            "entity_type": "person",
+            "description": "The most common of the three moneyers known from surviving dies of Beonna's coinage.",
+            "anchor": "of whom Efe is much the commonest"
+          },
+          {
+            "canonical_name": "debased sceattas",
+            "entity_type": "coin",
+            "description": "Sceattas circulating alongside Beonna's coinage, noted for their debased silver content.",
+            "anchor": "debased sceattas circulating alongside it"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Beonna's coinage",
+              "debased sceattas"
+            ],
+            "label": "is markedly purer in silver than",
+            "anchor": "Its silver is markedly purer than"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The end of Beonna's reign is not recorded in written sources and is inferred from his coinage.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "inferred from his coinage rather than",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context"
+            }
+          },
+          {
+            "content": "Beonna's coinage is the earliest English coinage struck to a deliberately reformed weight and fineness standard.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "earliest English one struck to a deliberately",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The coinage reform under Beonna anticipates Offa's by a generation and was probably its model.",
+            "discourse_act": "assert",
+            "epistemic_status": "tentative",
+            "anchor": "anticipates Offa's by a generation",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How does the East Anglian reform compare to later Mercian practices?",
+            "anchor": "anticipates Offa's by a generation"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00003",
+      "questions": [
+        "What is the correct narrower dating for the issue within the reign of Aldfrith?"
+      ],
+      "thematic_carriers": [
+        "Aldfrith penny, Series Y",
+        "Aldfrith",
+        "Eoforwic"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00003",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Aldfrith penny, Series Y",
+            "entity_type": "sceatta",
+            "description": "A silver sceatta of Aldfrith struck at the Eoforwic mint.",
+            "anchor": "A silver sceatta of Aldfrith",
+            "attributes": {
+              "ruler": "Aldfrith",
+              "mint": "Eoforwic",
+              "denomination": "sceatta",
+              "metal": "silver",
+              "weight": 1.21,
+              "struck": "685-704",
+              "catalogue_ref": "Wessex Down 1"
+            }
+          },
+          {
+            "canonical_name": "Aldfrith",
+            "entity_type": "ruler",
+            "description": "King of Northumbria.",
+            "anchor": "Aldfrith, king of Northumbria"
+          },
+          {
+            "canonical_name": "Eoforwic",
+            "entity_type": "mint",
+            "description": "Mint where the sceatta was struck.",
+            "anchor": "struck at the Eoforwic mint"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "What is the correct narrower dating for the issue within the reign of Aldfrith?",
+            "anchor": "narrower dating within that reign is contested"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00004",
+      "questions": [
+        "Which ruler or authority oversaw the Gipeswic mint issue?"
+      ],
+      "reveals": "Series R is a mint issue rather than a royal one.",
+      "thematic_carriers": [
+        "Series R sceatta",
+        "Gipeswic mint",
+        "Wessex Down hoard"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00004",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Series R sceatta",
+            "entity_type": "sceatta",
+            "description": "A coin of the Series R group featuring a radiate bust right with a runic legend on the obverse and a standard with four pellets on the reverse.",
+            "anchor": "obverse carries a radiate bust right",
+            "attributes": {
+              "metal": "silver",
+              "weight": 0.95,
+              "catalogue_ref": "Wessex Down 2"
+            }
+          },
+          {
+            "canonical_name": "Gipeswic mint",
+            "entity_type": "mint",
+            "description": "A mint where Series R sceattas were struck.",
+            "anchor": "struck at the Gipeswic mint"
+          },
+          {
+            "canonical_name": "Wessex Down hoard",
+            "entity_type": "coin",
+            "description": "A hoard containing fourteen examples of the Series R sceatta.",
+            "anchor": "The Wessex Down hoard contained"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Series R sceatta",
+              "Gipeswic mint"
+            ],
+            "label": "struck at",
+            "anchor": "struck at the Gipeswic mint"
+          }
+        ],
+        "claims": [
+          {
+            "content": "Series R is a mint issue rather than a royal one.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "Series R is a mint issue",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "No ruler is named on the coin and none can be inferred from the types.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "none can be inferred from the types",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Which ruler or authority oversaw the Gipeswic mint issue?",
+            "anchor": "none can be inferred from the types"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00006",
+      "questions": [
+        "What specific die-link or stylistic evidence confirms the Mercian copy's attribution to Offa's reign?"
+      ],
+      "reveals": "The prototype of the dinar is dated to AH 157 (773 or 774) by its Arabic legend, providing a terminus post quem for the Mercian copy.",
+      "thematic_carriers": [
+        "Offa gold dinar",
+        "Offa",
+        "Lundenwic",
+        "Abbasid Arabic legend",
+        "OFFA REX"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00006",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Offa gold dinar",
+            "entity_type": "coin",
+            "description": "A gold imitation dinar of Offa, king of Mercia, struck at the Lundenwic mint.",
+            "anchor": "A gold imitation dinar of Offa",
+            "attributes": {
+              "ruler": "Offa",
+              "mint": "Lundenwic",
+              "denomination": "dinar",
+              "metal": "gold",
+              "weight": 4.28,
+              "catalogue_ref": "Wessex Down 4"
+            }
+          },
+          {
+            "canonical_name": "Offa",
+            "entity_type": "ruler",
+            "description": "King of Mercia who reigned from 757 to 796.",
+            "anchor": "Offa, king of Mercia"
+          },
+          {
+            "canonical_name": "Lundenwic",
+            "entity_type": "mint",
+            "description": "A mint where the gold imitation dinar of Offa was struck.",
+            "anchor": "at the Lundenwic mint"
+          },
+          {
+            "canonical_name": "Abbasid Arabic legend",
+            "entity_type": "institution",
+            "description": "The prototype legend copied on the obverse of the dinar.",
+            "anchor": "Abbasid Arabic legend"
+          },
+          {
+            "canonical_name": "OFFA REX",
+            "entity_type": "institution",
+            "description": "A Latin legend inserted upside down relative to the Arabic on the obverse.",
+            "anchor": "Latin legend OFFA REX"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Offa gold dinar",
+              "Lundenwic"
+            ],
+            "label": "struck at",
+            "anchor": "struck at the Lundenwic mint"
+          },
+          {
+            "participants": [
+              "Offa gold dinar",
+              "Abbasid Arabic legend"
+            ],
+            "label": "copies",
+            "anchor": "copies an Abbasid Arabic legend"
+          },
+          {
+            "participants": [
+              "OFFA REX",
+              "Offa gold dinar"
+            ],
+            "label": "appears on obverse of",
+            "anchor": "Latin legend OFFA REX inserted"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The prototype of the dinar is dated to AH 157 (773 or 774) by its Arabic legend, providing a terminus post quem for the Mercian copy.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "dated by its own Arabic legend to AH 157",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "metrological",
+              "proposed_date": "773 or 774"
+            }
+          },
+          {
+            "content": "Offa reigned as king of Mercia from 757 to 796.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "Offa reigned 757 to 796",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "What specific die-link or stylistic evidence confirms the Mercian copy's attribution to Offa's reign?",
+            "anchor": "terminus post quem for the Mercian copy"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00007",
+      "questions": [
+        "How many additional specimens of the Coenwulf mancus exist beyond the Wessex Down hoard?"
+      ],
+      "thematic_carriers": [
+        "Coenwulf mancus",
+        "Coenwulf",
+        "Lundenwic",
+        "Deigmund",
+        "Wessex Down hoard"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00007",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Coenwulf mancus",
+            "entity_type": "coin",
+            "description": "A gold mancus of Coenwulf struck at the Lundenwic mint by the moneyer Deigmund.",
+            "anchor": "A gold mancus of Coenwulf",
+            "attributes": {
+              "ruler": "Coenwulf",
+              "mint": "Lundenwic",
+              "denomination": "mancus",
+              "metal": "gold",
+              "weight": 4.33,
+              "catalogue_ref": "Wessex Down 5"
+            }
+          },
+          {
+            "canonical_name": "Coenwulf",
+            "entity_type": "ruler",
+            "description": "King of Mercia under whom the mancus was struck.",
+            "anchor": "Coenwulf, king of Mercia"
+          },
+          {
+            "canonical_name": "Lundenwic",
+            "entity_type": "mint",
+            "description": "The mint where the mancus was struck.",
+            "anchor": "struck at the Lundenwic mint"
+          },
+          {
+            "canonical_name": "Deigmund",
+            "entity_type": "person",
+            "description": "The moneyer who struck the mancus.",
+            "anchor": "by the moneyer Deigmund"
+          },
+          {
+            "canonical_name": "Wessex Down hoard",
+            "entity_type": "place",
+            "description": "A hoard containing the majority of known specimens of the mancus.",
+            "anchor": "outside the Wessex Down hoard"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Coenwulf mancus",
+              "Deigmund"
+            ],
+            "label": "struck by",
+            "anchor": "by the moneyer Deigmund"
+          },
+          {
+            "participants": [
+              "Coenwulf mancus",
+              "Wessex Down hoard"
+            ],
+            "label": "predominantly found in",
+            "anchor": "Only one specimen is known outside the Wessex Down hoard"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How many additional specimens of the Coenwulf mancus exist beyond the Wessex Down hoard?",
+            "anchor": "Only one specimen is known outside"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00008",
+      "questions": [
+        "Did the coin circulate via North Sea trade networks rather than local production?"
+      ],
+      "reveals": "Series X is usually assigned to a mint at Ribe rather than to any English mint.",
+      "thematic_carriers": [
+        "Series X sceatta, \"Wodan/monster\" type",
+        "Ribe",
+        "Wessex Down hoard"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00008",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Series X sceatta, \"Wodan/monster\" type",
+            "entity_type": "sceatta",
+            "description": "A silver sceatta of the Series X group with a facing head on the obverse and a fantastic beast on the reverse.",
+            "anchor": "silver sceatta of the Series X group",
+            "attributes": {
+              "metal": "silver",
+              "weight": 1.14,
+              "catalogue_ref": "Wessex Down 6"
+            }
+          },
+          {
+            "canonical_name": "Ribe",
+            "entity_type": "mint",
+            "description": "A mint at Ribe rather than to any English mint.",
+            "anchor": "mint at Ribe"
+          },
+          {
+            "canonical_name": "Wessex Down hoard",
+            "entity_type": "coin",
+            "description": "A hoard containing Series X sceatta.",
+            "anchor": "Wessex Down hoard"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Series X sceatta, \"Wodan/monster\" type",
+              "Ribe"
+            ],
+            "label": "usually assigned to the mint of",
+            "anchor": "assigned to a mint at Ribe"
+          },
+          {
+            "participants": [
+              "Series X sceatta, \"Wodan/monster\" type",
+              "Wessex Down hoard"
+            ],
+            "label": "found in",
+            "anchor": "presence in the Wessex Down hoard"
+          }
+        ],
+        "claims": [
+          {
+            "content": "Series X is usually assigned to a mint at Ribe rather than to any English mint.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "usually assigned to a mint at Ribe",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The presence of Series X sceatta in the Wessex Down hoard indicates North Sea circulation rather than local striking.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "evidence of North Sea circulation",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Did the coin circulate via North Sea trade networks rather than local production?",
+            "anchor": "evidence of North Sea circulation"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00010",
+      "questions": [
+        "How do the charters allow the mancus to be dated by its moneyer rather than by its style?"
+      ],
+      "reveals": "The gold mancus is the only English gold coin of the period naming both a king and a mint.",
+      "thematic_carriers": [
+        "Coenwulf of Mercia",
+        "Offa",
+        "gold mancus",
+        "silver coinage",
+        "Lundenwic",
+        "charters"
+      ],
+      "plot": "Coenwulf ruled Mercia from 796 until 821, holding the Mercian supremacy together for a quarter century.",
+      "section_extraction": {
+        "section_id": "sec_00010",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Coenwulf of Mercia",
+            "entity_type": "ruler",
+            "description": "Ruler of Mercia from 796 to 821 who held the Mercian supremacy together for a quarter century.",
+            "anchor": "Coenwulf ruled Mercia from"
+          },
+          {
+            "canonical_name": "Offa",
+            "entity_type": "ruler",
+            "description": "Predecessor whose short-lived son Coenwulf succeeded and whose coinage reform Coenwulf continued.",
+            "anchor": "succeeding Offa's short-lived son"
+          },
+          {
+            "canonical_name": "gold mancus",
+            "entity_type": "coin",
+            "description": "The only English coin of the period naming both a king and a mint.",
+            "anchor": "gold mancus is the only English gold coin",
+            "attributes": {
+              "ruler": "Coenwulf of Mercia",
+              "denomination": "mancus",
+              "metal": "gold"
+            }
+          },
+          {
+            "canonical_name": "silver coinage",
+            "entity_type": "coin",
+            "description": "Large and well organised coinage that continued Offa's reform without substantial change.",
+            "anchor": "silver coinage is large and well organised",
+            "attributes": {
+              "metal": "silver"
+            }
+          },
+          {
+            "canonical_name": "Lundenwic",
+            "entity_type": "mint",
+            "description": "A mint where moneyers struck for Offa and largely continued to strike for Coenwulf.",
+            "anchor": "at Lundenwic largely continued"
+          },
+          {
+            "canonical_name": "charters",
+            "entity_type": "work",
+            "description": "Well-documented records that allow the mancus to be dated by its moneyer rather than by its style.",
+            "anchor": "well documented in charters"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Coenwulf of Mercia",
+              "Mercia"
+            ],
+            "label": "ruled from 796 until 821",
+            "anchor": "Coenwulf ruled Mercia from 796"
+          },
+          {
+            "participants": [
+              "Coenwulf of Mercia",
+              "Offa"
+            ],
+            "label": "succeeded the short-lived son of",
+            "anchor": "succeeding Offa's short-lived son"
+          },
+          {
+            "participants": [
+              "silver coinage",
+              "Offa's reform"
+            ],
+            "label": "continues",
+            "anchor": "continuing Offa's reform without substantial change"
+          },
+          {
+            "participants": [
+              "moneyers",
+              "Coenwulf of Mercia"
+            ],
+            "label": "struck for",
+            "anchor": "moneyers who struck for Offa at Lundenwic"
+          }
+        ],
+        "events": [
+          {
+            "description": "Coenwulf ruled Mercia from 796 until 821, holding the Mercian supremacy together for a quarter century.",
+            "participants": [
+              "Coenwulf of Mercia"
+            ],
+            "anchor": "Coenwulf ruled Mercia from 796 until 821"
+          },
+          {
+            "description": "Coenwulf succeeded Offa's short-lived son to the throne.",
+            "participants": [
+              "Coenwulf of Mercia",
+              "Offa"
+            ],
+            "anchor": "succeeding Offa's short-lived son"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The gold mancus is the only English gold coin of the period naming both a king and a mint.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "only English gold coin of the period naming",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The reign is well documented in charters.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "reign is well documented in charters",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context"
+            }
+          },
+          {
+            "content": "Charters allow the mancus to be dated by its moneyer rather than by its style.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "charters are what allow the mancus to be dated",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "metrological"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How do the charters allow the mancus to be dated by its moneyer rather than by its style?",
+            "anchor": "allow the mancus to be dated by its moneyer"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00011",
+      "questions": [
+        "Does the three-state wear pattern in the Wessex Down deposit reflect a single long issue or multiple overlapping strikes?"
+      ],
+      "reveals": "Series R was struck over a long period, dated between 715 and 740 based on hoard context.",
+      "thematic_carriers": [
+        "Ferreira",
+        "Series R",
+        "Wessex Down hoard",
+        "Vasquez"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00011",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Ferreira",
+            "entity_type": "person",
+            "description": "Scholar who proposes a widened dating range for Series R based on hoard context.",
+            "anchor": "Ferreira places the Series R"
+          },
+          {
+            "canonical_name": "Series R",
+            "entity_type": "coin",
+            "description": "Coin group whose issue period is argued to be long, dated 715–740.",
+            "anchor": "places the Series R group"
+          },
+          {
+            "canonical_name": "Wessex Down hoard",
+            "entity_type": "place",
+            "description": "Deposit containing Series R coins in three distinct wear states.",
+            "anchor": "The Wessex Down deposit contains"
+          },
+          {
+            "canonical_name": "Vasquez",
+            "entity_type": "person",
+            "description": "Scholar whose early-end dating of Series R is endorsed by Ferreira.",
+            "anchor": "agreement with Vasquez on"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Ferreira",
+              "Series R"
+            ],
+            "label": "dates to the period",
+            "anchor": "places the Series R group"
+          },
+          {
+            "participants": [
+              "Ferreira",
+              "Vasquez"
+            ],
+            "label": "agrees with on the early end of dating",
+            "anchor": "agreement with Vasquez on"
+          }
+        ],
+        "claims": [
+          {
+            "content": "Series R was struck over a long period, dated between 715 and 740 based on hoard context.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "attributed_to": "Ferreira",
+            "anchor": "places the Series R group between 715 and 740",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context",
+              "proposed_date": "715–740"
+            }
+          },
+          {
+            "content": "The presence of three distinct wear states in the Wessex Down deposit argues for a long period of issue for Series R.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "attributed_to": "Ferreira",
+            "anchor": "contains Series R coins in three distinct wear",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context"
+            }
+          },
+          {
+            "content": "The proposed dating widens the conventional range rather than challenging it.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "attributed_to": "Ferreira",
+            "anchor": "widening of the conventional dating",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          },
+          {
+            "content": "Ferreira agrees with Vasquez on the early end of the dating range.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "attributed_to": "Ferreira",
+            "anchor": "agreement with Vasquez on the early end",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Does the three-state wear pattern in the Wessex Down deposit reflect a single long issue or multiple overlapping strikes?",
+            "anchor": "three distinct wear states"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00012",
+      "questions": [
+        "Does the wear difference in the Wessex Down deposit justify reversing Halstead's die chain?"
+      ],
+      "thematic_carriers": [
+        "Ferreira",
+        "Series Y sceattas of Aldfrith",
+        "Aldfrith",
+        "Wessex Down deposit",
+        "Series R coins",
+        "Halstead"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00012",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Ferreira",
+            "entity_type": "person",
+            "description": "Scholar who dates Series Y sceattas to the last decade of Aldfrith's reign.",
+            "anchor": "Ferreira dates the same"
+          },
+          {
+            "canonical_name": "Series Y sceattas of Aldfrith",
+            "entity_type": "sceatta",
+            "description": "Aldfrith's coinage dated by Ferreira to the last decade of the reign.",
+            "anchor": "Series Y sceattas of Aldfrith",
+            "attributes": {
+              "ruler": "Aldfrith",
+              "denomination": "sceattas",
+              "struck": "695–704",
+              "catalogue_ref": "Series Y"
+            }
+          },
+          {
+            "canonical_name": "Aldfrith",
+            "entity_type": "ruler",
+            "description": "Ruler whose coinage series are dated to the last decade of his reign.",
+            "anchor": "reign, between 695"
+          },
+          {
+            "canonical_name": "Wessex Down deposit",
+            "entity_type": "place",
+            "description": "A hoard where Aldfrith pennies show markedly less wear than Series R coins.",
+            "anchor": "in the Wessex Down deposit"
+          },
+          {
+            "canonical_name": "Series R coins",
+            "entity_type": "coin",
+            "description": "A group of coins buried with Series Y sceattas, dated no earlier than about 710.",
+            "anchor": "than the Series R coins",
+            "attributes": {
+              "denomination": "coins",
+              "struck": "about 710",
+              "catalogue_ref": "Series R"
+            }
+          },
+          {
+            "canonical_name": "Halstead",
+            "entity_type": "person",
+            "description": "Scholar whose die chain Ferreira argues must be reversed in direction.",
+            "anchor": "Halstead's die chain"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Series Y sceattas of Aldfrith",
+              "Series R coins"
+            ],
+            "label": "buried with",
+            "anchor": "buried with them"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Does the wear difference in the Wessex Down deposit justify reversing Halstead's die chain?",
+            "anchor": "die chain must be reversed"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00013",
+      "questions": [
+        "What grade of evidence supports the dating of the Coenwulf mancus?"
+      ],
+      "thematic_carriers": [
+        "Coenwulf mancus",
+        "Halstead 2014",
+        "Nkemdirim 2018",
+        "Deigmund",
+        "Lundenwic charter witness lists"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00013",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Coenwulf mancus",
+            "entity_type": "coin",
+            "description": "A gold mancus of Coenwulf catalogued as Wessex Down 5.",
+            "anchor": "gold mancus of Coenwulf",
+            "attributes": {
+              "ruler": "Coenwulf",
+              "denomination": "mancus",
+              "metal": "gold",
+              "struck": "805 to 810",
+              "catalogue_ref": "Wessex Down 5"
+            }
+          },
+          {
+            "canonical_name": "Halstead 2014",
+            "entity_type": "work",
+            "description": "A study that dates the Coenwulf mancus to between 805 and 810.",
+            "anchor": "Both Halstead and Nkemdirim"
+          },
+          {
+            "canonical_name": "Nkemdirim 2018",
+            "entity_type": "work",
+            "description": "A study that dates the Coenwulf mancus to between 805 and 810.",
+            "anchor": "Nkemdirim 2018 date the"
+          },
+          {
+            "canonical_name": "Deigmund",
+            "entity_type": "person",
+            "description": "A moneyer attested in the Lundenwic charter witness lists only in those years.",
+            "anchor": "moneyer Deigmund is attested"
+          },
+          {
+            "canonical_name": "Lundenwic charter witness lists",
+            "entity_type": "work",
+            "description": "Charter witness lists that mention the moneyer Deigmund only in those years.",
+            "anchor": "Lundenwic charter witness lists"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Halstead 2014",
+              "Coenwulf mancus"
+            ],
+            "label": "dates to",
+            "anchor": "date the gold mancus of Coenwulf"
+          },
+          {
+            "participants": [
+              "Nkemdirim 2018",
+              "Coenwulf mancus"
+            ],
+            "label": "dates to",
+            "anchor": "Nkemdirim 2018 date the gold mancus"
+          },
+          {
+            "participants": [
+              "Deigmund",
+              "Lundenwic charter witness lists"
+            ],
+            "label": "attested in",
+            "anchor": "Deigmund is attested in the Lundenwic"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "What grade of evidence supports the dating of the Coenwulf mancus?",
+            "anchor": "agree in date, in evidence and in grade"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00014",
+      "questions": [
+        "Does the die-link chain definitively fix the start of Aldfrith's reign to the late 680s?"
+      ],
+      "thematic_carriers": [
+        "Halstead",
+        "Series Y sceattas",
+        "Aldfrith",
+        "Wessex Down 1",
+        "Ferrybridge find",
+        "Aldfrith's predecessor"
+      ],
+      "plot": "A coin from the Ferrybridge find is struck over an earlier issue of Aldfrith's predecessor.",
+      "section_extraction": {
+        "section_id": "sec_00014",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Halstead",
+            "entity_type": "person",
+            "description": "Scholar proposing a die-link argument for the dating of Aldfrith's Series Y sceattas.",
+            "anchor": "Halstead argues that"
+          },
+          {
+            "canonical_name": "Series Y sceattas",
+            "entity_type": "sceatta",
+            "description": "A coin series of Aldfrith central to the dating argument.",
+            "anchor": "Series Y sceattas of Aldfrith"
+          },
+          {
+            "canonical_name": "Aldfrith",
+            "entity_type": "ruler",
+            "description": "Northumbrian king whose reign is dated by the die-link chain.",
+            "anchor": "first years of the reign"
+          },
+          {
+            "canonical_name": "Wessex Down 1",
+            "entity_type": "coin",
+            "description": "A Series Y sceatta specimen used as the primary anchor in the die-link chain.",
+            "anchor": "catalogue reference Wessex Down 1",
+            "attributes": {
+              "ruler": "Aldfrith",
+              "denomination": "sceatta",
+              "catalogue_ref": "Wessex Down 1"
+            }
+          },
+          {
+            "canonical_name": "Ferrybridge find",
+            "entity_type": "place",
+            "description": "Archaeological find containing a coin that shares a die with Wessex Down 1.",
+            "anchor": "coin from the Ferrybridge find"
+          },
+          {
+            "canonical_name": "Aldfrith's predecessor",
+            "entity_type": "ruler",
+            "description": "Ruler whose coin issue was struck over by the Ferrybridge specimen.",
+            "anchor": "issue of Aldfrith's predecessor"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Wessex Down 1",
+              "Ferrybridge find coin"
+            ],
+            "label": "shares obverse die with",
+            "anchor": "obverse die is shared with a coin"
+          }
+        ],
+        "events": [
+          {
+            "description": "A coin from the Ferrybridge find is struck over an earlier issue of Aldfrith's predecessor.",
+            "participants": [
+              "Ferrybridge find coin",
+              "Aldfrith's predecessor issue"
+            ],
+            "anchor": "coin was struck over an issue of"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Does the die-link chain definitively fix the start of Aldfrith's reign to the late 680s?",
+            "anchor": "anchor sits early in the reign"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00015",
+      "questions": [
+        "How does the monotonic weight series across the reign inform the dating of the coinage?"
+      ],
+      "thematic_carriers": [
+        "Nkemdirim",
+        "Beonna pennies of Efe"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00015",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Nkemdirim",
+            "entity_type": "person",
+            "description": "Scholar who dates the Beonna pennies of Efe based on weight standards.",
+            "anchor": "Nkemdirim dates the"
+          },
+          {
+            "canonical_name": "Beonna pennies of Efe",
+            "entity_type": "coin",
+            "description": "Pennies struck by the moneyer Efe under King Beonna.",
+            "anchor": "Beonna pennies of the moneyer Efe",
+            "attributes": {
+              "ruler": "Beonna",
+              "denomination": "penny",
+              "weight": 1.05,
+              "struck": "757–760"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How does the monotonic weight series across the reign inform the dating of the coinage?",
+            "anchor": "weight series is monotonic"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00016",
+      "questions": [
+        "How do the administrative and metrological reforms under Offa compare to those of contemporary northern Europe?"
+      ],
+      "reveals": "The coin reform was administrative as well as metrological.",
+      "thematic_carriers": [
+        "Offa of Mercia",
+        "Mercia",
+        "reformed broad penny",
+        "sceatta",
+        "gold dinar imitation",
+        "Beonna"
+      ],
+      "plot": "Offa ruled Mercia from 757 until 796.",
+      "section_extraction": {
+        "section_id": "sec_00016",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Offa of Mercia",
+            "entity_type": "ruler",
+            "description": "Dominant English king of the later eighth century who ruled Mercia from 757 to 796.",
+            "anchor": "Offa ruled Mercia from 757"
+          },
+          {
+            "canonical_name": "Mercia",
+            "entity_type": "place",
+            "description": "Kingdom ruled by Offa from 757 until 796.",
+            "anchor": "Offa ruled Mercia from"
+          },
+          {
+            "canonical_name": "reformed broad penny",
+            "entity_type": "coin",
+            "description": "Heavier, wider coin that replaced the sceatta across southern England and set the shape of the English penny for five hundred years.",
+            "anchor": "reformed broad penny — a heavier"
+          },
+          {
+            "canonical_name": "sceatta",
+            "entity_type": "sceatta",
+            "description": "Coin type replaced by the broad penny across southern England.",
+            "anchor": "replaced the sceatta across"
+          },
+          {
+            "canonical_name": "gold dinar imitation",
+            "entity_type": "coin",
+            "description": "Exceptional gold coinage struck under Offa.",
+            "anchor": "exceptionally, the gold dinar imitation",
+            "attributes": {
+              "metal": "gold"
+            }
+          },
+          {
+            "canonical_name": "Beonna",
+            "entity_type": "ruler",
+            "description": "Ruler of a smaller kingdom whose coinage is conventionally measured against Offa's.",
+            "anchor": "Beonna's among them, are"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Offa of Mercia",
+              "Mercia"
+            ],
+            "label": "ruled",
+            "anchor": "Offa ruled Mercia from"
+          },
+          {
+            "participants": [
+              "reformed broad penny",
+              "sceatta"
+            ],
+            "label": "replaced",
+            "anchor": "replaced the sceatta across"
+          },
+          {
+            "participants": [
+              "Offa of Mercia",
+              "Beonna"
+            ],
+            "label": "conventionally measured against",
+            "anchor": "ruler against whom the coinages"
+          }
+        ],
+        "events": [
+          {
+            "description": "Offa ruled Mercia from 757 until 796.",
+            "participants": [
+              "Offa of Mercia",
+              "Mercia"
+            ],
+            "anchor": "Offa ruled Mercia from 757"
+          },
+          {
+            "description": "The reformed broad penny replaced the sceatta across southern England.",
+            "participants": [
+              "reformed broad penny",
+              "sceatta"
+            ],
+            "anchor": "replaced the sceatta across"
+          }
+        ],
+        "claims": [
+          {
+            "content": "Offa was the dominant English king of the later eighth century, exercising authority well beyond Mercia itself.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "attributed_to": "Offa of Mercia",
+            "anchor": "dominant English king of the later eighth century",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The coin reform was administrative as well as metrological.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "reform was administrative as well as metrological",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "metrological"
+            }
+          },
+          {
+            "content": "Moneyers are named, mints are distinguished, and the portrait work is of a quality without parallel in contemporary northern Europe.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "moneyers are named, mints are distinguished",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "Offa is the ruler against whom the coinages of the smaller kingdoms, Beonna's among them, are conventionally measured.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "ruler against whom the coinages",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How do the administrative and metrological reforms under Offa compare to those of contemporary northern Europe?",
+            "anchor": "quality without parallel in contemporary"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00017",
+      "questions": [
+        "Did the circulation pattern reflect trade networks or deliberate monetary policy?"
+      ],
+      "reveals": "The mint operated under direct royal control rather than through independent moneyers.",
+      "thematic_carriers": [
+        "Eoforwic",
+        "Eoforwic sceatta",
+        "southern mints"
+      ],
+      "plot": "Eoforwic sceattas travelled to southern hoards, appearing in numbers that indicate genuine circulation.",
+      "section_extraction": {
+        "section_id": "sec_00017",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Eoforwic",
+            "entity_type": "mint",
+            "description": "The Northumbrian mint at York, which struck royal sceatta coinage in the later seventh and eighth centuries.",
+            "anchor": "The mint at Eoforwic"
+          },
+          {
+            "canonical_name": "Eoforwic sceatta",
+            "entity_type": "sceatta",
+            "description": "Royal coinage struck at Eoforwic, distinguished by an animal obverse and a heavier weight standard.",
+            "anchor": "struck the royal sceatta coinage",
+            "attributes": {
+              "mint": "Eoforwic",
+              "denomination": "sceatta",
+              "struck": "later seventh and eighth centuries"
+            }
+          },
+          {
+            "canonical_name": "southern mints",
+            "entity_type": "mint",
+            "description": "Southern mints whose output is contrasted with Eoforwic's animal obverse and lighter weight standard.",
+            "anchor": "distinguished from the southern mints"
+          }
+        ],
+        "entities_developed": [
+          {
+            "entity_name": "Eoforwic sceatta",
+            "label": "distinguished by an animal obverse",
+            "anchor": "consistent use of an animal obverse"
+          },
+          {
+            "entity_name": "Eoforwic sceatta",
+            "label": "heavier weight standard",
+            "anchor": "slightly heavier weight standard"
+          },
+          {
+            "entity_name": "Eoforwic",
+            "label": "operated under direct royal control",
+            "anchor": "operated under direct royal control"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Eoforwic",
+              "Eoforwic sceatta"
+            ],
+            "label": "struck",
+            "anchor": "struck the royal sceatta coinage"
+          },
+          {
+            "participants": [
+              "Eoforwic sceatta",
+              "southern mints"
+            ],
+            "label": "distinguished from",
+            "anchor": "distinguished from the southern mints"
+          },
+          {
+            "participants": [
+              "Eoforwic",
+              "royal control"
+            ],
+            "label": "operated under",
+            "anchor": "operated under direct royal control"
+          }
+        ],
+        "relations_developed": [
+          {
+            "participants": [
+              "Eoforwic sceatta",
+              "southern contemporaries"
+            ],
+            "label": "heavier than",
+            "anchor": "run about a tenth of a gram above"
+          },
+          {
+            "participants": [
+              "Eoforwic sceatta",
+              "southern hoards"
+            ],
+            "label": "circulated in",
+            "anchor": "examples turn up in southern hoards"
+          }
+        ],
+        "events": [
+          {
+            "description": "Eoforwic sceattas travelled to southern hoards, appearing in numbers that indicate genuine circulation.",
+            "participants": [
+              "Eoforwic sceatta",
+              "southern hoards"
+            ],
+            "anchor": "examples turn up in southern hoards"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The mint operated under direct royal control rather than through independent moneyers.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "operated under direct royal control",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          },
+          {
+            "content": "No moneyer's name is found on any Eoforwic issue before the ninth century.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "no moneyer's name is found",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          },
+          {
+            "content": "Eoforwic products travelled and appear in southern hoards in numbers arguing for genuine circulation rather than isolated losses.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "argue for genuine circulation",
+            "claim_kind": "attribution",
+            "scope": "universal"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Did the circulation pattern reflect trade networks or deliberate monetary policy?",
+            "anchor": "argue for genuine circulation"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00018",
+      "questions": [
+        "How did the introduction of moneyers' names change the administrative structure of the mint?"
+      ],
+      "reveals": "Gipeswic was the most productive of the English sceatta mints.",
+      "thematic_carriers": [
+        "Gipeswic",
+        "Series R group",
+        "reformed penny coinage of Beonna",
+        "Beonna"
+      ],
+      "plot": "A monetary reform brought the mint under a named administration, evidenced by the appearance of moneyers' names on later issues.",
+      "section_extraction": {
+        "section_id": "sec_00018",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Gipeswic",
+            "entity_type": "mint",
+            "description": "The most productive English sceatta mint, located in East Anglia beside a trading settlement.",
+            "anchor": "Gipeswic, at Ipswich in East Anglia"
+          },
+          {
+            "canonical_name": "Series R group",
+            "entity_type": "coin",
+            "description": "An early sceatta group struck at Gipeswic over several decades, accounting for the highest number of surviving specimens.",
+            "anchor": "struck the Series R group",
+            "attributes": {
+              "denomination": "sceatta",
+              "struck": "over several decades",
+              "catalogue_ref": "Series R"
+            }
+          },
+          {
+            "canonical_name": "reformed penny coinage of Beonna",
+            "entity_type": "coin",
+            "description": "A later coinage struck at Gipeswic under the ruler Beonna, featuring moneyers' names.",
+            "anchor": "reformed penny coinage of Beonna",
+            "attributes": {
+              "ruler": "Beonna",
+              "denomination": "penny",
+              "struck": "later",
+              "catalogue_ref": "reformed penny coinage"
+            }
+          },
+          {
+            "canonical_name": "Beonna",
+            "entity_type": "ruler",
+            "description": "A ruler under whose authority Gipeswic struck a reformed penny coinage.",
+            "anchor": "coinage of Beonna"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Gipeswic",
+              "Series R group"
+            ],
+            "label": "struck",
+            "anchor": "struck the Series R group"
+          },
+          {
+            "participants": [
+              "Gipeswic",
+              "reformed penny coinage of Beonna"
+            ],
+            "label": "struck",
+            "anchor": "struck the reformed penny coinage"
+          },
+          {
+            "participants": [
+              "Gipeswic",
+              "working trading settlement"
+            ],
+            "label": "sat beside",
+            "anchor": "mint sat beside a working"
+          },
+          {
+            "participants": [
+              "Series R group",
+              "southern North Sea"
+            ],
+            "label": "found across",
+            "anchor": "coins are found across the"
+          }
+        ],
+        "events": [
+          {
+            "description": "A monetary reform brought the mint under a named administration, evidenced by the appearance of moneyers' names on later issues.",
+            "participants": [
+              "Gipeswic",
+              "reformed penny coinage of Beonna"
+            ],
+            "anchor": "reform brought the mint under a named"
+          },
+          {
+            "description": "A die study identifies well over two hundred obverse dies for the Series R group.",
+            "participants": [
+              "Series R group"
+            ],
+            "anchor": "die study underlying that count identifies"
+          }
+        ],
+        "claims": [
+          {
+            "content": "Gipeswic was the most productive of the English sceatta mints.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "most productive of the English sceatta",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "The appearance of moneyers' names on Beonna's issues but not on Series R indicates the reform brought the mint under a named administration.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "sign that the reform brought the mint",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic"
+            }
+          },
+          {
+            "content": "Series R accounts for more surviving specimens than any other English sceatta group.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "Series R accounts for more surviving",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "hoard-context"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How did the introduction of moneyers' names change the administrative structure of the mint?",
+            "anchor": "reform brought the mint under a named"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00019",
+      "questions": [
+        "How do the surviving gold issues compare to the silver output in fixing the mint's place in the record?"
+      ],
+      "reveals": "The Coenwulf mancus bears the earliest unambiguous mint signature on an English gold coin.",
+      "thematic_carriers": [
+        "Lundenwic",
+        "Offa gold dinar",
+        "Coenwulf mancus",
+        "reformed penny coinage"
+      ],
+      "plot": "The Lundenwic mint began striking coins for the Mercian kings in the eighth century.",
+      "section_extraction": {
+        "section_id": "sec_00019",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Lundenwic",
+            "entity_type": "mint",
+            "description": "The trading settlement west of the Roman walls of London.",
+            "anchor": "trading settlement west of the Roman walls"
+          },
+          {
+            "canonical_name": "Offa gold dinar",
+            "entity_type": "coin",
+            "description": "A gold coin whose reverse legend names the Lundenwic mint.",
+            "anchor": "Offa gold dinar",
+            "attributes": {
+              "ruler": "Offa",
+              "mint": "Lundenwic",
+              "denomination": "dinar",
+              "metal": "gold"
+            }
+          },
+          {
+            "canonical_name": "Coenwulf mancus",
+            "entity_type": "coin",
+            "description": "A gold coin whose reverse legend explicitly names the Lundenwic mint.",
+            "anchor": "Coenwulf mancus",
+            "attributes": {
+              "ruler": "Coenwulf",
+              "mint": "Lundenwic",
+              "denomination": "mancus",
+              "metal": "gold"
+            }
+          },
+          {
+            "canonical_name": "reformed penny coinage",
+            "entity_type": "coin",
+            "description": "Coinage whose reverse legends record the names of Lundenwic's moneyers.",
+            "anchor": "reformed penny coinage",
+            "attributes": {
+              "denomination": "penny"
+            }
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Lundenwic",
+              "Mercian kings"
+            ],
+            "label": "struck for",
+            "anchor": "struck for the Mercian kings"
+          }
+        ],
+        "events": [
+          {
+            "description": "The Lundenwic mint began striking coins for the Mercian kings in the eighth century.",
+            "participants": [
+              "Lundenwic",
+              "Mercian kings"
+            ],
+            "anchor": "struck for the Mercian kings from the eighth"
+          }
+        ],
+        "claims": [
+          {
+            "content": "The Coenwulf mancus bears the earliest unambiguous mint signature on an English gold coin.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "earliest unambiguous mint signature",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic",
+              "proposed_date": "eighth century"
+            }
+          },
+          {
+            "content": "The gold issues fix Lundenwic's place in the record because both surviving gold issues carry a king's name and a mint name together.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "anchor": "gold is what fixes its place",
+            "claim_kind": "attribution",
+            "scope": "universal",
+            "attributes": {
+              "grade": "stylistic",
+              "proposed_date": "eighth century"
+            }
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "How do the surviving gold issues compare to the silver output in fixing the mint's place in the record?",
+            "anchor": "gold is what fixes its place"
+          }
+        ]
+      }
+    },
+    {
+      "chapter_id": "sec_00020",
+      "questions": [
+        "Does the stylistic copying of the radiate bust confirm the 710–725 date range?"
+      ],
+      "thematic_carriers": [
+        "Vasquez",
+        "Series R dies",
+        "Merovingian prototype",
+        "Gipeswic die"
+      ],
+      "section_extraction": {
+        "section_id": "sec_00020",
+        "enrichment_depth": "extracted",
+        "entities_introduced": [
+          {
+            "canonical_name": "Vasquez",
+            "entity_type": "person",
+            "description": "Scholar who assigns a stylistic date to the runic Series R dies.",
+            "anchor": "Vasquez dates"
+          },
+          {
+            "canonical_name": "Series R dies",
+            "entity_type": "coin",
+            "description": "Runic coin dies dated to the early eighth century on stylistic grounds.",
+            "anchor": "runic Series R dies"
+          },
+          {
+            "canonical_name": "Merovingian prototype",
+            "entity_type": "coin",
+            "description": "Merovingian coin whose currency is confined to 710–725.",
+            "anchor": "Merovingian prototype whose"
+          },
+          {
+            "canonical_name": "Gipeswic die",
+            "entity_type": "coin",
+            "description": "Later die from Gipeswic that lacks the runic EPA legend cutter.",
+            "anchor": "later Gipeswic die"
+          }
+        ],
+        "relations_introduced": [
+          {
+            "participants": [
+              "Series R dies",
+              "Merovingian prototype"
+            ],
+            "label": "copied from",
+            "anchor": "radiate bust is copied from a Merovingian"
+          }
+        ],
+        "questions_raised": [
+          {
+            "content": "Does the stylistic copying of the radiate bust confirm the 710–725 date range?",
+            "anchor": "stylistic grounds. The radiate bust"
+          }
+        ]
+      }
+    }
+  ],
+  "failures": [
+    {
+      "chapter_id": "sec_00005",
+      "reason": "parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>",
+      "failure_kind": "parse_drift"
+    }
+  ],
+  "written_at": "2026-09-08T14:20:08.345761973+00:00"
+}
