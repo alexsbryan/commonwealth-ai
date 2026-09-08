@@ -67,20 +67,17 @@ pub struct HostProfile {
 }
 
 impl HostProfile {
-    /// The document-side and query-side embedders for this endpoint, in that
-    /// order.
-    ///
-    /// ONE accessor rather than three `http_embed_fn` call sites (ARCH §10.6):
-    /// `serve` needs both — the engine's ingest is document-side and the MCP
-    /// tools' questions are query-side — and `ingest` needs the document one.
-    /// While each site built its own, all three sent RAW text, which is how
-    /// `ask` came to embed its questions 0.128 mean cosine away from the atlas
-    /// seed table it searches (measured 2026-09-07, note 500f1229).
-    ///
-    /// With no recognised family both sides are the raw transport, identical
-    /// and un-prefixed. That is the honest degradation, and `probe` has
-    /// already said so by name.
     /// The DOCUMENT-side embedder: what `ingest` writes `chunks.lance` with.
+    ///
+    /// One accessor per side, replacing the three `http_embed_fn` call sites
+    /// this crate used to carry (ARCH §10.6). While each site built its own,
+    /// all three sent RAW text — which is how `ask` came to embed its
+    /// questions 0.128 mean cosine away from the atlas seed table it searches
+    /// (measured 2026-09-07, note 500f1229).
+    ///
+    /// With no recognised family this is the raw transport, un-prefixed and
+    /// identical to the query side. That is the honest degradation, and
+    /// `probe` has already named it on stderr.
     pub fn embed_document_fn(&self) -> EmbedFn {
         self.embed_fn(Side::Document)
     }
