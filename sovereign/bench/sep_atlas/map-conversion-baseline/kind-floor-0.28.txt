@@ -1,0 +1,20 @@
+== sep
+atlas kind: 13/21 classified, 8 abstained (abstain:both 2, abstain:margin 6); classified kinds: tension 13
+== wikipedia
+atlas kind: 7/20 classified, 13 abstained (abstain:both 10, abstain:margin 1, abstain:sim 2); classified kinds: tension 7
+== thematic-bk
+atlas kind: 4/6 classified, 2 abstained (abstain:margin 2); classified kinds: tension 2, thematic 2
+== wessex
+classified      tension      0.395  +0.095  enumeration  0.300  q1
+classified      enumeration  0.383  +0.069  lookup       0.315  q2
+abstain:margin  lookup       0.281  +0.039  trajectory   0.242  q3
+classified      thematic     0.629  +0.234  tension      0.395  q4
+abstain:margin  trajectory   0.410  +0.022  tension      0.389  q5
+atlas kind: 3/5 classified, 2 abstained (abstain:margin 2); classified kinds: enumeration 1, tension 1, thematic 1
+== off-topic
+abstain:both    trajectory   0.162  +0.015  lookup       0.147  q1
+abstain:both    thematic     0.197  +0.009  lookup       0.189  q2
+classified      enumeration  0.357  +0.157  thematic     0.200  q3
+abstain:margin  thematic     0.300  +0.029  enumeration  0.271  q4
+abstain:both    trajectory   0.244  +0.035  thematic     0.209  q5
+atlas kind: 1/5 classified, 4 abstained (abstain:both 3, abstain:margin 1); classified kinds: enumeration 1

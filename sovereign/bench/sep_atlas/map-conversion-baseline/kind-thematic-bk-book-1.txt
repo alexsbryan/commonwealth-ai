@@ -1,0 +1,11 @@
+atlas kind: map = pre-registered defaults (`brothers-karamazov-book-1` has no atlas/ontology.json)
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+verdict         winner         sim  margin  runner-up      sim  id
+classified      thematic     0.432  +0.188  tension      0.244  bk_thematic_overview
+abstain:sim     thematic     0.322  +0.072  tension      0.250  bk_fatherhood_theme
+abstain:both    thematic     0.304  +0.037  enumeration  0.267  bk_eldership_theme
+abstain:both    tension      0.336  +0.019  thematic     0.317  bk_tension_submission_freedom
+classified      tension      0.383  +0.071  thematic     0.313  bk_tension_faith_unbelief
+classified      tension      0.429  +0.151  thematic     0.278  bk_tension_spiritual_secular_authority
+atlas kind: 3/6 classified, 3 abstained (abstain:both 2, abstain:sim 1); classified kinds: tension 2, thematic 1

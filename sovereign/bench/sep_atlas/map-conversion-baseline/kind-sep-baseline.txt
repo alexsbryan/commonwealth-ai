@@ -1,0 +1,32 @@
+warning: 1 expected_fact(s) in sovereign/bench/sep/questions.toml cannot be scored by the keyword scorer and are excluded from every fact ratio:
+  comparative_mencius_xunzi_human_nature: "li"
+  Every token is under 3 alphanumeric chars. Spell the value out ("80 percent") or add surrounding words to make it matchable.
+atlas kind: map = pre-registered defaults (`sep` has no atlas/ontology.json)
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+verdict         winner         sim  margin  runner-up      sim  id
+classified      tension      0.362  +0.119  trajectory   0.244  argument_consequence_against_compatibilism
+abstain:sim     tension      0.307  +0.081  thematic     0.226  concept_modality_necessary_aposteriori
+classified      tension      0.399  +0.087  trajectory   0.313  comparative_locke_reid_personal_identity
+abstain:sim     tension      0.297  +0.074  thematic     0.223  dialectical_gettier_lottery
+classified      tension      0.378  +0.109  lookup       0.269  argument_internalism_externalism_justification
+abstain:sim     tension      0.312  +0.059  thematic     0.253  concept_qualia_physicalism
+abstain:sim     tension      0.333  +0.082  thematic     0.250  position_summary_hard_problem_illusionism
+abstain:margin  tension      0.395  +0.012  thematic     0.383  dialectical_content_narrow_wide_burge
+classified      tension      0.424  +0.114  trajectory   0.310  contested_trolley_doctrine_double_effect
+abstain:both    tension      0.290  +0.033  thematic     0.257  position_summary_virtue_ethics_function
+abstain:both    trajectory   0.312  +0.012  tension      0.300  position_summary_kripke_reference_causal_historical
+abstain:margin  tension      0.374  +0.036  thematic     0.338  dialectical_putnam_twin_earth_meaning
+abstain:both    tension      0.314  +0.040  thematic     0.274  argument_godel_incompleteness
+classified      tension      0.401  +0.145  trajectory   0.256  argument_rawls_original_position
+abstain:sim     tension      0.288  +0.082  trajectory   0.206  comparative_berlin_liberty
+classified      tension      0.357  +0.123  thematic     0.233  contested_no_miracles_scientific_realism
+abstain:sim     tension      0.327  +0.080  trajectory   0.247  comparative_kant_hume_causation
+abstain:both    thematic     0.253  +0.008  tension      0.245  argument_aristotle_hylomorphism
+abstain:both    trajectory   0.211  +0.011  tension      0.200  position_summary_husserl_heidegger
+abstain:both    tension      0.298  +0.007  thematic     0.291  comparative_mencius_xunzi_human_nature
+abstain:sim     tension      0.318  +0.075  thematic     0.243  contested_bioethics_principlism
+atlas kind: 6/21 classified, 15 abstained (abstain:both 6, abstain:margin 2, abstain:sim 7); classified kinds: tension 6

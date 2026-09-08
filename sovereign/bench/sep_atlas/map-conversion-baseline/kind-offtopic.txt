@@ -1,0 +1,14 @@
+atlas kind: map = pre-registered defaults (no --corpus given)
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+atlas kind: inter-centroid cosine 0.641 (thematic~lookup) .. 0.411 (tension~lookup), mean 0.522
+verdict         winner         sim  margin  runner-up      sim  id
+abstain:both    trajectory   0.162  +0.015  lookup       0.147  q1
+abstain:both    thematic     0.197  +0.009  lookup       0.189  q2
+classified      enumeration  0.357  +0.157  thematic     0.200  q3
+abstain:both    thematic     0.300  +0.029  enumeration  0.271  q4
+abstain:both    trajectory   0.244  +0.035  thematic     0.209  q5
+classified      lookup       0.831  +0.315  thematic     0.515  q6
+classified      enumeration  0.840  +0.429  lookup       0.412  q7
+classified      tension      0.739  +0.307  thematic     0.431  q8
+atlas kind: 4/8 classified, 4 abstained (abstain:both 4); classified kinds: enumeration 2, lookup 1, tension 1

@@ -1,0 +1,9 @@
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+verdict         winner         sim  margin  runner-up      sim  id
+classified      tension      0.395  +0.095  enumeration  0.300  q1
+classified      enumeration  0.383  +0.069  lookup       0.315  q2
+abstain:both    lookup       0.281  +0.039  trajectory   0.242  q3
+classified      thematic     0.629  +0.234  tension      0.395  q4
+abstain:margin  trajectory   0.410  +0.022  tension      0.389  q5
+atlas kind: 3/5 classified, 2 abstained (abstain:both 1, abstain:margin 1); classified kinds: enumeration 1, tension 1, thematic 1
