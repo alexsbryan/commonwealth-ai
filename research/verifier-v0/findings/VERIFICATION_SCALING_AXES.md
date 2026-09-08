@@ -409,3 +409,56 @@ instrument, and it is not done here.
 Reproduce: `scripts/ensemble_axis.py` (AUC + bootstrap + miss overlap) and
 `scripts/ensemble_axis_op.py` (combiners + operating point + oracle bound).
 Both refuse to report if the single-judge numbers stop reproducing.
+
+### 8.1 Follow-on — the complementarity is structured, and the threshold dwarfs it
+
+`scripts/perkind_complementarity.py`, same day, on the 2,510-item constructed
+bank (`runs/headroom/scored.jsonl`), both judges matched to the same FA on
+grounded items at three operating points (5/10/20%). Free — a join, no inference.
+
+Per-kind, at FA=10%. `inc-only` = fabrications the 35B incumbent catches that
+rung-1000 misses: the jury's ceiling, which no combiner can invent or exceed.
+
+| kind | n | incumbent | rung-1000 | union | inc-only |
+|---|---|---|---|---|---|
+| distractor_absorption | 283 | 98.2% | 99.6% | 99.6% | **0.0%** |
+| unsupported_addition | 285 | 18.2% | 97.2% | 97.2% | **0.0%** |
+| cross_chunk_chimera | 127 | 85.0% | 96.1% | 96.1% | 0.0% |
+| number_perturb | 80 | 46.2% | 76.2% | 78.8% | 2.5% |
+| entity_swap | 286 | 35.0% | 71.0% | 73.1% | 2.1% |
+| negation_flip | 75 | 25.3% | **53.3%** | 58.7% | **5.3%** |
+| **ALL** | 1136 | 52.3% | 86.7% | 87.8% | **1.1%** |
+
+**Two findings, and the second is the important one.**
+
+**(1) The complementarity is structured, not random — and it is small.** The
+second judge earns its seat only on the *relational* corruptions (polarity,
+entity identity, quantity) and contributes exactly ZERO on the
+presence/absence ones. Mechanically right: containment is a question any
+competent judge answers, while polarity requires reading the relation. Stable
+across all three FA points. But in aggregate the ceiling is +1.1% — a whole
+second 35B recovers about one fabrication in ninety.
+
+**(2) The operating point is 12x more powerful than the jury.** rung-1000
+alone: 78.9% catch @ FA 5%, 86.7% @ 10%, **92.5% @ 20%**. Moving the threshold
+5%->20% buys **+13.6pt**; adding a second model buys **+1.1pt**.
+
+This is why §8's ensembles could only come out negative: they were measured
+inside a zero-sum frame. A gate whose output is a BIT must trade every extra
+catch against a suppressed correct answer. **A verdict that annotates rather
+than refuses does not** — a false alarm costs an unnecessary hedge on a true
+sentence, a true catch prevents a confident lie, and those costs are
+asymmetric enough to buy the FA budget outright.
+
+**What this licenses, and what it does not.**
+
+- **Funds E2 (C=4).** The best judge's per-kind profile is wildly uneven
+  (99.6% vs 53.3%). Narrow probes PARTITION the question instead of
+  duplicating it, which is exactly why §8's panel was redundant and a
+  specialist panel need not be. Fans out across nodes: N probes, one claim.
+- **Names two untested mesh shapes.** *Independent evidence* — every judge in
+  §8 read the same window; two copies of one model on different corpus shards
+  may be more independent than two families on one page. And *coverage* —
+  if FA is cheap, the marginal node is better spent on ANOTHER claim than on
+  re-checking one, which scales linearly and needs no independence property.
+- **Does not rehabilitate M.** The ceiling is measured and it is +1.1%.
