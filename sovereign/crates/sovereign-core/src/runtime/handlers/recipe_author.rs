@@ -35,7 +35,7 @@ use crate::error::{Error, Result};
 use super::super::*;
 use crate::slot_policy::Workload;
 
-use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_for};
+use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_for, TextEnvelope};
 
 /// Cap iterations per turn so a runaway loop can't burn the slot.
 /// 12 matches the live-trial harness default — leaves headroom for
@@ -337,7 +337,7 @@ impl Runtime {
                         Err(e) => Err(e),
                     };
                     let result_str = match &exec_result {
-                        Ok(out) => format_step_output(out),
+                        Ok(out) => format_step_output(out, TextEnvelope::Wire),
                         Err(e) => serde_json::json!({
                             "error": e.to_string(),
                         })

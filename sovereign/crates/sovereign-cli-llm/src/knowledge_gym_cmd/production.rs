@@ -18,17 +18,27 @@
 //! by way of the public `Executor::run` — the same entry a planner-emitted
 //! `reason_with_tools` step takes. Nothing about the loop is re-implemented
 //! here: production builds the prompt (`build_retrieval_reasoning_prompt`),
-//! production parses the `<tool_call>`, production dispatches through
-//! `ToolRegistry::call_cached`, and production writes the `search_log` this
-//! module reads as the ledger.
+//! production parses the `<tool_call>` through `sovereign_core::tool_loop` —
+//! the ONE tool-call protocol in the crate since 2026-09-08 — production
+//! dispatches through `ToolRegistry::call_cached`, and production writes the
+//! `search_log` this module reads as the ledger.
+//!
+//! **What the gym's subject is.** Tool use: does the loop offer the right
+//! tools, does the model call one, do the tool's rows reach the model, does it
+//! cite what came back. The grounding contract on the CHAT path is covered by
+//! chaos-monkey (`citation_faithful`, `citation_grounded`, abstention,
+//! distractors) and this must not duplicate it (ARCH §19). Nothing else covers
+//! the tool loop.
 //!
 //! Two things are the gym's: the inference provider points at the running
 //! daemon (so the model is the same one `--raw` measures), and
 //! `knowledge_lookup` is bound to the fixture's canned envelope instead of a
 //! live corpus. The mock is bound through the SAME
-//! `tool_manifest::declared_from` seam the real tool uses and returns the SAME
-//! `StepOutput::Json` shape (`KnowledgeLookupResponse`), so what the path does
-//! with a tool result is production's behaviour and not the gym's.
+//! `tool_manifest::declared_from` seam the real tool uses — including the
+//! description override `KnowledgeLookupTool::declared()` applies — and
+//! returns the SAME `StepOutput::Json` shape (`KnowledgeLookupResponse`), so
+//! what the path does with a tool result is production's behaviour and not the
+//! gym's.
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -154,7 +164,16 @@ fn mock_knowledge_lookup(
     envelope: Value,
     record: Arc<Mutex<MockRecord>>,
 ) -> sovereign_core::tool_manifest::DeclaredTool {
-    let manifest = sovereign_core::tool_manifest::require("knowledge_lookup").clone();
+    let mut manifest = sovereign_core::tool_manifest::require("knowledge_lookup").clone();
+    // The description too, exactly as `KnowledgeLookupTool::declared()` sets
+    // it. Without this line the prompt renders the row's placeholder —
+    // "Supplied at construction from assets/tool_description.md." — so the
+    // model was asked to choose a tool it had been told nothing about, and
+    // every verdict was partly a measurement of that (ARCH §18.4: validate the
+    // instrument before the result). Seen in the prompt dump 2026-09-08.
+    manifest.description = sovereign_tools::knowledge_lookup::TOOL_DESCRIPTION
+        .trim()
+        .to_string();
     sovereign_core::tool_manifest::declared_from(manifest, move |params: Value, _ctx| {
         let envelope = envelope.clone();
         let record = Arc::clone(&record);
@@ -304,12 +323,14 @@ pub async fn run_executor_turn(
     let mut ledger = TurnLedger::default();
     // Correlate by POSITION AMONG MOCKED CALLS, not by position in the log.
     // The two diverge the moment the path dispatches a tool the mock does not
-    // field — which it does: production's `ReasonWithTools` prompt hardcodes
-    // `"tool":"search"` in its worked example, so a model offered only
-    // `knowledge_lookup` still emits `search` first and the log's row 0 is a
-    // call the mock never saw. Zipping by index attributed the mock's evidence
-    // to that row and printed `search: 2 row(s) returned` for a tool that was
-    // never available (observed on 01_corpus_definitional, 2026-09-07).
+    // field, and zipping by index would attribute the mock's evidence to that
+    // row — printing `search: 2 row(s) returned` for a tool that was never
+    // available (observed on 01_corpus_definitional, 2026-09-07, when the
+    // production prompt still hardcoded `"tool":"search"` as its worked
+    // example whatever the step offered; that example is now generated from
+    // `available_tools`, so the divergence should be rare rather than routine
+    // — but a model is free to invent a tool name at any time, and this stays
+    // for that).
     let mut mocked_seen = 0usize;
     for entry in search_log.iter() {
         let m = if entry.tool_id == "knowledge_lookup" {

@@ -41,13 +41,46 @@ impl Runtime {
         let turn_start = std::time::Instant::now();
 
         // ── Build tool descriptions for the system prompt ────────
-        let mut tool_descs: Vec<String> = Vec::with_capacity(available_tools.len());
+        let mut descriptors: Vec<ToolDescriptor> = Vec::with_capacity(available_tools.len());
+        let mut unresolved: Vec<String> = Vec::new();
         for id in available_tools {
-            if let Ok(t) = self.tools.get(id) {
-                let d = t.descriptor();
-                tool_descs.push(format!("- {} (id: {}): {}", d.name, d.id, d.description));
+            match self.tools.get(id) {
+                Ok(t) => descriptors.push(t.descriptor()),
+                Err(_) => unresolved.push(id.to_string()),
             }
         }
+        if !unresolved.is_empty() {
+            tracing::warn!(
+                target: "runtime.attached_doc",
+                missing = %unresolved.join(", "),
+                offered = descriptors.len(),
+                "turn named tool(s) this registry does not hold; they are not in the prompt"
+            );
+        }
+        let tool_descs: Vec<String> = descriptors
+            .iter()
+            .map(|d| format!("- {} (id: {}): {}", d.name, d.id, d.description))
+            .collect();
+        // The worked call, generated from what is on offer (`tool_loop`), not
+        // written out here. A prompt that shows an envelope the parser does
+        // not accept produces zero tool calls and reads as a model failure.
+        //
+        // With nothing on offer the prompt SAYS SO rather than showing a
+        // placeholder call the model could not make (ARCH §18.3: absence is
+        // reported, never defaulted). Reachable in principle only — the
+        // attached-document turn is composed with `attached_doc_search` — but
+        // a fake example is exactly the shape that made the retrieval prompt
+        // teach `search` on steps that never offered it.
+        let call_instruction = match crate::tool_loop::worked_example(&descriptors) {
+            Some(example) => format!(
+                "Emit a tool call as a single line, exact format:\n\
+                 {example}\n\
+                 `name` must be one of the ids above; `arguments` must match that tool's parameters."
+            ),
+            None => "No document tools are available this turn. Answer from the briefing above, \
+                 and say plainly that you could not retrieve passages to support it."
+                .to_string(),
+        };
 
         // ── Resolve the attached asset + its skeleton ────────────
         // `DocumentSession.source` carries the asset id (per the
@@ -107,8 +140,7 @@ impl Runtime {
             "The user has attached a document to this conversation. {briefing}{prefetch_block}\
              \n\nYou have these tools:\n\n\
              {tool_descs}\n\n\
-             Emit a tool call as a single line, exact format:\n\
-             <tool_call>{{\"tool\":\"<id>\",\"query\":\"<search terms>\"}}</tool_call>\n\n\
+             {call_instruction}\n\n\
              ## How to query effectively\n\
              **Phrase queries in the document's vocabulary, not the question's.** RAG retrieval scores chunks by similarity to your query, so paraphrasing the question abstractly will miss chunks that describe the same event in the document's specific words. The briefing above lists the document's actual entities and the phrases the document uses about them; lift query terms from there.\n\
              \n\
@@ -209,7 +241,16 @@ impl Runtime {
             let response_text = completion.text.trim().to_string();
 
             // ── Tool call? Parse + dispatch ──────────────────────
-            if let Some((tool_id, query)) = parse_tool_call_inline(&response_text) {
+            //
+            // ONE parser, shared with every other tool loop in the crate
+            // (`crate::tool_loop`). This handler drove a private
+            // `{"tool","query"}` parser until 2026-09-08, which could express
+            // nothing but a search — see `tool_loop`'s header.
+            let (thinking_text, parsed_calls) =
+                crate::tool_loop::parse_assistant_text(&response_text);
+            if let Some(call) = parsed_calls.first() {
+                let tool_id = call.name.clone();
+                let query = call.query_arg();
                 distinct_queries.insert(query.trim().to_lowercase());
                 // Surface "calling X" immediately on TWO surfaces:
                 // (a) the in-session narration log — what the bench
@@ -248,7 +289,10 @@ impl Runtime {
 
                 let (tool_result_text, ok, result_summary) = match self.tools.get(&tool_id) {
                     Ok(_) => {
-                        let params = serde_json::json!({"query": query});
+                        // The model's arguments reach the tool WHOLE. The
+                        // retired parser rebuilt them as `{"query": …}`, so a
+                        // tool with any other parameter was uncallable here.
+                        let params = call.arguments.clone();
                         let tool_ctx = ToolContext {
                             conversation_id: conversation_id.to_string(),
                             task_id: None,
@@ -289,15 +333,21 @@ impl Runtime {
                                 }
                                 (t.clone(), true, format!("Retrieved {chunks} passage(s)"))
                             }
-                            Ok(StepOutput::Json(v)) => {
-                                let txt = v
-                                    .get("answer")
-                                    .and_then(|a| a.as_str())
-                                    .unwrap_or("(no answer field)")
-                                    .to_string();
-                                (txt, true, "Retrieved JSON payload".to_string())
+                            // Every non-Text shape goes through the shared
+                            // formatter, which knows no tool's schema. This
+                            // branch read `.get("answer")` and substituted
+                            // "(no answer field)" until 2026-09-08 — a guess at
+                            // one tool's key that discarded every other tool's
+                            // rows (`tool_loop` header).
+                            Ok(other) => {
+                                let txt = crate::tool_loop::format_step_output(
+                                    &other,
+                                    crate::tool_loop::TextEnvelope::Prose,
+                                );
+                                let n = crate::tool_loop::result_cardinality(&other);
+                                total_chunks += n;
+                                (txt, true, format!("Retrieved {n} result(s)"))
                             }
-                            Ok(_) => ("(no results)".to_string(), true, "Empty result".to_string()),
                             Err(e) => (format!("Tool error: {e}"), false, format!("Failed: {e}")),
                         }
                     }
@@ -337,12 +387,7 @@ impl Runtime {
                     search_method_parts.push(tool_id.clone());
                 }
 
-                let thinking = response_text
-                    .split("<tool_call>")
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
+                let thinking = thinking_text.trim().to_string();
                 let passage_count = tool_result_text.matches("[Source").count();
                 conversation_segments.push(AttachedDocSegment::ToolCall {
                     thinking,

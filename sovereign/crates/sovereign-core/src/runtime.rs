@@ -949,8 +949,8 @@ impl Runtime {
 }
 
 pub(crate) use self::attached_doc_render::{
-    parse_tool_call_inline, render_attached_doc_conversation, strip_dangling_tool_calls,
-    truncate_for_chip, AttachedDocSegment,
+    render_attached_doc_conversation, strip_dangling_tool_calls, truncate_for_chip,
+    AttachedDocSegment,
 };
 
 mod attached_doc_render;

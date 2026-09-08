@@ -121,29 +121,23 @@ impl Runtime {
             .iter()
             .filter_map(|(id, output)| match output {
                 StepOutput::Text(t) => Some(format!("Step {id}: {t}")),
-                StepOutput::Json(v) => {
-                    // Prefer a tool's human-formatted fields over raw JSON:
-                    // `answer` (search tools), then `summary` (the COMPACT
-                    // cited figures from a deterministic figure tool like
-                    // parcel_analytics). Showing the raw JSON would put
-                    // precise multi-digit values (e.g. 1477806471.0) in
-                    // front of the model — which it cannot retype faithfully
-                    // and corrupts into digit-salad. So the model narrates
-                    // from compact figures it can copy; the exact derivation
-                    // is appended verbatim from the tool downstream.
-                    let text = v
-                        .get("answer")
-                        .and_then(|a| a.as_str())
-                        .or_else(|| v.get("summary").and_then(|s| s.as_str()))
-                        .unwrap_or("");
-                    if text.is_empty() {
-                        Some(format!(
-                            "Step {id}: {}",
-                            serde_json::to_string_pretty(v).unwrap_or_default()
-                        ))
-                    } else {
-                        Some(format!("Step {id}: {text}"))
-                    }
+                StepOutput::Json(_) => {
+                    // A tool's own compact prose when it published one
+                    // (`tool_loop::narratable_summary` — one decider, one key,
+                    // and the reason it exists is written there); otherwise
+                    // the whole value through the shared formatter. The
+                    // fallback used to be a local `to_string_pretty` reached
+                    // after guessing at `answer` — a second renderer for the
+                    // same job.
+                    let text = crate::tool_loop::narratable_summary(output)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| {
+                            crate::tool_loop::format_step_output(
+                                output,
+                                crate::tool_loop::TextEnvelope::Prose,
+                            )
+                        });
+                    Some(format!("Step {id}: {text}"))
                 }
                 StepOutput::ReasonWithToolsResult {
                     ref text,

@@ -67,15 +67,18 @@ impl InferenceProvider for DeterministicInference {
         } else if prompt_lower.contains("\"steps\"") && prompt_lower.contains("\"edges\"") {
             // Plan generation
             r#"{"goal":"test","steps":[{"id":0,"description":"answer","kind":"reason","prompt":"Answer the question","speed":"slow"}],"edges":[]}"#.to_string()
-        } else if prompt_lower.contains("how to search")
+        } else if prompt_lower.contains("how to call a tool")
             && prompt_lower.contains("[search results for")
         {
-            // ReasonWithTools: has search results — synthesize now
+            // ReasonWithTools: has results — synthesize now
             "Based on what I found, here is the answer. [Source: sep] The knowledge base confirms this.".to_string()
-        } else if prompt_lower.contains("how to search") && prompt_lower.contains("available tools")
+        } else if prompt_lower.contains("how to call a tool")
+            && prompt_lower.contains("available tools")
         {
-            // ReasonWithTools: first iteration — emit a tool call
-            r#"Let me search for relevant information. <tool_call>{"tool":"search","query":"Bergson laughter humor"}</tool_call>"#.to_string()
+            // ReasonWithTools: first iteration — emit a tool call in the ONE
+            // envelope `crate::tool_loop` parses (2026-09-08; was the retired
+            // `{"tool","query"}` shape).
+            r#"Let me search for relevant information. <tool_call>{"name":"search","arguments":{"query":"Bergson laughter humor"}}</tool_call>"#.to_string()
         } else if prompt_lower.contains("you have used all available searches") {
             // ReasonWithTools: forced synthesis after hitting cap
             "Forced synthesis after reaching search limit. [Source: sep] Based on available findings.".to_string()
@@ -199,8 +202,8 @@ impl InferenceProvider for AlwaysSearchInference {
         let prompt_lower = request.prompt.to_lowercase();
         let text = if prompt_lower.contains("you have used all available searches") {
             "Forced synthesis after cap.".to_string()
-        } else if prompt_lower.contains("how to search") {
-            r#"Searching again. <tool_call>{"tool":"search","query":"more results"}</tool_call>"#
+        } else if prompt_lower.contains("how to call a tool") {
+            r#"Searching again. <tool_call>{"name":"search","arguments":{"query":"more results"}}</tool_call>"#
                 .to_string()
         } else {
             "fallback".to_string()

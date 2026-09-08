@@ -1164,6 +1164,216 @@ async fn reason_with_tools_caps_at_max_iterations() {
     }
 }
 
+// ─── ReasonWithTools: a Json tool's evidence must reach the model ──
+//
+// ARCH §18.1 — the named failing input. `knowledge_lookup` (and every other
+// tool whose result is a `StepOutput::Json`) returns an evidence envelope with
+// no `answer` key. Until 2026-09-08 `execute_reason_with_tools` rendered a Json
+// result by reading `.get("answer")` and substituting the literal string
+// `"No results."` when the key was absent — so a tool that fired, matched, and
+// returned rows delivered NOTHING to the model, and `SearchLogEntry`'s
+// `result_count` (the UI's "hits returned") recorded 0.
+//
+// The assertion is on what the NEXT prompt actually carried, not on the final
+// answer: a model asked about Bergson can produce a plausible answer from
+// pretraining whether or not the evidence arrived, so scoring the answer would
+// pass on a path that lost the evidence (§18.1 — a guard asserting on a field
+// the subject supplies is not a guard).
+
+/// Records every prompt it was asked to complete, and drives one tool call
+/// followed by a synthesis. The recorded prompts are what the assertion reads.
+struct EvidenceProbeInference {
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+#[async_trait::async_trait]
+impl sovereign_core::traits::InferenceProvider for EvidenceProbeInference {
+    async fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> sovereign_core::error::Result<CompletionResponse> {
+        if let Ok(mut v) = self.seen.lock() {
+            v.push(request.prompt.clone());
+        }
+        // One call, then synthesise. The second turn's prompt is the one the
+        // assertion inspects, so the loop must not call twice.
+        //
+        // Keyed on the CALL COUNT, not on prompt content. Keying it on
+        // `prompt.contains("ev-0001")` made the probe answer on turn one,
+        // because the retrieval prompt names `[ev-0001]` as the citation FORM
+        // — an instrument that read its own subject's text and mistook it for
+        // the tool's output (ARCH §18.4, validate the instrument first).
+        let already_called = self.seen.lock().map(|v| v.len() > 1).unwrap_or(false);
+        let text = if already_called {
+            "Here is my answer.".to_string()
+        } else {
+            r#"Let me look that up. <tool_call>{"name":"knowledge_lookup","arguments":{"query":"Bergson laughter"}}</tool_call>"#
+                .to_string()
+        };
+        Ok(CompletionResponse {
+            text,
+            tokens_used: 5,
+            prompt_tokens: 0,
+            model_id: "evidence-probe".to_string(),
+            latency_ms: 1,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> sovereign_core::error::Result<
+        std::pin::Pin<
+            Box<dyn futures::Stream<Item = sovereign_core::error::Result<String>> + Send>,
+        >,
+    > {
+        Err(sovereign_core::error::Error::NotImplemented(
+            "not supported".to_string(),
+        ))
+    }
+
+    async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        Ok(vec![0.0; 8])
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 8192,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Moderate,
+        }
+    }
+}
+
+/// The real `knowledge_lookup` manifest bound to a canned envelope — the same
+/// seam the knowledge gym uses, so the tool line the prompt renders and the
+/// parameter schema the model is offered are production's, not a second copy.
+fn canned_knowledge_lookup() -> sovereign_core::tool_manifest::DeclaredTool {
+    let manifest = sovereign_core::tool_manifest::require("knowledge_lookup").clone();
+    sovereign_core::tool_manifest::declared_from(manifest, move |_params, _ctx| async move {
+        Ok(StepOutput::Json(serde_json::json!({
+            "query": "Bergson laughter",
+            "evidence": [{
+                "id": "ev-0001",
+                "source_kind": "corpus",
+                "source_id": "sep",
+                "title": "Bergson",
+                "content": "Bergson's Laughter treats comedy as a social corrective.",
+                "confidence": 0.9,
+            }],
+            "by_kind_counts": { "corpus": 1, "memory": 0, "note": 0 },
+        })))
+    })
+}
+
+#[tokio::test]
+async fn reason_with_tools_delivers_a_json_tools_evidence_to_the_model() {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let inference = std::sync::Arc::new(EvidenceProbeInference {
+        seen: std::sync::Arc::clone(&seen),
+    });
+    let store: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
+        std::sync::Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(canned_knowledge_lookup()));
+
+    let executor = Executor::new(
+        inference,
+        std::sync::Arc::new(tools),
+        store,
+        std::sync::Arc::new(AutoApprovalChannel),
+        std::sync::Arc::new(SkillRegistry::new()),
+    );
+
+    let plan = Plan {
+        id: "evidence-delivery".to_string(),
+        goal: "What did Bergson say about laughter?".to_string(),
+        steps: vec![Step {
+            id: 0,
+            description: "look up Bergson".to_string(),
+            kind: StepKind::ReasonWithTools {
+                prompt_template: "What did Bergson say about laughter?".to_string(),
+                speed: Speed::Slow,
+                available_tools: vec!["knowledge_lookup".to_string()],
+                max_iterations: 4,
+            },
+            requires_approval: false,
+            inputs: vec![],
+            sampling: None,
+            evaluation: None,
+        }],
+        edges: vec![],
+    };
+    let task = Task {
+        id: "evidence-task".to_string(),
+        conversation_id: "evidence-conv".to_string(),
+        goal: "test".to_string(),
+        plan: plan.clone(),
+        status: TaskStatus::Running,
+        completed_steps: Vec::new(),
+        created_at: 0,
+        updated_at: 0,
+        version: 0,
+    };
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+
+    let result = executor.run(&plan, &mut ctx).await.expect("executor runs");
+    assert!(result.error.is_none(), "execution should succeed");
+
+    let prompts = seen.lock().expect("prompt log").clone();
+    assert!(
+        prompts.len() >= 2,
+        "the loop must call the model again after the tool; saw {} prompt(s).\nFIRST PROMPT:\n{}",
+        prompts.len(),
+        prompts.first().map(String::as_str).unwrap_or("<none>")
+    );
+    let after_tool = &prompts[1];
+    assert!(
+        after_tool.contains("ev-0001"),
+        "the tool returned an evidence row and the model never saw it. \
+         Prompt after the tool call:\n{after_tool}"
+    );
+    assert!(
+        after_tool.contains("social corrective"),
+        "the evidence CONTENT must reach the model, not just its id:\n{after_tool}"
+    );
+    assert!(
+        !after_tool.contains("No results."),
+        "a tool that returned a row must not be rendered as \"No results.\":\n{after_tool}"
+    );
+
+    // The path's own tally is the row the UI shows as "hits returned" and the
+    // gym reads as `path_result_count`. A Json result counted 0 is the same
+    // defect wearing a different face.
+    let StepOutput::ReasonWithToolsResult { search_log, .. } =
+        result.completed.get(&0).expect("step 0 output")
+    else {
+        panic!("expected ReasonWithToolsResult");
+    };
+    assert_eq!(search_log.len(), 1, "one tool call: {search_log:?}");
+    assert_eq!(
+        search_log[0].tool_id, "knowledge_lookup",
+        "the dispatched tool id is recorded verbatim: {search_log:?}"
+    );
+    assert_eq!(
+        search_log[0].query, "Bergson laughter",
+        "the model's query argument is recorded: {search_log:?}"
+    );
+    assert!(
+        search_log[0].result_count > 0,
+        "one evidence row returned must be counted as at least one hit, got {}",
+        search_log[0].result_count
+    );
+}
+
 // ─── Auto-Collaborate (Phase 2 → I4-C structural detection) ──
 //
 // These tests exercise `Runtime::maybe_collaborate` directly. Since the

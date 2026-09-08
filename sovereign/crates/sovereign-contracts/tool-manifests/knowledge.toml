@@ -540,6 +540,34 @@ latency = "fast"
 scope = "persistent"
 permissions = []
 
+# The row declared NO parameters until 2026-09-08, so `tool_schemas_for`
+# projected an empty schema and a model was offered the tool without being
+# told it takes a query. Rust's `validate_extra` enforced `query` anyway, so
+# the constraint existed and was simply invisible to the caller — the shape
+# ARCH principle 10 exists to prevent. The Rust check stays: it also refuses a
+# whitespace-only query, which JSON Schema cannot express.
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "One focused question or phrase, 8 words or fewer."
+
+[tool.parameters.properties.kinds]
+type = "array"
+description = "Restrict to these evidence channels. Omit for all three."
+
+[tool.parameters.properties.kinds.items]
+type = "string"
+enum = ["corpus", "memory", "note"]
+
+[[tool.examples]]
+situation = "The question names a concept, person, or work the answer must be grounded in"
+call = { query = "Bergson laughter social corrective" }
+
 [tool.output_schema]
 type = "object"
 

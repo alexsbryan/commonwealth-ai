@@ -114,14 +114,8 @@ pub fn __voice_test_default_judge_prompt() -> &'static str {
     DEFAULT_JUDGE_PROMPT
 }
 
-// ─── Tool Call Parsing ────────────────────────────────────────
+// ─── Idempotency ──────────────────────────────────────────────
 
-struct ParsedToolCall {
-    tool_id: String,
-    query: String,
-}
-
-/// Parse a `<tool_call>{"tool":"...","query":"..."}</tool_call>` from model output.
 /// Content-derived idempotency key for a tool action: stable across a
 /// replan that re-issues the same `(tool, params)` under a new step_id,
 /// and across a process restart (the hash is deterministic, unlike
@@ -211,19 +205,6 @@ fn with_anomalies_channel(schema: &serde_json::Value) -> serde_json::Value {
         }
     }
     s
-}
-
-fn parse_tool_call(text: &str) -> Option<ParsedToolCall> {
-    let start = text.find("<tool_call>")?;
-    let end = text.find("</tool_call>")?;
-    if end <= start {
-        return None;
-    }
-    let json_str = &text[start + "<tool_call>".len()..end];
-    let value: serde_json::Value = serde_json::from_str(json_str.trim()).ok()?;
-    let tool_id = value.get("tool")?.as_str()?.to_string();
-    let query = value.get("query")?.as_str()?.to_string();
-    Some(ParsedToolCall { tool_id, query })
 }
 
 // ─── Public Types ──────────────────────────────────────────────
@@ -489,7 +470,9 @@ impl Executor {
         max_iterations: usize,
         task: &Task,
     ) -> Result<StepOutput> {
-        use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_for};
+        use crate::tool_loop::{
+            format_step_output, parse_assistant_text, tool_schemas_for, TextEnvelope,
+        };
 
         let descriptors: Vec<ToolDescriptor> = tool_ids
             .iter()
@@ -541,7 +524,7 @@ impl Executor {
             for call in &calls {
                 let result = match self.tools.get(&call.name) {
                     Ok(tool) => match tool.execute(&call.arguments, &ctx).await {
-                        Ok(out) => format_step_output(&out),
+                        Ok(out) => format_step_output(&out, TextEnvelope::Wire),
                         Err(e) => serde_json::json!({ "error": e.to_string() }).to_string(),
                     },
                     Err(_) => serde_json::json!({
@@ -1086,14 +1069,43 @@ impl Executor {
         max_iterations: usize,
         task: &Task,
     ) -> Result<StepOutput> {
+        use crate::tool_loop::{
+            format_step_output, parse_assistant_text, result_cardinality, tool_schemas_for,
+            TextEnvelope,
+        };
+
+        // The tools actually on offer, resolved ONCE. Both the prompt's tool
+        // list and its worked example are built from these, so a prompt can
+        // never name a tool the step did not offer (ARCH §18.3 — the example
+        // is absent when the list is, never defaulted to a familiar name).
+        let mut descriptors: Vec<ToolDescriptor> = Vec::with_capacity(available_tools.len());
+        let mut unresolved: Vec<&str> = Vec::new();
+        for id in available_tools {
+            match self.tools.get(id) {
+                Ok(t) => descriptors.push(t.descriptor()),
+                Err(_) => unresolved.push(id.as_str()),
+            }
+        }
+        if !unresolved.is_empty() {
+            // A step that names a tool this host has not registered used to
+            // drop it here with no trace: it never reached the prompt and was
+            // never dispatched, so the plan silently ran without a capability
+            // it asked for (ARCH §18.3). The step still runs — a partially
+            // served plan beats no plan — but the gap is on the record.
+            tracing::warn!(
+                target: "executor.reason_with_tools",
+                missing = %unresolved.join(", "),
+                offered = descriptors.len(),
+                "step named tool(s) this registry does not hold; they are not in the prompt"
+            );
+        }
+
         // Build tool descriptions for the system prompt. Annotation
         // matches the planner prompt format (Phase 1.4) so the agent
         // sees consistent effect/scope/latency tags across both paths.
-        let tool_descs: Vec<String> = available_tools
+        let tool_descs: Vec<String> = descriptors
             .iter()
-            .filter_map(|id| self.tools.get(id).ok())
-            .map(|t| {
-                let d = t.descriptor();
+            .map(|d| {
                 let effect = match d.effect {
                     Effect::Read => "Read",
                     Effect::Write => "Write",
@@ -1129,6 +1141,7 @@ impl Executor {
                 )
             })
             .collect();
+        let tool_schemas = tool_schemas_for(&descriptors);
 
         // Phase 2 signals: poll each available tool's cheap-state
         // summary. Most tools return None. The ones that don't give
@@ -1144,8 +1157,12 @@ impl Executor {
             }
         }
 
-        let system =
-            self.build_retrieval_reasoning_prompt(&tool_descs, &tool_signals, max_iterations);
+        let system = self.build_retrieval_reasoning_prompt(
+            &tool_descs,
+            &descriptors,
+            &tool_signals,
+            max_iterations,
+        );
 
         // Build the growing conversation as a single prompt.
         let mut conversation = format!("{system}\n\n---\n\nUser question: {prompt}\n\nAssistant:");
@@ -1154,7 +1171,7 @@ impl Executor {
         let mut iterations = 0;
 
         loop {
-            let request = CompletionRequest {
+            let mut request = CompletionRequest {
                 prompt: conversation.clone(),
                 system_message: None, // System is baked into the prompt
                 preferred_speed: speed,
@@ -1162,66 +1179,80 @@ impl Executor {
                 temperature: Some(0.3),
                 ..Default::default()
             };
+            // The scoped tools, projected into the shape the embedded chat
+            // template and the daemon's envelope grammar both consume. The
+            // prompt still lists them in prose — this is what makes the model
+            // see the parameter SCHEMAS, which is how it learns to write an
+            // argument that is not `query`.
+            if !tool_schemas.is_empty() {
+                request.tools = Some(tool_schemas.clone());
+            }
 
             let response = self.inference.complete(&request).await?;
             let response_text = response.text.trim().to_string();
 
             // Check if the model emitted a tool call.
-            if let Some(tool_call) = parse_tool_call(&response_text) {
-                // Find and execute the tool.
-                let tool_result = match self.tools.get(&tool_call.tool_id) {
-                    Ok(_tool) => {
-                        let params = serde_json::json!({"query": tool_call.query});
-                        let ctx = ToolContext {
-                            conversation_id: task.conversation_id.clone(),
-                            task_id: Some(task.id.clone()),
-                            working_directory: None,
-                            in_reasoning_loop: true,
-                            agent_session_token: None,
-                            turn_index: 0,
-                            ..Default::default()
-                        };
-                        // Tier 4: cache-aware dispatch.
+            let (thinking, calls) = parse_assistant_text(&response_text);
+            if !calls.is_empty() {
+                // Every call in the turn runs. The retired parser returned only
+                // the FIRST envelope in the text, so a model that emitted two
+                // had its second silently dropped — absence reported, never
+                // defaulted (ARCH §18.3).
+                let ctx = ToolContext {
+                    conversation_id: task.conversation_id.clone(),
+                    task_id: Some(task.id.clone()),
+                    working_directory: None,
+                    in_reasoning_loop: true,
+                    agent_session_token: None,
+                    turn_index: 0,
+                    ..Default::default()
+                };
+                let mut rendered = String::new();
+                for call in &calls {
+                    let query = call.query_arg();
+                    // Tier 4: cache-aware dispatch. The model's arguments go
+                    // to the tool WHOLE — the retired loop rebuilt them as
+                    // `{"query": …}` and so could not drive anything but a
+                    // search.
+                    let (tool_result, result_count) = if self.tools.get(&call.name).is_err() {
+                        (format!("Tool '{}' not available.", call.name), 0)
+                    } else {
                         match self
                             .tools
-                            .call_cached(&tool_call.tool_id, &params, &ctx)
+                            .call_cached(&call.name, &call.arguments, &ctx)
                             .await
                         {
-                            Ok(output) => match output {
-                                StepOutput::Text(t) => t,
-                                StepOutput::Json(v) => v
-                                    .get("answer")
-                                    .and_then(|a| a.as_str())
-                                    .unwrap_or("No results.")
-                                    .to_string(),
-                                _ => "No results.".to_string(),
-                            },
-                            Err(e) => format!("Search failed: {e}. Try a different query."),
+                            Ok(output) => (
+                                format_step_output(&output, TextEnvelope::Prose),
+                                result_cardinality(&output),
+                            ),
+                            Err(e) => (
+                                format!("Tool call failed: {e}. Try different arguments."),
+                                0,
+                            ),
                         }
-                    }
-                    Err(_) => format!("Tool '{}' not available.", tool_call.tool_id),
-                };
-
-                // Count results (rough heuristic: count [Source lines).
-                let result_count = tool_result.matches("[Source").count();
-
-                search_log.push(SearchLogEntry {
-                    iteration: iterations,
-                    tool_id: tool_call.tool_id.clone(),
-                    query: tool_call.query.clone(),
-                    result_count,
-                });
+                    };
+                    tracing::info!(
+                        target: "executor.reason_with_tools",
+                        tool = %call.name,
+                        iteration = iterations,
+                        result_count,
+                        rendered_chars = tool_result.len(),
+                        "reason loop tool call"
+                    );
+                    search_log.push(SearchLogEntry {
+                        iteration: iterations,
+                        tool_id: call.name.clone(),
+                        query: query.clone(),
+                        result_count,
+                    });
+                    rendered.push_str(&format!(
+                        "\n\n[Search results for \"{query}\"]:\n{tool_result}"
+                    ));
+                }
 
                 // Append model's thinking + tool results to the conversation.
-                let thinking = response_text
-                    .split("<tool_call>")
-                    .next()
-                    .unwrap_or("")
-                    .trim();
-                conversation.push_str(&format!(
-                    " {thinking}\n\n[Search results for \"{}\"]:\n{tool_result}\n\nAssistant:",
-                    tool_call.query
-                ));
+                conversation.push_str(&format!(" {thinking}{rendered}\n\nAssistant:"));
 
                 iterations += 1;
 
@@ -1267,10 +1298,42 @@ impl Executor {
     fn build_retrieval_reasoning_prompt(
         &self,
         tool_descriptions: &[String],
+        descriptors: &[ToolDescriptor],
         tool_signals: &[String],
         max_iterations: usize,
     ) -> String {
         let tools_list = tool_descriptions.join("\n");
+
+        // The worked call, GENERATED from the tools this step actually offers.
+        // Hardcoded here until 2026-09-08 as `{"tool":"search","query":…}` —
+        // which named a tool that is not offered on most steps, so a model
+        // offered only `knowledge_lookup` emitted `search` first and was told
+        // `Tool 'search' not available.` (6 of 9 gym replays, 2026-09-07). When
+        // no tool is on offer there is no example and no "How to call a tool"
+        // section at all: a prompt that teaches a call the step cannot serve is
+        // worse than one that teaches none.
+        let how_to_call = match crate::tool_loop::worked_example(descriptors) {
+            Some(example) => format!(
+                "## How to call a tool\n\n\
+                 When you need information, emit a tool call in this exact format:\n\
+                 {example}\n\n\
+                 `name` must be one of the ids under \"Available tools\" below, and \
+                 `arguments` must match that tool's declared parameters.\n\n\
+                 After each call, you'll receive its result. Read it carefully, then either:\n\
+                 - Call again with different arguments if you need more information\n\
+                 - Write your final answer if you have enough\n\n\
+                 ## When to call\n\n\
+                 - Call when you need factual information you're not certain about.\n\
+                 - Call when you need specific details, quotes, dates, or names.\n\
+                 - If results are incomplete, try different terms — different angle, more specific, or broader.\n\
+                 - Don't look up things you already found.\n\n\
+                 ## When to stop\n\n\
+                 - Stop when you have enough sources to answer confidently.\n\
+                 - Stop when additional calls return information you've already seen.\n\
+                 - You have a maximum of {max_iterations} calls. Use them wisely.\n\n"
+            ),
+            None => String::new(),
+        };
 
         // Phase 2: render an optional `## Tool state` block only when
         // at least one tool returned a non-None signal. Silent
@@ -1289,35 +1352,14 @@ impl Executor {
             .unwrap_or_default();
 
         format!(
-            r#"You are a research assistant with access to knowledge bases. Answer the user's question by searching for relevant information and reasoning about what you find.
+            r#"You are a research assistant with access to knowledge bases. Answer the user's question by looking up relevant information and reasoning about what you find.
 
-## How to search
-
-When you need information, emit a tool call in this exact format:
-<tool_call>{{"tool":"search","query":"your search terms"}}</tool_call>
-
-After each search, you'll receive results. Read them carefully, then either:
-- Search again with different terms if you need more information
-- Write your final answer if you have enough
-
-## When to search
-
-- Search when you need factual information you're not certain about.
-- Search when you need specific details, quotes, dates, or names.
-- If results are incomplete, try different search terms — different angle, more specific, or broader.
-- Don't search for things you already found.
-
-## When to stop
-
-- Stop when you have enough sources to answer confidently.
-- Stop when additional searches return information you've already seen.
-- You have a maximum of {max_iterations} searches. Use them wisely.
-
-## Your answer
+{how_to_call}## Your answer
 
 When ready to answer (without a <tool_call>):
-- Cite sources using [Source: name] notation for every claim backed by search results.
-- If you make a claim that is NOT directly supported by your search results,
+- Cite sources using the handles the tool results returned — an evidence id
+  (`[ev-0001]`) or a `[Source: name]` label — for every claim backed by one.
+- If you make a claim that is NOT directly supported by a tool result,
   mark it with [unverified] so the user knows it comes from your general
   knowledge rather than a retrieved source.
 - If sources conflict, present both positions.
