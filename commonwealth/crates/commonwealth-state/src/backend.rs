@@ -372,24 +372,27 @@ fn upsert_if_newer_on(
     timestamp: u64,
     origin: &[u8],
 ) -> Result<bool> {
-    let existing: Option<(u64, Vec<u8>)> = conn
+    let existing: Option<(u64, Vec<u8>, Vec<u8>)> = conn
         .query_row(
-            "SELECT timestamp, origin FROM store WHERE app_id = ?1 AND key = ?2",
+            "SELECT timestamp, origin, value FROM store WHERE app_id = ?1 AND key = ?2",
             params![app_id, key],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
         .map_err(|e| Error::Backend(format!("query failed: {e}")))?;
 
-    if let Some((ts, held_origin)) = existing {
+    if let Some((ts, held_origin, held_value)) = existing {
         // Strictly newer wins. An EQUAL timestamp is a tie the clock cannot
-        // break, and it has two shapes: two ORIGINS in one second stay with
+        // break, and it has three shapes: two ORIGINS in one second stay with
         // the incumbent (deterministic on every node, no arrival order); one
-        // origin rewriting its own key in one second is program order, and
-        // the later write wins — refusing it lost the daemon's second write
-        // of a second (`a_same_second_rewrite_by_the_same_origin_wins`), which
-        // is the common case for a bumped claim or a republished catalogue.
-        if ts > timestamp || (ts == timestamp && held_origin != origin) {
+        // origin rewriting its own key to the SAME bytes changed nothing and
+        // is not a write (`mesh_peer_store_agrees_with_the_solo_answers` —
+        // counting it would queue one redundant op per unchanged row); one
+        // origin rewriting its own key to DIFFERENT bytes is program order,
+        // and the later write wins — refusing it lost the daemon's second
+        // write of a second (`a_same_second_rewrite_by_the_same_origin_wins`),
+        // the common case for a bumped claim or a republished catalogue.
+        if ts > timestamp || (ts == timestamp && (held_origin != origin || held_value == value)) {
             return Ok(false);
         }
     }

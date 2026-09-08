@@ -968,6 +968,14 @@ mod tests {
             store.get("app", "k").unwrap().unwrap().value.as_ref(),
             b"second"
         );
+        let queued = store.outbox_len().unwrap();
+        assert!(
+            !store
+                .set("app", "k", Bytes::from("second"), node(1))
+                .unwrap(),
+            "the same bytes again is not a write"
+        );
+        assert_eq!(store.outbox_len().unwrap(), queued, "and queues nothing");
         let ts = store.get("app", "k").unwrap().unwrap().timestamp;
         let rival = StoreEntry {
             app_id: "app".into(),
