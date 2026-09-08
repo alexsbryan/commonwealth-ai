@@ -46,27 +46,68 @@ box before
   for c in raptor-subset-off raptor-subset-on brothers-karamazov-book-1; do
     d="$HOME/.svrnmesh/indexes/$c/atlas"
     echo "   $c: population=[$(head -2 "$d/atoms_ann.population" 2>/dev/null | tr '\n' ' ')] \
+derivation=[$(head -1 "$d/edges.csr.derivation" 2>/dev/null || echo ABSENT)] \
 embedded=$(python3 -c "import json;print(json.load(open('$d/_summary.json'))['ann']['embedded_atoms'])" 2>/dev/null)"
   done
 } > "$OUT/preflight.txt" 2>&1
 [[ -x "$CLI" ]] || { echo "ABORT: no worktree binary" >> "$OUT/log.txt"; echo 90 > "$OUT/preflight.rc"; exit 90; }
 echo 0 > "$OUT/preflight.rc"
 
-# ── leg 0: re-seed brothers-karamazov-book-1 (seat-authorised, reversible) ──
-# Its marker reads schema 1 — the pre-ei-7a derivation — so `ann_table_is_fresh`
-# is already false and the daemon would rebuild it silently at next boot. This
-# does it deliberately, from THIS branch's population logic, with the Entity-era
-# table copied aside first so one `mv` restores it.
+# ── leg 0: rebuild brothers-karamazov-book-1's DERIVED set ─────────────────
+# Seat-authorised, reversible, and BOTH halves are needed:
+#
+#   - the SEED TABLE, because its marker reads schema 1 (the pre-ei-7a
+#     derivation), so `ann_table_is_fresh` is already false and the daemon
+#     would rebuild it silently at next boot anyway; and
+#   - the STORE, because the `Configures` edges are derived at the store write
+#     and this corpus has none. A seed table alone would put the walk on a
+#     Configuration it cannot leave — seeds on a terminus, which is half of
+#     what bar (d) is asking about.
+#
+# `migrate-all <corpus>` does both through the one writer. The whole derived
+# set is copied aside first: `atoms.json`, `edges.json` and every evidence path
+# are untouched, so one `mv` restores the pre-ei-5c state and nothing this leg
+# writes is content.
 reseed() {
   local d="$HOME/.svrnmesh/indexes/brothers-karamazov-book-1/atlas"
-  local bak="$d/atoms_ann.pre-ei5c.$(date +%Y%m%d)"
-  echo "-- before:"; cat "$d/atoms_ann.population"
-  mkdir -p "$bak"
-  cp -a "$d/atoms_ann.lance" "$bak/" && cp -a "$d/atoms_ann.population" "$bak/" || return 1
+  local bak="$d/derived.pre-ei5c.$(date +%Y%m%d)"
+  echo "-- BEFORE"
+  echo "   population: [$(tr '\n' ' ' < "$d/atoms_ann.population" 2>/dev/null)]"
+  echo "   derivation: [$(tr '\n' ' ' < "$d/edges.csr.derivation" 2>/dev/null || echo ABSENT)]"
+  python3 -c "import json;print('   embedded_atoms =', json.load(open('$d/_summary.json'))['ann']['embedded_atoms'])"
+  python3 - "$d/edges.json" <<'PYEOF'
+import json, sys
+from collections import Counter
+try:
+    e = json.load(open(sys.argv[1]))["edges"]
+    print("   edges.json:", len(e), Counter(x["edge_type"] for x in e).most_common())
+except Exception as ex:
+    print("   edges.json:", ex)
+PYEOF
+  mkdir -p "$bak" || return 1
+  for f in atoms.lance edges.csr atoms_ann.lance atoms_ann.population edges.csr.derivation; do
+    [[ -e "$d/$f" ]] && { cp -a "$d/$f" "$bak/" || return 1; }
+  done
   echo "-- backup at $bak (restore: mv \"$bak\"/* \"$d\"/)"
-  "$CLI" atlas backfill-ann brothers-karamazov-book-1 || return 1
-  echo "-- after:"; cat "$d/atoms_ann.population"
-  python3 -c "import json;print('embedded_atoms =', json.load(open('$d/_summary.json'))['ann']['embedded_atoms'])"
+  # `--no-flip`: `.read_v2` is already set on this corpus and flipping is not
+  # this leg's business.
+  "$CLI" atlas migrate-all --no-flip brothers-karamazov-book-1 || return 1
+  echo "-- AFTER"
+  echo "   population: [$(tr '\n' ' ' < "$d/atoms_ann.population" 2>/dev/null)]"
+  echo "   derivation: [$(tr '\n' ' ' < "$d/edges.csr.derivation" 2>/dev/null || echo ABSENT)]"
+  python3 -c "import json;print('   embedded_atoms =', json.load(open('$d/_summary.json'))['ann']['embedded_atoms'])"
+  # The Configures edges are DERIVED into edges.csr and never into edges.json,
+  # so the count that matters is the CSR's. Read it out of the header rather
+  # than inferred from the atoms.
+  python3 - "$d/edges.csr" <<'PYEOF'
+import struct, sys
+try:
+    b = open(sys.argv[1], "rb").read(16)
+    magic, ver, n_atoms, n_edges = struct.unpack("<IIII", b)
+    print(f"   edges.csr: version={ver} atoms={n_atoms} edges={n_edges}")
+except Exception as ex:
+    print("   edges.csr:", ex)
+PYEOF
 }
 leg 0-reseed-bk reseed
 

@@ -1841,6 +1841,39 @@ means one thing.
     typed predicate STAYS: it is right for one as well as two, and the string
     compare is what a third producer would silently fail.
 
+  **A derived edge kind needs a marker, or it ships and cannot be applied
+  (ei-5c, 2026-09-07).** `EdgeType::Configures` is derived from
+  `Configuration.constituent_atoms` at the ONE store write
+  (`atlas::store::configures::derive_configures_edges`), which is the right
+  place — `write_atlas_full` and `atlas migrate-all`'s rebuild both go through
+  it. But `store_needs_build` decided from two facts only, a current CSR header
+  and an `atoms.json` newer than the store, and a code change that adds a
+  derived edge kind moves neither. Every installed store would have kept its
+  old edges forever, and `migrate-all` — the documented migration — would have
+  inspected them, said `current`, and skipped. A mechanism that ships and can
+  never be applied is worse than a missing one, because the command that should
+  apply it succeeds.
+
+  `atlas/edges.csr.derivation` closes it, in `seed_population`'s shape rather
+  than a new one (§19): a one-line marker carrying `EDGE_DERIVATION_SCHEMA`,
+  written by the store writer immediately after `edges.csr`, and one clause in
+  `store_needs_build` that reads absent-or-different as STALE. It degrades to
+  "rebuild this store", never to "cannot open" — the marker gates
+  `store_needs_build`, which only `atlas migrate-all` calls, so nothing on the
+  read path consults it and a store with no marker keeps serving the walk until
+  an operator rebuilds it.
+
+  **`CSR_VERSION` was the other candidate and is REFUSED.** Bumping the header
+  would force the rebuild structurally, but `CsrEdges::open` rejects a
+  stale-version CSR with no fallback, so it would take every corpus's walk dark
+  on every peer and inside every published snapshot until each was rebuilt. A
+  missing edge kind is a smaller harm than an unloadable graph.
+
+  Cost, for whoever runs it: every installed atlas rebuilds its store once at
+  its next `migrate-all` — about 1.9 s each, measured over n=1,078 in ei-3b —
+  which is roughly an hour for SEP's 1,770 and folds into the same pass as the
+  re-embed rather than being a third one.
+
   **`raptor_grounding.rs` IS retired, ei-5c (2026-09-07)** — the walk is the
   ONE producer of whole-work summaries, and `apply_raptor_grounding`,
   `raptor_scored_chunk`, `raptor_late_inject_enabled`, the
@@ -7476,6 +7509,11 @@ doc has drawn since ei-4-walk — three steps, and step 1 is separable in fact:
 | `corpus-engine/src/enrichment/atlas/ground/report.rs` | 337 | what the walk says about itself — ledger, degradations, map, result |
 | `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 668 | the tests |
 
+Two more small files landed beside `store.rs` for the same reason rather than
+growing it: `store/configures.rs` (the `Configures` derivation and its tests)
+and `store/derivation.rs` (the edge-derivation marker). `store.rs` ends inside
+slack against its 1,274 baseline.
+
 Every one under 800, so this is a real cut and not a shuffle: the oversized row
 disappears and NOTHING enters ARCH §3.1's approach band, which is the failure
 mode that band ratchet exists to catch ("frozen so a split cannot refill").
@@ -7492,6 +7530,22 @@ also the better cut: the derivation answers one question no other part of the
 store write asks — which field is secretly an edge list — and the store's job is
 the CSR and the Lance table, not the vocabulary. `store.rs` ends at 1,292
 against a 1,274 baseline, +18, inside slack.
+
+**The approach band: +1 line, and none of the +9 files.** `arch-gate` blocks
+with `approach band GREW: files 176 -> 185 (+9)` and `lines 171751 -> 180657
+(+8906)`. Every `.rs` file in `git diff main...HEAD` was measured at both ends;
+four land in ARCH §3.1's 800-1200 band, all four were already in it on main,
+and they net to **+1 line**:
+
+| file | main | tip | delta |
+|---|---|---|---|
+| `corpus-mcp/src/tools.rs` | 1058 | 1077 | +19 (the quota in the rendered navigation row, and its test) |
+| `sovereign/crates/sovereign-cli-llm/src/bench_cmd/ablate.rs` | 1184 | 1190 | +6 (the `raptor_off` arm's removal note, longer than the arm) |
+| `sovereign/crates/sovereign-core/src/runtime/question_analysis.rs` | 879 | 855 | −24 (`raptor_late_inject_enabled` deleted) |
+| `sovereign/crates/sovereign-core/src/runtime.rs` | 1146 | 1146 | 0 |
+
+The remaining +8,905 lines and all +9 files are upstream's, on the same reading
+§10.1n recorded for ei-5b.
 
 **`context.rs` is NOT this order's.** §10.1n's row for it stands unchanged:
 2,168 → 2,230 is ei-7a's `render_atom_entry` arm, already on `main` at this

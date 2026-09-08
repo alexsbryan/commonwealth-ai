@@ -139,6 +139,15 @@ names the inferred edges. What is missing is the third role.
    for this exact relation and emitted by nothing. The atlas store's writer
    derives it from `Configuration.constituent_atoms` now, so the edge the walk
    follows and the field the atom carries are one fact.
+
+   A derived edge kind needs the store to KNOW its derivation moved, or it
+   ships and cannot be applied: `store_needs_build` reads a CSR header and an
+   mtime, and neither changes when the code learns a new derivation. So
+   `atlas/edges.csr.derivation` carries a version beside the graph and an
+   absent-or-older one reads as stale — the same marker shape the seed table
+   already uses one level down. Every installed atlas therefore rebuilds its
+   store once, at its next `atlas migrate-all`; nothing on the read path
+   consults the marker, so a corpus keeps grounding meanwhile.
 3. **Vocabulary + prose** — as today (`concern`, `position`, `tension`,
    `absence`, `evidence` terms; guidance).
 

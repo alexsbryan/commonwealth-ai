@@ -34,6 +34,7 @@ use super::projection::{project, AtomRecord};
 use super::{AtomEnvelope, AtomType};
 
 mod configures;
+pub mod derivation;
 
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
 /// columns or the edges.csr binary format).
@@ -567,6 +568,12 @@ pub async fn write_store(
     }
     let all: Vec<Edge> = edges.iter().cloned().chain(configures).collect();
     write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, &all)?;
+    // The marker rides with the graph, written second so it is never newer
+    // than what it describes. Without it a derivation change is invisible to
+    // `store_needs_build` and no installed store ever picks it up — see
+    // `derivation`'s module doc.
+    derivation::write_derivation_marker(atlas_dir)
+        .map_err(|e| format!("write derivation marker: {e}"))?;
     Ok(lance)
 }
 
@@ -663,6 +670,15 @@ pub fn store_needs_build(atlas_dir: &Path) -> bool {
     // which the mtime check below would read as "current". Gate on the header
     // version explicitly so `migrate-all` rebuilds it instead of skipping it.
     if edges_csr_version(&atlas_dir.join(EDGES_CSR_FILENAME)) != Some(CSR_VERSION) {
+        return true;
+    }
+    // A store whose EDGES were derived under an older rule. The CSR header
+    // above answers "can this be read"; this answers "was it built from
+    // today's atoms the way today's code builds it", which the mtime clause
+    // below structurally cannot see: adding a derived edge kind changes
+    // neither `atoms.json` nor the header. Absent counts as stale, which is
+    // every store written before ei-5c.
+    if !derivation::derivation_marker_is_current(atlas_dir) {
         return true;
     }
     let mtime = |p: PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
