@@ -70,25 +70,9 @@ impl DaemonInferenceClient {
             ],
             "temperature": temperature,
             "stream": false,
-            "think_budget": think_budget,
         });
-        // DeepSeek-style thinking control. V3.1+ / V4 reject unknown
-        // dialect-mismatched fields silently, so this is safe for
-        // other OpenAI-compat providers — they ignore it. Local
-        // daemon sees both `think_budget` (its native field) and
-        // `thinking` (no-op).
-        //   `{"type":"disabled"}` — fully suppress reasoning
-        //   `{"type":"enabled"}` + optional `budget_tokens` — opt in
         if let Some(obj) = body.as_object_mut() {
-            let thinking = if think_budget == 0 {
-                serde_json::json!({"type": "disabled"})
-            } else {
-                serde_json::json!({
-                    "type": "enabled",
-                    "budget_tokens": think_budget,
-                })
-            };
-            obj.insert("thinking".into(), thinking);
+            apply_thinking_controls(obj, think_budget);
         }
         if let Some(n) = max_tokens {
             if let Some(obj) = body.as_object_mut() {
@@ -649,5 +633,96 @@ pub(super) async fn send_honouring_shed(
         );
         tokio::time::sleep(delay).await;
         waited += delay;
+    }
+}
+
+/// Put every spelling of "think this much" on the body that some
+/// OpenAI-compatible host reads. There are three, and a host reads ONE of
+/// them; the other two are unknown fields it drops on the floor:
+///
+/// - `think_budget` — the Commonwealth daemon's native field
+///   (`resolve_think_budget`). `0` makes the daemon inject `/no_think` for
+///   SystemPromptToken families (Qwen3 / Qwen3.5 / SmolLM3).
+/// - `thinking: {type: disabled|enabled}` — DeepSeek V3.1+ / V4.
+/// - `chat_template_kwargs: {enable_thinking: bool}` — llama-server, vLLM
+///   and SGLang, all of which hand the map to the Jinja chat template, and
+///   the Qwen3 templates read exactly this key. It is the ONLY one of the
+///   three a bare `llama-server` understands.
+///
+/// The third was missing until 2026-09-08, and the bare-endpoint acceptance
+/// (`corpus-mcp/acceptance.sh`, a Qwen3.6-35B behind a plain llama-server)
+/// paid for it on every phase: all 20 chapters of the wessex-hoard fixture
+/// failed Phase 1 as `think_truncated` and were re-run on the exemplar-free
+/// terse prompt, phases 3 and 6 returned 0 of 4 and 0 of 164 (an empty
+/// `content` beside a full `reasoning_content`), and the run spent 201,596
+/// completion tokens where the daemon spent 17,940. What the terse retry
+/// costs is attribution: without the exemplars no claim carried
+/// `attributed_to`, and the EI3 bar read 17/21 against the control's 21/21.
+///
+/// Only the `0` case sets `enable_thinking`. A positive budget leaves the
+/// template's own default in place: forcing `true` would switch thinking ON
+/// for a model whose template ships it off, which is not what a budget
+/// says.
+fn apply_thinking_controls(body: &mut serde_json::Map<String, serde_json::Value>, think_budget: u32) {
+    body.insert("think_budget".into(), serde_json::json!(think_budget));
+    let thinking = if think_budget == 0 {
+        serde_json::json!({"type": "disabled"})
+    } else {
+        serde_json::json!({
+            "type": "enabled",
+            "budget_tokens": think_budget,
+        })
+    };
+    body.insert("thinking".into(), thinking);
+    if think_budget == 0 {
+        body.insert(
+            "chat_template_kwargs".into(),
+            serde_json::json!({ "enable_thinking": false }),
+        );
+    }
+    tracing::debug!(
+        think_budget,
+        enable_thinking = if think_budget == 0 { Some(false) } else { None },
+        "enrich wire: thinking controls on the request"
+    );
+}
+
+#[cfg(test)]
+mod thinking_controls_tests {
+    use super::apply_thinking_controls;
+
+    /// THE FAILING INPUT: the body a bare llama-server received before
+    /// 2026-09-08 carried `think_budget` and `thinking`, neither of which it
+    /// reads, and no `chat_template_kwargs` — so a Qwen3 template thought
+    /// through the whole output budget under a JSON grammar and returned an
+    /// empty `content`. Drop the third insert above and this test names it.
+    #[test]
+    fn a_zero_budget_is_spelled_for_llama_server_too() {
+        let mut body = serde_json::Map::new();
+        apply_thinking_controls(&mut body, 0);
+        assert_eq!(body["think_budget"], serde_json::json!(0));
+        assert_eq!(body["thinking"], serde_json::json!({"type": "disabled"}));
+        assert_eq!(
+            body["chat_template_kwargs"],
+            serde_json::json!({"enable_thinking": false}),
+            "the one spelling llama-server / vLLM / SGLang read"
+        );
+    }
+
+    /// A positive budget opts in where a host has a budget notion and says
+    /// nothing to the chat template — the template's default stands.
+    #[test]
+    fn a_positive_budget_leaves_the_template_default_alone() {
+        let mut body = serde_json::Map::new();
+        apply_thinking_controls(&mut body, 2048);
+        assert_eq!(body["think_budget"], serde_json::json!(2048));
+        assert_eq!(
+            body["thinking"],
+            serde_json::json!({"type": "enabled", "budget_tokens": 2048})
+        );
+        assert!(
+            !body.contains_key("chat_template_kwargs"),
+            "no forced enable_thinking on a model whose template ships it off"
+        );
     }
 }

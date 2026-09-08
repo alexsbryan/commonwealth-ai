@@ -373,6 +373,25 @@ lane names an owner and a scheduled measurement before it is accepted.
    classified layer is a daemon-only capability under §4's own kill rule is
    the open question this step hands on.
 
+   **Answered in part, 2026-09-08.** The thinking was never switched off on
+   a bare endpoint: the enrichment client sent `think_budget: 0` and
+   `thinking: {type: disabled}`, which the daemon and DeepSeek read, and not
+   `chat_template_kwargs: {enable_thinking: false}`, which llama-server,
+   vLLM and SGLang read. Every phase therefore thought through its budget
+   under the JSON grammar — the 18-of-20 terse retries, the 11x tokens, and
+   phases 3 and 6 returning empty `content` beside a full
+   `reasoning_content` are one defect. With the kwarg sent
+   (`inference_client/wire.rs::apply_thinking_controls`), the two attribution
+   chapters extract on the first attempt in 48 s and the scholars are
+   `person` entities, not `sceatta`. What remains is narrower and isolated:
+   the same client, prompt, schema and model return 6 attributed claims
+   through the daemon and 0 through llama-server, thinking on or off — the
+   sketch carries no `claims` key — so the bare endpoint's schema-to-grammar
+   path, not the model or the prompt, is where the attribution rows of
+   `truth.json` are still lost. That is the kill-rule question in its
+   sharpest form, and it is a llama.cpp grammar question, not a capability a
+   daemon uniquely has.
+
    One caveat the step surfaced and did not own, the sibling of step 4's.
    §6 row 3 asks the map to name `coin` / `attribution` **and** a `Tension` or
    `Grounds` edge. The `attribution` half holds: the seed table populates all

@@ -306,35 +306,41 @@ the atlas it produces against that fixture's `truth.json`, beside the
 daemon-built corpus of the same name — the control it must not fall below.
 Without those variables the leg reports NEVER-RAN by name; it is not skipped.
 
-**Budget for the thinking, not just the answer.** A thinking model whose
-chain of thought does not close inside the output budget returns an EMPTY
-`content` from an OpenAI-compatible endpoint, not an error: llama-server puts
-the reasoning in `reasoning_content` and fills `content` only once thinking
-terminates. Phase 1 then reports `<empty response>`. The same endpoint, model
-and schema, two requests apart:
+**Thinking is switched off per request, in the one spelling a bare endpoint
+reads.** A thinking model whose chain of thought does not close inside the
+output budget returns an EMPTY `content` from an OpenAI-compatible endpoint,
+not an error: llama-server puts the reasoning in `reasoning_content` and
+fills `content` only once thinking terminates, and a JSON grammar does not
+stop it thinking first. Until 2026-09-08 the enrichment client asked for no
+thinking in two spellings the daemon and DeepSeek read (`think_budget: 0`,
+`thinking: {type: disabled}`) and not the one llama-server, vLLM and SGLang
+read — `chat_template_kwargs: {enable_thinking: false}` — so on a bare
+llama-server every phase thought through its budget under the grammar. That
+was the whole of the "budget for the thinking" story this section used to
+tell: measured 2026-09-05 on the wessex fixture, `Qwen3.6-35B-A3B` needed the
+terse retry on 18 of 20 chapters and spent 201,596 completion tokens against
+the daemon's 17,940, and phases 3 and 6 returned empty `content` for every
+candidate. With the kwarg sent, the same two attribution chapters extract on
+the first attempt in 48 s for both, and the scholars come back as `person`
+entities rather than coins. The `/no_think` soft switch and a
+`reasoning_budget` field do nothing here; only the template kwarg does, and
+only on a template that declares `enable_thinking` — a thinking-only build
+(the plain `Qwen3.5-4B.Q6_K` template has no such variable) cannot be
+switched per request, and that is a fact about the model to name, not a
+budget to raise.
 
-    max_tokens 64    -> content ""                       (64 tokens spent)
-    max_tokens 16384 -> content {"capital": "Paris"}     (166 tokens, stop)
-
-So the endpoint honours `response_format: json_schema` — the JSON came back
-conforming — and the failure is the budget, not the schema.
-
-**This is the bare-endpoint path, not one small model.** Measured 2026-09-05
-on the wessex fixture, 20 chapters: `Qwen3.6-35B-A3B` needed the terse retry
-on **18 of 20 chapters**, and recovered all 18 — phase 1 spent 81,403
-completion tokens on the first pass and 120,193 more on the retry, against
-17,940 for the same extraction through the daemon. The 4B differs in degree,
-not in kind: it also recovered on retry, but at a rate that put a 20-chapter
-run into hours. Budget for both passes and expect roughly 11x the daemon's
-completion tokens.
-
-Two phases return nothing at all here, on both runs and both models. Phase 3
-(cluster naming) reports `0/N named, N failed (ParseDrift)`; phase 6 (the
-tension classifier) reports `0 chat + N parse failure(s) — recall degraded`,
-N being every candidate. Extraction and resolve are unaffected — they produced
-172 and 165 atoms against the daemon control's 159 — so what a bare endpoint
-loses is the classified layer above the atoms, not the atoms. Both phases say
-so in the run rather than passing quietly.
+**What a bare llama-server still loses, isolated and open.** The same
+`corpus ingest`, prompt, schema and 35B, chapters `sec_00014` + `sec_00012`
+of the fixture: through the daemon (`--base-url http://127.0.0.1:9741/v1`)
+Phase 1 returns 6 claims, 4 of them `attributed_to` Halstead or Ferreira;
+through llama-server (`--chat-url`) it returns 0 claims, thinking on or off —
+the sketch carries no `claims` key at all. Entities, relations and questions
+are unaffected. The difference is in how the endpoint turns the JSON schema
+into a grammar (llama.cpp's converter against the daemon's llguidance; the
+`claims` property is optional at the top level), and it is the remaining gap
+between this path and the control on `truth.json`'s attribution rows. It is
+reported by name in the run's `[done] resolve` line (`0 claim atom(s)`),
+never inferred.
 
 Data root: the same derivation every sovereign binary uses
 (`SOVEREIGN_DATA_DIR`, else `~/.svrnmesh`), or `--data-dir`. Serving reads
