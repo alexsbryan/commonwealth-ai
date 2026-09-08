@@ -44,7 +44,10 @@
 #      never skipped; where it runs, the embedding-width question §7 step 6
 #      asks is answered from the real index.
 #
-# Env: OLLAMA_URL (default http://localhost:11434/v1), ACCEPT_PULL / PULL_ROOT /
+# Env: OLLAMA_URL (default http://localhost:11434/v1),
+#      OLLAMA_EMBED_MODEL (default qwen3-embedding:0.6b — the tag the Ollama
+#      arm's CONTROL invocation names; never guessed from the listed ids),
+#      ACCEPT_PULL / PULL_ROOT /
 #      PULL_CORPUS (the cold-root pull leg),
 #      EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf,
 #      resolved against the MAIN checkout when this runs from a worktree —
@@ -87,6 +90,11 @@ CORPUS_MCP="${CORPUS_MCP:-target/debug/corpus-mcp}"
 # Ollama's OpenAI-compatible surface — the first rung of the discovery ladder
 # and the shape §4's commands are written for. Probed, never assumed.
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434/v1}"
+# The embedding model the Ollama arm's CONTROL names explicitly. It is an env,
+# never a heuristic over the listed ids: guessing which of a host's models
+# embeds is exactly the decision that has to be made by someone who knows, and
+# a wrong guess would be a silent substitution (ARCH §18.3).
+OLLAMA_EMBED_MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:0.6b}"
 # Every corpus the `ask` step runs on; each one not installed here is
 # reported COULD-NOT-JUDGE rather than skipped silently. wessex-hoard is
 # §6 row 3's own fixture (declared types, an ontology.json, near-full seed
@@ -255,23 +263,62 @@ echo "acceptance: discovery -> a named --base-url is refused, never substituted"
 if command -v ollama >/dev/null && curl -sf -m 3 "$OLLAMA_URL/models" >/dev/null 2>&1; then
   ollama_models="$(curl -s -m 5 "$OLLAMA_URL/models")"
   echo "acceptance: ollama -> reachable at $OLLAMA_URL"
-  { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
-    echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-    echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
-  } | "$CORPUS_MCP" serve --base-url "$OLLAMA_URL" --corpus "$CORPUS" \
-      >"$work/ollama.jsonl" 2>"$work/ollama.err" \
-      || { cat "$work/ollama.err" >&2; fail "corpus-mcp against Ollama exited non-zero"; }
-  grep -q 'corpus_id' "$work/ollama.jsonl" \
-    || fail "corpus_list returned nothing against Ollama: $(cat "$work/ollama.err")"
-  # The width question §7 step 6 asks by name: an Ollama embedding whose width
-  # does not match the shipped index degrades to full-text and SAYS so. Which
-  # way it went is reported either way; neither is a failure of this host.
-  if grep -q 'vector search DISABLED' "$work/ollama.err"; then
-    echo "acceptance: ollama -> WIDTH MISMATCH against $CORPUS; degraded to full-text and said so"
+  # Two invocations, because they answer two different questions and only one
+  # of them is §4's promise.
+  #
+  #   DEFAULT  no --embed-model. This is the promise: one process, one URL,
+  #            both models, no flags. corpus-mcp sends the first id
+  #            `GET /v1/models` returns (host.rs), and Ollama is the one shape
+  #            that serves chat AND embeddings from a single URL, so that first
+  #            id can be the chat model. This assertion stays as it was.
+  #   CONTROL  --embed-model $OLLAMA_EMBED_MODEL. Never asserted as the arm's
+  #            PASS — it is what tells a reader whether a failing default is
+  #            "Ollama does not work here" or "the model PICK is wrong", which
+  #            a bare non-zero exit cannot distinguish. Measured 2026-09-07:
+  #            the default died on `POST /v1/embeddings 501 This server does not
+  #            support embeddings` for qwen3:0.6b while the control served sep
+  #            at 1024-d, vector + full-text. That is a defect in the picker and
+  #            is fixed in corpus-mcp, not here, so this stays red until it is.
+  ollama_probe() {  # ollama_probe <tag-or-empty> <jsonl-out> <err-out>
+    local extra=()
+    [[ -n "$1" ]] && extra=(--embed-model "$1")
+    { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
+      echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+      echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
+    } | "$CORPUS_MCP" serve --base-url "$OLLAMA_URL" --corpus "$CORPUS" \
+          ${extra[@]+"${extra[@]}"} >"$2" 2>"$3"
+  }
+  ollama_width() {  # the width corpus-mcp reported, or "?" — §7 step 6
+    sed -n 's/.*embeddings via [^,]*, model `\([^`]*\)`, \([0-9]*\)-d.*/\1 \2-d/p' "$1" | head -1
+  }
+
+  ollama_probe "" "$work/ollama.jsonl" "$work/ollama.err" && default_rc=0 || default_rc=$?
+  if (( default_rc == 0 )) && grep -q 'corpus_id' "$work/ollama.jsonl"; then
+    echo "acceptance: ollama -> default (no --embed-model) served $CORPUS: $(ollama_width "$work/ollama.err")"
+    if grep -q 'vector search DISABLED' "$work/ollama.err"; then
+      echo "acceptance: ollama -> WIDTH MISMATCH against $CORPUS; degraded to full-text and said so"
+    else
+      echo "acceptance: ollama -> embedding width matches $CORPUS; vector + full-text live"
+    fi
+    echo "acceptance: ollama arm -> PASS"
   else
-    echo "acceptance: ollama -> embedding width matches $CORPUS; vector + full-text live"
+    # The default failed. Say what it picked and what came back, then run the
+    # control so the report distinguishes the two diagnoses.
+    echo "acceptance: ollama -> DEFAULT PATH FAILED (exit $default_rc):" >&2
+    grep -E '^corpus-mcp: endpoint candidate|^Error:' "$work/ollama.err" | head -3 >&2
+    if ollama_probe "$OLLAMA_EMBED_MODEL" "$work/ollama-named.jsonl" "$work/ollama-named.err" \
+       && grep -q 'corpus_id' "$work/ollama-named.jsonl"; then
+      echo "acceptance: ollama -> CONTROL with --embed-model $OLLAMA_EMBED_MODEL SERVED $CORPUS: $(ollama_width "$work/ollama-named.err")" >&2
+      fail "the Ollama DEFAULT invocation does not work — §4's promise is one URL and no flags, and \
+the same corpus serves fine when the embedding model is named, so the endpoint is not the problem: \
+the model PICK is (corpus-mcp host.rs sends the first id /v1/models returns)"
+    else
+      echo "acceptance: ollama -> CONTROL with --embed-model $OLLAMA_EMBED_MODEL ALSO FAILED:" >&2
+      tail -5 "$work/ollama-named.err" >&2
+      fail "corpus-mcp against Ollama exited non-zero with and without --embed-model — this is the \
+endpoint or the corpus, not the model pick"
+    fi
   fi
-  echo "acceptance: ollama arm -> PASS"
 else
   echo "acceptance: ollama arm -> COULD-NOT-RUN (not installed or not serving at $OLLAMA_URL)."
   echo "acceptance:   This is NOT a pass and NOT a fail. The llama-server arm below is the"
