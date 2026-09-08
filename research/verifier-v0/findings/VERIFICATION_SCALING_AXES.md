@@ -462,3 +462,108 @@ asymmetric enough to buy the FA budget outright.
   if FA is cheap, the marginal node is better spent on ANOTHER claim than on
   re-checking one, which scales linearly and needs no independence property.
 - **Does not rehabilitate M.** The ceiling is measured and it is +1.1%.
+
+## 9. Sequential passes — the pre-registered rule broke its own kill bar, and the correction is sharper
+
+**Written 2026-09-08, same session as §8/§8.1.** Those measured PARALLEL passes
+and killed them. This is the other regime — sequential refinement, where
+"convergence" is literally the right word.
+
+**The pre-registration** (`scripts/refinement_loop_sim.py` header, written
+before the run) reasoned: a pass removes defects at `catch x b` and INTRODUCES
+them at `FA x (1-b)`, since a fix applied to an already-correct claim is a new
+defect. So the loop should settle at `b* = FA/(catch+FA)` — exactly where
+precision hits 50% — predicting 5.96 / 10.27 / 17.78% at FA 5/10/20%, and
+predicting that from a 9% production base rate FA=10% and FA=20% **degrade**.
+
+**Every equilibrium missed, all in the same direction, and the loop improved
+where it was predicted to degrade.** Kill bar: fired.
+
+### What was actually wrong
+
+The one-step arithmetic was exact — six of six cells within 0.2pt:
+
+| FA | base | predicted b₁ | simulated b₁ |
+|---|---|---|---|
+| 20% | 9% | 18.8% | **18.8%** |
+| 10% | 9% | 10.2% | 10.3% |
+| 5% | 9% | 6.4% | 6.4% |
+
+So the error was in the DYNAMICS, not the formula. The mechanism:
+**damage is self-correcting.** A false alarm damages a correct claim — but the
+damaged claim is now genuinely defective, so it re-enters the next pass's
+flagging pool where the verifier's catch rate is far above its false-alarm
+rate. Measured: **78.4 / 86.5 / 92.3%** of claims damaged in iteration 1 are
+re-flagged in iteration 2, tracking the verifier's own catch (79.2 / 87.1 /
+93.0%). The loop repairs its own collateral faster than it creates it. The
+steady-state formula assumed a well-mixed population re-exposed each round;
+the real process freezes what passes and recycles only what it touched.
+
+### The corrected law — detectability of damage, not precision
+
+The whole result rests on one assumption: that a claim damaged BY A REVISION is
+as detectable as an INJECTED corruption. Almost certainly optimistic — injected
+corruptions are entity swaps and negation flips, while revision damage is
+fluent, model-generated, and is the "shared-bias residual" the audit gate
+already names. So it is parameterised and swept. δ = P(revision damage scores
+like a real corruption); 1−δ = P(it is invisible).
+
+| δ | FA 5% | FA 10% | FA 20% |
+|---|---|---|---|
+| 1.0 | 3.0% | 2.5% | 2.3% |
+| 0.6 | 4.3% | 5.9% | 8.8% |
+| 0.4 | 5.1% | 7.0% | **11.6%** |
+| 0.2 | 5.8% | 9.0% | **14.7%** |
+| 0.0 | 6.6% | **10.2%** | **17.0%** |
+
+*(equilibrium defect rate from a 9% start; bold = worse than where it began)*
+
+**At δ=0 the simulation reproduces the pre-registered b\* almost exactly**
+(6.6 / 10.2 / 17.0 against 5.96 / 10.27 / 17.72). The formula was never wrong —
+it is the **boundary case where damage is invisible**, and it was misapplied as
+the general law. The general law is:
+
+> **A refinement loop converges iff the damage it causes is detectable by the
+> same verifier that causes it. Precision governs the FIRST pass; δ governs the
+> limit.** FA=5% is safe at any δ. FA=10% turns destructive below δ≈0.1.
+> FA=20% turns destructive below δ≈0.5.
+
+So an aggressive operating point is a **bet on δ**, and a conservative one is
+robust to not knowing it. Two consequences that invert the usual intuition:
+
+- **One pass is the dangerous configuration, not many.** A single pass at
+  FA=20% on a 9% base rate takes the defect rate from 9.2% to **18.8%** — it
+  nearly doubles it, at every δ, because δ only acts from iteration 2 onward.
+  A latency-constrained system that runs exactly one gate pass is sitting on
+  the worst point of this curve.
+- **Iteration depth is what makes an aggressive gate safe** — and depth is
+  precisely what cheap passes buy. This is the one mesh shape every result in
+  §8/§8.1/§9 leaves standing, and it is about sequential depth, not parallel
+  width.
+
+### P3 confirmed: the drop variant converges to silence
+
+The same loop with action=DROP instead of REPAIR, from a 9% base, settles in
+ONE iteration and freezes (survivors are never re-judged):
+
+| FA | defect rate | coverage |
+|---|---|---|
+| 5% | 8.8% → 2.1% | 100% → 88.4% |
+| 20% | 9.1% → **0.8%** | 100% → **73.3%** |
+
+Dropping a quarter of the answer buys an 11× cut in the defect rate. **Any
+objective without a coverage term scores that as a triumph.** The second
+condition stands: a refinement loop needs a two-sided objective or it converges
+toward saying nothing, looking better by its own metric the whole way down.
+
+### What is now the decision-relevant unknown
+
+**δ.** It is measurable and it is not measured: take the claims the verifier
+false-alarms on, have a model revise them under the gate's own instruction,
+re-judge the revisions, and count what fraction the verifier catches. At FA=20%
+on the constructed bank's 1,374 grounded items that is ~275 revisions — a few
+hundred inference calls, and it converts the load-bearing assumption of this
+section into a number.
+
+Reproduce: `scripts/refinement_loop_sim.py` (pre-registration + P1/P2/P3) and
+`scripts/refinement_loop_diag.py` (one-step check, mechanism, δ sweep).
