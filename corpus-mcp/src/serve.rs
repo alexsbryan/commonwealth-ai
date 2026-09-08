@@ -90,17 +90,18 @@ pub struct ServeArgs {
 /// is `pub(crate)`.
 pub const PULL_DEADLINE_MINS: u64 = 30;
 
-/// The mean-cosine bar the restore's embedding-space probe applies, named here
-/// only so the refusal can quote it to the person reading it.
+/// The mean-cosine bar the restore's embedding-space probe applies, quoted in
+/// the refusal so the person reading it knows what was missed by how much.
 ///
-/// ONE decider, and it is not this line: the value lives in
-/// `corpus-engine/src/engine/ingest_prebuilt.rs::PREBUILT_PROBE_THRESHOLD` and
-/// is `pub(crate)` there, so this host cannot read it. Quoting a number this
-/// crate cannot import is a §10.6 hazard, and it is written down here rather
-/// than inline so a drift has ONE place to be fixed and this comment to be
-/// found. Measured against it on 2026-09-05: 0.6822 for a bare llama-server
-/// against sep's snapshot (run 20260905T201633Z).
-const PREBUILT_PROBE_THRESHOLD: f32 = 0.92;
+/// IMPORTED, not copied. It was a hand-written `0.92` here with a comment
+/// apologising for it — the value lived in `ingest_prebuilt.rs` as
+/// `pub(crate)` and this host could not reach it. ei-6b moved the decision
+/// into `corpus_engine::snapshot`, which made the constant `pub` on the way
+/// past, so the §10.6 hazard that comment described is now closed rather than
+/// documented. Measured against it on 2026-09-05: 0.6822 for a bare
+/// llama-server against sep's snapshot (run 20260905T201633Z) — which ei-6b
+/// later traced to sep being mean-pooled, not to the endpoint (note 500f1229).
+use corpus_engine::snapshot::PREBUILT_PROBE_THRESHOLD;
 
 pub async fn run(args: ServeArgs) -> Result<()> {
     let profile =
