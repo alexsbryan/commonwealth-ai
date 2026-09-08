@@ -25,6 +25,7 @@ use commonwealth_core::ids::NodeId;
 
 use crate::backend::SqliteBackend;
 use crate::error::{Error, Result};
+use crate::rail_kv::KvOp;
 
 /// A single entry in the mesh store.
 #[derive(Debug, Clone)]
@@ -38,22 +39,26 @@ pub struct StoreEntry {
     pub origin: NodeId,
 }
 
-/// One local write waiting to go onto the ring journal.
+/// One local write waiting to go onto the ring journal: the act itself, plus
+/// where it is queued and which namespace it belongs to.
 ///
-/// `deleted` and `value: None` say the same thing, and both are here because
-/// the column is what the pump filters on and the `Option` is what it hands
-/// [`rail_kv::to_payload`](crate::rail_kv::to_payload). They cannot disagree —
-/// `an_outbox_rows_two_spellings_of_a_tombstone_agree` is the pin.
+/// The act is a [`KvOp`] — the SAME type
+/// [`rail_kv::to_payload`](crate::rail_kv::to_payload) puts on the journal and
+/// [`rail_kv::from_payload`](crate::rail_kv::from_payload) reads back — so a
+/// queued write and a journal line have ONE spelling between them
+/// (ARCH §10.6). A tombstone is `op.value == None`, here and on the wire and
+/// in the fold; the `deleted` column `rail_outbox` still carries is written
+/// but never read back, because `value IS NULL` already says it — see the
+/// schema note in [`crate::backend`].
 #[derive(Debug, Clone)]
-pub struct OutboxRow {
+pub struct Outboxed {
+    /// The `rail_outbox` row id, and what [`MeshStore::outbox_ack`] takes.
     pub id: i64,
+    /// The namespace this write is scoped to. NOT part of the act: the rail
+    /// carries it as the journal's name, never inside the payload.
     pub app_id: String,
-    pub key: String,
-    /// `None` is a tombstone.
-    pub value: Option<Bytes>,
-    /// Unix seconds — the ORIGINAL write time, and what the fold orders by.
-    pub t: u64,
-    pub deleted: bool,
+    /// The write itself, in the rail's own vocabulary.
+    pub op: KvOp,
 }
 
 /// What one [`MeshStore::apply_projection`] did.
@@ -163,27 +168,6 @@ impl MeshStore {
         Ok(written)
     }
 
-    /// Append `value` to an existing entry or create it. Values are newline-joined.
-    ///
-    /// Composed of `get` + `set`, so the rail carries the WHOLE combined value
-    /// as one act rather than a delta. That is the right shape here: the fold
-    /// is last-write-wins over whole values, and a delta would need every
-    /// prior act to have arrived before it could mean anything.
-    pub fn append(&self, app_id: &str, key: &str, value: Bytes, origin: NodeId) -> Result<()> {
-        let existing = self.get(app_id, key)?;
-        let new_value = match existing {
-            Some(e) => {
-                let mut combined = e.value.to_vec();
-                combined.push(b'\n');
-                combined.extend_from_slice(&value);
-                Bytes::from(combined)
-            }
-            None => value,
-        };
-        self.set(app_id, key, new_value, origin)?;
-        Ok(())
-    }
-
     /// Delete an entry. Returns true if something was deleted.
     ///
     /// A local delete, so it queues a TOMBSTONE for the rail. A key this node
@@ -195,11 +179,6 @@ impl MeshStore {
         let deleted = self.backend.delete_and_enqueue(app_id, key, t)?;
         tracing::debug!(app_id, key, t, deleted, "mesh_store.delete");
         Ok(deleted)
-    }
-
-    /// List all keys for an app.
-    pub fn list_keys(&self, app_id: &str) -> Result<Vec<String>> {
-        self.backend.list_keys(app_id)
     }
 
     /// Return all entries whose key starts with `prefix` for the given app.
@@ -245,17 +224,18 @@ impl MeshStore {
     /// Rows stay queued until [`MeshStore::outbox_ack`], so a crash between
     /// the append and the ack re-sends rather than loses — the rail's op id is
     /// content-derived, so a duplicate append is the same op.
-    pub fn outbox_take(&self, limit: usize) -> Result<Vec<OutboxRow>> {
+    pub fn outbox_take(&self, limit: usize) -> Result<Vec<Outboxed>> {
         let rows = self.backend.outbox_take(limit)?;
         Ok(rows
             .into_iter()
-            .map(|r| OutboxRow {
+            .map(|r| Outboxed {
                 id: r.id,
                 app_id: r.app_id,
-                key: r.key,
-                value: r.value.map(Bytes::from),
-                t: r.t,
-                deleted: r.deleted,
+                op: KvOp {
+                    key: r.key,
+                    value: r.value.map(Bytes::from),
+                    t: r.t,
+                },
             })
             .collect())
     }
@@ -777,19 +757,6 @@ mod tests {
     }
 
     #[test]
-    fn list_keys_scoped_to_app() {
-        let store = MeshStore::in_memory().unwrap();
-        store.set("app1", "k1", Bytes::from("v"), node(1)).unwrap();
-        store.set("app1", "k2", Bytes::from("v"), node(1)).unwrap();
-        store.set("app2", "k3", Bytes::from("v"), node(1)).unwrap();
-
-        let keys = store.list_keys("app1").unwrap();
-        assert_eq!(keys.len(), 2);
-        assert!(keys.contains(&"k1".to_string()));
-        assert!(keys.contains(&"k2".to_string()));
-    }
-
-    #[test]
     fn scan_filters_by_prefix() {
         let store = MeshStore::in_memory().unwrap();
         store
@@ -908,46 +875,6 @@ mod tests {
         assert_eq!(store.outbox_len().unwrap(), 0);
     }
 
-    /// **`append` LOSES a write inside one second, and has since it was
-    /// written.** This is a pin on a DEFECT, not a contract — read the name.
-    ///
-    /// It composes as `get` + `set`, `set` stamps `now_secs()`, and
-    /// `upsert_if_newer` refuses an equal timestamp (deliberately: that is how
-    /// a tie keeps the incumbent). So a second `append` in the same wall-clock
-    /// second writes nothing, and `append` throws away the `bool` that would
-    /// have said so — an unsuccessful write in a success-shaped return
-    /// (ARCH §18.3).
-    ///
-    /// It ships unfixed here because `MeshStore::append` has NO production
-    /// caller — the ledgers spell append-only in the KEY instead
-    /// (`ContributionEmitter`, `ActivityEmitter`) — so a fix would be a
-    /// second timestamp rule minted for nobody (ARCH §10.6). Whoever gives it
-    /// a caller owns the fix, and this test is what turns red when they do.
-    ///
-    /// The rail half is right either way: when the write DOES land it queues
-    /// the whole combined value rather than a delta, because the fold is
-    /// last-write-wins over whole values.
-    #[test]
-    /// A same-second `append` used to be LOST: `set` stamps `now_secs()`, the
-    /// tie rule refused an equal timestamp, and `append` threw the bool away.
-    /// The store now lets one origin rewrite its own key inside a second, so
-    /// the appended value lands and the WHOLE combined value is queued.
-    #[test]
-    fn append_within_one_second_lands_and_queues_the_whole_value() {
-        let store = MeshStore::in_memory().unwrap();
-        store
-            .set("app", "log", Bytes::from("one"), node(1))
-            .unwrap();
-        store
-            .append("app", "log", Bytes::from("two"), node(1))
-            .unwrap();
-        assert_eq!(
-            store.get("app", "log").unwrap().unwrap().value.as_ref(),
-            b"one\ntwo"
-        );
-        assert_eq!(store.outbox_len().unwrap(), 2, "both writes are queued");
-    }
-
     /// The tie rule, both shapes: the SAME origin rewriting a key in the same
     /// second wins (program order); a DIFFERENT origin at the same timestamp
     /// does not (the incumbent keeps, deterministically — see
@@ -992,23 +919,6 @@ mod tests {
             store.get("app", "k").unwrap().unwrap().value.as_ref(),
             b"second"
         );
-    }
-
-    /// The two spellings of "this is a tombstone" cannot disagree. They are
-    /// both here because the column is what a query filters on and the
-    /// `Option` is what the pump hands `rail_kv::to_payload`.
-    #[test]
-    fn an_outbox_rows_two_spellings_of_a_tombstone_agree() {
-        let store = MeshStore::in_memory().unwrap();
-        store.set("app", "a", Bytes::from(""), node(1)).unwrap();
-        assert!(store.delete("app", "a").unwrap());
-        for row in store.outbox_take(100).unwrap() {
-            assert_eq!(
-                row.deleted,
-                row.value.is_none(),
-                "row {row:?} says two different things"
-            );
-        }
     }
 
     /// Take is non-destructive and ack is what removes: the pump appends
@@ -1489,7 +1399,12 @@ mod tests {
             store
         };
         let survivors = |store: &MeshStore| -> Vec<String> {
-            let mut k = store.list_keys(LEDGER).unwrap();
+            let mut k: Vec<String> = store
+                .scan(LEDGER, "")
+                .unwrap()
+                .into_iter()
+                .map(|e| e.key)
+                .collect();
             k.sort();
             k
         };
@@ -1552,7 +1467,7 @@ mod tests {
         assert!(store.delete(ATLAS, "evicted").unwrap());
         let queued = store.outbox_take(8).unwrap();
         assert_eq!(queued.len(), 1, "{queued:?}");
-        assert!(queued[0].deleted && queued[0].value.is_none());
+        assert!(queued[0].op.value.is_none(), "a delete queues a tombstone");
 
         // The other door: a sweep queues nothing at all.
         assert_eq!(store.gc_app_before(ATLAS, now).unwrap(), 1);
@@ -1565,7 +1480,7 @@ mod tests {
         // The next fold. The tombstone is on the journal by now; the sweep is
         // on no journal anywhere, so the row it took is still a winning row.
         let next = unsealed(vec![
-            projected("evicted", None, queued[0].t, "aa"),
+            projected("evicted", None, queued[0].op.t, "aa"),
             claim("swept"),
         ]);
         store

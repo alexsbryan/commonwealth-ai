@@ -88,7 +88,7 @@ use std::time::Duration;
 
 use commonwealth_api::state::AppState;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster};
-use commonwealth_state::{rail_kv, MeshStore, OutboxRow};
+use commonwealth_state::{rail_kv, MeshStore, Outboxed};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
@@ -231,7 +231,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
     // Grouped so the roster is read once per namespace and the seal check runs
     // once per namespace, not once per row. `BTreeMap` keeps the order a
     // function of the namespace set rather than of hash iteration.
-    let mut by_namespace: BTreeMap<String, Vec<OutboxRow>> = BTreeMap::new();
+    let mut by_namespace: BTreeMap<String, Vec<Outboxed>> = BTreeMap::new();
     for row in queued {
         by_namespace
             .entry(row.app_id.clone())
@@ -275,10 +275,11 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
                 out.deferred += 1;
                 continue;
             }
-            let payload = match rail_kv::to_payload(&row.key, row.value.as_deref(), row.t) {
+            let op = &row.op;
+            let payload = match rail_kv::to_payload(&op.key, op.value.as_deref(), op.t) {
                 Ok(p) => p,
                 Err(e) => {
-                    warn!(namespace, key = %row.key, error = %e,
+                    warn!(namespace, key = %op.key, error = %e,
                           "rail kv pump: this write cannot travel on the rail and was dropped");
                     out.refused += 1;
                     acked.push(row.id);
@@ -286,14 +287,16 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
                 }
             };
             match journal.append(RailAct::Record { payload }, rail.signer(), &roster) {
-                Ok(op) => {
+                Ok(appended) => {
                     debug!(
                         namespace,
-                        key = %row.key,
-                        t = row.t,
-                        deleted = row.deleted,
-                        id = %op.id,
-                        seq = op.kind.seq,
+                        key = %op.key,
+                        t = op.t,
+                        // The one spelling of "this is a tombstone" — the
+                        // outbox row carries no second one (ARCH §10.6).
+                        deleted = op.value.is_none(),
+                        id = %appended.id,
+                        seq = appended.kind.seq,
                         "rail kv pump: appended a local write"
                     );
                     acked.push(row.id);
@@ -311,7 +314,7 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
                     );
                 }
                 Err(e) => {
-                    warn!(namespace, key = %row.key, error = %e,
+                    warn!(namespace, key = %op.key, error = %e,
                           "rail kv pump: the rail refused this write, which was dropped");
                     out.refused += 1;
                     acked.push(row.id);

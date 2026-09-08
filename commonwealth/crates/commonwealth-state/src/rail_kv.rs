@@ -7,8 +7,8 @@
 //! at peers on a timer. cw-lift 4 makes the rail's journal the truth and the
 //! store a LOCAL PROJECTION of it: a write goes out as one signed
 //! `RailAct::Record`, and what a node holds is the fold of every op it has
-//! admitted. Readers of `MeshStore` are untouched — `get`, `scan`,
-//! `list_keys` answer exactly as before.
+//! admitted. Readers of `MeshStore` are untouched — `get` and `scan`
+//! answer exactly as before.
 //!
 //! This module is the vocabulary and the fold, and nothing else. It has no
 //! I/O, no clock and no journal: the pump that appends and the exchange that

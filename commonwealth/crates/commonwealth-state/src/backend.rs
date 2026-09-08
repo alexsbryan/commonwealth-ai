@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS store (
 -- What this node has written and not yet put on the rail. One row per
 -- write, drained by the pump in `sovereign-mesh`; see `MeshStore::set`
 -- for why an excluded app_id can never appear in it.
+--
+-- `deleted` is WRITTEN and never read: a reader derives the tombstone from
+-- `value IS NULL`, which is the same fact and the only one `Outboxed` carries
+-- (ARCH §10.6). The column stays so an older binary can still open this file
+-- and so no migration is owed for one bit that was always redundant.
 CREATE TABLE IF NOT EXISTS rail_outbox (
     id      INTEGER PRIMARY KEY,
     app_id  TEXT NOT NULL,
@@ -216,7 +221,7 @@ impl SqliteBackend {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare_cached(
-                "SELECT id, app_id, key, value, t, deleted FROM rail_outbox \
+                "SELECT id, app_id, key, value, t FROM rail_outbox \
                  ORDER BY id LIMIT ?1",
             )
             .map_err(|e| Error::Backend(format!("prepare failed: {e}")))?;
@@ -228,7 +233,6 @@ impl SqliteBackend {
                     key: row.get(2)?,
                     value: row.get(3)?,
                     t: row.get(4)?,
-                    deleted: row.get::<_, i64>(5)? != 0,
                 })
             })
             .map_err(|e| Error::Backend(format!("query failed: {e}")))?
@@ -272,22 +276,6 @@ impl SqliteBackend {
             .query_row("SELECT COUNT(*) FROM rail_outbox", [], |row| row.get(0))
             .map_err(|e| Error::Backend(format!("count failed: {e}")))?;
         Ok(n as usize)
-    }
-
-    /// List all keys for an app.
-    pub fn list_keys(&self, app_id: &str) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare_cached("SELECT key FROM store WHERE app_id = ?1 ORDER BY key")
-            .map_err(|e| Error::Backend(format!("prepare failed: {e}")))?;
-
-        let keys = stmt
-            .query_map(params![app_id], |row| row.get::<_, String>(0))
-            .map_err(|e| Error::Backend(format!("query failed: {e}")))?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| Error::Backend(format!("row error: {e}")))?;
-
-        Ok(keys)
     }
 
     /// Return all rows whose key starts with `prefix` for the given app.
@@ -459,15 +447,16 @@ pub struct RawEntry {
     pub origin: Vec<u8>,
 }
 
-/// One queued write as the table holds it. [`crate::OutboxRow`] is the same
-/// row with `Bytes` instead of `Vec<u8>`, for a caller above the backend.
+/// One queued write as the table holds it. [`crate::Outboxed`] is the same
+/// row with the write folded into a [`crate::KvOp`], for a caller above the
+/// backend. No `deleted`: the column is not selected, because `value: None`
+/// is the tombstone and there is one spelling of it (ARCH §10.6).
 pub struct OutboxRawRow {
     pub id: i64,
     pub app_id: String,
     pub key: String,
     pub value: Option<Vec<u8>>,
     pub t: u64,
-    pub deleted: bool,
 }
 
 pub struct AllRow {

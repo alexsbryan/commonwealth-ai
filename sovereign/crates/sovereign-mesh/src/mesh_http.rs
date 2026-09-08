@@ -1565,10 +1565,12 @@ mod tests {
     /// catch. The state that actually gates admission is
     /// `AppState.inner.mesh.invite_key_hash`, and nothing reads it.
     ///
-    /// `mesh_rotate` writes the new hash to disk (`persist::rotate_join_key`)
-    /// and refreshes the cached plaintext (`daemon.set_join_key`), but never
-    /// writes the live `Mesh`. So the running daemon keeps admitting the OLD
-    /// key on `/internal/join` and keeps gossiping the OLD hash.
+    /// The defect this was written against: rotation wrote the new hash to
+    /// disk and refreshed the cached plaintext, but never wrote the live
+    /// `Mesh`, so the running daemon kept admitting the OLD key on
+    /// `/internal/join` and kept gossiping the OLD hash. `rotate_join_key` is
+    /// now the one implementation and mutates the live mesh first; this
+    /// assertion is what stays red if that is ever undone.
     #[tokio::test]
     async fn rotate_changes_the_live_in_memory_hash_not_only_the_disk_one() {
         let (daemon, base, _tmp) = spawn_test_router().await;

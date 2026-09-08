@@ -246,8 +246,8 @@ pub struct EmbeddedDaemon {
     /// `<data_dir>/join_key.secret`. The hash is one-way, so without
     /// this the share UI couldn't render the invite link after the
     /// app restarts. Genuine runtime state: set on `create_mesh` /
-    /// `join_mesh` / `try_resume`; refreshed on `set_join_key` (called
-    /// by the rotate handler); cleared on `stop`.
+    /// `join_mesh` / `try_resume`; refreshed by `rotate_join_key`, which
+    /// is the one implementation of rotation; cleared on `stop`.
     join_key_plaintext: RwLock<Option<String>>,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
@@ -1902,14 +1902,6 @@ impl EmbeddedDaemon {
             endpoint_id,
             health,
         })
-    }
-
-    /// Replace the in-memory cached plaintext join key. Called by
-    /// the rotate HTTP handler after `persist::rotate_join_key` so
-    /// the next status poll surfaces the new link without needing
-    /// a daemon restart.
-    pub async fn set_join_key(&self, key: String) {
-        *self.join_key_plaintext.write().await = Some(key);
     }
 
     /// Rotate the invite credential. **The one and only implementation of

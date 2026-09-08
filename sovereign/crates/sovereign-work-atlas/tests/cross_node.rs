@@ -116,8 +116,8 @@ fn replicate(src: &MeshStore, dst: &MeshStore, src_node: NodeId, dst_node: NodeI
         );
         // Through the wire vocabulary rather than around it: a value that does
         // not survive `to_payload`/`from_payload` does not reach a peer either.
-        let payload =
-            rail_kv::to_payload(&row.key, row.value.as_deref(), row.t).expect("KV payload");
+        let payload = rail_kv::to_payload(&row.op.key, row.op.value.as_deref(), row.op.t)
+            .expect("KV payload");
         let op = rail_kv::from_payload(&payload).expect("this build can read what it wrote");
         by_namespace
             .entry(row.app_id)

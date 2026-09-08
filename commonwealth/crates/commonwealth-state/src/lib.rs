@@ -24,12 +24,12 @@
 //!
 //! **THIS IS A PROJECTION NOW, NOT A REPLICA (cw-lift 4).** The truth is the
 //! ring journal — an append-only signed log on disk, one per namespace — and
-//! what this store holds is the fold of it. A local `set`/`append`/`delete`
+//! what this store holds is the fold of it. A local `set`/`delete`
 //! queues one act in the `rail_outbox` table, in the SAME transaction as the
 //! row change; the pump in `sovereign-mesh` drains that onto the journal, and
 //! what a peer sends comes back through [`rail_kv::project`] and
-//! [`MeshStore::apply_projection`]. **Readers are unchanged**: `get`, `scan`
-//! and `list_keys` answer exactly what they did.
+//! [`MeshStore::apply_projection`]. **Readers are unchanged**: `get` and
+//! `scan` answer exactly what they did.
 //!
 //! The OLD contract — `all_entries_for_gossip`, the whole store POSTed at
 //! every peer on a ten-second timer — is gone at cw-lift rung 2e together with
@@ -126,4 +126,4 @@ pub use peer_preferences::{
 pub use processed_shards::{processed_shards_key, union_processed_shards, PROCESSED_SHARDS_APP_ID};
 pub use rail_kv::{project, KvOp, Projected, Projection};
 pub use retention::RETENTION_WINDOW_DAYS;
-pub use store::{Applied, MeshStore, OutboxRow, StoreEntry};
+pub use store::{Applied, MeshStore, Outboxed, StoreEntry};

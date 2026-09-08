@@ -5685,15 +5685,19 @@ LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL at
 the window `commonwealth-state::retention` declares.
 
 **It is a PROJECTION of the ring rail since cw-lift 4, not a replica,
-and readers are unchanged.** `get` / `scan` / `list_keys` answer exactly
-what they did; what changed is where a row comes from and where a write
-goes. Truth is the ring journal — an append-only signed log on disk, one
+and readers are unchanged.** `get` / `scan` answer exactly what they
+did; what changed is where a row comes from and where a write goes. Truth is the ring journal — an append-only signed log on disk, one
 directory per namespace — and this store is the fold of it:
 
-- **Out.** `set` / `append` / `delete` write the row and insert a
+- **Out.** `set` / `delete` write the row and insert a
   `rail_outbox` row in the SAME transaction (`backend.rs`), drained by
   the pump in `sovereign-mesh` via `MeshStore::outbox_take(limit)` /
-  `outbox_ack(&[id])`. `merge_entry` deliberately does NOT enqueue — it
+  `outbox_ack(&[id])`. A drained row is an
+  `Outboxed { id, app_id, op: rail_kv::KvOp }` — the queued write and the
+  journal line are ONE type, so a tombstone has one spelling
+  (`op.value == None`) between the outbox, the wire and the fold
+  (ARCH §10.6). The `rail_outbox.deleted` column is still written and no
+  longer read. `merge_entry` deliberately does NOT enqueue — it
   is the receive side, and a row that re-entered the outbox would echo
   around the mesh forever. The SENDER-side privacy guard is inside
   `enqueue_on`, not at the call site: `is_gossip_excluded` is the one
