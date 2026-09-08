@@ -1911,7 +1911,7 @@ mod tests {
         let (a_id, b_id) = (NodeId::from_u128(61), NodeId::from_u128(62));
         let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let mesh = kv_mesh(&ka, &kb, a_id, b_id);
-        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (_a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
         let (b_state, _b_rail) = kv_node(db.path(), &kb, b_id, mesh);
 
         let now = commonwealth_core::clock::unix_now_secs();
