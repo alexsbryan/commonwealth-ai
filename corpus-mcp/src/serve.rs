@@ -110,10 +110,13 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         .unwrap_or_else(sovereign_contracts::rebrand::data_dir);
     eprintln!("corpus-mcp: data root {}", data_dir.display());
 
-    let embed = corpus_engine::embed_http::http_embed_fn(
-        profile.embeddings_url.clone(),
-        profile.embed_model.clone(),
-    );
+    // Two embedders, not one: the engine's pull/ingest is DOCUMENT-side and
+    // the MCP tools' questions are QUERY-side. Handing one raw `EmbedFn` to
+    // both was how `ask` came to search the atlas seed table from 0.128 mean
+    // cosine outside it (measured 2026-09-07, note 500f1229) — a silent space
+    // substitution, exit 0 (ARCH §18.3).
+    let embed_doc = profile.embed_document_fn();
+    let embed_query = profile.embed_query_fn();
     let recipes_dir = data_dir.join("recipes");
     let indexes_dir = data_dir.join("indexes");
 
@@ -134,8 +137,8 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         //
         // The value is the GGUF filename STEM, which is what that error asks
         // for by example. See [`embed_model_stem`].
-        let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed.clone())
-            .with_embedding_model(&embed_model_stem(&profile.embed_model));
+        let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed_doc.clone())
+            .with_embedding_model(embed_model_stem(&profile.embed_model));
         for id in &args.corpora {
             ensure_installed(&engine, id, args.pull_deadline_mins).await?;
         }
@@ -144,7 +147,7 @@ pub async fn run(args: ServeArgs) -> Result<()> {
     let server = tools::Server::open(
         recipes_dir,
         indexes_dir,
-        embed,
+        embed_query,
         args.corpora,
         args.limit,
         profile,
@@ -307,7 +310,7 @@ async fn ensure_installed(engine: &CorpusEngine, id: &str, deadline_mins: u64) -
 /// was built with), is answered by the next run's captured `pull.err` and by
 /// nothing currently on disk. Do not restate the causal claim until that file
 /// says it.
-fn embed_model_stem(model_id: &str) -> &str {
+pub(crate) fn embed_model_stem(model_id: &str) -> &str {
     model_id.strip_suffix(".gguf").unwrap_or(model_id)
 }
 

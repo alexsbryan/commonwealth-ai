@@ -580,7 +580,7 @@ instruction = 2
 # [user_slots.quirks_override]
 # "embed.pooling"              = "Mean"
 # "embed.normalize"            = "Server"
-# "embed.append_eos_token"     = false
+# "embed.eos_token"            = ""        # "" / omitted = append nothing
 # "embed.output_dimensions"    = 1024
 
 # ─────────────────────────────────────────────────────────────────────

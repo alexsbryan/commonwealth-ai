@@ -442,6 +442,37 @@ async fn cmd_publish(args: &[String]) -> i32 {
             );
         }
 
+        // The embedder configuration these vectors were produced under, from
+        // the SAME manifest the daemon resolves its embed slot through — not
+        // re-derived from the model name here, because a name is exactly what
+        // has been shown not to determine the space (`sep` and `wessex-hoard`
+        // share `Qwen3-Embedding-0.6B-Q8_0` and sit 0.66 apart; note
+        // 500f1229). `None` is legal and prints, because a publisher whose
+        // index names an embedder we cannot resolve must not silently claim a
+        // configuration it does not know (ARCH §18.3).
+        let embedding_model_for_manifest =
+            match corpus_engine::snapshot::read_local_index_meta(&index_dir) {
+                Ok(meta) => meta.embedding_model,
+                Err(e) => {
+                    eprintln!("Failed to read index meta at {}: {e}", index_dir.display());
+                    return 1;
+                }
+            };
+        let embed_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .embed_quirks_for_model(&embedding_model_for_manifest);
+        match &embed_quirks {
+            Some(q) => println!(
+                "Embedder config: pooling {:?}, normalize {:?} — recorded in the manifest, so a \
+                 restorer can refuse a mismatched space without downloading the archive.",
+                q.pooling, q.normalize
+            ),
+            None => println!(
+                "Embedder config: UNKNOWN for `{embedding_model_for_manifest}` — publishing \
+                 without one. Restorers will have only the cosine probe to judge this \
+                 archive's embedding space by."
+            ),
+        }
+
         let opts = PublishOptions {
             index_dir,
             enrichment_dir,
@@ -454,6 +485,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
             producer_version: PRODUCER_VERSION.to_string(),
             zstd_level: parsed.zstd_level,
             sibling_index_dirs,
+            embed_quirks,
         };
 
         match publish_snapshot(opts).await {

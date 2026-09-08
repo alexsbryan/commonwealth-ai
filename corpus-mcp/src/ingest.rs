@@ -310,10 +310,10 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     }
 
     // ── 4. acquire → extract → chunk → embed → index ────────────────────────
-    let embed = corpus_engine::embed_http::http_embed_fn(
-        embed_profile.embeddings_url.clone(),
-        embed_profile.embed_model.clone(),
-    );
+    // Document side: `ingest`'s whole job is writing chunk vectors, and they
+    // must land in the space this model's family defines or nothing built here
+    // is searchable by a daemon (or by `serve`) later.
+    let embed = embed_profile.embed_document_fn();
     let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed.clone())
         .with_embedding_model(&embed_profile.embed_model);
     println!("\n=== corpus ingest — {corpus_id} ===");
@@ -427,10 +427,27 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
     let progress: EnrichProgressFn = Arc::new(render_build_event);
     let t_build = std::time::Instant::now();
-    // The Backfill step's embedder is the same HTTP closure the ingest used,
-    // so the atlas seed table and `chunks.lance` share one vector space —
-    // which is the precondition `ask`'s ANN seed lookup depends on.
-    let code = build_with_progress_with_embedder(&parsed, Some(progress), Some(embed), None).await;
+    // The Backfill step's embedder is the QUERY-side one, and that is not a
+    // slip: `build_with_progress_with_embedder`'s own contract says so (the
+    // daemon adapts with `inference_to_embed_query_fn`), because the seed
+    // table it writes is searched by `atlas_navigate_ann` with a query-side
+    // vector. `chunks.lance` is the document space; the seed table is the
+    // query space; they are DIFFERENT spaces on an instruction-aware embedder
+    // and pairing them is the substitution §18.3 forbids.
+    //
+    // Until 2026-09-07 this passed the document-side closure, with a comment
+    // asserting the opposite invariant. It went unnoticed because neither side
+    // applied any instruction at all, so the two wrong halves matched each
+    // other — and matched no daemon-built atlas. Measured cost of the query
+    // instruction on a daemon-built seed table: +0.128 mean cosine (note
+    // 500f1229).
+    let code = build_with_progress_with_embedder(
+        &parsed,
+        Some(progress),
+        Some(embed_profile.embed_query_fn()),
+        None,
+    )
+    .await;
     let build_secs = t_build.elapsed().as_secs();
     if code != 0 {
         bail!("enrichment build for `{corpus_id}` failed with exit code {code}");

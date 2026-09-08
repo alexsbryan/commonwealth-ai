@@ -27,6 +27,7 @@ use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
+use crate::model_family::EmbedQuirks;
 use crate::oicp::CapabilityProfile;
 
 /// Root of `models.toml`. Nested exactly how TOML sees it:
@@ -501,23 +502,42 @@ impl ModelsManifest {
         if std::env::var("SOVEREIGN_DISABLE_QUERY_PREFIX").is_ok_and(|v| v != "0") {
             return String::new();
         }
-        let family = self.embed_family_for_file(model_id).or_else(|| {
-            if !model_id.to_ascii_lowercase().contains("embed") {
-                return None;
-            }
-            // The id names an embedding model but didn't match a filename.
-            // Use the family of any declared embed slot (they are homogeneous
-            // in practice — all Qwen3Embedding today — and this stays correct
-            // if that changes, since it reads the manifest, not a constant).
-            self.profiles
-                .values()
-                .find_map(|p| p.embed.as_ref())
-                .map(|slot| parse_family(slot.family.as_str()))
-        });
-        family
-            .and_then(|f| f.default_quirks().embed)
+        self.embed_quirks_for_model(model_id)
             .map(|eq| eq.query_instruction)
             .unwrap_or_default()
+    }
+
+    /// The full [`EmbedQuirks`] for an embedding model id, resolved from the
+    /// manifest — `None` for a chat model or an id that names no embedder.
+    ///
+    /// The resolution [`Self::embed_query_instruction`] used to inline, lifted
+    /// so the two cannot drift (ARCH §10.6): a caller that needs the whole
+    /// configuration (the snapshot publisher, recording the space its vectors
+    /// were produced in) and a caller that needs one field of it now read the
+    /// same table through the same family lookup.
+    ///
+    /// Unlike `embed_query_instruction`, this does NOT honour
+    /// `SOVEREIGN_DISABLE_QUERY_PREFIX`. That flag is an A/B knob for
+    /// attributing retrieval deltas at QUERY time; a published manifest must
+    /// record the family's real configuration, not the state of an env var on
+    /// the publisher's shell.
+    pub fn embed_quirks_for_model(&self, model_id: &str) -> Option<EmbedQuirks> {
+        self.embed_family_for_file(model_id)
+            .or_else(|| {
+                if !model_id.to_ascii_lowercase().contains("embed") {
+                    return None;
+                }
+                // The id names an embedding model but didn't match a filename.
+                // Use the family of any declared embed slot (they are
+                // homogeneous in practice — all Qwen3Embedding today — and
+                // this stays correct if that changes, since it reads the
+                // manifest, not a constant).
+                self.profiles
+                    .values()
+                    .find_map(|p| p.embed.as_ref())
+                    .map(|slot| parse_family(slot.family.as_str()))
+            })
+            .and_then(|f| f.default_quirks().embed)
     }
 
     /// The canonical prescribed embed slot — the `default` profile's embed

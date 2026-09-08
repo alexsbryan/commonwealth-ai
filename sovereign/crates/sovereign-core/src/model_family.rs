@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use serde::{Deserialize, Serialize};
 
-// Re-export embed-strategy types from oicp-types so that all crates that
-// depend on sovereign-core continue to find them at their original path.
+// Re-export embed-strategy types from oicp-types, and `EmbedQuirks` from
+// `sovereign-contracts`, so that all crates that depend on sovereign-core
+// continue to find them at their original path.
+//
+// `EmbedQuirks` moved DOWN to `sovereign-contracts` on 2026-09-07 (ei-6b): the
+// table has to be reachable by `corpus-mcp`, which embeds against a bare
+// OpenAI-compatible endpoint and may not link `sovereign-core` at all. This
+// crate is now a CALLER of that one table, not a second copy of it (ARCH
+// §10.6) — see `sovereign_contracts::embed_quirks`.
 pub use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
+pub use sovereign_contracts::embed_quirks::EmbedQuirks;
 
 /// Identifies the behavioural family of a loaded model.
 ///
@@ -175,24 +183,6 @@ pub enum ThinkingControl {
     None,
 }
 
-/// Embedding-specific configuration for the Embed slot.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmbedQuirks {
-    pub pooling: PoolingStrategy,
-    pub normalize: NormalizationStrategy,
-    /// Prepended to query-side inputs at inference time.
-    /// Empty string = no instruction prefix.
-    pub query_instruction: String,
-    /// Prepended to document-side inputs at ingestion time.
-    pub document_instruction: String,
-    /// Whether to append the model's EOS token to every input.
-    /// Required for Qwen3-Embedding; must be false for Qwen3-Embedding and similar embedders.
-    pub append_eos_token: bool,
-    /// Output vector dimensionality. Used to validate index compatibility
-    /// at open time and to reject mismatched BYOM swaps at startup.
-    pub output_dimensions: usize,
-}
-
 // Backwards-compatible defaults for the three sampler-stage params
 // we just added to ModelQuirks. Used by serde when an existing
 // `models.toml` quirks_override doesn't mention them.
@@ -296,16 +286,10 @@ impl ModelFamily {
                 code_top_k: None,
                 code_top_p: None,
                 code_presence_penalty: None,
-                embed: Some(EmbedQuirks {
-                    pooling: PoolingStrategy::Last,
-                    normalize: NormalizationStrategy::Application,
-                    query_instruction: "Instruct: Given a search query, retrieve \
-                                          relevant passages that answer the query\nQuery: "
-                        .into(),
-                    document_instruction: String::new(),
-                    append_eos_token: true,
-                    output_dimensions: 1024, // overridden in manifest for 4B (2560) / 8B (4096)
-                }),
+                // The strings live in ONE place. `output_dimensions` is the
+                // 0.6B value and is overridden in the manifest for 4B (2560)
+                // and 8B (4096).
+                embed: Some(EmbedQuirks::qwen3_embedding()),
                 rerank: None,
                 has_recurrent_layers: false,
             },
@@ -588,7 +572,7 @@ mod tests {
         let quirks = ModelFamily::Qwen3Embedding.default_quirks();
         let eq = quirks.embed.expect("Qwen3Embedding must have EmbedQuirks");
         assert!(matches!(eq.pooling, PoolingStrategy::Last));
-        assert!(eq.append_eos_token);
+        assert_eq!(eq.eos_token.as_deref(), Some("<|endoftext|>"));
         assert_eq!(eq.output_dimensions, 1024);
     }
 

@@ -186,6 +186,11 @@ pub struct CorpusEngine {
     /// `primary_entities` per the Option-A path.
     chunk_entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
     expected_embedding_model: String,
+    /// The embedder configuration this engine's `EmbedFn` applies, when the
+    /// caller knows it. `None` is the honest default: an `EmbedFn` is an
+    /// opaque closure and the engine cannot introspect one, so a caller that
+    /// does not say leaves every snapshot check on the cosine probe.
+    expected_embed_quirks: Option<sovereign_contracts::embed_quirks::EmbedQuirks>,
     /// Dimensionality the loaded embedding model produces, or 0 for
     /// "not yet known".
     ///
@@ -390,6 +395,7 @@ impl CorpusEngine {
             // default and drifted from the real file stem
             // `"qwen-embedding-0.6b"` on every fresh install).
             expected_embedding_model: String::new(),
+            expected_embed_quirks: None,
             expected_embedding_dimensions: std::sync::atomic::AtomicUsize::new(0),
             index_cache: std::sync::Mutex::new(HashMap::new()),
             index_info_cache: std::sync::Mutex::new(HashMap::new()),
@@ -783,6 +789,22 @@ impl CorpusEngine {
 
     pub fn with_embedding_model(mut self, model: &str) -> Self {
         self.expected_embedding_model = model.to_string();
+        self
+    }
+
+    /// Declare the embedder configuration this engine's `EmbedFn` applies.
+    ///
+    /// The companion to [`with_embedding_model`](Self::with_embedding_model),
+    /// and for the same reason: the engine cannot introspect an opaque
+    /// `EmbedFn`, so the facts a snapshot must be checked against have to be
+    /// told to it. The NAME alone is not enough — `sep` and `wessex-hoard`
+    /// were both built by `Qwen3-Embedding-0.6B-Q8_0` and sit 0.66 apart
+    /// because one is mean-pooled (note 500f1229).
+    pub fn with_embed_quirks(
+        mut self,
+        quirks: sovereign_contracts::embed_quirks::EmbedQuirks,
+    ) -> Self {
+        self.expected_embed_quirks = Some(quirks);
         self
     }
 

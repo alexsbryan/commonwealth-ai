@@ -72,6 +72,7 @@ pub fn restore_snapshot_archive(
     expected_sha256: Option<&str>,
     local_embedding_model: &str,
     local_embedding_dimensions: usize,
+    local_embed_quirks: Option<&sovereign_contracts::embed_quirks::EmbedQuirks>,
 ) -> Result<RestoreOutcome> {
     if let Some(want) = expected_sha256 {
         let (got, size) = hash_and_size(archive_path)?;
@@ -96,8 +97,33 @@ pub fn restore_snapshot_archive(
     // compared at all, so refuse before extracting. A name-only mismatch
     // is carried out in the outcome for the caller to VERIFY by probe
     // (model names drift across dir/stem/repo/quant for the same model).
-    let embedding_compat =
-        manifest.check_embedding_compatibility(local_embedding_model, local_embedding_dimensions);
+    let embedding_compat = manifest.check_embedding_compatibility(
+        local_embedding_model,
+        local_embedding_dimensions,
+        local_embed_quirks,
+    );
+    // A DECLARED config that differs is refusable here, before a single entry
+    // is extracted — the difference is nameable and no probe can overturn it.
+    if embedding_compat == EmbeddingCompat::ConfigMismatch {
+        let declared = manifest
+            .embed_quirks
+            .as_ref()
+            .expect("ConfigMismatch is only reachable with a declared config");
+        return Err(Error::SnapshotIncompatible(format!(
+            "snapshot declares embedder config pooling={:?} normalize={:?} eos={:?} \
+             query_instruction={:?}, but this host embeds with pooling={:?} \
+             normalize={:?} eos={:?} query_instruction={:?}. Same model name is not the \
+             same embedding space; this corpus must be re-published from the current stack.",
+            declared.pooling,
+            declared.normalize,
+            declared.eos_token,
+            declared.query_instruction,
+            local_embed_quirks.map(|q| q.pooling),
+            local_embed_quirks.map(|q| q.normalize),
+            local_embed_quirks.and_then(|q| q.eos_token.clone()),
+            local_embed_quirks.map(|q| q.query_instruction.clone()),
+        )));
+    }
     if embedding_compat == EmbeddingCompat::DimsMismatch {
         return Err(Error::SnapshotIncompatible(format!(
             "snapshot built with {}-dim vectors but local model '{}' emits {}-dim",

@@ -109,6 +109,7 @@ impl CorpusEngine {
             expected_sha,
             &self.expected_embedding_model,
             recipe.index.embedding_dimensions,
+            self.expected_embed_quirks.as_ref(),
         ) {
             Ok(o) => o,
             Err(Error::SnapshotIncompatible(reason)) => {
@@ -128,7 +129,14 @@ impl CorpusEngine {
         // embedding space empirically before trusting the vectors: re-embed
         // a sample of the snapshot's own chunks with the local document
         // embedder and compare to their stored vectors.
-        if outcome.embedding_compat == EmbeddingCompat::NameMismatch {
+        // Both verdicts land here and both mean the same thing operationally
+        // — the name differs and the config could not settle it, so the probe
+        // is the evidence. They differ in what a FAILURE then means, which is
+        // why the refusal below reads `embedding_compat` rather than assuming.
+        if matches!(
+            outcome.embedding_compat,
+            EmbeddingCompat::NameMismatch | EmbeddingCompat::ConfigUnknown
+        ) {
             let forced = std::env::var("SOVEREIGN_FORCE_PREBUILT")
                 .map(|v| !v.is_empty() && v != "0")
                 .unwrap_or(false);
@@ -144,14 +152,28 @@ impl CorpusEngine {
                 let accepted = matches!(&verdict, Ok(score) if *score >= PREBUILT_PROBE_THRESHOLD);
                 if !accepted {
                     match &verdict {
-                        Ok(score) => tracing::warn!(
-                            corpus_id = %corpus_id,
-                            snapshot_model = %outcome.manifest.embedding_model,
-                            local_model = %self.expected_embedding_model,
-                            probe_cosine = score,
-                            threshold = PREBUILT_PROBE_THRESHOLD,
-                            "ingest: embedding-space probe FAILED — discarding snapshot, full ingest"
-                        ),
+                        Ok(score) => {
+                            // WHY, not just how far. A bare cosine sends the
+                            // reader looking for a broken embedder; the cause
+                            // is almost always that the snapshot predates the
+                            // manifest's `embed_quirks` field and was pooled
+                            // differently (ARCH §18.3 — name the degradation).
+                            let cause = if outcome.manifest.embed_quirks.is_none() {
+                                "the snapshot declares no embedder config (published before                                  that manifest field existed), so pooling could not be                                  compared before downloading — a different POOLING is the                                  usual cause of a score in this range, and no re-embedding                                  on this host can fix it: the corpus must be re-published                                  from the current stack"
+                            } else {
+                                "the snapshot's declared embedder config matched this host,                                  so a failing probe here is a genuine surprise and worth                                  investigating rather than re-publishing"
+                            };
+                            tracing::warn!(
+                                corpus_id = %corpus_id,
+                                snapshot_model = %outcome.manifest.embedding_model,
+                                local_model = %self.expected_embedding_model,
+                                probe_cosine = score,
+                                threshold = PREBUILT_PROBE_THRESHOLD,
+                                declared_embed_config = outcome.manifest.embed_quirks.is_some(),
+                                %cause,
+                                "ingest: embedding-space probe REFUSED the snapshot — discarding, full ingest"
+                            );
+                        }
                         Err(e) => tracing::warn!(
                             corpus_id = %corpus_id,
                             error = %e,

@@ -208,6 +208,7 @@ async fn wiki_store_survives_publish_and_restore_intact() {
         producer_version: "test".into(),
         zstd_level: 1,
         sibling_index_dirs: Vec::new(),
+        embed_quirks: None,
     })
     .await
     .unwrap();
@@ -221,6 +222,7 @@ async fn wiki_store_survives_publish_and_restore_intact() {
         Some(&outcome.archive_sha256),
         "qwen3-embedding-0.6b",
         1024,
+        None,
     )
     .unwrap();
 
@@ -302,6 +304,7 @@ async fn restore_under_a_new_corpus_id_still_serves_the_walk() {
         producer_version: "test".into(),
         zstd_level: 1,
         sibling_index_dirs: Vec::new(),
+        embed_quirks: None,
     })
     .await
     .unwrap();
@@ -315,6 +318,7 @@ async fn restore_under_a_new_corpus_id_still_serves_the_walk() {
         Some(&outcome.archive_sha256),
         "qwen3-embedding-0.6b",
         1024,
+        None,
     )
     .unwrap();
 

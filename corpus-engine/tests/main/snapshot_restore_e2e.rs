@@ -55,6 +55,7 @@ fn restore_real_wikipedia_snapshot_as_sibling() {
         Some(WIKIPEDIA_PREBUILT_SHA256),
         "qwen-embedding-0.6b",
         1024,
+        None,
     )
     .expect("restore_snapshot_archive succeeded");
 

@@ -107,49 +107,96 @@ what you get is the enriched corpus, not a re-embed. A corpus whose recipe
 declares no snapshot is **not** pulled — building it is `corpus-mcp ingest`'s
 job. Either way you are told which.
 
-**A shipped snapshot will very likely be REJECTED against a bare llama-server,
-and this is measured, not hypothetical.** Before it trusts a snapshot, the
-restore re-embeds a sample of that snapshot's own chunks through your endpoint
-and compares them to the stored vectors, requiring a mean cosine of at least
-0.92. On 2026-09-05, `sep`'s snapshot against a bare
-`llama-server --embeddings` on the *identical* `Qwen3-Embedding-0.6B-Q8_0.gguf`
-scored **0.68**.
+**A shipped snapshot will very likely be REJECTED, and this is measured, not
+hypothetical.** Before it trusts a snapshot, the restore re-embeds a sample of
+that snapshot's own chunks through your endpoint and compares them to the
+stored vectors, requiring a mean cosine of at least 0.92. On 2026-09-05,
+`sep`'s snapshot against a bare `llama-server --embeddings` on the *identical*
+`Qwen3-Embedding-0.6B-Q8_0.gguf` scored **0.68**.
 
-The model file is not the problem. Qwen3-Embedding is **last-token pooled** and
-requires an **EOS token appended to every input**; the pooling itself comes
-from the GGUF metadata, so both servers agree on it, but the EOS append is
-something the *caller* does before tokenizing, and a bare llama-server
-`/v1/embeddings` does not do it. The pooled vector is therefore taken at a
-different token, and the space differs. **There is no llama-server flag for
-this** — `--pooling last` changes nothing, because last-token pooling is
-already what the GGUF declares.
+Until 2026-09-07 this section blamed the EOS token and told you a bare
+endpoint could not match ours. **Both halves of that were wrong**, and the
+measurement that corrected them is in `test-artifacts/ei6b-mechanism/`:
 
-So on a bare endpoint, expect this:
+- A bare `llama-server` reproduces *our daemon's* embeddings at **0.9956**
+  cosine on raw text, and **0.9998** once the caller prepares inputs the way
+  this crate now does. There was never a meaningful endpoint gap.
+- Our own daemon scores **0.698** against `sep`'s stored vectors — it cannot
+  reproduce them either. Whatever is wrong is not in the caller.
+- Re-embedding `sep`'s chunks with `--pooling mean` scores **0.9997**.
+
+`sep` and `wikipedia` were built **mean-pooled**. Qwen3-Embedding is a
+**last-token-pooled** model and the current stack pools last, which every
+corpus built since July 2026 confirms:
+
+| corpus | built | `--pooling last` | `--pooling mean` |
+|---|---|---|---|
+| `sep` chunks | 2026-04-09 | 0.7069 | **0.9997** |
+| `wikipedia` chunks | 2026-04-29 | 0.7192 | **0.9573** |
+| `wessex-hoard` chunks | 2026-09-02 | **0.9968** | 0.6615 |
+| `sep-al-farabi` atlas seeds | 2026-09-05 | **0.9610** | 0.5131 |
+
+So the probe is right to refuse those two snapshots, no endpoint can fix it,
+and `SOVEREIGN_FORCE_PREBUILT=1` on them would install vectors your queries
+cannot reach. They need re-publishing from the current stack; that is tracked,
+and it is not something a user can do locally.
+
+For every other corpus — anything built by the current stack — a bare
+llama-server is a first-class endpoint. Which is what this crate is for.
+
+### What this crate does about it
+
+`corpus-mcp` now prepares embed inputs the way the corpus was built, from one
+table (`sovereign_contracts::embed_quirks`) shared with the daemon rather than
+re-derived here:
+
+- The embed family is resolved from the endpoint's own model id. **An
+  unrecognised id gets no quirks at all** — raw text, said out loud at boot and
+  reported in `corpus_list` — never some other family's instruction prefix.
+- Documents get the document-side preparation; questions and atlas seed tables
+  get the **query-side** one. These are different vector spaces on an
+  instruction-aware embedder, and mixing them costs real recall:
+
+| what a question is embedded with | cosine vs. the atlas seed table |
+|---|---|
+| raw text | 0.8605 |
+| + query instruction | 0.9841 |
+| + query instruction + EOS | **0.9888** |
+
+  Measured on `wessex-hoard`, a corpus the current stack built. Until
+  2026-09-07 this crate sent raw text on both sides, so its own seed tables
+  were written in one space and searched in another — the two errors cancelled
+  and matched no daemon-built atlas.
+- Snapshots published from now on record the embedder configuration they were
+  built under, so a mismatched space is refused **from the manifest**, naming
+  pooling, before a byte is downloaded. Snapshots published before then carry
+  no such field, and the refusal says so rather than printing a bare cosine.
+
+So on a bare endpoint against one of the two stale snapshots, expect this:
 
     corpus-mcp serve --corpus sep
-    → snapshot discarded (probe_cosine=0.68 < 0.92), full rebuild starts
-    → refused after 30 minutes, because a rebuild of sep is hours, not minutes
+    → snapshot refused (probe_cosine=0.68 < 0.92); the snapshot declares no
+      embedder config, so pooling could not be compared before downloading —
+      a different POOLING is the usual cause, and no re-embedding on this host
+      can fix it: the corpus must be re-published from the current stack
+    → full rebuild starts, then is refused, because a rebuild of sep is hours
 
-That refusal is deliberate — `serve` will not silently spend hours rebuilding a
-corpus you asked it to fetch. Your options, in the order most people want them:
+That refusal is deliberate — `serve` will not silently spend hours rebuilding
+a corpus you asked it to fetch. Your options:
 
-1. **Use an endpoint that matches the one the snapshot was built with.** For
-   the corpora this project ships, that is the sovereign daemon's embedder,
-   which appends EOS as the model requires.
-2. **Build the corpus yourself** — `corpus-mcp ingest <recipe.toml>`. The
+1. **Build the corpus yourself** — `corpus-mcp ingest <recipe.toml>`. The
    vectors are then yours and match your endpoint by construction. This is the
-   honest path for a bare llama-server, and it is what the three-command
+   honest path for the two stale snapshots, and it is what the three-command
    experience above is for.
-3. `SOVEREIGN_FORCE_PREBUILT=1` skips the probe and accepts the snapshot on its
-   declared name. Only do this if you know your endpoint matches the one that
-   built it; otherwise you get an index whose vectors disagree with your own
-   queries, and retrieval quietly degrades instead of failing.
-4. `--pull-deadline-mins 0` disables the bound if you genuinely want to wait
+2. **Use an endpoint matching the one that built it.** For `sep` and
+   `wikipedia` today that means a mean-pooled embedder, which is not what our
+   own daemon runs either.
+3. `--pull-deadline-mins 0` disables the bound if you genuinely want to wait
    out a rebuild.
-
-The snapshot manifest does not record the embedder configuration it was built
-with, only a model NAME — which is why this can only be discovered by probing
-rather than read off the archive.
+4. `SOVEREIGN_FORCE_PREBUILT=1` skips the probe. **Do not use it on `sep` or
+   `wikipedia`** — the mismatch there is real and you would get an index whose
+   vectors disagree with your own queries, degrading retrieval quietly instead
+   of failing.
 
 ## The MCP config block
 

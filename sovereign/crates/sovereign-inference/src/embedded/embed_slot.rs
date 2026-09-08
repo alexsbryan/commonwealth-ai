@@ -308,15 +308,13 @@ impl EmbedSlot {
         max_input_tokens: usize,
         embed_quirks: Option<&EmbedQuirks>,
     ) -> Result<Vec<f32>> {
-        let prepared = if let Some(eq) = embed_quirks {
-            let prefixed = format!("{}{text}", eq.document_instruction);
-            if eq.append_eos_token {
-                format!("{prefixed}<|endoftext|>")
-            } else {
-                prefixed
-            }
-        } else {
-            text.to_string()
+        // The one table assembles the input; this slot never formats a
+        // prefix or an EOS literal of its own (ARCH §10.6 — the same
+        // `prepare_document` runs in `corpus-mcp` against a bare endpoint,
+        // which is the only reason the two produce the same vector space).
+        let prepared = match embed_quirks {
+            Some(eq) => eq.prepare_document(text),
+            None => text.to_string(),
         };
         Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
@@ -331,15 +329,9 @@ impl EmbedSlot {
         max_input_tokens: usize,
         embed_quirks: Option<&EmbedQuirks>,
     ) -> Result<Vec<f32>> {
-        let prepared = if let Some(eq) = embed_quirks {
-            let prefixed = format!("{}{query}", eq.query_instruction);
-            if eq.append_eos_token {
-                format!("{prefixed}<|endoftext|>")
-            } else {
-                prefixed
-            }
-        } else {
-            query.to_string()
+        let prepared = match embed_quirks {
+            Some(eq) => eq.prepare_query(query),
+            None => query.to_string(),
         };
         Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
@@ -448,13 +440,7 @@ impl EmbedSlot {
         let mut prepared: Vec<Vec<LlamaToken>> = Vec::with_capacity(inputs.len());
         for text in inputs {
             let prefixed = match slot.embed_quirks.as_ref() {
-                Some(eq) => {
-                    let mut s = format!("{}{}", eq.document_instruction, text);
-                    if eq.append_eos_token {
-                        s.push_str("<|endoftext|>");
-                    }
-                    s
-                }
+                Some(eq) => eq.prepare_document(text),
                 None => text.to_string(),
             };
             let mut toks = slot

@@ -32,8 +32,12 @@
 //!   again. A winner that cannot embed is a named refusal listing what every
 //!   rung said.
 
+use std::sync::Arc;
+
 use anyhow::{bail, Context, Result};
+use corpus_engine::EmbedFn;
 use serde_json::Value;
+use sovereign_contracts::embed_quirks::EmbedQuirks;
 
 /// What was learned about the endpoint before serving anything.
 #[derive(Debug, Clone)]
@@ -46,12 +50,143 @@ pub struct HostProfile {
     /// vector leg on the first query (§18.4: validate the instrument first).
     pub embed_dims: usize,
     pub kind: HostKind,
+    /// Which embed family the endpoint's model id resolved to, and how its
+    /// inputs must be prepared — `None` when the id matches no known family.
+    ///
+    /// `None` is a refusal, not a default (ARCH §18.3): raw text is sent and
+    /// the absence is named in stderr at boot AND in `corpus_list`, because a
+    /// wrong instruction prefix produces a plausible vector in a space nothing
+    /// else occupies — exit 0, and bad retrieval discovered months later.
+    pub embed_quirks: Option<(String, EmbedQuirks)>,
     /// Every endpoint candidate tried before this one was chosen, in ladder
     /// order, each with the sentence that decided it. One entry (the named
     /// URL) when the caller passed `--base-url`. Carried rather than only
     /// printed because `corpus_list` reports it: ARCH §18.3's "absence is
     /// reported" is not satisfied by a line that scrolled past at boot.
     pub attempts: Vec<Attempt>,
+}
+
+impl HostProfile {
+    /// The document-side and query-side embedders for this endpoint, in that
+    /// order.
+    ///
+    /// ONE accessor rather than three `http_embed_fn` call sites (ARCH §10.6):
+    /// `serve` needs both — the engine's ingest is document-side and the MCP
+    /// tools' questions are query-side — and `ingest` needs the document one.
+    /// While each site built its own, all three sent RAW text, which is how
+    /// `ask` came to embed its questions 0.128 mean cosine away from the atlas
+    /// seed table it searches (measured 2026-09-07, note 500f1229).
+    ///
+    /// With no recognised family both sides are the raw transport, identical
+    /// and un-prefixed. That is the honest degradation, and `probe` has
+    /// already said so by name.
+    /// The DOCUMENT-side embedder: what `ingest` writes `chunks.lance` with.
+    pub fn embed_document_fn(&self) -> EmbedFn {
+        self.embed_fn(Side::Document)
+    }
+
+    /// The QUERY-side embedder: what a question is embedded with, and what
+    /// the atlas seed table (`atoms_ann.lance`) is BUILT with — see
+    /// `sovereign_enrichment_build::build_with_progress_with_embedder`, whose
+    /// `embedder` parameter is documented as the query side
+    /// (`sovereign/crates/sovereign-enrichment-build/src/build/mod.rs:41-48`)
+    /// because `atlas_navigate_ann` searches that table with a query vector.
+    pub fn embed_query_fn(&self) -> EmbedFn {
+        self.embed_fn(Side::Query)
+    }
+
+    fn embed_fn(&self, side: Side) -> EmbedFn {
+        let raw = corpus_engine::embed_http::http_embed_fn(
+            self.embeddings_url.clone(),
+            self.embed_model.clone(),
+        );
+        let Some((family, quirks)) = self.embed_quirks.clone() else {
+            return raw;
+        };
+        prepared(raw, move |t| {
+            tracing::debug!(
+                family = %family,
+                side = side.label(),
+                "corpus-mcp: embed quirks applied"
+            );
+            match side {
+                Side::Document => quirks.prepare_document(t),
+                Side::Query => quirks.prepare_query(t),
+            }
+        })
+    }
+}
+
+/// Which side of an asymmetric embedder an input belongs to.
+///
+/// Two named accessors rather than one returning a pair: a `(EmbedFn, EmbedFn)`
+/// is two values of the SAME type and a caller that destructures them in the
+/// wrong order gets a silent space swap with no compiler complaint — which is
+/// exactly the bug this module was written after, one crate over
+/// (`ingest.rs`'s Backfill call handed the document embedder to a parameter
+/// documented as the query side, for as long as corpus-mcp has had an atlas).
+/// A call site now has to NAME the side it wants.
+#[derive(Debug, Clone, Copy)]
+enum Side {
+    Document,
+    Query,
+}
+
+impl Side {
+    fn label(self) -> &'static str {
+        match self {
+            Side::Document => "document",
+            Side::Query => "query",
+        }
+    }
+}
+
+/// One embedding round-trip against `model`, returning the vector width.
+///
+/// `Err` carries the sentence a person needs to understand the rejection —
+/// the status and body for a refusal, the parse failure otherwise — because
+/// the caller prints it beside the model id it belongs to.
+async fn probe_one_embedding(
+    client: &reqwest::Client,
+    embeddings_url: &str,
+    model: &str,
+) -> std::result::Result<usize, String> {
+    let resp = client
+        .post(embeddings_url)
+        .json(&serde_json::json!({ "input": "corpus-mcp probe", "model": model }))
+        .send()
+        .await
+        .map_err(|e| format!("POST {embeddings_url}: {e}"))?;
+    let status = resp.status();
+    let body: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("{status}, body not JSON: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("{status}: {body}"));
+    }
+    match body["data"][0]["embedding"].as_array().map(|a| a.len()) {
+        Some(0) | None => Err(format!("{status}, no usable data[0].embedding in {body}")),
+        Some(dims) => Ok(dims),
+    }
+}
+
+/// Wrap an `EmbedFn` so every input passes through `prep` first.
+///
+/// The transport stays `corpus_engine::embed_http::http_embed_fn` — this adds
+/// the preparation step and nothing else, so there is still one HTTP client
+/// and one error mapping (ARCH §19: the surface existed, it just needed the
+/// text prepared before it).
+fn prepared<F>(inner: EmbedFn, prep: F) -> EmbedFn
+where
+    F: Fn(&str) -> String + Send + Sync + 'static,
+{
+    let prep = Arc::new(prep);
+    Arc::new(move |text: &str| {
+        let inner = Arc::clone(&inner);
+        let text = (prep)(text);
+        Box::pin(async move { inner(&text).await })
+    })
 }
 
 /// One rung of the discovery ladder, and what probing it found.
@@ -361,8 +496,9 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
     // 2. The embedding model id — from the flag, else from what the host
     //    says it serves. Absence is refused, never defaulted (§18.3).
     let models_url = format!("{base}/models");
-    let embed_model = match embed_model {
-        Some(m) => m,
+    let embeddings_url = format!("{base}/embeddings");
+    let candidates: Vec<String> = match &embed_model {
+        Some(m) => vec![m.clone()],
         None => {
             let listed = client
                 .get(&models_url)
@@ -372,48 +508,93 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
                 .json::<Value>()
                 .await
                 .with_context(|| format!("GET {models_url}: not JSON"))?;
-            let first = listed["data"]
+            let ids: Vec<String> = listed["data"]
                 .as_array()
-                .and_then(|d| d.first())
-                .and_then(|m| m["id"].as_str())
-                .map(str::to_string);
-            match first {
-                Some(id) => id,
-                None => bail!(
+                .map(|d| {
+                    d.iter()
+                        .filter_map(|m| m["id"].as_str())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if ids.is_empty() {
+                bail!(
                     "{models_url} lists no models, so there is no embedding model id to \
                      send; pass --embed-model <id>"
-                ),
+                );
             }
+            // Ordered, not "the first row". On Ollama — the one shape that
+            // serves chat AND embeddings from one URL — the first id was
+            // `qwen3:0.6b` and `/v1/embeddings` answered 501 "This server does
+            // not support embeddings" (measured by ei-3c, 2026-09-07). The
+            // list is a menu, not a ranking, so the decider that already knows
+            // which families EMBED sorts it: recognised embedding families
+            // first, everything else after, listed order preserved within each
+            // group.
+            let (known, rest): (Vec<String>, Vec<String>) = ids.into_iter().partition(|id| {
+                EmbedQuirks::for_model_stem(crate::serve::embed_model_stem(id)).is_some()
+            });
+            if known.is_empty() {
+                eprintln!(
+                    "corpus-mcp: none of the {} model id(s) at {models_url} looks like a known \
+                     embedding model — trying each in listed order",
+                    rest.len()
+                );
+            }
+            known.into_iter().chain(rest).collect()
         }
     };
 
-    // 3. One probe embedding: proves the endpoint works and learns its width.
-    let embeddings_url = format!("{base}/embeddings");
-    let resp = client
-        .post(&embeddings_url)
-        .json(&serde_json::json!({ "input": "corpus-mcp probe", "model": embed_model }))
-        .send()
-        .await
-        .with_context(|| format!("POST {embeddings_url}"))?;
-    let status = resp.status();
-    let body: Value = resp
-        .json()
-        .await
-        .with_context(|| format!("POST {embeddings_url}: {status}, body not JSON"))?;
-    if !status.is_success() {
-        bail!("POST {embeddings_url} returned {status}: {body}");
+    // 3. One probe embedding, per candidate until one answers with a vector.
+    //    A host that lists a model it cannot embed with is not an error to
+    //    fall over on — it is a menu item to skip — but skipping SILENTLY is
+    //    the substitution §18.3 forbids, so the winner and every rejection are
+    //    printed, and a total failure lists what each one said.
+    let mut rejections: Vec<String> = Vec::new();
+    let mut chosen: Option<(String, usize)> = None;
+    for id in &candidates {
+        match probe_one_embedding(&client, &embeddings_url, id).await {
+            Ok(dims) => {
+                chosen = Some((id.clone(), dims));
+                break;
+            }
+            Err(why) => {
+                if candidates.len() > 1 {
+                    eprintln!("corpus-mcp: model `{id}` cannot embed — {why}");
+                }
+                rejections.push(format!("  {id}: {why}"));
+            }
+        }
     }
-    let embed_dims = body["data"][0]["embedding"]
-        .as_array()
-        .map(|a| a.len())
-        .with_context(|| format!("POST {embeddings_url}: no data[0].embedding in {body}"))?;
-    if embed_dims == 0 {
-        bail!("POST {embeddings_url} returned an empty embedding for model `{embed_model}`");
-    }
+    let Some((embed_model, embed_dims)) = chosen else {
+        bail!(
+            "no model at {models_url} could serve an embedding via {embeddings_url}. Tried \
+             {} candidate(s):\n{}\nPass --embed-model <id> if the right one is not listed.",
+            candidates.len(),
+            rejections.join("\n")
+        );
+    };
     eprintln!(
         "corpus-mcp: embeddings via {embeddings_url}, model `{embed_model}`, {embed_dims}-d ({})",
         kind.label()
     );
+
+    // 4. WHICH embed family, and therefore how inputs must be prepared. The
+    //    stem normaliser is the one in `serve` (ARCH §19), and an unrecognised
+    //    id is named here rather than defaulted to some family's instruction.
+    let stem = crate::serve::embed_model_stem(&embed_model);
+    let embed_quirks = EmbedQuirks::for_model_stem(stem);
+    match &embed_quirks {
+        Some((family, _)) => eprintln!(
+            "corpus-mcp: embed quirks `{family}` for model stem `{stem}` — documents and \
+             queries are prepared the way this corpus was built"
+        ),
+        None => eprintln!(
+            "corpus-mcp: model stem `{stem}` matches no known embed family — sending RAW \
+             text, with no instruction prefix and no EOS. If this endpoint serves an \
+             instruction-aware embedder, its vectors will not match a corpus built with one."
+        ),
+    }
 
     Ok(HostProfile {
         base_url: base,
@@ -421,6 +602,7 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
         embed_model,
         embed_dims,
         kind,
+        embed_quirks: embed_quirks.map(|(f, q)| (f.to_string(), q)),
         // `probe` alone knows nothing about a ladder; `discover_and_probe`
         // fills this in. Empty means "this endpoint was handed to us", which
         // is exactly what `corpus_list` should say about it.

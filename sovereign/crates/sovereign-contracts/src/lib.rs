@@ -28,6 +28,7 @@ pub mod engine_config;
 // build gate. `sovereign_core::egress` re-exports it — one boundary, two
 // paths to it.
 pub mod egress;
+pub mod embed_quirks;
 pub mod error;
 pub mod frame;
 pub mod health;

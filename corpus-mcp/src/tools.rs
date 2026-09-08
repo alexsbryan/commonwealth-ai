@@ -320,6 +320,18 @@ impl Server {
                 })
             })
             .collect();
+        let family_text = match &self.profile.embed_quirks {
+            Some((family, _)) => format!(
+                "\n\nembed family `{family}` — queries and documents are prepared the way \
+                 this model's corpora were built"
+            ),
+            None => format!(
+                "\n\nembed family: NONE matched for model `{}` — raw text is sent, with no \
+                 instruction prefix and no EOS. Vectors here will not match a corpus built \
+                 with an instruction-aware embedder.",
+                self.profile.embed_model
+            ),
+        };
         let probe_text = if probes.is_empty() {
             String::new()
         } else {
@@ -337,7 +349,7 @@ impl Server {
             )
         };
         ToolOutcome {
-            text: format!("{text}{probe_text}"),
+            text: format!("{text}{family_text}{probe_text}"),
             is_error: false,
             structured: Some(json!({
                 "corpora": rows,
@@ -346,6 +358,13 @@ impl Server {
                     "embed_model": self.profile.embed_model,
                     "embedding_dimensions": self.profile.embed_dims,
                     "kind": self.profile.kind.label(),
+                    // WHICH embed family was recognised, or `null` for none.
+                    // A caller comparing this host's vectors against a corpus
+                    // built elsewhere needs to know whether an instruction
+                    // prefix was applied, and `null` here is the honest
+                    // "raw text, no family matched" (ARCH §18.3) rather than
+                    // an absence it has to infer.
+                    "embed_family": self.profile.embed_quirks.as_ref().map(|(f, _)| f.as_str()),
                     "discovery": probes,
                 }
             })),

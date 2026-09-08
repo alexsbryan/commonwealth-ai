@@ -17,6 +17,8 @@
 //! Qwen-built snapshot is useless to a node running Jina, and silent
 //! restore would poison the vector index.
 
+use sovereign_contracts::embed_quirks::EmbedQuirks;
+
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -72,8 +74,28 @@ pub const SNAPSHOT_ENRICHMENT_PREFIX: &str = "enrichment";
 pub enum EmbeddingCompat {
     /// Model name AND dimensions match the local model.
     Exact,
-    /// Dimensions match, model name differs — verify the space by probe.
+    /// Dimensions match, model name differs, and the manifest's declared
+    /// embedder config AGREES with the local one — verify the space by probe.
     NameMismatch,
+    /// Dimensions match, model name differs, and the manifest declares no
+    /// embedder config at all — so the only evidence available is the probe.
+    ///
+    /// Every snapshot published before 2026-09-07 is this. Named rather than
+    /// folded into [`NameMismatch`] because the two differ in what a FAILING
+    /// probe then means: with a declared config that matched, a failure is a
+    /// genuine surprise; with no declared config it is the expected outcome
+    /// for a snapshot built by an older stack, and the person deserves to be
+    /// told which of those they are looking at (ARCH §18.3).
+    ConfigUnknown,
+    /// Dimensions match but the manifest's declared embedder config DIFFERS
+    /// from the local one — pooling, normalization, an instruction, or the
+    /// EOS marker. Never usable, and refusable without downloading a byte.
+    ///
+    /// This is the verdict that would have answered `sep` in 2026-04 instead
+    /// of the 0.6822 cosine that took a 93-minute run to produce: sep is
+    /// mean-pooled, the stack is last-pooled, and a declared config would have
+    /// said so at the manifest (note 500f1229).
+    ConfigMismatch,
     /// Dimensions differ — vectors are not comparable; never usable.
     DimsMismatch,
 }
@@ -158,6 +180,20 @@ pub struct SnapshotManifest {
     /// load-bearing for query-time multi-corpus retrieval).
     #[serde(default)]
     pub bundled_corpora: Vec<String>,
+
+    /// The embedder configuration these vectors were produced under —
+    /// pooling, normalization, both instructions verbatim, and the EOS marker.
+    ///
+    /// `None` means the publisher did not declare one (every snapshot
+    /// published before 2026-09-07), and the restorer falls through to the
+    /// cosine probe with [`EmbeddingCompat::ConfigUnknown`] rather than
+    /// guessing. A model NAME is not the embedding space: `sep` and
+    /// `wessex-hoard` were both built by `Qwen3-Embedding-0.6B-Q8_0` and are
+    /// 0.66 apart, because one was pooled `Mean` and the other `Last` (note
+    /// 500f1229). This field is what makes that difference visible before a
+    /// gigabyte moves.
+    #[serde(default)]
+    pub embed_quirks: Option<EmbedQuirks>,
 }
 
 impl SnapshotManifest {
@@ -193,7 +229,18 @@ impl SnapshotManifest {
             archive_sha256: None,
             notes: None,
             bundled_corpora: Vec::new(),
+            embed_quirks: None,
         }
+    }
+
+    /// Declare the embedder configuration these vectors were produced under.
+    ///
+    /// The publisher's door to [`SnapshotManifest::embed_quirks`]. A manifest
+    /// without it is not wrong — it is a snapshot whose space can only be
+    /// checked by probe, which is what every published snapshot is today.
+    pub fn with_embed_quirks(mut self, quirks: EmbedQuirks) -> Self {
+        self.embed_quirks = Some(quirks);
+        self
     }
 
     /// Serialise to pretty JSON suitable for writing into a tar entry.
@@ -224,13 +271,28 @@ impl SnapshotManifest {
         &self,
         local_model: &str,
         local_dimensions: usize,
+        local_quirks: Option<&EmbedQuirks>,
     ) -> EmbeddingCompat {
         if self.embedding_dimensions != local_dimensions {
-            EmbeddingCompat::DimsMismatch
-        } else if self.embedding_model == local_model {
+            return EmbeddingCompat::DimsMismatch;
+        }
+        // Config outranks the name in BOTH directions. A declared config that
+        // differs is a refusal even when the names match — the same model file
+        // under a different pooling is a different space, which is the whole
+        // lesson of `sep` — and a declared config that agrees is what lets a
+        // name-only difference stay a probe rather than a rejection.
+        match (self.embed_quirks.as_ref(), local_quirks) {
+            (Some(declared), Some(local)) if declared != local => {
+                return EmbeddingCompat::ConfigMismatch
+            }
+            _ => {}
+        }
+        if self.embedding_model == local_model {
             EmbeddingCompat::Exact
-        } else {
+        } else if self.embed_quirks.is_some() && local_quirks.is_some() {
             EmbeddingCompat::NameMismatch
+        } else {
+            EmbeddingCompat::ConfigUnknown
         }
     }
 }
@@ -358,6 +420,15 @@ pub struct PublishOptions {
     /// `manifest.bundled_corpora`. Empty for the common single-corpus
     /// case.
     pub sibling_index_dirs: Vec<(String, PathBuf)>,
+    /// The embedder configuration these vectors were produced under, recorded
+    /// into [`SnapshotManifest::embed_quirks`].
+    ///
+    /// `None` publishes a manifest a restorer can only check by probe. The
+    /// publisher is the ONLY party that knows this — the archive is bytes and
+    /// the index meta carries a model NAME, which is not the space (`sep` and
+    /// `wessex-hoard` share a name and sit 0.66 apart; note 500f1229) — so
+    /// leaving it `None` is a real, if legal, loss of information.
+    pub embed_quirks: Option<EmbedQuirks>,
 }
 
 /// Result of a successful publish.
@@ -432,6 +503,19 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     manifest.source_recipe_sha256 = opts.source_recipe_sha256.clone();
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
+    manifest.embed_quirks = opts.embed_quirks.clone();
+    match &opts.embed_quirks {
+        Some(q) => tracing::debug!(
+            pooling = ?q.pooling,
+            normalize = ?q.normalize,
+            eos = ?q.eos_token,
+            "snapshot: recording the embedder config this archive was built with"
+        ),
+        None => tracing::warn!(
+            "snapshot: publishing with NO embedder config declared — a restorer will \
+             have only the cosine probe to judge this archive's embedding space by"
+        ),
+    }
     // Bundlable siblings = atlas-only (no chunks.lance). A prefix match that
     // carries its own Lance dataset (a `<prefix>-partition-node-*` mesh shard,
     // or a full corpus sharing the prefix) can't be captured by sibling
@@ -1075,12 +1159,76 @@ mod tests {
     #[test]
     fn embedding_compatibility_flags_model_name_mismatch() {
         let m = sample_manifest();
-        // Same dims (1024), different name → NameMismatch: verify by probe,
-        // do NOT reject on the label alone.
+        // Same dims (1024), different name, and this manifest declares no
+        // embedder config → ConfigUnknown: verify by probe, do NOT reject on
+        // the label alone, and say that the probe is the only evidence there
+        // is.
         assert_eq!(
-            m.check_embedding_compatibility("jina-v2-en", 1024),
+            m.check_embedding_compatibility("jina-v2-en", 1024, None),
+            EmbeddingCompat::ConfigUnknown
+        );
+    }
+
+    /// A DECLARED config that differs is a refusal before a byte moves —
+    /// even when the model name matches exactly. This is the `sep` case:
+    /// same model file, `Mean` pooling against a `Last`-pooled stack, 0.66
+    /// cosine apart (note 500f1229). Today it costs a download, an extract
+    /// and a 16-chunk probe to learn that.
+    #[test]
+    fn embedding_compatibility_refuses_a_declared_config_mismatch() {
+        let mut mean_pooled = EmbedQuirks::qwen3_embedding();
+        mean_pooled.pooling = sovereign_contracts::oicp::PoolingStrategy::Mean;
+        let m = sample_manifest().with_embed_quirks(mean_pooled);
+        let local = EmbedQuirks::qwen3_embedding();
+        assert_eq!(
+            m.check_embedding_compatibility("qwen3-embedding-0.6b", 1024, Some(&local)),
+            EmbeddingCompat::ConfigMismatch,
+            "a name-identical, mean-pooled snapshot must be refused on the config"
+        );
+    }
+
+    /// Two declared configs that agree leave a name difference exactly where
+    /// it was: a probe, not a rejection.
+    #[test]
+    fn embedding_compatibility_keeps_a_name_difference_probeable_when_configs_agree() {
+        let local = EmbedQuirks::qwen3_embedding();
+        let m = sample_manifest().with_embed_quirks(local.clone());
+        assert_eq!(
+            m.check_embedding_compatibility("qwen-embedding-0.6b", 1024, Some(&local)),
             EmbeddingCompat::NameMismatch
         );
+    }
+
+    /// A local config the manifest cannot be compared against is still
+    /// ConfigUnknown — the absence is the manifest's, and it is reported as
+    /// such rather than being read as agreement (ARCH §18.3).
+    #[test]
+    fn embedding_compatibility_reports_an_undeclared_config_as_unknown() {
+        let local = EmbedQuirks::qwen3_embedding();
+        let m = sample_manifest();
+        assert_eq!(
+            m.check_embedding_compatibility("qwen-embedding-0.6b", 1024, Some(&local)),
+            EmbeddingCompat::ConfigUnknown
+        );
+    }
+
+    #[test]
+    fn manifest_roundtrip_preserves_the_embedder_config() {
+        let m = sample_manifest().with_embed_quirks(EmbedQuirks::qwen3_embedding());
+        let parsed =
+            SnapshotManifest::from_json_bytes(m.to_json_pretty().unwrap().as_bytes()).unwrap();
+        assert_eq!(parsed.embed_quirks, Some(EmbedQuirks::qwen3_embedding()));
+    }
+
+    /// Every snapshot published before 2026-09-07 has no `embed_quirks` key
+    /// at all. It must still parse.
+    #[test]
+    fn manifest_without_an_embedder_config_still_parses() {
+        let m = sample_manifest();
+        let mut v: serde_json::Value = serde_json::from_str(&m.to_json_pretty().unwrap()).unwrap();
+        v.as_object_mut().unwrap().remove("embed_quirks");
+        let parsed = SnapshotManifest::from_json_bytes(v.to_string().as_bytes()).unwrap();
+        assert_eq!(parsed.embed_quirks, None);
     }
 
     #[test]
@@ -1088,7 +1236,7 @@ mod tests {
         let m = sample_manifest();
         // Different dims → DimsMismatch: the hard floor, never usable.
         assert_eq!(
-            m.check_embedding_compatibility("qwen3-embedding-0.6b", 768),
+            m.check_embedding_compatibility("qwen3-embedding-0.6b", 768, None),
             EmbeddingCompat::DimsMismatch
         );
     }
@@ -1097,7 +1245,7 @@ mod tests {
     fn embedding_compatibility_accepts_exact_match() {
         let m = sample_manifest();
         assert_eq!(
-            m.check_embedding_compatibility("qwen3-embedding-0.6b", 1024),
+            m.check_embedding_compatibility("qwen3-embedding-0.6b", 1024, None),
             EmbeddingCompat::Exact
         );
     }
@@ -1146,6 +1294,67 @@ mod tests {
         std::fs::write(root.join("cache/_tokens.json"), b"{}").unwrap();
     }
 
+    /// The publisher's declaration survives into the archive, and a restorer
+    /// with a DIFFERENT config refuses it from the manifest alone — no
+    /// download of the vectors, no probe. This is the producer that gives
+    /// `EmbeddingCompat::ConfigMismatch` something to fire on; without it the
+    /// verdict is a gate with no input that can make it fail (ARCH §18.1).
+    #[tokio::test]
+    async fn published_manifest_carries_the_embedder_config_and_a_mismatch_is_refusable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let index_dir = tmp.path().join("indexes/wikitest");
+        let output_path = tmp.path().join("out.tar.zst");
+        write_fake_index_dir(&index_dir, "wikitest", "qwen3-embedding-0.6b", 1024);
+
+        // Publish as a MEAN-pooled corpus — `sep`'s real situation.
+        let mut published_with = EmbedQuirks::qwen3_embedding();
+        published_with.pooling = sovereign_contracts::oicp::PoolingStrategy::Mean;
+
+        let outcome = publish_snapshot(PublishOptions {
+            index_dir,
+            enrichment_dir: None,
+            output_path: output_path.clone(),
+            snapshot_id: "wikitest-2026-09-07".into(),
+            chunk_count: 42,
+            residual_gap_pct: None,
+            notes: None,
+            source_recipe_sha256: None,
+            producer_version: "sovereign-cli/test".into(),
+            zstd_level: 3,
+            sibling_index_dirs: Vec::new(),
+            embed_quirks: Some(published_with.clone()),
+        })
+        .await
+        .unwrap();
+
+        let read_back = read_manifest_from_archive(&output_path).unwrap();
+        assert_eq!(
+            read_back.embed_quirks.as_ref(),
+            Some(&published_with),
+            "the config the publisher declared must survive into the archive"
+        );
+        assert_eq!(
+            outcome.manifest.embed_quirks.as_ref(),
+            Some(&published_with)
+        );
+
+        // A last-pooled restorer refuses it on the manifest, by name.
+        let local = EmbedQuirks::qwen3_embedding();
+        assert_eq!(
+            read_back.check_embedding_compatibility("qwen3-embedding-0.6b", 1024, Some(&local)),
+            EmbeddingCompat::ConfigMismatch
+        );
+        // ... and the same restorer accepts its own configuration.
+        assert_eq!(
+            read_back.check_embedding_compatibility(
+                "qwen3-embedding-0.6b",
+                1024,
+                Some(&published_with)
+            ),
+            EmbeddingCompat::Exact
+        );
+    }
+
     #[tokio::test]
     async fn publish_roundtrip_includes_manifest_and_index_subtree() {
         let tmp = tempfile::tempdir().unwrap();
@@ -1167,6 +1376,7 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
             sibling_index_dirs: Vec::new(),
+            embed_quirks: None,
         })
         .await
         .unwrap();
@@ -1220,6 +1430,7 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
             sibling_index_dirs: Vec::new(),
+            embed_quirks: None,
         })
         .await
         .unwrap();
@@ -1262,6 +1473,7 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
             sibling_index_dirs: Vec::new(),
+            embed_quirks: None,
         })
         .await
         .unwrap();
@@ -1289,6 +1501,7 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
             sibling_index_dirs: Vec::new(),
+            embed_quirks: None,
         })
         .await
         .unwrap();
@@ -1349,6 +1562,7 @@ mod tests {
                 ("sep-aristotle".to_string(), sibling_a),
                 ("sep-descartes".to_string(), sibling_b),
             ],
+            embed_quirks: None,
         })
         .await
         .unwrap();
@@ -1368,6 +1582,7 @@ mod tests {
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             1024,
+            None,
         )
         .unwrap();
         assert_eq!(result.manifest.bundled_corpora.len(), 2);
@@ -1421,6 +1636,7 @@ mod tests {
                 ("parent-article".into(), atlas_sibling),
                 ("parent-shard".into(), lance_sibling),
             ],
+            embed_quirks: None,
         })
         .await
         .expect("publish must succeed, skipping the lance-bearing sibling");
@@ -1440,6 +1656,7 @@ mod tests {
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             1024,
+            None,
         )
         .unwrap();
         assert!(restore_tmp
@@ -1462,6 +1679,7 @@ mod tests {
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             1024,
+            None,
         )
         .unwrap();
 
@@ -1492,6 +1710,7 @@ mod tests {
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             1024,
+            None,
         )
         .unwrap();
 
@@ -1541,6 +1760,7 @@ mod tests {
             Some("0000000000000000000000000000000000000000000000000000000000000000"),
             "qwen3-embedding-0.6b",
             1024,
+            None,
         )
         .unwrap_err();
         assert!(err.to_string().contains("sha256 mismatch"));
@@ -1565,9 +1785,10 @@ mod tests {
             Some(&outcome.archive_sha256),
             "jina-v2-en",
             1024,
+            None,
         )
         .expect("name-only mismatch must not refuse restore");
-        assert_eq!(restored.embedding_compat, EmbeddingCompat::NameMismatch);
+        assert_eq!(restored.embedding_compat, EmbeddingCompat::ConfigUnknown);
         // Extraction proceeded — the index is on disk for the probe.
         assert!(restore_tmp.path().join("indexes/wikitest").exists());
     }
@@ -1587,6 +1808,7 @@ mod tests {
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             768,
+            None,
         )
         .unwrap_err();
         let msg = err.to_string();
