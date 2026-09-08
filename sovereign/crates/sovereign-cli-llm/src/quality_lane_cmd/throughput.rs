@@ -19,7 +19,7 @@
 //!
 //! | row | kind | what a failure means |
 //! |---|---|---|
-//! | probe:`<arm>` | HARD when the bank declares bars for the running stem | the slot got slower than a number written down before the run |
+//! | probe:`<arm>` | TRACKED | the slot's TTFT / decode / prefill against the bank's pre-registered numbers. Every one is WALL-CLOCK and this host moves 2.8x across its load range, so the row records and does not gate (ARCH §18.2, 2026-09-08). The load it was taken at is on the row in `summary.json` |
 //! | probe:`<arm>` | TRACKED when the bank says `bars_deferred` | recorded; the operator has not set this arm's numbers |
 //! | prompt size:`<arm>` | HARD | the long arm's prompt no longer costs the tokens the bank declared — the tokenizer moved, so the arm is not the arm the baseline was captured against |
 //! | greedy fidelity | TRACKED | temperature-0 decode stopped being reproducible across trials |
@@ -82,7 +82,10 @@ struct ThroughputArm {
     trials: usize,
     warmup: usize,
     max_tokens: u32,
-    /// `bars[<model stem>]` — a HARD table for that stem, or nothing.
+    /// `bars[<model stem>]` — the pre-registered numbers for that stem, or
+    /// nothing. TRACKED since 2026-09-08: every one is wall-clock (ARCH
+    /// §18.2). A stem with no table is still could-not-judge — running a
+    /// different model is not evidence about this one.
     bars: toml::value::Table,
     /// Declared by an operator: this arm records and does not gate.
     bars_deferred: bool,
@@ -405,10 +408,47 @@ fn arm_row(report: &mut LaneReport, arm: &ThroughputArm, stem: Option<&str>, p: 
             } else if blown.is_empty() {
                 report.passed(
                     &subject,
-                    format!("within the bars for `{}` — {numbers}", stem.unwrap_or("?")),
+                    format!(
+                        "TRACKED — within the bars for `{}`; {numbers}",
+                        stem.unwrap_or("?")
+                    ),
                 );
             } else {
-                report.failed(&subject, format!("{} — {numbers}", blown.join("; ")));
+                // TRACKED, not failed. Every bar on this row is wall-clock,
+                // and this host's decode moves 2.8x across its load range
+                // (50.7 tok/s at load 3.7 against 17.8 at load 32, note
+                // `d596639c`) — so the bar fires on the machine as readily
+                // as on a regression, and a red here does not mean the code
+                // got worse.
+                //
+                // Demoted 2026-09-08 with the `host-quiet` precondition that
+                // used to stand in front of this lane (ARCH §18.2). The
+                // guard and the bar were two halves of one mistake: the
+                // guard converted every contended run into could-not-judge,
+                // and deleting only the guard would have converted them into
+                // FAILURES instead. The plan was to normalise these against a
+                // same-run throughput divisor; that was NOT MEASURED (the
+                // daemon held no model plan, so `slot-decodes` was unmet for
+                // 82 consecutive probes across a 25.1-to-6.2 load range) and
+                // an unvalidated normaliser is not shipped on a prediction
+                // (§18.5). So the numbers are
+                // recorded with the load they were taken at, and the lane
+                // says plainly that it cannot verdict latency here rather
+                // than pretending to by refusing to answer.
+                //
+                // What still gates on this lane: `prompt size:<arm>` (a
+                // token count, load-invariant) and `e2e` (a turn that
+                // errored or came back empty).
+                report.passed(
+                    &subject,
+                    format!(
+                        "TRACKED, does not gate — OVER the bars for `{}`: {}; {numbers}. \
+                         Wall-clock on a shared host: read the load recorded on this row in \
+                         summary.json before reading this as a regression",
+                        stem.unwrap_or("?"),
+                        blown.join("; ")
+                    ),
+                );
             }
         }
     }
@@ -879,8 +919,19 @@ mod tests {
         ));
     }
 
+    /// A blown wall-clock bar is TRACKED, not failed — and the row still
+    /// SAYS it was over, so the number is not lost.
+    ///
+    /// Changed 2026-09-08 with the `host-quiet` deletion (ARCH §18.2). This
+    /// asserted `Failed` on the middle row, and that verdict is the other
+    /// half of the same mistake: the deleted guard turned every contended
+    /// run into could-not-judge, and removing the guard alone would have
+    /// turned them into failures. 12 tok/s against a 40 tok/s bar is what
+    /// this host does at load 32 with no code change at all. An unknown stem
+    /// is STILL could-not-judge — running a different model is not evidence
+    /// about this one.
     #[test]
-    fn an_unknown_stem_is_could_not_judge_and_a_blown_bar_is_a_failure() {
+    fn a_blown_wall_clock_bar_is_tracked_and_an_unknown_stem_is_could_not_judge() {
         let b = parse_bank(&bank_text()).unwrap();
         let short = b.arms.iter().find(|a| a.id == "primary/short").unwrap();
         let fine = ProbeResult {
@@ -906,10 +957,16 @@ mod tests {
             verdicts,
             vec![
                 kernel_types::Verdict::Passed,
-                kernel_types::Verdict::Failed,
+                kernel_types::Verdict::Passed,
                 kernel_types::Verdict::CouldNotJudge,
             ]
         );
+        // Tracked is not silent. The over-bar row names both numbers, or
+        // demoting it would have deleted the signal rather than moved it.
+        let over = r.rows_for_test()[1].reason().as_str().to_string();
+        assert!(over.contains("TRACKED"), "{over}");
+        assert!(over.contains("12.0 tok/s < 40.0"), "{over}");
+        assert!(over.contains("9000 ms > 1000"), "{over}");
     }
 
     /// A bar whose metric the probe could not compute was NOT met — it was

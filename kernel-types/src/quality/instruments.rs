@@ -212,18 +212,40 @@ pub enum Fidelity {
     F5,
 }
 
-/// What must be true before an instrument can judge anything. The four wire
-/// spellings are `quality/check-lanes.toml`'s
-/// (`quality_check_cmd::Precondition`); `container:` and `host-quiet` are
-/// declared here FIRST because the shell harnesses need them and the lane
-/// runner does not yet have them. Phase 1 merges the two tables and the
-/// superset becomes the one closed set (ARCH §10.6 — stated here so the
-/// duplication is a scheduled merge rather than a discovery).
+/// What must be true before an instrument can judge anything.
 ///
-/// No `Eq`/`Ord`: the load bound is an `f64`, and a total order over a type
-/// holding a float would be a lie. Preconditions are declared in the order the
-/// author wrote them and rendered that way.
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+/// **Every member asserts that the SUBJECT of the measurement exists. None of
+/// them asserts that the WORLD is convenient** — ARCH §18.2's rule, and the
+/// closed set is closed on it. `port-listening`, `slot-decodes`,
+/// `corpus-installed`, `binary` and `container` each say "the thing under
+/// test is not here": cheap to probe, rare in practice, and a true
+/// `never-ran`.
+///
+/// A sixth spelling, `host-quiet:<max 1-min load>`, was here from the
+/// `check-lanes.toml` merge until 2026-09-08 and is **deleted, not retuned**.
+/// It said "the machine is busy", which is unfalsifiable, fired constantly,
+/// and converted a measurement problem into a standing excuse: on the host
+/// that runs the check its bound of 4 was unmet most of the time, so every
+/// wall-clock row emitted could-not-judge naming the load and three
+/// consecutive runs learned nothing. Nobody ever derived the 4 — what was
+/// measured is a SPREAD, 50.7 tok/s at load 3.7 against 17.8 tok/s at load 32
+/// on this host (note `d596639c`), and a spread says load matters, not where
+/// the line is. Sharper: in one `chat-ask` run at load 4.27-4.32 the same row
+/// reported `failed` on q1 and `could-not-judge` on q2, because the threshold
+/// is evaluated per question and the load crossed 4.0 between them.
+///
+/// That evidence is still true and the conclusion changed. Load is now
+/// RECORDED on every summary row as a covariate
+/// (`quality_check_cmd::exec::InstrumentRun::load_start`/`load_end`,
+/// `sovereign_cli_shared::host_load::load_average_1m`) and gates nothing:
+/// when the world is inconvenient, change what you measure rather than
+/// waiting for a world you do not have. Re-adding a world-shaped precondition
+/// here needs the same evidence any bar needs — a derivation and a run that
+/// demanded it.
+///
+/// Preconditions are declared in the order the author wrote them and rendered
+/// that way.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precondition {
     PortListening(u16),
     SlotDecodes(String),
@@ -231,42 +253,6 @@ pub enum Precondition {
     Binary(String),
     /// A toolbox/container the command must run inside.
     Container(String),
-    /// The host's 1-minute load average is at or under this bound.
-    ///
-    /// The ARGUMENT is not decoration. A latency bar measured on a contended
-    /// box is could-not-judge, never failed, and the bound has to be per-lane:
-    /// the same binary and bank produced 50.7 tok/s at load 3.7 and 17.8 at
-    /// load 32 on this host (note d596639c).
-    ///
-    /// **THIS ONE IS A MITIGATION AND IT IS ON ITS WAY OUT.** ARCH §18.2, as
-    /// amended: a precondition may assert that the SUBJECT of the measurement
-    /// exists; it may not assert that the WORLD is convenient. The four above
-    /// are the legitimate kind — they say the thing under test is not here.
-    /// This one says the machine is busy, and on the authoring host it is
-    /// unmet most of the time, so the five rows carrying `host-quiet:4` emit
-    /// could-not-judge instead of a verdict. Nobody derived the 4. The
-    /// replacement is to record load as a covariate on every row and make the
-    /// comparison a same-run ratio against a reference, so the number is
-    /// load-independent and no abstention is needed; that is the
-    /// `in-situ-baselines` order's work, and it needed this merged table to
-    /// exist first. Until then: carried through the merge VERBATIM on exactly
-    /// the rows that already had it, and added to nothing.
-    ///
-    /// WHAT IT DOES NOT CHECK, said here rather than discovered later. The
-    /// question it stands in for is "is another decode in flight on the
-    /// daemon", and this host serves no such field: `/status` carries
-    /// `inference.resident[]` and `process.rss_mb`, and there is no queue- or
-    /// slot-depth route on it (checked 2026-09-05 against the full route
-    /// list). Reading load alone is therefore a NAMED substitution, not a
-    /// silent one (ARCH §18.3) — a second decode driven by a peer session
-    /// raises this host's load average, so the instrument is correlated but
-    /// not equivalent, and a decode arriving from a mesh peer with no local
-    /// CPU cost would not be seen at all.
-    ///
-    /// Wire form and semantics are the runner's
-    /// (`quality_check_cmd::exec::check_precondition`); this schema follows it
-    /// rather than inventing a bare spelling beside it (ARCH §10.6).
-    HostQuiet(f64),
 }
 
 /// What an instrument compares against, and in what currency.
@@ -825,7 +811,7 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
 const KIND_WORDS: &str = "gate|suite|bench|probe|control|check";
 const ENFORCEMENT_WORDS: &str = "hard|advisory|tracked";
 const PRECONDITION_WORDS: &str = "port-listening:<port>, slot-decodes:<slot>, \
-     corpus-installed:<id>, binary:<name>, container:<name>, host-quiet";
+     corpus-installed:<id>, binary:<name>, container:<name>";
 const CLAIM_WORDS: &str = "invariant|judged";
 const VERDICT_WORDS: &str = "exit-code|judgement-line";
 const RUNS_IN_WORDS: &str = "prepush, precommit, ci:<job>, weekly:<job>, smoke:<phase>, \
@@ -1075,15 +1061,11 @@ impl Precondition {
             "corpus-installed" => Precondition::CorpusInstalled(arg.to_string()),
             "binary" => Precondition::Binary(arg.to_string()),
             "container" => Precondition::Container(arg.to_string()),
-            // Same refusal the runner makes: a non-positive or non-finite
-            // bound is not a load ceiling.
-            "host-quiet" => {
-                let max: f64 = arg.parse().ok()?;
-                if !(max.is_finite() && max > 0.0) {
-                    return None;
-                }
-                Precondition::HostQuiet(max)
-            }
+            // `host-quiet:<load>` parsed here until 2026-09-08 and is now
+            // REFUSED like any other unknown spelling — see the enum's doc.
+            // A retired precondition that still parses is the silent
+            // substitution (ARCH §18.3): the declaration would keep reading
+            // as a live guard while gating nothing.
             _ => return None,
         })
     }
@@ -1095,7 +1077,6 @@ impl Precondition {
             Precondition::CorpusInstalled(s) => format!("corpus-installed:{s}"),
             Precondition::Binary(s) => format!("binary:{s}"),
             Precondition::Container(s) => format!("container:{s}"),
-            Precondition::HostQuiet(max) => format!("host-quiet:{max}"),
         }
     }
 }
@@ -1541,13 +1522,19 @@ fidelity = "F7"
             "corpus-installed:sep",
             "binary:cargo-hack",
             "container:sovereign-vulkan",
-            "host-quiet:4",
         ] {
             assert_eq!(
                 Precondition::parse(s).map(|p| p.label()),
                 Some(s.to_string()),
                 "{s}"
             );
+        }
+        // Retired 2026-09-08 and REFUSED, not quietly accepted. A registry
+        // that still parses `host-quiet:4` would let a declaration read as a
+        // live guard while gating nothing (ARCH §18.3); a refusal names the
+        // row and the file at load time.
+        for s in ["host-quiet:4", "host-quiet:0.5", "host-quiet:nonsense"] {
+            assert_eq!(Precondition::parse(s), None, "{s}");
         }
         for s in [
             "prepush",

@@ -118,14 +118,21 @@
 #                      F0 unit · F1 mocked backend · F2 real binary + fixture
 #                      daemon · F3 real daemon + models · F4 supervised child ·
 #                      F5 the packaged boot chain
-#   preconditions    optional; a CLOSED set. Four spellings are
-#                    `quality/check-lanes.toml`'s, argument included:
+#   preconditions    optional; a CLOSED set, argument included:
 #                    `port-listening:<port>`, `slot-decodes:<slot>`,
 #                    `corpus-installed:<id>`, `binary:<name>`,
-#                    `host-quiet:<max 1-min load>`, `container:<name>`. THE
-#                    MERGE LANDED 2026-09-07: this superset is the one closed
-#                    set, `kernel_types::quality::Precondition`, and both the
-#                    lane runner and the shell harnesses read it (ARCH §10.6)
+#                    `container:<name>`. One set,
+#                    `kernel_types::quality::Precondition`, read by both the
+#                    lane runner and the shell harnesses (ARCH §10.6).
+#                    EVERY ONE ASSERTS THE SUBJECT EXISTS — none asserts that
+#                    the world is convenient (ARCH §18.2). A sixth spelling
+#                    bounding the 1-minute load average was here until
+#                    2026-09-08 and is deleted, not retuned — it fired on most
+#                    runs of the host that runs the check, so wall-clock rows
+#                    abstained instead of judging. Load is now recorded per row
+#                    in `summary.json` as a covariate and gates nothing. The
+#                    evidence and the rule are on
+#                    `kernel_types::quality::Precondition`
 #   baseline         { kind = "count" | "metrics" | "fingerprint" | "none",
 #                    path = "..." } (required; `none` carries no path).
 #                    `fingerprint` is `check-lanes.toml`'s `baseline_dir`:
@@ -1078,7 +1085,7 @@ command = "scripts/desktop-smoke.sh"
 cost_secs = 14400.0
 enforcement = "hard"
 fidelity = "F5"
-preconditions = ["host-quiet:4", "binary:sovereign-desktop", "binary:timeout"]
+preconditions = ["binary:sovereign-desktop", "binary:timeout"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
@@ -1124,7 +1131,7 @@ command = "scripts/mtp-probe.sh --n 5 --max-tokens 200"
 cost_secs = 180.0
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet:4"]
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
@@ -1283,7 +1290,6 @@ command = "scripts/daemon-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
@@ -1329,7 +1335,7 @@ command = "scripts/mesh-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["binary:podman", "host-quiet:4"]
+preconditions = ["binary:podman"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["weekly:soak", "by-hand"]
@@ -1389,7 +1395,7 @@ command = "scripts/throughput_probe.py"
 cost_secs = 400.0
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet:4"]
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "metrics", path = "sovereign/bench" }
 negative_control = "none"
 runs_in = ["smoke:1"]
@@ -1545,12 +1551,12 @@ negative_control = "none"
 runs_in = ["check"]
 doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
 
-# EVERY row of this lane is wall-clock (TTFT, decode tok/s), so the whole lane
-# is could-not-judge on a contended host rather than failed. Run 1 measured
-# 17.8 tok/s against a 50 tok/s bar at load 32 and called it a FAILURE; the bar
-# was fine and the machine was busy (note d596639c). chat-ask declares the same
-# rule at ROW level, in its own bank, because only one of its seventeen rows is
-# wall-clock.
+# EVERY row of this lane is wall-clock (TTFT, decode tok/s), and this host
+# moves 2.8x under load — 50.7 tok/s at load 3.7 against 17.8 at load 32 (note
+# d596639c). The lane carried a 1-minute-load precondition for that reason
+# until 2026-09-08 and no longer does: the guard fired on most runs here, so
+# the numbers were never judged at all. Load is recorded on every row of
+# `summary.json` instead, as a covariate that gates nothing.
 [[instrument]]
 id = "throughput"
 kind = "bench"
@@ -1567,7 +1573,6 @@ preconditions = [
   "slot-decodes:primary",
   "slot-decodes:fast",
   "binary:python3",
-  "host-quiet:4",
 ]
 baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/throughput" }
 bank = "sovereign/bench/quality-check/throughput.toml"

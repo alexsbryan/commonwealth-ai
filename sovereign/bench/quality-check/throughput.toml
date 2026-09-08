@@ -9,10 +9,22 @@
 # whole repo it has never compared anything to anything (ARCH §19: the
 # instrument existed, the comparison did not).
 #
-# Every number below is PRE-REGISTERED. The two HARD bars are the order's,
-# from a measured 430 ms / 50.0 tok/s on the primary slot; every other arm is
-# TRACKED with `bars_deferred`, which is a DECLARED absence and not the same
-# thing as a missing bar table (see `bars_deferred` below).
+# Every number below is PRE-REGISTERED. The two bars on `primary/short` are
+# the order's, from a measured 430 ms / 50.0 tok/s on the primary slot; every
+# other arm carries `bars_deferred`, which is a DECLARED absence and not the
+# same thing as a missing bar table (see `bars_deferred` below).
+#
+# **NO BAR ON THIS LANE GATES SINCE 2026-09-08.** Every one of them is
+# wall-clock and this host's decode moves 2.8x across its load range (50.7
+# tok/s at load 3.7 against 17.8 at load 32, note d596639c), so a bar fires on
+# the machine as readily as on a regression. They are still declared, still
+# measured and still REPORTED when they are exceeded — the row says `TRACKED
+# ... OVER the bars` and names both numbers — and the load the reading was
+# taken at is on the row in `summary.json`. What gates on this lane is
+# load-invariant: `prompt size:<arm>` (a token count) and `e2e` (a turn that
+# errored or came back empty). ARCH §18.2; the same commit deleted the
+# `host-quiet` precondition that used to stand in front of the lane, because
+# the guard and the bar were two halves of one mistake.
 
 schema_version = 1
 

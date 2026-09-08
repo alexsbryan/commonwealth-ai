@@ -58,8 +58,8 @@ mod report;
 mod select;
 
 use exec::{
-    check_precondition, describe_precondition, finish, resolve_program, spawn_instrument, InFlight,
-    InstrumentRun,
+    check_precondition, describe_precondition, finish, resolve_program, spawn_instrument,
+    Covariates, InFlight, InstrumentRun,
 };
 use fingerprint::{compute_fingerprint, Fingerprint};
 use report::{print_selection, report_one, stamp_now, write_summary};
@@ -420,8 +420,8 @@ pub async fn run(args: &[String]) -> i32 {
                 );
                 results.insert(
                     inst.id.clone(),
-                    InstrumentRun {
-                        judgement: Judgement::could_not_judge(
+                    InstrumentRun::did_not_start(
+                        Judgement::could_not_judge(
                             inst.id.clone(),
                             Reason::new(format!(
                                 "out of budget — {remaining}s left of {budget_secs}s, and this \
@@ -430,10 +430,9 @@ pub async fn run(args: &[String]) -> i32 {
                             ))
                             .expect("never a placeholder"),
                         ),
-                        secs: 0,
-                        exit_code: None,
-                        tail: String::new(),
-                    },
+                        0,
+                        Covariates::capture(&base).await,
+                    ),
                 );
                 continue;
             }
@@ -455,16 +454,15 @@ pub async fn run(args: &[String]) -> i32 {
                 );
                 results.insert(
                     inst.id.clone(),
-                    InstrumentRun {
-                        judgement: Judgement::could_not_judge(
+                    InstrumentRun::did_not_start(
+                        Judgement::could_not_judge(
                             inst.id.clone(),
                             Reason::new(format!("precondition unmet: {}", unmet.join("; ")))
                                 .expect("never a placeholder"),
                         ),
-                        secs: 0,
-                        exit_code: None,
-                        tail: String::new(),
-                    },
+                        0,
+                        Covariates::capture(&base).await,
+                    ),
                 );
                 continue;
             }
@@ -486,7 +484,20 @@ pub async fn run(args: &[String]) -> i32 {
                 inst.id,
                 inst.reservation_secs()
             );
-            match spawn_instrument(inst, &argv, &repo, &out_dir, &fingerprint, parsed.mint, cap) {
+            // The covariate snapshot brackets the child, so it is taken as
+            // late as possible before the spawn and as early as possible
+            // after the wait.
+            let before = Covariates::capture(&base).await;
+            match spawn_instrument(
+                inst,
+                &argv,
+                &repo,
+                &out_dir,
+                &fingerprint,
+                parsed.mint,
+                cap,
+                before,
+            ) {
                 Ok(f) => flight.push(f),
                 Err(run) => {
                     report_one(inst, &run);
@@ -531,16 +542,15 @@ pub async fn run(args: &[String]) -> i32 {
                     _ => match f.child.wait() {
                         Ok(s) => s,
                         Err(e) => {
-                            let run = InstrumentRun {
-                                judgement: Judgement::could_not_judge(
+                            let run = InstrumentRun::did_not_start(
+                                Judgement::could_not_judge(
                                     f.inst.id.clone(),
                                     Reason::new(format!("cannot wait on the process: {e}"))
                                         .expect("never a placeholder"),
                                 ),
-                                secs: f.started.elapsed().as_secs(),
-                                exit_code: None,
-                                tail: String::new(),
-                            };
+                                f.started.elapsed().as_secs(),
+                                Covariates::capture(&base).await,
+                            );
                             report_one(f.inst, &run);
                             results.insert(f.inst.id.clone(), run);
                             continue;
@@ -548,7 +558,8 @@ pub async fn run(args: &[String]) -> i32 {
                     },
                 };
                 let inst = f.inst;
-                let run = finish(f, status);
+                let after = Covariates::capture(&base).await;
+                let run = finish(f, status, after);
                 report_one(inst, &run);
                 results.insert(inst.id.clone(), run);
             }

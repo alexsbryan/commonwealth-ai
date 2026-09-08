@@ -1111,11 +1111,44 @@ The rule that follows, for preconditions specifically: **a precondition may
 assert that the SUBJECT of the measurement exists; it may not assert that the
 WORLD is convenient.** `port-listening`, `slot-decodes`, `corpus-installed` and
 `binary` all say "the thing under test is not here" — cheap, rare, and a true
-`never-ran`. `host-quiet` says "conditions are not nice", which is
+`never-ran`. `host-quiet` said "conditions are not nice", which is
 unfalsifiable, fires constantly, and converts a measurement problem into a
 standing excuse. When the world is inconvenient, change what you measure — a
 same-run ratio, a load-invariant counter — rather than waiting for a world you
 do not have.
+
+Executed 2026-09-08. The spelling is gone from
+`kernel_types::quality::Precondition` and its parser REFUSES it, because a
+retired precondition that still parses keeps reading as a live guard while
+gating nothing (§18.3). In its place every `summary.json` row carries
+`load_start`/`load_end` and `daemon_uptime_secs_start`/`_end` — the load as a
+covariate that gates nothing, and the uptime pair because a row that ran
+across a daemon restart is INTERRUPTED, not slow, and without the bracket the
+two are indistinguishable. `chat-ask`'s one fused row became two, `per-stage
+calls` and `per-stage ceilings`, so the load-sensitive half stopped deciding
+the load-invariant half's verdict.
+
+**And the same day's outage is the sharpest case FOR the precondition class
+this section keeps.** The measurement that was to follow could not be taken:
+82 consecutive one-token probes of the primary slot were refused across a
+1-minute load range of 25.1 down to 6.2, and the load range is the point —
+nothing load-shaped explains a refusal that is identical at 25 and at 6. The
+body said `model_not_available`, `/status` said `inference.resident: []`, and
+the cause was a silent no-op: `3c9a41bd8` installed a roster source holding
+`AppState` WEAKLY six lines above an `Arc::get_mut` block, a `Weak` counts as
+a share, so `get_mut` returned `None` and three installers —
+`with_local_inference`, `with_rpc_shard_warmer`, `with_mesh_mutation_hook` —
+all returned without doing anything and without saying so. Config intact,
+twelve models advertised, no plan installed.
+
+`slot-decodes:primary` names that in one line: the subject of the measurement
+is not here. A load-shaped guard would have blamed a busy host, been believed,
+and been wrong at every load. That is the difference between the two classes,
+observed rather than argued.
+
+The lesson that generalises past preconditions: before building a correction
+for a measurement, confirm the measurement is obtainable at all in the
+condition you are correcting for.
 
 ### 18.3 Never silently substitute, and never substitute for absence
 

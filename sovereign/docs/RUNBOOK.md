@@ -141,6 +141,38 @@ Re-minting a baseline (the legitimate path):
    snapshot** so the next box agrees.
 Never `--update-baseline` to silence a red you haven't explained.
 
+Minting does NOT wait for a quiet host, and never did require one after
+2026-09-08. `svrn quality check --mint` mints against whatever the machine is
+and records the conditions: every `summary.json` row carries `load_start` /
+`load_end` and `daemon_uptime_secs_start` / `_end`, and a lane baseline
+carries `host_load_1m`. Read those before you read a wall-clock delta. The
+`host-quiet:4` precondition that used to stand in front of these lanes is
+deleted (ARCH §18.2) — on this host it was unmet most of the time, so it
+produced abstentions rather than protection, and nobody had derived the 4.
+
+Two readings, not one, and they answer different questions:
+
+- **`load_start` vs `load_end`** — a row that began quiet and ended at load 30
+  is a different story from one that was busy throughout.
+- **`daemon_uptime_secs_start` > `daemon_uptime_secs_end`** — the daemon
+  restarted inside that row. That row is not slow, it is INTERRUPTED: the
+  models were evicted and re-loaded under it. Discard it; do not average it in.
+
+And the reading a load number does NOT support: **a 503 is not a busy host.**
+On 2026-09-08 the primary slot refused 82 consecutive one-token probes across
+a 1-minute load range of 25.1 down to 6.2 — identical at both ends, which is
+what rules load out. The body said `model_not_available` and `/status` said
+`inference.resident: []`; the daemon had booted with no model plan installed.
+So when a wall-clock lane is could-not-judge and its log carries 503s, read
+the RESPONSE BODY before reading the load: `model_not_available` /
+`model_not_ready` means the stack is not there (`slot-decodes` unmet, a true
+`never-ran`), and only a body about queueing or wait is about contention.
+
+While you are there: `/status`'s `inference.resident` does not describe what
+the daemon is holding. The same run showed a process holding ~42 GB WIRED with
+residency reporting `[]`, and a freshly booted one at 22.7 GB RSS with the
+same empty list. Do not gate on that field.
+
 ## 7. Retrieval pipeline knobs
 
 Generated reference: [`retrieval-pipeline.md`](./retrieval-pipeline.md) —

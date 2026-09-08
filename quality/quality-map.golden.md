@@ -48,7 +48,6 @@
 | `cli-journey-sandbox` | `sovereign/scripts/cli-journey-sandbox.sh` | tracked | F3 | unmeasured | **no** |
 | `cli-journey-verify` | `sovereign/scripts/cli-journey-verify.sh --tier 2` | hard | F3 | unmeasured | **no** |
 | `contract-nightly` | `sovereign/scripts/cli-journey-nightly.sh` | hard | F3 | unmeasured | **no** |
-| `daemon-supervised` | `scripts/daemon-supervised.sh` | tracked | F4 | unmeasured | **no** |
 | `desktop-demo` | `npm run demo` | tracked | F3 | unmeasured | **no** |
 | `desktop-e2e-faults` | `npm run test:e2e:faults` | hard | F4 | 20m | **no** |
 | `desktop-e2e-real` | `npm run test:e2e:real` | hard | F2 | 50m | **no** |
@@ -75,6 +74,7 @@
 | `desktop-ttfi` | `npm run test:ttfi` | tracked | F1 | 5m | **no** |
 | `enrichment-f1` | `svrn quality lane bench --id enrichment-f1` | hard | F2 | unmeasured | **no** |
 | `knowledge-gym` | `svrn quality lane bench --id knowledge-gym` | hard | F3 | 36s | **no** |
+| `mesh-soak-gate` | `sovereign mesh soak-gate mesh-soak-findings.jsonl` | advisory | F0 | unmeasured | **no** |
 | `mtp-probe` | `scripts/mtp-probe.sh --n 5 --max-tokens 200` | tracked | F3 | 3m | **no** |
 | `retrieval-prod` | `svrn quality lane bench --id retrieval-prod` | hard | F3 | 57s | **no** |
 | `routing` | `svrn quality lane bench --id routing` | hard | F3 | 38s | **no** |
@@ -91,7 +91,7 @@
 | `capability-map` | `sovereign code capability-map` | tracked | F2 | unmeasured | **no** |
 | `co-sweep` | `scripts/co-sweep.sh` | tracked | F0 | unmeasured | **no** |
 | `daemon-soak` | `scripts/daemon-soak.sh` | tracked | F3 | unmeasured | **no** |
-| `daemon-soak-report` | `scripts/daemon-soak-report.sh` | tracked | F0 | unmeasured | **no** |
+| `daemon-soak-report` | `scripts/daemon-soak-report.sh` | tracked | F0 | 3s | **no** |
 | `desktop-a11y` | `npm run a11y` | tracked | F1 | unmeasured | **no** |
 | `desktop-breaker` | `npm run breaker` | tracked | F3 | unmeasured | **no** |
 | `desktop-chaos` | `npm run chaos` | tracked | F3 | unmeasured | **no** |
@@ -117,6 +117,7 @@
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
 | `cli-journey-selftest` | `sovereign/scripts/tests/cli-journey-selftest.sh` | hard | F1 | 3s | yes |
+| `daemon-soak-report-selftest` | `scripts/daemon-soak-report.sh --self-test` | tracked | F0 | 0.20s | **no** |
 | `desktop-judge-calibration` | `node tests/e2e/scripts/calibrate-judge.mjs` | hard | F3 | unmeasured | **no** |
 | `desktop-sabotage` | `npm run sabotage` | hard | F1 | unmeasured | yes |
 | `inner-chaos-calibrate` | `sovereign-cli-llm eval inner-chaos --calibrate` | hard | F3 | 5m | **no** |
@@ -137,11 +138,11 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-soak-report`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
-| F4 | a supervised child process | `daemon-supervised`, `desktop-e2e-faults` |
+| F4 | a supervised child process | `desktop-e2e-faults` |
 | F5 | the packaged boot chain a shipped install takes | `desktop-smoke`, `wizard-verify` |
 
 ## Load-bearing — what silently weakens a verdict
@@ -162,7 +163,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `clippy-json` | — | `--message-format=json` | lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child |
 | `concept-gate` | — | `(advisory only)` | it relays `svrn code converge status`, which reads a SCIP graph that exists only on an indexed machine. On a clean checkout its only answers are COULD-NOT-JUDGE and NEVER-RAN, which is why it is in no CI job |
 | `contract-nightly` | `port-listening:9741` | — | — |
-| `daemon-soak` | `host-quiet:4` | — | — |
+| `daemon-soak-report` | — | `the daemon's own exit receipts, not supervisor.log` | the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08 |
+|  |  | `a portable `date` and `stat`` | both readers were GNU-only and both failed SILENTLY on darwin: `stat -c %Y /proc/$PID` substituted now for the start time so every daemon read `up 0h0m`, and an empty 24h cutoff left the restart rate as `?`. A green from this report on a mac meant nothing before 2026-09-08 |
 | `desktop-chaos` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `desktop-check` | — | `--fail-on-warnings` | without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI |
 | `desktop-demo` | `port-listening:9741`<br>`slot-decodes:primary` | `(a failed beat exports no clip)` | the product reel is an acceptance suite: `demo:export` is what turns green beats into artifacts, so a broken beat cannot ship as a video |
@@ -177,7 +179,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `desktop-judge-calibration` | `port-listening:9741`<br>`slot-decodes:primary` | `sensitivity floor 0.85 / specificity floor 0.8` | no rubric or judge change may score runs without passing it (ARCH §18.6) |
 | `desktop-sabotage` | — | `--allow-dirty` | escape hatch only. The default refusal exists because the script rewrites TRACKED files and a SIGKILL mid-run would lose uncommitted work git cannot return |
 |  |  | `(runs after the suite)` | a red suite makes every verdict here meaningless, and the script refuses to start on a red baseline |
-| `desktop-smoke` | `host-quiet:4`<br>`binary:sovereign-desktop`<br>`binary:timeout` | `SMOKE_P<n>_SECS` | per-phase soft budgets. A phase that runs out of budget SKIPs, and a SKIP verified nothing — read the scoreboard for SKIP rows, not just the final verdict |
+| `desktop-smoke` | `binary:sovereign-desktop`<br>`binary:timeout` | `SMOKE_P<n>_SECS` | per-phase soft budgets. A phase that runs out of budget SKIPs, and a SKIP verified nothing — read the scoreboard for SKIP rows, not just the final verdict |
 |  |  | `the timeout resolver` | run_capped shelled out to GNU `timeout` until 2026-07-28, which darwin does not ship, so every phase exited 127 and the whole gate was structurally incapable of passing on half the platforms it ships to. The start banner now names which of timeout/gtimeout/bash-fallback it resolved |
 | `desktop-soak` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `desktop-soak-py` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
@@ -190,9 +192,13 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `inner-chaos-calibrate` | `port-listening:9741`<br>`slot-decodes:primary` | `sensitivity floor 0.85 / specificity floor 0.8` | no rubric or judge change may score runs without passing it — the judge-calibration gate (ARCH §18.6) |
 | `inner-chaos-soak` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `knowledge-gym` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
-| `mesh-soak` | `binary:podman`<br>`host-quiet:4` | `the podman backend` | real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled |
+| `mesh-soak` | `binary:podman` | `the podman backend` | real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled |
+|  |  | ``continue-on-error: true` on the weekly job` | .github/workflows/mesh-soak-nightly.yml:35 — the job is advisory, so a red soak does not fail the workflow. `runs_in` says it is scheduled and this says what the schedule can do about a failure, which is nothing |
+|  |  | `the declared `binary:podman` precondition matches no code path` | the script compares BACKEND only against "local" (mesh-soak.sh:126,133) and its own comments say "all rootless, no podman" (:63,:836). MESH_QA.md:100 documents MESH_SOAK_BACKEND=podman, which would just skip the netns re-exec and run on the bare host. Left as declared rather than silently corrected: which of the doc, the script and this row is wrong is a mesh-QA decision, not a registry edit |
+| `mesh-soak-gate` | — | `BOTH of its invocations swallow the exit code` | mesh-soak.sh:1248 ends `\|\| true` and only runs under --gate, which the weekly workflow does not pass; mesh-soak-nightly.yml:107-108 runs it as its own step and also ends `\|\| true`. It is declared `advisory` because that is what it IS, not because someone decided it should be — `cmd_soak_gate` exits 1 on regression and nothing reads it |
+|  |  | `the baseline is named three different things and none is committed` | mesh-soak.sh looks for $ROOT/mesh-soak-baseline.json (gitignored, .gitignore:175), the workflow passes .github/mesh-slo-baseline.json, MESH_QA.md:132 says mesh-slo-baseline.json. A gate against a baseline that does not exist gates nothing |
 | `module-cycles` | `binary:cargo-modules` | — | — |
-| `mtp-probe` | `port-listening:9741`<br>`slot-decodes:primary`<br>`host-quiet:4` | — | — |
+| `mtp-probe` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `oicp-conformance` | `port-listening:9741` | — | — |
 | `pre-commit` | — | `CO_PRECOMMIT_STAGED / CO_PRECOMMIT_SELF` | the only way to exercise the warn path by hand without staging a peer's file — §18.1 says watch it fire |
 | `quality-check` | `port-listening:9741`<br>`slot-decodes:primary` | `--mint` | without it a first run against a NEW stack fingerprint writes no baseline at all — deliberately, so a drifting stack cannot silently re-mint its own bar |
@@ -211,8 +217,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `sovereign-test` | `container:sovereign-vulkan` | `--allow-empty` | a run matching zero tests exits 4, not 0. Pass it only when you genuinely expect an empty scope — a filtered run that matched nothing verified nothing |
 |  |  | `--filter <whole test name>` | the filter sets the BUILD scope too: the script git-greps the literal through *.rs, so a broad substring silently degrades to a full-workspace build (measured 280s vs 37.5s) |
 | `synth` | `port-listening:9741`<br>`slot-decodes:primary`<br>`corpus-installed:sep` | — | — |
-| `throughput` | `port-listening:9741`<br>`slot-decodes:primary`<br>`slot-decodes:fast`<br>`binary:python3`<br>`host-quiet:4` | — | — |
-| `throughput-probe` | `port-listening:9741`<br>`slot-decodes:primary`<br>`host-quiet:4` | — | — |
+| `throughput` | `port-listening:9741`<br>`slot-decodes:primary`<br>`slot-decodes:fast`<br>`binary:python3` | — | — |
+| `throughput-probe` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `windows-crosscheck` | `binary:cargo-xwin` | — | — |
 | `wizard-verify` | `binary:sovereign-desktop`<br>`port-listening:9741` | `SOVEREIGN_CLI_PATH UNSET` | every other supervised lane in the repo SETS it, so resolve_daemon_child() takes the env branch. This is the only coverage of the `current_exe() --daemon-child` branch a packaged install actually takes |
 |  |  | `a private netns (Linux) / checked-free ports (macOS)` | there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges |
@@ -223,7 +229,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 
 | venue | instruments |
 |---|---|
-| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `daemon-soak`, `daemon-soak-report`, `daemon-supervised`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `lint-gate`, `mesh-soak`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `sovereign-lint`, `sovereign-test`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
+| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `lint-gate`, `mesh-soak`, `mesh-soak-gate`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `sovereign-lint`, `sovereign-test`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
 | `check` | `chaos-monkey`, `chat-ask`, `enrichment-f1`, `knowledge-gym`, `retrieval-prod`, `routing`, `synth`, `throughput` |
 | `ci:cli-release` | `check-desktop-version` |
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
@@ -234,7 +240,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
 | `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
-| `run-if-stale` | `co-sweep`, `contract-nightly`, `oicp-conformance` |
+| `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
 | `smoke:2` | `inner-chaos-calibrate`, `quality-check` |
@@ -247,9 +253,10 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:cycles` | `module-cycles` |
 | `weekly:doc-coverage` | `doc-coverage` |
 | `weekly:features` | `feature-matrix`, `feature-powerset` |
+| `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (66 of 91)
+### What CI does not run (67 of 92)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -266,8 +273,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
 - `daemon-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
-- `daemon-soak-report` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
-- `daemon-supervised` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
+- `daemon-soak-report` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-soak-report-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `desktop-a11y` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
 - `desktop-breaker` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
 - `desktop-chaos` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
@@ -296,7 +303,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
 - `knowledge-gym` — sovereign/bench/knowledge-gym/RUNBOOK.md · runs in: check
 - `lint-gate` — scripts/pre-push.sh (header — why it is not a push gate) · runs in: by-hand
-- `mesh-soak` — commonwealth/docs/MESH_QA.md · runs in: by-hand
+- `mesh-soak` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
+- `mesh-soak-gate` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
 - `mtp-probe` — sovereign/bench/README.md · runs in: smoke:1
 - `oicp-conformance` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
@@ -326,5 +334,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**91 instruments, 9 with a negative control, 49 unmeasured cost, 34 by-hand only.** (0 run nowhere at all.)
+**92 instruments, 10 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
 

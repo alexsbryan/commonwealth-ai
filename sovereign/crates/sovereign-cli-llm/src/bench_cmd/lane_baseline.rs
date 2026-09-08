@@ -126,6 +126,20 @@ pub struct LaneBaseline {
     pub artifact_mtime: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The host's 1-minute load average when this baseline was captured.
+    ///
+    /// PROVENANCE, never a term in a verdict. `diff` does not read it. It is
+    /// here because minting stopped requiring a quiet host on 2026-09-08 —
+    /// the `host-quiet` precondition that used to enforce one was deleted
+    /// (ARCH §18.2), since on the host that runs the check it was unmet most
+    /// of the time and the effect was that nothing was minted or judged. A
+    /// baseline captured at load 22 is still a baseline; what it owes the
+    /// next reader is the 22.
+    ///
+    /// `None` on baselines captured before this field existed, and on any
+    /// platform reporting no load average.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_load_1m: Option<f64>,
     pub metrics: BTreeMap<String, LaneMetric>,
 }
 
@@ -140,6 +154,7 @@ impl LaneBaseline {
             prompt_version: None,
             artifact_mtime: None,
             note: None,
+            host_load_1m: sovereign_cli_shared::host_load::load_average_1m(),
             metrics: BTreeMap::new(),
         }
     }

@@ -57,10 +57,6 @@ pub(super) async fn check_precondition(p: &Precondition, base: &str) -> bool {
                 false
             }
         },
-        // A host that reports no load average cannot be shown quiet, and
-        // assuming it is would make the guard a rubber stamp on exactly the
-        // platform it cannot see.
-        Precondition::HostQuiet(max) => check_host_quiet(*max),
     };
     tracing::debug!(precondition = ?p, ok, "quality check: precondition");
     ok
@@ -68,12 +64,11 @@ pub(super) async fn check_precondition(p: &Precondition, base: &str) -> bool {
 
 /// How an unmet precondition reads in a could-not-judge reason.
 ///
-/// `host-quiet` is the one that carries evidence rather than restating the
-/// rule: it names the load it SAW. Reached only for an UNMET precondition, so
-/// a `None` reason there means the load fell back under the bound between the
-/// check and the render — say THAT, because "the host is quiet" inside an
-/// unmet-precondition reason would read as a contradiction and hide a real
-/// race (ARCH §18.3).
+/// Every one of them names the SUBJECT that is missing — a port, a slot, a
+/// corpus, a binary, a container — because that is the only thing a
+/// precondition is allowed to assert (ARCH §18.2). None of them can say "the
+/// machine is busy"; load is a covariate on the row, not a gate in front of
+/// it.
 pub(super) fn describe_precondition(p: &Precondition) -> String {
     match p {
         Precondition::PortListening(port) => format!("nothing is listening on 127.0.0.1:{port}"),
@@ -94,17 +89,6 @@ pub(super) fn describe_precondition(p: &Precondition) -> String {
                 format!("{CONTAINER_MARKER} does not name `{c}` — this is a different container")
             }
         },
-        // ONE reader, in `sovereign_cli_shared::host_load` — the chat-ask
-        // lane judges its `per-stage ceilings` row against the same number in
-        // another process (ARCH §10.6).
-        Precondition::HostQuiet(max) => sovereign_cli_shared::host_load::host_quiet(*max)
-            .reason()
-            .unwrap_or_else(|| {
-                format!(
-                    "the 1-minute load average fell back under {max:.1} between the check and \
-                     this message; it did not run"
-                )
-            }),
     }
 }
 
@@ -146,11 +130,70 @@ async fn slot_decodes(base: &str, slot: &str) -> bool {
     resp.status().is_success()
 }
 
-/// The `HostQuiet` predicate, split out so a test can drive it against a
-/// bound no host beats and one no host exceeds — the two ends that show it
-/// reads the machine rather than returning a constant (ARCH §18.1).
-fn check_host_quiet(max_load: f64) -> bool {
-    sovereign_cli_shared::host_load::host_quiet(max_load).is_quiet()
+/// The conditions a row was measured under. **Recorded on every row, gating
+/// nothing** — this is what replaced the `host-quiet` precondition on
+/// 2026-09-08 (ARCH §18.2). That guard refused to judge a wall-clock row
+/// above a load bound nobody derived, and on this host it was unmet most of
+/// the time, so the rows it "protected" reported could-not-judge instead of a
+/// number. When the world is inconvenient, record the world and judge
+/// anyway.
+///
+/// Two fields because two different things make a run slow and they call for
+/// opposite readings:
+///
+/// - `load` — the host's 1-minute average. A busy box decodes 2.8x slower
+///   here (50.7 tok/s at load 3.7 against 17.8 at load 32, note `d596639c`),
+///   so a slow row taken at load 30 is a caveat on the reading.
+/// - `daemon_uptime_secs` — how long the resident stack has been up. A row
+///   whose start uptime EXCEEDS its end uptime ran across a daemon restart,
+///   and that row is not slow, it is interrupted: the models were evicted and
+///   re-loaded under it. Two peer sessions share this daemon and one restarts
+///   it deliberately, so the two cases are routinely confusable and only this
+///   field tells them apart.
+///
+/// `None` on either is a NAMED absence — no load average on this platform, or
+/// a daemon that did not answer — never a zero, which would read as an idle
+/// host or a just-started one (ARCH §18.3).
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Covariates {
+    pub(super) load: Option<f64>,
+    pub(super) daemon_uptime_secs: Option<u64>,
+}
+
+impl Covariates {
+    /// Read both, now. ONE capture point, so a row's `before` and `after`
+    /// cannot end up sampling different things (ARCH §10.6).
+    pub(super) async fn capture(base: &str) -> Covariates {
+        let c = Covariates {
+            load: sovereign_cli_shared::host_load::load_average_1m(),
+            daemon_uptime_secs: daemon_uptime_secs(base).await,
+        };
+        // Glassbox: the numbers a reader will later use to caveat a row are
+        // visible while the run is happening, not only in the file after it
+        // (ARCH §9.1). Either being `None` is itself the interesting event.
+        tracing::debug!(
+            load = ?c.load,
+            daemon_uptime_secs = ?c.daemon_uptime_secs,
+            "quality check: covariates"
+        );
+        c
+    }
+}
+
+/// `process.uptime_seconds` off the daemon's `/status`, or `None`.
+///
+/// A short timeout and a swallowed error on purpose: this is a covariate, and
+/// a covariate that can fail a run would be a gate wearing a different name.
+/// The absence is recorded as `null`.
+async fn daemon_uptime_secs(base: &str) -> Option<u64> {
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/status"))
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("process")?.get("uptime_seconds")?.as_u64()
 }
 
 /// What happened to one instrument, beyond its verdict.
@@ -164,6 +207,36 @@ pub(super) struct InstrumentRun {
     /// failure is the whole of what the shell harnesses used to reconstruct
     /// by grepping for `✗|FAIL|^error` — a pattern no gate promised to keep.
     pub(super) tail: String,
+    /// The conditions when this row STARTED, and when it finished.
+    ///
+    /// Two readings rather than one because a run is minutes long and a
+    /// 1-minute average taken at the end does not describe the start: a row
+    /// that began quiet and ended at load 30 is a different story from one
+    /// that was busy throughout, and a single sample cannot tell them apart.
+    /// The pair is also what makes a daemon restart visible — see
+    /// [`Covariates`].
+    pub(super) before: Covariates,
+    pub(super) after: Covariates,
+}
+
+impl InstrumentRun {
+    /// A row that never got as far as a process: out of budget, an unmet
+    /// precondition, a log that could not be created, a spawn that failed.
+    ///
+    /// One constructor rather than five literals, so the load covariate
+    /// cannot be recorded on four of them and forgotten on the fifth — the
+    /// deliverable is "load on EVERY row, always" and a struct literal is
+    /// how that becomes "on most rows" three commits later (ARCH §7).
+    pub(super) fn did_not_start(judgement: Judgement, secs: u64, at: Covariates) -> InstrumentRun {
+        InstrumentRun {
+            judgement,
+            secs,
+            exit_code: None,
+            tail: String::new(),
+            before: at,
+            after: at,
+        }
+    }
 }
 
 /// Resolve `argv[0]`. `svrn`/`sovereign` mean THIS dispatcher — never
@@ -196,6 +269,9 @@ pub(super) struct InFlight<'a> {
     pub(super) cap_secs: u64,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
+    /// Read once, at spawn. Carried rather than re-read in [`finish`] so the
+    /// pair on the summary row genuinely brackets the run.
+    before: Covariates,
 }
 
 /// Spawn one instrument. `Err` is a judgement it earned by not starting.
@@ -208,6 +284,7 @@ pub(super) fn spawn_instrument<'a>(
     fingerprint: &Fingerprint,
     mint: bool,
     cap_secs: u64,
+    before: Covariates,
 ) -> Result<InFlight<'a>, InstrumentRun> {
     let t0 = Instant::now();
     let stdout_path = out_dir.join(format!("lane-{}.out", inst.id));
@@ -216,16 +293,15 @@ pub(super) fn spawn_instrument<'a>(
         std::fs::File::create(&stdout_path),
         std::fs::File::create(&stderr_path),
     ) else {
-        return Err(InstrumentRun {
-            judgement: Judgement::could_not_judge(
+        return Err(InstrumentRun::did_not_start(
+            Judgement::could_not_judge(
                 inst.id.clone(),
                 Reason::new(format!("cannot create the log under {}", out_dir.display()))
                     .expect("a path is never a placeholder"),
             ),
-            secs: 0,
-            exit_code: None,
-            tail: String::new(),
-        });
+            0,
+            before,
+        ));
     };
     let program = resolve_program(&argv[0]);
     let mut cmd = std::process::Command::new(&program);
@@ -256,17 +332,17 @@ pub(super) fn spawn_instrument<'a>(
             cap_secs,
             stdout_path,
             stderr_path,
+            before,
         }),
-        Err(e) => Err(InstrumentRun {
-            judgement: Judgement::never_ran(
+        Err(e) => Err(InstrumentRun::did_not_start(
+            Judgement::never_ran(
                 inst.id.clone(),
                 Reason::new(format!("cannot run `{}`: {e}", argv.join(" ")))
                     .expect("a command line is never a placeholder"),
             ),
-            secs: t0.elapsed().as_secs(),
-            exit_code: None,
-            tail: String::new(),
-        }),
+            t0.elapsed().as_secs(),
+            before,
+        )),
     }
 }
 
@@ -277,7 +353,11 @@ pub(super) fn spawn_instrument<'a>(
 /// the eight check lanes SAY a [`Judgement`] on their last stdout line,
 /// because an exit code cannot express could-not-judge and `bench all` exits
 /// 1 for regressed, stale AND missing-baseline.
-pub(super) fn finish(f: InFlight<'_>, status: std::process::ExitStatus) -> InstrumentRun {
+pub(super) fn finish(
+    f: InFlight<'_>,
+    status: std::process::ExitStatus,
+    after: Covariates,
+) -> InstrumentRun {
     let secs = f.started.elapsed().as_secs();
     let code = status.code();
     let captured = match std::fs::read_to_string(&f.stdout_path) {
@@ -295,6 +375,8 @@ pub(super) fn finish(f: InFlight<'_>, status: std::process::ExitStatus) -> Instr
                 secs,
                 exit_code: code,
                 tail: String::new(),
+                before: f.before,
+                after,
             };
         }
     };
@@ -373,33 +455,14 @@ pub(super) fn finish(f: InFlight<'_>, status: std::process::ExitStatus) -> Instr
         secs,
         exit_code: code,
         tail: tail_of(&joined, 12),
+        before: f.before,
+        after,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// `host-quiet` parses its bound, and the could-not-judge reason NAMES
-    /// the load it saw rather than restating the rule.
-    ///
-    /// The row this guards is the reason run 1 called a 17.8 tok/s decode a
-    /// FAILURE against a 50 tok/s bar at load 32. The bar was right and the
-    /// machine was busy (note d596639c); a wall-clock verdict on a contended
-    /// host is could-not-judge (ARCH §18.3).
-    #[test]
-    fn host_quiet_reason_names_the_load_and_the_predicate_reads_the_machine() {
-        let described = describe_precondition(&Precondition::HostQuiet(0.001));
-        assert!(
-            described.contains("load average") || described.contains("quiet"),
-            "the reason must speak about load: {described}"
-        );
-        // A bound no real host beats is unmet; one no host exceeds is met.
-        // Together these show the predicate actually reads the machine
-        // rather than answering a constant.
-        assert!(!check_host_quiet(0.0000001));
-        assert!(check_host_quiet(1.0e9));
-    }
 
     /// `container:` is the spelling the shell harnesses had and the lane
     /// runner did not. It now has exactly one probe, like the other five.

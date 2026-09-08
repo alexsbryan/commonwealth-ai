@@ -45,23 +45,20 @@ schema_version = 1
 # that mattered was the one where 1.5x was the wrong rule.
 ceiling_floor_ms = 250
 
-# ── The precondition the ceilings row declares ───────────────────────
-# A wall-clock bar measured on a contended host is could-not-judge, never
-# failed (ARCH §18.3): the same binary and the same bank decoded at 50.7
-# tok/s at 1-minute load 3.7 and 17.8 tok/s at load 32 on this machine — a
-# 2.8x spread no threshold absorbs without going blind on the quiet case.
+# ── No load guard on the ceilings row ────────────────────────────────
+# `host_quiet_max_load = 4.0` sat here until 2026-09-08 and is DELETED, not
+# retuned. The evidence behind it is still true — the same binary and bank
+# decoded at 50.7 tok/s at 1-minute load 3.7 and 17.8 tok/s at load 32 on this
+# machine, a 2.8x spread — and the conclusion drawn from it was wrong. Nobody
+# derived the 4, and on the host that runs the check the bound is unmet most
+# of the time, so the row abstained instead of reporting. The sharpest case is
+# this row's own: one run at load 4.27-4.32 reported `failed` on q1 and
+# `could-not-judge` on q2, because the bound was evaluated per question and
+# the load crossed 4.0 between them.
 #
-# Declared HERE rather than in `quality/instruments.toml` because it guards
-# ONE ROW. The lane's other sixteen rows — route, gate outcome, both halves
-# answered, not abstained, useful — are claims about the ANSWER, and a busy
-# machine does not change them; making the whole lane could-not-judge under
-# load would throw away the signal the lane exists for. `throughput`, whose
-# every row IS wall-clock, declares `host-quiet:4` at lane level instead.
-# Two scopes, one rule — read against the same
-# `sovereign_cli_shared::host_load` number.
-#
-# 4.0 is the bound the quiet measurement was taken under (1-min load 3.69).
-host_quiet_max_load = 4.0
+# Load is now RECORDED per row in `target/quality-check/<stamp>/summary.json`
+# and gates nothing (ARCH §18.2; the enum's doc on
+# `kernel_types::quality::Precondition` carries the rule).
 
 [bank]
 id = "chat-ask"

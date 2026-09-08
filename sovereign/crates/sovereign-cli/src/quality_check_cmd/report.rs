@@ -130,6 +130,19 @@ pub(super) fn write_summary(
                 "secs": r.secs,
                 "est_secs": l.reservation_secs(),
                 "exit_code": r.exit_code,
+                // THE COVARIATE. Recorded on every row, gating nothing —
+                // what replaced the `host-quiet` precondition on 2026-09-08
+                // (ARCH §18.2). `null` where the platform reports no load
+                // average; a zero there would read as an idle host.
+                "load_start": r.before.load,
+                "load_end": r.after.load,
+                // A row whose START uptime exceeds its END uptime ran across
+                // a daemon restart. That row is not slow, it is interrupted —
+                // the models were evicted and re-loaded under it — and
+                // without this pair it is indistinguishable from a contended
+                // one.
+                "daemon_uptime_secs_start": r.before.daemon_uptime_secs,
+                "daemon_uptime_secs_end": r.after.daemon_uptime_secs,
             })
         })
         .collect();
@@ -157,4 +170,111 @@ pub(super) fn write_summary(
 /// asking a colleague to look at a table.
 pub(super) fn stamp_now() -> String {
     chrono::Local::now().format("%Y%m%d-%H%M%S").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::exec::Covariates;
+    use kernel_types::quality::Registry;
+    use kernel_types::{Judgement, Reason};
+
+    fn fp() -> Fingerprint {
+        Fingerprint {
+            hex: "deadbeef".into(),
+            primary: "stem-a".into(),
+            fast: "stem-b".into(),
+            embed: "stem-c".into(),
+            smoke_subsets: Vec::new(),
+            banks: BTreeMap::new(),
+        }
+    }
+
+    /// **Load lands on EVERY row, including the ones that never ran.**
+    ///
+    /// This is the whole of what replaced `host-quiet` (ARCH §18.2), and the
+    /// row it is easiest to forget is the one that abstained — which is
+    /// exactly the row a reader is looking at when they want to know what
+    /// the machine was doing. The failing input this test names: a row built
+    /// by `InstrumentRun::did_not_start`, the constructor every non-running
+    /// path goes through.
+    #[test]
+    fn a_row_that_never_ran_still_carries_the_load_and_the_daemon_uptime() {
+        let reg = Registry::parse(super::super::tests::TABLE).expect("parses");
+        let lane = reg
+            .instruments
+            .iter()
+            .find(|i| i.id == "chat-ask")
+            .expect("the fixture lane");
+        let mut results = BTreeMap::new();
+        results.insert(
+            lane.id.clone(),
+            InstrumentRun::did_not_start(
+                Judgement::could_not_judge(
+                    lane.id.clone(),
+                    Reason::literal("precondition unmet: nothing is listening"),
+                ),
+                0,
+                Covariates {
+                    load: Some(31.5),
+                    daemon_uptime_secs: Some(12),
+                },
+            ),
+        );
+        let dir = std::env::temp_dir().join(format!("qc-summary-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("tmp dir");
+        let path = dir.join("summary.json");
+        write_summary(
+            &path,
+            "20260908-000000",
+            "check",
+            &fp(),
+            &[lane],
+            &results,
+            0,
+            1800,
+            0,
+        )
+        .expect("writes");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("reads")).expect("json");
+        let row = &doc["lanes"][0];
+        assert_eq!(row["verdict"], "could-not-judge");
+        assert_eq!(row["load_start"], 31.5, "{row}");
+        assert_eq!(row["load_end"], 31.5, "{row}");
+        assert_eq!(row["daemon_uptime_secs_start"], 12, "{row}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A host that reports no load average writes `null`, never `0.0`.
+    /// A zero there reads as an idle machine, which is the flattering
+    /// direction and the one §18.3 forbids.
+    #[test]
+    fn an_unreadable_covariate_is_null_and_not_a_zero() {
+        let reg = Registry::parse(super::super::tests::TABLE).expect("parses");
+        let lane = reg
+            .instruments
+            .iter()
+            .find(|i| i.id == "docs-gate")
+            .expect("the fixture gate");
+        let mut results = BTreeMap::new();
+        results.insert(
+            lane.id.clone(),
+            InstrumentRun::did_not_start(
+                Judgement::never_ran(lane.id.clone(), Reason::literal("cannot run")),
+                0,
+                Covariates::default(),
+            ),
+        );
+        let dir = std::env::temp_dir().join(format!("qc-summary-null-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("tmp dir");
+        let path = dir.join("summary.json");
+        write_summary(&path, "s", "prepush", &fp(), &[lane], &results, 0, 60, 0).expect("writes");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("reads")).expect("json");
+        let row = &doc["lanes"][0];
+        assert!(row["load_start"].is_null(), "{row}");
+        assert!(row["daemon_uptime_secs_end"].is_null(), "{row}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

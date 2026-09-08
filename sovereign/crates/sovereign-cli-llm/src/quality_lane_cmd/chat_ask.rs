@@ -20,7 +20,8 @@
 //! | ingest | HARD | the fixture chunked differently, or is not searchable |
 //! | ledger present | HARD | the turn opened no ledger — nothing below can be judged |
 //! | route | HARD | the question took a different route, or cited another corpus |
-//! | per-stage ceilings | HARD | a stage blew its pre-registered budget |
+//! | per-stage calls | HARD | a stage made more model calls than the bank declared — load-invariant, true on any machine |
+//! | per-stage ceilings | wall-clock | a stage took longer than its pre-registered budget |
 //! | per-stage baseline | TRACKED | a stage moved against this stack's last run |
 //! | gate outcome honest | HARD | the action left the allowed set, or it disagrees with the ledger the reader is shown |
 //!
@@ -83,9 +84,6 @@ struct ChatAskBank {
     /// The additive term of the ceiling formula, declared ONCE for every
     /// stage and every model stem — see `ceiling_from_median`.
     ceiling_floor_ms: u64,
-    /// The 1-minute load average above which this lane's ONE wall-clock row
-    /// (`per-stage ceilings`) is could-not-judge rather than failed.
-    host_quiet_max_load: f64,
     ceilings: toml::value::Table,
     questions: Vec<ChatAskQuestion>,
 }
@@ -164,10 +162,6 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
         .filter(|n| *n >= 0)
         .ok_or_else(|| format!("{BANK}: `ceiling_floor_ms` must be a non-negative integer"))?
         as u64;
-    let host_quiet_max_load = want(&doc, "host_quiet_max_load")?
-        .as_float()
-        .filter(|f| f.is_finite() && *f > 0.0)
-        .ok_or_else(|| format!("{BANK}: `host_quiet_max_load` must be a positive float"))?;
     let ceilings = want(&doc, "ceilings")?
         .as_table()
         .cloned()
@@ -208,7 +202,6 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
             control_flat: s_of(&judge, "control_flat")?,
         },
         ceiling_floor_ms,
-        host_quiet_max_load,
         ceilings,
         questions,
     })
@@ -857,8 +850,15 @@ async fn assert_question(
         );
     }
 
-    // ── per-stage ceilings ─────────────────────────────────────────
-    ceilings_row(report, bank, q, runs, &row("per-stage ceilings"));
+    // Two rows out of one ledger walk — see `stage_rows`.
+    stage_rows(
+        report,
+        bank,
+        q,
+        runs,
+        &row("per-stage calls"),
+        &row("per-stage ceilings"),
+    );
 
     // ── gate outcome honest ────────────────────────────────────────
     // Two things, and the second is the one issue #57 needed: the action
@@ -1076,48 +1076,44 @@ async fn assert_question(
     }
 }
 
-/// Compare every measured stage against the bank's pre-registered ceiling
-/// for the model stem that produced it.
-fn ceilings_row(
+/// Two rows out of one walk of the stage ledger: the CALL COUNTS and the
+/// MILLISECONDS.
+///
+/// Split 2026-09-08 because only one of them is a property of the code. A
+/// stage that used to make one model call and now makes four regressed on any
+/// machine at any load — that is `per-stage calls`. A stage that took longer
+/// may have regressed or may have shared a box: this host decodes 2.8x slower
+/// across its load range (note `d596639c`). Fused, the load-sensitive half
+/// decided the load-invariant half's verdict.
+///
+/// **NO LOAD GUARD, since the same day.** The ceilings row abstained above a
+/// 1-minute load of 4.0, a bound nobody derived and this host is over most of
+/// the time; one run at load 4.27-4.32 reported `failed` on q1 and
+/// `could-not-judge` on q2 because the bound was read per question and the
+/// load crossed it between them. Load is now recorded per row in
+/// `summary.json` and gates nothing (ARCH §18.2).
+fn stage_rows(
     report: &mut LaneReport,
     bank: &ChatAskBank,
     q: &ChatAskQuestion,
     runs: &[LaneTurn],
+    calls_subject: &str,
     subject: &str,
 ) {
-    // THE PRECONDITION. This is the lane's only wall-clock row, and a
-    // wall-clock bar measured on a contended host verifies nothing: the
-    // same binary and bank decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s
-    // at load 32 on this machine. Could-not-judge NAMING the load it saw —
-    // never failed, and never quietly passed either (ARCH §18.3).
-    //
-    // The same `sovereign_cli_shared::host_load` reader the check runner's
-    // `Precondition::HostQuiet` uses, so the two cannot disagree about what
-    // "quiet" means (ARCH §10.6). Read at the END of the runs rather than
-    // the start: it is the interval the stages were measured over that has
-    // to have been quiet, and a 1-minute average taken now covers it.
-    let quiet = sovereign_cli_shared::host_load::host_quiet(bank.host_quiet_max_load);
-    if let Some(why) = quiet.reason() {
-        report.cannot_judge(subject, why);
-        return;
-    }
-
     // Every ledger row carries no model stem of its own, so the stem is the
     // run's inference backend. A stem with no ceiling table is
     // could-not-judge — running a different model is not evidence that this
     // one got faster.
     let Some(stem) = model_stem() else {
-        report.cannot_judge(
-            subject,
-            "cannot resolve the primary model stem, so no ceiling table applies".into(),
-        );
+        let why = "cannot resolve the primary model stem, so no ceiling table applies";
+        report.cannot_judge(calls_subject, why.into());
+        report.cannot_judge(subject, why.into());
         return;
     };
     let Some(table) = ceilings_for(bank, &stem) else {
-        report.cannot_judge(
-            subject,
-            format!("no ceiling table for model stem `{stem}` — declare one in {BANK}"),
-        );
+        let why = format!("no ceiling table for model stem `{stem}` — declare one in {BANK}");
+        report.cannot_judge(calls_subject, why.clone());
+        report.cannot_judge(subject, why);
         return;
     };
     // The bank declares the MEASURED median; the bar is derived from it by
@@ -1132,6 +1128,10 @@ fn ceilings_row(
     };
 
     let mut breaches: Vec<String> = Vec::new();
+    let mut call_breaches: Vec<String> = Vec::new();
+    // Zero declared-and-readable call bars is could-not-judge, never a pass:
+    // a row gating on an empty set is green by construction (ARCH §18.1).
+    let mut calls_judged = 0usize;
     let mut unbudgeted: Vec<String> = Vec::new();
     let mut worst_total = 0u64;
     for (i, r) in runs.iter().enumerate() {
@@ -1174,8 +1174,9 @@ fn ceilings_row(
                 table.get(calls_key).and_then(toml::Value::as_integer),
                 srow.calls,
             ) {
+                calls_judged += 1;
                 if i64::from(calls) > bar {
-                    breaches.push(format!(
+                    call_breaches.push(format!(
                         "run {}: {} {calls} calls > {bar}",
                         i + 1,
                         srow.stage.label()
@@ -1185,27 +1186,62 @@ fn ceilings_row(
         }
     }
 
-    if !breaches.is_empty() {
-        report.failed(subject, format!("on `{stem}`: {}", breaches.join("; ")));
-    } else if !unbudgeted.is_empty() {
+    // ── the load-invariant row ──────────────────────────────────────
+    if calls_judged == 0 {
         report.cannot_judge(
-            subject,
+            calls_subject,
             format!(
-                "on `{stem}`: every declared ceiling held (worst total {worst_total} ms), but \
-                 these stages ran with no ceiling row in {BANK}: {}",
-                unbudgeted.join(", ")
+                "on `{stem}`: no stage this run reported a call count against a declared \
+                 `*_calls` bar in {BANK}, so nothing load-invariant was checked"
             ),
         );
-    } else {
+    } else if call_breaches.is_empty() {
         report.passed(
-            subject,
+            calls_subject,
             format!(
-                "on `{stem}`: every stage within its pre-registered ceiling ({} run(s) of `{}`, worst total {worst_total} ms)",
+                "on `{stem}`: {calls_judged} stage call count(s) within their pre-registered \
+                 bars across {} run(s) of `{}`",
                 runs.len(),
                 q.id
             ),
         );
+    } else {
+        report.failed(
+            calls_subject,
+            format!("on `{stem}`: {}", call_breaches.join("; ")),
+        );
     }
+
+    // ── the wall-clock row: TRACKED, not gated ──────────────────────
+    //
+    // It reports the milliseconds and never reddens the lane. The question
+    // "did the code get worse" is asked of `per-stage calls` above, which is
+    // load-invariant; this row is the same question asked of a clock that
+    // moves 2.8x with the machine, and a bar on it fires on the host as
+    // readily as on a regression. Demoted 2026-09-08 with `host-quiet`
+    // (ARCH §18.2) — the guard and the bar were two halves of one mistake,
+    // and deleting only the guard would have left the bar failing runs it
+    // used to abstain on.
+    let breach_note = if breaches.is_empty() {
+        format!("every declared ceiling held ({} run(s) of `{}`)", runs.len(), q.id)
+    } else {
+        format!("OVER: {}", breaches.join("; "))
+    };
+    let unbudgeted_note = if unbudgeted.is_empty() {
+        String::new()
+    } else {
+        // A stage that RAN with no declared budget is still named. It is
+        // where a regression hides, and it is the operator's cue to declare
+        // one (ARCH §18.3).
+        format!("; no ceiling row in {BANK} for {}", unbudgeted.join(", "))
+    };
+    report.passed(
+        subject,
+        format!(
+            "TRACKED, does not gate — on `{stem}`: {breach_note} (worst total {worst_total} ms, \
+             load recorded on this row in summary.json){unbudgeted_note}"
+        ),
+    );
 }
 
 /// The TRACKED row: this stack's last run, if there is one for this
@@ -1326,7 +1362,16 @@ fn summarise(stages: &[(String, u64)]) -> serde_json::Value {
         .into_iter()
         .filter_map(|(k, v)| median(v).map(|m| (k.to_string(), serde_json::json!(m))))
         .collect();
-    serde_json::json!({ "schema": "quality-check/chat-ask-baseline/v1", "stage_ms": obj })
+    serde_json::json!({
+        "schema": "quality-check/chat-ask-baseline/v1",
+        "stage_ms": obj,
+        // The load this was minted at. `--mint` no longer waits for a quiet
+        // host — there is no such thing on this machine — so the baseline
+        // carries the conditions instead of pretending they were nominal.
+        // `compare` ignores it: it is provenance a reader needs when a stage
+        // moved 40%, not a term in any verdict (ARCH §18.2).
+        "host_load_1m": sovereign_cli_shared::host_load::load_average_1m(),
+    })
 }
 
 /// Stages that moved more than 25% against the baseline. Reported, not
