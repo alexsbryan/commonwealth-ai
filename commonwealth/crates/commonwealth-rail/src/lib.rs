@@ -270,6 +270,22 @@ pub struct Compaction {
     pub floors: Floors,
 }
 
+/// One [`RingJournal::seal`]: the seal act, and the prune it authorises.
+///
+/// **A seal and its prune are one act, and they are not one result.** The seal
+/// is signed and on disk by the time the prune runs, so a refused prune is not
+/// a failed seal — reporting it as one would tell a caller its seal did not
+/// land when it did, and the retry would write a second one. So the pair is an
+/// `Ok` carrying a `Result`: the caller has to look at `retired` to say what
+/// happened, and cannot mistake "nothing was retired" for "the prune was
+/// refused" (ARCH §18.3).
+#[derive(Debug)]
+pub struct Sealed {
+    pub op: Op<SignedOp>,
+    /// What [`RingJournal::compact`] did, or why it would not.
+    pub retired: Result<Compaction, RailError>,
+}
+
 // ── The journal on disk ──────────────────────────────────────
 
 /// One namespace's append-only journal, plus its roster.
@@ -521,6 +537,39 @@ impl RingJournal {
             "ring rail: ingested a peer batch"
         );
         Ok(fresh.len())
+    }
+
+    /// Sign a [`Seal`](RailAct::Seal) and delete what it retires — the pair.
+    ///
+    /// **THE one seal-and-prune (ARCH §10.6).** Rung S taught the read path to
+    /// skip a retired prefix; nothing removed one from disk, so a seal on its
+    /// own changed no bytes anywhere, and a prune with no seal behind it
+    /// reports the deleted range as missing, forever, on every node. Neither
+    /// half is worth anything alone. The two callers that seal — the rail
+    /// route an app reaches (`commonwealth_api::routes_rail::append`) and the
+    /// daemon's own KV pump (`sovereign_mesh::rail_kv_pump`) — reach this
+    /// rather than each writing the sequence themselves, because a second
+    /// spelling of "seal, then compact, and a refused compaction is not a
+    /// failed seal" is a decider with two answers.
+    ///
+    /// The seal's own failure IS an `Err`: nothing was written, so there is no
+    /// half-done state to describe.
+    pub fn seal(
+        &self,
+        signer: &dyn RingSigner,
+        roster: &Roster,
+        verifier: &dyn RingVerifier,
+    ) -> Result<Sealed, RailError> {
+        let op = self.append(RailAct::Seal, signer, roster)?;
+        let retired = self.compact(roster, verifier);
+        if let Err(e) = &retired {
+            tracing::warn!(
+                namespace = %self.namespace,
+                error = %e,
+                "ring rail: the seal is written, the prune it authorises was refused"
+            );
+        }
+        Ok(Sealed { op, retired })
     }
 
     /// Delete every line a seal has retired, and report what went.

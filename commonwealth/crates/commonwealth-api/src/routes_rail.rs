@@ -25,7 +25,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use commonwealth_knowledge::GuestGrant;
-use commonwealth_rail::{RailAct, RailError, RingJournal, RingRail, RosterOrigin};
+use commonwealth_rail::{Compaction, RailAct, RailError, RingJournal, RingRail, RosterOrigin};
 use serde::Deserialize;
 
 use crate::client_auth::Guest;
@@ -139,37 +139,33 @@ fn journal_for(
     Ok((rail, journal))
 }
 
-/// Delete what a seal just retired, and say what happened either way.
+/// Render what [`RingJournal::seal`]'s prune did, for the append body.
 ///
 /// **A seal and the prune it authorises are one act to the caller.** Rung S
 /// taught the read path to skip a retired prefix; nothing removed one from
 /// disk, so a seal on its own changed no bytes anywhere — and a prune with no
 /// seal behind it reports the deleted range as missing, forever, on every node.
 /// Neither half is worth anything alone, so an app that seals gets both from
-/// one request rather than a capability it has to remember to call.
+/// one request rather than a capability it has to remember to call. Doing them
+/// is the journal's; saying so in HTTP is this.
 ///
-/// **A refusal here is not an error on the append.** The seal is signed and
-/// fsynced by the time this runs; returning 500 would tell the app its seal
-/// failed when it is durably on the journal, and the next attempt would write a
-/// second one. So the outcome is reported in the body instead — with the
-/// refusal's own sentence, never as an absent field, because "nothing was
-/// retired" and "the prune was refused" are the two answers a caller most needs
-/// to tell apart (ARCH §18.3).
-fn retire(journal: &RingJournal, roster: &commonwealth_rail::Roster) -> serde_json::Value {
-    match journal.compact(roster, &commonwealth_rail::Ed25519Verifier) {
+/// **A refusal is not an error on the append.** The seal is signed and fsynced
+/// before the prune runs, so returning 500 would tell the app its seal failed
+/// when it is durably on the journal, and the next attempt would write a second
+/// one. The outcome is reported in the body instead — with the refusal's own
+/// sentence, never as an absent field, because "nothing was retired" and "the
+/// prune was refused" are the two answers a caller most needs to tell apart
+/// (ARCH §18.3).
+fn retire(retired: &Result<Compaction, RailError>) -> serde_json::Value {
+    match retired {
         Ok(done) => serde_json::json!({
             "removed": done.removed,
             "kept": done.kept,
             "gaps_cleared": done.gaps_cleared,
         }),
-        Err(e) => {
-            tracing::warn!(
-                namespace = journal.namespace(),
-                error = %e,
-                "ring rail: the seal is written, the prune it authorises was refused"
-            );
-            serde_json::json!({ "refused": e.to_string() })
-        }
+        // The warn is `RingJournal::seal`'s, at the site that knows the
+        // namespace and that a seal is already on disk. This renders.
+        Err(e) => serde_json::json!({ "refused": e.to_string() }),
     }
 }
 
@@ -210,10 +206,23 @@ pub async fn append(
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    // Sealing is the one act with a second half. Read before the act moves.
+    // Sealing is the one act with a second half, and the pair lives on the
+    // journal (`RingJournal::seal`) rather than here — the daemon's own KV
+    // pump seals too, and two spellings of "seal, then compact, and a refused
+    // compaction is not a failed seal" is a decider with two answers
+    // (ARCH §10.6).
     let sealed = matches!(act, RailAct::Seal);
-    match journal.append(act, rail.signer(), &roster) {
-        Ok(op) => {
+    let appended = if sealed {
+        journal
+            .seal(rail.signer(), &roster, &commonwealth_rail::Ed25519Verifier)
+            .map(|done| (done.op, Some(retire(&done.retired))))
+    } else {
+        journal
+            .append(act, rail.signer(), &roster)
+            .map(|op| (op, None))
+    };
+    match appended {
+        Ok((op, retired)) => {
             let mut out = serde_json::json!({
                 "id": op.id,
                 "seq": op.kind.seq,
@@ -221,8 +230,8 @@ pub async fn append(
                 "ts_unix": op.ts_unix,
                 "namespace": journal.namespace(),
             });
-            if sealed {
-                out["retired"] = retire(&journal, &roster);
+            if let Some(retired) = retired {
+                out["retired"] = retired;
             }
             Json(out).into_response()
         }

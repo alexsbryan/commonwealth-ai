@@ -5001,6 +5001,17 @@ content and the journal cannot grow one copy per start. It replaced
 `republish_local_measurements`, which had to re-upload the whole file on every
 restart because the KV buffer was in memory.
 
+**`republish` is also the SNAPSHOT behind this namespace's seal** (cw-lift 4).
+`rail_kv_pump` checks every namespace it owns against `SEAL_AFTER_OWN_OPS`, and
+this one has to be reached from there rather than from a drain: it is
+gossip-excluded, so it never enters the outbox, and its acts go straight onto
+the journal from `POST /v1/mesh/measurements` with nothing above them counting.
+A KV namespace's snapshot is its live store rows; this one's is
+`mesh_measurements::load()` through `republish`, which is idempotent by
+`wire_key` and therefore re-appends exactly what the seal retired. It runs AT
+the seal and not at the next boot — the window between them would otherwise be
+a ring whose measurements had been retired and not yet replaced.
+
 **The rail has ONE roster reader, and this namespace is why** (2026-09-08,
 the fix 4a's live run demanded). `RingRail::roster(&journal)` answers every
 caller that holds a journal and a namespace — the append and log routes in
@@ -5008,8 +5019,9 @@ caller that holds a journal and a namespace — the append and log routes in
 `RosterSource` installed for the namespace when one is, and from `roster.json`
 otherwise; `RingJournal::roster_file` is now named as the file half and has two
 callers, that door and the CLI writer. `MeshRosterSource` (in `ring_roster.rs`)
-is the source for `mesh-measurements`, installed beside the rail itself in
-`daemon.rs` through `MeshRosterSource::install`, the one place the namespace
+is the source for `mesh-measurements` — and, since cw-lift 4, for every
+namespace in `DAEMON_OWN_NAMESPACES` — installed beside the rail itself in
+`daemon.rs` through `MeshRosterSource::install`, the one place a namespace
 and its derivation meet. Until then those three paths read the file — empty
 for this namespace — so the daemon refused its own key at the append door and
 a peer's seal retired nothing on the ring that most needs retention. The
@@ -5344,6 +5356,32 @@ an offline node contributes nothing further, and a writing node can always
 seal. WHEN to seal stays the operator's, for the reason `sync.rs` refuses a
 truncation setting: a local cadence puts the disagreement one layer up.
 
+**Amended at cw-lift 4 for the daemon's OWN namespaces: the daemon writes
+them, so the daemon seals them.** The operator's-call rule holds for an APP's
+ring — sealing forgets history and an app's history is the app's. It does not
+hold for
+`sovereign-mesh/src/ring_roster.rs::DAEMON_OWN_NAMESPACES`, which the daemon
+writes on a cadence nobody chose: nobody is going to run
+`svrn ring seal inference` every few weeks, and a journal nobody seals grows
+without bound on every node, so leaving the decision unmade IS a decision. It
+is safe to automate here because both halves check themselves — `compact`
+re-admits its own result and refuses a prune that would raise a gap, and the
+SNAPSHOT re-appends the live set under its ORIGINAL `t`, so the fold puts every
+row back where its author left it. That is exactly what `sync.rs`'s refused
+truncation knob was not: an operator-set line with nothing checking what fell
+below it. The threshold is ONE constant,
+`rail_kv_pump::SEAL_AFTER_OWN_OPS = 2_000`, for KV and measurements alike, and
+what it counts is this node's own ADMITTED ops at or above its authenticated
+floor. The cost of that count is a fold, so a cheap one-sided gate runs first:
+own RAW lines on disk (parsed, not verified) can never be fewer than
+own-admitted-above-floor, so a cheap count under the bar proves the expensive
+one is (§9.5). **The seal's honest cost, stated rather than hidden**: a
+snapshot carries LIVE rows, and a tombstone is not one — a delete this node
+published stops travelling once the seal that retired it lands, so a peer that
+never received the tombstone keeps its stale value. That is the KV shape of
+K7's "no history past the next seal", and it is why the threshold is thousands
+of ops rather than hundreds.
+
 **`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
 `ring roster add <person> --self` binds a name to the node key it signs with,
@@ -5677,6 +5715,51 @@ directory per namespace — and this store is the fold of it:
   `wikipedia-newsworthy-tracked` (was `…:tracked`). A colon is legal on
   POSIX and APFS and is not on NTFS, and the desktop ships on Windows
   linking `sovereign-mesh` and through it `commonwealth-rail`.
+
+- **The pump, the seal and the fold on the receive side are the daemon's**
+  (`sovereign-mesh/src/rail_kv_pump.rs`). `spawn_rail_kv_pump` runs beside
+  `spawn_ring_sync_loop` and drains the outbox every
+  `RAIL_KV_PUMP_INTERVAL` (2 s): per row, `rail.journal(app_id)` →
+  `rail.roster(&journal)` (THE door) → `journal.append(Record)`, then ack.
+  Three verdicts, kept apart (§18.2): appended and acked; **deferred** on
+  `RailError::NotInRoster` — a solo daemon is a normal daemon, the row STAYS
+  queued and travels the moment membership exists, logged once per namespace
+  per tick at debug; **refused** on anything else — acked WITH a warn naming
+  the sentence, never a silent drop and never an infinite retry.
+  `MeshStore` is `in_memory()` in production, so the pump's FIRST act at boot
+  is `project_all_on_disk` — the store is rebuilt from the journals or it
+  holds nothing at all.
+- **On receive, the fold runs once per namespace per ring-sync round**, after
+  every peer, in `run_one_round` — NOT inside `exchange`. Half the ops a node
+  receives never pass through its own exchange: a peer PUSHES on call 2 of
+  ITS exchange and those land through `/internal/ring/sync`, a route in
+  another crate. A projection hung off our own pull count would be blind to
+  exactly the direction a local write creates.
+  `RoundOutcome::namespaces_projected` reports it, and
+  `a_round_projects_the_namespace_even_when_it_pulled_nothing` is the pin.
+- **`mesh-measurements` is skipped by NAME, not by parse failure.**
+  `rail_kv_pump::is_kv_namespace` is one predicate against
+  `MEASUREMENTS_APP_ID`. The KV fold's own `unreadable` count would work as a
+  discriminator and would then report ~28 unreadable acts a round for a
+  namespace behaving perfectly — a count that fires when nothing is wrong
+  stops being read (§18.3).
+- **A local write does not wait for the 60-second round.** One
+  `tokio::sync::Notify` is held by both halves: the pump raises it after any
+  successful append and `spawn_ring_sync_loop` selects on it beside its
+  interval sleep. Same wire, same sender — the pump never talks to a peer, it
+  asks the one replication path to run.
+- **Which namespaces replicate is DECLARED**, in
+  `ring_roster::DAEMON_OWN_NAMESPACES`, and every entry is the constant its
+  owning subsystem exports (`INFERENCE_APP_ID`, `CONTRIBUTIONS_APP_ID`,
+  `PROCESSED_SHARDS_APP_ID`, `NOTES_APP_ID`, `APP_ID_PUBLIC`,
+  `APP_ID_TRACKED`, `MEASUREMENTS_APP_ID`) rather than a literal repeated
+  here (§10.6). `MeshRosterSource::install` derives a roster from membership
+  for each. It has to be a list and not a rule: an APP's ring keeps a roster
+  FILE, and there is no property of a namespace string that separates
+  `inference` from `house-expenses` — a fallback like "derive when the roster
+  file is empty" would silently admit every mesh member as an author of an
+  app's journal (§7.1). A `MeshStore` `app_id` that is NOT on the list
+  appends nothing and says so, which is the loud failure.
 
 `all_entries_for_gossip` + `merge_entry` are the OLD contract — the whole
 store, at peers, on a timer. Both are still present because the sender
@@ -7806,7 +7889,7 @@ every chaos bank on disk.
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store gossip replication | `commonwealth-api/src/routes_app_internal.rs` · `sovereign-mesh/src/gossip.rs` | Gossip replicates the `Mesh` member list in Steps 1-3 and the mesh_store in Step 4. `POST /internal/app/state` is the ONE receiver and `recv_app_state` is the one handler; `AppStateGossipBody` / `GossipStoreEntry` are now the ONE declaration of the wire shape, with `From<&StoreEntry>` projecting a row onto it — before cw-lift 2c there were three hand-written `json!` literals of those five fields and nothing making them agree with the struct that parses them. **The periodic sender EXISTS** — Step 4, a full-snapshot anti-entropy push on the 10 s round. **Senders of replicated state: 3** (this push, the ring digest, `broadcast_now`'s single-entry POST), down from 4 — `corpus_collaborate`'s queue-handoff unicast was deleted at 2c: its targets were a subset of the round's and the consumer it fed polls at 30 s. The count is `cw-twin-visibility`'s instrument and is pinned structurally by `gossip_push_surfacing::every_sender_of_replicated_state_is_declared`, so a fourth is a build failure rather than a later grep. **Step 4 did NOT go at 2e (kill bar K8).** It is the only anti-entropy for every namespace `all_entries_for_gossip` still yields — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `mesh-measurements`, `wikipedia-newsworthy:tracked` — and only `mesh-measurements` fits the ring journal today; the rest wait on retention. Deleting it would end replication, not move it. Its byte gauge is `RING_SYNC_OPS_BUDGET_BYTES`, the one decider (§10.6), not a second `MAX_REQUEST_BODY_BYTES / 2`. Note `FANOUT = 2` governs Steps 1-3 only — Step 4 hits EVERY online peer, so a bandwidth model built on `FANOUT` understates it by N/2. |
+| mesh_store gossip replication | `commonwealth-api/src/routes_app_internal.rs` · `sovereign-mesh/src/gossip.rs` | Gossip replicates the `Mesh` member list in Steps 1-3 and the mesh_store in Step 4. `POST /internal/app/state` is the ONE receiver and `recv_app_state` is the one handler; `AppStateGossipBody` / `GossipStoreEntry` are now the ONE declaration of the wire shape, with `From<&StoreEntry>` projecting a row onto it — before cw-lift 2c there were three hand-written `json!` literals of those five fields and nothing making them agree with the struct that parses them. **The periodic sender EXISTS** — Step 4, a full-snapshot anti-entropy push on the 10 s round. **Senders of replicated state: 3** (this push, the ring digest, `broadcast_now`'s single-entry POST), down from 4 — `corpus_collaborate`'s queue-handoff unicast was deleted at 2c: its targets were a subset of the round's and the consumer it fed polls at 30 s. The count is `cw-twin-visibility`'s instrument and is pinned structurally by `gossip_push_surfacing::every_sender_of_replicated_state_is_declared`, so a fourth is a build failure rather than a later grep. **Step 4 did NOT go at 2e (kill bar K8).** It is the only anti-entropy for every namespace `all_entries_for_gossip` still yields — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `mesh-measurements`, `wikipedia-newsworthy-tracked` — and only `mesh-measurements` fits the ring journal today; the rest wait on retention. Deleting it would end replication, not move it. Its byte gauge is `RING_SYNC_OPS_BUDGET_BYTES`, the one decider (§10.6), not a second `MAX_REQUEST_BODY_BYTES / 2`. Note `FANOUT = 2` governs Steps 1-3 only — Step 4 hits EVERY online peer, so a bandwidth model built on `FANOUT` understates it by N/2. |
 | Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
 

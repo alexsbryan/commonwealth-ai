@@ -39,4 +39,4 @@ pub use plan::{
     LoadPolicy, MeshPlan, NodeRole, PlanTrigger, RequestRouter, RoutingCondition, RoutingRule,
     SchedulingStrategy, Tier, TierQueueDepths, UnavailableReason,
 };
-pub use store_adapter::InferenceStateStore;
+pub use store_adapter::{InferenceStateStore, INFERENCE_APP_ID};

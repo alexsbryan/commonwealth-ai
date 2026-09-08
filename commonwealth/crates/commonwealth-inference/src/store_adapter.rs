@@ -20,7 +20,17 @@ use commonwealth_state::MeshStore;
 use crate::inference_plan::InferencePlan;
 use crate::model::ModelInfo;
 
-const APP_ID: &str = "inference";
+/// The mesh-store namespace this adapter keeps the inference plan and the
+/// model catalogue in — and, since cw-lift 4, the ring namespace it replicates
+/// over.
+///
+/// Public because it now has a reader that is not a writer:
+/// `sovereign_mesh::ring_roster::DAEMON_OWN_NAMESPACES` declares which rings
+/// this daemon authors on, and a literal in each place is two answers to what
+/// this namespace is called (ARCH §10.6).
+pub const INFERENCE_APP_ID: &str = "inference";
+
+const APP_ID: &str = INFERENCE_APP_ID;
 
 /// Encode a ModelId as a 32-character lowercase hex string using all 16 bytes.
 ///

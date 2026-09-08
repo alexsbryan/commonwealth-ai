@@ -184,7 +184,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // 5 -> 9 (2026-09-08): four more inline `#[cfg(test)]` exchanges — the
     // seal-prune pair (4a), then the derived-roster prune test and its
     // control half (3c9a41bd8). Every one binds a loopback `internal_router`.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 9),
+    // 9 -> 13 (2026-09-08, cw-lift 4): the mesh store becomes a projection of
+    // the rail, and its four two-node tests each drive one — a write reaching
+    // a peer's store, a delete that an older write does not undo, a seal with
+    // its snapshot, and a private namespace that reaches neither. All
+    // loopback `internal_router`.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 13),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests

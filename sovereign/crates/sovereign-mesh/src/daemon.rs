@@ -289,6 +289,12 @@ enum DaemonState {
         /// and its own cadence rather than a step inside gossip — see
         /// [`crate::ring_sync`] for the bandwidth arithmetic that forces it.
         _ring_sync_handle: crate::ring_sync::RingSyncHandle,
+        /// Aborts the mesh-store outbox pump on Drop — the loop that signs
+        /// local store writes onto their ring journals and seals the daemon's
+        /// own namespaces. Same pattern and the same second reason as
+        /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
+        /// its `tokio::spawn` in a stray diff and stay silent about it.
+        _rail_kv_pump_handle: crate::rail_kv_pump::RailKvPumpHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -3314,10 +3320,23 @@ impl EmbeddedDaemon {
         let collaborate_handle =
             crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
 
-        // Ring-ledger replication: one round immediately, then every minute.
+        // Ring-ledger replication: one round immediately, then every minute —
+        // or as soon as the KV pump signs a local write, whichever comes
+        // first. ONE `Notify`, held by both halves: the pump raises it, the
+        // sync loop selects on it beside its interval. The pump also rebuilds
+        // the mesh store from the journals on disk before its first drain,
+        // which is the boot half of "the journal is truth" — production
+        // `MeshStore` is `in_memory()`.
+        let ring_write_nudge = Arc::new(tokio::sync::Notify::new());
         let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
             app_state.clone(),
             crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+            Arc::clone(&ring_write_nudge),
+        );
+        let rail_kv_pump_handle = crate::rail_kv_pump::spawn_rail_kv_pump(
+            app_state.clone(),
+            crate::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
+            ring_write_nudge,
         );
 
         // Re-spawn any solo corpus ingest the daemon was running before
@@ -3748,6 +3767,7 @@ impl EmbeddedDaemon {
             _gossip_handle: gossip_handle,
             _collaborate_handle: collaborate_handle,
             _ring_sync_handle: ring_sync_handle,
+            _rail_kv_pump_handle: rail_kv_pump_handle,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,

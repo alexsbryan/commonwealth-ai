@@ -1356,7 +1356,7 @@ pub(super) fn wire_note_propagation_sink(
             // reaches here. Until cw-lift 2b this was an `if
             // ev.tombstone` whose two arms both evaluated to "notes",
             // which read as a private path that does not exist.
-            let app_id = "notes";
+            let app_id = corpus_engine_notes::NOTES_APP_ID;
             // Receipt stamp (order commons-fluency fix 3): the wire
             // copy carries the publication clock — the moment THIS
             // sink's set() accepted it — which is the origin end of
@@ -1560,7 +1560,7 @@ pub(super) fn spawn_notes_ingest_poller(
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 interval.tick().await;
-                let entries = match mesh_for_poller.scan("notes", "") {
+                let entries = match mesh_for_poller.scan(corpus_engine_notes::NOTES_APP_ID, "") {
                     Ok(e) => e,
                     Err(err) => {
                         tracing::debug!(

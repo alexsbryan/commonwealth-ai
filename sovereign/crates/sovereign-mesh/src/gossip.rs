@@ -814,7 +814,7 @@ pub async fn run_one_round(
     // yields, and after rung 2b that set is the ones with a real
     // cross-peer consumer: `inference`, `contributions`, `corpus-engine`,
     // `notes`, `work-atlas`, `mesh-measurements`,
-    // `wikipedia-newsworthy:tracked`. Only `mesh-measurements` fits the
+    // `wikipedia-newsworthy-tracked`. Only `mesh-measurements` fits the
     // ring journal today — the other five wait on retention, which the
     // journal does not have — so deleting this loop would not move
     // replication anywhere, it would end it. It also carries

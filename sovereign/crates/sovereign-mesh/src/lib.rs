@@ -86,6 +86,7 @@ pub mod project_http;
 pub mod projects;
 pub mod prompt_compactor;
 pub mod rail_bind;
+pub mod rail_kv_pump;
 pub mod reading_formatters;
 pub mod reading_http;
 #[cfg(feature = "treesitter")]

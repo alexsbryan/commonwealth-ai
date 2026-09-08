@@ -53,6 +53,6 @@ pub use note::{is_ephemeral_kind, Note, NoteScope, NoteSource, ScopeFilter, EPHE
 pub use notes::{
     BackfillReport, EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow, GlinerFn,
     IngestRemoteReport, NodeAttribution, NodeRoster, NotePropagationEvent, NoteReadOutcome,
-    NoteStore, PropagationSinkFn, RosterEntry, ToolCallLogRow,
+    NoteStore, PropagationSinkFn, RosterEntry, ToolCallLogRow, NOTES_APP_ID,
 };
 pub use project_docs::{find_markdown_files, DocResult, ProjectDocsStore};

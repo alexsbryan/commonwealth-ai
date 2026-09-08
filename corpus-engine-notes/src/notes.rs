@@ -191,6 +191,19 @@ pub struct ExportedNoteEntity {
     pub kind: String,
 }
 
+/// The mesh-store namespace a propagated note lands in — and, since cw-lift 4,
+/// the ring namespace it replicates over.
+///
+/// Here rather than at the daemon's wiring site because the namespace is a
+/// property of the data, and it now has a second reader that is not the writer:
+/// `sovereign_mesh::ring_roster::DAEMON_OWN_NAMESPACES` declares which rings
+/// this daemon authors on, and a literal in each place is two answers to what
+/// this namespace is called (ARCH §10.6).
+///
+/// PRIVATE notes are not this: they go to `notes-private`, which is
+/// gossip-excluded and never reaches a wire at all.
+pub const NOTES_APP_ID: &str = "notes";
+
 /// Fire-and-forget callback the daemon installs to publish
 /// propagation events. The closure adapts the event into whatever
 /// transport the caller owns (most commonly

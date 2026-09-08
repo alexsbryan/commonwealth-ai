@@ -63,6 +63,7 @@
 //! has no origin field at all because the op carries its author in a
 //! signature.
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_api::routes_internal::{
@@ -71,6 +72,7 @@ use commonwealth_api::routes_internal::{
 use commonwealth_api::state::AppState;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_transport::{peer_contact, TrafficClass};
+use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
 /// Money does not need ten-second convergence, and the bandwidth argument in
@@ -128,6 +130,11 @@ pub struct RoundOutcome {
     pub peers_refused: usize,
     pub ops_pulled: usize,
     pub ops_pushed: usize,
+    /// Namespaces whose journal was folded back into the mesh store this round.
+    /// Counted apart from `namespaces` because a measurements ring, a journal
+    /// that would not admit and a namespace the store refuses are all "not
+    /// projected" and none of them is "nothing to project" (ARCH §18.2).
+    pub namespaces_projected: usize,
 }
 
 /// Spawn the periodic ring-sync task. Call once per daemon start.
@@ -137,7 +144,18 @@ pub struct RoundOutcome {
 /// holds — waiting a full minute to boot-republish would leave a freshly
 /// restarted peer confidently reporting a total over a subset for that whole
 /// minute.
-pub fn spawn_ring_sync_loop(app_state: AppState, interval: Duration) -> RingSyncHandle {
+///
+/// `nudge` is the wake-up [`crate::rail_kv_pump`] fires after it signs a local
+/// write onto a journal. Sixty seconds is the right cadence for anti-entropy
+/// and the wrong one for "I just wrote something", and the two do not have to
+/// be the same number: the nudge starts a round now, and the round is the same
+/// round. **Nothing about the sender census changes** — the pump does not talk
+/// to a peer, it asks this loop to.
+pub fn spawn_ring_sync_loop(
+    app_state: AppState,
+    interval: Duration,
+    nudge: Arc<Notify>,
+) -> RingSyncHandle {
     let task = tokio::spawn(async move {
         info!(
             interval_secs = interval.as_secs(),
@@ -154,11 +172,20 @@ pub fn spawn_ring_sync_loop(app_state: AppState, interval: Duration) -> RingSync
                     peers_refused = outcome.peers_refused,
                     ops_pulled = outcome.ops_pulled,
                     ops_pushed = outcome.ops_pushed,
+                    projected = outcome.namespaces_projected,
                     round_ms = started.elapsed().as_millis() as u64,
                     "ring sync: round"
                 );
             }
-            tokio::time::sleep(interval).await;
+            // `Notify::notify_one` stores one permit when nobody is waiting, so
+            // a write that lands mid-round wakes the NEXT sleep rather than
+            // being lost — which is exactly the write that most needs to go.
+            tokio::select! {
+                _ = tokio::time::sleep(interval) => {}
+                _ = nudge.notified() => {
+                    debug!("ring sync: woken by a local write rather than the interval");
+                }
+            }
         }
     });
     RingSyncHandle { _task: task }
@@ -259,6 +286,30 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
                 outcome.peers_refused += 1;
             } else {
                 outcome.peers_unreachable += 1;
+            }
+        }
+
+        // ── The journal is truth; the store is its projection.
+        //
+        // ONCE per namespace per round, after every peer, and NOT inside
+        // `exchange`. Two reasons, and the second is the one that matters:
+        //
+        // - Folding is one Ed25519 verify per op, so doing it per chunk would
+        //   pay a bootstrap's whole read cost sixteen times over for one
+        //   answer that does not change until the last chunk lands.
+        // - **Half the ops this node receives never pass through `exchange`
+        //   at all.** A peer PUSHES on call 2 of its own exchange, and those
+        //   ops arrive through `/internal/ring/sync` — a route, in another
+        //   crate, that this loop never runs. A projection hung off our own
+        //   pull would be blind to exactly the direction the pump's nudge
+        //   creates, and a write would reach a peer's disk immediately and its
+        //   store never.
+        if let Ok(j) = rail.journal(namespace) {
+            if crate::rail_kv_pump::project_namespace(app_state, &rail, &j)
+                .await
+                .is_some()
+            {
+                outcome.namespaces_projected += 1;
             }
         }
     }
@@ -644,13 +695,21 @@ mod tests {
     }
 
     async fn serve(router: axum::Router) -> String {
+        let addr = serve_at(router).await;
+        format!("http://{addr}/internal/ring/sync")
+    }
+
+    /// [`serve`] for a caller that needs the ADDRESS rather than the route —
+    /// `run_one_round` dials a member's `addresses`, so a test that drives the
+    /// round has to put a real one in the mesh.
+    async fn serve_at(router: axum::Router) -> std::net::SocketAddr {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let _ = axum::serve(listener, router).await;
         });
         tokio::time::sleep(Duration::from_millis(20)).await;
-        format!("http://{addr}/internal/ring/sync")
+        addr
     }
 
     /// **The gate, and the thing 2a measured.** A 10,000-op journal — past
@@ -1005,6 +1064,501 @@ mod tests {
             "the stall check must stop after the second chunk, not run all \
              {MAX_CHUNKS_PER_EXCHANGE} — {} calls",
             hits.load(std::sync::atomic::Ordering::SeqCst)
+        );
+    }
+
+    // ── The mesh store as a projection of the rail (cw-lift 4) ──
+    //
+    // Two nodes, the REAL internal router, the REAL pump and the REAL fold.
+    // Every helper below is deliberately built from the production pieces:
+    // a fixture that appended its own ops or projected with its own roster
+    // would pass whatever the two halves happened to agree on.
+
+    /// The namespace these tests replicate. A `MeshStore` app_id verbatim, and
+    /// one of `DAEMON_OWN_NAMESPACES` — a namespace not on that list has no
+    /// derived roster and would be refused at the door for that reason alone,
+    /// which is a different test.
+    const KV: &str = commonwealth_inference::INFERENCE_APP_ID;
+
+    /// One mesh both nodes see. Each member carries the pubkey of the key its
+    /// node signs with, because that equality is the whole bridge between a
+    /// signature and a `NodeId` — a fixture whose membership is empty makes
+    /// every projected row `unattributed` for that reason and nothing else.
+    fn kv_mesh(
+        ka: &SigningKey,
+        kb: &SigningKey,
+        a: NodeId,
+        b: NodeId,
+    ) -> commonwealth_core::mesh::Mesh {
+        use crate::ring_roster::tests::{member, mesh_of, pubkey_of};
+        mesh_of(vec![
+            member(a, "a", Some(pubkey_of(ka))),
+            member(b, "b", Some(pubkey_of(kb))),
+        ])
+    }
+
+    /// A node whose rail derives its roster from that membership — what the
+    /// daemon installs, through the same call the daemon makes.
+    fn kv_node(
+        dir: &std::path::Path,
+        key: &SigningKey,
+        self_id: NodeId,
+        mesh: commonwealth_core::mesh::Mesh,
+    ) -> (AppState, Arc<RingRail>) {
+        let state = AppState::new(self_id, mesh);
+        let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+        crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
+        state.install_ring_rail(rail.clone());
+        (state, rail)
+    }
+
+    /// One store write as the act a node would have signed, with the write
+    /// time chosen by the caller. The pump builds these from the outbox; these
+    /// are for the history a test needs to already exist.
+    fn kv_op(
+        ns: &str,
+        key: &SigningKey,
+        seq: u64,
+        k: &str,
+        v: Option<&[u8]>,
+        t: u64,
+    ) -> Op<SignedOp> {
+        signed_in(
+            ns,
+            key,
+            seq,
+            RailAct::Record {
+                payload: commonwealth_state::rail_kv::to_payload(k, v, t).unwrap(),
+            },
+        )
+    }
+
+    fn value_at(state: &AppState, app_id: &str, key: &str) -> Option<Vec<u8>> {
+        state
+            .inner
+            .mesh_store
+            .get(app_id, key)
+            .unwrap()
+            .map(|e| e.value.to_vec())
+    }
+
+    /// **(a) A local store write reaches a peer's store, over the ring.**
+    ///
+    /// The whole mechanism end to end: `set` queues, the pump signs, the
+    /// exchange carries, the fold projects. The origin assertion is the one
+    /// that cannot be faked — B never sees a `NodeId` on the wire, only a
+    /// signature, and the roster is what turns one into the other.
+    ///
+    /// Watched RED by deleting the `journal.append` arm's `acked.push(row.id)`
+    /// and returning before the append: `pumped.appended` is 0 and B's store
+    /// answers `None`.
+    #[tokio::test]
+    async fn a_local_store_write_reaches_a_peers_store_through_the_ring() {
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[1u8; 32]),
+            SigningKey::from_bytes(&[2u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(1), NodeId::from_u128(2));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, _b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        assert!(a_state
+            .inner
+            .mesh_store
+            .set(KV, "plan", bytes::Bytes::from_static(b"v1"), a_id)
+            .unwrap());
+        assert_eq!(
+            a_state.inner.mesh_store.outbox_len().unwrap(),
+            1,
+            "a local write queues for the rail"
+        );
+
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 1, "{pumped:?}");
+        assert_eq!(pumped.deferred + pumped.refused, 0, "{pumped:?}");
+        assert_eq!(
+            a_state.inner.mesh_store.outbox_len().unwrap(),
+            0,
+            "an appended row is acked"
+        );
+
+        let url = serve(internal_router(b_state.clone())).await;
+        let journal = a_rail.journal(KV).unwrap();
+        let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal).await;
+        assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
+        assert_eq!(out.pushed, 1, "the write landed on the peer's journal");
+
+        assert_eq!(
+            crate::rail_kv_pump::project_all_on_disk(&b_state).await,
+            1,
+            "the peer folds the namespace it just received"
+        );
+        let got = b_state
+            .inner
+            .mesh_store
+            .get(KV, "plan")
+            .unwrap()
+            .expect("the peer's store holds the write");
+        assert_eq!(got.value.as_ref(), b"v1");
+        assert_eq!(
+            got.origin, a_id,
+            "the origin comes from the roster placing a signature, never from \
+             anything the sender supplied"
+        );
+    }
+
+    /// **(b) A delete travels, and an older write does not undo it.**
+    ///
+    /// Two claims in one journal, because they are the same claim: the fold
+    /// orders on the payload's `t`, so a tombstone at `t` beats every write
+    /// below it no matter when the line arrived. The lower-`t` write here is
+    /// signed by the OTHER node, which is the case an arrival-order rule
+    /// cannot get right.
+    ///
+    /// Watched RED by folding on `op.ts_unix` instead of the payload's `t` in
+    /// `rail_kv::project`: B's store gets `stale` back and the final assertion
+    /// fails.
+    #[tokio::test]
+    async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[3u8; 32]),
+            SigningKey::from_bytes(&[4u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(11), NodeId::from_u128(12));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+        let now = commonwealth_core::clock::unix_now_secs();
+
+        // A already holds the key, from a write older than the wall clock —
+        // so the delete below is unambiguously later. `set` stamps `now`, and
+        // a set/delete pair inside one second is a tie the fold breaks by
+        // actor and id rather than by intent.
+        let a_journal = a_rail.journal(KV).unwrap();
+        assert_eq!(
+            a_journal
+                .ingest_all(&[kv_op(KV, &ka, 0, "k", Some(b"live"), now - 100)])
+                .unwrap(),
+            1
+        );
+        crate::rail_kv_pump::project_all_on_disk(&a_state).await;
+        assert_eq!(value_at(&a_state, KV, "k").as_deref(), Some(&b"live"[..]));
+
+        let b_url = serve(internal_router(b_state.clone())).await;
+        let client = reqwest::Client::new();
+        let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "k").as_deref(),
+            Some(&b"live"[..]),
+            "control: the key reached the peer before it was deleted"
+        );
+
+        // The delete, through the store, through the pump, over the ring.
+        assert!(a_state.inner.mesh_store.delete(KV, "k").unwrap());
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 1, "the tombstone is an act like any other");
+        let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "k"),
+            None,
+            "the peer lost the key the tombstone names"
+        );
+
+        // A write B signed, older than the tombstone, arriving after it.
+        let b_journal = b_rail.journal(KV).unwrap();
+        assert_eq!(
+            b_journal
+                .ingest_all(&[kv_op(KV, &kb, 0, "k", Some(b"stale"), now - 50)])
+                .unwrap(),
+            1
+        );
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "k"),
+            None,
+            "a lower-t write does not resurrect a deleted key"
+        );
+        // …and it does not resurrect it on the node that deleted it either,
+        // once the op gets there.
+        let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        assert_eq!(out.pulled, 1, "B's older write came over");
+        crate::rail_kv_pump::project_all_on_disk(&a_state).await;
+        assert_eq!(value_at(&a_state, KV, "k"), None);
+    }
+
+    /// **(c) A seal bounds the ring, and the snapshot keeps every live key.**
+    ///
+    /// The filler here is SUPERSEDED history of the same four keys — 2,000
+    /// older writes the live set has already overwritten, which is exactly
+    /// what a seal is for. Afterwards the peer's disk holds the seal and the
+    /// snapshot and nothing else, and its store still answers for every key.
+    ///
+    /// The assertion is on what is on DISK and on what the STORE answers, not
+    /// on a return value: a seal that retired nothing, or a snapshot that
+    /// dropped the live set, would leave `PumpOutcome` looking identical.
+    ///
+    /// Watched RED by deleting the `snapshot()` call from `seal_if_due`: the
+    /// disk assertion passes (one line, the seal) and every value assertion
+    /// below it fails — the seal became a delete.
+    #[tokio::test]
+    async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
+        const KEYS: [&str; 4] = ["k0", "k1", "k2", "k3"];
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[5u8; 32]),
+            SigningKey::from_bytes(&[6u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(21), NodeId::from_u128(22));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        for k in KEYS {
+            assert!(a_state
+                .inner
+                .mesh_store
+                .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
+                .unwrap());
+        }
+        // ── The control: four ops is not two thousand, and nothing seals.
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 4);
+        assert_eq!(
+            (pumped.sealed, pumped.snapshot_rows),
+            (0, 0),
+            "below the threshold the pump seals nothing"
+        );
+        let a_journal = a_rail.journal(KV).unwrap();
+        assert_eq!(a_journal.read().unwrap().0.len(), 4);
+
+        // ── 2,000 older writes of the same keys: history, already superseded.
+        let old = commonwealth_core::clock::unix_now_secs() - 10_000;
+        let filler: Vec<Op<SignedOp>> = (0..crate::rail_kv_pump::SEAL_AFTER_OWN_OPS as u64)
+            .map(|i| {
+                kv_op(
+                    KV,
+                    &ka,
+                    4 + i,
+                    KEYS[i as usize % KEYS.len()],
+                    Some(format!("old-{i}").as_bytes()),
+                    old + i,
+                )
+            })
+            .collect();
+        let total = 4 + filler.len();
+        assert_eq!(a_journal.ingest_all(&filler).unwrap(), filler.len());
+
+        // The peer takes the whole history first, so the prune below has
+        // something to remove — otherwise "B's disk is short" would be true
+        // because B was never told anything.
+        let a_url = serve(internal_router(a_state.clone())).await;
+        let client = reqwest::Client::new();
+        let b_journal = b_rail.journal(KV).unwrap();
+        let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        assert_eq!(
+            b_journal.read().unwrap().0.len(),
+            total,
+            "control: the peer holds the unsealed history"
+        );
+
+        // ── One more local write, and the seal fires on the same tick.
+        assert!(a_state
+            .inner
+            .mesh_store
+            .set(KV, "k0", bytes::Bytes::from_static(b"newest"), a_id)
+            .unwrap());
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 1);
+        assert_eq!(pumped.sealed, 1, "{pumped:?}");
+        assert_eq!(
+            pumped.snapshot_rows,
+            KEYS.len(),
+            "every live row is re-appended above the new floor"
+        );
+        let held = a_journal.read().unwrap().0;
+        assert_eq!(
+            held.len(),
+            1 + KEYS.len(),
+            "the writer's own disk is the seal plus the snapshot: {held:?}"
+        );
+        assert!(matches!(held[0].kind.act, RailAct::Seal));
+
+        // ── The peer meets the seal and retires the same prefix.
+        let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        assert_eq!(
+            b_journal.read().unwrap().0.len(),
+            1 + KEYS.len(),
+            "the peer's disk holds only the seal and the snapshot"
+        );
+        assert_eq!(
+            a_journal.digest().unwrap(),
+            b_journal.digest().unwrap(),
+            "two nodes, one claim"
+        );
+
+        // ── …and every live key is still readable on the peer.
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "k0").as_deref(),
+            Some(&b"newest"[..]),
+            "the newest write survives its own snapshot"
+        );
+        for k in &KEYS[1..] {
+            assert_eq!(
+                value_at(&b_state, KV, k).as_deref(),
+                Some(format!("live-{k}").as_bytes()),
+                "{k} did not survive the seal"
+            );
+        }
+    }
+
+    /// **(d) A namespace that never leaves a machine never leaves it.**
+    ///
+    /// The sender-side guard is inside the store's own transaction, so this
+    /// asserts on the two places a private write could surface if it slipped:
+    /// this node's outbox and its journals, and the peer's store. The control
+    /// in the same test is a public write on the same tick — without it, an
+    /// entirely broken pump would pass.
+    ///
+    /// Watched RED by deleting the `is_gossip_excluded` guard from
+    /// `backend::enqueue_on`: the row queues, the pump appends it, a
+    /// `notes-private` journal appears on disk, and the peer refuses it at
+    /// `apply_projection` — the last layer, and the first three assertions all
+    /// go red on the way there.
+    #[tokio::test]
+    async fn an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store() {
+        const PRIVATE: &str = "notes-private";
+        assert!(
+            commonwealth_state::GOSSIP_EXCLUDED_APP_IDS.contains(&PRIVATE),
+            "this test is about an excluded namespace"
+        );
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[7u8; 32]),
+            SigningKey::from_bytes(&[8u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(31), NodeId::from_u128(32));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, _b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        assert!(a_state
+            .inner
+            .mesh_store
+            .set(PRIVATE, "secret", bytes::Bytes::from_static(b"mine"), a_id)
+            .unwrap());
+        assert!(a_state
+            .inner
+            .mesh_store
+            .set(KV, "public", bytes::Bytes::from_static(b"shared"), a_id)
+            .unwrap());
+        assert_eq!(
+            a_state.inner.mesh_store.outbox_len().unwrap(),
+            1,
+            "only the public write queued"
+        );
+
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 1, "{pumped:?}");
+        let namespaces = a_rail.namespaces().unwrap();
+        assert!(
+            !namespaces.iter().any(|n| n == PRIVATE),
+            "a private namespace has no journal at all: {namespaces:?}"
+        );
+
+        let url = serve(internal_router(b_state.clone())).await;
+        let journal = a_rail.journal(KV).unwrap();
+        let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+
+        assert_eq!(
+            value_at(&b_state, PRIVATE, "secret"),
+            None,
+            "the private write is nowhere on the peer"
+        );
+        assert_eq!(
+            value_at(&b_state, KV, "public").as_deref(),
+            Some(&b"shared"[..]),
+            "control: the public write on the same tick did travel"
+        );
+    }
+
+    /// **(e) The ROUND is what projects, and it does so whether or not it
+    /// pulled anything.**
+    ///
+    /// The wiring the four tests above reach past: they call
+    /// `project_all_on_disk` by hand, which is the boot path. In production a
+    /// namespace is folded once per round, after every peer — and the second
+    /// half of this test is why it cannot instead hang off `exchange`'s pulled
+    /// count. **Half the ops a node receives never pass through its own
+    /// `exchange`**: a peer PUSHES on call 2 of its exchange, and those land
+    /// through `/internal/ring/sync`, a route in another crate. A projection
+    /// conditioned on our own pull would be blind to exactly the direction the
+    /// pump's nudge creates.
+    ///
+    /// Watched RED by moving the projection inside `if ex.pulled > 0`: the
+    /// first half still passes and the converged round below reports
+    /// `namespaces_projected: 0`, which is the shape of the bug.
+    #[tokio::test]
+    async fn a_round_projects_the_namespace_even_when_it_pulled_nothing() {
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[9u8; 32]),
+            SigningKey::from_bytes(&[10u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(41), NodeId::from_u128(42));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let now = commonwealth_core::clock::unix_now_secs();
+
+        let a_dir = da.path().to_path_buf();
+        let mut mesh_for_b = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(&a_dir, &ka, a_id, kv_mesh(&ka, &kb, a_id, b_id));
+        a_rail
+            .journal(KV)
+            .unwrap()
+            .ingest_all(&[kv_op(KV, &ka, 0, "from-a", Some(b"a"), now)])
+            .unwrap();
+        let a_addr = serve_at(internal_router(a_state.clone())).await;
+
+        // B's view of the mesh has A at a real address; everything else about
+        // the two states is identical.
+        if let Some(record) = mesh_for_b.members.get_mut(&a_id) {
+            record.addresses = vec![a_addr];
+        }
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh_for_b);
+        b_rail
+            .journal(KV)
+            .unwrap()
+            .ingest_all(&[kv_op(KV, &kb, 0, "from-b", Some(b"b"), now)])
+            .unwrap();
+
+        let round = run_one_round(&b_state).await;
+        assert_eq!(round.peers_reached, 1, "{round:?}");
+        assert_eq!((round.ops_pulled, round.ops_pushed), (1, 1), "{round:?}");
+        assert_eq!(round.namespaces_projected, 1, "{round:?}");
+        assert_eq!(
+            value_at(&b_state, KV, "from-a").as_deref(),
+            Some(&b"a"[..]),
+            "the round folded what it pulled"
+        );
+
+        // Converged: nothing moves, and the namespace is projected anyway.
+        let round = run_one_round(&b_state).await;
+        assert_eq!((round.ops_pulled, round.ops_pushed), (0, 0), "{round:?}");
+        assert_eq!(
+            round.namespaces_projected, 1,
+            "a round that pulled nothing still folds — ops a peer PUSHED \
+             arrive by a route this loop never runs: {round:?}"
         );
     }
 }
