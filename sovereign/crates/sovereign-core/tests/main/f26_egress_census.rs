@@ -151,14 +151,16 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback-only at both layers and refuses anything else — so the class
     // is LocalDaemon, not egress. Nothing here leaves the machine.
     ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
-    // sovereign-cli `svrn quality check` (quality_check_cmd.rs, 2026-09-04,
-    // order quality-check-lean): two `reqwest::Client`s against the host
-    // daemon on :9741 — the stack fingerprint reads `/v1/models`, and the
-    // `SlotDecodes` precondition sends a one-token completion so a lane
-    // never runs against a daemon that answers the models route but
-    // cannot decode. Both loopback; neither carries estate content off the
-    // machine. LocalDaemon, not egress.
-    ("sovereign/crates/sovereign-cli/src/quality_check_cmd.rs", Class::LocalDaemon, 2),
+    // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
+    // the module became a directory on 2026-09-07 in registry-1-selections, so
+    // the one row became two — same two clients, same class, split across the
+    // files that now own them). Both `reqwest::Client`s talk to the host daemon
+    // on :9741: the stack fingerprint reads `/v1/models`, and the `SlotDecodes`
+    // precondition sends a one-token completion so a lane never runs against a
+    // daemon that answers the models route but cannot decode. Both loopback;
+    // neither carries estate content off the machine. LocalDaemon, not egress.
+    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.

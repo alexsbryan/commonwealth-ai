@@ -547,9 +547,14 @@ mod tests {
         assert!(budget("corpus-engine-sections").is_empty());
         assert!(budget("sovereign-time").is_empty());
         assert_eq!(budget("corpus-engine-vocab"), ["kernel-types"]);
+        // `sovereign-time` joined 2026-09-07 — an EMPTY-dependency leaf, so the
+        // closure widens by zero crates. Pinned here because this test is the
+        // structural half of "widen deliberately": the gate binary goes green
+        // the moment ARCH_LAYERS.toml changes, and only this line makes the
+        // widening something a human had to type twice.
         assert_eq!(
             budget("sovereign-contracts"),
-            ["oicp-types", "kernel-types"]
+            ["oicp-types", "kernel-types", "sovereign-time"]
         );
         assert_eq!(budget("oicp-client"), ["sovereign-contracts", "oicp-types"]);
     }

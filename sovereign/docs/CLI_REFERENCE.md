@@ -823,7 +823,7 @@ Added 2026-07-30 because the per-subsystem posture tools only answer when asked,
 The curated breakage check — the lean tier `./scripts/sovereign-ci-bench.sh --quick` was in name only. `posture` above reads artifacts other commands wrote; this one RUNS the lanes and writes the table.
 
 ```
-svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint] [--lane-table PATH]
+svrn quality check [--trigger <venue>] [--lane <id>]... [--dry-run] [--list] [--budget-secs 1800] [--mint] [--registry PATH]
 svrn quality lane <id>
 svrn quality map [--layers|--fidelity|--load-bearing|--where] [--update-golden]
 ```

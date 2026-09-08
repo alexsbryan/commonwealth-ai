@@ -1513,7 +1513,7 @@ baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselin
 bank = "sovereign/bench/quality-check/chat-ask.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
+doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
 
 # EVERY row of this lane is wall-clock (TTFT, decode tok/s), so the whole lane
 # is could-not-judge on a contended host rather than failed. Run 1 measured
@@ -1589,7 +1589,7 @@ baseline = { kind = "none" }
 bank = "sovereign/bench/routing/cells_v1.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/routing/README.md"
+doc = "sovereign/bench/README.md"
 
 # Two commands, because no single `--filter` selects sep AND wikipedia and
 # inventing a filter language to make it one would be a worse trade than
@@ -1711,7 +1711,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/knowledge-gym/README.md"
+doc = "sovereign/bench/knowledge-gym/RUNBOOK.md"
 
 [[instrument]]
 id = "synth"

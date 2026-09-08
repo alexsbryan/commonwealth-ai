@@ -602,10 +602,13 @@ binary = "dispatcher"
 feature = "dev-tools"
 classification = "daemon"
 flags = [
+  { name = "--trigger", takes_value = true },
   { name = "--lane", takes_value = true },
+  { name = "--dry-run" },
+  { name = "--list" },
   { name = "--budget-secs", takes_value = true },
   { name = "--mint" },
-  { name = "--lane-table", takes_value = true },
+  { name = "--registry", takes_value = true },
 ]
 [[command]]
 path = "quality lane"

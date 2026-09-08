@@ -41,7 +41,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow] [--attached <doc.txt> | --attached-asset <id>] [--enrich-model <stem>] [--no-gliner]",
+            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--smoke-subset <id>] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow] [--attached <doc.txt> | --attached-asset <id>] [--enrich-model <stem>] [--no-gliner]",
         ),
         HelpSection::Subcommands(&[
             (

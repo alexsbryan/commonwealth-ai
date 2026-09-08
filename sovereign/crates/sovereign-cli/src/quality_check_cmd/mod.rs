@@ -147,7 +147,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--mint" => out.mint = true,
             "--dry-run" => out.dry_run = true,
             "--list" => out.list = true,
-            "--lane-table" | "--registry" => {
+            "--registry" => {
                 let v = args.get(i + 1).ok_or("--registry needs a path")?;
                 out.table = Some(PathBuf::from(v));
                 i += 1;
