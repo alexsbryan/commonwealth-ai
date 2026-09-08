@@ -28,43 +28,60 @@ OLLAMA_URL="http://127.0.0.1:11434/v1"
 EMBED_TAG="qwen3-embedding:0.6b"
 CHAT_TAG="qwen3:0.6b"
 
-mark() { echo "$2" > "$RUN_DIR/rc.$1"; echo "== leg $1 -> $2" >&2; }
+# The out dir and the markers file are created FIRST, before anything that can
+# fail. Run 1 (2026-09-07) exited 2 in its first second on a missing model and
+# left no out dir and no markers.txt, which a watcher reads as a unit that never
+# started — the same trap ei-6 fixed on 2026-09-05. Every exit path from here on
+# writes `markers.txt` and `DONE`, SIGTERM included.
+OUT="$RUN_DIR/out"
+mkdir -p "$OUT"
+: > "$OUT/markers.txt"
+mark() {
+  echo "$1 rc=$2" >> "$OUT/markers.txt"
+  echo "$2" > "$OUT/rc.$1"
+  echo "== leg $1 -> $2" >&2
+}
 serve_pid=""
 finish() {
+  rc=$?
   [[ -n "$serve_pid" ]] && kill "$serve_pid" 2>/dev/null
   {
     echo "finished: $(date -Is)"
     free -g | head -2
     df -h /home | tail -1
-  } > "$RUN_DIR/box-after.txt" 2>&1
-  echo "DONE $(date -Is)" > "$RUN_DIR/DONE"
+  } > "$OUT/box-after.txt" 2>&1
+  echo "DONE rc=$rc" >> "$OUT/markers.txt"
+  echo "DONE rc=$rc $(date -Is)" > "$OUT/DONE"
 }
 trap finish EXIT
-trap 'echo "SIGTERM" >> "$RUN_DIR/DONE.reason"; exit 143' TERM INT
+trap 'echo "signal=TERM" >> "$OUT/markers.txt"; exit 143' TERM
+trap 'echo "signal=INT"  >> "$OUT/markers.txt"; exit 130' INT
 
 {
   echo "started: $(date -Is)"
-  echo "container: $(cat /run/.containerenv 2>/dev/null | head -1 || echo HOST)"
+  echo "container: $(head -1 /run/.containerenv 2>/dev/null || echo HOST)"
   free -g | head -2
   df -h /home | tail -1
   pgrep -af 'cargo|rustc' | grep -v pgrep || echo "no builds running"
-} > "$RUN_DIR/box-before.txt" 2>&1
+} > "$OUT/box-before.txt" 2>&1
 
 # ── preflight: everything a LATER leg needs, checked BEFORE the long ones ────
+# What the ACCEPTANCE needs is acceptance.sh's own list, asked for by name
+# rather than kept twice here (ARCH §10.6). It resolves the embed gguf against
+# the main checkout when this runs from a worktree — `models/` is gitignored, so
+# no worktree carries it, which is exactly how run 1 died.
 pf_fail=0
 [[ -f /run/.containerenv ]] || { echo "PREFLIGHT: must run INSIDE the sovereign-vulkan toolbox — llama-server needs Vulkan; ROCm x A3B SEGVs on the host" >&2; pf_fail=1; }
-command -v ollama    >/dev/null || { echo "PREFLIGHT: no ollama on PATH ($OLLAMA_HOME/bin)" >&2; pf_fail=1; }
-command -v llama-server >/dev/null || { echo "PREFLIGHT: no llama-server on PATH" >&2; pf_fail=1; }
-command -v jq        >/dev/null || { echo "PREFLIGHT: no jq" >&2; pf_fail=1; }
-command -v python3   >/dev/null || { echo "PREFLIGHT: no python3" >&2; pf_fail=1; }
-[[ -x "$REPO/target/debug/corpus-mcp" ]] || { echo "PREFLIGHT: corpus-mcp not built" >&2; pf_fail=1; }
-[[ -f "$REPO/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" ]] || { echo "PREFLIGHT: no embed gguf" >&2; pf_fail=1; }
+"$REPO/corpus-mcp/acceptance.sh" --preflight >> "$OUT/preflight.txt" 2>&1 \
+  || { echo "PREFLIGHT: acceptance.sh refused — $(tail -1 "$OUT/preflight.txt")" >&2; pf_fail=1; }
+# What only THIS unit needs, beyond the acceptance's own list.
+command -v ollama  >/dev/null || { echo "PREFLIGHT: no ollama on PATH ($OLLAMA_HOME/bin)" >&2; pf_fail=1; }
 [[ -d "$HOME/.svrnmesh/indexes/sep" ]] || { echo "PREFLIGHT: sep corpus not installed (the arm's corpus_list target)" >&2; pf_fail=1; }
 mark preflight "$pf_fail"
 (( pf_fail == 0 )) || exit 2
 
 # ── leg 1: ollama serve, CPU ────────────────────────────────────────────────
-ollama serve > "$RUN_DIR/ollama-serve.log" 2>&1 &
+ollama serve > "$OUT/ollama-serve.log" 2>&1 &
 serve_pid=$!
 up=1
 for _ in $(seq 1 60); do
@@ -73,25 +90,25 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 mark serve "$up"
-(( up == 0 )) || { tail -30 "$RUN_DIR/ollama-serve.log" >&2; exit 3; }
-grep -iE 'inference compute|gpu|library=|no compatible' "$RUN_DIR/ollama-serve.log" | head -10 \
-  > "$RUN_DIR/ollama-device.txt" 2>&1 || true
-echo "-- device lines ollama reported:"; cat "$RUN_DIR/ollama-device.txt"
+(( up == 0 )) || { tail -30 "$OUT/ollama-serve.log" >&2; exit 3; }
+grep -iE 'inference compute|gpu|library=|no compatible' "$OUT/ollama-serve.log" | head -10 \
+  > "$OUT/ollama-device.txt" 2>&1 || true
+echo "-- device lines ollama reported:"; cat "$OUT/ollama-device.txt"
 
 # ── leg 2: the two model pulls (new egress for this BOX, not for the product) ─
 pull_rc=0
 for tag in "$EMBED_TAG" "$CHAT_TAG"; do
   echo "== pulling $tag"
-  ollama pull "$tag" >> "$RUN_DIR/ollama-pull.log" 2>&1 || pull_rc=1
+  ollama pull "$tag" >> "$OUT/ollama-pull.log" 2>&1 || pull_rc=1
 done
-ollama list >> "$RUN_DIR/ollama-pull.log" 2>&1
-curl -s "$OLLAMA_URL/models" | python3 -m json.tool > "$RUN_DIR/ollama-models.json" 2>&1 || true
+ollama list >> "$OUT/ollama-pull.log" 2>&1
+curl -s "$OLLAMA_URL/models" | python3 -m json.tool > "$OUT/ollama-models.json" 2>&1 || true
 mark pull "$pull_rc"
-(( pull_rc == 0 )) || { tail -20 "$RUN_DIR/ollama-pull.log" >&2; exit 4; }
+(( pull_rc == 0 )) || { tail -20 "$OUT/ollama-pull.log" >&2; exit 4; }
 
 # The width question EPISTEMIC_INDEX.md §7 step 6 asks, answered directly before
 # the acceptance run so it is on the record whichever way the arm goes.
-python3 - "$OLLAMA_URL" "$EMBED_TAG" > "$RUN_DIR/embed-width.txt" 2>&1 <<'PY'
+python3 - "$OLLAMA_URL" "$EMBED_TAG" > "$OUT/embed-width.txt" 2>&1 <<'PY'
 import json, sys, urllib.request
 url, tag = sys.argv[1], sys.argv[2]
 req = urllib.request.Request(f"{url}/embeddings",
@@ -105,18 +122,18 @@ print("models listed, in the order corpus-mcp sees them (it takes the FIRST "
 for m in listed["data"]:
     print("   ", m["id"])
 PY
-cat "$RUN_DIR/embed-width.txt"
+cat "$OUT/embed-width.txt"
 
 # ── leg 3: the acceptance, once, with Ollama reachable ──────────────────────
 # Read arm only: ACCEPT_INGEST and ACCEPT_PULL stay unset, so the 60-90 min
 # ingest and the 875 MB snapshot pull both report NEVER-RAN by name as usual.
 cd "$REPO"
 OLLAMA_URL="$OLLAMA_URL" CORPUS_MCP="$REPO/target/debug/corpus-mcp" \
-  ./corpus-mcp/acceptance.sh > "$RUN_DIR/acceptance.log" 2>&1
+  ./corpus-mcp/acceptance.sh > "$OUT/acceptance.log" 2>&1
 acc_rc=$?
 mark acceptance "$acc_rc"
-grep -E '^acceptance: ollama' "$RUN_DIR/acceptance.log" || echo "(no ollama lines — read the log)"
-tail -25 "$RUN_DIR/acceptance.log"
+grep -E '^acceptance: ollama' "$OUT/acceptance.log" || echo "(no ollama lines — read the log)"
+tail -25 "$OUT/acceptance.log"
 
 # ── leg 4: the named-model control ──────────────────────────────────────────
 # corpus-mcp takes the FIRST model /v1/models lists when --embed-model is absent
@@ -129,9 +146,9 @@ tail -25 "$RUN_DIR/acceptance.log"
   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
 } | "$REPO/target/debug/corpus-mcp" serve --base-url "$OLLAMA_URL" \
       --embed-model "$EMBED_TAG" --corpus sep \
-      > "$RUN_DIR/named-model.jsonl" 2> "$RUN_DIR/named-model.err"
+      > "$OUT/named-model.jsonl" 2> "$OUT/named-model.err"
 named_rc=$?
 mark named-model "$named_rc"
-grep -E 'embeddings via|vector search|DISABLED' "$RUN_DIR/named-model.err" | head -5
+grep -E 'embeddings via|vector search|DISABLED' "$OUT/named-model.err" | head -5
 
 exit "$acc_rc"

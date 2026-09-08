@@ -11,10 +11,20 @@ INSIDE the toolbox (llama-server needs Vulkan; ROCm x A3B SEGVs on the host):
       -- flock /tmp/sovereign-build.lock \
       /home/alexbryan/dev/ei3c-wt/runs/ei3c-ollama-arm/run.sh
 
-The script refuses with `PREFLIGHT:` and rc.preflight=1 if it finds itself on
-the host, or if any of ollama / llama-server / jq / python3 / the corpus-mcp
-binary / the embed gguf / the `sep` index is missing — all of it checked before
-the first slow leg.
+NO env is required on the scope. Run 1 (2026-09-07) died in its first second on
+`PREFLIGHT: no embed gguf`, because `models/` is gitignored and this is a
+worktree: `$REPO/sovereign/models/...` does not exist here and never will.
+`corpus-mcp/acceptance.sh` now derives the fallback from the git COMMON dir —
+a worktree's is `<main checkout>/.git` — so it resolves
+/home/alexbryan/dev/commonwealth-ai/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf
+on its own. An explicit `--setenv=EMBED_GGUF=<path>` still wins if you want a
+different model.
+
+The preflight is `acceptance.sh --preflight` (its own dependency list, asked
+for by name rather than kept twice here) plus the two things only this unit
+needs: an `ollama` on PATH and an installed `sep` index. It refuses with
+`PREFLIGHT:` and `preflight rc=1` if it finds itself on the host — all of it
+before the first slow leg.
 
 ## Forecast
 
@@ -32,18 +42,25 @@ it is the same one every previous acceptance run used.
 
 ## Legs and their markers
 
-    rc.preflight  0 = every dependency present     (else exit 2)
-    rc.serve      0 = /v1/models answered          (else exit 3)
-    rc.pull       0 = both tags pulled             (else exit 4)
-    rc.acceptance the acceptance script's own exit code; the unit exits with it
-    rc.named-model corpus_list with --embed-model pinned
+Everything lands in `out/`, which is created FIRST — before the preflight, so a
+unit that dies in its first second still leaves a readable record. Run 1 did
+not, and a watcher cannot tell that from a unit that never started.
 
-`DONE` is written on every exit path including SIGTERM (`DONE.reason` says so),
-so a killed unit is not mistaken for a hung one.
+    out/markers.txt   one line per leg, then `DONE rc=<n>`; `signal=TERM` if killed
+    out/rc.<leg>      the same rcs one file each
+    out/DONE          `DONE rc=<n> <timestamp>`
 
-## Artifacts
+    preflight  0 = every dependency present         (else exit 2)
+    serve      0 = /v1/models answered              (else exit 3)
+    pull       0 = both tags pulled                 (else exit 4)
+    acceptance the acceptance script's own exit code — 1 FAIL (an assertion it
+               lost), 2 REFUSED (a dependency this machine lacks); the unit
+               exits with it
+    named-model corpus_list with --embed-model pinned
 
-    box-before.txt box-after.txt
+## Artifacts (all under `out/`)
+
+    box-before.txt box-after.txt preflight.txt
     ollama-serve.log ollama-device.txt ollama-pull.log ollama-models.json
     embed-width.txt        the §7 step 6 answer, measured directly
     acceptance.log         the whole run; `acceptance: ollama` lines are the arm

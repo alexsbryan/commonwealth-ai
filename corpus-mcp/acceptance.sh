@@ -46,7 +46,9 @@
 #
 # Env: OLLAMA_URL (default http://localhost:11434/v1), ACCEPT_PULL / PULL_ROOT /
 #      PULL_CORPUS (the cold-root pull leg),
-#      EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf),
+#      EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf,
+#      resolved against the MAIN checkout when this runs from a worktree —
+#      `models/` is gitignored and no worktree carries it),
 #      PORT (8089), CORPUS (sep), ATLAS_CORPUS (sep-freewill),
 #      ONTOLOGY_CORPUS (wessex-hoard — a corpus that DECLARED types; SEP
 #      declares none, so the ontology read is judged on this one and reported
@@ -59,7 +61,19 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 cd "$repo"
 
-EMBED_GGUF="${EMBED_GGUF:-sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf}"
+# `models/` is gitignored, so NO git worktree carries the gguf and every
+# campaign worker runs from one. The main checkout does have it, and a
+# worktree's git COMMON dir is `<main checkout>/.git` — so the fallback is
+# derived, never a path typed in. Explicit EMBED_GGUF always wins.
+EMBED_GGUF="${EMBED_GGUF:-}"
+if [[ -z "$EMBED_GGUF" ]]; then
+  EMBED_GGUF="sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+  if [[ ! -f "$EMBED_GGUF" ]]; then
+    common="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+    [[ -n "$common" && -f "$(dirname "$common")/$EMBED_GGUF" ]] \
+      && EMBED_GGUF="$(dirname "$common")/$EMBED_GGUF"
+  fi
+fi
 PORT="${PORT:-8089}"
 CORPUS="${CORPUS:-sep}"
 ATLAS_CORPUS="${ATLAS_CORPUS:-sep-freewill}"
@@ -107,9 +121,15 @@ work="$(mktemp -d)"
 trap 'kill ${server_pid:-} ${chat_pid:-} 2>/dev/null || true; rm -rf "$work"' EXIT
 
 fail() { echo "acceptance: FAIL — $*" >&2; exit 1; }
-[[ -x "$CORPUS_MCP" ]] || fail "$CORPUS_MCP not built (cargo build -p corpus-mcp)"
-[[ -f "$EMBED_GGUF" ]] || fail "embedding model $EMBED_GGUF not found"
-command -v llama-server >/dev/null || fail "llama-server not on PATH"
+# The two verdicts a caller must be able to tell apart, in the EXIT CODE rather
+# than in the wording (ARCH §18.2). `fail` (1) is an assertion this run made and
+# lost — the chain is broken. `refuse` (2) is a dependency this machine does not
+# have, which is could-not-judge and never a miss. The EI3 instrument maps them
+# exactly that way, so a box without llama-server never reads as a failed bar.
+refuse() { echo "acceptance: REFUSED — $*" >&2; exit 2; }
+[[ -x "$CORPUS_MCP" ]] || refuse "$CORPUS_MCP not built (cargo build -p corpus-mcp)"
+[[ -f "$EMBED_GGUF" ]] || refuse "embedding model $EMBED_GGUF not found"
+command -v llama-server >/dev/null || refuse "llama-server not on PATH"
 # Every external tool a LATER leg needs, checked HERE. Run 1 of stage 2
 # (2026-09-05) spent 5,418 s on the ingest and then died in the scorer on
 # `FATAL: jq is required` — jq is on this host and was not in the toolbox the
@@ -119,8 +139,17 @@ command -v llama-server >/dev/null || fail "llama-server not on PATH"
 # refusal says which one (ARCH §18.3).
 for tool in jq python3; do
   command -v "$tool" >/dev/null \
-    || fail "$tool not on PATH — the truth.json recall leg needs it, and this refuses now rather than after the ingest"
+    || refuse "$tool not on PATH — the truth.json recall leg needs it, and this refuses now rather than after the ingest"
 done
+
+# Everything above this line is the dependency preflight, and `--preflight` is
+# how another runner asks for JUST that. It exists so a long unit can fail in
+# its first second instead of after a 3-minute model pull, WITHOUT keeping a
+# second list of what the acceptance needs (ARCH §10.6: one decider, one name).
+if [[ "${1:-}" == "--preflight" ]]; then
+  echo "acceptance: preflight ok — embed model $EMBED_GGUF, host $CORPUS_MCP"
+  exit 0
+fi
 
 # ── 0. the three commands, and the ladder — no model needed ─────────────────
 #
