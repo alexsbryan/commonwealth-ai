@@ -431,14 +431,42 @@ print("%d %d %d" % (p, f, w))
 ' "$out_jsonl" 2>/dev/null || echo "0 0 0")"
 read -r total_pass total_fail total_warn <<< "$counts"
 
+# COULD-NOT-JUDGE IS A THIRD ANSWER, and this script is the only party that
+# can give it: it holds the raw log. A cargo failure with no first-party
+# diagnostic and a third-party build-script or link error in it means the
+# check could not RUN on this host — the native toolchain (cmake, clang,
+# vulkan) lives in the dev toolbox — and nothing in the diff can fix that.
+# Reporting it as a FAILURE blocks a push over a machine's setup; reporting it
+# as a pass is the substitution ARCH §18.3 forbids. So it is exit 3, and the
+# instrument registry declares `could_not_judge_exits = [3]` on both lint rows.
+#
+# This logic used to live in `scripts/pre-push.sh::break_is_first_party`,
+# reading this script's log from outside. One decider, in the file that owns
+# the evidence (ARCH §10.6).
+LINT_COULD_NOT_JUDGE=3
+could_not_judge() {
+    # A first-party diagnostic anywhere means we DID judge this tree.
+    if grep -E '^[[:space:]]*--> ' "$raw_log" 2>/dev/null \
+        | grep -qv -e '\.cargo/registry' -e '/rustc/' -e '\.cargo/git'; then
+        return 1
+    fi
+    grep -qE 'failed to run custom build command for|error: linking with|cannot find -l' \
+        "$raw_log" 2>/dev/null
+}
+
 final_exit=0
 disagreement=""
 if [[ "$total_fail" -gt 0 ]]; then
     final_exit=1
 elif [[ "$cargo_exit" != "0" ]]; then
-    # Fail closed: cargo said no, the stream showed nothing to blame.
-    final_exit="$cargo_exit"
-    disagreement="cargo exited ${cargo_exit} but no failure was attributed to any file"
+    if could_not_judge; then
+        final_exit=$LINT_COULD_NOT_JUDGE
+        disagreement="a third-party build script failed and no first-party diagnostic was emitted — this host cannot run the check (the native deps live in the dev toolbox); COULD-NOT-JUDGE, not a failure and not a pass"
+    else
+        # Fail closed: cargo said no, the stream showed nothing to blame.
+        final_exit="$cargo_exit"
+        disagreement="cargo exited ${cargo_exit} but no failure was attributed to any file"
+    fi
 fi
 
 if [[ $HUMAN -eq 0 ]]; then

@@ -57,6 +57,35 @@ impl VenueAction {
     }
 }
 
+/// What a venue does to an instrument that outlives the budget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Overrun {
+    /// Stop it. It reaches no verdict, which is could-not-judge and never a
+    /// pass.
+    Kill,
+    /// Let it finish and say how long the venue took. The budget is a number
+    /// on the verdict line, enforced by not adding gates rather than by
+    /// killing the ones that are there.
+    Report,
+}
+
+impl Overrun {
+    pub fn parse(s: &str) -> Option<Overrun> {
+        Some(match s {
+            "kill" => Some(Overrun::Kill),
+            "report" => Some(Overrun::Report),
+            _ => return None,
+        }?)
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Overrun::Kill => "kill",
+            Overrun::Report => "report",
+        }
+    }
+}
+
 /// A step run ONCE before a trigger's instruments, and the argv rewrite it
 /// buys.
 ///
@@ -95,6 +124,19 @@ pub struct Trigger {
     /// the code. Per venue because the scale differs by three orders of
     /// magnitude — a lane wants 60 s of runway, a 0.04 s ratchet does not.
     pub min_runway_secs: u64,
+    /// What happens to an instrument still running when the budget is spent.
+    ///
+    /// TWO REAL BEHAVIOURS, measured on 2026-09-07. `svrn quality check` KILLS:
+    /// a lane held past a 30-minute budget is a lane nobody is waiting for, and
+    /// could-not-judge is the honest verdict for one that was stopped. The push
+    /// gate must NOT: its budget was always a REPORTING number ("the verdict
+    /// line prints the elapsed total every run, so a gate that creeps past the
+    /// budget shows up as a number rather than as a habit of skipping"), and
+    /// the first selection-driven run killed the workspace compile at 59 s and
+    /// called it could-not-judge — turning the one gate that matters most into
+    /// an abstention over five seconds. An abstention you have not earned is
+    /// not rigor (ARCH §18.2).
+    pub overrun: Overrun,
     /// What a `failed` instrument does to the venue.
     pub on_fail: VenueAction,
     /// What a `could-not-judge` instrument does to the venue. Separate from
@@ -137,10 +179,19 @@ impl Trigger {
 /// of them silently loses (ARCH §10.6).
 pub(super) fn parse_triggers(value: &toml::Value) -> Result<Vec<Trigger>, Vec<String>> {
     let empty = Vec::new();
-    let rows = value
-        .get("trigger")
-        .and_then(|v| v.as_array())
-        .unwrap_or(&empty);
+    // ABSENT and MALFORMED are two answers. A registry with no `[[trigger]]`
+    // rows is a real state — nothing is delegating to it yet. A `trigger` key
+    // that is not an array of tables is a MIS-EDITED file, and reading it as
+    // "no triggers" would leave every venue unrunnable while the file looks
+    // fine (ARCH §18.3 — the same rule the fingerprint applies to a
+    // `smoke.toml` whose `subset` key will not read as an array).
+    let rows = match value.get("trigger") {
+        None => &empty,
+        Some(v) => match v.as_array() {
+            Some(a) => a,
+            None => return Err(vec!["`trigger` must be an array of tables".to_string()]),
+        },
+    };
     let mut errors = Vec::new();
     let mut out: Vec<Trigger> = Vec::new();
     for (i, row) in rows.iter().enumerate() {
@@ -188,18 +239,27 @@ fn trigger(row: &toml::Value, index: usize) -> Result<Trigger, Vec<String>> {
     let budget_secs = u64_field(row, "budget_secs", &at, &mut errors);
     // A trigger that declares no concurrency is SERIAL. Defaulting to
     // "however many the host has" would silently change what a venue costs
-    // when it moves machines.
-    let concurrency = row
-        .get("concurrency")
-        .and_then(toml::Value::as_integer)
-        .and_then(|n| usize::try_from(n).ok())
+    // when it moves machines. A concurrency that is PRESENT and not a
+    // positive integer is refused rather than clamped: `concurrency = 0` and
+    // `concurrency = -1` are typos, and silently reading them as 1 hides the
+    // typo behind behaviour that looks deliberate.
+    let concurrency = usize::try_from(positive_or_default(row, "concurrency", 1, &at, &mut errors))
         .unwrap_or(1)
         .max(1);
-    let min_runway_secs = row
-        .get("min_runway_secs")
-        .and_then(toml::Value::as_integer)
-        .and_then(|n| u64::try_from(n).ok())
-        .unwrap_or(0);
+    let min_runway_secs = positive_or_default(row, "min_runway_secs", 0, &at, &mut errors);
+    // KILL is the default because it is the stricter reading and it is what
+    // `svrn quality check` already did. A venue that wants its budget to be a
+    // report says so.
+    let overrun = match row.get("overrun") {
+        None => Some(Overrun::Kill),
+        Some(v) => match v.as_str().and_then(Overrun::parse) {
+            Some(o) => Some(o),
+            None => {
+                errors.push(at("`overrun` is not `kill` or `report`"));
+                None
+            }
+        },
+    };
     let on_fail = venue_action_field(row, "on_fail", &at, &mut errors);
     // Defaults to whatever `on_fail` says. A venue that blocks on a red and
     // has said nothing about could-not-judge means the stricter thing — the
@@ -246,8 +306,8 @@ fn trigger(row: &toml::Value, index: usize) -> Result<Trigger, Vec<String>> {
         }
     }
 
-    let (Some(id), Some(budget_secs), Some(on_fail), Some(on_could_not_judge)) =
-        (id, budget_secs, on_fail, on_could_not_judge)
+    let (Some(id), Some(budget_secs), Some(overrun), Some(on_fail), Some(on_could_not_judge)) =
+        (id, budget_secs, overrun, on_fail, on_could_not_judge)
     else {
         if errors.is_empty() {
             errors.push(at("a required field was absent and reported nothing"));
@@ -262,10 +322,34 @@ fn trigger(row: &toml::Value, index: usize) -> Result<Trigger, Vec<String>> {
         budget_secs,
         concurrency,
         min_runway_secs,
+        overrun,
         on_fail,
         on_could_not_judge,
         prepare,
     })
+}
+
+/// An optional non-negative integer with a declared default. PRESENT-and-junk
+/// is an error, not the default: a clamped typo reads as a deliberate setting.
+fn positive_or_default(
+    row: &toml::Value,
+    key: &str,
+    default: u64,
+    at: &impl Fn(&str) -> String,
+    errors: &mut Vec<String>,
+) -> u64 {
+    match row.get(key) {
+        None => default,
+        Some(v) => match v.as_integer() {
+            Some(n) if n >= 0 => n as u64,
+            _ => {
+                errors.push(at(&format!(
+                    "`{key}` must be a non-negative integer when declared"
+                )));
+                default
+            }
+        },
+    }
 }
 
 fn u64_field(
@@ -350,6 +434,8 @@ substitute_to = ["target/debug/xtask"]
         assert_eq!(t[0].on_fail, VenueAction::Block);
         assert_eq!(t[0].on_could_not_judge, VenueAction::Report);
         assert_eq!(t[0].prepare.len(), 1);
+        // Not declared here, so the stricter reading.
+        assert_eq!(t[0].overrun, Overrun::Kill);
     }
 
     /// The rewrite is what makes the hoisted build worth anything. Watch it
@@ -393,6 +479,18 @@ substitute_to = ["target/debug/xtask"]
         );
         // Missing budget.
         assert!(one("[[trigger]]\nid = \"prepush\"\non_fail = \"block\"").is_err());
+        // The push gate's budget is a REPORT, and a typo in that word must not
+        // silently become a KILL that stops the workspace compile.
+        assert!(one(
+            "[[trigger]]\nid = \"prepush\"\nbudget_secs = 1\non_fail = \"block\"\noverrun = \"maybe\""
+        )
+        .is_err());
+        assert_eq!(
+            one("[[trigger]]\nid = \"prepush\"\nbudget_secs = 1\non_fail = \"block\"\noverrun = \"report\"")
+                .unwrap()[0]
+                .overrun,
+            Overrun::Report
+        );
         // Unknown venue action.
         assert!(
             one("[[trigger]]\nid = \"prepush\"\nbudget_secs = 1\non_fail = \"maybe\"").is_err()
@@ -409,8 +507,23 @@ substitute_to = ["target/debug/xtask"]
              [[trigger]]\nid = \"prepush\"\nbudget_secs = 2\non_fail = \"block\""
         )
         .is_err());
-        // No `[[trigger]]` rows at all is legal — a registry may declare none.
+        // Present and junk is an ERROR, not the default: a clamped typo
+        // reads as a deliberate setting.
+        assert!(one(
+            "[[trigger]]\nid = \"prepush\"\nbudget_secs = 1\non_fail = \"block\"\nconcurrency = -1"
+        )
+        .is_err());
+        assert!(one(
+            "[[trigger]]\nid = \"prepush\"\nbudget_secs = 1\non_fail = \"block\"\nmin_runway_secs = \"soon\""
+        )
+        .is_err());
+        // ABSENT and MALFORMED are two answers. No `[[trigger]]` rows at all
+        // is legal — a registry may delegate to none. A `trigger` key that is
+        // not an array of tables is a mis-edited file, and reading it as "no
+        // triggers" would leave every venue unrunnable while the file looks
+        // fine (ARCH §18.3).
         assert_eq!(one("schema_version = 1"), Ok(Vec::new()));
+        assert!(one("trigger = \"prepush\"").is_err());
     }
 
     /// A venue that says nothing about could-not-judge means the STRICTER

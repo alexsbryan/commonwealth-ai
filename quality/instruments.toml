@@ -295,6 +295,10 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/concepts.txt" }
 negative_control = "none"
 runs_in = ["prepush"]
+# Exits 3 or 4 when the concept graph cannot judge THIS commit — an index
+# older than the diff. `scripts/pre-push.sh` special-cased these two codes by
+# name until 2026-09-07; declared here, no runner has to know the gate.
+could_not_judge_exits = [3, 4]
 doc = "quality/NOUN_CONVERGENCE.md"
 load_bearing = [
   { flag = "(advisory only)", why = "it relays `svrn code converge status`, which reads a SCIP graph that exists only on an indexed machine. On a clean checkout its only answers are COULD-NOT-JUDGE and NEVER-RAN, which is why it is in no CI job" },
@@ -387,6 +391,12 @@ preconditions = ["container:sovereign-vulkan"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:0", "by-hand"]
+# Exit 3 = the check could not RUN on this host: a third-party build script
+# failed and no first-party diagnostic was emitted, so nothing in the diff
+# can fix it (the native deps live in the dev toolbox). The script decides
+# that — it owns the raw log — and pre-push used to re-derive it from
+# outside by grepping that same file (ARCH §10.6).
+could_not_judge_exits = [3]
 doc = "AGENTS.md §Compilation and test feedback"
 load_bearing = [
   { flag = "--full", why = "without it the run scopes to the crates owning uncommitted changes plus direct dependents; the banner names the scope, so a scoped clean run cannot be read as a repo-wide guarantee" },
@@ -412,6 +422,12 @@ baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush"]
 when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\\.toml$|^sovereign/scripts/cli-journey-.*\\.sh$|^sovereign/scripts/tests/)"
+# Exit 3 = the check could not RUN on this host: a third-party build script
+# failed and no first-party diagnostic was emitted, so nothing in the diff
+# can fix it (the native deps live in the dev toolbox). The script decides
+# that — it owns the raw log — and pre-push used to re-derive it from
+# outside by grepping that same file (ARCH §10.6).
+could_not_judge_exits = [3]
 doc = "scripts/pre-push.sh (header — why the compile runs alongside the ratchets)"
 load_bearing = [
   { flag = "SOVEREIGN_CHANGED_PATHS", why = "without it the script resolves the WHOLE workspace and the push costs minutes instead of ~22s. The venue exports it from the push range" },
@@ -446,9 +462,29 @@ cost_secs = 22.0
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "none" }
-negative_control = "none"
+negative_control = "pre-push-fail-closed"
 runs_in = ["by-hand"]
 doc = "scripts/pre-push.sh (header — the one-minute budget)"
+
+# The negative control for the hook above, and the only thing that has ever
+# exercised its fail-closed branch. `git diff` FAILING and "this push changes
+# nothing" are different facts, and conflating them passes the gate green, in
+# silence, exactly when it is least sure of itself. This drives the REAL hook
+# in a mktemp repo with an unknown sha on stdin and pins all four directions:
+# an undiffable range gates every tracked file, a valid empty range gates
+# nothing, a valid range gates exactly its own diff.
+[[instrument]]
+id = "pre-push-fail-closed"
+kind = "control"
+claim = "invariant"
+command = "bash scripts/tests/pre-push-fail-closed.sh"
+cost_secs = "unmeasured"
+enforcement = "hard"
+fidelity = "F2"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["ci:suites", "by-hand"]
+doc = "scripts/tests/pre-push-fail-closed.sh (header)"
 
 [[instrument]]
 id = "pre-commit"
@@ -1765,6 +1801,15 @@ id = "prepush"
 budget_secs = 60
 concurrency = 2
 min_runway_secs = 1
+# THE BUDGET IS A REPORT HERE, NOT A KILL, and this is the field that says so.
+# `pre-push.sh`'s own header: "the verdict line prints the elapsed total every
+# run, so a gate that creeps past the budget shows up as a number rather than
+# as a habit of skipping." The first selection-driven run of this trigger
+# proved why it matters — it killed the workspace compile at 59 s of the 60 s
+# budget and recorded could-not-judge, turning the gate that matters most into
+# an abstention over five seconds. An abstention you have not earned is not
+# rigor (ARCH §18.2). The budget is enforced by not adding gates.
+overrun = "report"
 on_fail = "block"
 on_could_not_judge = "report"
 
@@ -1781,6 +1826,10 @@ concurrency = 1
 # it is a lane that will be killed and report a TIMEOUT saying nothing about
 # the code.
 min_runway_secs = 60
+# The check DOES kill: a lane held past a 30-minute budget is a lane nobody is
+# waiting for, and could-not-judge is honest for one that was stopped. This is
+# the behaviour the runner already had, now stated rather than assumed.
+overrun = "kill"
 on_fail = "block"
 # A HARD lane goes red on could-not-judge too: "suddenly nothing to judge" on
 # a gated surface is a regression signal, not a pass.
