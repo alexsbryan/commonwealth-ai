@@ -93,17 +93,24 @@ impl AdmittedTurn {
     /// tracks foreground work", and the honest consequence is that the
     /// turn's calls are treated as fresh load, exactly as they were before
     /// this module existed. Absence is reported at `info` — the level the
-    /// daemon actually runs at — never defaulted into a claim of admission
-    /// (ARCH §18.3).
+    /// daemon actually runs at, on the DEFAULT module target so the daemon's
+    /// filter allowlist cannot drop it — never defaulted into a claim of
+    /// admission (ARCH §18.3).
     pub(crate) fn open(engine: &Arc<corpus_engine::CorpusEngine>) -> Option<Self> {
         let Some(lease) = engine.foreground_lease() else {
-            // `info`, not `debug`: the daemon runs at INFO, so a decision
-            // only visible at debug is invisible where it is made
-            // (principle 1). One line per turn, and the absence is the
-            // one that must not be silent (ARCH §18.3).
+            // `info`, and NO custom target. The daemon's `EnvFilter` is an
+            // allowlist of literal target strings plus module paths
+            // (`sovereign_cli_daemon::DAEMON_TRACING_FILTER`), so a
+            // `target: "inference.admission"` event is DROPPED unless someone
+            // remembers to add it — the trap that has silently darkened this
+            // codebase's observability four times, per that constant's own
+            // doc. WATCHED: the first arm of the 2026-09-07 measurement put
+            // ZERO of these into `daemon.err`, while the queue's own lines
+            // (module-targeted, caught by `sovereign_inference=info`) landed.
+            // The subsystem name lives in the MESSAGE, exactly as
+            // `inference.queue:` does one crate over.
             tracing::info!(
-                target: "inference.admission",
-                "turn opened with no foreground signal installed — its model \
+                "inference.admission: turn opened with no foreground signal installed — its model \
                  calls are admitted as fresh load"
             );
             return None;
@@ -114,9 +121,8 @@ impl AdmittedTurn {
         // reader could name (ARCH §7.5 — never a counter, never an address).
         let token = TurnAdmission::new(uuid::Uuid::new_v4().to_string());
         tracing::info!(
-            target: "inference.admission",
             admitted_turn = %token,
-            "turn admitted — its model calls may park at the slot queue"
+            "inference.admission: turn admitted — its model calls may park at the slot queue"
         );
         Some(Self {
             token,

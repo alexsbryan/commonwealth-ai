@@ -32,9 +32,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import pathlib
+import re
 import statistics
 import subprocess
 import sys
@@ -77,35 +79,76 @@ def load1() -> float:
         return float("nan")
 
 
-def daemon_err_size() -> int:
-    try:
-        return DAEMON_ERR.stat().st_size
-    except OSError:
-        return 0
+# The log's own vocabulary. Counted by TIMESTAMP window, not by byte offset:
+# the daemon copy-truncates its log past a size cap, and the first run of this
+# probe (2026-09-07) rotated mid-arm, which silently zeroed one arm's census
+# and made the other read a stale window. An instrument whose reading depends
+# on a file not being rotated is not one (ARCH §18.4).
+LOG_EVENTS = {
+    "shed_pre_park": "inference.queue: SHED — predicted wait",
+    "shed_after_park": "inference.queue: SHED after parking",
+    "park_admitted": "inference.queue: PARK",
+    "contended_park": "inference.queue: slot busy, waiting for permit",
+    "turn_admitted": "inference.admission: turn admitted",
+    "turn_unadmitted": "inference.admission: turn opened with no foreground",
+    # A daemon that DIED inside the arm invalidates every turn after it — see
+    # `DeathKind.DAEMON_GONE`.
+    "daemon_shutdown": "daemon: shutdown signal received",
+    "daemon_up": "svrn daemon is running",
+}
+
+TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 
 
-def census_log(start: int, end: int) -> dict:
+def census_log(lo_utc: str, hi_utc: str) -> dict:
     """Count the queue's own events inside this arm's window.
 
     Read from the daemon's log rather than inferred from the client side: a
     turn that survived because its call PARKED and one that survived because
     the slot happened to be free look identical from outside.
+
+    Reads the live log AND any `.bak` copies the rotation left, so a rotation
+    inside the arm costs nothing.
     """
-    counts = {"shed_pre_park": 0, "shed_after_park": 0, "park_admitted": 0}
-    if not DAEMON_ERR.exists():
-        return counts | {"log_readable": False}
-    with DAEMON_ERR.open("rb") as fh:
-        fh.seek(start)
-        blob = fh.read(max(0, end - start)).decode("utf-8", "replace")
-    for line in blob.splitlines():
-        if "inference.queue: SHED — predicted wait" in line:
-            counts["shed_pre_park"] += 1
-        elif "inference.queue: SHED after parking" in line:
-            counts["shed_after_park"] += 1
-        elif "inference.queue: PARK" in line:
-            counts["park_admitted"] += 1
-    counts["log_readable"] = True
+    counts = {k: 0 for k in LOG_EVENTS}
+    files = [DAEMON_ERR] + sorted(DAEMON_ERR.parent.glob(DAEMON_ERR.name + ".*.bak"))
+    seen_any = False
+    for f in files:
+        if not f.exists():
+            continue
+        seen_any = True
+        with f.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = TS_RE.search(line)
+                if not m or not (lo_utc <= m.group(1) < hi_utc):
+                    continue
+                for k, pat in LOG_EVENTS.items():
+                    if pat in line:
+                        counts[k] += 1
+    counts["log_readable"] = seen_any
     return counts
+
+
+# How a turn failed. A closed set, matched on the daemon's own words rather
+# than guessed at — and `other` is a real verdict, not a bucket to hide in.
+DEATH_SHED = "shed"                  # the host refused: "host busy: ~N ms predicted wait"
+DEATH_DAEMON_GONE = "daemon_gone"    # nothing was listening: the daemon died or is restarting
+DEATH_TRANSPORT = "transport"        # the connection broke mid-turn
+DEATH_CLIENT_TIMEOUT = "client_timeout"
+DEATH_OTHER = "other"
+
+
+def classify_death(err: str) -> str:
+    low = err.lower()
+    if "host busy" in low or "queue position" in low:
+        return DEATH_SHED
+    if "error sending request" in low or "connection refused" in low:
+        return DEATH_DAEMON_GONE
+    if "websocket" in low or "connection reset" in low or "broken pipe" in low:
+        return DEATH_TRANSPORT
+    if "client timeout" in low:
+        return DEATH_CLIENT_TIMEOUT
+    return DEATH_OTHER
 
 
 def ask(question: str, corpus: str, timeout: int) -> dict:
@@ -131,13 +174,18 @@ def ask(question: str, corpus: str, timeout: int) -> dict:
         "question": question[:60],
     }
     if rc != 0 or not out.strip():
-        # A turn that produced no answer at all. THE number the order calls
-        # "whole-turn deaths" — reported with the daemon's own words, because
-        # `host busy: ~30000 ms predicted wait at queue position 1` and a
-        # crashed daemon take different fixes.
+        # A turn that produced no answer at all — and WHICH KIND, because a
+        # shed and a dead daemon take different fixes and the first run of
+        # this probe proved they do not report themselves apart. A jetsam
+        # kill 16 turns into an arm produced 16 connection-refused failures
+        # in 600 ms, and the summary counted every one as a "whole-turn
+        # death" alongside the four real `host busy` refusals. That reading
+        # would have credited the fix with 16 deaths it never caused
+        # (ARCH §18.3 — never let one class wear another's name).
         rec["died"] = True
         tail = [ln for ln in err.strip().splitlines() if ln.strip()]
         rec["error"] = tail[-1][:300] if tail else "(no stderr)"
+        rec["death_kind"] = classify_death(rec["error"])
         return rec
 
     rec["died"] = False
@@ -165,6 +213,7 @@ def ask(question: str, corpus: str, timeout: int) -> dict:
 
 def summarise(arm: str, rows: list[dict], log: dict, elapsed_s: float) -> dict:
     ok = [r for r in rows if not r["died"]]
+    died = [r for r in rows if r["died"]]
     walls = sorted(r["wall_ms"] for r in ok)
     shed = [
         r
@@ -184,10 +233,35 @@ def summarise(arm: str, rows: list[dict], log: dict, elapsed_s: float) -> dict:
         i = min(len(xs) - 1, int(round(q * (len(xs) - 1))))
         return xs[i]
 
+    from collections import Counter
+
+    kinds = Counter(r["death_kind"] for r in died)
+    # An UNPLANNED exit inside the window. The `daemon_up` line at the start
+    # of an arm is the operator's own restart and must not read as a kill —
+    # keying on it would mark every arm compromised, which is the same
+    # blindness as marking none.
+    restarts = log.get("daemon_shutdown", 0)
     return {
         "arm": arm,
         "turns": len(rows),
-        "died_whole": sum(1 for r in rows if r["died"]),
+        # THE number the order calls "whole-turn deaths" is the shed one.
+        # The others are reported beside it, never folded in.
+        "died_shed": kinds.get(DEATH_SHED, 0),
+        "died_daemon_gone": kinds.get(DEATH_DAEMON_GONE, 0),
+        "died_transport": kinds.get(DEATH_TRANSPORT, 0),
+        "died_other": kinds.get(DEATH_CLIENT_TIMEOUT, 0) + kinds.get(DEATH_OTHER, 0),
+        "died_whole": len(died),
+        # An arm the daemon did not survive did not measure what it says it
+        # measured: every turn after the kill failed on a closed socket. The
+        # arm is REPORTED as compromised rather than averaged (ARCH §18.3).
+        "daemon_restarts_in_arm": restarts,
+        "turns_that_reached_the_daemon": len(rows) - kinds.get(DEATH_DAEMON_GONE, 0),
+        "arm_verdict": (
+            f"compromised: the daemon exited {restarts} time(s) inside the window — "
+            "every turn after a kill failed on a closed socket and measured nothing"
+            if restarts
+            else "clean"
+        ),
         "judge_failed_open": sum(1 for r in rows if r.get("judge_failure")),
         "judge_failure_queue_shed": len(shed),
         "judge_failure_calls_answered_zero": len(unanswered),
@@ -244,7 +318,8 @@ def main() -> int:
         )
         time.sleep(2)
 
-    log_start = daemon_err_size()
+    # UTC minute stamps bracket the arm; the daemon logs in UTC.
+    arm_lo = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     t0 = time.monotonic()
     rows: list[dict] = []
     try:
@@ -270,9 +345,9 @@ def main() -> int:
             except (ProcessLookupError, PermissionError):
                 loader.terminate()
 
-    summary = summarise(
-        a.arm, rows, census_log(log_start, daemon_err_size()), time.monotonic() - t0
-    )
+    arm_hi = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    summary = summarise(a.arm, rows, census_log(arm_lo, arm_hi), time.monotonic() - t0)
+    summary["window_utc"] = [arm_lo, arm_hi]
     out.with_suffix(".summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
     return 0
