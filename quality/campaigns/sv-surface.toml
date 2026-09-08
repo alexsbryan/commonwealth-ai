@@ -1,0 +1,192 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER carries the rung list, so the plan survives
+# without them.
+id        = "sv-surface"
+objective = "Sovereign's surfaces become projections over one serving stack - the desktop attaches as a pure client, the CLI is the same client in a terminal, the phone is the same client over the wire - so any capability they expose is answered by one decider, proven by the attach boot, a surface-parity sweep, and censuses that go red on a planted twin"
+spec      = "the converged plan, 2026-09-08; quality/TOPOLOGY.md 3.5 + Phase 6 (the one-DRIVER bar) govern the turn half and are NOT restated here"
+register  = "quality/CONCEPTS.toml"
+declared  = "2026-09-08"
+status    = "active"
+
+# ── THE CLAIM ───────────────────────────────────────────────────────────────
+#
+# Turns already landed the destination shape: ONE driver (`serve_turn`), with
+# `TurnSink` for in-process hosts and `sovereign-turn-client` for
+# out-of-process ones (`TURN_EXECUTION_SITES` 18 -> 6, TOPOLOGY Phase 6 waves
+# 1-3). The defect that remains is CAPABILITY-shaped: deciders the CLI and the
+# desktop each carry a private copy of, and an attach-mode desktop that
+# assembles a full private stack (`state.rs` constructs a CorpusEngine, a
+# Runtime over `build_attach_provider`'s remote provider, a store handle, a
+# LocalCorpusManager...) so the same question can answer differently depending
+# on which surface and which boot asked it.
+#
+# This campaign is NOT: retiring the embedded sink (sanctioned - "nothing
+# requires a host to speak HTTP", TOPOLOGY Phase 6 wave 2); deciding
+# sovereign-server's tenant-front fate (TOPOLOGY's open question - mobile
+# rides its wire COMPATIBILITY, Phase 5c: "a client cannot tell which it
+# reached"); or converting the six bench-gated harness turn-sites (18.6,
+# pre-registered re-baselines, not builds).
+#
+# PROVEN BY THREE CONSTRUCTIONS, not by prose:
+#   1. THE ATTACH BOOT - attach mode constructs zero local deciders and the
+#      desktop surface suite runs green against an externally-booted daemon.
+#   2. SURFACE PARITY - one fixture, both surfaces, identical answers per
+#      family; mobile parity is BY CONSTRUCTION once it consumes the one
+#      client family.
+#   3. TWIN CENSUSES - per family, a planted second implementation turns the
+#      family census red.
+#
+# ── THE CLOSED APP-LOCAL SET (named up front; anything else that stays ──────
+# ── in-process at attach is a defect, not a holdout) ─────────────────────────
+#   tray - crash report/bundle - updater - friendly names - command bridge
+#   (test surface) - setup-wizard's pre-daemon model validation + GGUF
+#   download (writes the config the daemon reads; pre-daemon by definition) -
+#   smoketest - meshapp webview auth - supervisor (process management).
+# OUT OF SCOPE: mobile SHIPPING (real keychain, iOS/Android project
+# generation, signing, TestFlight) - a product decision with an Apple
+# toolchain attached, not an architecture one (sovereign-mobile/HANDOFF.md).
+#
+# ── LADDER ──────────────────────────────────────────────────────────────────
+#
+#   -1  instruments: the three measurements below, floors minted from runs.
+#       LANDED 2026-09-08: attach construction inventory (13 state.rs needles
+#       + the attach provider in builders/inference.rs = 14, the census at
+#       sovereign-desktop/src-tauri/tests/attach_construction_census.rs,
+#       sabotage-verified: SkillRegistry count edited 1->2, watched red
+#       naming the needle, reverted, re-green), twin enumeration (6
+#       families), mobile wire-drift diff (M-1's work list, recorded on its
+#       row).
+#   0   chat periphery onto the driver: redirect_turn + resume_session via
+#       DesktopTurnSink; hand-drained turn streams in src-tauri -> 0.
+#       Turn-path change -> pre-registered bench (18.6).
+#   1   corpus status: one decider (CorpusEngine::installed_indexes served);
+#       CLI corpus_cmd/status.rs scan_corpus_rows repointed; parity test.
+#   2   models: residency via GET /v1/models (CLI model_cmd's /status scrape
+#       repointed); one GGUF-scanner home (desktop models.rs
+#       scan_directory_flat vs the daemon-side scan).
+#   3   conversation wire surface - ONE rung, TWO consumers: the CRUD routes
+#       the desktop needs for pure-client attach are the routes mobile
+#       already speaks on sovereign-server (list/get/create/delete +
+#       messages). Daemon grows them; wire-compat holds (5c); mobile then
+#       runs against either backend.
+#   4   mirror deletions: mesh status up-conversion (mesh_commands.rs),
+#       reading Dto mirrors (44 refs), health report adoption of
+#       sovereign_contracts::health (desktop health.rs carries its own
+#       HealthReport by its own comment).
+#   5   workflows daemon-side (operator decision, 2026-09-08): the daemon
+#       executes; workflow_commands.rs becomes a job-submission client;
+#       desktop's sovereign-workflow/-host deps leave with the dep shrink.
+#       Prerequisite for 6 (the host provider feed is a constructed decider).
+#   6   THE ATTACH BOOT - attach constructs zero deciders; turns via
+#       TurnClient; boot assertion + full surface suite green against an
+#       externally-booted daemon. The C2 divergence dies here: today an
+#       attached desktop answers from its OWN assembled stack; after 6 it
+#       answers from the daemon it attached to.
+#   M-1 mobile revive AGAINST the client family from its first green build.
+#       Drift measured 2026-09-08 (sovereign-mobile, written-never-compiled,
+#       detached workspace): remote/dto.rs:164 hand-mirrors
+#       sovereign_server::approval::ServerEvent - an enum that BECAME
+#       sovereign_contracts::types::TurnFrame - and lacks QueuePosition plus
+#       the TurnRequest::{Approve,UserReply,Message{intent,mode}} client
+#       replies. Work list: compile pass, adopt sovereign-turn-client +
+#       rung-1..3 family clients (deleting the mirror + remote/client.rs's
+#       inline Deserialize), reconcile the wire drift, suite green against a
+#       fixture daemon. Workspace detachment KEPT; path-deps are
+#       contract-layer only (the client crate's own dep rule makes this safe
+#       by construction).
+#   M-2 mobile error vocabulary onto the shared refusal types; the
+#       CONCEPTS.toml note ("sovereign-mobile carries 15 further commands
+#       with their own error.rs") converts to a row.
+#
+# SEQUENCING CONSTRAINTS: sovereign-mesh and commonwealth-api are cw-lift's
+# active zone - rungs 1/3 coordinate via work_in_flight and wait on their
+# reds clearing. `git commit -- <paths>` always. Embedded/supervised boots
+# are untouched by every rung: the objective changes what attach CONSTRUCTS,
+# never what embedded is entitled to.
+
+[[bar]]
+id           = "sv-attach-pure-client"
+one_line     = "CLAIM: attach mode constructs zero local deciders - the desktop is a client, like svrn chat"
+derives_from = "TOPOLOGY 3.5 'one process assembles; everything else is a surface', refined by Phase 6 wave 2 to one-DRIVER; attach is the boot where client-only is provable"
+status       = "open"
+# The floor is the measured needle inventory of the attach-reachable
+# construction spine (bootstrap_with_progress runs for BOTH modes; only the
+# EmbeddedDaemon commission and RunLock are Local-only). Counted by the
+# census test below, 2026-09-08: 13 needles in state.rs + the attach
+# provider in state/builders/inference.rs = 14 constructions:
+#   build_attach_provider - open_store - NoteStore::open -
+#   RecipeProjectStore::open - SkillRegistry::new - load_gliner_extractor -
+#   build_folder_tiered_provider - CorpusEngine::new -
+#   LocalCorpusManager::init_with_recipes_dir - build_knowledge_view -
+#   WatchedSubsystem::install - common_parts - commission (the Runtime) -
+#   CompactionWorker::spawn.
+# Each rung deletes needles; the census total only moves through a rung row
+# recorded here, never silently. The needle list cannot see an UNLISTED new
+# construction (the cw-lift 2c weakness, same as
+# every_sender_of_replicated_state_is_declared) - the total's history in git
+# is the audit, and rung 6's boot assertion is the stronger instrument that
+# replaces it at the end.
+floor        = 14.0
+floor_basis  = "attach_construction_census.rs, first run 2026-09-08: 14 needles, each pinned by name and count in the test"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"
+kill         = "K1 - a capability that genuinely cannot cross without a shim wider than a route goes to the operator as a DECLARED closed-set addition with a ledger row, never a silent in-process fallback. The K2/cw-lift precedent: the honest deliverable may be a profile, and the objective sentence survives it."
+
+[[bar]]
+id           = "sv-capability-twins"
+one_line     = "CLAIM: no capability the surfaces share is implemented twice"
+derives_from = "the duplication table verified 2026-09-08, file:line in the ladder rows"
+status       = "open"
+# Six twin families, measured 2026-09-08:
+#   corpus status      corpus_cmd/status.rs:128 scan_corpus_rows  vs  commands/corpus.rs:273 installed_indexes
+#   model residency    model_cmd.rs:19+/status scrape  vs  GET /v1/models + commands/models.rs:168 scan_directory_flat
+#   GGUF discovery     desktop scan_directory_flat  vs  the daemon-side scanner (one home decided at rung 2)
+#   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO
+#   reading DTOs       commands/reading.rs - 44 Dto refs mirroring daemon DTOs (byte-compat by comment)
+#   health report      health.rs:123 - its own HealthReport, NOT sovereign_contracts::health, by its own comment
+# Each deletion lands with its parity test; the count reaches 0 when every
+# family answers from one home.
+floor        = 6.0
+floor_basis  = "twin enumeration rung -1, 2026-09-08, the six families above with file:line"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
+kill         = "K2 - if parity cannot assert because the surfaces render different GRANULARITIES (not different answers), the instrument is re-derived, not the divergence forgiven."
+
+[[bar]]
+id           = "sv-twin-census"
+one_line     = "CLAIM: a planted second implementation anywhere goes red - the twins cannot come back"
+derives_from = "cw-lift 2c's every_sender_of_replicated_state_is_declared pattern, including its recorded weakness"
+status       = "open"
+# One watched-failing sabotage control per deleted twin family (plant the
+# twin, watch the family census red, revert). The needle-list weakness is
+# inherited and RECORDED: a census sees known spellings, so each control
+# plants the spelling it knows. No new registries - CONCEPTS.toml rows and
+# per-family census tests only (the machinery guard).
+floor        = 0.0
+floor_basis  = "no sabotage controls exist yet, 2026-09-08"
+target       = 6.0
+direction    = "higher_is_better"
+instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"
+kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
+
+[[bar]]
+id           = "sv-one-client"
+one_line     = "CLAIM: the client family is the only out-of-process consumer of the wire"
+derives_from = "the mobile decision, 2026-09-08: adopt during revive, daemon-first wire-compat"
+status       = "open"
+# One hand-rolled wire consumer exists today: sovereign-mobile's
+# remote/dto.rs:164 ServerEvent mirror (of an enum that became TurnFrame) +
+# remote/client.rs's inline Deserialize wrappers. M-1 deletes it by adoption.
+# svrn chat and the desktop-attach future both consume sovereign-turn-client;
+# the bar holds that no surface crate re-mints a private client or mirror.
+floor        = 1.0
+floor_basis  = "sovereign-mobile remote/dto.rs ServerEvent mirror + remote/client.rs inline DTOs, 2026-09-08"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "the mirror stays deleted; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."
