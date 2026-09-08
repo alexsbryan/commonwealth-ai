@@ -13,8 +13,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use commonwealth_core::ids::NodeId;
 use commonwealth_state::{is_gossip_excluded, MeshStore};
+use kernel_types::NodeId;
+use sovereign_contracts::peer::{PeerEntry, PeerStore, PeerStoreError};
 use uuid::Uuid;
 
 use sovereign_core::time::unix_now_u64;
@@ -23,6 +24,68 @@ use sovereign_work_atlas::model::{
 };
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
+
+/// `PeerStore` over the REAL `MeshStore`, so these tests drive the actual
+/// gossip path rather than a stand-in — `all_entries_for_gossip` and
+/// `merge_entry` below are the mesh's own, and the privacy invariant is only
+/// worth asserting against them.
+///
+/// This is the same delegation `sovereign_mesh::peer_adapter::MeshPeerStore`
+/// performs, and it is repeated here because this crate cannot reach that one:
+/// `sovereign-mesh` sits in the `mesh-api` layer, above `capabilities`, and
+/// the arrow only points down. Twenty lines in a test file is the cheaper
+/// half of that trade.
+struct MeshPeer(Arc<MeshStore>);
+
+impl MeshPeer {
+    fn new(store: &Arc<MeshStore>) -> Arc<dyn PeerStore> {
+        Arc::new(Self(Arc::clone(store)))
+    }
+}
+
+fn port_err(e: commonwealth_state::error::Error) -> PeerStoreError {
+    PeerStoreError::Backend(e.to_string())
+}
+
+fn port_entry(e: commonwealth_state::StoreEntry) -> PeerEntry {
+    PeerEntry {
+        app_id: e.app_id,
+        key: e.key,
+        value: e.value,
+        timestamp: e.timestamp,
+        origin: e.origin,
+    }
+}
+
+impl PeerStore for MeshPeer {
+    fn get(&self, app_id: &str, key: &str) -> Result<Option<PeerEntry>, PeerStoreError> {
+        self.0
+            .get(app_id, key)
+            .map(|o| o.map(port_entry))
+            .map_err(port_err)
+    }
+
+    fn set(
+        &self,
+        app_id: &str,
+        key: &str,
+        value: bytes::Bytes,
+        origin: NodeId,
+    ) -> Result<bool, PeerStoreError> {
+        self.0.set(app_id, key, value, origin).map_err(port_err)
+    }
+
+    fn delete(&self, app_id: &str, key: &str) -> Result<bool, PeerStoreError> {
+        self.0.delete(app_id, key).map_err(port_err)
+    }
+
+    fn scan(&self, app_id: &str, prefix: &str) -> Result<Vec<PeerEntry>, PeerStoreError> {
+        self.0
+            .scan(app_id, prefix)
+            .map(|v| v.into_iter().map(port_entry).collect())
+            .map_err(port_err)
+    }
+}
 
 /// Mirror the gossip loop: take every record from `src` that the
 /// gossip layer would broadcast, merge into `dst`. Private app_ids
@@ -87,8 +150,8 @@ fn public_claim_propagates_via_gossip() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -123,8 +186,8 @@ fn peer_claim_gets_received_at_on_first_observation() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:rec", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -205,8 +268,8 @@ fn private_claim_never_propagates() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Private, "conn:secret", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -237,8 +300,8 @@ fn public_observation_propagates_via_gossip() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "edits:a", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -270,8 +333,8 @@ fn private_observation_never_propagates() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Private, "edits:secret", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -307,8 +370,8 @@ fn release_drops_claim_locally_and_via_gossip_after_resync() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -362,8 +425,8 @@ fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
 
     // Peer machine claims ITS daemon's primary slot.
     let sess_a = sample_session(node_a, Privacy::Public, "conn:peer", &"r".repeat(64));

@@ -139,8 +139,25 @@ pub struct KindCounts {
 
 // ─── Asset descriptors ─────────────────────────────────────────
 
+/// The ONLY `knowledge_lookup` text that reaches a model in production.
+///
+/// It arrives as the manifest's `description` (see `declared()` below) and is
+/// rendered into the prompt as one prose line — `- {name} (id: {id}): {desc}`
+/// — by the two paths that offer this tool: the attached-document turn
+/// (`runtime/handlers/attached_doc.rs`) and the executor's `ReasonWithTools`
+/// step (`executor.rs`). Both then parse an inline
+/// `<tool_call>{"tool":…,"query":…}</tool_call>` marker back out; neither uses
+/// the OpenAI `tools[]` array.
+///
+/// There is deliberately NO system-prompt asset beside it. One existed until
+/// 2026-09-04 (`assets/system_prompt.md`, exported as
+/// `KNOWLEDGE_LOOKUP_SYSTEM_PROMPT`) with zero consumers in its whole life. It
+/// was deleted rather than wired because a dead asset that reads as the
+/// production contract is worse than an absent one: it is what a reader
+/// designing against "the production knowledge_lookup prompt" finds first.
+/// Contrast `sovereign_tools::search::SEARCH_SYSTEM_PROMPT`, which IS live and
+/// IS pinned by the search-gym conformance test.
 pub const TOOL_DESCRIPTION: &str = include_str!("assets/tool_description.md");
-pub const SYSTEM_PROMPT: &str = include_str!("assets/system_prompt.md");
 
 // ─── Tool impl ─────────────────────────────────────────────────
 

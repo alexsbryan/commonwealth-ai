@@ -12,7 +12,7 @@ helpers (`_tokenize`, `_to_rpn`, `_eval_rpn`). The task: split the
 module into files where every source file is ≤ 30 lines, keeping
 all 6 tests in `tests/test_calc.py` green.
 
-This problem is the validation target for `commonwealth-tdd`'s
+This problem is the validation target for `sovereign-tdd`'s
 multi-file sequencer (the v2 wedge). Distinct from the Green-phase
 problems in 1.x / 2.x / 3.2 / 4.x because there's no bug to fix —
 the code is correct on baseline. Success is structural improvement
@@ -23,7 +23,7 @@ Baseline state: 97 lines max, 6/6 tests passing.
 Goal:          ≤ 30 lines per source file, 6/6 tests still passing.
 
 Bench-runner integration is pending — for now the problem is driven
-by the `probe_multi_file` example binary in `commonwealth-tdd`. A
+by the `probe_multi_file` example binary in `sovereign-tdd`. A
 `--agent multi_file` bench runner would slot the same fixture into
 the standard run pipeline.
 """

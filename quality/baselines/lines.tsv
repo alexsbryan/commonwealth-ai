@@ -1,4 +1,4 @@
-# size-gate baseline — code lines per crate — comments and blanks excluded, `<crate>::tests` counted separately (may only shrink).
+# size-gate baseline — code lines per crate and per script tree — comments and blanks excluded, `<crate>::tests` counted separately (may only shrink).
 # MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
@@ -55,6 +55,7 @@
 173	oplog::tests
 255	quality/arch-layers
 313	quality/arch-layers::tests
+36113	scripts
 356	serving-policy
 418	serving-policy::tests
 1611	sovereign-mobile/src-tauri
@@ -71,12 +72,10 @@
 24	sovereign/bench/agent-coding/problems/2.2-group-anagrams/scaffold::tests
 4	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold
 45	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold::tests
-2762	sovereign/crates/commonwealth-agent-tools
-1750	sovereign/crates/commonwealth-agent-tools::tests
-4887	sovereign/crates/commonwealth-tdd
-3825	sovereign/crates/commonwealth-tdd::tests
 6940	sovereign/crates/sovereign-agent-bench
 2947	sovereign/crates/sovereign-agent-bench::tests
+2762	sovereign/crates/sovereign-agent-tools
+1750	sovereign/crates/sovereign-agent-tools::tests
 1768	sovereign/crates/sovereign-atos
 786	sovereign/crates/sovereign-atos::tests
 569	sovereign/crates/sovereign-authoring-harness
@@ -99,6 +98,7 @@
 41428	sovereign/crates/sovereign-core::tests
 18702	sovereign/crates/sovereign-desktop/src-tauri
 4997	sovereign/crates/sovereign-desktop/src-tauri::tests
+9235	sovereign/crates/sovereign-desktop/tests/e2e/scripts
 6383	sovereign/crates/sovereign-enrichment-build
 1157	sovereign/crates/sovereign-enrichment-build::tests
 243	sovereign/crates/sovereign-enrichment-catalog
@@ -121,6 +121,8 @@
 1431	sovereign/crates/sovereign-server::tests
 6735	sovereign/crates/sovereign-store
 2278	sovereign/crates/sovereign-store::tests
+4887	sovereign/crates/sovereign-tdd
+3825	sovereign/crates/sovereign-tdd::tests
 22	sovereign/crates/sovereign-time
 41627	sovereign/crates/sovereign-tools
 24596	sovereign/crates/sovereign-tools::tests

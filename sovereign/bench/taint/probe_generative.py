@@ -81,7 +81,7 @@ TARGETS = [
     dict(label="T2 count_emails (unformalized: fs recursion on untrusted path)", rel="sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs",
          name="count_emails",
          prov="`path` originates from a #[tauri::command] argument (`import_email_archive`) — a filesystem path chosen entirely by the caller/UI, no allow-list applied before it reaches here."),
-    dict(label="T3 apply_edit_range (control: slice IS guarded at :423)", rel="sovereign/crates/commonwealth-agent-tools/src/executor.rs",
+    dict(label="T3 apply_edit_range (control: slice IS guarded at :423)", rel="sovereign/crates/sovereign-agent-tools/src/executor.rs",
          line=450,
          prov="`args.start_line`/`args.end_line` come from a tool-call JSON emitted by an LLM agent — attacker-influenceable integers. Earlier lines in this function may or may not constrain them."),
     dict(label="T4 validate_email_source (generative: validator logic)", rel="sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs",

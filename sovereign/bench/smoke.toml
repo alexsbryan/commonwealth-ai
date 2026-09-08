@@ -160,13 +160,48 @@ ids = [
 # same corpus, and reusing the ids would make a corpus-level regression look
 # like two independent findings.
 
+# CUT from five to THREE on 2026-09-05, from the per-question measurement the
+# order asked for before anything was changed. `svrn chat ask --format json`
+# carries the stage ledger; the five questions, on this host at 1-minute loads
+# 8-25, cost (total_ms · retrieval · draft(calls) · audit(calls) · completion
+# tokens):
+#
+#   concept_qualia_physicalism          137,298   7,077  124,504(1)     213(1)  1,022
+#   position_summary_hard_problem       137,667  26,325  103,727(1)       6(1)    707
+#   argument_rawls_original_position    381,755  17,570  153,151(1) 193,122(11) 1,761
+#   comparative_berlin_liberty          268,534  62,877  137,447(1)  67,021(11) 1,134
+#   comparative_kant_hume_causation     138,209   6,153   69,518(1)  61,667(10) 1,242
+#
+# THE COST IS THE MODEL'S, not a startup and not a defect: draft is 55.3% of
+# the total across the five and is ONE call per question generating ~1,170
+# tokens; audit is 30.3% and is the grounding gate's own 10-11-call ladder;
+# retrieval is 11.3%. There is no structural fix inside this lane — which is
+# why the answer is N rather than a patch.
+#
+# N = 3, derived: the check's 1,800 s less the other six lanes' measured
+# seconds (305 + 180 + 63 + 106 + 0 + 44 = 698) leaves 1,102 s for chaos +
+# synth; chaos at four probes less its now-deleted 22 s startup is ~409 s;
+# synth's runway is therefore ~693 s. At the 210 s median above that is three
+# questions with headroom, and five cannot fit under any reading — the run
+# that tried was killed at its 666 s cap having answered two.
+#
+# WHICH three: the three cheapest that still span three DISTINCT archetypes —
+# a concept question, a position summary, a comparison. Dropped are
+# `argument_rawls_original_position` (382 s, the single most expensive item in
+# the bank) and `comparative_berlin_liberty` (269 s), the latter because it
+# was the second comparison and duplicated an archetype the survivor covers.
+# Dropping `argument` does drop an archetype, and that is a real cost stated
+# rather than hidden: at 382 s it alone would take 55% of the runway.
+#
+# The subset id is `-v2` because the selection changed, and
+# `quality_check_cmd::smoke_selection_digest` puts the ids themselves in the
+# run fingerprint — so a three-question run cannot compare against a
+# five-question baseline.
 [[subset]]
-subset_id = "synth-v1"
+subset_id = "synth-v2"
 bank = "sovereign/bench/sep/questions.toml"
 ids = [
     "concept_qualia_physicalism",
     "position_summary_hard_problem_illusionism",
-    "argument_rawls_original_position",
-    "comparative_berlin_liberty",
     "comparative_kant_hume_causation",
 ]

@@ -71,6 +71,9 @@ pub mod model_fetch;
 pub mod newsworthy_host;
 pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
+/// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
+/// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
+pub mod peer_adapter;
 pub mod peer_inference;
 pub mod persist;
 /// The §4.1 candidate objective — rank on predicted time-to-answer

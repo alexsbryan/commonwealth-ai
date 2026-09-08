@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Bench-side adapter over `commonwealth_tdd`'s test-output parsers.
+//! Bench-side adapter over `sovereign_tdd`'s test-output parsers.
 //!
 //! The four per-language parsers (cargo libtest, `go test -json`,
 //! vitest, pytest) and `TestParseResult` itself live in
-//! `commonwealth_tdd::shared::parser`. This module is the one arm
+//! `sovereign_tdd::shared::parser`. This module is the one arm
 //! that maps the bench's [`WitnessLanguage`] onto tdd's `Language`.
 //! The parsers used to be forked here; the fork had drifted — it
 //! never grew tdd's 2026-07-07 "a run that broke before executing
@@ -18,28 +18,28 @@
 
 use crate::problem::WitnessLanguage;
 
-pub use commonwealth_tdd::TestParseResult;
+pub use sovereign_tdd::TestParseResult;
 
 /// Dispatch over the witness language.
 ///
-/// `WitnessLanguage` and `commonwealth_tdd::Language` carry the same
+/// `WitnessLanguage` and `sovereign_tdd::Language` carry the same
 /// four variants in the same order; this is a total map with no
 /// fallback arm, so a new variant on either side is a compile error
 /// rather than a silent mis-parse.
 pub fn parse_test_output(language: WitnessLanguage, stdout: &str) -> TestParseResult {
     let lang = match language {
-        WitnessLanguage::Rust => commonwealth_tdd::Language::Rust,
-        WitnessLanguage::Go => commonwealth_tdd::Language::Go,
-        WitnessLanguage::TypeScript => commonwealth_tdd::Language::TypeScript,
-        WitnessLanguage::Python => commonwealth_tdd::Language::Python,
+        WitnessLanguage::Rust => sovereign_tdd::Language::Rust,
+        WitnessLanguage::Go => sovereign_tdd::Language::Go,
+        WitnessLanguage::TypeScript => sovereign_tdd::Language::TypeScript,
+        WitnessLanguage::Python => sovereign_tdd::Language::Python,
     };
-    commonwealth_tdd::shared::parser::parse_test_output(lang, stdout)
+    sovereign_tdd::shared::parser::parse_test_output(lang, stdout)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_tdd::shared::parser::{
+    use sovereign_tdd::shared::parser::{
         parse_cargo_libtest, parse_go_test_json, parse_pytest_text, parse_vitest_default,
     };
 

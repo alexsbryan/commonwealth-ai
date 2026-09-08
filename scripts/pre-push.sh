@@ -39,9 +39,9 @@
 #   ─── everything below runs while that does ─────────
 #   rustfmt                                        6s    (Rust pushes only)
 #   xtask build freshness check                  0.2s    (cached)
-#   eight xtask gates, one binary                 21s
+#   nine xtask gates, one binary                  21s
 #     standalone: docs 2.2 · arch 4.2 · layout 2.6 · env 2.6 · concept 5.3
-#     boundary/layer/lock < 0.1 each
+#     boundary/layer/lock/instrument < 0.1 each
 #   size ratchet + deletion manifest             4-5s
 #   ───────────────────────────────────────────────────
 #   wall clock = max(cargo check, ~32s) — NOT their sum
@@ -74,11 +74,12 @@
 # hook suites in particular now run on every push instead of only when a hook
 # changed, which is strictly more coverage than this file ever gave them.
 #
-# The eight xtask gates stay. They are 17s, they are the only place in the
+# The nine xtask gates stay. They are 17s, they are the only place in the
 # repo that runs them, and they are the checks a diff genuinely cannot answer.
 # They are ALSO added to CI (`gates`) so a --no-verify push and a contributor
 # without this hook installed are gated too — belt and braces on purpose, and
-# cheap in both places.
+# cheap in both places. (instrument-gate joined them on 2026-09-04 at 0.04s —
+# it only reads files.)
 #
 # The compile check is the one gate that can exceed the budget on its own, and
 # what drives that is NOT the size of the diff — it is FREE MEMORY. The script
@@ -435,7 +436,7 @@ fi
 # nightly plus `cargo install cargo-public-api` (a CI concern, and it burns
 # 15.7s failing to find the binary); lint-gate consumes a clippy JSON stream
 # and belongs to the lint script that produces one. Neither is a push gate.
-XTASK_GATES=(docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate clock-gate concept-gate)
+XTASK_GATES=(docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate clock-gate instrument-gate concept-gate)
 
 xtask_gates() {
     local g rc=0 code out xtask
@@ -487,7 +488,7 @@ xtask_gates() {
     return $rc
 }
 
-run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/clock/concept)" xtask_gates
+run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/clock/instrument/concept)" xtask_gates
 
 # ── The size term. ADVISORY on purpose, for now. ──────────────────────────
 #

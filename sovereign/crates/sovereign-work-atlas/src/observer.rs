@@ -295,7 +295,7 @@ impl BackgroundWatcher for AtlasObserver {
 
     async fn on_files_changed(&self, paths: Vec<PathBuf>) {
         // The trait contract: return quickly. `process` itself is
-        // O(paths) cheap MeshStore writes — well under the
+        // O(paths) cheap peer-store writes — well under the
         // coordinator's per-watcher budget — so we run it inline
         // instead of spawning. If put_observation or broadcast
         // latency ever grows, switch to `tokio::spawn` with an
@@ -325,16 +325,19 @@ use sovereign_core::time::unix_now_u64 as now_secs;
 mod tests {
     use std::sync::Arc;
 
-    use commonwealth_core::ids::NodeId;
-    use commonwealth_state::MeshStore;
+    use kernel_types::NodeId;
+    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
 
     use crate::tools::broadcast::NullBroadcaster;
 
     use super::*;
 
     fn mk_observer(repo_id: &str) -> AtlasObserver {
-        let mesh = Arc::new(MeshStore::in_memory().unwrap());
-        let store = Arc::new(WorkAtlasStore::new(mesh, NodeId::from_u128(7)));
+        let mesh = Arc::new(SoloPeerStore::new());
+        let store = Arc::new(WorkAtlasStore::new(
+            mesh as Arc<dyn PeerStore>,
+            NodeId::from_u128(7),
+        ));
         AtlasObserver::new(
             store,
             WorkAtlasConfig::defaults(),
@@ -389,8 +392,11 @@ mod tests {
 
     #[tokio::test]
     async fn private_observation_lands_only_in_private_namespace() {
-        let mesh = Arc::new(MeshStore::in_memory().unwrap());
-        let store = Arc::new(WorkAtlasStore::new(Arc::clone(&mesh), NodeId::from_u128(7)));
+        let mesh = Arc::new(SoloPeerStore::new());
+        let store = Arc::new(WorkAtlasStore::new(
+            Arc::clone(&mesh) as Arc<dyn PeerStore>,
+            NodeId::from_u128(7),
+        ));
         let mut cfg = WorkAtlasConfig::defaults();
         cfg.node.default_privacy = "private".into();
         let obs = AtlasObserver::new(

@@ -91,8 +91,8 @@ A pass against `sovereign/ARCH_PRINCIPLES.md` surfaced these specific applicatio
 | **7.1** | **Structural invariants** | `Workdir` newtype wraps `PathBuf` and is only constructible via `Workdir::check_safe(path, force)` — the dirty-git case becomes unrepresentable at the type level downstream. The `solve()` signature takes `Workdir`, not `PathBuf`. |
 | 7.4 | Defence in depth | Workdir safety: (1) constructor refuses dirty/system paths, (2) per-candidate snapshots prevent partial-state leakage, (3) all writes go through the existing `executor::execute` which has its own workdir guards. |
 | **8.1** | **Centralise workspace deps** | `regex` gets promoted to `[workspace.dependencies]` (currently a direct dep in `sovereign-agent-bench`). New crate inherits via `workspace = true`. |
-| 8.3 | Re-export boundaries | `commonwealth-solver` re-exports the executor primitives it uses; bench imports via the re-export, not direct path-dep on `commonwealth-agent-tools`. |
-| 8.5 | Heavy deps stay where they're needed | `commonwealth-solver` deps: `tokio`, `reqwest`, `serde`, `regex`, `commonwealth-agent-tools`, `tracing`. No lance, no tauri, no llama. |
+| 8.3 | Re-export boundaries | `commonwealth-solver` re-exports the executor primitives it uses; bench imports via the re-export, not direct path-dep on `sovereign-agent-tools`. |
+| 8.5 | Heavy deps stay where they're needed | `commonwealth-solver` deps: `tokio`, `reqwest`, `serde`, `regex`, `sovereign-agent-tools`, `tracing`. No lance, no tauri, no llama. |
 | **9.1** | **Glassbox tracing** | Every non-obvious decision emits a `tracing` event with `solve:` prefix: dirty-git refusal, baseline tests, each candidate dispatched, candidate result, winner selected, stall, exhausted, completed. |
 | 9.3 | Redact deliberately | Workdir paths logged at full path at `debug!`, basename only at `info!`. Test failure tails capped at ~1.5 KB (already do this). |
 | 10.2 | Touch one dimension at a time | Six phases shipped as separate commits: extraction, safety check, auto-detect, HTTP, MCP, Pi. |
@@ -112,7 +112,7 @@ The bolded rows (§6, §7.1, §8.1, §9.1, §12.4) drive concrete changes to the
 - `SolveRequest`, `SolveResponse`, `SolveConfig`, `SolveEvent` types
 - HTTP client for the daemon's chat-completions endpoint
 - Workdir snapshot/restore
-- Edit application (via `commonwealth-agent-tools::executor::execute`)
+- Edit application (via `sovereign-agent-tools::executor::execute`)
 - Test execution + result parsing
 
 **What it does NOT own:**

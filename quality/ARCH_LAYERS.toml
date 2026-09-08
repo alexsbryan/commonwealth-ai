@@ -64,15 +64,20 @@ backstage = [
 #   sovereign-tools — the MCP tool surface agents call at work time. Product.
 #     Its ATOS and archaeology reach is optional and off by default, which is
 #     the rule being satisfied, not evaded.
-#   commonwealth-tdd — `scripts/nc-boundary.py` classifies it back-of-house and
-#     that is WRONG; this rule caught it as a false positive on first run, from
+#   sovereign-tdd (`commonwealth-tdd` until cw-lift 3a, 2026-09-04) —
+#     `scripts/nc-boundary.py` classified it back-of-house and that was WRONG;
+#     this rule caught it as a false positive on first run, from
 #     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
 #     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
-#     (routes_mcp.rs:469) — and the `solve` verb's daemon route
-#     (daemon_cmd/solve_http.rs). The product does not ship without those.
+#     (`routes_mcp.rs::tdd_tool_descriptors`) — and the `solve` verb's daemon
+#     route (daemon_cmd/solve_http.rs). The product does not ship without those.
 #     The distinction that decides it: a quality control measures SOVEREIGN,
 #     while this drives red-green-refactor over the USER's repo and emits their
 #     code. It is a feature about tests, not a test of the product.
+#     The RENAME changed nothing about this adjudication — `nc-boundary.py`
+#     keys domain on PATH and back-of-house on an explicit crate SET, and the
+#     crate was under `sovereign/crates/` and out of that set both before and
+#     after. It is recorded so the next reader does not re-derive it.
 
 # ── Layers (bottom → top) ────────────────────────────────────────────────────
 
@@ -222,7 +227,17 @@ crates = [
     "sovereign-eval",
     "sovereign-meshapp",
     "sovereign-authoring-harness",
-    "commonwealth-agent-tools",
+    # The canonical agent-tool primitives (executor + Primitive + ExecCtx) and
+    # the TDD-machine backend built on them. Both were named `commonwealth-*`
+    # until cw-lift 3a (2026-09-04) despite living in `sovereign/crates/` with
+    # no commonwealth dependency of any kind; the prefix meant three different
+    # things at once and the domain boundary could not be read off a manifest.
+    # `sovereign-tdd` also moved down out of `mesh-api`, where it sat beside
+    # `commonwealth-api` for no reason but its name: it backs two shipped MCP
+    # tools and the `solve` verb, which is a capability, and its only internal
+    # deps are `sovereign-agent-tools` (sideways) and `kernel-types` (down).
+    "sovereign-agent-tools",
+    "sovereign-tdd",
 ]
 
 # Cross-family assembly: the mesh HTTP surface + harnesses + the in-process
@@ -233,7 +248,6 @@ name = "mesh-api"
 crates = [
     "commonwealth-api",
     "commonwealth-test-harness",
-    "commonwealth-tdd",
     "sovereign-mesh",
 ]
 
@@ -258,10 +272,6 @@ crates = [
 # direction is one-way… sovereign-mesh is the only place the two upper
 # projects meet"). sovereign-* reaching DOWN into mesh-foundation is layer-
 # legal; commonwealth-* reaching into sovereign-* is not, except contracts.
-# NOTE: commonwealth-agent-tools + commonwealth-tdd live in sovereign/crates/
-# (naming predates the monorepo merge) — their sovereign deps are exempted
-# here rather than grandfathered, since the crates are sovereign-side in all
-# but name.
 # The knowledge layer meets sovereign at the contracts seam and nowhere else.
 # Layer ordering cannot say this on its own: `sovereign-contracts` is declared
 # in the `contract` layer above, so every `corpus-engine-* → sovereign-*` edge

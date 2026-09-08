@@ -167,7 +167,19 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // 15 -> 17 (2026-08-27): the `mesh_switch` handler and the two new rotate
     // tests each construct a client for loopback calls to our own daemon.
     // Class unchanged — mesh transport, never third-party egress.
-    ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 17),
+    // 17 -> 16 (2026-09-04, cw-lift 2d, ce42f893f): mesh-measurements moved
+    // onto the ring rail, taking one construction site with it. A DECREMENT
+    // is registered for the same reason an increment is — the census is a
+    // count, and an unexplained fall hides a capability that left.
+    ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 16),
+    // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
+    // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
+    // each online peer, plus the inline `#[cfg(test)]` module that binds a
+    // real socket — src/ files carry their test sites into the census.
+    // Class::Mesh: peer traffic on the estate's own transport, our own auth,
+    // custody class peer. It carries signed ring ops, never estate content to
+    // a third party.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 5),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
@@ -472,9 +484,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-agent-bench/src/judge.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-agent-bench/src/cli/replay.rs", Class::LocalDaemon, 1),
 
-    // ---- commonwealth-tdd (LocalDaemon — TDD loop against the daemon) ----
-    ("sovereign/crates/commonwealth-tdd/src/backend.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/commonwealth-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
+    // ---- sovereign-tdd (LocalDaemon — TDD loop against the daemon) ----
+    ("sovereign/crates/sovereign-tdd/src/backend.rs", Class::LocalDaemon, 2),
+    ("sovereign/crates/sovereign-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-compute ----
     // client: loopback back to the host daemon; supervisor: heartbeat

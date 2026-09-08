@@ -73,7 +73,8 @@ pub(crate) async fn gate_answer_with_progress(
         .await;
     let gate_ms = started.elapsed().as_millis() as u64;
     crate::runtime::stage_ledger::gate_close(ledger_window, gate_ms);
-    record_gate_decision(&mut outcome, evidence, profile, gate_ms, census.take());
+    let (calls, failures) = census.take();
+    record_gate_decision(&mut outcome, evidence, profile, gate_ms, calls, &failures);
     outcome
 }
 
@@ -128,6 +129,7 @@ fn record_gate_decision(
     profile: &GroundingProfile,
     gate_ms: u64,
     calls: Vec<sovereign_contracts::types::GateCallRow>,
+    failures: &[sovereign_contracts::types::JudgeFailureReason],
 ) {
     #[cfg(not(test))]
     use sovereign_contracts::types::{grounding_journal_append, journal_dir};
@@ -189,6 +191,7 @@ fn record_gate_decision(
             );
         }
     }
+    let judge_failure = super::call_census::judge_failure_of(&calls, failures);
     d.calls = calls;
     d.entity_anchored = evidence.entity_anchored;
     d.claim_audited = !outcome.claims.is_empty();
@@ -197,6 +200,26 @@ fn record_gate_decision(
         .and_then(|m| m.get("action"))
         .and_then(|v| v.as_str())
         .map(str::to_string);
+    // EVERY fail-open exit says why, and it says so HERE rather than at
+    // each of the ladder's exits — one site, so a future exit that ships
+    // unverified cannot forget (the same reason this funnel owns the
+    // journal at all, ARCH §10.6). The set of fail-open actions is the one
+    // `runtime::epistemic` renders `FailOpen` from: one decider, one name.
+    if d.action
+        .as_deref()
+        .is_some_and(crate::runtime::epistemic::action_is_fail_open)
+    {
+        tracing::warn!(
+            target: "grounding_gate",
+            event = "judge_failed_open",
+            action = d.action.as_deref().unwrap_or("?"),
+            reason = judge_failure.reason.label(),
+            calls_attempted = judge_failure.calls_attempted,
+            calls_answered = judge_failure.calls_answered,
+            "gate released without a verdict"
+        );
+        d.judge_failure = Some(judge_failure);
+    }
     d.retried = meta
         .and_then(|m| m.get("retried"))
         .and_then(|v| v.as_bool())
@@ -251,6 +274,15 @@ fn record_gate_decision(
             "episode_id".to_string(),
             serde_json::Value::String(d.episode_id.clone()),
         );
+        // Same value the journal line carries, on the wire the turn
+        // returns — the lane and the desktop read the meta, not the
+        // journal, and a reason only one of them can see is not a reason.
+        if let Some(jf) = d.judge_failure {
+            m.insert(
+                "judge_failure".to_string(),
+                serde_json::to_value(jf).unwrap_or(serde_json::Value::Null),
+            );
+        }
     }
     // The per-chunk custody ledger the judge's evidence universe held
     // (custody.md §5, reds R-2/R-3): emitted for EVERY decision through

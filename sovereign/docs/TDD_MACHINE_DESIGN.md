@@ -54,7 +54,7 @@ Each phase is a `SolverProvider` impl behind a shared registry. The calling harn
 sovereign-agent-bench  ──┐  (uses Green for measurement runs)
                          │
                          ▼
-                  commonwealth-tdd  (NEW crate)
+                  sovereign-tdd  (NEW crate)
                   ─────────────────────────
                     SolverProvider trait (Red, Green, Refactor impls)
                     SolverRegistry::builtin()
@@ -90,7 +90,7 @@ Same set of load-bearing rules carry from `SOLVER_DESIGN.md` v2; restated here f
 | 4 | Registry pattern | `SolverRegistry` hosts `tdd_red`, `tdd_green`, `tdd_refactor` (and future solvers) |
 | 4.3 | Unknown id loud | `POST /v1/solve/{unknown}` → 400 + registered ids |
 | 5 | Interface segregation | `SolverProvider` trait: `id() + solve()` |
-| 6 | Data vs program | All three phase prompts live as `commonwealth-tdd/assets/*.md` (red_prompt.md, green_prompt.md, refactor_prompt.md) |
+| 6 | Data vs program | All three phase prompts live as `sovereign-tdd/assets/*.md` (red_prompt.md, green_prompt.md, refactor_prompt.md) |
 | 7.1 | Structural invariants | `Workdir` newtype; only constructible via `check_safe`; `solve()` accepts `Workdir`, not `PathBuf` |
 | 8.1 | Workspace deps | `regex` promoted to workspace |
 | 9.1 | Glassbox tracing | Per-phase: `tdd_red:` / `tdd_green:` / `tdd_refactor:` event prefixes |
@@ -134,7 +134,7 @@ struct RedResult {
 
 **Input:** `Workdir`, optional `task_description` (defaults to inferring intent from failing tests).
 
-**Process:** the existing `runners::search` loop — port from `sovereign-agent-bench` into `commonwealth-tdd`. Parallel candidates × monotonic improvement × stall detection. Unchanged from what we shipped today.
+**Process:** the existing `runners::search` loop — port from `sovereign-agent-bench` into `sovereign-tdd`. Parallel candidates × monotonic improvement × stall detection. Unchanged from what we shipped today.
 
 **Output:**
 ```rust
@@ -204,7 +204,7 @@ Structural metrics are computable deterministically; the model proposes a single
 ## Shared types
 
 ```rust
-// commonwealth-tdd/src/types.rs
+// sovereign-tdd/src/types.rs
 
 pub struct Workdir(PathBuf);  // §7.1 structural — only via check_safe()
 
@@ -365,8 +365,8 @@ Refuses to refactor untested code (no safety net).`,
 
 | Component | State |
 |---|---|
-| Green-phase search loop | **90% built** — `runners::search` in bench; port to `commonwealth-tdd` |
-| `runners::shared` helpers (EditAction, parse, apply, snapshot, run_tests) | **90% built** — port to `commonwealth-tdd` |
+| Green-phase search loop | **90% built** — `runners::search` in bench; port to `sovereign-tdd` |
+| `runners::shared` helpers (EditAction, parse, apply, snapshot, run_tests) | **90% built** — port to `sovereign-tdd` |
 | `Workdir` newtype | New (~150 LOC + tests) |
 | `ChatBackend` trait + Deterministic mock | New (~150 LOC) |
 | `SolverProvider` trait + `SolverRegistry` | New (~100 LOC) |
@@ -381,9 +381,9 @@ Refuses to refactor untested code (no safety net).`,
 
 | Phase | Work | Days |
 |---|---|---|
-| 7a — `commonwealth-tdd` crate scaffold + Workdir + ChatBackend + Registry | Per-§-compliance setup | 1.0 |
+| 7a — `sovereign-tdd` crate scaffold + Workdir + ChatBackend + Registry | Per-§-compliance setup | 1.0 |
 | 7b — Green-phase port from bench | Migrate `runners::search` + tests | 1.0 |
-| 7b.bench — Migrate bench's `runners::search` to wrap `commonwealth_tdd::solve` | Thin adapter | 0.25 |
+| 7b.bench — Migrate bench's `runners::search` to wrap `sovereign_tdd::solve` | Thin adapter | 0.25 |
 | 7c — Red-phase implementation | Test-fails-on-baseline verification + framework adapters | 1.5 |
 | 7d — Refactor-phase implementation (v1 single-file only) | ExtractFunction + InlineFunction + RenameSymbol + ReorderTopLevels; per-language adapters via tree-sitter or equivalent; tests-as-gate | 1.5 |
 | 7e — HTTP + MCP endpoints | Both transports share registry | 0.5 |
@@ -395,7 +395,7 @@ Bumped from `SOLVER_DESIGN` v2's 4.75 days because Red and Refactor are new cons
 
 ## Open questions
 
-1. **Crate name.** `commonwealth-tdd` is the clearest. Alternatives: `commonwealth-cycle`, `commonwealth-rgr`. **Recommendation: `commonwealth-tdd`** — most discoverable, matches what we're building.
+1. **Crate name.** `sovereign-tdd` is the clearest. Alternatives: `commonwealth-cycle`, `commonwealth-rgr`. **Recommendation: `sovereign-tdd`** — most discoverable, matches what we're building.
 
 2. **Refactor v1 targets.** Listed 4 above. Should we ship all 4 in v1 or pick 1-2 to validate the pattern first? **Recommendation: ship `SplitFile` and `RemoveDuplication` in v1; defer `ReduceCyclomatic` and `ReduceLOC` to v1.5.** SplitFile maps directly to ARCH §3.1's file ceilings, which is a real recurring need; duplication is the second-most-frequent refactor.
 
@@ -414,7 +414,7 @@ Bumped from `SOLVER_DESIGN` v2's 4.75 days because Red and Refactor are new cons
 - [ ] Promote `regex` to `[workspace.dependencies]`
 
 **Phase 7a — Crate scaffold:**
-- [ ] Create `sovereign/crates/commonwealth-tdd/` with `assets/`, `src/`
+- [ ] Create `sovereign/crates/sovereign-tdd/` with `assets/`, `src/`
 - [ ] `types.rs`, `workdir.rs`, `backend.rs`, `prompts.rs`, `registry.rs`
 - [ ] `DeterministicChatBackend` unit tests pin the pattern
 
@@ -445,7 +445,7 @@ Bumped from `SOLVER_DESIGN` v2's 4.75 days because Red and Refactor are new cons
 - [ ] Smoke probe each target against a fixture before declaring done
 
 **Phase 7e — HTTP + MCP:**
-- [ ] `sovereign-server` depends on `commonwealth-tdd`
+- [ ] `sovereign-server` depends on `sovereign-tdd`
 - [ ] `POST /v1/solve/{solver_id}` route
 - [ ] MCP tool registrations on existing server
 - [ ] End-to-end smokes for all three
@@ -459,7 +459,7 @@ Bumped from `SOLVER_DESIGN` v2's 4.75 days because Red and Refactor are new cons
 
 **Phase 7g — Docs:**
 - [ ] `sovereign/docs/TDD_MACHINE.md` — end-user-facing
-- [ ] `sovereign/SYSTEM_OVERVIEW.md` §10 lists `commonwealth-tdd`
+- [ ] `sovereign/SYSTEM_OVERVIEW.md` §10 lists `sovereign-tdd`
 - [ ] Memory note: "sovereign ships TDD-machine: red-green-refactor backend for any harness that calls it; not a solver, not a coding harness"
 
 ## What this design intentionally does not include
@@ -486,7 +486,7 @@ Each shape is a new SolverProvider impl. The trait stays narrow; the registry gr
 ## Decision checkpoint — resolved 2026-05-24
 
 - [x] Workflow shape: red → green → refactor, three tools
-- [x] Crate name: `commonwealth-tdd`
+- [x] Crate name: `sovereign-tdd`
 - [x] Three SolverProvider impls behind one registry
 - [x] HTTP + MCP both ship in v1
 - [x] Pi extension: `@svrnmesh/pi-tdd`

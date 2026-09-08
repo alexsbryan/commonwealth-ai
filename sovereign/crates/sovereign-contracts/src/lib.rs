@@ -36,6 +36,12 @@ pub mod launch;
 pub mod mcp_config;
 pub mod memory_config;
 pub mod observer;
+// The two ports a daemon speaks to its peers through — a replicated KV store
+// and the convergence stamps — plus the honest N=1 implementations of both.
+// Here rather than in the daemon because three crates must agree on them:
+// `sovereign-cli-daemon` declares them, `sovereign-work-atlas` consumes one,
+// and `sovereign-mesh` supplies the mesh-backed adapter for each (cw-lift 3b).
+pub mod peer;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;

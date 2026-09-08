@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! TTL eviction for the work atlas.
 //!
-//! MeshStore's built-in `gc(ttl_seconds)` is app-wide and keyed on
+//! The mesh store's built-in `gc(ttl_seconds)` is app-wide and keyed on
 //! entry timestamp — not on the per-record `ttl_expires_at` /
 //! `last_activity_at` that the work atlas uses. This module scans
 //! every 60s and drops anything past its deadline. Cheap: a handful
@@ -192,8 +192,8 @@ use sovereign_core::time::unix_now_u64 as now_secs;
 mod tests {
     use std::path::PathBuf;
 
-    use commonwealth_core::ids::NodeId;
-    use commonwealth_state::MeshStore;
+    use kernel_types::NodeId;
+    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
     use uuid::Uuid;
 
     use crate::model::{
@@ -203,8 +203,11 @@ mod tests {
     use super::*;
 
     fn mk_store() -> Arc<WorkAtlasStore> {
-        let mesh = Arc::new(MeshStore::in_memory().unwrap());
-        Arc::new(WorkAtlasStore::new(mesh, NodeId::from_u128(1)))
+        let mesh = Arc::new(SoloPeerStore::new());
+        Arc::new(WorkAtlasStore::new(
+            mesh as Arc<dyn PeerStore>,
+            NodeId::from_u128(1),
+        ))
     }
 
     fn mk_session(privacy: Privacy, last_activity_at: u64) -> SessionRecord {

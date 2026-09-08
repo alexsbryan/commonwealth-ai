@@ -7,5 +7,5 @@ pub mod auto_test;
 pub mod test_result_parser;
 
 pub use auto_test::{run_auto_witness, AutoWitnessError, AutoWitnessOutcome};
-pub use commonwealth_tdd::TestParseResult;
+pub use sovereign_tdd::TestParseResult;
 pub use test_result_parser::parse_test_output;

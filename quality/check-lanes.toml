@@ -29,11 +29,27 @@
 #                 180; chaos-monkey came in at 799 s against 240 and synth at
 #                 546 against 180, which is the whole reason the measured
 #                 `secs` in summary.json is persisted.
+#
+#                 RE-SET again 2026-09-05 for the five lanes the corpus seal
+#                 (`LaneScope::Sealed`) or the synth cut actually moved, each
+#                 from two or three measured runs rather than one — and each
+#                 left ABOVE its highest observed actual, because an est is a
+#                 RESERVATION and under-reserving starves a lane that would
+#                 have finished. Actuals, oldest to newest:
+#                   routing         60 ·  63 ·  38   -> 80
+#                   retrieval-prod 230 · 106 ·  57   -> 90
+#                   chaos-monkey   726 · 431 · 397   -> 450
+#                   knowledge-gym   39 ·  44 ·  36   -> 50
+#                   synth       skipped · 666* · 272 -> 330   (*capped at 5q)
+#                 chat-ask (458 · 305 · 251) and throughput (217 · 180) keep
+#                 their ests: neither was touched by this order's changes and
+#                 chat-ask's spread is the widest of the eight.
 #   command       argv. `svrn` / `sovereign` / `sovereign-cli` resolve to the
 #                 RUNNING dispatcher, never to PATH.
 #   preconditions optional; a CLOSED set (quality_check_cmd::Precondition):
 #                 `port-listening:<port>`, `slot-decodes:<slot>`,
-#                 `corpus-installed:<id>`, `binary:<name>`. An unmet one is
+#                 `corpus-installed:<id>`, `binary:<name>`,
+#                 `host-quiet:<max 1-min load>`. An unmet one is
 #                 could-not-judge NAMING it, and the lane does not run.
 #   baseline_dir  optional; `<dir>/<fingerprint>/latest.json` is this lane's
 #                 baseline for the current stack. A lane with none compares
@@ -89,6 +105,13 @@ preconditions = [
     "slot-decodes:primary",
     "slot-decodes:fast",
     "binary:python3",
+    # EVERY row of this lane is wall-clock (TTFT, decode tok/s), so the whole
+    # lane is could-not-judge on a contended host rather than failed. Run 1
+    # measured 17.8 tok/s against a 50 tok/s bar at load 32 and called it a
+    # FAILURE; the bar was fine and the machine was busy (note d596639c).
+    # chat-ask declares the same rule at ROW level, in its own bank, because
+    # only one of its seventeen rows is wall-clock.
+    "host-quiet:4",
 ]
 baseline_dir = "sovereign/bench/quality-check/baselines/throughput"
 bank = "sovereign/bench/quality-check/throughput.toml"
@@ -121,7 +144,7 @@ bank = "sovereign/bench/quality-check/throughput.toml"
 id = "routing"
 kind = "invariant"
 enforcement = "hard"
-est_secs = 90
+est_secs = 80
 command = [
     "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
@@ -141,7 +164,7 @@ bank = "sovereign/bench/routing/cells_v1.toml"
 id = "retrieval-prod"
 kind = "invariant"
 enforcement = "hard"
-est_secs = 110
+est_secs = 90
 command = [
     "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
@@ -188,7 +211,7 @@ bank = "sovereign/bench/literary/bk-book-1.toml"
 id = "chaos-monkey"
 kind = "judged"
 enforcement = "hard"
-est_secs = 500
+est_secs = 450
 command = [
     "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
     "svrn", "bench", "chaos-monkey", "run",
@@ -212,7 +235,7 @@ bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
 id = "knowledge-gym"
 kind = "judged"
 enforcement = "hard"
-est_secs = 60
+est_secs = 50
 command = [
     "svrn", "quality", "lane", "bench", "--id", "knowledge-gym", "--reader", "knowledge-gym", "--",
     "svrn", "knowledge-gym", "run", "--json",
@@ -224,14 +247,14 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 id = "synth"
 kind = "judged"
 enforcement = "hard"
-est_secs = 560
+est_secs = 330
 command = [
     "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
     "--bench-root", "sovereign/bench",
     "--synth",
     "--filter", "sep/questions",
-    "--smoke-subset", "synth-v1",
+    "--smoke-subset", "synth-v2",
     "--report", "{report}",
 ]
 preconditions = [

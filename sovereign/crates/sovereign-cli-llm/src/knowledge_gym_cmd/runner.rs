@@ -127,8 +127,31 @@ pub struct ReplayReport {
 }
 
 impl ReplayReport {
+    /// The replay RAN and every predicate held.
+    ///
+    /// `runner_error` is deliberately still part of this: a replay that never
+    /// ran did not pass. What changed on 2026-09-04 is that it is no longer
+    /// the COMPLEMENT of this — see [`ReplayReport::errored`].
     fn passed(&self) -> bool {
-        self.transcript.runner_error.is_none() && self.predicates.iter().all(|p| p.passed)
+        !self.errored() && self.predicates.iter().all(|p| p.passed)
+    }
+
+    /// The replay NEVER RAN — the daemon refused it (a 503 under load), the
+    /// request could not be built, a turn errored out.
+    ///
+    /// Split from `passed` because the two are not complements and treating
+    /// them as such is ARCH §18.3 exactly: `pass_count` counted an errored
+    /// replay as a failure, so a fixture whose three replays all 503'd under
+    /// a peer's load scored `0/3` — a number indistinguishable at the lane
+    /// from three real predicate failures. A replay that never ran is
+    /// could-not-judge, never failed.
+    fn errored(&self) -> bool {
+        self.transcript.runner_error.is_some()
+    }
+
+    /// The runner's own reason, when it never ran.
+    fn error_reason(&self) -> Option<&str> {
+        self.transcript.runner_error.as_deref()
     }
 }
 
@@ -143,21 +166,58 @@ impl FixtureReport {
         self.replays.iter().filter(|r| r.passed()).count()
     }
 
-    pub fn pass_rate(&self) -> f32 {
-        if self.replays.is_empty() {
-            0.0
+    /// Replays that never ran. Reported beside the passes rather than folded
+    /// into them, so a reader can tell a failing fixture from an unjudgeable
+    /// one.
+    pub fn errored_count(&self) -> usize {
+        self.replays.iter().filter(|r| r.errored()).count()
+    }
+
+    /// Replays that actually reached a verdict — the DENOMINATOR any rate
+    /// over this fixture is honest about.
+    pub fn judged_count(&self) -> usize {
+        self.replays.len() - self.errored_count()
+    }
+
+    /// The first runner error, for a reason line that names what happened.
+    pub fn first_error(&self) -> Option<&str> {
+        self.replays.iter().find_map(|r| r.error_reason())
+    }
+
+    /// Passes over JUDGED replays.
+    ///
+    /// `None` when nothing was judged: a fixture whose every replay 503'd has
+    /// no rate, and returning `0.0` there is the silent substitution that
+    /// made a busy host look like a broken model (ARCH §18.3).
+    pub fn pass_rate(&self) -> Option<f32> {
+        let judged = self.judged_count();
+        if judged == 0 {
+            None
         } else {
-            self.pass_count() as f32 / self.replays.len() as f32
+            Some(self.pass_count() as f32 / judged as f32)
         }
     }
 
     pub fn human_lines(&self) -> Vec<String> {
-        let mut lines = vec![format!(
-            "replays: {}, passed: {} ({:.0}%)",
-            self.replays.len(),
-            self.pass_count(),
-            self.pass_rate() * 100.0
-        )];
+        let mut lines = vec![match self.pass_rate() {
+            Some(rate) => format!(
+                "replays: {}, passed: {}/{} ({:.0}%){}",
+                self.replays.len(),
+                self.pass_count(),
+                self.judged_count(),
+                rate * 100.0,
+                if self.errored_count() > 0 {
+                    format!("  [{} never ran]", self.errored_count())
+                } else {
+                    String::new()
+                }
+            ),
+            None => format!(
+                "replays: {}, COULD-NOT-JUDGE — none ran ({})",
+                self.replays.len(),
+                self.first_error().unwrap_or("no reason recorded"),
+            ),
+        }];
         for (i, r) in self.replays.iter().enumerate() {
             if let Some(err) = &r.transcript.runner_error {
                 lines.push(format!("  [{i}] RUNNER ERROR: {err}"));
@@ -179,13 +239,39 @@ impl FixtureReport {
     }
 }
 
+/// One fixture's rollup, with NAMED fields.
+///
+/// Was a positional `(String, usize, usize, f32)` until 2026-09-04. The
+/// errored count has no honest slot in a 4-tuple, and appending a fifth cell
+/// is identity-from-position (ARCH §7.5) on a wire two crates read.
+#[derive(Debug, Serialize)]
+pub struct FixtureRollup {
+    pub slug: String,
+    pub passed: usize,
+    /// Replays that never ran. `passed + errored <= replays` always.
+    pub errored: usize,
+    pub replays: usize,
+    /// Passes over JUDGED replays; `null` when nothing was judged.
+    pub pass_rate: Option<f32>,
+}
+
+impl FixtureRollup {
+    /// Replays that reached a verdict — the denominator `pass_rate` uses.
+    pub fn judged(&self) -> usize {
+        self.replays - self.errored
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct AggregateSummary {
     pub fixtures: usize,
     pub total_replays: usize,
     pub total_passes: usize,
+    /// Replays that never ran, across every fixture. A run with a non-zero
+    /// count here has not measured what its `pass_rate` appears to say.
+    pub total_errored: usize,
     pub pass_rate: f32,
-    pub per_fixture: Vec<(String, usize, usize, f32)>,
+    pub per_fixture: Vec<FixtureRollup>,
 }
 
 impl AggregateSummary {
@@ -197,8 +283,25 @@ impl AggregateSummary {
             self.total_passes,
             self.pass_rate * 100.0
         )];
-        for (slug, pass, total, rate) in &self.per_fixture {
-            lines.push(format!("  {slug}: {pass}/{total} ({:.0}%)", rate * 100.0));
+        for f in &self.per_fixture {
+            match f.pass_rate {
+                Some(rate) => lines.push(format!(
+                    "  {}: {}/{} ({:.0}%){}",
+                    f.slug,
+                    f.passed,
+                    f.judged(),
+                    rate * 100.0,
+                    if f.errored > 0 {
+                        format!("  [{} never ran]", f.errored)
+                    } else {
+                        String::new()
+                    }
+                )),
+                None => lines.push(format!(
+                    "  {}: COULD-NOT-JUDGE — all {} replay(s) never ran",
+                    f.slug, f.errored
+                )),
+            }
         }
         lines
     }
@@ -207,25 +310,29 @@ impl AggregateSummary {
 pub fn summarise(reports: &[FixtureReport]) -> AggregateSummary {
     let total_replays: usize = reports.iter().map(|r| r.replays.len()).sum();
     let total_passes: usize = reports.iter().map(|r| r.pass_count()).sum();
-    let pass_rate = if total_replays == 0 {
+    let total_errored: usize = reports.iter().map(|r| r.errored_count()).sum();
+    // Over JUDGED replays. Dividing by `total_replays` charged every 503 to
+    // the model, which is what made a contended host read as a regression.
+    let judged = total_replays - total_errored;
+    let pass_rate = if judged == 0 {
         0.0
     } else {
-        total_passes as f32 / total_replays as f32
+        total_passes as f32 / judged as f32
     };
     AggregateSummary {
         fixtures: reports.len(),
         total_replays,
         total_passes,
+        total_errored,
         pass_rate,
         per_fixture: reports
             .iter()
-            .map(|r| {
-                (
-                    r.slug.clone(),
-                    r.pass_count(),
-                    r.replays.len(),
-                    r.pass_rate(),
-                )
+            .map(|r| FixtureRollup {
+                slug: r.slug.clone(),
+                passed: r.pass_count(),
+                errored: r.errored_count(),
+                replays: r.replays.len(),
+                pass_rate: r.pass_rate(),
             })
             .collect(),
     }

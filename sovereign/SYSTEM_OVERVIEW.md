@@ -265,8 +265,8 @@ crates/
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder — Pass/Fail policy + render over corpus-engine harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib shared by the desktop bridge + `meshapp dev` (§5)
 ├── sovereign-agent-bench    # Eleven-problem agent-coding battery
-├── commonwealth-agent-tools # Canonical agent-tool primitives (cross-runner contract)
-└── commonwealth-tdd         # Unified TDD solver loop (HTTP + MCP transports)
+├── sovereign-agent-tools    # Canonical agent-tool primitives (cross-runner contract)
+└── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
 Top-level: `modes/` (skills — recipe-author, inner-work),
@@ -2607,7 +2607,7 @@ last-token pooling + the query instruction-prefix (and thus matches the cache).
 
 **Synthesis role layer (`role.rs`).** The knowledge-turn path is organized as
 three data-defined roles — the synthesis-side counterpart to the agent-loop
-roles in `commonwealth-agent-tools/src/role/`, lifting the same
+roles in `sovereign-agent-tools/src/role/`, lifting the same
 `RoleProfile`/`RoleModelMap` shape (ARCH §6: profiles are *data*). **Router**
 classifies + resolves the route (mechanism: `EmbedRouter` +
 `resolve_synthesis_route`); **Synthesizer** assembles the grounded answer
@@ -2808,6 +2808,61 @@ contract or the audit ladder, and
 `the_longform_pivot_changes_the_route_and_not_the_holding` pins that the same
 content at 1,799 and 1,801 characters releases the same holding and differs
 only in `mode` (`single_claim` vs `per_claim`).
+**Value-presence became a VETO on 2026-09-04, and the probe decides**
+(order `grounding-footguns`, the same split 571849a89 made for quotes,
+extended to values). `value_presence.rs` answers "is the specific this answer
+asserts grounded?" for THREE consumers at once — the gate's entity-anchored
+branch (`judge.rs`, to decide), the chaos scorer's `asserted_value_grounded`
+(to measure), and the deep-research containment checks. Until this date a
+deterministic substring test decided BOTH directions, and its own doc stated
+the positive one: "a real corpus token (even mis-roled, or the surname inside a
+full name carrying the asked-for part) is exactly-present and released as best
+effort." That is how the fabrication "Winnie's mother is **Mrs Neale**" — Mrs
+Neale is the charwoman of Brett Street — scored GROUNDED on the chaos corpus,
+and, through `is_honest_absent`, scored HONEST. Now: `value_present_in_chunks`
+may only REFUSE (a value whose tokens appear nowhere is ungrounded, cheaply,
+with no model call), and the positive verdict comes from
+`judge::claim_chunk_support` at `config::grounding_gate_threshold()` — the same
+register and the same threshold the audit pass and the citation stage use, and
+no second threshold is minted. The probe is asked ONCE, against the chunks that
+CARRY the value joined into one passage (which chunks is decided by the same
+veto predicate applied per chunk — one implementation, never two), with the
+claim composed from the question's own frame. **The 18-word role-word stop list
+is deleted**: it existed only to make presence generous enough to say
+"grounded" about a mis-roled value, and the words it was generous about
+(`mrs`, `sir`, `chief`, `inspector`, …) are exactly the ones a mis-roled
+fabrication gets wrong. Measured on the chaos corpus's own paragraphs
+(`svrn bench judge-replay --register chunk_judge`, 3 repeats, identical each
+time): the mother fabrication scores support 0.0045 and "Mrs Neale is the
+charwoman" scores 0.9999 against the SAME evidence — three orders of magnitude
+apart, a separation no substring test can express — while the competence case a
+strict extractive judge used to lose ("Yundt's first name is Karl", against a
+paragraph that only ever writes "Karl Yundt") scores 0.9997. Showing the probe
+the value's whole neighbourhood rather than one chunk is load-bearing and was
+measured: the same fabrication scores 0.2956 and 0.4001 against two single
+chunks that merely mention Mrs Neale near Winnie — both of which RELEASE at tau
+— and 0.0060 against the two together.
+
+**Every fail-open exit names WHY, at one site** (2026-09-04). `judge_failed_open`
+released turns under load and the ledger recorded only that it had happened, so
+the class could not be fixed: the queue shedding the call, a slot mid-restart
+and an unreadable verdict take three different fixes.
+`GroundingDecisionLine::judge_failure` and `grounding_gate.judge_failure` now
+carry `{reason, calls_attempted, calls_answered}` on every action
+`runtime::epistemic::action_is_fail_open` recognises — attached in
+`gate::record_gate_decision`, the funnel that already owns the journal, so a
+future exit that ships unverified cannot forget. `JudgeFailureReason` is a
+closed set derived from a closed set: six variants are `Error` variants matched
+on the ENUM (never sniffed from a message), and two are arithmetic over the
+turn's own call census — `verdict_unparseable` when every judging call answered
+and no verdict was reached, `no_judge_call` when none was attempted. MEASURED
+on this host, 32 turns under a second concurrent `chat ask`: 5 `judge_failed_open`
+exits, **5 of 5 `queue_shed` with zero calls answered**, plus 5 whole turns that
+died at the DRAFT on the same shed. The class is host admission
+(`sovereign-inference::model_slot::acquire_with_queue_gauge`'s priority-blind
+pre-park gate), not the gate — note `d6e13797` records the measurement and why
+no gate-side retry was shipped for it.
+
 **Per-turn STACK ATTRIBUTION — the strip that says which system spent the
 turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
 system can tell what it decided and why") as a function no stage owned, on
@@ -3945,8 +4000,10 @@ anchor rubrics on three dimensions per problem (9/problem, 99 max). CLI:
 `svrn agent-bench <run|list|show>`. Dispatch via
 `AgentRunnerRegistry`.
 
-`sovereign/crates/commonwealth-agent-tools/` — canonical tool
-surface. Ten primitives (`inspect_workdir` polymorphic over
+`sovereign/crates/sovereign-agent-tools/` — canonical tool
+surface. (Was `commonwealth-agent-tools` until cw-lift 3a,
+2026-09-04; layer was already `capabilities`, the name was the
+only thing wrong.) Ten primitives (`inspect_workdir` polymorphic over
 file/dir/find/grep, `write_file`, `patch_file`, `replace_function`,
 `build`, `smoke`, `agent_done`, `agent_plan`,
 `handoff_to_evaluator`, `handoff_to_implementer`); every runner
@@ -3955,15 +4012,21 @@ role layer (Planner / Implementer / Evaluator) operating on the
 same model weights via different prompts + tool subsets + forced
 first tools.
 
-`sovereign/crates/commonwealth-tdd/` — unified solver loop for any
-TDD-shaped workflow. One function `run_trial(Trial) → TrialResult`
+`sovereign/crates/sovereign-tdd/` — unified solver loop for any
+TDD-shaped workflow. (Was `commonwealth-tdd`, and sat in the
+`mesh-api` layer beside `commonwealth-api`, until cw-lift 3a
+(2026-09-04): it has no commonwealth dependency of any kind and
+backs two shipped MCP tools, so it is a `capabilities` crate. The
+MCP tool ids `tdd_solve` / `tdd_bdd_cycle` are a wire surface and
+did NOT rename — pinned by
+`routes_mcp::tests::tdd_tool_ids_are_frozen_wire_names`.) One function `run_trial(Trial) → TrialResult`
 with `Polarity::{MaximizePassing, GenerateOneFailing}`
 (`run_trial_observed` adds a per-round observer for live progress).
 `tasks::solve` is the verbless goal entry: failing tests → fix;
 none → pin-then-green via `bdd_cycle`; explicit verbs `fix` / `pin`
 / `split`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
 
-`commonwealth-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Ring 2 (2026-09-03): `model.rs` puts the daemon's local model behind the same trait with three wire levers — `stable_prefix_len` (the instruction is one pinned family), `lark_grammar` (moves are a closed set; push/split/edit draw from catalog-minus-stack, the goal's own parts, and tracked non-test files), `assistant_prefix` (closes the think block this family's template opens). Measured on the 4B: 5 runs byte-identical, 35/35 prefix hits, 9/9 restore-fidelity, 9 of 11 fixture tests green in ~14 s where the flat solve loop stalled at 0/11 in 285 s. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
+`sovereign-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Ring 2 (2026-09-03): `model.rs` puts the daemon's local model behind the same trait with three wire levers — `stable_prefix_len` (the instruction is one pinned family), `lark_grammar` (moves are a closed set; push/split/edit draw from catalog-minus-stack, the goal's own parts, and tracked non-test files), `assistant_prefix` (closes the think block this family's template opens). Measured on the 4B: 5 runs byte-identical, 35/35 prefix hits, 9/9 restore-fidelity, 9 of 11 fixture tests green in ~14 s where the flat solve loop stalled at 0/11 in 285 s. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
 
 **SOLVE surface** (`docs/specs/SOLVE_UX.md`) — the daemon hosts the
 solver as an async job API on `:9741`: `POST /v1/solve/jobs` (202 +
@@ -6134,11 +6197,11 @@ Default ports:
 | Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
 
 | Is any quality subsystem's posture stale? | **`svrn posture`** (dev-tools) — one read-only table: artifact age + verdict for drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines; each row names its refresh command. Added 2026-07-30 because drift and arch had both been weeks stale with nothing aggregating that fact |
-| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>] [--budget-secs 1800] [--mint]`** (dev-tools, `sovereign-cli/src/quality_check_cmd.rs`) — the curated lean check. Lanes are DATA in `quality/check-lanes.toml`; each runs as a subprocess and states its own verdict on its LAST stdout line as a `kernel_types::Judgement` (`sovereign_cli_shared::lane_verdict`), so no caller reconstructs a verdict by grepping lane prose the way `scripts/lib/ci-bench-verdict.sh` must. Preconditions are a closed enum (port / slot-decodes / corpus-installed / binary) and an unmet one is could-not-judge NAMING it, never a pass. Every run writes `target/quality-check/<stamp>/summary.json` with per-lane seconds — which `sovereign-ci-bench.sh` has never done (`target/ci-bench` is empty). A run whose stack has no baseline for its fingerprint writes NOTHING; `--mint` is the only door |
-| Did issue #57 come back — an answerable half refused? | **`svrn quality check --lane chat-ask`** (`sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs`, bank `sovereign/bench/quality-check/chat-ask.toml`) — ingests `docs/ARCHITECTURE_TOUR.md` from source into `qc-arch-tour-<fingerprint8>` (that ingest IS the document-ingest lane: chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads the turn's own ledger through `chat ask --format json`'s `metadata`. Named rows: ingest · ledger present · route · per-stage ceilings · per-stage baseline (TRACKED) · gate outcome · both halves answered · not abstained · useful · judge calibrated. The ceilings are PRE-REGISTERED per model stem and a stem with no table is could-not-judge, not a pass. The usefulness judge is the gate's own forced-choice A/B probe (`bench_cmd::live_runner::forced_choice_ab`) and its two controls run on EVERY run — if they stop separating, `useful` is could-not-judge rather than a verdict. Abstention is read through `bench_cmd::chaos_monkey::action_from_gate_signal`, the one decider, never a second detector |
+| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>] [--budget-secs 1800] [--mint]`** (dev-tools, `sovereign-cli/src/quality_check_cmd.rs`) — the curated lean check. Lanes are DATA in `quality/check-lanes.toml`; each runs as a subprocess and states its own verdict on its LAST stdout line as a `kernel_types::Judgement` (`sovereign_cli_shared::lane_verdict`), so no caller reconstructs a verdict by grepping lane prose the way `scripts/lib/ci-bench-verdict.sh` must. Preconditions are a closed enum (port / slot-decodes / corpus-installed / binary / **host-quiet**) and an unmet one is could-not-judge NAMING it, never a pass. `host-quiet:<max 1-min load>` is the one every WALL-CLOCK lane declares: the same binary, bank and bar decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s at load 32 on the authoring host, so a latency verdict taken on a contended box is could-not-judge and the reason NAMES the load it saw (`sovereign_cli_shared::host_load`, one reader shared with the lanes — ARCH §10.6). It reads the 1-minute load average and NOT the daemon's in-flight decodes, which this host serves no route for; that is a named substitution, not a silent one. `throughput` declares it at LANE level because every row it has is wall-clock; `chat-ask` declares `host_quiet_max_load` in its own bank instead, guarding only its `per-stage ceilings` row, because its other sixteen rows are claims about the ANSWER and a busy machine does not change them. Every run writes `target/quality-check/<stamp>/summary.json` with per-lane seconds — which `sovereign-ci-bench.sh` has never done (`target/ci-bench` is empty). A run whose stack has no baseline for its fingerprint writes NOTHING; `--mint` is the only door |
+| Did issue #57 come back — an answerable half refused? | **`svrn quality check --lane chat-ask`** (`sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs`, bank `sovereign/bench/quality-check/chat-ask.toml`) — ingests `docs/ARCHITECTURE_TOUR.md` from source into `qc-arch-tour-<fingerprint8>` (that ingest IS the document-ingest lane: chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads the turn's own ledger through `chat ask --format json`'s `metadata`. Named rows: ingest · ledger present · route · per-stage ceilings · per-stage baseline (TRACKED) · gate outcome · both halves answered · not abstained · useful · judge calibrated. The bank declares PRE-REGISTERED MEDIANS per model stem and the bar is DERIVED by one formula — `ceiling = max(1.5 x median, median + ceiling_floor_ms)`, `ceiling_floor_ms` declared once for every stage (`chat_ask::ceiling_from_median`, ARCH §10.6). The additive term exists because a multiplier alone has no floor: 1.5x a 193 ms `retrieval` median put the bar at 290 ms and a run failed the whole lane on `retrieval 298 ms > 290`, eight milliseconds. A stem with no table is could-not-judge, not a pass, and so is the whole ceilings row on a host that is not quiet. The usefulness judge is the gate's own forced-choice A/B probe (`bench_cmd::live_runner::forced_choice_ab`) and its two controls run on EVERY run — if they stop separating, `useful` is could-not-judge rather than a verdict. Abstention is read through `bench_cmd::chaos_monkey::action_from_gate_signal`, the one decider, never a second detector |
 | Is the ENGINE slower than a number written down first? | **`svrn quality check --lane throughput`** (`sovereign-cli-llm/src/quality_lane_cmd/throughput.rs`, bank `sovereign/bench/quality-check/throughput.toml`) — wraps `scripts/throughput_probe.py --json` rather than re-deriving it, over four declared arms (primary/fast x short/long) plus two plain end-to-end turns through the runtime. Bars are PRE-REGISTERED per model stem: an arm with a bars table for the running stem gates HARD, an arm the operator declared `bars_deferred` records without gating, and an arm with NEITHER is could-not-judge naming the stem — a model swap can never read as a decision someone made. The long arms run one COLD trial against a prompt salted in its first bytes, because the daemon prefix-caches (measured: 5,917 tokens cost TTFT 44,727 ms cold and 375 ms repeated) and the ordinary warm-up-plus-trials shape would measure the cache. Its predecessor, `desktop-smoke.sh::perf_probe`, compared each run against a gitignored baseline directory that does not exist on a fresh checkout, so it captured on every run and compared on none |
 | Which ITEMS does the lean check run, and who decided? | `sovereign/bench/smoke.toml` — one file, one `[[subset]]` row per (subset, bank), either `ids = [...]` or `mode = "full"`. Reached by `--smoke-subset <subset_id>` on `bench all` (forwarded to both its routing and retrieval/synth `eval run` subprocesses) and on `bench chaos-monkey run`; `knowledge-gym` already selected by id, so the lane's argv expands `{ids:<subset>}` into its existing `--fixture` flag rather than growing a second one. DECLARED, not sampled: `--sample-questions N` and `--limit N` count off the front of a bank and so pick a different set as it grows, which is what makes a sampled lane's baseline cap-specific. A selected bank with NO row exits 2 rather than running whole, and a declared id the bank no longer has refuses rather than shrinking the lane. The `subset_id`s are in the run fingerprint |
-| Did retrieval / routing / enrichment / synth / chaos / the gym BREAK (not drift)? | **`svrn quality check`** runs all six through `quality lane bench` (`sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs`), which runs each existing verb UNCHANGED and reads the report it writes — no lane prose is parsed. HARD on CATASTROPHE ONLY, because at six probes and ten questions a one-item flip is 12-20 points and a band is noise (RUNBOOK §6): an errored item, an empty answer, an all-zero tally, an abstention on an answerable probe, a confabulation on an absent one. Scores are TRACKED with no band. `BenchOutcome::tally` exists so the ROUTING surface can answer "did this score zero" as data — it is the one surface that carries neither per-item rows nor a count, and put `correct/total` in `note` prose |
+| Did retrieval / routing / enrichment / synth / chaos / the gym BREAK (not drift)? | **`svrn quality check`** runs all six through `quality lane bench` (`sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs`), which runs each existing verb UNCHANGED and reads the report it writes — no lane prose is parsed. Every one of these that drives the chat pipeline builds an IN-PROCESS session (`bench all` subprocesses `svrn eval run`), and since 2026-09-05 that session is SEALED to the bank's corpus via `sovereign_runtime_recipe::LaneScope::Sealed`: the wikipedia link graph, the cross-corpus meta-atlas and the bridge index are not loaded for a lane that cannot consult them. Measured on the authoring host, chaos-monkey against a 316-chunk corpus: lane startup 23.1 s -> 4.5 s, because 22.3 s of it was a 7.85M-edge graph and a 981 MB meta-atlas JSON. The cost was paid once per LANE, not once per run. HARD on CATASTROPHE ONLY, because at six probes and ten questions a one-item flip is 12-20 points and a band is noise (RUNBOOK §6): an errored item, an empty answer, an all-zero tally, an abstention on an answerable probe, a confabulation on an absent one. Scores are TRACKED with no band. A knowledge-gym replay the daemon REFUSED (a 503 under load) is could-not-judge on its own `replays that ran` row and contributes no tally at all — it used to be folded into `pass_count` as a failure, so three refusals scored `0/3` and tripped the HARD all-zero row exactly like three real predicate failures (ARCH §18.3). `AggregateSummary.per_fixture` carries named fields (`slug`/`passed`/`errored`/`replays`/`pass_rate`) so the distinction survives the wire, and `pass_rate` is over JUDGED replays. `BenchOutcome::tally` exists so the ROUTING surface can answer "did this score zero" as data — it is the one surface that carries neither per-item rows nor a count, and put `correct/total` in `note` prose |
 | Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly bench; it composes every lane rather than reinventing one, and is where drift against committed baselines is judged. Its `--quick` tier was deleted 2026-09-04: it down-sampled by COUNT and wrote nothing durable, and `svrn quality check` is the lean tier now. Lane semantics + tiers at §"Bench harnesses" above; entry point `sovereign/bench/README.md`. The workspace lint/test scripts are the *build* gate and never run a model against a question bank |
 | A bench says regressed — is that real, or noise? | `sovereign/docs/RUNBOOK.md` §6 — per-lane noise bands, baseline-age semantics, and the legitimate `--update-baseline` re-mint path |
 
@@ -6496,7 +6559,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 |------|----------|--------------|
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
-| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `commonwealth-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
+| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `sovereign-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
@@ -7175,7 +7238,7 @@ only its loud rows is the silent-absorb this section exists to prevent — total
 | `commonwealth-api/src/admission.rs` | 1,439 | 1,447 | +8 |
 | `corpus-engine/src/enrichment/governance_view.rs` | 1,380 | 1,407 | +27 |
 | `corpus-engine/src/sharding.rs` | 2,648 | 2,649 | +1 |
-| `commonwealth-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
+| `sovereign-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
 | `sovereign-cli-daemon/src/daemon_cmd/mod.rs` | 1,407 | 1,416 | +9 |
 | `sovereign-cli-shared/src/cli_contract.rs` | 1,607 | 1,617 | +10 |
 | `sovereign-cli/tests/main/cli_contract_journeys.rs` | 1,201 | 1,217 | +16 |

@@ -26,8 +26,8 @@
 //! every landing verdict call `svrn code converge status` and gate on its exit.
 
 use crate::{
-    arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, layer_gate,
-    layout_gate, lock_gate,
+    arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
+    layer_gate, layout_gate, lock_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -64,6 +64,13 @@ pub fn run() -> i32 {
             layout_gate::run(&no_args)
         }),
         ("env-gate", Enforcement::Hard, &|| env_gate::run(&no_args)),
+        // Hard, and it reads the working tree like layout-gate and clock-gate
+        // do: it censuses the declared quality surfaces and fails on any
+        // command they reach that quality/instruments.toml does not know.
+        // 0.04s — file reads only, no compile.
+        ("instrument-gate", Enforcement::Hard, &|| {
+            instrument_gate::run(&no_args)
+        }),
         // Hard for the same reason layout-gate is: it reads the working tree,
         // so its verdict is about the code being gated, not about the last
         // indexed commit.

@@ -1,18 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Typed facade over [`commonwealth_state::MeshStore`].
+//! Typed facade over a [`PeerStore`].
 //!
 //! Hides the bytes/app_id/serde dance from callers. Every mutating
 //! method routes through `Privacy::app_id()` so a Private record
 //! cannot be written to the public namespace by accident.
+//!
+//! The store is the PORT, not the mesh (cw-lift 3b). It was
+//! `commonwealth_state::MeshStore` until then, which meant a capability crate
+//! could not be built, tested or run without the mesh substrate — even though
+//! the four methods it calls (`get`/`set`/`delete`/`scan`) are the same four
+//! a node with no peers answers correctly on its own. A daemon on a live mesh
+//! passes the mesh adapter and every record gossips; a solo one passes
+//! `SoloPeerStore` and the atlas still works, because replication to zero
+//! peers is the identity function.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
-use commonwealth_core::ids::NodeId;
-use commonwealth_state::MeshStore;
+use kernel_types::NodeId;
 use serde::Serialize;
+use sovereign_contracts::peer::{PeerStore, PeerStoreError};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -31,8 +40,8 @@ pub enum WorkAtlasError {
     #[error("claim {0} not found")]
     ClaimNotFound(Uuid),
 
-    #[error("mesh store error: {0}")]
-    Store(#[from] commonwealth_state::error::Error),
+    #[error("peer store error: {0}")]
+    Store(#[from] PeerStoreError),
 
     #[error("serialize: {0}")]
     Serde(#[from] serde_json::Error),
@@ -47,10 +56,10 @@ pub struct SessionIdentity {
     pub repo_id: String,
 }
 
-/// Typed wrapper around [`MeshStore`] for the work atlas.
+/// Typed wrapper around a [`PeerStore`] for the work atlas.
 #[derive(Clone)]
 pub struct WorkAtlasStore {
-    store: Arc<MeshStore>,
+    store: Arc<dyn PeerStore>,
     node_id: NodeId,
     /// Claims-rail receipt stamps (order `commons-fluency` fix 3b):
     /// `claim_id -> unix seconds` of THIS node's first local
@@ -59,11 +68,11 @@ pub struct WorkAtlasStore {
     /// rather than in the gossiped record bytes (the origin must not
     /// receive its own claim back with a receipt it never gave).
     /// Dies at process restart, exactly like the claims themselves
-    /// (MeshStore is in-memory).
+    /// (the store is in-memory).
     received_at: Arc<Mutex<HashMap<Uuid, u64>>>,
 }
 
-// `MeshStore` doesn't expose Debug — surface a placeholder shape so
+// `PeerStore` is not a `Debug` bound — surface a placeholder shape so
 // the work-atlas tools (which derive `Debug`) compile.
 impl std::fmt::Debug for WorkAtlasStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,7 +83,7 @@ impl std::fmt::Debug for WorkAtlasStore {
 }
 
 impl WorkAtlasStore {
-    pub fn new(store: Arc<MeshStore>, node_id: NodeId) -> Self {
+    pub fn new(store: Arc<dyn PeerStore>, node_id: NodeId) -> Self {
         Self {
             store,
             node_id,
@@ -151,7 +160,13 @@ impl WorkAtlasStore {
 
     pub fn put_session(&self, rec: &SessionRecord) -> Result<(), WorkAtlasError> {
         let key = format!("session:{}", rec.session_id);
-        write_record(&self.store, rec.privacy.app_id(), &key, rec, self.node_id)
+        write_record(
+            self.store.as_ref(),
+            rec.privacy.app_id(),
+            &key,
+            rec,
+            self.node_id,
+        )
     }
 
     pub fn get_session(&self, session_id: Uuid) -> Result<Option<SessionRecord>, WorkAtlasError> {
@@ -200,7 +215,7 @@ impl WorkAtlasStore {
         }
         let key = format!("claim:{}", rec.claim_id);
         write_record(
-            &self.store,
+            self.store.as_ref(),
             parent_privacy.app_id(),
             &key,
             rec,
@@ -277,7 +292,7 @@ impl WorkAtlasStore {
     pub fn put_tombstone(&self, rec: &ClaimTombstone) -> Result<(), WorkAtlasError> {
         let key = format!("claim-tombstone:{}", rec.claim_id);
         write_record(
-            &self.store,
+            self.store.as_ref(),
             Privacy::Public.app_id(),
             &key,
             rec,
@@ -356,7 +371,7 @@ impl WorkAtlasStore {
 
     // ── Observations ──────────────────────────────────────────────────────
 
-    /// Build the MeshStore key for an observation. Embeds `session_id`
+    /// Build the store key for an observation. Embeds `session_id`
     /// + `file_path` so the (session, path) tuple is the natural
     /// primary key. Path separators are kept verbatim — `scan` uses
     /// the full prefix `observation:<session_id>:`.
@@ -374,7 +389,7 @@ impl WorkAtlasStore {
     ) -> Result<(), WorkAtlasError> {
         let key = Self::observation_key(rec.session_id, &rec.file_path);
         write_record(
-            &self.store,
+            self.store.as_ref(),
             parent_privacy.app_id(),
             &key,
             rec,
@@ -480,7 +495,7 @@ fn matches_scope(sr: &SymbolRef, scope: &str, mode: ScopeMatch) -> bool {
 }
 
 fn write_record<T: Serialize>(
-    store: &MeshStore,
+    store: &dyn PeerStore,
     app_id: &str,
     key: &str,
     rec: &T,
@@ -501,10 +516,11 @@ fn short_hash(s: &str) -> &str {
 mod tests {
     use super::*;
     use crate::model::AgentKind;
+    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
 
     fn mk_store() -> WorkAtlasStore {
-        let mesh = Arc::new(MeshStore::in_memory().unwrap());
-        WorkAtlasStore::new(mesh, NodeId::from_u128(1))
+        let mesh = Arc::new(SoloPeerStore::new());
+        WorkAtlasStore::new(mesh as Arc<dyn PeerStore>, NodeId::from_u128(1))
     }
 
     fn sample_session(privacy: Privacy) -> SessionRecord {

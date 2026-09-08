@@ -6,7 +6,8 @@
 //! Observations yet.
 //!
 //! Public surface:
-//! - [`WorkAtlasStore`] — typed facade over [`commonwealth_state::MeshStore`].
+//! - [`WorkAtlasStore`] — typed facade over a
+//!   [`sovereign_contracts::peer::PeerStore`].
 //! - [`tools`] module — the three MCP tools.
 //! - [`gc::WorkAtlasGc`] — TTL eviction task spawned by the daemon.
 //! - [`config::WorkAtlasConfig`] — toml-backed operator settings.
@@ -20,9 +21,13 @@ pub mod repo_id;
 pub mod store;
 pub mod tools;
 
+// The port `WorkAtlasStore::new` takes, re-exported because it is in this
+// crate's public signature: a caller must be able to name the trait it is
+// handing over without taking its own dependency on the contracts crate.
 pub use confidence::ConfidenceGrade;
 pub use config::WorkAtlasConfig;
 pub use model::{AgentKind, ClaimRecord, ObservationRecord, Privacy, SessionRecord, SymbolRef};
 pub use observer::AtlasObserver;
 pub use repo_id::{resolve_repo_id, resolve_repo_id_allowing_local, RepoIdError, RepoIdSource};
+pub use sovereign_contracts::peer::PeerStore;
 pub use store::{ScopeMatch, SessionIdentity, WorkAtlasError, WorkAtlasStore};

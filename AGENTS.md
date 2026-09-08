@@ -215,7 +215,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Which crates/files across the workspace do X?" | a read-only search subagent (max 3 concurrent, one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
 | "Code intel is down and I need a broad sweep" | same — delegate it, and keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cd corpus-engine && cargo xtask quality` — the `xtask` alias lives in `corpus-engine/.cargo/config.toml`, so it does NOT resolve from the repo root (arch/docs/boundary/layer/lock/env gates) |
-| "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench), each row names its refresh command |
+| "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench/instruments), each row names its refresh command |
 | "Does the test my commit body cites actually SEE the change?" | `scripts/evidence-verdict.py <commit>` — runs the cited test at that commit in its own worktree, then again with the source hunks reverted; VALIDATED / UNSUPPORTED / COULD-NOT-JUDGE / NEVER-RAN. Minutes per commit; `--candidates --range A..B` lists what would be judged for free |
 | "What argument produced this fn, and did its evidence hold?" | `scripts/intent.py <symbol> [--note]` — the commits that shaped the symbol, each body's claim / objection / concession (local model, engine named), and the evidence verdict. `--note` stores it tagged with the symbol, and `.claude/hooks/intent-warn.py` shows it before any Edit that touches the fn — you should not need to ask |
 | "Did my change regress retrieval / routing / synthesis / enrichment?" | `svrn quality check` — the curated ~30-minute breakage check, four verdicts per lane, table persisted; `./scripts/sovereign-ci-bench.sh` is the full nightly. See `MAIN_SESSION_PROTOCOL.md` §"Measuring quality" |
@@ -336,10 +336,11 @@ carried a size term, and the workspace runs about +622k / -179k over 90 days
 (`quality/DELETION.md`) — 29 lines deleted per 100 added.
 
 - `cargo xtask size-gate` — code lines per crate, comments and blanks
-  excluded, `<crate>::tests` counted apart with its own ceiling. Raise ONE
-  crate with `size-gate --accept <crate>` and say in the commit what the
-  lines bought; `--update-baseline` on a working tree is the absorb-everyone
-  trap above, and `--root <path>` is there so the re-pin recipe works.
+  excluded, `<crate>::tests` counted apart, plus a key each for `scripts/` and
+  the desktop e2e script tree (`.sh/.py/.mjs/.ts`). Raise ONE key with
+  `size-gate --accept <key>` and say in the commit what the lines bought;
+  `--update-baseline` on a working tree is the absorb-everyone trap above, and
+  `--root <path>` is there so the re-pin recipe works.
 - `scripts/deletion-manifest.py --verify` — the deletion campaign's own
   ratchet, which was written but never wired to anything and had lost about
   155k lines to two growing lanes before this.

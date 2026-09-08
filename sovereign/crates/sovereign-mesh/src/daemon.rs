@@ -382,6 +382,21 @@ pub struct CreateMeshResult {
     pub client_token: Option<String>,
 }
 
+/// The shared-model host decision, with the two inputs that produced it.
+///
+/// Returned whole rather than as a bare `bool` so a caller's log line and its
+/// branch cannot come from two different membership snapshots — the anchor
+/// count and the verdict are read once, together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HostRole {
+    /// Whether THIS node runs the host role right now.
+    pub am_host: bool,
+    /// Eligible anchors the decision saw, self included when self is one.
+    pub eligible_anchors: usize,
+    /// Whether an operator pin was supplied — not whether it won.
+    pub pinned: bool,
+}
+
 /// One peer's live iroh connection path (H2 observability). `path` is
 /// `None` when the endpoint has no record of this peer yet.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -2116,6 +2131,50 @@ impl EmbeddedDaemon {
     /// role — see `commonwealth_core::partition::should_host`. Pure read of the
     /// gossiped membership, so every anchor computes the same set and converges
     /// on the same host without coordination.
+    /// Whether THIS node runs the shared-model HOST role right now, and what
+    /// the decision saw.
+    ///
+    /// ONE accessor for a question the daemon used to assemble itself from two
+    /// reads of this handle plus a `commonwealth_core::partition` call — which
+    /// is how a binary with no mesh configured still had to link the mesh
+    /// substrate to answer a question about itself (cw-lift 3b). `pin` is the
+    /// operator-designated host (`[shared_model] host_node_id`); it wins only
+    /// while it is actually an eligible anchor, so a pinned host that drops
+    /// out fails over to election instead of stranding the cluster.
+    ///
+    /// **A mesh of one is not a special case.** A roster of one elects its
+    /// only member, so a solo node hosts — the correct answer, reached by the
+    /// same code path a fleet takes. The one `false` that is not an election
+    /// result is an unresolved identity: we cannot be the elected leader of a
+    /// set we are not yet in.
+    pub async fn host_role(&self, pin: Option<NodeId>) -> HostRole {
+        let Some(me) = self.self_node_id().await else {
+            tracing::debug!(
+                pinned = pin.is_some(),
+                "shared-model: identity not resolved yet — not hosting"
+            );
+            return HostRole {
+                am_host: false,
+                eligible_anchors: 0,
+                pinned: pin.is_some(),
+            };
+        };
+        let anchors = self.eligible_anchors().await;
+        let am_host = commonwealth_core::partition::should_host(me, pin, &anchors);
+        tracing::debug!(
+            am_host,
+            me = %me.to_hex(),
+            eligible_anchors = anchors.len(),
+            pinned = pin.is_some(),
+            "shared-model: host-role decided"
+        );
+        HostRole {
+            am_host,
+            eligible_anchors: anchors.len(),
+            pinned: pin.is_some(),
+        }
+    }
+
     pub async fn eligible_anchors(&self) -> Vec<commonwealth_core::ids::NodeId> {
         let app_state = {
             let state = self.state.read().await;
@@ -2552,7 +2611,7 @@ impl EmbeddedDaemon {
             .serving()
             .map(|s| Arc::clone(&s.core.corpus_engine));
         let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
-            Some(provided) => Arc::clone(provided),
+            Some(provided) => provided.inner(),
             // Only the headless daemon carries a shared store; the desktop and
             // the mesh-admin one-shot get a private in-memory one, which is
             // what their variants declare by not having the field.
@@ -2578,7 +2637,7 @@ impl EmbeddedDaemon {
         if let Some(recorder) = self.services.rails().map(|r| &r.convergence_recorder) {
             app_state
                 .inner
-                .install_convergence_recorder(Arc::clone(recorder));
+                .install_convergence_recorder(recorder.inner());
         }
 
         // Route every peer dial through an `IpTransport` configured

@@ -3,11 +3,11 @@
 #   cargo run -p xtask -- layer-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- layer-gate --tighten
-17	commonwealth-core
-11	commonwealth-state
+13	commonwealth-core
+9	commonwealth-state
 20	corpus-engine
 14	corpus-engine-notes
 11	corpus-engine-scip
-25	sovereign-contracts
-19	sovereign-core
-9	sovereign-tools
+26	sovereign-contracts
+17	sovereign-core
+8	sovereign-tools

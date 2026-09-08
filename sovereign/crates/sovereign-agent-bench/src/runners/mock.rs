@@ -129,14 +129,14 @@ mod tests {
             prompt: "do x".into(),
             workdir,
             tool_allowlist: &["read", "write"],
-            workdir_scale: commonwealth_agent_tools::WorkdirScale::Scaffold,
+            workdir_scale: sovereign_agent_tools::WorkdirScale::Scaffold,
             token_budget: 1_000,
             wall_seconds_cap: 60,
             model_handle: "commonwealth/coder".into(),
             build_cmd: "cargo build".into(),
             verify_cmd: "cargo test".into(),
             syntax_validator: None,
-            role_model_map: commonwealth_agent_tools::RoleModelMap::default(),
+            role_model_map: sovereign_agent_tools::RoleModelMap::default(),
         };
         let artifact = runner.run(ctx).await.unwrap();
         assert_eq!(artifact.tokens.output, 80);

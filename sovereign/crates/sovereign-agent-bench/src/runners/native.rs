@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Native agent runner. Drives the daemon's
 //! `/v1/chat/completions` directly with the
-//! `commonwealth-agent-tools` canonical primitive set. No subprocess
+//! `sovereign-agent-tools` canonical primitive set. No subprocess
 //! — the agent loop, tool dispatch, and detector state machine all
 //! run in-process.
 //!
 //! The design payoff vs pi: the model sees ONLY the canonical
 //! primitives (no arbitrary `bash`), and tool execution is direct
-//! Rust (the executor module of `commonwealth-agent-tools`). Per the
+//! Rust (the executor module of `sovereign-agent-tools`). Per the
 //! plan in `~/.claude/plans/autonomous-loop-tick-tingly-clock.md`:
 //! meta-skill discipline lives in the tool contract, not the
 //! prompt. Native is where that thesis is measured against pi.
@@ -27,17 +27,17 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use commonwealth_agent_tools::adapter::{
+use sovereign_agent_tools::adapter::{
     native as native_adapter, AgentToolAdapter, TranslateOutcome,
 };
-use commonwealth_agent_tools::executor::ExecCtx;
-use commonwealth_agent_tools::registry::Registry;
-use commonwealth_agent_tools::role::{
+use sovereign_agent_tools::executor::ExecCtx;
+use sovereign_agent_tools::registry::Registry;
+use sovereign_agent_tools::role::{
     profile::{default_profile_for, profile_for},
     transition::{transition_after, NextRole},
     Role, RoleDossier, RoleProfile, TransitionTrigger,
 };
-use commonwealth_agent_tools::{summarize_for_dossier, PrimitiveKind};
+use sovereign_agent_tools::{summarize_for_dossier, PrimitiveKind};
 
 use crate::runner::{
     AgentRunArtifact, AgentRunContext, AgentRunError, AgentRunner, ChatRequestRecord, ExitReason,
@@ -419,14 +419,14 @@ async fn run_native_monolithic(
                     canonical,
                     canonical_kind,
                 } => {
-                    use commonwealth_agent_tools::PrimitiveKind;
+                    use sovereign_agent_tools::PrimitiveKind;
                     // Update thrash tracker BEFORE executing so a
                     // 3rd same-path write triggers without us
                     // actually running the wasteful write.
                     let signal = match canonical_kind {
                         PrimitiveKind::WriteFile => {
                             let path = match &canonical {
-                                commonwealth_agent_tools::Primitive::WriteFile(args) => {
+                                sovereign_agent_tools::Primitive::WriteFile(args) => {
                                     Some(args.path.as_str())
                                 }
                                 _ => None,
@@ -799,7 +799,7 @@ async fn run_native_role_aware(
             );
             filter_descriptors_for(
                 &adapter,
-                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+                sovereign_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
             )
         } else if evaluator_must_handoff {
             tracing::info!(
@@ -809,7 +809,7 @@ async fn run_native_role_aware(
             );
             filter_descriptors_for(
                 &adapter,
-                commonwealth_agent_tools::role::EVALUATOR_MUST_HANDOFF_SUBSET,
+                sovereign_agent_tools::role::EVALUATOR_MUST_HANDOFF_SUBSET,
             )
         } else if matches!(active_role, Role::Implementer) && force_full_rewrite_pending {
             force_full_rewrite_pending = false;
@@ -820,7 +820,7 @@ async fn run_native_role_aware(
             );
             filter_descriptors_for(
                 &adapter,
-                commonwealth_agent_tools::role::IMPLEMENTER_REWRITE_SUBSET,
+                sovereign_agent_tools::role::IMPLEMENTER_REWRITE_SUBSET,
             )
         } else {
             filter_descriptors(&adapter, &profile)
@@ -1288,13 +1288,9 @@ async fn run_native_role_aware(
                     | PrimitiveKind::ReplaceFunction
             ) {
                 let path = match &canonical {
-                    commonwealth_agent_tools::Primitive::WriteFile(args) => {
-                        Some(args.path.as_str())
-                    }
-                    commonwealth_agent_tools::Primitive::PatchFile(args) => {
-                        Some(args.path.as_str())
-                    }
-                    commonwealth_agent_tools::Primitive::ReplaceFunction(args) => {
+                    sovereign_agent_tools::Primitive::WriteFile(args) => Some(args.path.as_str()),
+                    sovereign_agent_tools::Primitive::PatchFile(args) => Some(args.path.as_str()),
+                    sovereign_agent_tools::Primitive::ReplaceFunction(args) => {
                         Some(args.path.as_str())
                     }
                     _ => None,
@@ -1344,7 +1340,7 @@ async fn run_native_role_aware(
                 // "your edit broke X; try a different approach."
                 // Run only on Smoke (Build doesn't enumerate tests).
                 if matches!(kind, PrimitiveKind::Smoke) {
-                    let parsed = commonwealth_tdd::shared::parser::parse_pytest_text(tail);
+                    let parsed = sovereign_tdd::shared::parser::parse_pytest_text(tail);
                     let new_failed: HashSet<String> = parsed.failed_names.iter().cloned().collect();
                     let regressed: Vec<String> = match &last_failed_set {
                         Some(prev) => new_failed.difference(prev).cloned().collect(),
@@ -1431,23 +1427,20 @@ async fn run_native_role_aware(
 
             // Special updates from transition primitives.
             match (&canonical, kind) {
-                (
-                    commonwealth_agent_tools::Primitive::AgentPlan(args),
-                    PrimitiveKind::AgentPlan,
-                ) => {
+                (sovereign_agent_tools::Primitive::AgentPlan(args), PrimitiveKind::AgentPlan) => {
                     role_dossier.set_plan(args.plan.clone());
                     if let Some(items) = args.pseudocode.clone() {
                         role_dossier.set_pseudocode(items);
                     }
                 }
                 (
-                    commonwealth_agent_tools::Primitive::HandoffToImplementer(args),
+                    sovereign_agent_tools::Primitive::HandoffToImplementer(args),
                     PrimitiveKind::HandoffToImplementer,
                 ) => {
                     role_dossier.set_diagnosis(args.diagnosis.clone());
                 }
                 (
-                    commonwealth_agent_tools::Primitive::HandoffToEvaluator(args),
+                    sovereign_agent_tools::Primitive::HandoffToEvaluator(args),
                     PrimitiveKind::HandoffToEvaluator,
                 ) => {
                     // The "what_you_changed" becomes the
@@ -2758,7 +2751,7 @@ mod tests {
         // Implementer's turn still goes to the override." Pins the
         // resolution semantics used at the call site in
         // run_native_role_aware.
-        let mut map = commonwealth_agent_tools::RoleModelMap::new();
+        let mut map = sovereign_agent_tools::RoleModelMap::new();
         map.set(Role::Evaluator, Some("commonwealth/coder".into()));
         let fallback = "commonwealth/primary";
         assert_eq!(map.model_for(Role::Planner, fallback), fallback);
@@ -2781,7 +2774,7 @@ mod tests {
         let adapter = native_adapter::Adapter;
         let restricted = filter_descriptors_for(
             &adapter,
-            commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+            sovereign_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
         );
         let names: Vec<&str> = restricted
             .iter()
@@ -2848,7 +2841,7 @@ mod tests {
         let tools = if matches!(Role::Evaluator, Role::Evaluator) && dossier.smoke_just_passed() {
             filter_descriptors_for(
                 &adapter,
-                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+                sovereign_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
             )
         } else {
             filter_descriptors(&adapter, &profile)
@@ -2871,7 +2864,7 @@ mod tests {
         let tools = if matches!(Role::Evaluator, Role::Evaluator) && dossier.smoke_just_passed() {
             filter_descriptors_for(
                 &adapter,
-                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+                sovereign_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
             )
         } else {
             filter_descriptors(&adapter, &profile)

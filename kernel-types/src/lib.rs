@@ -101,6 +101,11 @@ pub mod hash;
 pub mod ids;
 pub mod judgement;
 pub mod origin;
+// The instrument registry's schema. Feature-gated so the default four-dep
+// budget in Cargo.toml still holds for a lift of this leaf — `toml` is only
+// linked by the three programs that read `quality/instruments.toml`.
+#[cfg(any(test, feature = "quality-registry"))]
+pub mod quality;
 #[cfg(any(test, feature = "wire-fixture"))]
 pub mod wire;
 
@@ -116,3 +121,5 @@ pub use judgement::{
     honesty_footer, is_absent_marker, render_rows, Freshness, Judgement, Reason, Verdict,
 };
 pub use origin::{Grain, Locator, Origin, Server, Source};
+#[cfg(any(test, feature = "quality-registry"))]
+pub use quality::{Coverage, Instrument, Registry as InstrumentRegistry};

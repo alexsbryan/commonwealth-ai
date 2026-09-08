@@ -14,7 +14,7 @@ default = ["dev-routes", "net-tools"]
 # on the assumption "one person owns this box":
 #
 #   POST /v1/solve, /v1/cycle/bdd   client-supplied `test_command` reaching
-#                                   `sh -c` (commonwealth-tdd), inside the
+#                                   `sh -c` (sovereign-tdd), inside the
 #                                   authed router — any tenant key is a shell
 #   POST /v1/documents/upload       ingests an ABSOLUTE server-side path, so
 #   POST /v1/corpora/upload         any tenant can read any file the process
@@ -80,10 +80,18 @@ sovereign-workflow-host = { workspace = true }
 # TDD-machine backend — HTTP + MCP transports dispatch through this
 # crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
 # phase 7e.
-commonwealth-tdd = { workspace = true }
+sovereign-tdd = { workspace = true }
 # Dial-by-key client access (Track M) — pulls the iroh feature into
 # default builds of this binary; everything else stays runtime-gated
 # behind `[iroh] enabled`.
+#
+# Same class as `sovereign-mesh`'s forcing, and refused for the same reason
+# (cw-lift 3b — the measurement is in that manifest). This crate has its own
+# `src/iroh_access.rs` naming `commonwealth_transport::iroh` outside any cfg,
+# so propagating instead of forcing is a one-line manifest change and a
+# multi-file source change behind it. Note this line does NOT reach
+# `sovereign-cli-daemon`: the server is not in the daemon's dependency tree,
+# so the bar's "two unconditional forcings" are one, for that bar's subject.
 commonwealth-transport = { workspace = true, features = ["iroh"] }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }

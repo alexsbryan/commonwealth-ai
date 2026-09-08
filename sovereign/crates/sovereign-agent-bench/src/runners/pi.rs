@@ -47,7 +47,7 @@ use crate::sandbox::Sandbox;
 /// removes that brittleness. See `bench/agent-coding/problems/*/prompt.md`
 /// — each prompt now nudges the model toward `write` + `bash` verify.
 /// Tool names this runner passes to pi via `--tools`. Authoritative
-/// source is `commonwealth_agent_tools::adapter::pi::Adapter::
+/// source is `sovereign_agent_tools::adapter::pi::Adapter::
 /// pi_tool_allowlist()`; the equivalence is pinned by
 /// `tool_allowlist_matches_canonical_adapter` below so a future PR
 /// that adds a primitive to the canonical layer can't forget to
@@ -837,9 +837,7 @@ fn harvest_assistant_blocks(
                     // outcomes leave `canonical_kind = None`,
                     // which the failure-class aggregator surfaces.
                     let canonical_kind = {
-                        use commonwealth_agent_tools::adapter::{
-                            pi as pi_adapter, AgentToolAdapter,
-                        };
+                        use sovereign_agent_tools::adapter::{pi as pi_adapter, AgentToolAdapter};
                         let adapter = pi_adapter::Adapter::default()
                             .with_problem_commands(pi_build_cmd, pi_verify_cmd);
                         adapter.translate(&name, &input).canonical_kind()
@@ -983,7 +981,7 @@ mod tests {
         // pi tools the bench exposes. If a future PR adds a tool to
         // the adapter (e.g. opens up `mv` for some new primitive)
         // without updating PI_TOOL_ALLOWLIST, this fails.
-        let canonical = commonwealth_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
+        let canonical = sovereign_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
         assert_eq!(PI_TOOL_ALLOWLIST, canonical);
     }
 

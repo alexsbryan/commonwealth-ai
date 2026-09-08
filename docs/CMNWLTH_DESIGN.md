@@ -122,7 +122,7 @@ carry content-addressed refs, not just inline JSON; (c) asymmetric
 verification policy (verify failures, trust successes) must be expressible.
 
 ### UC6 — Distributed solve: sandboxed TDD candidate evaluation (planned)
-Shape: **Job**, requiring an isolating **Executor**. `commonwealth-tdd` today
+Shape: **Job**, requiring an isolating **Executor**. `sovereign-tdd` today
 is purely local; the expensive inner step (apply candidate edits, run the
 test command) becomes a job whose `kind` demands a sandboxed executor,
 because the code being run is model-generated and untrusted by construction.

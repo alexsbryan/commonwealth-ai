@@ -296,7 +296,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-31-cargo_compile_error_counts_as_failure_no"
 requirement = "CI-31"
-target = "sovereign/crates/commonwealth-tdd/src/shared/parser.rs"
+target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    // Compile failure: rustc diagnostics and no test summary at all.\n    // A test that references a not-yet-written function dies here \u2014\n    // count it as one failing entry so the loop has a gradient. When\n    // any summary exists, tests ran; the \"error: test failed\" footer\n    // cargo prints after real failures must not double-count.\n    if !saw_summary {\n        let compile_error = stdout.lines().any(|l| {\n            let t = l.trim();\n            t.starts_with(\"error[\") || t.starts_with(\"error:\")\n        });\n        if compile_error {\n            failed_names.push(\"<compile error>\".to_string());\n            total_failed = 1;\n        }\n    }"
 replace = "    // Compile failure: rustc diagnostics and no test summary at all.\n    // A test that references a not-yet-written function dies here \u2014\n    // count it as one failing entry so the loop has a gradient. When\n    // any summary exists, tests ran; the \"error: test failed\" footer\n    // cargo prints after real failures must not double-count.\n    if !saw_summary {\n        let compile_error = stdout.lines().any(|l| {\n            let t = l.trim();\n            t.starts_with(\"error[\") || t.starts_with(\"error:\")\n        });\n        if compile_error {\n            // Mutation: Do not add to failed_names, only increment counter.\n            total_failed = 1;\n        }\n    }"
 mustFail = ["cargo_compile_error_counts_as_failure_not_as_a_witness_that_never_ran"]
@@ -676,7 +676,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-vitest_suite_failures_do_not_inflate_rea"
 requirement = "EV-24"
-target = "sovereign/crates/commonwealth-tdd/src/shared/parser.rs"
+target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    if passed == 0 && failed == 0 {\n        if suite_failures > 0 {\n            failed = suite_failures;\n            failed_names.push(\"<suite error>\".to_string());\n        } else if errors > 0 {\n            failed = errors;\n            failed_names.push(\"<suite error>\".to_string());\n        } else if playwright_fatal {\n            failed = 1;\n            failed_names.push(\"<suite error>\".to_string());\n        }\n    } else {"
 replace = "    // MUTATION: Always treat zero-count runs as passing to break negative control\n    if passed == 0 && failed == 0 {\n        return TestParseResult {\n            passed,\n            failed,\n            total,\n            failed_names,\n        };\n    }\n    if false {"
 mustFail = ["vitest_suite_failures_do_not_inflate_real_test_counts"]
@@ -686,7 +686,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-generate_one_failing_accepts_all_new_tes"
 requirement = "EV-24"
-target = "sovereign/crates/commonwealth-tdd/src/trial.rs"
+target = "sovereign/crates/sovereign-tdd/src/trial.rs"
 find = "        Polarity::GenerateOneFailing { .. } => {\n            let new_tests = after.total.saturating_sub(before.total);\n            let new_failures = after.failed.saturating_sub(before.failed);\n            new_tests >= 1 && new_failures == new_tests && after.passed == before.passed\n        }"
 replace = "        Polarity::GenerateOneFailing { .. } => {\n            // BUG: This logic incorrectly allows vacuous passes or regressions,\n            // violating the requirement that tests must prove they can fail.\n            // Specifically, it ignores whether existing passed tests remain passed\n            // in a way that distinguishes 'new failing' from 'existing passing'.\n            // By removing the check `after.passed == before.passed`, we allow cases\n            // where total tests increase but some are newly passing (vacuous), \n            // OR by changing the condition to always return true for any growth,\n            // we break the discrimination. Let's make it trivially true for any non-zero delta.\n            after.total > before.total || after.failed > before.failed\n        }"
 mustFail = ["generate_one_failing_accepts_all_new_tests_failing"]
@@ -696,7 +696,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-cargo_libtest_some_fail"
 requirement = "EV-24"
-target = "sovereign/crates/commonwealth-tdd/src/shared/parser.rs"
+target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    let mut total_passed: u32 = 0;\n    let mut total_failed: u32 = 0;"
 replace = "    // MUTATION: Intentionally ignore failed counts to make the test fail\n    let mut total_passed: u32 = 0;\n    let mut total_failed: u32 = 0;"
 mustFail = ["cargo_libtest_some_fail"]
@@ -816,7 +816,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-34-accepts_clean_git_repo"
 requirement = "EV-34"
-target = "sovereign/crates/commonwealth-tdd/src/workdir.rs"
+target = "sovereign/crates/sovereign-tdd/src/workdir.rs"
 find = "    pub fn check_safe(path: PathBuf, force: bool) -> Result<Self, DirtyWorkdir> {\n        let canonical = path.canonicalize().unwrap_or(path.clone());\n        if is_system_path(&canonical) {"
 replace = "    pub fn check_safe(path: PathBuf, force: bool) -> Result<Self, DirtyWorkdir> {\n        // Mutation: Ignore the input path and always use a fixed system-like path for checks,\n        // violating the requirement that it must confirm on a clean checkout (the actual `path`).\n        // This breaks the definition of \"clean\" relative to the provided directory.\n        let _ignored_input = path;\n        let fake_canonical = std::env::current_exe()\n            .ok()\n            .and_then(|p| p.parent().map(PathBuf::from))\n            .unwrap_or_else(|| PathBuf::from(\"/usr/bin\"));\n\n        if is_system_path(&fake_canonical) {"
 mustFail = ["accepts_clean_git_repo"]
@@ -836,7 +836,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-34-bash_cargo_test_integration_classifies_a"
 requirement = "EV-34"
-target = "sovereign/crates/commonwealth-agent-tools/src/adapter/pi.rs"
+target = "sovereign/crates/sovereign-agent-tools/src/adapter/pi.rs"
 find = "    // Defaults \u2014 if no per-problem commands are bound, fall back\n    // to Rust prefixes (preserves PR 1 behavior for existing\n    // Rust-only problems before the bench wiring lands).\n    let build_match = build_prefix.unwrap_or(\"cargo build\");\n    let verify_match = verify_prefix.unwrap_or(\"cargo test --quiet --test integration\");"
 replace = "    // Defaults \u2014 if no per-problem commands are bound, fall back\n    // to Rust prefixes (preserves PR 1 behavior for existing\n    // Rust-only problems before the bench wiring lands).\n    let build_match = build_prefix.unwrap_or(\"cargo build\");\n    let verify_match = verify_prefix.unwrap_or(\"cargo test --workspace\");"
 mustFail = ["bash_cargo_test_integration_classifies_as_smoke"]

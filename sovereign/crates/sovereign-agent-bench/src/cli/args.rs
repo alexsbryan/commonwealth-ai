@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use commonwealth_agent_tools::{Role, RoleModelMap};
+use sovereign_agent_tools::{Role, RoleModelMap};
 use thiserror::Error;
 
 use crate::problem::Tier;

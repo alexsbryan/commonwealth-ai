@@ -129,10 +129,10 @@ members = [
     "sovereign/crates/sovereign-pipeline",
     "sovereign/crates/sovereign-work-atlas",
     "sovereign/crates/sovereign-agent-bench",
-    "sovereign/crates/commonwealth-agent-tools",
+    "sovereign/crates/sovereign-agent-tools",
     # TDD-machine backend (red-green-refactor solver registry).
     # See sovereign/docs/TDD_MACHINE_DESIGN.md.
-    "sovereign/crates/commonwealth-tdd",
+    "sovereign/crates/sovereign-tdd",
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
@@ -272,8 +272,8 @@ sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "sovereign/crates/sovereign-authoring-harness" }
-commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
-commonwealth-tdd = { path = "sovereign/crates/commonwealth-tdd" }
+sovereign-agent-tools = { path = "sovereign/crates/sovereign-agent-tools" }
+sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
@@ -362,11 +362,11 @@ hostname = "0.4"
 
 # Text utilities — hoisted 2026-05-24 so the eight crates that each
 # declared `regex = "1"` track one version. Used heavily in bench's
-# search runner output parsing and now by `commonwealth-tdd`.
+# search runner output parsing and now by `sovereign-tdd`.
 regex = "1"
 
 # Filesystem scratch space — used by every test that needs an
-# isolated workdir (bench candidate snapshots, commonwealth-tdd
+# isolated workdir (bench candidate snapshots, sovereign-tdd
 # workdir gate tests, atos lifecycle tests, …).
 tempfile = "3"
 

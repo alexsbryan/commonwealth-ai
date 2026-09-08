@@ -7,9 +7,13 @@ license.workspace = true
 [lib]
 
 [dependencies]
-# Mesh KV store + node identity — atlas records live here.
-commonwealth-state = { workspace = true }
-commonwealth-core  = { workspace = true }
+# The `PeerStore` port atlas records live in, plus `NodeId` straight from the
+# neutral kernel. Both replaced `commonwealth-state` + `commonwealth-core` in
+# cw-lift 3b: this crate calls four store methods, and all four have a correct
+# answer on a node with no peers, so requiring the mesh substrate to build or
+# test a capability was a link-time cost with no runtime meaning.
+sovereign-contracts = { workspace = true }
+kernel-types = { workspace = true }
 
 # Tool trait, ToolContext, StepOutput. The three MCP tools live in this crate.
 sovereign-core = { workspace = true }
@@ -40,6 +44,13 @@ arc-swap = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+# TEST-ONLY, and deliberately not a runtime dep: the mirror half of the
+# gossip-exclusion invariant (`private_app_id_matches_gossip_exclusion_list`).
+# The literal in `Privacy::Private.app_id()` and the one in
+# `GOSSIP_EXCLUDED_APP_IDS` must agree or a private claim gossips; that is a
+# claim about the MESH, so the assertion has to reach the mesh's own list
+# rather than restate it here (ARCH §10.6 — one decider, one name).
+commonwealth-state = { workspace = true }
 
 [lints]
 workspace = true

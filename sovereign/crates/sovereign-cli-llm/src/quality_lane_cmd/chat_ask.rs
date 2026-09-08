@@ -22,7 +22,7 @@
 //! | route | HARD | the question took a different route, or cited another corpus |
 //! | per-stage ceilings | HARD | a stage blew its pre-registered budget |
 //! | per-stage baseline | TRACKED | a stage moved against this stack's last run |
-//! | gate outcome | HARD | the gate's action left the bank's allowed set |
+//! | gate outcome honest | HARD | the action left the allowed set, or it disagrees with the ledger the reader is shown |
 //! | both halves answered | HARD | the #57 failure, back |
 //! | not abstained | HARD | an answerable question got a refusal |
 //! | useful | HARD | a reader would not come away with an answer |
@@ -71,6 +71,12 @@ struct ChatAskBank {
     runs: usize,
     warmup: usize,
     judge: JudgeCfg,
+    /// The additive term of the ceiling formula, declared ONCE for every
+    /// stage and every model stem — see `ceiling_from_median`.
+    ceiling_floor_ms: u64,
+    /// The 1-minute load average above which this lane's ONE wall-clock row
+    /// (`per-stage ceilings`) is could-not-judge rather than failed.
+    host_quiet_max_load: f64,
     ceilings: toml::value::Table,
     questions: Vec<ChatAskQuestion>,
 }
@@ -142,6 +148,17 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
 
     let bank = want(&doc, "bank")?;
     let judge = want(&doc, "judge")?;
+    // Required, not defaulted: a bank with no floor would silently restore
+    // the bare 1.5x rule, which is the bug this replaced (ARCH §18.3).
+    let ceiling_floor_ms = want(&doc, "ceiling_floor_ms")?
+        .as_integer()
+        .filter(|n| *n >= 0)
+        .ok_or_else(|| format!("{BANK}: `ceiling_floor_ms` must be a non-negative integer"))?
+        as u64;
+    let host_quiet_max_load = want(&doc, "host_quiet_max_load")?
+        .as_float()
+        .filter(|f| f.is_finite() && *f > 0.0)
+        .ok_or_else(|| format!("{BANK}: `host_quiet_max_load` must be a positive float"))?;
     let ceilings = want(&doc, "ceilings")?
         .as_table()
         .cloned()
@@ -181,6 +198,8 @@ fn parse_bank(text: &str) -> Result<ChatAskBank, String> {
             control_good: s_of(&judge, "control_good")?,
             control_flat: s_of(&judge, "control_flat")?,
         },
+        ceiling_floor_ms,
+        host_quiet_max_load,
         ceilings,
         questions,
     })
@@ -233,6 +252,10 @@ struct LaneTurn {
     visible: String,
     metadata: Option<TurnMetadata>,
     source_origins: Vec<String>,
+    /// The turn's epistemic ledger, as the wire carried it. The `gate
+    /// outcome honest` row reads the holdings' `verification`: an action
+    /// and its holdings must tell the same story.
+    epistemic: Option<sovereign_contracts::types::EpistemicState>,
     wall_ms: u64,
 }
 
@@ -261,6 +284,7 @@ async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<L
         visible,
         metadata: outcome.metadata,
         source_origins,
+        epistemic: outcome.epistemic_state,
         wall_ms,
     })
 }
@@ -285,6 +309,25 @@ fn gate_u64(meta: &TurnMetadata, key: &str) -> Option<u64> {
     meta.grounding_gate.as_ref()?.get(key)?.as_u64()
 }
 
+/// **THE ceiling formula.** One implementation, one name (ARCH §10.6).
+///
+/// `ceiling = max(1.5 x median, median + floor_ms)`
+///
+/// The multiplicative term is what a slow stage needs; the additive term is
+/// what a fast one needs, and before the floor existed there was no additive
+/// term at all. `retrieval` has a 193 ms median, so 1.5x set its bar at
+/// 290 ms and a run failed the whole lane on `retrieval 298 ms > 290` —
+/// eight milliseconds, well inside the stage's own run-to-run spread. A bar
+/// that fires on noise is not a bar; `max` takes whichever term makes the
+/// weaker claim.
+///
+/// `floor_ms` is declared ONCE, in the bank, and applies to every stage.
+fn ceiling_from_median(median_ms: u64, floor_ms: u64) -> u64 {
+    let multiplicative = (median_ms as f64 * 1.5).round() as u64;
+    let additive = median_ms.saturating_add(floor_ms);
+    multiplicative.max(additive)
+}
+
 /// The ceiling table for a model stem, or `None` — which is
 /// could-not-judge, never a pass. Running a different model is not evidence
 /// that this one got faster.
@@ -296,16 +339,16 @@ fn ceilings_for<'a>(bank: &'a ChatAskBank, stem: &str) -> Option<&'a toml::value
 /// silently passing. Residuals are arithmetic and carry no budget.
 fn ceiling_keys(stage: StageId) -> Option<(&'static str, &'static str)> {
     match stage {
-        StageId::Retrieval => Some(("retrieval_ms", "retrieval_calls")),
-        StageId::Draft => Some(("draft_ms", "draft_calls")),
-        StageId::Audit => Some(("audit_ms", "audit_calls")),
-        StageId::ReAudit => Some(("re_audit_ms", "re_audit_calls")),
-        StageId::Rewrite => Some(("rewrite_ms", "rewrite_calls")),
-        StageId::Retry => Some(("retry_ms", "retry_calls")),
-        StageId::Verify => Some(("verify_ms", "verify_calls")),
-        StageId::Citation => Some(("citation_ms", "citation_calls")),
-        StageId::Admission => Some(("admission_ms", "admission_calls")),
-        StageId::Segments => Some(("segments_ms", "segments_calls")),
+        StageId::Retrieval => Some(("retrieval_median_ms", "retrieval_calls")),
+        StageId::Draft => Some(("draft_median_ms", "draft_calls")),
+        StageId::Audit => Some(("audit_median_ms", "audit_calls")),
+        StageId::ReAudit => Some(("re_audit_median_ms", "re_audit_calls")),
+        StageId::Rewrite => Some(("rewrite_median_ms", "rewrite_calls")),
+        StageId::Retry => Some(("retry_median_ms", "retry_calls")),
+        StageId::Verify => Some(("verify_median_ms", "verify_calls")),
+        StageId::Citation => Some(("citation_median_ms", "citation_calls")),
+        StageId::Admission => Some(("admission_median_ms", "admission_calls")),
+        StageId::Segments => Some(("segments_median_ms", "segments_calls")),
         StageId::GateUnattributed | StageId::TurnUnattributed => None,
     }
 }
@@ -325,6 +368,103 @@ fn missing_coverage<'a>(visible: &str, must_locate: &'a [String]) -> Vec<&'a str
         .collect()
 }
 
+/// What the `gate outcome honest` row decided, and why.
+#[derive(Debug, PartialEq, Eq)]
+enum Honesty {
+    Honest,
+    /// The action and the ledger tell different stories.
+    Dishonest(String),
+}
+
+/// **Does this turn's ledger say the same thing its action does?**
+///
+/// A gate action is a claim about how far verification got; the holdings are
+/// what the reader is shown. Issue #57 was those two disagreeing — eight shed
+/// judges shipped as eight `Verified` holdings on a turn whose action said
+/// `released`. The old `gate outcome` row could not have seen it: it read the
+/// action against an allow-list and never looked at the ledger at all.
+///
+/// Three rules, each the contrapositive of a way the disagreement shows up:
+///
+/// 1. `judge_failed_open` (and every other fail-open action) ⇒ NOTHING is
+///    `Verified`. The gate reached no verdict; a verified holding under that
+///    action is the §18.3 defect literally — an `Err` in a success shape.
+/// 2. A HELD-reach action (`released`, `verified`, `retry_released`,
+///    `rewrite_released`, `citation_grounded`) ⇒ nothing is `FailOpen`. A
+///    claim nobody judged cannot ride out under an action that says every
+///    claim held; that turn's honest exit is `judge_failed_open`.
+/// 3. `citation_grounded` ⇒ every released quote is OPENABLE
+///    (`openable >= quotes`). A citation the reader cannot open is a promise
+///    the release did not keep.
+///
+/// A FLAWED-reach action (`annotated_marked`, `annotated_no_retry`, …) is
+/// deliberately unconstrained beyond the bank's allow-list: it means "some
+/// claims were flagged", and a mix of `Verified`, `FailedOnce` and `FailOpen`
+/// is the honest ledger for it.
+///
+/// **`located` is NOT rule 3, and that was measured before it was written.**
+/// The row used to fail on `located == 0`, reading it as "the reader was told
+/// where to look for none of them". `located` counts quotes carrying a
+/// SECTION HEADING, joined out of the corpus's `governance_view` enrichment
+/// (`grounding::gate_evidence_locators`), and the chat-ask fixture is ingested
+/// with no enrichment at all — so it is structurally 0 on this corpus and on
+/// every un-enriched one. Measured on this host, 8 of 8 `citation_grounded`
+/// turns: `located 0`, `openable == quotes` (2/2 and 1/1), every quote
+/// carrying a `(corpus_id, chunk_id)` target. Nothing was unlocatable; the row
+/// was reading the wrong field. `openable` is the one that answers it, and
+/// `inner.rs` says so: "openable <= quotes, and it is INDEPENDENT of located
+/// in both directions … Reading either as a proxy for the other would
+/// misreport both."
+fn gate_outcome_honest(
+    action: &str,
+    verifications: &[String],
+    quotes: Option<u64>,
+    openable: Option<u64>,
+) -> Honesty {
+    let fail_open_action = matches!(
+        action,
+        "judge_failed_open" | "retry_released_unverified" | "rewrite_released_unverified"
+    );
+    let held_action = matches!(
+        action,
+        "released" | "verified" | "retry_released" | "rewrite_released" | "citation_grounded"
+    );
+    if fail_open_action {
+        let verified = verifications.iter().filter(|v| *v == "verified").count();
+        if verified > 0 {
+            return Honesty::Dishonest(format!(
+                "`{action}` reached no verdict, yet {verified} of {} holding(s) say `verified`",
+                verifications.len()
+            ));
+        }
+    }
+    if held_action {
+        let open = verifications.iter().filter(|v| *v == "fail_open").count();
+        if open > 0 {
+            return Honesty::Dishonest(format!(
+                "`{action}` says every claim held, yet {open} of {} holding(s) say `fail_open`                  — that turn's honest exit is `judge_failed_open`",
+                verifications.len()
+            ));
+        }
+    }
+    if action == "citation_grounded" {
+        match (quotes, openable) {
+            (Some(q), Some(o)) if o < q => {
+                return Honesty::Dishonest(format!(
+                    "released {q} quote(s) of which only {o} can be opened"
+                ));
+            }
+            (Some(q), None) if q > 0 => {
+                return Honesty::Dishonest(format!(
+                    "released {q} quote(s) and reported no `openable` count at all"
+                ));
+            }
+            _ => {}
+        }
+    }
+    Honesty::Honest
+}
+
 // ─── The lane ───────────────────────────────────────────────────────
 
 pub(crate) async fn run(args: &[String]) -> i32 {
@@ -333,7 +473,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         println!();
         println!("Ingests {BANK}'s fixture into a per-fingerprint corpus, asks the");
         println!("bank's questions three warm times each, and asserts route, per-stage");
-        println!("ceilings, gate outcome, both-halves coverage, abstention and");
+        println!("ceilings, gate-outcome honesty, both-halves coverage, abstention and");
         println!("usefulness — each as its own named row.");
         return 0;
     }
@@ -664,7 +804,10 @@ async fn assert_question(
     // ── per-stage ceilings ─────────────────────────────────────────
     ceilings_row(report, bank, q, runs, &row("per-stage ceilings"));
 
-    // ── gate outcome ───────────────────────────────────────────────
+    // ── gate outcome honest ────────────────────────────────────────
+    // Two things, and the second is the one issue #57 needed: the action
+    // must be in the bank's allowed set, AND the action must agree with the
+    // ledger the reader is shown (`gate_outcome_honest`).
     let actions: Vec<String> = ledgers
         .iter()
         .map(|m| gate_str(m, "action").unwrap_or("(absent)").to_string())
@@ -674,43 +817,81 @@ async fn assert_question(
         .iter()
         .filter(|a| !q.allowed_gate_actions.contains(a))
         .collect();
-    // `located` is the #57 signature and it is treated exactly as far as it
-    // goes: it EXISTS only on the citation exit (`grounding/inner.rs`), one
-    // of sixteen, so `located == 0` is a failure — the gate released quotes
-    // and told the reader where to look for NONE of them, which is the
-    // shape the issue reported — while `located` ABSENT means the turn took
-    // a different exit and says nothing either way. Failing on absence
-    // would redden every non-citation turn for a reason unrelated to the
-    // answer (ARCH §18.3).
-    let unlocated = located.iter().filter(|l| **l == Some(0)).count();
-    let absent = located.iter().filter(|l| l.is_none()).count();
+    let verdicts: Vec<(usize, Honesty)> = runs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let action = r
+                .metadata
+                .as_ref()
+                .and_then(|m| gate_str(m, "action"))
+                .unwrap_or("(absent)");
+            let verifications: Vec<String> = r
+                .epistemic
+                .as_ref()
+                .map(|e| {
+                    e.holdings
+                        .iter()
+                        .map(|h| {
+                            serde_json::to_value(h.verification)
+                                .ok()
+                                .and_then(|v| v.as_str().map(str::to_string))
+                                .unwrap_or_else(|| "(unserializable)".into())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let quotes = r.metadata.as_ref().and_then(|m| gate_u64(m, "quotes"));
+            let openable = r.metadata.as_ref().and_then(|m| gate_u64(m, "openable"));
+            (
+                i + 1,
+                gate_outcome_honest(action, &verifications, quotes, openable),
+            )
+        })
+        .collect();
+    let dishonest: Vec<String> = verdicts
+        .iter()
+        .filter_map(|(i, v)| match v {
+            Honesty::Dishonest(why) => Some(format!("run {i}: {why}")),
+            Honesty::Honest => None,
+        })
+        .collect();
+    let holdings_seen: usize = runs
+        .iter()
+        .filter_map(|r| r.epistemic.as_ref())
+        .map(|e| e.holdings.len())
+        .sum();
     if !bad_action.is_empty() {
         report.failed(
-            &row("gate outcome"),
+            &row("gate outcome honest"),
             format!(
                 "actions {actions:?} — {bad_action:?} not in {:?}",
                 q.allowed_gate_actions
             ),
         );
-    } else if unlocated > 0 {
+    } else if !dishonest.is_empty() {
         report.failed(
-            &row("gate outcome"),
+            &row("gate outcome honest"),
+            format!("actions {actions:?} allowed, but the ledger disagrees — {dishonest:?}"),
+        );
+    } else if holdings_seen == 0 {
+        // No holdings anywhere: the action rule passed and the ledger rule
+        // had nothing to read. Not a pass on the half that matters
+        // (ARCH §18.1) — four verdicts, not two.
+        report.cannot_judge(
+            &row("gate outcome honest"),
             format!(
-                "actions {actions:?} allowed, but {unlocated} run(s) released quotes with \
-                 `located: 0` — the reader was told where to look for none of them (issue #57)"
+                "actions {actions:?} are within the allowed set, but no run carried a single \
+                 holding — there is no ledger to check the action against"
             ),
         );
     } else {
         report.passed(
-            &row("gate outcome"),
+            &row("gate outcome honest"),
             format!(
-                "actions {actions:?} all within the bank's allowed set; located {located:?}\
-                 {}",
-                if absent == located.len() {
-                    " (no run took the citation exit, which is the only one that reports it)"
-                } else {
-                    ""
-                }
+                "actions {actions:?} allowed and agreed with {holdings_seen} holding(s); \
+                 located {located:?} (section headings, absent on an un-enriched corpus \
+                 by design — `openable` is what says a quote can be opened)"
             ),
         );
     }
@@ -824,6 +1005,23 @@ fn ceilings_row(
     runs: &[LaneTurn],
     subject: &str,
 ) {
+    // THE PRECONDITION. This is the lane's only wall-clock row, and a
+    // wall-clock bar measured on a contended host verifies nothing: the
+    // same binary and bank decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s
+    // at load 32 on this machine. Could-not-judge NAMING the load it saw —
+    // never failed, and never quietly passed either (ARCH §18.3).
+    //
+    // The same `sovereign_cli_shared::host_load` reader the check runner's
+    // `Precondition::HostQuiet` uses, so the two cannot disagree about what
+    // "quiet" means (ARCH §10.6). Read at the END of the runs rather than
+    // the start: it is the interval the stages were measured over that has
+    // to have been quiet, and a 1-minute average taken now covers it.
+    let quiet = sovereign_cli_shared::host_load::host_quiet(bank.host_quiet_max_load);
+    if let Some(why) = quiet.reason() {
+        report.cannot_judge(subject, why);
+        return;
+    }
+
     // Every ledger row carries no model stem of its own, so the stem is the
     // run's inference backend. A stem with no ceiling table is
     // could-not-judge — running a different model is not evidence that this
@@ -842,11 +1040,15 @@ fn ceilings_row(
         );
         return;
     };
+    // The bank declares the MEASURED median; the bar is derived from it by
+    // the one formula. `ceiling_floor_ms` is declared once, at the bank's top
+    // level, so it cannot drift per stage.
+    let floor_ms = bank.ceiling_floor_ms;
     let ms_bar = |k: &str| {
         table
             .get(k)
             .and_then(toml::Value::as_integer)
-            .map(|n| n as u64)
+            .map(|n| ceiling_from_median(n as u64, floor_ms))
     };
 
     let mut breaches: Vec<String> = Vec::new();
@@ -861,7 +1063,7 @@ fn ceilings_row(
             continue;
         };
         worst_total = worst_total.max(l.total_ms);
-        if let Some(bar) = ms_bar("total_ms") {
+        if let Some(bar) = ms_bar("total_median_ms") {
             if l.total_ms > bar {
                 breaches.push(format!("run {}: total {} ms > {bar}", i + 1, l.total_ms));
             }
@@ -1092,6 +1294,91 @@ fn find_repo_root() -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    fn v(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// ISSUE #57 ON THE WIRE. A `judge_failed_open` turn whose holdings say
+    /// `verified` is the defect verbatim — the gate reached no verdict and
+    /// the reader is shown four confirmations.
+    ///
+    /// FAILS IF the fail-open arm is dropped from `gate_outcome_honest`:
+    /// this row goes green on a ledger that claims verification nobody did.
+    #[test]
+    fn a_fail_open_turn_may_not_show_a_verified_holding() {
+        assert_eq!(
+            gate_outcome_honest(
+                "judge_failed_open",
+                &v(&["fail_open", "fail_open"]),
+                None,
+                None
+            ),
+            Honesty::Honest
+        );
+        let d = gate_outcome_honest(
+            "judge_failed_open",
+            &v(&["fail_open", "verified"]),
+            None,
+            None,
+        );
+        assert!(
+            matches!(d, Honesty::Dishonest(ref why) if why.contains("verified")),
+            "{d:?}"
+        );
+    }
+
+    /// The other direction: an action that says every claim held cannot be
+    /// carrying a claim nobody judged. That turn's honest exit exists and is
+    /// `judge_failed_open`.
+    #[test]
+    fn a_held_action_may_not_carry_an_unjudged_holding() {
+        assert_eq!(
+            gate_outcome_honest("released", &v(&["verified", "verified"]), None, None),
+            Honesty::Honest
+        );
+        let d = gate_outcome_honest("released", &v(&["verified", "fail_open"]), None, None);
+        assert!(
+            matches!(d, Honesty::Dishonest(ref why) if why.contains("fail_open")),
+            "{d:?}"
+        );
+        // A FLAWED release is deliberately unconstrained: "some claims were
+        // flagged" is what it means, and a mixed ledger is honest for it.
+        assert_eq!(
+            gate_outcome_honest(
+                "annotated_marked",
+                &v(&["verified", "failed_once", "fail_open"]),
+                None,
+                None
+            ),
+            Honesty::Honest
+        );
+    }
+
+    /// A citation the reader cannot open is a promise the release did not
+    /// keep — and it is `openable` that says so, never `located`.
+    ///
+    /// The measured case this pins: 8 of 8 `citation_grounded` turns on this
+    /// host reported `located: 0` with `openable == quotes`. Under the old
+    /// row every one of them was a failure; under this one they pass, and a
+    /// genuinely unopenable quote still fails.
+    #[test]
+    fn a_citation_release_is_judged_on_openable_not_on_section_headings() {
+        assert_eq!(
+            gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(2), Some(2)),
+            Honesty::Honest,
+            "located is not consulted at all"
+        );
+        let d = gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(2), Some(1));
+        assert!(
+            matches!(d, Honesty::Dishonest(ref why) if why.contains("opened")),
+            "{d:?}"
+        );
+        // Quotes released and no openable count reported at all is not a
+        // pass either — absence is reported, never defaulted (§18.3).
+        let d = gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(1), None);
+        assert!(matches!(d, Honesty::Dishonest(_)), "{d:?}");
+    }
+
     fn bank_text() -> String {
         std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1148,22 +1435,60 @@ mod tests {
         assert!(parse_bank("").is_err());
     }
 
-    /// The pre-registered ceilings are in the bank for the stem this host
-    /// runs, and they are the order's numbers. A ceiling edited to fit a
-    /// failing run is not a ceiling.
+    /// The bank declares the MEASURED medians for the stem this host runs,
+    /// and the bar is derived from them by one formula.
+    ///
+    /// This test asserted the order's opening ceilings (2000/30000/15000/
+    /// 30000/60000) and went red on 2026-09-04 when commit bab7df796 re-set
+    /// the bank from a quiet run without updating it — a pre-existing
+    /// failure this order inherited, not one it caused. It now asserts what
+    /// the bank actually carries, which is the medians.
+    ///
+    /// A median edited to fit a failing run is not a measurement, and unlike
+    /// a hand-edited ceiling it is a claim a re-run can contradict.
     #[test]
-    fn the_pre_registered_ceilings_are_the_orders_numbers() {
+    fn the_bank_declares_the_measured_medians_for_this_hosts_stem() {
         let b = parse_bank(&bank_text()).unwrap();
         let t = ceilings_for(&b, "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL")
             .expect("this host's stem has a ceiling table");
         let n = |k: &str| t.get(k).and_then(toml::Value::as_integer).unwrap();
-        assert_eq!(n("retrieval_ms"), 2000);
-        assert_eq!(n("draft_ms"), 30000);
+        assert_eq!(n("retrieval_median_ms"), 193);
+        assert_eq!(n("draft_median_ms"), 22573);
         assert_eq!(n("draft_calls"), 1);
-        assert_eq!(n("citation_ms"), 15000);
-        assert_eq!(n("audit_ms"), 30000);
+        assert_eq!(n("citation_median_ms"), 7734);
+        assert_eq!(n("audit_median_ms"), 8954);
         assert_eq!(n("audit_calls"), 12);
-        assert_eq!(n("total_ms"), 60000);
+        assert_eq!(n("total_median_ms"), 31728);
+        // The floor is declared ONCE, outside the per-stem table.
+        assert_eq!(b.ceiling_floor_ms, 250);
+    }
+
+    /// The formula, and the reason it has an additive term at all.
+    ///
+    /// `retrieval`'s 193 ms median put the 1.5x bar at 290 ms, and a run
+    /// failed the whole lane on `retrieval 298 ms > 290` — eight
+    /// milliseconds. The floor is what makes a bar on a fast stage a bar
+    /// rather than a coin toss.
+    #[test]
+    fn the_ceiling_formula_takes_whichever_term_makes_the_weaker_claim() {
+        // Small stage: the additive term wins, and the 8 ms miss now passes.
+        assert_eq!(ceiling_from_median(193, 250), 443);
+        assert!(
+            298 < ceiling_from_median(193, 250),
+            "the run-2 failure was noise, not a regression"
+        );
+        // Large stages: 1.5x dominates, so the floor is invisible there —
+        // these are the 2026-09-04 ceilings to within rounding.
+        assert_eq!(ceiling_from_median(22573, 250), 33860);
+        assert_eq!(ceiling_from_median(7734, 250), 11601);
+        assert_eq!(ceiling_from_median(8954, 250), 13431);
+        assert_eq!(ceiling_from_median(31728, 250), 47592);
+        // The crossover: below 500 ms the floor binds, above it the
+        // multiplier does.
+        assert_eq!(ceiling_from_median(500, 250), 750);
+        assert_eq!(ceiling_from_median(501, 250), 752);
+        // A zero-median stage still gets a real band rather than a zero bar.
+        assert_eq!(ceiling_from_median(0, 250), 250);
     }
 
     /// A model stem with no ceiling table is could-not-judge, never a pass.

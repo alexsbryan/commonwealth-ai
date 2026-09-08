@@ -129,7 +129,7 @@ nothing and the script says so rather than passing. A gate that cannot fail is n
 
 | Removed | Why it cannot ship to a firm |
 |---|---|
-| `POST /v1/solve`, `POST /v1/cycle/bdd` | Client-supplied `test_command` reaches `sh -c` (`commonwealth-tdd/src/shared/test_runner.rs:44-52`), inside the *authenticated* router (`main.rs:768`). Any tenant key is a shell. Runs unconditionally as the baseline, before any model call. |
+| `POST /v1/solve`, `POST /v1/cycle/bdd` | Client-supplied `test_command` reaches `sh -c` (`sovereign-tdd/src/shared/test_runner.rs:44-52`), inside the *authenticated* router (`main.rs:768`). Any tenant key is a shell. Runs unconditionally as the baseline, before any model call. |
 | `POST /v1/documents/upload`, `POST /v1/corpora/upload` | Ingest an **absolute server-side path** (`routes_documents.rs:130`, `corpus_upload.rs:48`). Any tenant can ingest any file the process can read — including the config holding every other tenant's API key — into their own queryable corpus. |
 | `/mcp`, `/mcp/message`, `/mcp/stats` | Outside the auth layer entirely (`main.rs:807`), gated only by a loopback peer check that a reverse proxy defeats. Also carries `TddState`, so it is a second path to the same shell. |
 | `ShellTool` | Registered on the agent runtime unconditionally (`main.rs:381`). Its approval grant is cached store-wide, and a pending approval blocks a scheduler permit with no timeout. |

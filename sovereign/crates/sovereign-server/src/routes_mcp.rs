@@ -502,7 +502,7 @@ async fn dispatch_tdd_tool(
     params: Option<Value>,
     id: Value,
 ) -> JsonRpcResponse {
-    use commonwealth_tdd::{run_trial, Polarity, Trial, TrialConfig, Workdir};
+    use sovereign_tdd::{run_trial, Polarity, Trial, TrialConfig, Workdir};
     use std::sync::Arc;
 
     let arguments = params
@@ -602,8 +602,8 @@ async fn dispatch_bdd_cycle(
     arguments: Value,
     id: Value,
 ) -> JsonRpcResponse {
-    use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
-    use commonwealth_tdd::Workdir;
+    use sovereign_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
+    use sovereign_tdd::Workdir;
     use std::sync::Arc;
 
     let workdir_str = match arguments.get("workdir").and_then(|v| v.as_str()) {
@@ -1102,5 +1102,75 @@ mod tests {
         assert!(resp.error.is_some());
         assert!(resp.result.is_none());
         assert_eq!(resp.error.as_ref().unwrap().code, -32601);
+    }
+
+    // ─── The TDD tool ids are a WIRE SURFACE ─────────────────
+    //
+    // `tdd_solve` and `tdd_bdd_cycle` are served into `tools/list`
+    // and named by every MCP client that has ever called them —
+    // the Pi extension `@svrnmesh/pi-tdd`, agent harnesses, and
+    // anything that stored a tool id in a saved workflow. The
+    // BACKING CRATE renamed (`commonwealth-tdd` -> `sovereign-tdd`,
+    // cw-lift 3a, 2026-09-04) and these two strings deliberately
+    // did NOT: a crate name is internal, a tool id is a promise to
+    // a caller we cannot recompile. Renaming one would break every
+    // such caller with a silent `tool_not_found`, so it is frozen
+    // here rather than remembered (ARCH §7 — structural, not
+    // remembered).
+    //
+    // Adding a THIRD tool is legal and this test says so by
+    // asserting the two are present rather than that the set has
+    // size two; only removing or renaming one fails.
+
+    // The expected ids are SPELLED IN PIECES on purpose. Written whole,
+    // a global find-and-replace over `*.rs` — the exact instrument a
+    // crate rename reaches for, and the one that produced this file's
+    // current name — rewrites the assertion in the same pass as the
+    // code, and the pin passes while the wire breaks. That is §18.1's
+    // "a guard asserting on a field the subject supplies": the test
+    // must not draw its expectation from the same text the change
+    // edits. `concat!` is compile-time, so this costs nothing at run
+    // time and everything a careless rename needs it to.
+    const PUBLISHED_TDD_TOOL_IDS: &[&str] =
+        &[concat!("tdd_", "solve"), concat!("tdd_", "bdd_", "cycle")];
+
+    #[test]
+    fn tdd_tool_ids_are_frozen_wire_names() {
+        for id in PUBLISHED_TDD_TOOL_IDS {
+            assert!(
+                TDD_TOOL_NAMES.contains(id),
+                "{id} is a published MCP tool id and is missing from TDD_TOOL_NAMES \
+                 ({TDD_TOOL_NAMES:?}); every stored caller that names it breaks with a \
+                 silent tool_not_found. Add a tool, never rename one."
+            );
+        }
+    }
+
+    // One decider, one name (ARCH §10.6): the set that ROUTES a
+    // call and the set that is ADVERTISED in `tools/list` must be
+    // the same set. Drift between them is invisible from either
+    // side alone — an advertised id with no route is a
+    // `tool_not_found` on first use, and a routed id that is not
+    // advertised is a tool no client can discover.
+
+    #[test]
+    fn advertised_tdd_tools_are_exactly_the_routed_ones() {
+        let advertised: Vec<String> = tdd_tool_descriptors()
+            .iter()
+            .map(|d| {
+                d.get("name")
+                    .and_then(|v| v.as_str())
+                    .expect("every tool descriptor carries a name")
+                    .to_string()
+            })
+            .collect();
+        let mut advertised_sorted = advertised.clone();
+        advertised_sorted.sort();
+        let mut routed: Vec<String> = TDD_TOOL_NAMES.iter().map(|s| s.to_string()).collect();
+        routed.sort();
+        assert_eq!(
+            advertised_sorted, routed,
+            "tools/list advertises {advertised:?} but handle_tools_call routes {TDD_TOOL_NAMES:?}"
+        );
     }
 }

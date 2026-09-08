@@ -83,7 +83,15 @@ NOT_PRODUCTION = ("/tests/", "/benches/", "/examples/", "research/",
 #                                   — the same subsystem, and the list already
 #                                   held the store half. Omitting it split one
 #                                   decider across two answers.
-#   REMOVED commonwealth-tdd        NOT back-of-house. It backs two SHIPPED MCP
+#   REMOVED commonwealth-tdd        NOT back-of-house. (The crate is
+#                                   `sovereign-tdd` since cw-lift 3a,
+#                                   2026-09-04; the string removed from the
+#                                   set was the old name, and the rename
+#                                   changes NOTHING here — domain is keyed on
+#                                   PATH, still `sovereign/crates/`, and
+#                                   membership on this explicit set, which
+#                                   held neither name.)
+#                                   It backs two SHIPPED MCP
 #                                   tools, `tdd_solve` and `tdd_bdd_cycle`,
 #                                   listed in tools/list (sovereign-server
 #                                   routes_mcp.rs:469), plus the `solve` verb's

@@ -1529,3 +1529,79 @@ cluster = "quality"
 default = "off"
 status = "guard"
 purpose = "=1 permits a `svrn quality check` lane to WRITE its baseline for the current fingerprint. Set only by `--mint`. Off by default and that is the invariant: a first run against a new stack is could-not-judge (first-run) on its baseline-derived rows and writes nothing, because a baseline minted from an unwatched run is a bar nobody set (ARCH §18.4). Any write without this is a defect."
+
+# ── desktop-e2e ─────────────────────────────────────────────────────
+#
+# The knobs the desktop's real-mode, fault and meta-quality harnesses read.
+# They are declared here rather than in prose because `sovereign-desktop/
+# QUALITY_SURFACE.md` was the only registry for them, in three hand-maintained
+# tables, and that doc's own postmortem is about what happens to a list only a
+# human keeps. NOT YET CENSUSED: env-gate reads `.rs`, `scripts/*.sh` and
+# `.claude/hooks/*.sh`, and every site below is `.ts`/`.mjs`, so these rows are
+# declaration without enforcement until the census learns those extensions.
+# Nine of the ~25 SOVEREIGN_* names the desktop e2e tree reads; the rest are
+# per-spec fixtures (`SOVEREIGN_SPEC_NAME__*`) and demo knobs that no doc
+# claimed either. Extending the census is the phase-1 follow-up.
+
+[[flag]]
+name = "SOVEREIGN_REAL_ALLOW_ATTACH"
+cluster = "desktop-e2e"
+default = "off"
+status = "experiment"
+purpose = "Attach the real-mode Playwright suite to an existing daemon on :9741 instead of starting a hermetic one. NON-HERMETIC by construction: knowledge and inference state become whatever the box already has, so a green under this flag is a claim about your machine, not about the build. Without it the setup REFUSES when :9741 is occupied — trading hermeticity for convenience is a decision the runner makes you state."
+
+[[flag]]
+name = "SOVEREIGN_REAL_XVFB"
+cluster = "desktop-e2e"
+default = "off"
+status = "shipped"
+purpose = "Wrap the desktop app in `xvfb-run -a` for the real-mode suite. Required on headless Linux; a no-op elsewhere."
+
+[[flag]]
+name = "SOVEREIGN_REAL_KEEP_PROFILE"
+cluster = "desktop-e2e"
+default = "off"
+status = "experiment"
+purpose = "Do not wipe the real-mode scratch profile between runs. Triage only — a kept profile makes the next run non-hermetic in exactly the way SOVEREIGN_REAL_ALLOW_ATTACH does."
+
+[[flag]]
+name = "SOVEREIGN_REAL_PROFILE_DIR"
+cluster = "desktop-e2e"
+default = "unset (a generated name)"
+status = "shipped"
+purpose = "Name the real-mode scratch profile directory under `test-artifacts/`. Set it when two runs must not share a profile."
+
+[[flag]]
+name = "SOVEREIGN_REAL_CHAT_MODEL"
+cluster = "desktop-e2e"
+default = "unset"
+status = "guard"
+purpose = "Path to the GGUF the real-mode suite drives. Setup FAILS if it does not resolve rather than falling back to a stub — the models are not in the repo, and a real-mode run against no model would report green on a suite that proved nothing. This refusal is the reason no CI job runs that suite."
+
+[[flag]]
+name = "SOVEREIGN_REAL_EMBED_MODEL"
+cluster = "desktop-e2e"
+default = "unset"
+status = "guard"
+purpose = "Path to the embedding GGUF for the real-mode suite. Same refusal contract as SOVEREIGN_REAL_CHAT_MODEL: unresolvable means the setup fails, never that retrieval silently degrades."
+
+[[flag]]
+name = "SOVEREIGN_COMMAND_BRIDGE"
+cluster = "desktop-e2e"
+default = "off"
+status = "shipped"
+purpose = "Open the desktop's command bridge so a harness can drive the REAL Tauri command handlers over loopback. Always set by the real-mode, faults and bridge-parity harnesses; the app's env inherits `process.env`, so anything exported reaches the desktop process."
+
+[[flag]]
+name = "SOVEREIGN_COMMAND_BRIDGE_LEDGER"
+cluster = "desktop-e2e"
+default = "unset"
+status = "shipped"
+purpose = "Path the command bridge appends its invocation ledger to. Paired with SOVEREIGN_COMMAND_BRIDGE by every harness that sets one."
+
+[[flag]]
+name = "SOVEREIGN_INVOKE_COVERAGE"
+cluster = "desktop-e2e"
+default = "unset (off entirely)"
+status = "experiment"
+purpose = "Record which of the 260 Tauri commands a run actually reached, as JSONL (`{\"cmd\": \"<name>\"}`), first sighting only. Read it with `npm run report:coverage`. A run that read no ledger rows exits 3 as could-not-judge rather than reporting 0% — a missing ledger is an absence, not a measurement. Deliberately coverage-of-surface rather than an assertion count: assertion counts inflate for free, surface reach cannot move without reaching a new command."

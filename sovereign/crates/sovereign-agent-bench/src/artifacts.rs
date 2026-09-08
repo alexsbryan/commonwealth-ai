@@ -18,9 +18,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use commonwealth_agent_tools::RoleModelMap;
 use serde::Serialize;
 use serde_json::Value;
+use sovereign_agent_tools::RoleModelMap;
 
 use crate::judge::{JudgeError, JudgeRequest, JudgeTrialOutcome};
 use crate::runner::AgentRunArtifact;
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn persist_agent_run_writes_role_model_map_when_set() {
-        use commonwealth_agent_tools::{Role, RoleModelMap};
+        use sovereign_agent_tools::{Role, RoleModelMap};
         let dst = tempfile::tempdir().unwrap();
         let sink = ArtifactSink::new(dst.path().join("p")).unwrap();
         let mut map = RoleModelMap::new();

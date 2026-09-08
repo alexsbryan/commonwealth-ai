@@ -143,7 +143,7 @@ MULTITURN_MAX_TURNS="${MULTITURN_MAX_TURNS:-30}"
 # 0/27 that hides regressions). Pin it to the primary slot the daemon actually
 # serves; override with AGENT_MODEL for a dedicated coder model.
 AGENT_MODEL="${AGENT_MODEL:-commonwealth/primary}"
-# Agent runner. `search` is the built-in TDD red-green solver (commonwealth-tdd
+# Agent runner. `search` is the built-in TDD red-green solver (sovereign-tdd
 # via SearchRunner) — the path the committed baseline was captured with. The
 # bench's OWN default is `pi` (an external tool-calling agent) which scores far
 # lower here (measured 3/27 vs search's 9/27 on the same 3 problems, 2026-06-22)
@@ -582,7 +582,7 @@ run_lane "knowledge-gym-gate" HARD \
 # cheaper lanes. Separate binary; gated on grand_total/max_total.
 #
 # DAEMON CONFIG (2026-06-22): with AGENT_RUNNER=search (the default) this lane
-# uses the commonwealth-tdd solver, which ORCHESTRATES its own red-green loop
+# uses the sovereign-tdd solver, which ORCHESTRATES its own red-green loop
 # over the chat backend — it does NOT depend on the model emitting tool calls,
 # so it needs NO SOVEREIGN_FORCE_TOOL_CALLS and runs inline on the SAME clean
 # (force-off) daemon as every other lane. No separate daemon pass.
