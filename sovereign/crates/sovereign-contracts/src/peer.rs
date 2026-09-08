@@ -180,13 +180,11 @@ impl SoloPeerStore {
     }
 }
 
-/// Unix seconds, saturating at 0 before the epoch. Local to the solo store's
-/// last-write-wins stamp; the mesh store has its own clock.
+/// Unix seconds for the solo store's last-write-wins stamp. Asks the Tier-0
+/// decider; it used to be a private fifth copy of the same six lines, which is
+/// what `clock-gate` caught on 2026-09-07 (ARCH §10.6).
 fn now_unix_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    sovereign_time::unix_now_u64()
 }
 
 impl PeerStore for SoloPeerStore {

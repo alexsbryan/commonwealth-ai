@@ -252,10 +252,7 @@ fn run_probe(
     let staged = match &arm.prompt {
         ArmPrompt::Default => None,
         ArmPrompt::Long { chars, .. } => {
-            let salt = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
+            let salt = u128::from(sovereign_core::time::unix_millis());
             let dir = tempfile::tempdir().map_err(|e| format!("cannot stage the prompt: {e}"))?;
             let path = dir.path().join("long.txt");
             std::fs::write(&path, long_prompt(bank, *chars, salt))

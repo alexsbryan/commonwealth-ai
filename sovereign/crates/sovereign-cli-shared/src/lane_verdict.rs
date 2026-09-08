@@ -148,10 +148,12 @@ pub fn print(j: &Judgement) {
     print!("{}", emit(j));
 }
 
-/// The `as_of` a lane stamps on a verdict it just produced.
+/// The `as_of` a lane stamps on a verdict it just produced. Delegates to the
+/// one decider rather than reading the clock here — this function WAS the
+/// hand-read `clock-gate` caught on 2026-09-07.
 #[must_use]
 pub fn now() -> SystemTime {
-    SystemTime::now()
+    sovereign_time::system_now()
 }
 
 #[cfg(test)]

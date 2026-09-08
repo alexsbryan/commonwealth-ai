@@ -16,6 +16,9 @@ rust-version.workspace = true
 # while it lived here the knowledge layer could not name it without a
 # backflow edge. Re-exported from types::custody so callers are unchanged.
 kernel-types = { workspace = true }
+# The Tier-0 wall-clock leaf, same layer, zero deps of its own. Taken 2026-09-07
+# so `peer.rs` stops carrying a private fifth copy of `unix_now_u64`.
+sovereign-time = { workspace = true }
 oicp-types = { workspace = true }
 # `peer::PeerEntry.value`. A leaf third-party crate with no in-repo edges, so
 # it costs the contract seam nothing — and it keeps the port's payload the

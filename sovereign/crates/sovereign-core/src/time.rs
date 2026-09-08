@@ -14,6 +14,7 @@
 //!   - [`unix_now`]      — seconds, `i64` (timestamps stored as signed)
 //!   - [`unix_now_u64`]  — seconds, `u64`
 //!   - [`unix_millis`]   — milliseconds, `u64`
+//!   - [`system_now`]    — the raw `SystemTime`, for APIs that take one
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -61,4 +62,14 @@ mod tests {
         assert_eq!(unix_now() as u64, unix_now_u64());
         assert!(unix_millis() / 1000 >= unix_now_u64() - 1);
     }
+}
+
+/// The current wall-clock instant, for an API whose parameter IS a
+/// `SystemTime` — `kernel_types::Judgement::as_of` is the one this was minted
+/// for. Twin of `sovereign_time::system_now`, per the island rule this
+/// module's header already states.
+#[inline]
+#[must_use]
+pub fn system_now() -> SystemTime {
+    SystemTime::now()
 }

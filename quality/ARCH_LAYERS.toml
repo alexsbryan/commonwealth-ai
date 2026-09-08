@@ -605,7 +605,14 @@ name = "sovereign-contracts"
 # reckon with: `studio/LIBRARY.md` prices the real cut at about a dozen items
 # into a contract crate of a few hundred lines, re-exported at the current
 # paths so no importer in the monorepo changes.
-allow = ["oicp-types", "kernel-types"]
+#
+# `sovereign-time` joined 2026-09-07, the second instance of the collision its
+# own leaf comment above records: clock-gate routed `peer.rs`'s private
+# `now_unix_secs` at the one decider, and obeying that instruction left this
+# package's closure. Two gates pointing opposite ways is a defect in the
+# allowlist, not in the crate that obeyed. The closure widens by zero crates —
+# sovereign-time's `[dependencies]` is empty.
+allow = ["oicp-types", "kernel-types", "sovereign-time"]
 
 [[package_leaf]]
 name = "oicp-client"

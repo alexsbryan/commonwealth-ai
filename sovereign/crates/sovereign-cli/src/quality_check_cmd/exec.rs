@@ -369,7 +369,7 @@ pub(super) fn finish(f: InFlight<'_>, status: std::process::ExitStatus) -> Instr
     // decide which is the real output.
     let joined = format!("{captured}\n{stderr}");
     InstrumentRun {
-        judgement: judgement.as_of(SystemTime::now()),
+        judgement: judgement.as_of(sovereign_core::time::system_now()),
         secs,
         exit_code: code,
         tail: tail_of(&joined, 12),

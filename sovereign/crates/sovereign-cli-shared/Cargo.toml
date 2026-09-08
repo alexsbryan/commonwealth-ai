@@ -28,7 +28,7 @@ sovereign-core = { workspace = true, optional = true }
 # on directly rather than through `sovereign-core::time`, which re-exports the
 # same function but would drag corpus-engine + tokio + dashmap into a crate
 # every sibling binary links.
-sovereign-time = { workspace = true, optional = true }
+sovereign-time = { workspace = true }
 # `observation` probes PATH for the SCIP exporters (scip-go, scip-typescript,
 # …) so init can name a missing one instead of leaving an empty call graph.
 # Pinned at 7 to match all four sovereign-cli-* binaries (ARCH §8.2).
@@ -83,7 +83,7 @@ mcp-client = ["dep:reqwest"]
 # `audit` / `charter amend` READ it, so the model can no longer live in
 # either binary alone. Gated because `observation` probes for SCIP exporters
 # (`corpus-engine-scip`); binaries that never touch a project skip both.
-project-model = ["dep:corpus-engine-scip", "dep:sovereign-time", "dep:which"]
+project-model = ["dep:corpus-engine-scip", "dep:which"]
 # Enables `sovereign_cli_shared::code_index` — the `svrn code index` verb,
 # shared by `sovereign-cli` (which ships it) and `sovereign-cli-dev` (whose
 # `code` router also serves it). Each carried its own copy until 2026-08-20 and

@@ -15,6 +15,7 @@
 //!   - [`unix_now`]      — seconds, `i64`
 //!   - [`unix_now_u64`]  — seconds, `u64`
 //!   - [`unix_millis`]   — milliseconds, `u64`
+//!   - [`system_now`]    — the raw `SystemTime`, for APIs that take one
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -34,6 +35,18 @@ pub fn unix_now_u64() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// The current wall-clock instant, for an API whose parameter IS a
+/// `SystemTime` — `kernel_types::Judgement::as_of` is the one this was minted
+/// for. Added 2026-09-07: without it the decider had no door for that shape,
+/// so four call sites read the clock by hand and `clock-gate` was red on
+/// `main`. A decider that cannot answer a legitimate question is why people
+/// go around it (ARCH §10.6).
+#[inline]
+#[must_use]
+pub fn system_now() -> SystemTime {
+    SystemTime::now()
 }
 
 /// Milliseconds since the Unix epoch as `u64`. 0 if the clock is pre-epoch.
