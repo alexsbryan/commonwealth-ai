@@ -174,8 +174,8 @@ pub(super) fn stamp_now() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::exec::Covariates;
+    use super::*;
     use kernel_types::quality::Registry;
     use kernel_types::{Judgement, Reason};
 

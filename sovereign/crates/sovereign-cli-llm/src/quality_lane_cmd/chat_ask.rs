@@ -1223,7 +1223,11 @@ fn stage_rows(
     // and deleting only the guard would have left the bar failing runs it
     // used to abstain on.
     let breach_note = if breaches.is_empty() {
-        format!("every declared ceiling held ({} run(s) of `{}`)", runs.len(), q.id)
+        format!(
+            "every declared ceiling held ({} run(s) of `{}`)",
+            runs.len(),
+            q.id
+        )
     } else {
         format!("OVER: {}", breaches.join("; "))
     };
