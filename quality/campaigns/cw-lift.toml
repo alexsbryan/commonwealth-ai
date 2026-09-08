@@ -97,7 +97,8 @@ status    = "active"
 #       with data — 45 compile errors, and the no-iroh arm would have NO
 #       CONSUMER while the daemon cannot drop sovereign-mesh, so nothing
 #       would build it. Bonus: sovereign-work-atlas left the substrate too.
-#   3c  the instrument counts CLASSES, by PATH not prefix   DONE  3.0 -> 2.0
+#   3c  the instrument counts CLASSES, by PATH not prefix
+#                                             3554c409f DONE  3.0 -> 2.0
 #       and records that the bar's PROSE CLAIM is still unmet: 10
 #       commonwealth crates remain TRANSITIVELY via sovereign-mesh, which
 #       the daemon reaches at 78 distinct items. That is K2's fusion at a
@@ -106,7 +107,8 @@ status    = "active"
 #       K8 proved six namespaces cannot leave the 10s push until the journal
 #       can forget. Opener is 2c, which Phase 2 unblocked by accident: 2ce
 #       refused the projection for having no consumer, and 2d then landed one.
-#   4a  the journal can forget — seal AND prune, one rung   DONE  +883
+#   4a  the journal can forget — seal AND prune, one rung
+#                                             e8279937d DONE  +883
 #       Shipped together because 2a already measured that neither pays alone:
 #       a seal with the lines still on disk sends the identical ops
 #       (`ops_missing_from` is author-blind over what the node HOLDS), and a
@@ -153,6 +155,11 @@ status    = "active"
 #           DERIVED and `routes_rail` reads the on-disk one, so the append
 #           door refuses this node's own key there. Pre-existing (2d), and it
 #           is the namespace K8 most wants retention for.
+#   4a' one roster reader — the daemon's own ring can seal
+#                                             3c9a41bd8 DONE   +355
+#       Closes (b) above: the append door reads the rail's own roster origin,
+#       so a DERIVED namespace no longer refuses this node's own key.
+#       +355 is the same MECHANICAL all-files number 4a's row carries.
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
@@ -361,11 +368,56 @@ status       = "open"
 # is not a ladder row (the lift fixes, the dead-dependency cut, the
 # kernel-types move) is real and is not counted here; hand-summing those three
 # in as well gives -4,424, and the difference is the point of having a rule.
+#
+# ── 2026-09-08 · MEASURED UNDER THE DECLARED INSTRUMENT ─────────────────────
+#
+# The instrument field was ALREADY the decision on record and no third one was
+# sought; what was broken is its PARSER, which required `  <sha>  DONE` and so
+# saw only 10 of the 21 DONE shas — dropping -1, G, S, 2a's second sha, 2b's
+# column padding and the continuation rows 2f/2d — and the 10 it did catch sum
+# to exactly the -4,505 recorded above, which is how the drop was confirmed.
+# The parser is repaired in place, the ladder rows for 3c/4a/4a' gained the
+# shas they never carried, and the repair moves the number the FAILING way, so
+# it is not an instrument tuned toward a pass (§18.6).
+#
+#   rung  sha         +added  -deleted       net    (.rs only, git numstat)
+#   -1   b704b845d         0         0         0
+#   0a   5cc9076fc        29    -1,891    -1,862
+#   0b   e9f20feec         0    -3,122    -3,122
+#   0c   cfa70611f        34         0       +34
+#   4a   e26414742        46       -23       +23
+#   1a   33b003a2e       149       -35      +114
+#   1b   ff63884f3     1,022      -948       +74
+#   4b   2a5b63325        67       -22       +45
+#   G    4759e7b04        90       -15       +75
+#   1c   b94d399eb        77       -65       +12
+#   1d   84e6fd1c0         6        -6         0
+#   1e   34d308b85       209       -32      +177
+#   S    dc9010181       381       -21      +360
+#   2a   b55b9179e       334       -38      +296
+#   2a   73a273dd1       143       -16      +127
+#   2b   4747d6fa6       184      -645      -461
+#   2f   bc600f424     1,135      -202      +933
+#   2d   ce42f893f     1,560      -340    +1,220
+#   3c   3554c409f         0         0         0
+#   4a   e8279937d     1,066       -35    +1,031
+#   4a'  3c9a41bd8       409       -67      +342
+#   ------------------------------------------------------
+#   TOTAL              +6,941    -7,523      -582
+#
+#   net -582  vs target -3,800  ->  BREACHED by 3,218.  Verdict: `failed`.
+#
+# `status` stays "open" because the loader's status set is the three-member
+# SCOPE set (open/deferred/descoped, scripts/co-lineage.py:71) while `failed`
+# is a VERDICT (`VERDICTS`, scripts/co-lineage.py:69) that lives in a
+# measurement row — a measured miss leaves a bar OPEN, it does not close it,
+# and `closes_a_bar = ["met", "descoped"]` (quality/initiative-bars.toml:148)
+# is the rule that says so.
 floor        = -4690.0
 floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
 direction    = "lower_is_better"
-instrument   = "git show --numstat --format=\"\" $(sed -n 's/^#   [0-9][a-z]*  .*  \\([0-9a-f]\\{9\\}\\)  DONE.*/\\1/p' quality/campaigns/cw-lift.toml) -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
+instrument   = "(bash) git show --numstat --format= $(sed -n '/── LADDER ─/,/^# G IS DONE/p' quality/campaigns/cw-lift.toml | grep DONE | grep -oE '[0-9a-f]{9}') -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
 kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. The extraction is costing more than the boundary is worth."
 
 [[bar]]
