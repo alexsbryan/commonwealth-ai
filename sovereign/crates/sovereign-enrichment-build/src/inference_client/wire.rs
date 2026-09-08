@@ -663,7 +663,10 @@ pub(super) async fn send_honouring_shed(
 /// template's own default in place: forcing `true` would switch thinking ON
 /// for a model whose template ships it off, which is not what a budget
 /// says.
-fn apply_thinking_controls(body: &mut serde_json::Map<String, serde_json::Value>, think_budget: u32) {
+fn apply_thinking_controls(
+    body: &mut serde_json::Map<String, serde_json::Value>,
+    think_budget: u32,
+) {
     body.insert("think_budget".into(), serde_json::json!(think_budget));
     let thinking = if think_budget == 0 {
         serde_json::json!({"type": "disabled"})
