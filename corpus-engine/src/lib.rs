@@ -64,6 +64,7 @@ pub mod registry;
 pub mod safety;
 pub mod sharding;
 pub mod snapshot;
+pub mod snapshot_compat;
 mod snapshot_restore;
 pub mod sovereign_config;
 pub mod stream_axes;
@@ -173,12 +174,13 @@ pub use sharding::{
     MergePhaseProgress, PartitionMergeReport,
 };
 pub use snapshot::{
-    default_snapshot_filename, judge_restored_snapshot, prebuilt_toml_snippet, publish_snapshot,
-    read_local_index_meta, read_manifest_from_archive, snapshot_enrichment_path,
-    snapshot_index_path, LocalIndexMetaSummary, PublishOptions, PublishOutcome, SnapshotAcceptance,
-    SnapshotManifest, SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX,
-    SNAPSHOT_MANIFEST_FILENAME, SNAPSHOT_SCHEMA_VERSION,
+    default_snapshot_filename, prebuilt_toml_snippet, publish_snapshot, read_local_index_meta,
+    read_manifest_from_archive, snapshot_enrichment_path, snapshot_index_path,
+    LocalIndexMetaSummary, PublishOptions, PublishOutcome, SnapshotManifest,
+    SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX, SNAPSHOT_MANIFEST_FILENAME,
+    SNAPSHOT_SCHEMA_VERSION,
 };
+pub use snapshot_compat::{judge_restored_snapshot, SnapshotAcceptance};
 pub use snapshot_restore::{restore_snapshot_archive, RestoreOutcome};
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use testing::{

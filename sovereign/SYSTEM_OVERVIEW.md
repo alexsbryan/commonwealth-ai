@@ -7325,6 +7325,51 @@ files currently sit above their entries inside the 50-line slack —
 `origin/main` worktree. `--tighten` banked the one real cut this session made:
 `judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
 
+### 10.1p Size — the publisher wiring one order was told to take (ei-6b-embedder-parity, 2026-09-08)
+
+ONE arch-gate row, deferred via this entry. The baseline bump is the seat's at
+merge; this order did not touch `quality/baselines/`.
+
+| File | Before | After | Delta | Why |
+|---|---|---|---|---|
+| `sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs` | 1338 | 1417 | +79 (slack 50) | `corpus snapshot publish` now records the embedder config the vectors were produced under, and `snapshot restore` now JUDGES what it extracted instead of installing it. |
+
+**What the lines bought**, in two halves.
+
+The publish half (~25 lines) resolves this host's `EmbedQuirks` through
+`DEFAULT_MANIFEST::embed_quirks_for_model` — the same manifest the daemon
+resolves its embed slot through, not a re-derivation from the model name — and
+writes it into the snapshot manifest, printing which configuration it recorded
+or saying plainly that it could not resolve one. Until this, a published
+snapshot carried a model NAME and nothing else, and a name is not an embedding
+space: `sep` and `wessex-hoard` were both built by `Qwen3-Embedding-0.6B-Q8_0`
+and their vectors sit 0.66 apart because one was pooled `Mean` (note
+500f1229). This is the half that gives `EmbeddingCompat::ConfigMismatch` a
+producer; without it the verdict was a gate with no input that could make it
+fire (ARCH §18.1).
+
+The restore half (~54 lines) is the larger of the two and it closes a seam
+rather than adding a feature. `snapshot restore --archive <path>` extracted
+whatever it was handed — no probe, no verdict — while the HuggingFace pull
+checked compatibility and probed. Two restore paths, one decider (§10.6). This
+site now resolves the local quirks, calls
+`corpus_engine::judge_restored_snapshot`, and on anything short of accepted
+REMOVES the extracted index rather than leaving it installed, printing the
+verdict sentence. Measured end to end with zero egress in
+`runs/ei6b-local-restore/20260908T062605Z`: a name-mismatched archive accepted
+by probe at cosine 0.9999, an exact-match archive accepted without one, and an
+archive whose declared pooling was flipped to `Mean` refused before extraction
+with both configurations printed and nothing left on disk.
+
+**Where the order's other growth went instead of here.** `corpus-engine/src/snapshot.rs`
+was the second arch-gate row on the first pre-push run (1601 → 2048, +447). It
+is not in the table above because the lines MOVED rather than being accepted:
+the acceptance decision, the compat verdict vocabulary and their tests are now
+a sibling module beside `snapshot_restore.rs`, and `snapshot.rs` came back to
+1595 — six lines below where main had it. That is ARCH §3.1 applied to a file
+that was already past 1200 before this order touched it, and it is a move of
+this order's own lines, not a refactor of anyone else's (§10.2).
+
 ### 10.1n Size — the twelfth atom kind, and a walk that grew a hold-out (ei-7a-raptor, 2026-09-04)
 
 Two arch-gate size findings, both from order ei-7a-raptor, both DEFERRED via
