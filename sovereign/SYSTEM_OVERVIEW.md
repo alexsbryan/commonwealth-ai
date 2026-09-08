@@ -3248,6 +3248,41 @@ walk. `atlas_navigate_ann` survives as a thin caller under that same
 unfiltered row, so the eval CLI and the evidence-site wiring tests keep the
 walk they were calibrated against.
 
+**`svrn atlas kind` is the classifier's instrument** (2026-09-08,
+`atlas_cmd/kind.rs`): it runs the race over a bank or given questions under a
+corpus's own map (or the pre-registered one, and says which) and prints
+winner, `sim`, `margin`, runner-up and — on an abstain — WHICH gate refused
+(`abstain:sim` / `abstain:margin` / `abstain:both`), plus the map's
+inter-centroid cosines as the background a `sim` is read against. Built
+because "the classifier abstains on 15 of 21 SEP questions" was a number read
+off a lane ledger; the instrument reproduced it exactly before anything was
+concluded from it (§18.4). What it then showed: the abstention is not SEP's.
+Under the pre-registered map and gates, wikipedia abstains 16/20, the literary
+thematic set 3/6, and "Who was Aldfrith?" fails the floor on wessex-hoard; the
+winner is `tension` on 19 of 21 SEP questions, and 7 of the 15 SEP abstains
+fail ONLY the 0.34 floor with margins of 0.059–0.082. The floor was
+`column_aware::HEADER_MIN_SIM`, reused unmeasured: a header against a header
+phrase is one length regime, a forty-word question against a four-word gloss
+is another, and the map's own centroids sit at 0.41–0.64 cosine from each
+other. Off-topic controls (nginx, a capital, a unit conversion) score
+0.16–0.24 and are refused by the MARGIN gate, not the floor — the margin is
+the discriminator, as the constant's own comment says.
+
+**The floor stays at 0.34 anyway, and the reason is measured in the other
+direction (§18.6).** At `SOVEREIGN_QUESTION_KIND_MIN_SIM=0.28` the instrument
+admits 11 more questions across the banks (SEP 6→13, wikipedia 4→7, literary
+thematic 3→4, every one onto `tension`) and no off-topic control — and the
+EI2 SEP lane, same binary, same bank, same `--isolate --limit 30`, reads
+**149/159 against 152/159** at the default floor, below the 151 bar. The
+seven newly classified walks run the tension row, which composes no summary
+source, where the unfiltered row they abstained onto composes `[atoms,
+raptor]` — `summaries_appended` 120 → 64. So the abstention is a floor
+artefact AND admitting those questions costs facts, and the two facts point
+at the same place: the pre-registered `tension` row's composition, not the
+gate. Widening a row to move a bank is tuning a navigation default to the
+bench (spec §7 step 5), so that is an operator decision on §2.2, recorded
+here rather than made. The instrument is what makes the decision cheap.
+
 **The evidence budget is spent ACROSS the ideas the walk reached, not down the
 first one.** `ground::resolve_evidence` fetches each request's realisable
 chunks into its own queue and then round-robins, one per request per lap, in

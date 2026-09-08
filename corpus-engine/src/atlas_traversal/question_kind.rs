@@ -193,13 +193,31 @@ impl QuestionKindClassifier {
         self.centroids.len()
     }
 
-    /// Nearest kind with its similarity and margin, gates ignored.
-    ///
-    /// `None` when the classifier is empty or the query embedding is a
-    /// different width from the centroids — a width mismatch is the query
-    /// having been embedded in another space, which is unanswerable rather
-    /// than a low score (principle 6).
-    pub fn best(&self, query_embedding: &[f32]) -> Option<KindScore> {
+    /// The two gates as this classifier holds them: `(min_sim, min_margin)`.
+    /// An instrument reporting an abstain names which gate refused, and it
+    /// reads the numbers from here rather than re-deriving them (§10.6).
+    pub fn gates(&self) -> (f32, f32) {
+        (self.min_sim, self.min_margin)
+    }
+
+    /// Cosine between every pair of centroids, highest first — how
+    /// confusable this map's kinds are with each other under this embedder.
+    /// The background a query's `sim` is read against: a winner below the
+    /// map's own inter-kind similarity is near nothing in particular.
+    pub fn inter_centroid_sims(&self) -> Vec<(QuestionKind, QuestionKind, f32)> {
+        let mut out = Vec::new();
+        for (i, (ka, ca)) in self.centroids.iter().enumerate() {
+            for (kb, cb) in self.centroids.iter().skip(i + 1) {
+                out.push((*ka, *kb, dot(ca, cb)));
+            }
+        }
+        out.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        out
+    }
+
+    /// Every kind's cosine against the query, best first — the whole race,
+    /// not just its winner. `None` for the same reasons as [`Self::best`].
+    pub fn race(&self, query_embedding: &[f32]) -> Option<Vec<(QuestionKind, f32)>> {
         let dim = self.centroids.first()?.1.len();
         if query_embedding.len() != dim || dim == 0 {
             return None;
@@ -212,6 +230,17 @@ impl QuestionKindClassifier {
             .map(|(k, c)| (*k, dot(&q, c)))
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Some(scored)
+    }
+
+    /// Nearest kind with its similarity and margin, gates ignored.
+    ///
+    /// `None` when the classifier is empty or the query embedding is a
+    /// different width from the centroids — a width mismatch is the query
+    /// having been embedded in another space, which is unanswerable rather
+    /// than a low score (principle 6).
+    pub fn best(&self, query_embedding: &[f32]) -> Option<KindScore> {
+        let scored = self.race(query_embedding)?;
         let (kind, sim) = scored[0];
         let runner_up = scored.get(1).map(|x| x.1).unwrap_or(0.0);
         Some(KindScore {
