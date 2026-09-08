@@ -211,8 +211,11 @@ kill         = "a second walk kept behind a flag is still a second walk -- ARCH 
 #   2. sovereign-core calls it
 #      (sovereign/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs:296)
 #   3. corpus-mcp calls it (corpus-mcp/src/tools.rs:429)
-#   4. NO second walk is DEFINED outside corpus-engine. The one that exists today
-#      is the RAPTOR late-carry injector: `apply_raptor_grounding`
+#   4. NO second walk is DEFINED outside corpus-engine -- unless its file routes
+#      through `ground::ground(` itself, which is §10.6's other legal outcome
+#      (the loser becomes a CALLER in the same commit) and reads 1.0 with the
+#      delegation named. The one that exists today is the RAPTOR late-carry
+#      injector, delegating to nothing: `apply_raptor_grounding`
 #      (sovereign/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:105)
 #      and its gate `raptor_late_inject_enabled`
 #      (sovereign/crates/sovereign-core/src/runtime/question_analysis.rs:875).
@@ -223,39 +226,59 @@ kill         = "a second walk kept behind a flag is still a second walk -- ARCH 
 # that definition goes (ei-5c). Read-tier -- four greps, no build, well under the
 # loader's 10 s cap, so no timeout_s.
 instrument   = '''python3 - <<'PY'
-import json, subprocess, sys
+import json, os, subprocess, sys
 from pathlib import Path
 
+# EI5_ROOT lets the four arms below be watched against a COPY of the tree, so
+# validating the instrument never edits the tree it measures. Default is the
+# repo, which is where co-lineage.py runs it.
+ROOT = Path(os.environ.get("EI5_ROOT", "."))
 def files(*roots):
     for r in roots:
-        for p in Path(r).rglob("*.rs"):
+        for p in (ROOT / r).rglob("*.rs"):
             yield p
 
 CE = ["corpus-engine/src"]
 OUTSIDE = ["sovereign/crates/sovereign-core/src", "corpus-mcp/src"]
-# The pinned second-walk symbols. A DEFINITION of either outside corpus-engine is
-# the second implementation; a mere mention (a doc comment, a test name) is not.
+WALK = "ground::ground("
+# The pinned second-walk symbols. A DEFINITION of either outside corpus-engine
+# is a second implementation UNLESS its own file routes through the one walk:
+# ARCH §10.6 lets the loser become a CALLER in the same commit, and that outcome
+# must read 1.0 as surely as deletion does. The delegation test is FILE-LEVEL,
+# not call-graph — a file that both called ground() and kept an independent
+# traversal would pass it. That is the proxy's limit, stated rather than hidden;
+# which arm fired is printed either way.
 SECOND = ("fn apply_raptor_grounding", "fn raptor_late_inject_enabled")
 
-reasons = []
-defs = [f"{p}" for p in files(*CE) if "pub async fn ground(" in p.read_text(errors="ignore")]
+reasons, notes = [], []
+defs = [str(p.relative_to(ROOT)) for p in files(*CE)
+        if "pub async fn ground(" in p.read_text(errors="ignore")]
 if len(defs) != 1:
-    reasons.append(f"corpus-engine defines the walk {len(defs)} times: {defs}")
-for root, name in ((OUTSIDE[0], "sovereign-core"), (OUTSIDE[1], "corpus-mcp")):
-    if not any("ground::ground(" in p.read_text(errors="ignore") for p in files(root)):
+    reasons.append(f"corpus-engine defines the walk {len(defs)} times: {sorted(defs)}")
+for root, name in zip(OUTSIDE, ("sovereign-core", "corpus-mcp")):
+    if not any(WALK in p.read_text(errors="ignore") for p in files(root)):
         reasons.append(f"{name} does not call ground::ground()")
 for p in files(*OUTSIDE):
     txt = p.read_text(errors="ignore")
-    for sym in SECOND:
-        if sym in txt:
-            reasons.append(f"a second walk is defined outside corpus-engine: {sym.split()[1]} in {p}")
+    hits = [sym.split()[1] for sym in SECOND if sym in txt]
+    if not hits:
+        continue
+    rel = p.relative_to(ROOT)
+    if WALK in txt:
+        notes.append(f"{', '.join(hits)} in {rel} delegates to ground::ground() "
+                     "— a caller, not a second walk")
+    else:
+        reasons.append(f"a second walk is defined outside corpus-engine: "
+                       f"{', '.join(hits)} in {rel}")
 
+for n in notes:
+    print("ei5:", n, file=sys.stderr)
 for r in reasons:
     print("ei5:", r, file=sys.stderr)
 sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 print(json.dumps({"value": 0.0 if reasons else 1.0, "commit": sha or None,
                   "artifact": "corpus-engine/src/enrichment/atlas/ground.rs",
-                  "reasons": reasons}))
+                  "reasons": reasons, "callers": notes}))
 PY'''
 
 [[bar]]
