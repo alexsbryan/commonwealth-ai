@@ -7504,15 +7504,21 @@ doc has drawn since ei-4-walk — three steps, and step 1 is separable in fact:
 
 | file | lines | question it answers |
 |---|---|---|
-| `corpus-engine/src/enrichment/atlas/ground.rs` | 731 | the walk: seed, expand, aggregate |
+| `corpus-engine/src/enrichment/atlas/ground.rs` | 756 | the walk: seed, expand, aggregate |
 | `corpus-engine/src/enrichment/atlas/ground/select.rs` | 143 | which row, from whose map, on what evidence |
-| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 337 | what the walk says about itself — ledger, degradations, map, result |
-| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 668 | the tests |
+| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 349 | what the walk says about itself — ledger, degradations, map, result |
+| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 710 | the tests |
 
 Two more small files landed beside `store.rs` for the same reason rather than
-growing it: `store/configures.rs` (the `Configures` derivation and its tests)
-and `store/derivation.rs` (the edge-derivation marker). `store.rs` ends inside
-slack against its 1,274 baseline.
+growing it: `store/configures.rs` (154, the `Configures` derivation and its
+tests) and `store/derivation.rs` (183, the edge-derivation marker and the
+`store_needs_build` clause's own both-directions test). `store.rs` ends at
+1,305 against a 1,274 baseline — +31, inside slack.
+
+All four numbers in the table above are measured at this branch's tip, not at
+the commit that made the split: the two later commits grew `ground.rs` by 25
+and its tests by 42, and a §10 row carrying the split-day figures would be
+citing a tree that no longer exists (§11.1).
 
 Every one under 800, so this is a real cut and not a shuffle: the oversized row
 disappears and NOTHING enters ARCH §3.1's approach band, which is the failure
@@ -7521,15 +7527,16 @@ Public paths are unchanged — `ground.rs` re-exports both children whole, so
 every `atlas::ground::WalkLedger` and `atlas::ground::select_walk` still
 resolves (§10.6: a re-export, never a twin).
 
-**`store.rs` — avoided rather than accepted.** The `Configures` derivation and
-its three tests are ~155 lines, and `store.rs` is already past the ceiling at
-1,274, so adding them there would have been a fifth `GREW past slack` row for a
-file this order has no business growing. They live in
-`corpus-engine/src/enrichment/atlas/store/configures.rs` (155) instead, which is
-also the better cut: the derivation answers one question no other part of the
-store write asks — which field is secretly an edge list — and the store's job is
-the CSR and the Lance table, not the vocabulary. `store.rs` ends at 1,292
-against a 1,274 baseline, +18, inside slack.
+**`store.rs` — avoided rather than accepted, twice.** The `Configures`
+derivation and its three tests are ~155 lines, and `store.rs` is already past
+the ceiling at 1,274, so adding them there would have been a fifth `GREW past
+slack` row for a file this order has no business growing. They live in
+`store/configures.rs` instead, which is also the better cut: the derivation
+answers one question no other part of the store write asks — which field is
+secretly an edge list — and the store's job is the CSR and the Lance table, not
+the vocabulary. The same thing happened again with the derivation marker's
+`store_needs_build` test, which took the file to 1,356 (+82); it moved to
+`store/derivation.rs`, beside the thing it tests.
 
 **The approach band: +1 line, and none of the +9 files.** `arch-gate` blocks
 with `approach band GREW: files 176 -> 185 (+9)` and `lines 171751 -> 180657
