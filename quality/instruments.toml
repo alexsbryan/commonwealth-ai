@@ -1309,6 +1309,7 @@ runs_in = ["run-if-stale"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "the daemon's own exit receipts, not supervisor.log", why = "the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08" },
+  { flag = "exit 2 (WARN) renders `failed`, deliberately", why = "the script's contract is 0 PASS / 1 FAIL / 2 WARN and the registry has four verdicts, none of them `warn`. Read on the exit code, a WARN is a FAIL — the safe direction, because the other one hides. It IS red on this host today, and that is the finding rather than noise: the daemon logged five exits in the last 24 hours. If it ever goes red on something that does not deserve a look, raise the script's warn bar; do not add a verdict to make the row quiet" },
   { flag = "a portable `date` and `stat`", why = "both readers were GNU-only and both failed SILENTLY on darwin: `stat -c %Y /proc/$PID` substituted now for the start time so every daemon read `up 0h0m`, and an empty 24h cutoff left the restart rate as `?`. A green from this report on a mac meant nothing before 2026-09-08" },
 ]
 
@@ -1320,6 +1321,75 @@ kind = "control"
 claim = "invariant"
 command = "scripts/daemon-soak-report.sh --self-test"
 cost_secs = 0.2
+enforcement = "tracked"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["run-if-stale"]
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+
+# ── The concurrency lane (product-defects-batch entry 3) ─────────────
+#
+# The one soak-family row that carries all three of what the family was
+# missing: a measured cost, a negative control watched both ways, and a venue
+# that fires without a human remembering. `daemon-soak.sh` cycles a daemon
+# that is otherwise ALONE — none of its seven cases is a concurrency case —
+# and two in-flight turns is the smallest multi-user shape there is.
+
+[[instrument]]
+id = "daemon-concurrency-soak"
+kind = "gate"
+claim = "invariant"
+command = "scripts/daemon-concurrency-soak.py --minutes 30"
+cost_secs = 1831.8
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["port-listening:9741", "corpus-installed:sep"]
+baseline = { kind = "none" }
+negative_control = "daemon-concurrency-soak-control"
+could_not_judge_exits = [2]
+runs_in = ["run-if-stale"]
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+load_bearing = [
+  { flag = "NO host-quiet precondition", why = "contention is the condition to measure under, not one to wait out. The 1-minute load is recorded per turn and reported as a covariate; a soak that only runs on a quiet box measures a state that never occurs in use" },
+  { flag = "the kernel corroboration on the jetsam class", why = "`log_shutdown_context` calls any SIGTERM above 24 GiB peak RSS a possible jetsam, and this daemon carries ~36 GiB three minutes after boot with `inference.resident = []` — so the daemon's own verdict fires on every operator stop here. Without `os_confirms_memory_kill` this lane scores a peer's `daemon stop` as the defect it was built to catch (ARCH §18.1: a guard asserting on a field the subject supplies)" },
+  { flag = "`could_not_judge_exits = [2]`", why = "a death this run cannot pin on the load is `sigterm_unattributed` and exits 2. Read as a FAIL it manufactures findings; read as a PASS it hides an outage. It is the fourth verdict and the registry has to know that" },
+  { flag = "three death detectors, not one", why = "the injected-SIGKILL control left `daemon_pid_at_start == daemon_pid_at_end` with ZERO pid transitions — the pidfile names a corpse until a replacement boots — and only the not-alive sampler caught it. The `/v1/models` probe is the third and the only one that can reach `listener_lost`; there is no `/healthz` on :9741 and the obvious `curl && ` probe reads its 404 as healthy" },
+]
+
+# The mutant. Breaks the daemon on purpose and requires the lane above to
+# notice AND to name the class right — `--expect-death crash` is a
+# pre-registration, so a detector that saw nothing fails the control rather
+# than passing it quietly.
+[[instrument]]
+id = "daemon-concurrency-soak-control"
+kind = "control"
+claim = "invariant"
+command = "scripts/daemon-concurrency-soak.py --minutes 6 --inject-death sigkill --inject-at 10 --expect-death crash"
+cost_secs = 283.1
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["port-listening:9741", "corpus-installed:sep"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["run-if-stale"]
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+load_bearing = [
+  { flag = "it RESTORES the daemon it killed", why = "launchd here declares `KeepAlive { SuccessfulExit = false }` and did NOT relaunch after an injected SIGKILL, so a control that does not put the daemon back leaves the operator's box without one — and a negative control nobody dares schedule is one that never runs. `--no-restore` opts out for a deliberate teardown" },
+]
+
+# The SECOND control, and the cheap one: the classifier against synthetic
+# receipts, offline, in 2.4s. It exists because the control above needs a
+# live daemon and three minutes, and a closed set that is only checked when
+# someone can afford to kill the daemon is a closed set nobody checks. It
+# caught a live bug on its first execution — the kernel oracle was matching
+# `log show`'s own argv and confirming every jetsam it was asked about.
+[[instrument]]
+id = "daemon-concurrency-soak-selftest"
+kind = "control"
+claim = "invariant"
+command = "scripts/daemon-concurrency-soak.py --self-test"
+cost_secs = 2.4
 enforcement = "tracked"
 fidelity = "F0"
 baseline = { kind = "none" }
@@ -1942,6 +2012,10 @@ why = "prints the mutant bank; adjudicates nothing"
 [[not_instrument]]
 key = "npm:report:ttfi:save-baseline"
 why = "a `cp` that promotes a report to a baseline — a ratchet MOVE, not a measurement"
+
+[[not_instrument]]
+key = "scripts/admission_shed_probe.py"
+why = "a paired MEASUREMENT harness, not a verifier. It drives two arms of an A/B, records the gate's counters and the daemon log's census, and returns 0 whatever it finds — there is no verdict in it to fail on, and registering it as a `by-hand` probe would mint exactly the latent row this registry exists to stop. It is censused because `DAEMON_RESILIENCE.md` P3.6 names it, and P3.6 names it because `daemon-concurrency-soak` IMPORTS its driver, question bank and client-side death kinds rather than re-deriving them (ARCH §19). The verdict-taking instrument over this shape is `daemon-concurrency-soak`; this is the ruler it was built from"
 
 [[not_instrument]]
 key = "scripts/daemon-supervised.sh"

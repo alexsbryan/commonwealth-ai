@@ -22,6 +22,7 @@
 | `clippy-json` | `cargo clippy --workspace --all-targets --message-format=json` | advisory | F0 | unmeasured | **no** |
 | `clock-gate` | `cargo xtask clock-gate` | hard | F0 | 0.96s | yes |
 | `concept-gate` | `cargo xtask concept-gate` | advisory | F0 | 5s | **no** |
+| `daemon-concurrency-soak` | `scripts/daemon-concurrency-soak.py --minutes 30` | tracked | F3 | 31m | **no** |
 | `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 1s | yes |
 | `desktop-check` | `npm run check` | hard | F0 | 10s | yes |
 | `desktop-invoke-coverage-gate` | `npm run report:coverage:gate` | tracked | F0 | unmeasured | yes |
@@ -117,6 +118,8 @@
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
 | `cli-journey-selftest` | `sovereign/scripts/tests/cli-journey-selftest.sh` | hard | F1 | 3s | yes |
+| `daemon-concurrency-soak-control` | `scripts/daemon-concurrency-soak.py --minutes 6 --inject-death sigkill --inject-at 10 --expect-death crash` | tracked | F3 | 5m | **no** |
+| `daemon-concurrency-soak-selftest` | `scripts/daemon-concurrency-soak.py --self-test` | tracked | F0 | 2s | **no** |
 | `daemon-soak-report-selftest` | `scripts/daemon-soak-report.sh --self-test` | tracked | F0 | 0.20s | **no** |
 | `desktop-judge-calibration` | `node tests/e2e/scripts/calibrate-judge.mjs` | hard | F3 | unmeasured | **no** |
 | `desktop-sabotage` | `npm run sabotage` | hard | F1 | unmeasured | yes |
@@ -138,10 +141,10 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
-| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
+| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
 | F4 | a supervised child process | `desktop-e2e-faults` |
 | F5 | the packaged boot chain a shipped install takes | `desktop-smoke`, `wizard-verify` |
 
@@ -163,7 +166,13 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `clippy-json` | — | `--message-format=json` | lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child |
 | `concept-gate` | — | `(advisory only)` | it relays `svrn code converge status`, which reads a SCIP graph that exists only on an indexed machine. On a clean checkout its only answers are COULD-NOT-JUDGE and NEVER-RAN, which is why it is in no CI job |
 | `contract-nightly` | `port-listening:9741` | — | — |
+| `daemon-concurrency-soak` | `port-listening:9741`<br>`corpus-installed:sep` | `NO host-quiet precondition` | contention is the condition to measure under, not one to wait out. The 1-minute load is recorded per turn and reported as a covariate; a soak that only runs on a quiet box measures a state that never occurs in use |
+|  |  | `the kernel corroboration on the jetsam class` | `log_shutdown_context` calls any SIGTERM above 24 GiB peak RSS a possible jetsam, and this daemon carries ~36 GiB three minutes after boot with `inference.resident = []` — so the daemon's own verdict fires on every operator stop here. Without `os_confirms_memory_kill` this lane scores a peer's `daemon stop` as the defect it was built to catch (ARCH §18.1: a guard asserting on a field the subject supplies) |
+|  |  | ``could_not_judge_exits = [2]`` | a death this run cannot pin on the load is `sigterm_unattributed` and exits 2. Read as a FAIL it manufactures findings; read as a PASS it hides an outage. It is the fourth verdict and the registry has to know that |
+|  |  | `three death detectors, not one` | the injected-SIGKILL control left `daemon_pid_at_start == daemon_pid_at_end` with ZERO pid transitions — the pidfile names a corpse until a replacement boots — and only the not-alive sampler caught it. The `/v1/models` probe is the third and the only one that can reach `listener_lost`; there is no `/healthz` on :9741 and the obvious `curl && ` probe reads its 404 as healthy |
+| `daemon-concurrency-soak-control` | `port-listening:9741`<br>`corpus-installed:sep` | `it RESTORES the daemon it killed` | launchd here declares `KeepAlive { SuccessfulExit = false }` and did NOT relaunch after an injected SIGKILL, so a control that does not put the daemon back leaves the operator's box without one — and a negative control nobody dares schedule is one that never runs. `--no-restore` opts out for a deliberate teardown |
 | `daemon-soak-report` | — | `the daemon's own exit receipts, not supervisor.log` | the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08 |
+|  |  | `exit 2 (WARN) renders `failed`, deliberately` | the script's contract is 0 PASS / 1 FAIL / 2 WARN and the registry has four verdicts, none of them `warn`. Read on the exit code, a WARN is a FAIL — the safe direction, because the other one hides. It IS red on this host today, and that is the finding rather than noise: the daemon logged five exits in the last 24 hours. If it ever goes red on something that does not deserve a look, raise the script's warn bar; do not add a verdict to make the row quiet |
 |  |  | `a portable `date` and `stat`` | both readers were GNU-only and both failed SILENTLY on darwin: `stat -c %Y /proc/$PID` substituted now for the start time so every daemon read `up 0h0m`, and an empty 24h cutoff left the restart rate as `?`. A green from this report on a mac meant nothing before 2026-09-08 |
 | `desktop-chaos` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `desktop-check` | — | `--fail-on-warnings` | without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI |
@@ -240,7 +249,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
 | `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
-| `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
+| `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
 | `smoke:2` | `inner-chaos-calibrate`, `quality-check` |
@@ -256,7 +265,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (67 of 92)
+### What CI does not run (70 of 95)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -272,6 +281,9 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `co-sweep` — scripts/run-if-stale.sh (header) · runs in: run-if-stale
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
+- `daemon-concurrency-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-concurrency-soak-control` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-concurrency-soak-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
 - `daemon-soak-report` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-soak-report-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
@@ -334,5 +346,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**92 instruments, 10 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
+**95 instruments, 11 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
 
