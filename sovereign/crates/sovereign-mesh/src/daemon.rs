@@ -2693,22 +2693,22 @@ impl EmbeddedDaemon {
             // (503) instead of answering an empty ledger, so leaving it out
             // on some paths would make "this daemon cannot keep a ledger"
             // and "your ring is empty" the same observation.
-            let rail = Arc::new(commonwealth_rail::RingRail::new(
+            app_state.install_ring_rail(Arc::new(commonwealth_rail::RingRail::new(
                 &self.data_dir,
                 Arc::new(identity_key.clone()),
-            ));
-            // The daemon's own namespace has no hand-written roster: its
-            // membership IS the roster, and the rail's one reader has to know
-            // that or the append route refuses this node's own key there.
-            // Installed here, beside the rail, so there is no boot order in
-            // which the rail exists and the source does not.
-            if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
-                tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
-            }
-            app_state.install_ring_rail(rail);
+            )));
         }
 
         // ── Order is load-bearing ─────────────────────────────────
+        //
+        // Checked, not remembered (§7): a `Weak` counts against
+        // `Arc::get_mut` exactly as a strong clone does, and on 2026-09-08
+        // one installed six lines above this comment — every `with_*`
+        // below silently no-op'd and the host served 503 on every chat
+        // turn while advertising twelve models. A daemon that cannot run
+        // its installers refuses to boot rather than booting without
+        // inference (§18.3).
+        app_state.installers_can_run().map_err(MeshError::Config)?;
         //
         // The `with_*` installers below mutate `AppStateInner`
         // through `Arc::get_mut`, which silently fails (with a
@@ -2778,6 +2778,20 @@ impl EmbeddedDaemon {
 
         // ── End of Arc::get_mut-sensitive block ───────────────────
         // Everything below is free to clone `app_state.inner`.
+
+        // The daemon's own ring namespace has no hand-written roster: its
+        // membership IS the roster, and the rail's one reader has to know
+        // that or the append route refuses this node's own key there. The
+        // source holds the state WEAKLY, and a Weak is a share as far as
+        // `Arc::get_mut` is concerned — which is why it is installed HERE,
+        // below the block, and not beside the rail. The rail's lookup is at
+        // read time, so nothing between the rail's install and this line
+        // could have read the wrong roster.
+        if let Some(rail) = app_state.ring_rail() {
+            if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
+                tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
+            }
+        }
 
         // Apply foreground-yield config from setup_config and install
         // the AppState-backed YieldHook on the corpus engine.

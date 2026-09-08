@@ -1882,6 +1882,29 @@ impl AppState {
     }
 
     /// Install the in-process inference service. Same Arc-get_mut
+    /// Whether the `with_*` installers below can still take effect.
+    ///
+    /// They mutate through `Arc::get_mut`, which refuses when ANY other
+    /// `Arc` or `Weak` to the inner state exists — and on refusal they log
+    /// and carry on, so the daemon boots with no local inference and every
+    /// chat turn 503s. The caller asks this ONCE before the block and refuses
+    /// to boot on `Err`, turning a silent outage into a sentence (§18.3).
+    pub fn installers_can_run(&self) -> Result<(), String> {
+        let strong = Arc::strong_count(&self.inner);
+        let weak = Arc::weak_count(&self.inner);
+        if strong == 1 && weak == 0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "AppState is already shared (strong={strong}, weak={weak}) before its \
+                 with_* installers ran; they would silently no-op and the daemon would \
+                 boot without local inference. Move whatever cloned or downgraded \
+                 `app_state.inner` below the Arc::get_mut-sensitive block in \
+                 EmbeddedDaemon::start_daemon"
+            ))
+        }
+    }
+
     /// contract as `with_mesh_mutation_hook` — call before cloning
     /// AppState into the HTTP servers.
     pub fn with_local_inference(
@@ -2555,6 +2578,34 @@ pub fn test_app_state() -> AppState {
         peers: vec![],
     };
     AppState::new(NodeId::from_u128(1), mesh)
+}
+
+#[cfg(test)]
+mod installer_guard_tests {
+    use super::test_app_state;
+    use std::sync::Arc;
+
+    /// A fresh state can run its installers; a state anyone has cloned OR
+    /// downgraded cannot, and says so. The `Weak` case is the one that
+    /// took local inference down on 2026-09-08 — a Weak reads as harmless
+    /// and `Arc::get_mut` disagrees.
+    #[test]
+    fn installers_refuse_a_state_that_is_already_shared_even_weakly() {
+        let state = test_app_state();
+        assert!(state.installers_can_run().is_ok());
+        let weak = Arc::downgrade(&state.inner);
+        let err = state.installers_can_run().unwrap_err();
+        assert!(err.contains("weak=1"), "{err}");
+        drop(weak);
+        assert!(
+            state.installers_can_run().is_ok(),
+            "dropping the Weak restores it"
+        );
+        let strong = state.clone();
+        let err = state.installers_can_run().unwrap_err();
+        assert!(err.contains("strong=2"), "{err}");
+        drop(strong);
+    }
 }
 
 #[cfg(test)]

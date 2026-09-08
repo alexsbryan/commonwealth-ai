@@ -160,7 +160,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // daemon that answers the models route but cannot decode. Both loopback;
     // neither carries estate content off the machine. LocalDaemon, not egress.
     ("sovereign/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 2),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
@@ -181,7 +181,10 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // Class::Mesh: peer traffic on the estate's own transport, our own auth,
     // custody class peer. It carries signed ring ops, never estate content to
     // a third party.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 5),
+    // 5 -> 9 (2026-09-08): four more inline `#[cfg(test)]` exchanges — the
+    // seal-prune pair (4a), then the derived-roster prune test and its
+    // control half (3c9a41bd8). Every one binds a loopback `internal_router`.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 9),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
