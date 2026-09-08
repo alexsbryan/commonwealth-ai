@@ -492,7 +492,12 @@ pod_mode() {
 # One place that asks the HOME daemon anything, so "which daemon is home" is
 # answered once (§10.6). Prints the raw /v1/mesh/status JSON; empty on failure.
 home_status() {
-  timeout 6 curl -s "http://127.0.0.1:$HOME_PORT/v1/mesh/status" 2>/dev/null || true
+  # `curl --max-time`, never `timeout N curl`: darwin ships NEITHER timeout(1)
+  # nor gtimeout, so the wrapper was `command not found`, this returned empty,
+  # and `up --mesh` refused to rent on every macOS host with the daemon right
+  # there answering 200. Same defect desktop-smoke.sh carried until 2026-07-28.
+  # Line ~257 already had the right form; these three were the stragglers.
+  curl -s --max-time 6 "http://127.0.0.1:$HOME_PORT/v1/mesh/status" 2>/dev/null || true
 }
 
 # The invite a joining pod needs, or a refusal. NOT the bare `join_key`: a bare
@@ -720,7 +725,7 @@ check)
     # tunnel port is the pod, and what it must read depends on the mode.
     if [ "$port" = "$HOME_PORT" ]; then want=home; else want="$mode"; fi
     printf "%5s  " "$port"
-    out=$(timeout 6 curl -s "http://127.0.0.1:$port/v1/mesh/status" 2>/dev/null \
+    out=$(curl -s --max-time 6 "http://127.0.0.1:$port/v1/mesh/status" 2>/dev/null \
       | HOME_MESH="$HOME_MESH" WANT="$want" python3 -c '
 import sys, json, os
 home, want = os.environ.get("HOME_MESH", ""), os.environ["WANT"]
@@ -833,7 +838,12 @@ down)
     before=$(home_pod_members)
     if url=$(vastai ssh-url "$id" 2>/dev/null); then
       hostport="${url#ssh://root@}"
-      code=$(timeout 40 ssh -n -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+      # Bounded by ssh's OWN knobs rather than timeout(1) (absent on darwin):
+      # ConnectTimeout caps the dial, ServerAlive* caps a session that hangs
+      # after connecting (~30s). Without this the leave silently scored 000 on
+      # macOS and the pod was destroyed WITHOUT leaving the mesh.
+      code=$(ssh -n -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+             -o ServerAliveInterval=5 -o ServerAliveCountMax=6 \
              -p "${hostport##*:}" "root@${hostport%%:*}" \
              "curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:9741/v1/mesh/leave" \
              2>/dev/null || echo 000)
