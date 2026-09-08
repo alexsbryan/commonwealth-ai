@@ -66,6 +66,7 @@ pub async fn run(args: &[String]) -> i32 {
         Some("roster") => run_roster(&args[1..]).await,
         Some("dev") => run_dev(&args[1..]).await,
         Some("log") => run_log(&args[1..]).await,
+        Some("seal") => run_seal(&args[1..]).await,
         _ => {
             eprintln!(
                 "usage:\n\
@@ -73,12 +74,14 @@ pub async fn run(args: &[String]) -> i32 {
                  \x20 svrn ring roster add <person> (--key <node-pubkey-hex> | --self) --ring <ns>\n\
                  \x20 svrn ring roster list --ring <ns>\n\
                  \x20 svrn ring dev <ns> [--dir <bundle-dir>] [--port <n>]\n\
-                 \x20 svrn ring log <ns> [--json]\n\n\
+                 \x20 svrn ring log <ns> [--json]\n\
+                 \x20 svrn ring seal <ns>\n\n\
                  new     scaffold a ring app (index.html, app.js, its reducer and its tests).\n\
                  roster  bind a person's name to the node key they sign with.\n\
                  dev     mint a rail grant and serve the app at http://127.0.0.1:4318/.\n\
                  log     the acts on this journal, in the order every node applies them,\n\
-                 \x20       and everything the rail could not account for.\n\n\
+                 \x20       and everything the rail could not account for.\n\
+                 seal    retire everything this node wrote before now, and delete it.\n\n\
                  A ring namespace is created by its first write — there is nothing to\n\
                  provision. Start with `roster add`, because an op signed by a key no\n\
                  roster claims is a gap rather than an act.\n\n\
@@ -616,4 +619,128 @@ mod tests {
             "the guard reads the ONE constant, not a second spelling of it"
         );
     }
+}
+
+// ── seal ─────────────────────────────────────────────────────
+
+/// `svrn ring seal <ns>` — retire everything this node has written, and delete
+/// it from the journal.
+///
+/// # Why the terminal has this and an app does not need it
+///
+/// Sealing is an ordinary act: it takes the next `seq`, it is signed by the
+/// node key, and it travels the same total order as every record. So an app
+/// posts `{"op":"seal"}` to the append door and needs nothing from here. What
+/// the terminal adds is the *operator's* reason to do it — a journal is bounded
+/// only by somebody deciding it has kept enough, and there is no cadence the
+/// rail could pick for you.
+///
+/// **That is deliberate, and it is the same refusal `sync.rs` makes about a
+/// truncation setting.** A local rule for when to seal would put a
+/// disagreement one layer up: two nodes on different cadences, each re-sending
+/// what the other has retired. A seal is a signed act in one order, so peers
+/// agree about it by the mechanism they already have.
+///
+/// # Who seals is not a policy question
+///
+/// It looks like one, and it is not. [`RailAct::Seal`](commonwealth_rail::RailAct::Seal)
+/// carries no actor, so sealing somebody else's history is unwritable — every
+/// alternative to self-sealing is already ruled out by the type. The worry that
+/// remains is that a node which goes quiet never seals and its history grows
+/// without bound, and it does not survive contact: an actor's history grows
+/// only when that actor WRITES, so a node that is offline contributes nothing
+/// further, and a node that is writing is by definition able to seal. Growth is
+/// bounded per actor by what that actor writes between its own seals, and
+/// nobody needs to seal on anyone else's behalf.
+///
+/// This goes over HTTP rather than opening the journal directly, and the reason
+/// is `seq`. The daemon serialises appends behind one writer lock per
+/// namespace; a second process picking the next sequence number from its own
+/// read would race it and both would land on the same `seq` — a fork, reported
+/// by every node forever. `roster add` writes a different file and has no such
+/// hazard, which is why it does open the directory.
+async fn run_seal(args: &[String]) -> i32 {
+    let Some(namespace) = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .map(String::as_str)
+    else {
+        eprintln!("ring seal: which ring? `svrn ring seal <namespace>`");
+        return 2;
+    };
+    if let Some(why) = refuse_derived_roster(namespace) {
+        eprintln!("ring seal: {why}");
+        return 2;
+    }
+    let port = daemon_client_port();
+    let url = format!("http://127.0.0.1:{port}/v1/rail/append?namespace={namespace}");
+    let client = match http_client() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("ring seal: {e}");
+            return 1;
+        }
+    };
+    let resp = match client
+        .post(&url)
+        .json(&serde_json::json!({ "op": "seal" }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ring seal: cannot reach the daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("ring seal: {}", error_text(resp).await);
+        return 1;
+    }
+    let v: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ring seal: bad response: {e}");
+            return 1;
+        }
+    };
+
+    let seq = v.get("seq").and_then(|s| s.as_u64()).unwrap_or(0);
+    println!("{namespace} — sealed at seq {seq}.");
+    // The seal landed either way; what follows is whether the deletion it
+    // authorises actually happened. Printing only the seal would leave an
+    // operator believing the journal shrank when it may not have.
+    match v.get("retired") {
+        Some(r) if r.get("refused").is_some() => {
+            let why = r
+                .get("refused")
+                .and_then(|w| w.as_str())
+                .unwrap_or("no reason given");
+            println!();
+            println!("  The seal is written. Nothing was deleted:");
+            println!("    {why}");
+            return 1;
+        }
+        Some(r) => {
+            let removed = r.get("removed").and_then(|n| n.as_u64()).unwrap_or(0);
+            let kept = r.get("kept").and_then(|n| n.as_u64()).unwrap_or(0);
+            let cleared = r.get("gaps_cleared").and_then(|n| n.as_u64()).unwrap_or(0);
+            println!("  retired {removed} line(s) from disk; {kept} remain.");
+            if cleared > 0 {
+                println!(
+                    "  {cleared} gap(s) went with them — lines the rail had refused, \
+                     below a floor their author has now retired."
+                );
+            }
+            if removed == 0 {
+                println!("  Nothing was below the floor yet. Peers keep what they hold.");
+            }
+        }
+        // An older daemon: the seal is real, the prune is not something this
+        // build of the daemon does. Say so rather than print a silent success.
+        None => println!("  This daemon did not report a prune — it predates one."),
+    }
+    println!();
+    println!("  Peers delete their copy when this seal reaches them, not before.");
+    0
 }

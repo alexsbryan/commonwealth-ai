@@ -311,6 +311,94 @@ impl<K: Journaled> Oplog<K> {
         Ok(())
     }
 
+    /// Replace the whole log with exactly `ops`, atomically.
+    ///
+    /// **The only shrinking operation this journal has**, and the reason it
+    /// exists is retention: an append-only file that can never lose a line
+    /// grows without bound, and "delete the old prefix" is not expressible as
+    /// an append. Every other method here adds; this one is how a tenant that
+    /// has *earned* the right to forget actually forgets. What earns it is the
+    /// tenant's business — the ring rail requires a signed seal
+    /// (`commonwealth_rail::RingJournal::compact`) — and this method takes no
+    /// opinion beyond writing the lines it was handed.
+    ///
+    /// # Atomic, because a half-written journal is worse than a long one
+    ///
+    /// The lines go to a sibling temp file, are fsynced, and are then renamed
+    /// over the log. `rename(2)` within a directory is atomic, so a reader
+    /// concurrent with this sees either the whole old log or the whole new
+    /// one, and a crash at any point leaves one of the two on disk rather than
+    /// a truncated file. The directory is fsynced afterwards so the rename
+    /// itself survives a power cut — without that the data is durable and the
+    /// name pointing at it is not, which on some filesystems leaves the log
+    /// missing entirely.
+    ///
+    /// The temp file is `<FILE>.compacting` in the same directory rather than
+    /// in a temp dir: `rename(2)` cannot cross a filesystem, and a data
+    /// directory on its own volume is the normal deployment here.
+    ///
+    /// # This does NOT serialise against [`Self::append`]
+    ///
+    /// `O_APPEND` makes concurrent appends safe against each other; it does
+    /// nothing for an append racing a rename, which would land the appended
+    /// line in the file that is about to be replaced and lose it. The caller
+    /// holds the writer lock for the read-decide-replace sequence — see
+    /// `RingJournal::compact`, which does exactly that.
+    pub fn replace_all(&self, ops: &[Op<K>]) -> Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(OplogError::Io)?;
+        }
+        let mut buf = String::new();
+        for op in ops {
+            let line = serde_json::to_string(op).map_err(|e| OplogError::Serialise {
+                log: K::LABEL,
+                source: e,
+            })?;
+            buf.push_str(&line);
+            buf.push('\n');
+        }
+        let tmp = self.path.with_extension("compacting");
+        {
+            let mut f = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&tmp)
+                .map_err(OplogError::Io)?;
+            f.write_all(buf.as_bytes()).map_err(OplogError::Io)?;
+            f.sync_data().map_err(OplogError::Io)?;
+        }
+        fs::rename(&tmp, &self.path).map_err(OplogError::Io)?;
+        // The rename is a directory change, and a directory change is not
+        // covered by the file's own fsync above.
+        if let Some(parent) = self.path.parent() {
+            // Not worth FAILING a compaction over: the replacement lines are
+            // already fsynced, so a lost rename leaves the pre-compaction log
+            // in place — long, and correct. But not worth swallowing either
+            // (ARCH §18.3): a host where this always fails is one where every
+            // compaction is provisional, and the only way anyone learns that
+            // is if it says so.
+            let flushed = fs::File::open(parent).and_then(|dir| dir.sync_all());
+            if let Err(e) = flushed {
+                tracing::warn!(
+                    log = K::LABEL,
+                    dir = %parent.display(),
+                    error = %e,
+                    "oplog: replaced, but the directory was not flushed — the \
+                     rename may not survive a power cut, in which case the \
+                     pre-compaction log comes back"
+                );
+            }
+        }
+        tracing::info!(
+            log = K::LABEL,
+            ops = ops.len(),
+            path = %self.path.display(),
+            "oplog: replaced"
+        );
+        Ok(())
+    }
+
     /// Every op in append order. A missing file is an empty log, not an error.
     ///
     /// Drops the skip list from [`Self::read_all_with_skips`]. That is the
@@ -474,6 +562,41 @@ mod tests {
             b.id.as_str()["other-".len()..],
             "the hashed input must include the prefix, not only the body"
         );
+    }
+
+    /// **The one shrinking operation, and it leaves nothing behind.** The
+    /// temp file is a sibling of the log, so a compaction that returned
+    /// without cleaning up would leave a `.compacting` file in every ring
+    /// directory — harmless, and exactly the kind of litter that later reads
+    /// as a crashed run.
+    #[test]
+    fn replace_all_swaps_the_whole_log_and_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        let ops: Vec<Op<Probe>> = ["a", "b", "c"]
+            .iter()
+            .map(|w| Op::new(touch(w), 7, "human:alex"))
+            .collect();
+        log.append_all(&ops).unwrap();
+
+        log.replace_all(&ops[2..]).unwrap();
+        assert_eq!(log.read_all().unwrap(), ops[2..].to_vec());
+        assert!(
+            !dir.path().join("probe_oplog.compacting").exists(),
+            "the temp file outlived the rename"
+        );
+
+        // Replacing with nothing is an EMPTY log, not a missing one: a
+        // namespace whose every line was retired still exists.
+        log.replace_all(&[]).unwrap();
+        assert!(log.path().exists(), "the file was unlinked, not emptied");
+        assert!(log.read_all().unwrap().is_empty());
+
+        // And it is still a journal afterwards — append picks up from the
+        // replaced file rather than from whatever was there before.
+        let next = Op::new(touch("d"), 8, "human:alex");
+        log.append(&next).unwrap();
+        assert_eq!(log.read_all().unwrap(), vec![next]);
     }
 
     #[test]

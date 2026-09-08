@@ -85,7 +85,16 @@ use crate::{RailAct, SignedOp};
 pub type Digest = BTreeMap<String, u64>;
 
 /// Where each actor's history still starts. `{actor_pubkey_hex → seq}`.
-pub(crate) type Floors = BTreeMap<String, u64>;
+///
+/// Public because retention has a second reader: [`admit`](crate::admit)
+/// reports the floors it used on [`Admission`](crate::Admission), and
+/// `commonwealth_rail::RingJournal::compact` deletes from THAT map rather than
+/// deriving its own. A prune keyed on a second reading of the seals would be
+/// two answers to "what is retired" with the destructive one unwatched
+/// (ARCH §10.6) — and the two would differ exactly where it is most expensive,
+/// because [`sealed_floors`] over raw holdings trusts a seal that admission
+/// refused.
+pub type Floors = BTreeMap<String, u64>;
 
 /// The ONE reading of a [`Seal`](crate::RailAct::Seal) (ARCH §10.6).
 ///

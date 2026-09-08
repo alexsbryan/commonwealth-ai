@@ -590,7 +590,7 @@ binary = "dispatcher"
 feature = "dev-tools"
 # quality — the curated 30-minute breakage check. `posture` above reads
 # artifacts other commands wrote; this one RUNS the lanes declared in
-# `quality/check-lanes.toml` and writes the table to
+# `quality/instruments.toml` and writes the table to
 # `target/quality-check/<stamp>/summary.json`. Two subcommands: `check` (the
 # runner, in the dispatcher, no model) and `lane` (one lane, exec'd into the
 # `sovereign-cli-llm` sibling because every lane drives inference, ingests a
@@ -1449,7 +1449,7 @@ capabilities = ["mcp add", "mcp list", "mcp tools"]
 id = "ring-deploy"
 title = "Deploy an app to exactly your trust ring, and have its state converge"
 doc = "sovereign/docs/MESHAPP_AUTHORING.md"
-capabilities = ["ring new", "ring roster add", "ring log"]
+capabilities = ["ring new", "ring roster add", "ring log", "ring seal"]
 
 [[experience]]
 id = "publish-to-others"
@@ -1751,6 +1751,35 @@ run = "ring log journey-ring"
 note = """A ring with a roster and no acts yet. `complete` is the load-bearing \
 word: an empty journal that could not say whether it was empty or merely \
 unreachable would be the failure the gap report exists to prevent."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "complete"
+[[journey.step]]
+run = "ring seal journey-ring"
+mutates = true
+note = """The write half of retention, driven end to end. A seal is an ordinary \
+act taking the author's next seq, so this also proves the append door signs \
+under the roster the DAEMON loaded — it cannot pass if step [1] wrote the \
+roster somewhere the daemon does not read."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "sealed at seq 0"
+[[journey.step]]
+run = "ring seal journey-ring"
+mutates = true
+note = """The delete half, and the only assertion in this lane that proves a \
+line actually left the disk: the second seal sits above the first, so the first \
+is below the new floor and is removed. `retired 0` here would mean the seal is \
+being written and nothing is being pruned — which is exactly what shipping the \
+read half alone looked like, and it exits 0 either way (ARCH §18.1)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "retired 1 line(s)"
+[[journey.step]]
+run = "ring log journey-ring"
+note = """A compacted node is not a broken one. `complete` here is the \
+assertion the whole sealed floor exists for: before it, a journal that had \
+deleted a retired prefix reported one gap per deleted op, forever."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "complete"
@@ -3440,7 +3469,7 @@ stdout_contains = "refresh: sovereign drift detect"
 
 [[journey.step]]
 run = "quality check --budget-secs 0"
-note = """The BUDGET RULE is the assertable half of `quality check`. Driving a real lane here is a ten-minute model run inside a journey lane, which is not a journey, and `--help` would assert only that a help string exists. With no budget every lane is could-not-judge NAMING the shortfall and the run exits 4 — nothing ran, so nothing was verified, which is never a pass (the same claim as `sovereign-test.sh`'s zero-test exit). The step also proves `quality/check-lanes.toml` parsed, since a lane has to be read before it can be skipped, and it costs about a second."""
+note = """The BUDGET RULE is the assertable half of `quality check`. Driving a real lane here is a ten-minute model run inside a journey lane, which is not a journey, and `--help` would assert only that a help string exists. With no budget every lane is could-not-judge NAMING the shortfall and the run exits 4 — nothing ran, so nothing was verified, which is never a pass (the same claim as `sovereign-test.sh`'s zero-test exit). The step also proves `quality/instruments.toml` parsed, since a lane has to be read before it can be skipped, and it costs about a second."""
 [journey.step.expect]
 exit = 4
 stdout_contains = "out of budget"

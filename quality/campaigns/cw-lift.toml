@@ -106,6 +106,53 @@ status    = "active"
 #       K8 proved six namespaces cannot leave the 10s push until the journal
 #       can forget. Opener is 2c, which Phase 2 unblocked by accident: 2ce
 #       refused the projection for having no consumer, and 2d then landed one.
+#   4a  the journal can forget — seal AND prune, one rung   DONE  +883
+#       Shipped together because 2a already measured that neither pays alone:
+#       a seal with the lines still on disk sends the identical ops
+#       (`ops_missing_from` is author-blind over what the node HOLDS), and a
+#       prune with no floor behind it produced 10,000 SequenceHoles. So the
+#       append route runs the prune in the same request when the act was a
+#       seal, and `retired` on the response says what went — a seal's 200 is
+#       otherwise identical whether a thousand lines left or the prune was
+#       refused.
+#       WRITE half: no new verb. `{"op":"seal"}` through the append door an
+#       app already posts to; `svrn ring seal <ns>` is the operator's, over
+#       HTTP because a second process picking its own next `seq` would race
+#       the daemon's writer lock and fork the actor.
+#       DELETE half: `RingJournal::compact` + `Oplog::replace_all` (the first
+#       shrinking operation this journal has ever had — temp file, fsync,
+#       rename, fsync dir).
+#       THE FLOOR IS `Admission::floors`, never re-derived (§10.6). A forged
+#       seal is refused by admission and would be believed by a naive re-read,
+#       so deleting by the ADMITTED floor is what stops one pushed line
+#       erasing a member's history on every node that received it.
+#       The prune VERIFIES ITSELF: the kept set is re-admitted and the rewrite
+#       refuses if a gap would be raised (§7 — encoded, not remembered). Five
+#       defects injected, each turning exactly the test that names it red;
+#       the negative control (`deleting_a_prefix_with_no_seal_behind_it_makes_
+#       holes`) is what stops the rest passing vacuously.
+#       "WHO SEALS" WAS NOT A POLICY QUESTION. `Seal` carries no actor, so
+#       sealing another's history is unwritable and every alternative to
+#       self-sealing is already ruled out by the type. The unbounded-growth
+#       worry about a node that goes quiet does not survive contact: an
+#       actor's history grows only when that actor WRITES, so an offline node
+#       contributes nothing further and a writing node can always seal. WHEN
+#       stays the operator's, for the reason sync.rs refuses a truncation
+#       setting.
+#       +883 is the MECHANICAL all-files number, per the instrument finding
+#       below — no hand curation. ~340 of it is tests and ~250 doc comment;
+#       the campaign's deletion bar breaches either way and that is the
+#       operator's open decision, not something to re-instrument here.
+#       NOT IN THIS RUNG, and named rather than silently omitted:
+#       (a) `ring_sync` does not compact after ingesting a peer's seal — it
+#           holds no roster or verifier, so a peer prunes only when something
+#           else admits. `RingJournal::compact` is already author-blind and
+#           prunes any actor's retired prefix, so this is a seam, not a
+#           mechanism.
+#       (b) `mesh-measurements` cannot be sealed from the CLI: its roster is
+#           DERIVED and `routes_rail` reads the on-disk one, so the append
+#           door refuses this node's own key there. Pre-existing (2d), and it
+#           is the namespace K8 most wants retention for.
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN

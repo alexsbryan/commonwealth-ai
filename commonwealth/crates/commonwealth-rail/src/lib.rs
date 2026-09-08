@@ -126,6 +126,31 @@ impl RingRail {
     }
 }
 
+// ── What a compaction did ────────────────────────────────────
+
+/// What one [`RingJournal::compact`] removed, and the floors it removed by.
+///
+/// A count and not a `()` because "the journal is now shorter" and "there was
+/// nothing to shorten" are different facts, and a caller that cannot tell them
+/// apart cannot report either honestly. `removed: 0` is a normal, successful
+/// answer — it is what every ring that has never sealed gets.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Compaction {
+    /// Lines deleted from the journal.
+    pub removed: usize,
+    /// Lines still on it afterwards.
+    pub kept: usize,
+    /// Gaps the journal had before and does not have now — refused lines that
+    /// sat below a floor their claimed author authenticated. Reported because
+    /// a gap vanishing is a change to what this node claims completeness over,
+    /// and a destructive path may not make that change silently (ARCH §18.3).
+    pub gaps_cleared: usize,
+    /// The AUTHENTICATED floors this prune deleted below — [`admit`]'s own map,
+    /// carried through rather than re-derived, so the number above and the
+    /// reason for it cannot disagree.
+    pub floors: Floors,
+}
+
 // ── The journal on disk ──────────────────────────────────────
 
 /// One namespace's append-only journal, plus its roster.
@@ -377,6 +402,188 @@ impl RingJournal {
             "ring rail: ingested a peer batch"
         );
         Ok(fresh.len())
+    }
+
+    /// Delete every line a seal has retired, and report what went.
+    ///
+    /// **This is the half that makes the rail's storage bounded.** A journal
+    /// that can only be appended to grows for as long as the ring is used, and
+    /// every peer holds a full copy of everyone's history forever; the seal
+    /// (rung S) taught the READ path to stop asking for a retired prefix, but
+    /// nothing until now removed one from disk. Both halves are needed and
+    /// neither is provable alone: a seal nobody prunes on saves no bytes, and a
+    /// prune with no seal behind it produced ten thousand
+    /// [`SequenceHole`](RailGap::SequenceHole)s in the ceiling measurement,
+    /// because every node then reported the retired range as missing forever.
+    ///
+    /// # The floor is admission's, never re-derived here
+    ///
+    /// An op is dropped when its `seq` is strictly below its own actor's floor
+    /// on [`Admission::floors`] — the map [`admit`] built from seals that
+    /// passed the signature and roster checks. A prune that read the seals
+    /// itself would be a second answer to "what is retired" (ARCH §10.6), and
+    /// the two would part company at the worst possible place: a forged seal is
+    /// refused by admission and would be believed by a naive re-read, so one
+    /// pushed line would erase a member's history from disk on every node that
+    /// received it. Deleting by the ADMITTED floor makes that unwritable rather
+    /// than checked.
+    ///
+    /// The seal itself is kept — the floor IS its `seq`, and the comparison is
+    /// strict — which is what keeps [`digest`]'s contiguous run non-empty for a
+    /// compacted actor. Dropping it would make this node claim it holds nothing
+    /// of that actor, and every peer would re-send the whole history back.
+    ///
+    /// It prunes **every** actor's retired prefix, not just this node's. A seal
+    /// is a statement by its author that binds whoever admits it, so a peer
+    /// stops storing what the author retired as soon as the seal reaches it.
+    /// Author-only pruning would bound the writer's disk and nobody else's.
+    ///
+    /// # Two things it will not delete
+    ///
+    /// **A journal with unreadable lines is not rewritten at all.**
+    /// [`SkippedLine`] carries a line number and a parse error, never the
+    /// bytes, so a line this build cannot parse cannot survive a rewrite — and
+    /// that includes a line from a NEWER format version, which is exactly the
+    /// content an old build must not be the one to destroy. Refusing is the
+    /// only honest option; silently dropping them would be a compaction that
+    /// deletes the future (ARCH §18.3).
+    ///
+    /// **An op a surviving correction names is kept regardless of the floor.**
+    /// Retired means "nobody will ask for this again", and a
+    /// [`Correct`](RailAct::Correct) still pointing at it says otherwise.
+    /// Without this clause, sealing over a corrected op turns its correction
+    /// into a permanent [`DanglingCorrection`](RailGap::DanglingCorrection) —
+    /// and the guard below would then refuse every future compaction of that
+    /// ring, so the growth this method exists to stop would quietly come back.
+    ///
+    /// # It verifies its own result before committing it (ARCH §7)
+    ///
+    /// The kept set is re-admitted and compared against the admission we
+    /// started from; if compaction would raise a gap the journal did not
+    /// already have, nothing is written and the refusal names the gap. This is
+    /// the invariant "a node may delete only what a floor covers" encoded so it
+    /// cannot be forgotten, rather than left as a rule a future caller has to
+    /// remember — and it costs one fold over an in-memory `Vec` that is by
+    /// construction shorter than the one already read.
+    ///
+    /// Gaps may DISAPPEAR, and that is not refused: a line that failed the
+    /// signature check below a floor its claimed author authenticated is one
+    /// nobody will ever want, and keeping it would let anyone grow a peer's
+    /// journal without bound by pushing junk under an old seal. The count is
+    /// reported on [`Compaction::gaps_cleared`] rather than left silent.
+    ///
+    /// The writer lock is held across read, decide and replace, because
+    /// `O_APPEND` orders appends against each other and does nothing for an
+    /// append racing the rename underneath it.
+    pub fn compact(
+        &self,
+        roster: &Roster,
+        verifier: &dyn RingVerifier,
+    ) -> Result<Compaction, RailError> {
+        let log = self.log();
+        let (ops, skipped) = log
+            .read_all_with_skips()
+            .map_err(|e| RailError::Io(e.to_string()))?;
+
+        if !skipped.is_empty() {
+            return Err(RailError::Rejected(format!(
+                "`{}` holds {} line(s) this build cannot read, and a rewrite would \
+                 destroy them — their bytes are not recoverable from the skip \
+                 report. Nothing was deleted. Run `svrn ring log {}` to see what \
+                 they are; a line from a newer format version means this node is \
+                 the old one and must not be the one to compact.",
+                self.namespace,
+                skipped.len(),
+                self.namespace,
+            )));
+        }
+
+        let before = admit(&ops, &skipped, roster, &self.namespace, verifier);
+        let unchanged = |floors: Floors, kept: usize| Compaction {
+            removed: 0,
+            kept,
+            gaps_cleared: 0,
+            floors,
+        };
+        if before.floors.is_empty() {
+            tracing::debug!(
+                namespace = %self.namespace,
+                held = ops.len(),
+                "ring rail: nothing sealed, nothing to compact"
+            );
+            return Ok(unchanged(before.floors, ops.len()));
+        }
+
+        // Derived ids, because that is what a correction resolves against —
+        // see `admit`. An op whose on-disk id was rewritten therefore does not
+        // match here; the guard below is what stops that becoming a deletion
+        // the correction would dangle over.
+        let referenced: std::collections::BTreeSet<OpId> = before
+            .ops
+            .iter()
+            .filter_map(|o| o.corrects.clone())
+            .collect();
+
+        let kept: Vec<Op<SignedOp>> = ops
+            .iter()
+            .filter(|op| {
+                let floor = before.floors.get(&op.actor).copied().unwrap_or(0);
+                op.kind.seq >= floor || referenced.contains(&op.id)
+            })
+            .cloned()
+            .collect();
+        let removed = ops.len() - kept.len();
+        if removed == 0 {
+            tracing::debug!(
+                namespace = %self.namespace,
+                held = ops.len(),
+                sealed = ?before.floors,
+                "ring rail: every line held is at or above its floor"
+            );
+            return Ok(unchanged(before.floors, kept.len()));
+        }
+
+        let after = admit(&kept, &[], roster, &self.namespace, verifier);
+        let raised: Vec<&RailGap> = after
+            .gaps
+            .iter()
+            .filter(|g| !before.gaps.contains(g))
+            .collect();
+        if !raised.is_empty() {
+            return Err(RailError::Rejected(format!(
+                "compacting `{}` would raise {} gap(s) the journal does not have, \
+                 so nothing was deleted. First: {}",
+                self.namespace,
+                raised.len(),
+                raised[0],
+            )));
+        }
+        let gaps_cleared = before
+            .gaps
+            .iter()
+            .filter(|g| !after.gaps.contains(g))
+            .count();
+
+        log.replace_all(&kept)
+            .map_err(|e| RailError::Io(e.to_string()))?;
+        // INFO, not debug: this is the one call in the rail that destroys
+        // something, and an operator reading logs after a shrinking journal
+        // needs the floors it happened under without turning debug on.
+        tracing::info!(
+            namespace = %self.namespace,
+            held = ops.len(),
+            removed,
+            kept = kept.len(),
+            gaps_cleared,
+            sealed = ?before.floors,
+            "ring rail: compacted"
+        );
+        Ok(Compaction {
+            removed,
+            kept: kept.len(),
+            gaps_cleared,
+            floors: before.floors,
+        })
     }
 
     /// The roster on disk. A missing file is an empty ring, not an error —

@@ -238,6 +238,17 @@ pub struct Admission {
     /// How many journal lines this node holds, including the ones that did
     /// not survive admission. `held - ops.len()` is what was refused.
     pub held: usize,
+    /// Where each actor's history starts, per the seals this admission
+    /// AUTHENTICATED. Empty when nothing is sealed, and an actor absent from
+    /// it starts at zero.
+    ///
+    /// Reported rather than kept private because it is the one input that
+    /// stops a gap being raised, so a reader asking why this answer claims
+    /// completeness cannot get there any other way. It is also what
+    /// `commonwealth_rail::RingJournal::compact` deletes by: the floor a prune
+    /// trusts has to be the floor admission trusted, or the destructive path
+    /// gets its own second reading of the seals (ARCH §10.6, §18.3).
+    pub floors: crate::sync::Floors,
 }
 
 impl Admission {
@@ -487,6 +498,7 @@ pub fn admit(
         ops: out,
         gaps,
         held: ops.len(),
+        floors,
     }
 }
 

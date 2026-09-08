@@ -116,6 +116,40 @@ fn journal_for(
     Ok((rail, journal))
 }
 
+/// Delete what a seal just retired, and say what happened either way.
+///
+/// **A seal and the prune it authorises are one act to the caller.** Rung S
+/// taught the read path to skip a retired prefix; nothing removed one from
+/// disk, so a seal on its own changed no bytes anywhere — and a prune with no
+/// seal behind it reports the deleted range as missing, forever, on every node.
+/// Neither half is worth anything alone, so an app that seals gets both from
+/// one request rather than a capability it has to remember to call.
+///
+/// **A refusal here is not an error on the append.** The seal is signed and
+/// fsynced by the time this runs; returning 500 would tell the app its seal
+/// failed when it is durably on the journal, and the next attempt would write a
+/// second one. So the outcome is reported in the body instead — with the
+/// refusal's own sentence, never as an absent field, because "nothing was
+/// retired" and "the prune was refused" are the two answers a caller most needs
+/// to tell apart (ARCH §18.3).
+fn retire(journal: &RingJournal, roster: &commonwealth_rail::Roster) -> serde_json::Value {
+    match journal.compact(roster, &commonwealth_rail::Ed25519Verifier) {
+        Ok(done) => serde_json::json!({
+            "removed": done.removed,
+            "kept": done.kept,
+            "gaps_cleared": done.gaps_cleared,
+        }),
+        Err(e) => {
+            tracing::warn!(
+                namespace = journal.namespace(),
+                error = %e,
+                "ring rail: the seal is written, the prune it authorises was refused"
+            );
+            serde_json::json!({ "refused": e.to_string() })
+        }
+    }
+}
+
 /// POST /v1/rail/append — sign and append one act to this caller's namespace.
 ///
 /// The body is the act alone. `seq`, the signature, the timestamp and the id
@@ -150,15 +184,22 @@ pub async fn append(
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
+    // Sealing is the one act with a second half. Read before the act moves.
+    let sealed = matches!(act, RailAct::Seal);
     match journal.append(act, rail.signer(), &roster) {
-        Ok(op) => Json(serde_json::json!({
-            "id": op.id,
-            "seq": op.kind.seq,
-            "actor": op.actor,
-            "ts_unix": op.ts_unix,
-            "namespace": journal.namespace(),
-        }))
-        .into_response(),
+        Ok(op) => {
+            let mut out = serde_json::json!({
+                "id": op.id,
+                "seq": op.kind.seq,
+                "actor": op.actor,
+                "ts_unix": op.ts_unix,
+                "namespace": journal.namespace(),
+            });
+            if sealed {
+                out["retired"] = retire(&journal, &roster);
+            }
+            Json(out).into_response()
+        }
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

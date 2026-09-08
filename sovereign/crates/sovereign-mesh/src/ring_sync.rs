@@ -307,6 +307,61 @@ impl ExchangeOutcome {
     }
 }
 
+/// Delete what a peer's seal just retired, on THIS node's disk.
+///
+/// **The half that actually bounds storage.** The author's own node prunes
+/// when it seals (`routes_rail::append`), but that bounds the writer's disk and
+/// nobody else's — every housemate would still keep a full copy of everyone's
+/// history forever, which is the growth this exists to stop. A seal is a signed
+/// statement in the one total order, so it binds whoever admits it, and
+/// `RingJournal::compact` is already author-blind.
+///
+/// **Only when a seal actually arrived**, and that gate is not frugality for
+/// its own sake: compaction re-admits, which is one Ed25519 verify per op
+/// (2a measured the fold at 38.4 µs/op, 94% of it that verify), and a floor
+/// cannot move without a seal. Running it every round would pay the journal's
+/// whole read cost every sixty seconds to discover nothing changed.
+///
+/// It sits INSIDE the chunk loop rather than after it, deliberately. The
+/// trigger is the seal and not the chunk, so a bootstrap pulling sixteen
+/// chunks pays this once per seal it actually meets — and compaction keeps
+/// that number at roughly one, since every seal but the highest is itself
+/// below the floor and goes. Hoisting it out would be cheaper only in a case
+/// the mechanism prevents, and would skip the prune entirely on every path
+/// where a later chunk fails after the seal has already landed.
+///
+/// **Fails closed, everywhere it can fail.** The floor comes from
+/// `Admission::floors`, so a seal this node cannot authenticate against the
+/// roster it holds retires nothing — a stale or partial roster under-prunes
+/// rather than over-prunes, and `mesh-measurements`, whose roster is DERIVED
+/// and whose on-disk file is therefore empty, prunes nothing at all. A refusal
+/// is logged and the exchange carries on: the ops are ingested and durable, and
+/// a journal that stayed long is a worse outcome than a stalled round, not a
+/// reason to make one.
+fn prune_what_the_peer_retired(namespace: &str, journal: &commonwealth_rail::RingJournal) {
+    let roster = match journal.roster() {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(namespace, error = %e, "ring sync: a seal arrived and the roster is unreadable, so nothing was pruned");
+            return;
+        }
+    };
+    match journal.compact(&roster, &commonwealth_rail::Ed25519Verifier) {
+        Ok(done) if done.removed > 0 => {
+            info!(
+                namespace,
+                removed = done.removed,
+                kept = done.kept,
+                "ring sync: a peer's seal retired lines on this node"
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            warn!(namespace, error = %e, "ring sync: the prune a peer's seal authorises was refused")
+        }
+    }
+}
+
 /// The chunked exchange with one peer address: two calls per chunk, repeated
 /// until neither side moves or [`MAX_CHUNKS_PER_EXCHANGE`] is spent.
 ///
@@ -349,6 +404,14 @@ async fn exchange(
             Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
         };
         out.pulled += pulled;
+        if pulled > 0
+            && first
+                .ops
+                .iter()
+                .any(|o| matches!(o.kind.act, commonwealth_rail::RailAct::Seal))
+        {
+            prune_what_the_peer_retired(namespace, journal);
+        }
 
         // The peer's OWN report of what it holds — the one progress signal
         // that cannot be faked by a count an older build did not send.
@@ -611,6 +674,75 @@ mod tests {
             journal.digest().unwrap(),
             "two nodes, one claim"
         );
+    }
+
+    /// **A peer's seal shortens THIS node's disk, in the round it arrives.**
+    ///
+    /// The author's own node prunes when it seals, and that bounds the writer's
+    /// disk and nobody else's — without this, every housemate keeps a full copy
+    /// of everyone's history forever and the retention rung buys one node's
+    /// storage instead of the ring's. A seal is a signed statement in the one
+    /// total order, so it binds whoever admits it.
+    ///
+    /// The assertion is on what is on DISK afterwards, not on a return value:
+    /// `exchange` reports ops moved, and a prune that silently did nothing
+    /// would leave every count in this test identical.
+    #[tokio::test]
+    async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let (mine, theirs) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (_me, journal, _r1) = node(mine.path(), &key, 3);
+        let (peer_state, peer_journal, _r2) = node(theirs.path(), &key, 3);
+        // The peer has sealed; we have not heard about it yet.
+        peer_journal
+            .ingest(&signed(&key, 3, RailAct::Seal))
+            .unwrap();
+        assert_eq!(journal.read().unwrap().0.len(), 3, "control: we hold three");
+
+        let url = serve(internal_router(peer_state)).await;
+        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+
+        assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
+        assert_eq!(out.pulled, 1, "one op came over, and it was the seal");
+        let held = journal.read().unwrap().0;
+        assert_eq!(held.len(), 1, "the retired prefix left our disk: {held:?}");
+        assert!(matches!(held[0].kind.act, RailAct::Seal));
+
+        // And a pruned node is not a broken one, on either side of the wire.
+        let admitted = journal.admit(&solo_roster(&key), &Ed25519Verifier).unwrap();
+        assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
+        assert_eq!(
+            journal.digest().unwrap(),
+            peer_journal.digest().unwrap(),
+            "two nodes, one claim"
+        );
+    }
+
+    /// The control for the test above. The identical exchange with the seal
+    /// replaced by an ordinary act pulls the same one op and deletes NOTHING —
+    /// so the prune there is the seal's doing and not something the sync path
+    /// does to any journal it touches.
+    #[tokio::test]
+    async fn an_ordinary_op_arriving_prunes_nothing() {
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let (mine, theirs) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (_me, journal, _r1) = node(mine.path(), &key, 3);
+        let (peer_state, peer_journal, _r2) = node(theirs.path(), &key, 3);
+        peer_journal
+            .ingest(&signed(
+                &key,
+                3,
+                RailAct::Record {
+                    payload: body_of_size(FIXTURE_BODY_BYTES),
+                },
+            ))
+            .unwrap();
+
+        let url = serve(internal_router(peer_state)).await;
+        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+
+        assert_eq!(out.pulled, 1);
+        assert_eq!(journal.read().unwrap().0.len(), 4, "nothing was retired");
     }
 
     /// The control for the test above: that journal really does need more
