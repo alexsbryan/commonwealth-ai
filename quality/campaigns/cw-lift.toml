@@ -543,7 +543,7 @@ floor        = -4690.0
 floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
 direction    = "lower_is_better"
-instrument   = "(bash) git show --numstat --format= $(sed -n '/── LADDER ─/,/^# G IS DONE/p' quality/campaigns/cw-lift.toml | grep DONE | grep -oE '[0-9a-f]{9}') -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
+instrument   = "git show --numstat --format= $(sed -n '/── LADDER ─/,/^# G IS DONE/p' quality/campaigns/cw-lift.toml | grep DONE | grep -oE '[0-9a-f]{9}') -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
 kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. The extraction is costing more than the boundary is worth."
 
 [[bar]]
@@ -899,7 +899,10 @@ floor        = 8.0
 floor_basis  = "measured 2026-09-08: before the profile, a daemon booted with [discovery] mdns=true and [iroh] enabled=true spawned all EIGHT members of the RunningServices closed set — mdns_advertise, mdns_browse, gossip, auto_ingest_collaborate, ring_sync, rail_kv_pump, iroh_endpoint, iroh_watchdog — with no runtime posture able to stop the middle four at all. The prior instrument (blocker classes, 3c) read 2.0 here and is retired at 1.0; its final reading is in the closeout block above."
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "sovereign-mesh/tests/main/local_only_boot.rs :: a_local_only_daemon_spawns_no_network_service — boot an EmbeddedDaemon with the local-only profile ON (and a config that asks for mDNS and iroh), then count RunningServices, the census start_daemon records at each spawn site. The number is that count; the test also asserts /v1/models answers and the mesh holds exactly one member, so a daemon made quiet by being made useless does not read as a pass. Its control (the_control_a_networked_daemon_spawns_every_gated_loop) boots the same code with the profile off and requires all four gated loops. Replaces the blocker-class count, which could only move by a decision this campaign already refused (class 2, iroh — see 3b)."
+instrument   = "./scripts/sovereign-test.sh --package sovereign-mesh --filter a_local_only_daemon_spawns_no_network_service >/dev/null 2>&1 && echo 0 || exit 4"
+# The value is RunningServices under the profile, which the test asserts is 0;
+# a failing run exits 4 (could-not-judge, read the log) rather than inventing 8.
+timeout_s    = 900
 kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines, 44 crossing refs) cannot be cut without a shim over ~300 lines. Then local and mesh state are genuinely fused and the honest deliverable is a RUNTIME PROFILE, not a package. Say that rather than shipping a shim and calling it a boundary."
 
 [[bar]]
