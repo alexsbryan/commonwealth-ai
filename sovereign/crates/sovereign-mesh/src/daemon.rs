@@ -207,9 +207,17 @@ use crate::state::MeshState;
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
     /// Where to persist `mesh.json` so the daemon can auto-resume on
-    /// app restart. Empty means persistence is off (the in-memory
-    /// test constructor).
+    /// app restart. Empty means persistence is off — but it is NOT the
+    /// in-memory constructor's spelling any more: the identity key and the
+    /// ring rail's journals are written under `data_dir` unconditionally,
+    /// and an empty path put both in the process's working directory. See
+    /// [`Self::in_memory`].
     data_dir: PathBuf,
+    /// Owned scratch root for [`Self::in_memory`], deleted with the daemon.
+    /// `None` for a daemon commissioned with a real `data_dir`. Behind a
+    /// mutex only because `new` hands back an `Arc` and the root is attached
+    /// after construction.
+    _scratch: std::sync::Mutex<Option<tempfile::TempDir>>,
     /// This daemon's own `Arc`, captured by `Arc::new_cyclic` at
     /// construction. It is what lets `start_daemon` build the three routers
     /// that are pure functions of the daemon — mesh, admin, reading — instead
@@ -549,6 +557,7 @@ impl EmbeddedDaemon {
         Arc::new_cyclic(|self_weak| Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir,
+            _scratch: std::sync::Mutex::new(None),
             self_weak: self_weak.clone(),
             services,
             setup_config: RwLock::new(setup_config),
@@ -560,11 +569,30 @@ impl EmbeddedDaemon {
         })
     }
 
-    /// A daemon with persistence disabled — no `mesh.json` is written and
-    /// `try_resume` always answers `false`. Tests that don't want to set up a
-    /// tempdir; production code uses [`Self::new`] with a real `data_dir`.
+    /// A daemon whose disk footprint dies with it. Tests that don't want to
+    /// set up a tempdir; production code uses [`Self::new`] with a real
+    /// `data_dir`.
+    ///
+    /// Until 2026-09-08 this passed an EMPTY `data_dir`, and "in memory" was
+    /// false in two ways nobody noticed for months: `start_daemon` writes the
+    /// identity key under `data_dir` unconditionally, and after cw-lift 4b the
+    /// rail's KV pump appends every store write to `<data_dir>/rings/<ns>/`
+    /// — so every in-memory daemon wrote `node_key`, `node_id` and then whole
+    /// ring journals into the crate directory `cargo test` runs from. The
+    /// daemon now OWNS a temp root and hands it to `new`, so the footprint is
+    /// real, private, and gone on drop. `try_resume` may now find a
+    /// `mesh.json` this same daemon wrote; a test that needs the "never
+    /// resumes" property asserts it against its own fresh daemon.
     pub fn in_memory(setup_config: SetupConfig, services: DaemonServices) -> Arc<Self> {
-        Self::new(PathBuf::new(), setup_config, services)
+        let scratch = tempfile::Builder::new()
+            .prefix("svrn-in-memory-")
+            .tempdir()
+            .expect("a temp root for an in-memory daemon");
+        let daemon = Self::new(scratch.path().to_path_buf(), setup_config, services);
+        // `new` returns the daemon already behind its `Arc`, so the scratch
+        // root is attached through the one field written after construction.
+        *daemon._scratch.lock().unwrap_or_else(|e| e.into_inner()) = Some(scratch);
+        daemon
     }
 
     /// What this daemon is and what its host gave it. Read by

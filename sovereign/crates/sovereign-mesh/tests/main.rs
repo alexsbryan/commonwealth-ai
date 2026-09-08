@@ -48,8 +48,6 @@ mod finish_reason_streaming;
 mod gossip_auth;
 #[path = "main/gossip_integration.rs"]
 mod gossip_integration;
-#[path = "main/replication_sender_census.rs"]
-mod replication_sender_census;
 #[path = "main/guest_lender_routing.rs"]
 mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]
@@ -108,6 +106,8 @@ mod plaintext_join_over_iroh_e2e;
 mod port_config;
 #[path = "main/reading_http_e2e.rs"]
 mod reading_http_e2e;
+#[path = "main/replication_sender_census.rs"]
+mod replication_sender_census;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
 #[path = "main/rotate_pre_split_guard.rs"]

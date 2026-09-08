@@ -1066,9 +1066,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                         daemon: Arc::clone(&deferred_daemon),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
-                    // gossip's `all_entries_for_gossip` enumeration. Without it the
-                    // daemon builds a private in-memory store and atlas data is
-                    // invisible across the mesh.
+                    // the store's outbox and ride the ring rail (cw-lift 4b; the
+                    // gossip enumeration this comment used to name was deleted at
+                    // 2e). Without it the daemon builds a private in-memory store
+                    // and atlas data is invisible across the mesh.
                     mesh_store: Arc::clone(&work_atlas_mesh_store),
                     convergence_recorder: Arc::clone(&convergence_recorder),
                 },
