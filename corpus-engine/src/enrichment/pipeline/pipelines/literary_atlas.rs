@@ -369,7 +369,28 @@ impl Pipeline for LiteraryAtlasPipeline {
             "Respond with a single JSON object per the schema in the system \
              message. Entities only. No prose, no <think> block.",
         );
-        Some(ChatPrompt::new(*PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
+        Some(
+            ChatPrompt::new(*PHASE1A_SEED_SYSTEM, user)
+                .with_phase_id("phase1_seed")
+                // GRAMMAR, NOT A REQUEST. The user turn above asks for "a
+                // single JSON object per the schema in the system message"
+                // and, unconstrained, that is a hope: `enrich build
+                // chaos-secret-agent` died on 2026-09-08 at
+                // `stage 1a (seed) response is not valid JSON: expected `:`
+                // at line 28 column 15`, taking all ten steps with it, on a
+                // dense opening chapter. `phase1a_seed_schema()` is defined
+                // IN THIS FILE (below) and `philosophy_atlas` has applied it
+                // to this very stage all along, recording the same failure —
+                // "without a schema produce prose-prefixed or truncated JSON
+                // that fails to parse". The schema was exported to a sibling
+                // and never applied at home (ARCH §7.6: never ask a model to
+                // guarantee what code can enforce).
+                .with_response_schema("phase1a_seed", phase1a_seed_schema())
+                // Same headroom as the sibling: a seed list can run 30+
+                // entities on a dense opening, and a truncated response is
+                // the other way this stage produces unparseable JSON.
+                .with_max_output_tokens(4096),
+        )
     }
 
     fn parse_seed_response(&self, response: &str) -> Result<Vec<SeedEntity>> {
