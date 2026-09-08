@@ -85,6 +85,34 @@ status    = "active"
 #       indicts the FACTOR, not the flows.
 #   1   corpus status: one decider (CorpusEngine::installed_indexes served);
 #       CLI corpus_cmd/status.rs scan_corpus_rows repointed; parity test.
+#       LANDED 2026-09-08, RESHAPED BY MEASUREMENT: the twin was never
+#       desktop-vs-CLI on the DECIDER - the desktop already consumed the
+#       canonical installed_indexes walk. The twin was the CLI's PRIVATE
+#       walk (its own scan_corpus_rows + corpus_readiness + row type)
+#       beside corpus-engine's. The move: the status-row assembly moved
+#       DOWN into corpus-engine (engine/status.rs, ~380 lines + the 8
+#       recorded-history tests moved with it + a 9th pinning the served
+#       row carries state_label beside state); the CLI's status.rs is now
+#       PRINTING ONLY (620 -> 107 lines); the daemon serves the rows at
+#       GET /internal/corpus/status (sovereign-mesh reading_http - NOT
+#       commonwealth-api, which must not grow a corpus-engine dep against
+#       cw-lift's edge bar). Tier-2 tokens: read_token_snapshot moved down
+#       to corpus_engine::enrichment::tokens (one schema, one reader
+#       below, one writer above in sovereign-enrichment-build). A third
+#       consumer found and repointed on the way: quality_lane_cmd/
+#       chat_ask.rs's chunk-count precheck.
+#       PARITY: loopback_parity::corpus_status_route_serves_the_one_
+#       deciders_rows - the route's bytes EQUAL the decider's bytes on a
+#       two-state fixture (ready + in-flight partition), sabotage-verified.
+#       CENSUS: cli-llm tests/corpus_status_one_decider.rs pins the
+#       decider is not re-derived in the CLI, sabotage-verified (its first
+#       draft was self-referential and failed on its own needles - the
+#       instrument demonstrably fires). Desktop's library composition
+#       stays in-process until rung 6 (sanctioned; it reads the canonical
+#       walk already). GOTCHAS recorded: loopback_parity is
+#       #![cfg(feature = "treesitter")]-gated - a solo -p run silently
+#       omits it; rows arrive in corpus_id order (BTreeMap), not fixture
+#       order.
 #   2   models: residency via GET /v1/models (CLI model_cmd's /status scrape
 #       repointed); one GGUF-scanner home (desktop models.rs
 #       scan_directory_flat vs the daemon-side scan).
@@ -162,8 +190,11 @@ id           = "sv-capability-twins"
 one_line     = "CLAIM: no capability the surfaces share is implemented twice"
 derives_from = "the duplication table verified 2026-09-08, file:line in the ladder rows"
 status       = "open"
-# Six twin families, measured 2026-09-08:
-#   corpus status      corpus_cmd/status.rs:128 scan_corpus_rows  vs  commands/corpus.rs:273 installed_indexes
+# Six twin families, measured 2026-09-08. FIVE remain after rung 1 (the
+# corpus-status twin deleted: the CLI's private walk, see the ladder row):
+#   corpus status      DELETED 2026-09-08 (rung 1) - one decider at
+#                      corpus_engine::engine::status, served at
+#                      /internal/corpus/status
 #   model residency    model_cmd.rs:19+/status scrape  vs  GET /v1/models + commands/models.rs:168 scan_directory_flat
 #   GGUF discovery     desktop scan_directory_flat  vs  the daemon-side scanner (one home decided at rung 2)
 #   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO
@@ -171,8 +202,8 @@ status       = "open"
 #   health report      health.rs:123 - its own HealthReport, NOT sovereign_contracts::health, by its own comment
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
-floor        = 6.0
-floor_basis  = "twin enumeration rung -1, 2026-09-08, the six families above with file:line"
+floor        = 5.0
+floor_basis  = "twin enumeration rung -1 (6 families), rung 1 deleted the corpus-status twin 2026-09-08: 5 remain, the list above with file:line"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
@@ -188,8 +219,12 @@ status       = "open"
 # inherited and RECORDED: a census sees known spellings, so each control
 # plants the spelling it knows. No new registries - CONCEPTS.toml rows and
 # per-family census tests only (the machinery guard).
-floor        = 0.0
-floor_basis  = "no sabotage controls exist yet, 2026-09-08"
+#   1. corpus status - LANDED 2026-09-08: tests/corpus_status_one_decider.rs
+#      (planted `fn corpus_readiness(` stub, watched red naming the rule,
+#      reverted) + the route parity test's own sabotage (label lie, red,
+#      revert).
+floor        = 1.0
+floor_basis  = "rung 1 landed the corpus-status control, 2026-09-08; 0 before"
 target       = 6.0
 direction    = "higher_is_better"
 instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"

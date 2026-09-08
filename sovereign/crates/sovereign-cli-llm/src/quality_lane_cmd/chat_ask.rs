@@ -684,7 +684,7 @@ async fn ingest_row(
     }
 
     let state = sovereign_enrichment_catalog::corpus_state::inspect_corpus_state(corpus);
-    let chunks = crate::corpus_cmd::status::corpus_chunk_count(
+    let chunks = corpus_engine::engine::status::corpus_chunk_count(
         &sovereign_enrichment_catalog::paths::index_root(corpus),
     );
     let searchable = crate::corpus_cmd::search::search_titles(corpus, &bank.search_probe, 5).await;

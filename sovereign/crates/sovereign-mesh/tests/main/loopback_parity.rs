@@ -334,3 +334,109 @@ async fn every_router_fails_closed_when_connect_info_absent() {
 fn _silence_unused() -> PathBuf {
     PathBuf::new()
 }
+
+// ── sv-surface rung 1: the corpus-status route serves the one decider ────
+//
+// The parity instrument for the corpus-status family: the route's bytes and
+// `scan_corpus_rows`'s bytes on the SAME fixture are equal, so the wire's
+// answer and the CLI's printed answer cannot drift apart. The CLI prints
+// from the same function (sovereign-cli-llm corpus_cmd/status.rs imports it
+// since rung 1); before the rung it walked the indexes dir privately while
+// the desktop walked it through `installed_indexes` — the §10.6 twin.
+
+/// One minimal READY corpus + one in-flight PARTITION, on disk, under the
+/// engine's index dir — the two states a status surface must never confuse
+/// (a partition named as a corpus is the 2026-08-12 regression recorded in
+/// the decider's tests).
+fn write_fixture_meta(dir: &std::path::Path, corpus_id: &str, ingestion_in_progress: bool) {
+    std::fs::create_dir_all(dir).unwrap();
+    let meta = serde_json::json!({
+        "corpus_id": corpus_id,
+        "corpus_name": format!("{corpus_id} (fixture)"),
+        "embedding_model": "qwen-embedding-0.6b",
+        "embedding_dimensions": 1024,
+        "mesh_sharing": false,
+        "license": "private",
+        "created_at": 1_786_548_248_u64,
+        "last_updated": 1_786_548_248_u64,
+        "schema_version": 3,
+        "is_shard": false,
+        "ingestion_in_progress": ingestion_in_progress,
+        "indexes_built": !ingestion_in_progress,
+    });
+    std::fs::write(
+        corpus_engine::Corpus::meta_in(dir),
+        serde_json::to_string_pretty(&meta).unwrap(),
+    )
+    .unwrap();
+}
+
+#[tokio::test]
+async fn corpus_status_route_serves_the_one_deciders_rows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+    write_fixture_meta(&indexes.join("ready-corpus"), "ready-corpus", false);
+    write_fixture_meta(
+        &indexes.join("building-corpus-partition-node-1"),
+        "building-corpus",
+        true,
+    );
+
+    // A daemon whose ServingCore carries a REAL engine over that fixture —
+    // through THE assembler, like every production site.
+    let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        indexes.clone(),
+        std::sync::Arc::new(|_t: &str| {
+            Box::pin(async { Ok(vec![0.0_f32; 8]) })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                >
+        }),
+    ));
+    let daemon = EmbeddedDaemon::in_memory(
+        SetupConfig::unconfigured(),
+        crate::common::desktop_services_with_engine(engine),
+    );
+    let addr = crate::common::spawn_router(reading_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/internal/corpus/status"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        200,
+        "the status route must answer on loopback"
+    );
+    let served: serde_json::Value = resp.json().await.expect("rows serialize as JSON");
+
+    // PARITY, pinned: the route's bytes are the decider's bytes on the same
+    // fixture — not merely "also correct", but THE SAME value.
+    let rows = corpus_engine::engine::status::scan_corpus_rows(&indexes).unwrap();
+    let printed: serde_json::Value = serde_json::to_value(&rows).unwrap();
+    assert_eq!(
+        served, printed,
+        "the route and `svrn corpus status` must serve one decider's rows"
+    );
+
+    // And the fixture's two states survive the wire with their labels —
+    // the spelling the CLI-contract journey greps for. (Rows arrive in
+    // `corpus_id` order — the decider's BTreeMap — so look them up rather
+    // than trusting fixture-write order.)
+    let by_id = |v: &serde_json::Value, id: &str| {
+        v.as_array()
+            .expect("rows serve as an array")
+            .iter()
+            .find(|r| r["corpus_id"] == id)
+            .unwrap_or_else(|| panic!("no row for {id} in {v}"))
+            .clone()
+    };
+    let ready = by_id(&served, "ready-corpus");
+    assert_eq!(ready["state_label"], "ready");
+    let building = by_id(&served, "building-corpus");
+    assert_eq!(building["state_label"], "building");
+}

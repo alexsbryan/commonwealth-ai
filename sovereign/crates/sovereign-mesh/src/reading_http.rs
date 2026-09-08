@@ -263,6 +263,7 @@ pub struct SectionRef {
 
 pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
+        .route("/internal/corpus/status", get(get_corpus_status))
         .route(
             "/internal/corpus/{corpus}/chunks/{chunk_id}",
             get(get_chunk),
@@ -286,6 +287,41 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
+
+/// GET /internal/corpus/status — the one status row, served (sv-surface
+/// rung 1).
+///
+/// The decider is `corpus_engine::engine::status::scan_corpus_rows` — the
+/// same function the CLI's `svrn corpus status` prints from, so the wire's
+/// answer and the terminal's answer cannot drift apart. Before this route
+/// the CLI walked the indexes dir privately and the desktop walked it
+/// through `installed_indexes` with different rules: the §10.6 twin the
+/// sv-surface campaign exists to delete. The row carries `state_label`
+/// beside the typed `state` so a shell over the route greps the SAME
+/// spelling the CLI prints.
+async fn get_corpus_status(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    match corpus_engine::engine::status::scan_corpus_rows(engine.index_dir()) {
+        Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "indexes_dir_unreadable",
+                "detail": e.to_string(),
+            })),
+        )
+            .into_response(),
+    }
+}
 
 async fn get_chunk(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,

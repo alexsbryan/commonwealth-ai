@@ -10,7 +10,7 @@ use corpus_engine::Corpus;
 use super::fmt::{dir_size_bytes, format_count, human_bytes};
 // The readiness decider moved to `status.rs` with `corpus status`; `--wait`
 // imports it rather than keeping a second reading of "ready" (§10.6).
-use super::status::{corpus_readiness, CorpusReadiness};
+use corpus_engine::engine::status::{corpus_readiness, CorpusReadiness};
 
 // ── Mesh subcommand implementations ──────────────────────
 
