@@ -297,6 +297,231 @@ impl SnapshotManifest {
     }
 }
 
+// ─── The ONE acceptance decision for a restored snapshot ────────────────────
+
+/// Chunks re-embedded when the manifest cannot settle compatibility on its own.
+pub const PREBUILT_PROBE_SAMPLE: usize = 16;
+
+/// Mean-cosine bar a re-embedding must clear against the snapshot's own stored
+/// vectors. The same model (any name/quant) re-embeds its own chunks to ≈1.0
+/// when the CONFIG matches too; a different pooling lands near 0.70 and a
+/// genuinely different model collapses toward 0 — so 0.92 separates "verified
+/// compatible" from "would poison the index".
+///
+/// ONE owner. It was `pub(crate)` in `engine/ingest_prebuilt.rs`, which is why
+/// `corpus-mcp/src/serve.rs` carried a hand-copied `0.92` with a comment
+/// apologising for it (ARCH §10.6). Import it.
+pub const PREBUILT_PROBE_THRESHOLD: f32 = 0.92;
+
+/// Whether a restored snapshot may be kept, and why.
+///
+/// Four outcomes, not two (ARCH §18.2). `CouldNotJudge` is the one that has to
+/// exist: a caller with no embedder cannot run the probe, and treating that as
+/// acceptance is how a mean-pooled archive lands silently.
+#[derive(Debug, Clone)]
+pub enum SnapshotAcceptance {
+    Accepted {
+        via: &'static str,
+        probe_cosine: Option<f32>,
+    },
+    Refused {
+        reason: String,
+        probe_cosine: Option<f32>,
+    },
+    CouldNotJudge {
+        reason: String,
+    },
+}
+
+impl SnapshotAcceptance {
+    pub fn is_accepted(&self) -> bool {
+        matches!(self, SnapshotAcceptance::Accepted { .. })
+    }
+
+    /// One sentence, the same on every restore path.
+    pub fn describe(&self) -> String {
+        match self {
+            SnapshotAcceptance::Accepted {
+                via,
+                probe_cosine: Some(c),
+            } => format!("accepted ({via}, probe cosine {c:.4})"),
+            SnapshotAcceptance::Accepted { via, .. } => format!("accepted ({via})"),
+            SnapshotAcceptance::Refused {
+                reason,
+                probe_cosine: Some(c),
+            } => format!("REFUSED (probe cosine {c:.4} < {PREBUILT_PROBE_THRESHOLD}): {reason}"),
+            SnapshotAcceptance::Refused { reason, .. } => format!("REFUSED: {reason}"),
+            SnapshotAcceptance::CouldNotJudge { reason } => format!("COULD-NOT-JUDGE: {reason}"),
+        }
+    }
+}
+
+/// Re-embed a sample of an index's own chunks and cosine them against the
+/// stored vectors. The empirical test of "is this the same embedding space".
+///
+/// Lifted out of `CorpusEngine::probe_embedding_space` so the decision below
+/// has ONE implementation reachable without an engine — the CLI's
+/// `snapshot restore --archive` has no `CorpusEngine` and, until 2026-09-07,
+/// therefore had no probe at all.
+pub async fn probe_embedding_space_at(
+    index_dir: &Path,
+    embed: &crate::types::EmbedFn,
+    batch_embed: Option<&crate::types::BatchEmbedFn>,
+) -> Result<f32> {
+    let index = crate::CorpusIndex::open(index_dir).await?;
+    let sample = index.sample_embeddings(PREBUILT_PROBE_SAMPLE).await?;
+    if sample.is_empty() {
+        return Err(Error::InvalidInput(
+            "prebuilt snapshot has no chunk vectors to probe".to_string(),
+        ));
+    }
+    let ids: Vec<u64> = sample.iter().map(|(id, _)| *id).collect();
+    let chunks = index.get_chunks(&ids).await?;
+    let text_by_id: std::collections::HashMap<u64, &str> =
+        chunks.iter().map(|c| (c.id, c.content.as_str())).collect();
+
+    // Pair (stored vector, chunk text) in one pass so the two lists stay
+    // index-aligned even when some sampled ids carry no text.
+    let mut stored: Vec<&Vec<f32>> = Vec::new();
+    let mut texts: Vec<String> = Vec::new();
+    for (id, vec) in &sample {
+        if let Some(t) = text_by_id.get(id) {
+            stored.push(vec);
+            texts.push((*t).to_string());
+        }
+    }
+    if texts.is_empty() {
+        return Err(Error::InvalidInput(
+            "prebuilt snapshot chunks carry no text to re-embed".to_string(),
+        ));
+    }
+
+    // The DOCUMENT embedder — the same side ingest used to produce these
+    // vectors, so the comparison is like-with-like.
+    let local: Vec<Vec<f32>> = if let Some(batch) = batch_embed {
+        (batch)(&texts).await?
+    } else {
+        let mut v = Vec::with_capacity(texts.len());
+        for t in &texts {
+            v.push((embed)(t).await?);
+        }
+        v
+    };
+
+    let mut sims = Vec::new();
+    for (l, s) in local.iter().zip(stored.iter()) {
+        if l.len() == s.len() && !l.is_empty() {
+            sims.push(crate::engine::ingest_prebuilt::cosine(l, s));
+        }
+    }
+    if sims.is_empty() {
+        return Err(Error::InvalidInput(
+            "no comparable probe vectors (dimension mismatch on every sample)".to_string(),
+        ));
+    }
+    Ok(sims.iter().sum::<f32>() / sims.len() as f32)
+}
+
+/// May this restored snapshot be kept?
+///
+/// THE one decider, called by BOTH restore paths — `CorpusEngine::ingest`'s
+/// HuggingFace pull and the CLI's `snapshot restore --archive <path>`. They
+/// used to differ: the pull probed and the local path did not, so a
+/// mean-pooled archive handed to `--archive` installed silently, which is the
+/// `sep` failure on the path with no deadline to catch it (ARCH §10.6).
+///
+/// The order is config first, probe second, because config is free and exact:
+/// a declared mismatch is refusable before anything is re-embedded, and the
+/// probe exists only for the archives that declare nothing.
+pub async fn judge_restored_snapshot(
+    manifest: &SnapshotManifest,
+    index_dir: &Path,
+    compat: EmbeddingCompat,
+    local_model: &str,
+    embed: Option<&crate::types::EmbedFn>,
+    batch_embed: Option<&crate::types::BatchEmbedFn>,
+) -> SnapshotAcceptance {
+    match compat {
+        EmbeddingCompat::DimsMismatch => SnapshotAcceptance::Refused {
+            reason: format!(
+                "snapshot is {}-dim and this host's `{local_model}` is not; vectors are not \
+                 comparable at all",
+                manifest.embedding_dimensions
+            ),
+            probe_cosine: None,
+        },
+        EmbeddingCompat::ConfigMismatch => SnapshotAcceptance::Refused {
+            reason: config_mismatch_sentence(manifest),
+            probe_cosine: None,
+        },
+        EmbeddingCompat::Exact => SnapshotAcceptance::Accepted {
+            via: "model name and dimensions match",
+            probe_cosine: None,
+        },
+        // The name differs and the manifest could not settle it. Only the
+        // vectors can answer now.
+        EmbeddingCompat::NameMismatch | EmbeddingCompat::ConfigUnknown => {
+            let Some(embed) = embed else {
+                return SnapshotAcceptance::CouldNotJudge {
+                    reason: format!(
+                        "snapshot names `{}` and this host names `{local_model}`; the \
+                         embedding space can only be settled by re-embedding a sample, and no \
+                         embedder was supplied to this restore path",
+                        manifest.embedding_model
+                    ),
+                };
+            };
+            match probe_embedding_space_at(index_dir, embed, batch_embed).await {
+                Ok(score) if score >= PREBUILT_PROBE_THRESHOLD => SnapshotAcceptance::Accepted {
+                    via: "embedding-space probe",
+                    probe_cosine: Some(score),
+                },
+                Ok(score) => SnapshotAcceptance::Refused {
+                    reason: probe_failure_cause(manifest),
+                    probe_cosine: Some(score),
+                },
+                Err(e) => SnapshotAcceptance::CouldNotJudge {
+                    reason: format!("the embedding-space probe could not run: {e}"),
+                },
+            }
+        }
+    }
+}
+
+/// Why a probe in the failing range is almost never a broken embedder.
+///
+/// A bare cosine sends the reader hunting through their endpoint. It is
+/// usually the archive: `sep` and `wikipedia` were published mean-pooled under
+/// a last-pooled stack and score ≈0.70 against any current host (note
+/// 500f1229). Name the degradation (ARCH §18.3).
+fn probe_failure_cause(manifest: &SnapshotManifest) -> String {
+    if manifest.embed_quirks.is_none() {
+        "the snapshot declares no embedder config — it was published before that manifest \
+         field existed, so pooling could not be compared before downloading. A different \
+         POOLING is the usual cause of a score in this range, and no re-embedding on this \
+         host can fix it: the corpus must be re-published from the current stack."
+            .to_string()
+    } else {
+        "the snapshot's declared embedder config MATCHED this host, so a failing probe is a \
+         genuine surprise — investigate the endpoint rather than re-publishing."
+            .to_string()
+    }
+}
+
+/// Both configurations, side by side, so the difference is readable.
+fn config_mismatch_sentence(manifest: &SnapshotManifest) -> String {
+    match manifest.embed_quirks.as_ref() {
+        Some(d) => format!(
+            "snapshot declares pooling={:?} normalize={:?} eos={:?}, which differs from this \
+             host's embedder. The same model NAME is not the same embedding space — `sep` and \
+             `wessex-hoard` were both built by Qwen3-Embedding-0.6B-Q8_0 and sit 0.66 apart \
+             because one is mean-pooled. This corpus must be re-published from the current stack.",
+            d.pooling, d.normalize, d.eos_token
+        ),
+        None => "declared embedder config differs from this host's".to_string(),
+    }
+}
+
 /// Tarball-internal path for the index subtree of a given corpus.
 pub fn snapshot_index_path(corpus_id: &str) -> String {
     format!("{SNAPSHOT_INDEX_PREFIX}/{corpus_id}")

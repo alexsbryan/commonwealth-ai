@@ -145,6 +145,8 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
     // off the async runtime. ~162 KB ⇒ milliseconds, but keep the hot path clean.
     let data_dir = paths::data_root();
     let archive_for_task = archive.clone();
+    let quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+        .embed_quirks_for_model("qwen-embedding-0.6b");
     let outcome = tokio::task::spawn_blocking(move || {
         corpus_engine::restore_snapshot_archive(
             &archive_for_task,
@@ -153,6 +155,11 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
             Some(STARTER_SHA256),
             "qwen-embedding-0.6b",
             corpus_engine::DEFAULT_EMBED_DIM,
+            // The config THIS build embeds with, from the same manifest the
+            // daemon and the snapshot publisher resolve through — not `None`,
+            // which would put the starter on the ConfigUnknown arm by default
+            // and accept a wrongly-pooled archive on the label alone.
+            quirks.as_ref(),
         )
     })
     .await

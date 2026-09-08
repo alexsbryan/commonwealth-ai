@@ -14,15 +14,7 @@ use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::progress::ProgressCallback;
 use crate::recipe::Recipe;
-use crate::snapshot::EmbeddingCompat;
 use crate::types::IngestResult;
-
-/// Sample size + mean-cosine threshold for the name-mismatch embedding
-/// probe. The same model (any name/quant) re-embeds its own chunks to
-/// ≈1.0; a genuinely different model collapses toward 0 — so 0.92 cleanly
-/// separates "verified compatible" from "would poison the index".
-const PREBUILT_PROBE_SAMPLE: usize = 16;
-const PREBUILT_PROBE_THRESHOLD: f32 = 0.92;
 
 impl CorpusEngine {
     /// Download and extract a prebuilt-snapshot archive into the
@@ -124,80 +116,63 @@ impl CorpusEngine {
             Err(e) => return Err(e),
         };
 
-        // The model NAME differed from the snapshot's. Names are unreliable
-        // (dir/stem/repo/quant all drift for the same model), so VERIFY the
-        // embedding space empirically before trusting the vectors: re-embed
-        // a sample of the snapshot's own chunks with the local document
-        // embedder and compare to their stored vectors.
-        // Both verdicts land here and both mean the same thing operationally
-        // — the name differs and the config could not settle it, so the probe
-        // is the evidence. They differ in what a FAILURE then means, which is
-        // why the refusal below reads `embedding_compat` rather than assuming.
-        if matches!(
-            outcome.embedding_compat,
-            EmbeddingCompat::NameMismatch | EmbeddingCompat::ConfigUnknown
-        ) {
-            let forced = std::env::var("SOVEREIGN_FORCE_PREBUILT")
-                .map(|v| !v.is_empty() && v != "0")
-                .unwrap_or(false);
-            if forced {
-                tracing::warn!(
-                    corpus_id = %corpus_id,
-                    snapshot_model = %outcome.manifest.embedding_model,
-                    local_model = %self.expected_embedding_model,
-                    "ingest: prebuilt model-name mismatch — SOVEREIGN_FORCE_PREBUILT set, skipping the embedding-space probe"
-                );
-            } else {
-                let verdict = self.probe_embedding_space(&outcome.index_dir).await;
-                let accepted = matches!(&verdict, Ok(score) if *score >= PREBUILT_PROBE_THRESHOLD);
-                if !accepted {
-                    match &verdict {
-                        Ok(score) => {
-                            // WHY, not just how far. A bare cosine sends the
-                            // reader looking for a broken embedder; the cause
-                            // is almost always that the snapshot predates the
-                            // manifest's `embed_quirks` field and was pooled
-                            // differently (ARCH §18.3 — name the degradation).
-                            let cause = if outcome.manifest.embed_quirks.is_none() {
-                                "the snapshot declares no embedder config (published before                                  that manifest field existed), so pooling could not be                                  compared before downloading — a different POOLING is the                                  usual cause of a score in this range, and no re-embedding                                  on this host can fix it: the corpus must be re-published                                  from the current stack"
-                            } else {
-                                "the snapshot's declared embedder config matched this host,                                  so a failing probe here is a genuine surprise and worth                                  investigating rather than re-publishing"
-                            };
-                            tracing::warn!(
-                                corpus_id = %corpus_id,
-                                snapshot_model = %outcome.manifest.embedding_model,
-                                local_model = %self.expected_embedding_model,
-                                probe_cosine = score,
-                                threshold = PREBUILT_PROBE_THRESHOLD,
-                                declared_embed_config = outcome.manifest.embed_quirks.is_some(),
-                                %cause,
-                                "ingest: embedding-space probe REFUSED the snapshot — discarding, full ingest"
-                            );
-                        }
-                        Err(e) => tracing::warn!(
-                            corpus_id = %corpus_id,
-                            error = %e,
-                            "ingest: embedding-space probe could not run on a name-mismatched snapshot — discarding, full ingest"
-                        ),
-                    }
-                    let _ = std::fs::remove_dir_all(&outcome.index_dir);
-                    if let Some(enr) = &outcome.enrichment_dir {
-                        let _ = std::fs::remove_dir_all(enr);
-                    }
-                    let _ = std::fs::remove_file(&archive_path);
-                    return Ok(None);
-                }
-                if let Ok(score) = verdict {
-                    tracing::info!(
-                        corpus_id = %corpus_id,
-                        snapshot_model = %outcome.manifest.embedding_model,
-                        local_model = %self.expected_embedding_model,
-                        probe_cosine = score,
-                        "ingest: embedding-space probe PASSED — accepting name-mismatched snapshot"
-                    );
-                }
+        // MAY WE KEEP IT? One decider, shared with the CLI's
+        // `snapshot restore --archive` path (ARCH §10.6). Until 2026-09-07
+        // this block WAS the decision and the local path had none, so an
+        // archive in the wrong embedding space installed silently there.
+        let forced = std::env::var("SOVEREIGN_FORCE_PREBUILT")
+            .map(|v| !v.is_empty() && v != "0")
+            .unwrap_or(false);
+        let acceptance = if forced {
+            tracing::warn!(
+                corpus_id = %corpus_id,
+                snapshot_model = %outcome.manifest.embedding_model,
+                local_model = %self.expected_embedding_model,
+                "ingest: SOVEREIGN_FORCE_PREBUILT set — accepting the snapshot WITHOUT judging its embedding space"
+            );
+            crate::snapshot::SnapshotAcceptance::Accepted {
+                via: "SOVEREIGN_FORCE_PREBUILT",
+                probe_cosine: None,
             }
+        } else {
+            crate::snapshot::judge_restored_snapshot(
+                &outcome.manifest,
+                &outcome.index_dir,
+                outcome.embedding_compat,
+                &self.expected_embedding_model,
+                Some(&self.embed),
+                self.batch_embed.as_ref(),
+            )
+            .await
+        };
+
+        // A snapshot that is not ACCEPTED is discarded — including
+        // `CouldNotJudge`, because an unjudged archive is exactly the silent
+        // substitution §18.3 forbids, and falling through to a full ingest is
+        // the honest outcome (slow, correct) rather than the fast wrong one.
+        if !acceptance.is_accepted() {
+            tracing::warn!(
+                corpus_id = %corpus_id,
+                snapshot_model = %outcome.manifest.embedding_model,
+                local_model = %self.expected_embedding_model,
+                declared_embed_config = outcome.manifest.embed_quirks.is_some(),
+                verdict = %acceptance.describe(),
+                "ingest: prebuilt snapshot NOT accepted — discarding, full ingest"
+            );
+            let _ = std::fs::remove_dir_all(&outcome.index_dir);
+            if let Some(enr) = &outcome.enrichment_dir {
+                let _ = std::fs::remove_dir_all(enr);
+            }
+            let _ = std::fs::remove_file(&archive_path);
+            return Ok(None);
         }
+        tracing::info!(
+            corpus_id = %corpus_id,
+            snapshot_model = %outcome.manifest.embedding_model,
+            local_model = %self.expected_embedding_model,
+            verdict = %acceptance.describe(),
+            "ingest: prebuilt snapshot accepted"
+        );
 
         // The archive is large (multi-GB); delete it once we've committed
         // to keeping the restored index.
@@ -226,73 +201,14 @@ impl CorpusEngine {
             docs_skipped: 0,
         }))
     }
-
-    /// Empirical embedding-space compatibility probe. Re-embeds a sample
-    /// of the restored index's own chunks with the LOCAL document embedder
-    /// and returns the mean cosine against their stored vectors: ≈1.0 when
-    /// the spaces match (same model, any name/quant), collapsing toward 0
-    /// for a genuinely different model. Errors when there's nothing to
-    /// probe (caller treats that as "don't trust").
-    async fn probe_embedding_space(&self, index_dir: &Path) -> Result<f32> {
-        let index = CorpusIndex::open(index_dir).await?;
-        let sample = index.sample_embeddings(PREBUILT_PROBE_SAMPLE).await?;
-        if sample.is_empty() {
-            return Err(Error::InvalidInput(
-                "prebuilt snapshot has no chunk vectors to probe".to_string(),
-            ));
-        }
-        let ids: Vec<u64> = sample.iter().map(|(id, _)| *id).collect();
-        let chunks = index.get_chunks(&ids).await?;
-        let text_by_id: std::collections::HashMap<u64, &str> =
-            chunks.iter().map(|c| (c.id, c.content.as_str())).collect();
-
-        // Pair (stored vector, chunk text) in one pass so the two lists
-        // stay index-aligned even when some sampled ids carry no text.
-        let mut stored: Vec<&Vec<f32>> = Vec::new();
-        let mut texts: Vec<String> = Vec::new();
-        for (id, vec) in &sample {
-            if let Some(t) = text_by_id.get(id) {
-                stored.push(vec);
-                texts.push((*t).to_string());
-            }
-        }
-        if texts.is_empty() {
-            return Err(Error::InvalidInput(
-                "prebuilt snapshot chunks carry no text to re-embed".to_string(),
-            ));
-        }
-
-        // Re-embed via the DOCUMENT embedder (the same path ingest used to
-        // produce these vectors) so the comparison is like-with-like.
-        let local: Vec<Vec<f32>> = if let Some(batch) = self.batch_embed.as_ref() {
-            (batch)(&texts).await?
-        } else {
-            let mut v = Vec::with_capacity(texts.len());
-            for t in &texts {
-                v.push((self.embed)(t).await?);
-            }
-            v
-        };
-
-        let mut sims = Vec::new();
-        for (l, s) in local.iter().zip(stored.iter()) {
-            if l.len() == s.len() && !l.is_empty() {
-                sims.push(cosine(l, s));
-            }
-        }
-        if sims.is_empty() {
-            return Err(Error::InvalidInput(
-                "no comparable probe vectors (dimension mismatch on every sample)".to_string(),
-            ));
-        }
-        Ok(sims.iter().sum::<f32>() / sims.len() as f32)
-    }
 }
 
 /// Cosine similarity of two equal-length vectors. Scale-invariant, so
 /// stored-vs-re-embedded vectors compare correctly regardless of any
 /// per-vector normalization difference.
-fn cosine(a: &[f32], b: &[f32]) -> f32 {
+/// One implementation, used by the shared restore decider in
+/// `crate::snapshot::probe_embedding_space_at` as well as here (ARCH §10.6).
+pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let na = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let nb = b.iter().map(|x| x * x).sum::<f32>().sqrt();

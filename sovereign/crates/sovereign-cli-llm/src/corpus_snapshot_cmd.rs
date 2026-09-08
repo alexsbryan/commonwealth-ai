@@ -1050,6 +1050,12 @@ async fn cmd_restore(args: &[String]) -> i32 {
         );
     }
 
+    // The embedder configuration THIS host would embed with — the same
+    // resolution the publisher and the daemon use, so a declared mismatch is
+    // refused here from the manifest, before anything is extracted.
+    let local_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+        .embed_quirks_for_model(&parsed.embedding_model);
+
     let outcome = match restore_snapshot_archive(
         &archive_path,
         &sovereign_data_dir,
@@ -1057,6 +1063,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
         expected_sha,
         &parsed.embedding_model,
         parsed.embedding_dim,
+        local_quirks.as_ref(),
     ) {
         Ok(o) => o,
         Err(e) => {
@@ -1065,8 +1072,46 @@ async fn cmd_restore(args: &[String]) -> i32 {
         }
     };
 
+    // MAY WE KEEP IT? The same decider `CorpusEngine::ingest`'s HuggingFace
+    // pull runs (ARCH §10.6). Until 2026-09-07 this path had NO acceptance
+    // decision at all: `--archive` extracted whatever it was handed, so an
+    // archive in the wrong embedding space installed silently — the `sep`
+    // failure, on the one path with no deadline to catch it.
+    //
+    // The probe needs an embedder. This command has no engine, so it builds
+    // the same HTTP one `corpus-mcp` uses against the local daemon; if that is
+    // not up, the verdict is COULD-NOT-JUDGE by name and the restored index is
+    // REMOVED rather than left in place unjudged (§18.3).
+    let embed_base = sovereign_contracts::setup_config::client_daemon_base();
+    let embed: corpus_engine::EmbedFn = corpus_engine::embed_http::http_embed_fn(
+        format!("{}/embeddings", embed_base.trim_end_matches('/')),
+        parsed.embedding_model.clone(),
+    );
+    let acceptance = corpus_engine::judge_restored_snapshot(
+        &outcome.manifest,
+        &outcome.index_dir,
+        outcome.embedding_compat,
+        &parsed.embedding_model,
+        Some(&embed),
+        None,
+    )
+    .await;
+    if !acceptance.is_accepted() {
+        eprintln!();
+        eprintln!("✗ Restore NOT accepted: {}", acceptance.describe());
+        eprintln!(
+            "  The archive extracted, but its vectors are not in the space this host embeds \
+             in, so it has been removed rather than left installed."
+        );
+        let _ = std::fs::remove_dir_all(&outcome.index_dir);
+        if let Some(enr) = outcome.enrichment_dir.as_ref() {
+            let _ = std::fs::remove_dir_all(enr);
+        }
+        return 1;
+    }
+
     println!();
-    println!("✓ Restored");
+    println!("✓ Restored — {}", acceptance.describe());
     println!("  index_dir:    {}", outcome.index_dir.display());
     if let Some(p) = outcome.enrichment_dir.as_ref() {
         println!("  enrichment:   {}", p.display());

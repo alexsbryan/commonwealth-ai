@@ -8,7 +8,7 @@ mod expand;
 mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
-mod ingest_prebuilt;
+pub(crate) mod ingest_prebuilt;
 pub(crate) mod yield_gate;
 
 pub mod reindex;
