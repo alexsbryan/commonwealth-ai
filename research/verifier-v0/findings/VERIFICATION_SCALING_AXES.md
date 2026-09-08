@@ -567,3 +567,104 @@ section into a number.
 
 Reproduce: `scripts/refinement_loop_sim.py` (pre-registration + P1/P2/P3) and
 `scripts/refinement_loop_diag.py` (one-step check, mechanism, δ sweep).
+
+## 10. δ measured — damage barely happens, so detectability was the wrong question
+
+**2026-09-08, same session as §8/§8.1/§9.** §9 closed by naming δ (how
+detectable revision damage is) as the decision-relevant unknown, and swept it
+because it had never been measured. It is now measured, and the sweep was
+asking about the wrong term.
+
+Data: `findings/DELTA_MEASUREMENT.json`. Scripts: `measure_delta.py`
+(revisions + witness), `delta_witness.py`, `judge_revisions.py`,
+`delta_report.py`. Raw runs under `runs/delta/` (gitignored, per the
+heavy-asset convention).
+
+### Two instrument defects fixed first, either of which alone would have produced a wrong δ
+
+**D1 — the false-alarm population was 93% `multi_hop_conjunction`.** Setting
+tau over ALL grounded claims let one known architectural defect (the gate
+judges chunks separately, ~99.5% FA on cross-chunk synthesis, §6) select the
+population a refinement loop would act on. On this study's own denominator —
+grounded *excluding* multi_hop, **n=965, reproduced exactly** — the population
+is 78 `verbatim` + 115 `reframe`, and rung-1000's catch on non-multi_hop
+fabrications is **99.9–100%**, not the 79–93% §8.1 reported over the whole
+bank. *(§8.1's numbers are correct as stated — they name their denominator —
+but they are not comparable to Addendum 4/5, which exclude multi_hop.)*
+
+**D2 — the mechanical witness was mostly firing on artifacts.**
+`control_mine.asserted_values` was written for chaos-transcript prose. On SEP
+text three classes fire spuriously, each with a worked example in
+`delta_witness.py`: values carried over from the original claim (`John Dewey`,
+on a revision whose only edit was `richard`→`Richard`); sentence-initial
+capitalised runs (`Despite Avicenna`, `Under Mayo`); and the quote regex
+matching between two possessive apostrophes. Correcting the three took the
+damage rate from **10.7% to 1.6%**. Both are reported (§18.6).
+
+Instrument validation that passed: a **laziness control** — the reviser echoed
+**0/6** true defects unchanged, and repaired them correctly (restoring "Best
+Interests standard", "OI", "states of composite systems"), so its declining to
+change a false alarm is judgement, not inertia. And re-scored originals
+reproduce recorded margins to within 0.04–0.52 on a ±18 scale.
+
+### The result
+
+Operating point derived **in-run** (tau from 250 fresh grounded, catch from 100
+fresh ungrounded; §9's stored tau is a max over a chunk prefix — early exit
+fired on 901/2510 rows — so it does not transfer): **tau +15.629, FA 20.0%,
+catch 100.0%.**
+
+| quantity | value |
+|---|---|
+| originals still flagged in-run | 188/193 = 97.4% |
+| **p_damage** (revision asserts a value absent from evidence AND from the original) | **2/122 = 1.64%**, CI [0.45%, 5.78%] |
+| reviser declined (returned unchanged) | 9/193 = 4.7% |
+| **δ** | **COULD NOT JUDGE** — 2 damaged items, 0 of them flagged |
+| revisions still flagged (loop churns) | 80/193 = 41.5%, CI [34.7%, 48.5%] |
+| paired margin shift | median **+3.11**, mean +6.77 |
+| revisions that escaped the flag | 108/188 |
+
+**δ is unmeasurable, and the reason is the finding.** §9 assumed
+`p_damage = 1.0` — that acting on a false alarm always damages the claim. It is
+**~60× smaller than that**. Recomputing §9's attractor with the measured rate:
+
+| damage rate `d` | b* at FA=20% |
+|---|---|
+| 1.0 (§9's assumption) | 16.67% |
+| **1.64% (measured)** | **0.33%** |
+| 5.78% (CI upper bound) | 1.14% |
+
+Against a 9% starting defect rate the loop is safe at every operating point by
+more than an order of magnitude, and the conclusion survives the CI's
+pessimistic end.
+
+### The corrected law, and the constraint that actually binds
+
+> **The reviser is a second gate.** Handed a claim that is in fact grounded and
+> told it is unsupported, the model either declines to change it (4.7%) or
+> rewrites it while keeping it grounded. Damage is rare because the revision
+> step is itself a competent judge of the evidence — an unmodelled safety
+> mechanism that sits UPSTREAM of the self-correction §9 proposed.
+
+§9 predicted convergence and got it, but for the wrong reason: not damage being
+re-detected, but damage not occurring. Both give convergence; only one is true.
+
+**What binds instead is termination, not degradation.** 41.5% of revisions are
+still flagged after one pass, while moving a median +3.11 toward grounded. So
+the loop spins on the false-alarm population without hurting it — its cost is
+unbounded where its quality is safe. **For a gate whose output is an
+annotation, that is the right trade; for one that blocks a turn, the budget is
+now the binding constraint, and it is a latency question rather than a quality
+one.**
+
+### Scope
+
+- One operating point (FA=20%), one bank, one reviser (the daemon's resident
+  4B, not the 35B primary a production turn would synthesise with).
+- **The witness is sound, not complete.** It sees value-anchored damage —
+  names, numbers, quoted titles. Relational damage (a negation flip, a subtle
+  scope shift) is invisible to it, so **1.64% is a LOWER BOUND**, and this is
+  the most likely way the result is too optimistic. Measuring relational damage
+  needs a labeller this session did not have.
+- 122 of 193 revisions were witness-checkable; the other 71 assert no
+  extractable value.

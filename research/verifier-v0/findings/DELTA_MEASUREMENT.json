@@ -1,0 +1,101 @@
+{
+  "measured": "2026-09-08",
+  "bank": "heldout-sep constructed, decontaminated (2494)",
+  "operating_point": {
+    "fa_target": 0.2,
+    "tau_in_run": 15.6295,
+    "fa_actual": 0.2,
+    "catch": 1.0,
+    "n_cal_grounded": 250,
+    "n_cal_ungrounded": 100,
+    "denominator": "grounded EXCLUDING multi_hop_conjunction (HEADROOM_STUDY convention, n=965)"
+  },
+  "population": {
+    "n": 193,
+    "kinds": {
+      "verbatim": 78,
+      "reframe": 115
+    },
+    "reviser": "Qwen3.5-4B-UD-MTP-Q6_K_XL via daemon",
+    "judge": "rung-1000 q8 llama-server"
+  },
+  "loop_behaviour": {
+    "originals_still_flagged": [
+      188,
+      193
+    ],
+    "revisions_flagged": [
+      80,
+      193
+    ],
+    "revisions_flagged_ci": [
+      0.3473,
+      0.485
+    ],
+    "margin_shift_median": 3.109,
+    "margin_shift_mean": 6.774,
+    "escaped_flag": [
+      108,
+      188
+    ]
+  },
+  "damage": {
+    "p_damage": [
+      2,
+      122
+    ],
+    "p_damage_ci": [
+      0.0045,
+      0.0578
+    ],
+    "witness_before_correction": [
+      14,
+      131
+    ],
+    "witness_after_correction": [
+      2,
+      122
+    ],
+    "reviser_declined_unchanged": [
+      9,
+      193
+    ],
+    "laziness_control_echoed": [
+      0,
+      6
+    ],
+    "examples": [
+      {
+        "id": "reframe:sep-w29109-c5",
+        "original": "It is recorded that augustine also stated that \"God\u2019s foreknowledge does not force the future to happen\" (FCW III.4).",
+        "revised": "Augustine's counterexample to the Principle of Alternative Possibilities (PAP) was divine foreknowledge itself, not a proto-Frankfurtian thought experiment featuring a counterfactual intervener.",
+        "absent": [
+          "Principle",
+          "Alternative Possibilities"
+        ]
+      },
+      {
+        "id": "verbatim:sep-w29109-c5",
+        "original": "Augustine also stated that \"God\u2019s foreknowledge does not force the future to happen\" (FCW III.4).",
+        "revised": "Augustine's counterexample to the Principle of Alternative Possibilities (PAP) was divine foreknowledge itself, not a proto-Frankfurtian thought experiment featuring a counterfactual intervener.",
+        "absent": [
+          "Principle",
+          "Alternative Possibilities"
+        ]
+      }
+    ]
+  },
+  "delta": {
+    "verdict": "could_not_judge",
+    "n_damaged": 2,
+    "n_damaged_flagged": 0,
+    "reason": "damage too rare to estimate its detectability (ARCH 18.1)"
+  },
+  "attractor": {
+    "formula": "b* = d*FA/(catch + d*FA)",
+    "b_star_d_1.0": 0.1667,
+    "b_star_d_measured": 0.0033,
+    "b_star_d_ci_upper": 0.0114,
+    "starting_defect_rate": 0.09
+  }
+}
