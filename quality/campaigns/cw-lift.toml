@@ -230,7 +230,7 @@ status    = "active"
 #       enumeration only stopped re-sending a live row. The cross_node
 #       assertion is inverted, deliberately, with the old behaviour named.
 #   4d  THE LOCAL-ONLY DAEMON CLOSEOUT — K2 fired, the profile is the ship
-#                                             <sha>     DONE
+#                                             d6f247e5c DONE +1107
 #       Phase 3's closeout, landed in the 4-series because that is where the
 #       shas are. `cw-local-only-daemon`'s K2 says: if the state is genuinely
 #       fused, the honest deliverable is a RUNTIME PROFILE, not a package.
@@ -254,6 +254,41 @@ status    = "active"
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
+#   4e  a seal carries the deletes it retires  df42ce62a DONE +1068
+#       W2 recorded rather than absorbed that a snapshot re-appends LIVE rows
+#       only, so a tombstone stopped travelling once the seal that retired it
+#       landed — a peer that never received it kept the stale value (the KV
+#       shape of K7). Absorbed: a seal AND its whole snapshot ARE the actor's
+#       live set, so `apply_projection` retires every row of that origin whose
+#       key the set does not name — decided once in `rail_kv::project`
+#       (`sealed_actors`), applied in the same call. "Whole" is a FACT on the
+#       journal, not a timing guess: the snapshot ends with one act,
+#       `{"snap": <seal seq>}`, and reconciliation runs only when the mark is
+#       held with no SequenceHole for that actor. Both gates the seat offered
+#       (`is_complete()`, "an op above the floor") were shown unsound by a
+#       test each; failure direction is always "retire nothing". Self is
+#       skipped by NodeId: for this node the store LEADS the journal by an
+#       outbox drain, so reconciling self would read its own lag as a
+#       retirement.
+#       SEAT FIXES IN THE SAME PHASE, not rungs: 35a2f18fb (the roster source
+#       held AppState weakly ABOVE the Arc::get_mut block, every with_*
+#       installer silently no-op'd, local inference was down ~50 min — now a
+#       daemon that cannot run its installers refuses to boot), 693b8e043
+#       (`EmbeddedDaemon::in_memory` wrote node_key and, after 4b, whole ring
+#       journals into the crate directory; it owns a TempDir now), 929d1cd57
+#       (one origin's second write inside a second was refused by the store
+#       and folded in id order on peers; same-origin ties win, and the fold's
+#       last term is the actor's `seq`).
+#       4a's "WHEN to seal stays the operator's" IS AMENDED at 4b: for the
+#       daemon's OWN namespaces the daemon writes and the daemon seals
+#       (`SEAL_AFTER_OWN_OPS`, seal-then-snapshot, safe by construction since
+#       compact self-verifies). App rings are untouched.
+#       K7 ADJUDICATED by the seat under §10.6 (one path): the work atlas rides
+#       the same mechanism; "a released claim is gone, no surface records it"
+#       is now "no surface records it past the next seal" — and a release
+#       PROPAGATES as a tombstone where the old push only stopped re-sending.
+#       Reversible by taking `work-atlas` out of DAEMON_OWN_NAMESPACES, which
+#       would leave it with no replication at all now that Step 4 is gone.
 #
 # G IS DONE, and it found a third gate the order did not know about.
 # The pre-commit ARG_MAX kill is fixed and WATCHED: scripts/tests/
