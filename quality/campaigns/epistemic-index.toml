@@ -217,8 +217,13 @@ kill         = "a second walk kept behind a flag is still a second walk -- ARCH 
 #      delegation named. The one that exists today is the RAPTOR late-carry
 #      injector, delegating to nothing: `apply_raptor_grounding`
 #      (sovereign/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:105)
-#      and its gate `raptor_late_inject_enabled`
+#      its own summary producer `raptor_scored_chunk` (same file, :263), and its
+#      gate `raptor_late_inject_enabled`
 #      (sovereign/crates/sovereign-core/src/runtime/question_analysis.rs:875).
+#      Three symbols, because ei-5c is DELETING raptor_grounding.rs whole rather
+#      than folding it: the RAPTOR path reads conv_raptor_nodes /
+#      raptor_summaries.lance where the walk reads Summary atoms, so there was
+#      nothing to delegate to.
 # So 1.0 means ONE WALK, not "no RAPTOR": the summaries reach answers through
 # `ground()`'s Summary seeds under its budget, which is what the spec's RAPTOR
 # row ("the separate injector retires") already says. Watched failing: at
@@ -248,7 +253,8 @@ WALK = "ground::ground("
 # not call-graph — a file that both called ground() and kept an independent
 # traversal would pass it. That is the proxy's limit, stated rather than hidden;
 # which arm fired is printed either way.
-SECOND = ("fn apply_raptor_grounding", "fn raptor_late_inject_enabled")
+SECOND = ("fn apply_raptor_grounding", "fn raptor_late_inject_enabled",
+          "fn raptor_scored_chunk")
 
 reasons, notes = [], []
 defs = [str(p.relative_to(ROOT)) for p in files(*CE)
