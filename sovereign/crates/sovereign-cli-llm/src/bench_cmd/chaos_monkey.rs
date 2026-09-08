@@ -26,6 +26,24 @@ use sovereign_eval::chaos_monkey::{
     score, AgentAction, ChaosBank, ChaosQuestion, GateVerdict, Gates, PressureKind, ResultRow,
 };
 use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
+
+/// Does this scored `partition` cell mean a WRONG ANSWER REACHED THE READER?
+/// `None` when the cell is not one this build knows.
+///
+/// The verdict reader in `quality_lane_cmd` needs this question answered and
+/// may not name the back-of-house harness to ask it — `lib.rs`'s
+/// `bench_cmd_is_the_only_module_naming_the_eval_harness` is that containment,
+/// and it caught this import on the sweep of 2026-09-08. So the ONE decider
+/// stays where it belongs (`Partition::leaks_to_reader`, beside the counts
+/// that sum the same three cells) and this is the door through it.
+pub(crate) fn partition_leaks_to_reader(cell: &str) -> Option<bool> {
+    serde_json::from_value::<sovereign_eval::chaos_monkey::score::Partition>(
+        serde_json::Value::String(cell.to_string()),
+    )
+    .ok()
+    .map(|p| p.leaks_to_reader())
+}
+
 use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{

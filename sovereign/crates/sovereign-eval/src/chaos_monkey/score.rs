@@ -82,6 +82,26 @@ pub enum Partition {
     Unclassified,
 }
 
+impl Partition {
+    /// A WRONG ANSWER REACHED THE READER. The three cells differ only in whose
+    /// fault it was — the model with the evidence in hand ([`Self::LeakedWrong`]),
+    /// retrieval never surfacing it ([`Self::RetrievalMissLeaked`]), or an
+    /// invented specific on a question with no answer ([`Self::ConfabLeaked`]) —
+    /// and none of that changes what the reader got.
+    ///
+    /// This is the membership [`PartitionCounts::leaks_to_reader`] sums, lifted
+    /// onto the variant so a caller holding ONE row can ask the same question
+    /// the counts answer in aggregate, rather than re-deriving the set from
+    /// `answer_correct` and `gate_action` (ARCH §10.6). The two are held in
+    /// agreement by `the_leak_set_is_the_same_for_one_row_and_for_counts`.
+    pub fn leaks_to_reader(&self) -> bool {
+        matches!(
+            self,
+            Self::LeakedWrong | Self::RetrievalMissLeaked | Self::ConfabLeaked
+        )
+    }
+}
+
 /// One scored probe — the JSONL contract the verdict reader consumes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultRow {
@@ -1638,6 +1658,47 @@ mod tests {
             GateVerdict::CouldNotJudge,
             "no labels => empty population => could-not-judge, not a vacuous pass"
         );
+    }
+
+    /// `Partition::leaks_to_reader` and `PartitionCounts::leaks_to_reader`
+    /// are one membership stated twice — once per row, once in aggregate — so
+    /// they are held in agreement here rather than by anyone remembering. Add
+    /// a leaking variant and forget the counts field and this goes red.
+    #[test]
+    fn the_leak_set_is_the_same_for_one_row_and_for_counts() {
+        use Partition::*;
+        let every = [
+            Correct,
+            GateKilledCorrect,
+            SynthWrongCaught,
+            RetrievalMiss,
+            LeakedWrong,
+            RetrievalMissLeaked,
+            AbstainCorrect,
+            ReleasedBestEffort,
+            ConfabLeaked,
+            Unclassified,
+        ];
+        for p in every {
+            let mut counts = PartitionCounts::default();
+            counts.tally(p);
+            assert_eq!(
+                counts.leaks_to_reader(),
+                usize::from(p.leaks_to_reader()),
+                "{p:?} disagrees between the row predicate and the counts"
+            );
+        }
+        // The three that reach the reader, named — so a variant silently
+        // losing its leak status is a red test and not a quieter gate.
+        assert!(LeakedWrong.leaks_to_reader());
+        assert!(RetrievalMissLeaked.leaks_to_reader());
+        assert!(ConfabLeaked.leaks_to_reader());
+        // NEGATIVE CONTROL: an honest abstention on a miss is not a leak, and
+        // neither is a clean win — otherwise the predicate would fire on the
+        // behaviour we want.
+        assert!(!RetrievalMiss.leaks_to_reader());
+        assert!(!AbstainCorrect.leaks_to_reader());
+        assert!(!Correct.leaks_to_reader());
     }
 
     #[test]

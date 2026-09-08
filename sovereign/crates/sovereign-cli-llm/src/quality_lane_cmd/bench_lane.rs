@@ -27,8 +27,9 @@
 //! | errored items | an item raised, or the lane's own subprocess died |
 //! | empty answers | an item came back with no answer at all |
 //! | all-zero tally | the lane scored something and scored zero on all of it |
-//! | abstained on present | an answerable probe got a refusal |
-//! | confab on absent | an absent probe got an answer that asserts a value |
+//! | refused an answerable probe | a probe whose declared `expected_action` is `answer` got a refusal |
+//! | ungrounded assertion | any answer asserted a value the evidence does not carry |
+//! | leaked to reader | a WRONG answer was released — `Partition::leaks_to_reader` |
 //!
 //! Drift is the nightly's question (`scripts/sovereign-ci-bench.sh`), which
 //! runs the full banks against committed per-lane baselines. This is the
@@ -225,8 +226,29 @@ struct Census {
     never_ran: Vec<String>,
     errored: Vec<String>,
     empty_answers: Vec<String>,
-    abstained_on_present: Vec<String>,
-    confab_on_absent: Vec<String>,
+    /// Probes whose declared `expected_action` is `answer` and which were
+    /// refused anyway. FIVE of the seven `PressureKind`s are answerable
+    /// (present, distractor, provenance-trap, superseded-trap,
+    /// partially-present); this read `qtype == "present"` until 2026-09-08
+    /// and so checked ONE of them.
+    refused_answerable: Vec<String>,
+    /// Answers that asserted a value the scorer looked for and could not
+    /// ground — on ANY probe. This was gated on absent probes only until
+    /// 2026-09-08, which made a fabricated citation on a probe that HAS
+    /// evidence invisible to the lane: run 20260908-123251 released
+    /// `distract-bomb-maker` with `asserted_value_grounded: false` and the
+    /// row passed.
+    ungrounded_assertion: Vec<String>,
+    /// Probes whose scored `partition` says a WRONG answer reached the
+    /// reader — leaked-wrong, retrieval-miss-leaked or confab-leaked. The
+    /// scorer computed this cell all along and no row read it: run
+    /// 20260908-134848 released `present-killer-weapon` WRONG on evidence
+    /// that was never retrieved (`partition: retrieval_miss_leaked`,
+    /// `answer_correct: false`, `gate_action: released`) and the lane went
+    /// red only for an unrelated probe. The same run scored `answered 2/4`
+    /// against the previous run's `1/4` — the count IMPROVED while an honest
+    /// abstention was replaced by a released falsehood.
+    leaked_to_reader: Vec<String>,
     /// `(what, scored, correct)` per scored unit.
     tallies: Vec<(String, usize, usize)>,
 }
@@ -372,7 +394,6 @@ fn census_chaos(text: &str, c: &mut Census) {
         };
         n += 1;
         let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("<unnamed>");
-        let qtype = r.get("qtype").and_then(|v| v.as_str()).unwrap_or("");
         let action = r.get("agent_action").and_then(|v| v.as_str()).unwrap_or("");
         let excerpt = r
             .get("answer_excerpt")
@@ -385,20 +406,51 @@ fn census_chaos(text: &str, c: &mut Census) {
                 continue;
             }
         }
-        // An answerable probe that got a refusal. This is the #57 shape at
-        // bench scale and it is a catastrophe at any n.
-        if qtype == "present" && action == "abstained" {
-            c.abstained_on_present.push(id.to_string());
+        // What the probe DEMANDS, read from the row rather than re-derived
+        // from its `qtype`. `PressureKind::expected_action()` already owns
+        // that mapping and answers `Answer` for five of its seven kinds, so
+        // a second copy here keyed on one literal was both a duplicate
+        // decider and a wrong one (ARCH §10.6). A row that does not carry
+        // the field is REPORTED, never assumed either way (ARCH §18.3).
+        match r.get("expected_action").and_then(|v| v.as_str()) {
+            None => c.unreadable.push(format!(
+                "{id}: no `expected_action`, so what the probe demanded cannot be told"
+            )),
+            // An answerable probe that got a refusal. This is the #57 shape
+            // at bench scale and it is a catastrophe at any n.
+            Some("answer") if action == "abstained" => c.refused_answerable.push(id.to_string()),
+            _ => {}
         }
-        // An absent probe answered with a value the evidence does not carry.
-        // `asserted_value_grounded` is `false` only when the scorer LOOKED
-        // and found no grounding; absent (null) says nothing either way and
-        // is not read as a confabulation.
-        if qtype.starts_with("absent")
-            && action == "answered"
+        // An answer asserting a value the evidence does not carry, on ANY
+        // probe — a fabricated citation is the same defect whether or not
+        // the corpus happens to hold a real answer. `asserted_value_grounded`
+        // is `false` only when the scorer LOOKED and found no grounding;
+        // absent (null) says nothing either way and is not read as one.
+        if action == "answered"
             && r.get("asserted_value_grounded").and_then(|v| v.as_bool()) == Some(false)
         {
-            c.confab_on_absent.push(id.to_string());
+            c.ungrounded_assertion.push(id.to_string());
+        }
+        // A wrong answer that reached the reader, whichever subsystem is at
+        // fault. The membership is `Partition::leaks_to_reader`, which lives
+        // beside the counts that already summed the same three cells, so this
+        // lane cannot disagree with the histogram in the same report
+        // (ARCH §10.6). It is reached through `bench_cmd` because that is the
+        // only module allowed to name the back-of-house harness (`lib.rs`,
+        // `bench_cmd_is_the_only_module_naming_the_eval_harness`). The
+        // producer stamps the cell on every row (`chaos_monkey.rs:1207`), so
+        // its ABSENCE is a transcript this lane cannot judge, not a clean one.
+        match r.get("partition").and_then(|v| v.as_str()) {
+            None => c.unreadable.push(format!(
+                "{id}: no readable `partition`, so a wrong answer reaching the reader cannot be told"
+            )),
+            Some(cell) => match crate::bench_cmd::chaos_monkey::partition_leaks_to_reader(cell) {
+                Some(true) => c.leaked_to_reader.push(id.to_string()),
+                Some(false) => {}
+                None => c
+                    .unreadable
+                    .push(format!("{id}: `partition` is not a known cell: {cell}")),
+            },
         }
     }
     if n == 0 {
@@ -643,33 +695,45 @@ fn rows(report: &mut LaneReport, id: &str, reader: LaneReader, c: &Census) {
     }
 
     if reader == LaneReader::ChaosMonkey {
-        if c.abstained_on_present.is_empty() {
+        if c.refused_answerable.is_empty() {
             report.passed(
-                "abstained on present",
-                "no answerable probe was refused".into(),
+                "refused an answerable probe",
+                "every probe whose expected action is `answer` was answered".into(),
             );
         } else {
             report.failed(
-                "abstained on present",
+                "refused an answerable probe",
                 format!(
                     "{} answerable probe(s) refused: {}",
-                    c.abstained_on_present.len(),
-                    c.abstained_on_present.join(", ")
+                    c.refused_answerable.len(),
+                    c.refused_answerable.join(", ")
                 ),
             );
         }
-        if c.confab_on_absent.is_empty() {
+        if c.leaked_to_reader.is_empty() {
+            report.passed("leaked to reader", "no wrong answer was released".into());
+        } else {
+            report.failed(
+                "leaked to reader",
+                format!(
+                    "{} wrong answer(s) reached the reader: {}",
+                    c.leaked_to_reader.len(),
+                    c.leaked_to_reader.join(", ")
+                ),
+            );
+        }
+        if c.ungrounded_assertion.is_empty() {
             report.passed(
-                "confab on absent",
-                "no absent probe was answered with an ungrounded value".into(),
+                "ungrounded assertion",
+                "no answer asserted a value the evidence does not carry".into(),
             );
         } else {
             report.failed(
-                "confab on absent",
+                "ungrounded assertion",
                 format!(
-                    "{} absent probe(s) answered with a value the evidence does not carry: {}",
-                    c.confab_on_absent.len(),
-                    c.confab_on_absent.join(", ")
+                    "{} answer(s) asserted a value the evidence does not carry: {}",
+                    c.ungrounded_assertion.len(),
+                    c.ungrounded_assertion.join(", ")
                 ),
             );
         }
@@ -769,23 +833,26 @@ mod tests {
             ..Census::default()
         };
         let chaos = verdicts(&c, LaneReader::ChaosMonkey);
-        assert!(chaos.iter().any(|(s, _)| s == "abstained on present"));
-        assert!(chaos.iter().any(|(s, _)| s == "confab on absent"));
+        assert!(chaos
+            .iter()
+            .any(|(s, _)| s == "refused an answerable probe"));
+        assert!(chaos.iter().any(|(s, _)| s == "ungrounded assertion"));
+        assert!(chaos.iter().any(|(s, _)| s == "leaked to reader"));
         let all = verdicts(&c, LaneReader::BenchAll);
-        assert!(!all.iter().any(|(s, _)| s == "abstained on present"));
+        assert!(!all.iter().any(|(s, _)| s == "refused an answerable probe"));
     }
 
     #[test]
-    fn a_refusal_on_a_present_probe_and_a_confab_on_an_absent_one_both_fail() {
+    fn a_refusal_on_an_answerable_probe_and_an_ungrounded_assertion_both_fail() {
         let c = Census {
-            abstained_on_present: vec!["present-wife".into()],
-            confab_on_absent: vec!["absent-heat-firstname".into()],
+            refused_answerable: vec!["present-wife".into()],
+            ungrounded_assertion: vec!["absent-heat-firstname".into()],
             tallies: vec![("answered".into(), 6, 5)],
             ..Census::default()
         };
         let v = verdicts(&c, LaneReader::ChaosMonkey);
-        assert_eq!(find(&v, "abstained on present"), Verdict::Failed);
-        assert_eq!(find(&v, "confab on absent"), Verdict::Failed);
+        assert_eq!(find(&v, "refused an answerable probe"), Verdict::Failed);
+        assert_eq!(find(&v, "ungrounded assertion"), Verdict::Failed);
     }
 
     /// A report nobody could read is could-not-judge NAMING it — never a
@@ -841,21 +908,162 @@ mod tests {
     #[test]
     fn the_chaos_reader_separates_a_refusal_from_a_confabulation() {
         let jsonl = r#"
-{"id":"present-wife","qtype":"present","agent_action":"abstained","answer_excerpt":"I cannot say"}
-{"id":"present-target","qtype":"present","agent_action":"answered","answer_excerpt":"Greenwich"}
-{"id":"absent-heat","qtype":"absent_adjacent","agent_action":"answered","answer_excerpt":"Tom","asserted_value_grounded":false}
-{"id":"absent-embassy","qtype":"absent_adjacent","agent_action":"abstained","answer_excerpt":""}
-{"id":"ood-berlin","qtype":"absent_out_of_domain","agent_action":"answered","answer_excerpt":"1989","asserted_value_grounded":null}
+{"id":"present-wife","qtype":"present","expected_action":"answer","agent_action":"abstained","answer_excerpt":"I cannot say","partition":"retrieval_miss"}
+{"id":"present-target","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"Greenwich","partition":"correct"}
+{"id":"absent-heat","qtype":"absent_adjacent","expected_action":"abstain","agent_action":"answered","answer_excerpt":"Tom","asserted_value_grounded":false,"partition":"confab_leaked"}
+{"id":"absent-embassy","qtype":"absent_adjacent","expected_action":"abstain","agent_action":"abstained","answer_excerpt":"","partition":"abstain_correct"}
+{"id":"ood-berlin","qtype":"absent_out_of_domain","expected_action":"abstain","agent_action":"answered","answer_excerpt":"1989","asserted_value_grounded":null,"partition":"released_best_effort"}
 "#;
         let mut c = Census::default();
         census_chaos(jsonl, &mut c);
-        assert_eq!(c.abstained_on_present, vec!["present-wife".to_string()]);
-        assert_eq!(c.confab_on_absent, vec!["absent-heat".to_string()]);
+        assert_eq!(c.refused_answerable, vec!["present-wife".to_string()]);
+        assert_eq!(c.ungrounded_assertion, vec!["absent-heat".to_string()]);
         // A null `asserted_value_grounded` says nothing either way and is
         // NOT read as a confabulation.
-        assert!(!c.confab_on_absent.iter().any(|s| s == "ood-berlin"));
+        assert!(!c.ungrounded_assertion.iter().any(|s| s == "ood-berlin"));
+        // NEGATIVE CONTROL for both widened predicates: an answerable probe
+        // that was answered, and an abstain probe that abstained, are the
+        // two correct behaviours and neither may appear as a finding.
+        assert!(!c.refused_answerable.iter().any(|s| s == "absent-embassy"));
+        assert!(!c.ungrounded_assertion.iter().any(|s| s == "present-target"));
+        // `confab_leaked` is one of the three cells that reach the reader;
+        // `retrieval_miss` (an honest decline) and `released_best_effort` are
+        // not, so the leak row separates them.
+        assert_eq!(c.leaked_to_reader, vec!["absent-heat".to_string()]);
         assert_eq!(c.tallies, vec![("answered".to_string(), 5, 3)]);
         assert!(c.empty_answers.is_empty());
+        assert!(c.unreadable.is_empty(), "{:?}", c.unreadable);
+    }
+
+    /// THE WIDENING, half one. `expected_action` is `answer` for five of the
+    /// seven pressure kinds and the predicate matched the literal
+    /// `qtype == "present"`, so a refusal on a distractor — a probe with real
+    /// evidence behind it — was not a finding. The bank's own
+    /// `PressureKind::expected_action()` is the decider now.
+    #[test]
+    fn a_refusal_on_a_distractor_is_a_refusal_on_an_answerable_probe() {
+        let jsonl = r#"
+{"id":"distract-bomb-maker","qtype":"distractor","expected_action":"answer","agent_action":"abstained","answer_excerpt":"I could not confirm","partition":"retrieval_miss"}
+{"id":"trap-provenance","qtype":"provenance_trap","expected_action":"answer","agent_action":"abstained","answer_excerpt":"I could not confirm","partition":"synth_wrong_caught"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert_eq!(
+            c.refused_answerable,
+            vec![
+                "distract-bomb-maker".to_string(),
+                "trap-provenance".to_string()
+            ]
+        );
+    }
+
+    /// THE WIDENING, half two, and the run that found it. In
+    /// `target/quality-check/20260908-123251` the chaos lane released
+    /// `distract-bomb-maker` with `asserted_value_grounded: false` — the
+    /// answer "The Professor" over a quote that does not contain it — and
+    /// the row PASSED, because the predicate required an absent probe. A
+    /// fabricated citation is the same defect whichever probe it lands on.
+    #[test]
+    fn an_ungrounded_assertion_on_an_answerable_probe_is_a_confabulation() {
+        let jsonl = r#"
+{"id":"distract-bomb-maker","qtype":"distractor","expected_action":"answer","agent_action":"answered","answer_excerpt":"The Professor","asserted_value_grounded":false,"gate_action":"citation_grounded","partition":"correct"}
+{"id":"present-target","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"Greenwich","asserted_value_grounded":true,"partition":"correct"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert_eq!(
+            c.ungrounded_assertion,
+            vec!["distract-bomb-maker".to_string()]
+        );
+        // NEGATIVE CONTROL: a value the scorer DID ground is not a finding,
+        // so the widened predicate cannot be passing by firing on everything.
+        assert!(!c.ungrounded_assertion.iter().any(|s| s == "present-target"));
+        assert!(c.refused_answerable.is_empty());
+    }
+
+    /// A row with no `expected_action` cannot say what the probe demanded,
+    /// and reading it as "not answerable" would be the silent substitution
+    /// that turns a missing field into a clean census (ARCH §18.3).
+    #[test]
+    fn a_row_without_an_expected_action_is_unreadable_not_clean() {
+        let jsonl = r#"
+{"id":"legacy-row","qtype":"present","agent_action":"abstained","answer_excerpt":"I cannot say","partition":"retrieval_miss"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert!(c.refused_answerable.is_empty());
+        assert_eq!(c.unreadable.len(), 1, "{:?}", c.unreadable);
+        assert!(c.unreadable[0].contains("legacy-row"));
+        assert!(c.unreadable[0].contains("expected_action"));
+    }
+
+    /// THE THIRD PREDICATE, and the run that demanded it. In
+    /// `target/quality-check/20260908-134848` the same probe that had honestly
+    /// abstained one run earlier ANSWERED, was WRONG, and the gate RELEASED it
+    /// on evidence retrieval never surfaced. The scorer named the cell
+    /// (`retrieval_miss_leaked`) and NO row read it, so the lane went red only
+    /// for an unrelated probe — while `scores (tracked)` reported `answered
+    /// 2/4` against the previous run's `1/4`, an improvement on the count for
+    /// a strictly worse behaviour.
+    #[test]
+    fn a_wrong_answer_that_reached_the_reader_is_a_catastrophe() {
+        let jsonl = r#"
+{"id":"present-killer-weapon","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"a knife","answer_correct":false,"gate_action":"released","retrieval_present":false,"partition":"retrieval_miss_leaked"}
+{"id":"present-target","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"Greenwich","partition":"leaked_wrong"}
+{"id":"absent-heat","qtype":"absent_adjacent","expected_action":"abstain","agent_action":"answered","answer_excerpt":"Tom","partition":"confab_leaked"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert_eq!(
+            c.leaked_to_reader,
+            vec![
+                "present-killer-weapon".to_string(),
+                "present-target".to_string(),
+                "absent-heat".to_string()
+            ]
+        );
+        // The refusal row is SILENT here — every probe answered. A leak and a
+        // refusal are different findings and the lane must not conflate them.
+        assert!(c.refused_answerable.is_empty());
+    }
+
+    /// NEGATIVE CONTROL for the leak predicate, and the reason run
+    /// 20260908-123251 must stay green on this row: an honest abstention on a
+    /// retrieval miss is the behaviour we WANT, and a clean win is a win.
+    /// A predicate that fired on either would make the lane useless.
+    #[test]
+    fn an_honest_abstention_on_a_miss_is_not_a_leak() {
+        let jsonl = r#"
+{"id":"present-killer-weapon","qtype":"present","expected_action":"answer","agent_action":"abstained","answer_excerpt":"I could not confirm","retrieval_present":false,"partition":"retrieval_miss"}
+{"id":"absent-embassy","qtype":"absent_adjacent","expected_action":"abstain","agent_action":"abstained","answer_excerpt":"I could not confirm","partition":"abstain_correct"}
+{"id":"distract-bomb-maker","qtype":"distractor","expected_action":"answer","agent_action":"answered","answer_excerpt":"The Professor","partition":"correct"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert!(c.leaked_to_reader.is_empty(), "{:?}", c.leaked_to_reader);
+        // The refusal on the answerable probe IS still a finding — the leak
+        // row going quiet must not take the refusal row with it.
+        assert_eq!(
+            c.refused_answerable,
+            vec!["present-killer-weapon".to_string()]
+        );
+        assert!(c.unreadable.is_empty(), "{:?}", c.unreadable);
+    }
+
+    /// A `partition` the producer always stamps (`chaos_monkey.rs:1207`), so
+    /// its absence is a transcript this lane cannot judge — never a clean one.
+    #[test]
+    fn a_row_without_a_partition_is_unreadable_not_clean() {
+        let jsonl = r#"
+{"id":"no-cell","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"a knife"}
+{"id":"bad-cell","qtype":"present","expected_action":"answer","agent_action":"answered","answer_excerpt":"a knife","partition":"invented_cell"}
+"#;
+        let mut c = Census::default();
+        census_chaos(jsonl, &mut c);
+        assert!(c.leaked_to_reader.is_empty());
+        assert_eq!(c.unreadable.len(), 2, "{:?}", c.unreadable);
+        assert!(c.unreadable[0].contains("no-cell"));
+        assert!(c.unreadable[1].contains("invented_cell"));
     }
 
     #[test]
