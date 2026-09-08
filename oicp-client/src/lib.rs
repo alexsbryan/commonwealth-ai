@@ -942,6 +942,70 @@ struct ChatChoice {
 #[derive(Deserialize)]
 struct ChatMessage {
     content: Option<String>,
+    /// The server's NATIVE function-call array, when it chose that shape.
+    ///
+    /// A daemon handed a `tools` catalog rebuilds the tool-envelope grammar
+    /// from it and may answer with `content: ""` and the call here instead of
+    /// as `<tool_call>` text. This field was absent until 2026-09-08, so those
+    /// responses reached every caller as an EMPTY completion and the loop that
+    /// asked for the tool saw no call at all — silently, since the empty string
+    /// is a valid answer. [`ChatMessage::as_text`] is where the two shapes
+    /// become one.
+    #[serde(default)]
+    tool_calls: Vec<WireToolCall>,
+}
+
+#[derive(Deserialize)]
+struct WireToolCall {
+    function: WireToolFunction,
+}
+
+#[derive(Deserialize)]
+struct WireToolFunction {
+    name: String,
+    /// OpenAI sends the arguments as a JSON-encoded STRING, not an object.
+    #[serde(default)]
+    arguments: Option<String>,
+}
+
+impl ChatMessage {
+    /// The assistant turn as ONE text shape.
+    ///
+    /// Native `tool_calls` are re-emitted as the
+    /// `<tool_call>{"name":..,"arguments":{..}}</tool_call>` envelope every
+    /// tool loop in this workspace parses (`sovereign_core::tool_loop`), so a
+    /// caller never has to ask which shape the server picked. Normalising HERE
+    /// — at the wire boundary, in the one place the wire is read — is what
+    /// keeps that a single protocol rather than a second one that happens to
+    /// arrive over HTTP.
+    ///
+    /// Arguments arrive JSON-encoded as a string; they are re-parsed so the
+    /// envelope carries a real object, matching what a model emitting the
+    /// envelope directly would write. An unparseable argument string is passed
+    /// through as a string rather than dropped — the loop's parser tolerates
+    /// that shape, and dropping it would lose the call.
+    fn as_text(&self) -> String {
+        let prose = self.content.clone().unwrap_or_default();
+        if self.tool_calls.is_empty() {
+            return prose;
+        }
+        let mut out = prose;
+        for call in &self.tool_calls {
+            let args: serde_json::Value = match call.function.arguments.as_deref() {
+                Some(raw) => serde_json::from_str(raw)
+                    .unwrap_or_else(|_| serde_json::Value::String(raw.to_string())),
+                None => serde_json::json!({}),
+            };
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(&format!(
+                "<tool_call>{}</tool_call>",
+                serde_json::json!({ "name": call.function.name, "arguments": args })
+            ));
+        }
+        out
+    }
 }
 
 #[derive(Deserialize)]
@@ -1013,7 +1077,7 @@ impl InferenceProvider for RemoteApiProvider {
 
         let first_choice = chat_response.choices.first();
         let text = first_choice
-            .and_then(|c| c.message.content.clone())
+            .map(|c| c.message.as_text())
             .unwrap_or_default();
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
@@ -1972,6 +2036,81 @@ impl InferenceProvider for SplitInferenceProvider {
 
 #[cfg(test)]
 mod tests {
+    use super::ChatCompletionResponse;
+
+    /// The named failing input (ARCH §18.1): a daemon handed a `tools` catalog
+    /// answers with `content: ""` and the call in `tool_calls`. Before
+    /// 2026-09-08 that reached the caller as an EMPTY completion, so a tool
+    /// loop that asked for the tool saw no call — measured on the knowledge
+    /// gym's executor fixtures, 0 of 9 replays parsed a call and every
+    /// `final_message excerpt` was blank.
+    #[test]
+    fn a_native_tool_call_arrives_as_the_one_envelope() {
+        let body = r#"{"choices":[{"index":0,"message":{"role":"assistant","content":"",
+            "tool_calls":[{"id":"call_1","type":"function","function":{
+            "name":"knowledge_lookup","arguments":"{\"query\":\"mesh retry policy\"}"}}]},
+            "finish_reason":"tool_calls"}]}"#;
+        let parsed: ChatCompletionResponse =
+            serde_json::from_str(body).expect("wire response parses");
+        let text = parsed.choices.first().map(|c| c.message.as_text()).unwrap();
+        // The property is that it ROUND-TRIPS into the loop's parser, not that
+        // the string has a particular key order — asserting the rendered text
+        // would pin serde_json's map ordering and pass or fail for a reason
+        // that has nothing to do with the behaviour.
+        let v: serde_json::Value = {
+            let inner = text
+                .split("<tool_call>")
+                .nth(1)
+                .and_then(|s| s.split("</tool_call>").next())
+                .expect("envelope is closed");
+            serde_json::from_str(inner).expect("envelope body is JSON")
+        };
+        assert_eq!(v["name"], "knowledge_lookup");
+        assert_eq!(v["arguments"]["query"], "mesh retry policy");
+    }
+
+    #[test]
+    fn prose_without_tool_calls_is_untouched() {
+        let body = r#"{"choices":[{"index":0,"message":{"role":"assistant",
+            "content":"Just an answer."},"finish_reason":"stop"}]}"#;
+        let parsed: ChatCompletionResponse = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            parsed.choices.first().map(|c| c.message.as_text()).unwrap(),
+            "Just an answer."
+        );
+    }
+
+    #[test]
+    fn prose_and_a_native_call_both_survive() {
+        // Some servers put the model's reasoning in `content` AND the call in
+        // `tool_calls`. Dropping either half loses information the loop uses:
+        // the prose becomes the transcript's "thinking", the call becomes the
+        // dispatch.
+        let body = r#"{"choices":[{"index":0,"message":{"role":"assistant",
+            "content":"Let me check.","tool_calls":[{"id":"c","type":"function",
+            "function":{"name":"a","arguments":"{\"k\":1}"}}]},"finish_reason":"tool_calls"}]}"#;
+        let parsed: ChatCompletionResponse = serde_json::from_str(body).unwrap();
+        let text = parsed.choices.first().map(|c| c.message.as_text()).unwrap();
+        assert!(text.starts_with("Let me check."), "{text}");
+        assert!(text.contains(r#""name":"a""#), "{text}");
+    }
+
+    #[test]
+    fn unparseable_arguments_are_carried_not_dropped() {
+        // Absence is reported, never defaulted (ARCH §18.3) — and a call whose
+        // argument string is malformed is still a call the loop should see and
+        // refuse on its own terms, not one the wire silently swallows.
+        let body = r#"{"choices":[{"index":0,"message":{"role":"assistant","content":"",
+            "tool_calls":[{"id":"c","type":"function",
+            "function":{"name":"a","arguments":"{not json"}}]},"finish_reason":"tool_calls"}]}"#;
+        let parsed: ChatCompletionResponse = serde_json::from_str(body).unwrap();
+        let text = parsed.choices.first().map(|c| c.message.as_text()).unwrap();
+        assert!(text.contains(r#""name":"a""#), "{text}");
+        assert!(
+            text.contains("not json"),
+            "the raw arguments survive: {text}"
+        );
+    }
 
     /// A shed is retried; a FAILURE is not. This is the whole safety property
     /// of the retry, so it is the thing pinned.
