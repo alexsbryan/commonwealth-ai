@@ -82,6 +82,7 @@ from admission_shed_probe import (  # noqa: E402
     BANK,
     CLI,
     DAEMON_ERR,
+    DEATH_CLIENT_TIMEOUT,
     DEATH_DAEMON_GONE,
     DEATH_SHED,
     LOAD_QUESTION,
@@ -167,6 +168,14 @@ DEATH_UNSERVING = "unserving"
 # The daemon REFUSED, deliberately and in its own words. Not an outage and
 # not a pass: the run measured a busy host, which is a different question.
 DEATH_SHED_OUT = "shed_out"
+# EVERY TURN OUTRAN THE CLIENT'S PATIENCE. Could-not-judge, and it is a
+# separate word from `unserving` on purpose: the order forbids a host-quiet
+# precondition, so this lane runs on whatever contention the box has, and a
+# turn measured at 308s at load 15.3 is one bad afternoon away from the 600s
+# client cap. Reading that as an outage would put a false FAILED on the
+# instrument precisely when the host is busiest — which is how a lane earns
+# the reputation that gets it ignored.
+DEATH_TOO_SLOW = "too_slow"
 ALIVE = "clean"
 
 # Ordered most specific first: the jetsam line CONTAINS the plain shutdown
@@ -186,6 +195,7 @@ DEATH_CLASSES = [p[0] for p in DEATH_PATTERNS] + [
     DEATH_SELF_STOP,
     DEATH_UNSERVING,
     DEATH_SHED_OUT,
+    DEATH_TOO_SLOW,
 ]
 
 # Classes this soak may report as a CAUGHT DEFECT (exit 1). Everything else
@@ -548,8 +558,23 @@ def classify_daemon_death(
     )
 
 
+def unserved_class(kinds: Counter) -> str:
+    """Nobody was served — say WHY, because the three reasons are not one.
+
+    `shed` is the daemon refusing in its own words; `client_timeout` is this
+    script giving up first; anything else is the daemon up, answering and
+    producing nothing. Only the third is a defect this run can name.
+    """
+    explained = kinds.get(DEATH_SHED, 0) + kinds.get(DEATH_CLIENT_TIMEOUT, 0)
+    if explained < sum(kinds.values()):
+        return DEATH_UNSERVING
+    if kinds.get(DEATH_SHED, 0) >= kinds.get(DEATH_CLIENT_TIMEOUT, 0):
+        return DEATH_SHED_OUT
+    return DEATH_TOO_SLOW
+
+
 def residual_class(
-    *, restarts: int, gone: bool, phantom: bool, served_nobody: bool, all_shed: bool
+    *, restarts: int, gone: bool, phantom: bool, unserved: str | None
 ) -> str | None:
     """What happened when the daemon's log said NOTHING.
 
@@ -562,9 +587,7 @@ def residual_class(
         return DEATH_CRASH
     if phantom:
         return DEATH_LISTENER_LOST
-    if served_nobody:
-        return DEATH_SHED_OUT if all_shed else DEATH_UNSERVING
-    return None
+    return unserved
 
 
 def inject(kind: str, pid: int | None) -> dict:
@@ -644,8 +667,7 @@ def self_test() -> int:
 
     def residual(name, expect, **kw):
         nonlocal fails
-        base = dict(restarts=0, gone=False, phantom=False, served_nobody=False,
-                    all_shed=False)
+        base = dict(restarts=0, gone=False, phantom=False, unserved=None)
         got = residual_class(**(base | kw))
         ok = got == expect
         fails += 0 if ok else 1
@@ -658,12 +680,27 @@ def self_test() -> int:
     # THE 2026-09-08 OUTAGE, as a case. Up by every process check, serving
     # nobody. This is the one the instrument could not see before.
     residual("answered everything, served nobody", DEATH_UNSERVING,
-             served_nobody=True)
-    residual("refused everything, in its own words", DEATH_SHED_OUT,
-             served_nobody=True, all_shed=True)
+             unserved=DEATH_UNSERVING)
     residual("a dead process outranks an idle port", DEATH_CRASH,
-             gone=True, phantom=True, served_nobody=True)
+             gone=True, phantom=True, unserved=DEATH_UNSERVING)
     residual("nothing wrong", None)
+
+    def unserved(name, kinds, expect):
+        nonlocal fails
+        got = unserved_class(Counter(kinds))
+        ok = got == expect
+        fails += 0 if ok else 1
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}: expected {expect}, got {got}")
+
+    # Nobody served, three different reasons. Only the first is a defect.
+    unserved("all errored", {"other": 4}, DEATH_UNSERVING)
+    unserved("all refused", {DEATH_SHED: 4}, DEATH_SHED_OUT)
+    unserved("all timed out on a busy box", {DEATH_CLIENT_TIMEOUT: 4},
+             DEATH_TOO_SLOW)
+    unserved("refused and slow, no errors", {DEATH_SHED: 2, DEATH_CLIENT_TIMEOUT: 2},
+             DEATH_SHED_OUT)
+    unserved("one real error among refusals is still a defect",
+             {DEATH_SHED: 3, "other": 1}, DEATH_UNSERVING)
 
     globals()["log_files"] = real_log_files
     globals()["os_confirms_memory_kill"] = real_oracle
@@ -873,14 +910,12 @@ def main() -> int:
     kinds_all = Counter(r.get("death_kind", "unclassified") for r in rows if r["died"])
     answered = sum(1 for r in rows if not r["died"])
     served_nobody = bool(rows) and answered == 0
-    all_shed = served_nobody and kinds_all.get(DEATH_SHED, 0) == len(rows)
 
     residual = residual_class(
         restarts=restarts,
         gone=gone,
         phantom=phantom,
-        served_nobody=served_nobody,
-        all_shed=all_shed,
+        unserved=unserved_class(kinds_all) if served_nobody else None,
     )
     died = bool(log_class) or residual is not None
     death_class = log_class or residual
