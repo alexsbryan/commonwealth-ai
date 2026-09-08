@@ -344,18 +344,106 @@ fn push_csr(
     }
 }
 
+/// What one `edges.csr` write put in the graph and what it could not.
+///
+/// The CSR is atom × atom over interned ids, and `edges.json` is not: the
+/// resolvers write `Grounds` edges from a claim or state to the CHUNK that
+/// evidences it (`resolution.rs`, `resolution_ontology.rs` — "Grounds edges
+/// target a chunk"), so on every literary atlas a share of the declared graph
+/// has no seat here by construction. That share is reported, per ARCH §18.3,
+/// and kept apart from the other reason an endpoint fails to resolve: an id
+/// that IS atom-shaped and names no atom, which is a defect upstream.
+///
+/// Measured on brothers-karamazov-book-1 (2026-09-08): 109 edges declared, 77
+/// in the CSR, and the 32 missing were every one a `Grounds` edge to a
+/// `sec_NNNN` chunk. Before this struct existed the writer skipped them with
+/// `continue` and no count, and the gap was visible only to someone who read
+/// the CSR header beside `edges.json`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CsrWrite {
+    /// Where `edges.csr` landed.
+    pub path: PathBuf,
+    /// Edges in the CSR — both endpoints resolved to an atom.
+    pub written: u32,
+    /// Edges to a non-atom endpoint (a chunk or section reference). The atom
+    /// graph cannot hold them; the same fact rides on the atom's `evidence`.
+    pub evidence_refs: u32,
+    /// Edges whose missing endpoint is atom-shaped — a real dangling edge.
+    pub dangling: u32,
+    /// Up to [`Self::SAMPLES`] dangling endpoint ids, for the log line and the
+    /// operator, so a non-zero `dangling` names something to look at.
+    pub dangling_samples: Vec<String>,
+}
+
+impl CsrWrite {
+    const SAMPLES: usize = 5;
+
+    /// How many declared edges did not reach the CSR, for any reason.
+    pub fn skipped(&self) -> u32 {
+        self.evidence_refs + self.dangling
+    }
+}
+
+impl std::fmt::Display for CsrWrite {
+    /// One line for a status row: `77 edges in csr (32 evidence refs skipped, 0 dangling)`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} edges in csr", self.written)?;
+        if self.skipped() > 0 {
+            write!(
+                f,
+                " ({} evidence ref{} skipped, {} dangling",
+                self.evidence_refs,
+                if self.evidence_refs == 1 { "" } else { "s" },
+                self.dangling
+            )?;
+            if !self.dangling_samples.is_empty() {
+                write!(f, ": {}", self.dangling_samples.join(", "))?;
+            }
+            write!(f, ")")?;
+        }
+        Ok(())
+    }
+}
+
 /// Build and write `edges.csr` (out-CSR + symmetric in-CSR) over the interned
-/// local ids. Edges whose endpoints are not in `by_id` (dangling) are skipped.
+/// local ids. Edges whose endpoints are not in `by_id` are skipped AND
+/// counted, by reason — see [`CsrWrite`].
 fn write_edges_csr(
     atlas_dir: &Path,
     n_atoms: u32,
     by_id: &HashMap<String, u32>,
     edges: &[Edge],
-) -> Result<PathBuf, String> {
+) -> Result<CsrWrite, String> {
     let mut valid: Vec<LocalEdge> = Vec::with_capacity(edges.len());
+    let mut evidence_refs = 0u32;
+    let mut dangling = 0u32;
+    let mut dangling_samples: Vec<String> = Vec::new();
     for e in edges {
         let (Some(&s), Some(&t)) = (by_id.get(e.source.as_str()), by_id.get(e.target.as_str()))
         else {
+            // Which endpoint failed decides which count it is: an endpoint
+            // that was never atom-shaped is evidence by construction; one that
+            // was is a dangling reference. An edge with both unresolved is
+            // dangling if either side was meant to be an atom.
+            let unresolved = [&e.source, &e.target]
+                .into_iter()
+                .filter(|id| !by_id.contains_key(id.as_str()));
+            let mut atom_shaped = None;
+            for id in unresolved {
+                if id.atom_type().is_some() {
+                    atom_shaped = Some(id.as_str().to_string());
+                    break;
+                }
+            }
+            match atom_shaped {
+                Some(id) => {
+                    dangling += 1;
+                    if dangling_samples.len() < CsrWrite::SAMPLES {
+                        dangling_samples.push(format!("{} {:?}", id, e.edge_type));
+                    }
+                }
+                None => evidence_refs += 1,
+            }
             continue;
         };
         valid.push((
@@ -367,6 +455,25 @@ fn write_edges_csr(
         ));
     }
     let n_edges = valid.len() as u32;
+    if evidence_refs > 0 {
+        tracing::debug!(
+            atlas = %atlas_dir.display(),
+            declared = edges.len(),
+            written = n_edges,
+            evidence_refs,
+            "atlas store: edges to chunk references have no seat in the atom csr"
+        );
+    }
+    if dangling > 0 {
+        tracing::warn!(
+            atlas = %atlas_dir.display(),
+            declared = edges.len(),
+            written = n_edges,
+            dangling,
+            samples = ?dangling_samples,
+            "atlas store: edges.json names atoms that are not in atoms.json — dropped from the csr"
+        );
+    }
 
     let mut out = valid.clone();
     out.sort_by_key(|e| e.0);
@@ -391,7 +498,13 @@ fn write_edges_csr(
     std::fs::write(&tmp, &buf)
         .and_then(|_| std::fs::rename(&tmp, &path))
         .map_err(|e| format!("write {}: {e}", path.display()))?;
-    Ok(path)
+    Ok(CsrWrite {
+        path,
+        written: n_edges,
+        evidence_refs,
+        dangling,
+        dangling_samples,
+    })
 }
 
 /// mmap'd reader over `edges.csr` — the v2 CSR edge file written by
@@ -540,15 +653,25 @@ impl CsrEdges {
 
 // ── public lifecycle entry points ────────────────────────────────────────────
 
+/// What one store write produced — the `atoms.lance` path and the edge
+/// accounting, so a caller that prints "built" can print what was built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreWrite {
+    /// Where `atoms.lance` landed.
+    pub lance: PathBuf,
+    /// The `edges.csr` write, with its skipped-edge counts by reason.
+    pub edges: CsrWrite,
+}
+
 /// Build the v2 store from in-memory atoms + edges and write `atoms.lance` +
-/// `edges.csr` into `atlas_dir`. Returns the `atoms.lance` path. Atoms are
-/// interned to local u32 ids in iteration order; `edges.csr` references them.
+/// `edges.csr` into `atlas_dir`. Atoms are interned to local u32 ids in
+/// iteration order; `edges.csr` references them.
 pub async fn write_store(
     atlas_dir: &Path,
     _corpus_id: &str,
     atoms: &[AtomEnvelope],
     edges: &[Edge],
-) -> Result<PathBuf, String> {
+) -> Result<StoreWrite, String> {
     let mut by_id: HashMap<String, u32> = HashMap::with_capacity(atoms.len());
     let mut rows: Vec<AtomRow> = Vec::with_capacity(atoms.len());
     for (i, atom) in atoms.iter().enumerate() {
@@ -567,20 +690,23 @@ pub async fn write_store(
         );
     }
     let all: Vec<Edge> = edges.iter().cloned().chain(configures).collect();
-    write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, &all)?;
+    let csr = write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, &all)?;
     // The marker rides with the graph, written second so it is never newer
     // than what it describes. Without it a derivation change is invisible to
     // `store_needs_build` and no installed store ever picks it up — see
     // `derivation`'s module doc.
     derivation::write_derivation_marker(atlas_dir)
         .map_err(|e| format!("write derivation marker: {e}"))?;
-    Ok(lance)
+    Ok(StoreWrite { lance, edges: csr })
 }
 
 /// Read `atoms.json` (+ `edges.json`) from `atlas_dir`, build the v2 store, and
 /// write it beside them. The disk-reading lifecycle entry (post-install / CLI),
 /// mirroring [`super::archive::build_and_write_archive`].
-pub async fn build_and_write_store(atlas_dir: &Path, corpus_id: &str) -> Result<PathBuf, String> {
+pub async fn build_and_write_store(
+    atlas_dir: &Path,
+    corpus_id: &str,
+) -> Result<StoreWrite, String> {
     let atoms = super::read_atlas_atoms(atlas_dir)
         .map_err(|e| format!("read atoms.json for {corpus_id}: {e}"))?;
     let edges = super::read_atlas_edges(atlas_dir)
@@ -595,7 +721,7 @@ pub async fn build_and_write_store(atlas_dir: &Path, corpus_id: &str) -> Result<
 pub fn build_and_write_store_blocking(
     atlas_dir: &Path,
     corpus_id: &str,
-) -> Result<PathBuf, String> {
+) -> Result<StoreWrite, String> {
     run_blocking(build_and_write_store(atlas_dir, corpus_id))
 }
 
@@ -606,7 +732,7 @@ pub fn write_store_blocking(
     corpus_id: &str,
     atoms: &[AtomEnvelope],
     edges: &[Edge],
-) -> Result<PathBuf, String> {
+) -> Result<StoreWrite, String> {
     run_blocking(write_store(atlas_dir, corpus_id, atoms, edges))
 }
 
@@ -1094,6 +1220,87 @@ mod tests {
         assert!((out[0].3 - 0.9).abs() < 1e-6);
         // v2: the provenance byte round-trips (Derived here).
         assert_eq!(out[0].4, prov_u8(EdgeProvenance::Derived));
+    }
+
+    /// THE FAILING INPUT: an edge to a chunk reference and an edge to an
+    /// atom that does not exist both fail the `by_id` join, and before this
+    /// test the writer skipped both with a bare `continue` — 32 of 109 on
+    /// brothers-karamazov-book-1, and nothing said so. The two reasons are
+    /// different facts (evidence by construction vs. a dangling reference)
+    /// and the report keeps them apart.
+    #[test]
+    fn csr_writer_counts_what_it_could_not_seat_by_reason() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let mut by_id = HashMap::new();
+        by_id.insert(AtomId::claim(1).as_str().to_string(), 0u32);
+        by_id.insert(AtomId::entity(1).as_str().to_string(), 1u32);
+        let mk = |src: AtomId, tgt: AtomId, ty: EdgeType, id: &str| Edge {
+            id: EdgeId::from_raw(id),
+            edge_type: ty,
+            source: src,
+            target: tgt,
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: 1.0,
+            provenance: EdgeProvenance::Derived,
+        };
+        let edges = vec![
+            // seated
+            mk(
+                AtomId::claim(1),
+                AtomId::entity(1),
+                EdgeType::Involves,
+                "e1",
+            ),
+            // evidence by construction: the resolver's Grounds edge to a chunk
+            mk(
+                AtomId::claim(1),
+                AtomId::from_raw("sec_0007"),
+                EdgeType::Grounds,
+                "e2",
+            ),
+            // dangling: atom-shaped, names nothing in this store
+            mk(
+                AtomId::claim(1),
+                AtomId::entity(99),
+                EdgeType::Involves,
+                "e3",
+            ),
+            // dangling on the source side, target unresolved too — still a
+            // dangling edge, because one side was meant to be an atom
+            mk(
+                AtomId::state(4),
+                AtomId::from_raw("sec_0009"),
+                EdgeType::Grounds,
+                "e4",
+            ),
+        ];
+        let w = write_edges_csr(dir, 2, &by_id, &edges).unwrap();
+        assert_eq!(w.written, 1);
+        assert_eq!(w.evidence_refs, 1);
+        assert_eq!(w.dangling, 2);
+        assert_eq!(w.skipped(), 3);
+        assert_eq!(
+            w.dangling_samples,
+            vec![
+                "entity-0099 Involves".to_string(),
+                "state-0004 Grounds".to_string()
+            ]
+        );
+        let line = w.to_string();
+        assert_eq!(
+            line,
+            "1 edges in csr (1 evidence ref skipped, 2 dangling: entity-0099 Involves, state-0004 Grounds)"
+        );
+        // The header agrees with the report.
+        let csr = CsrEdges::open(&dir.join(EDGES_CSR_FILENAME)).unwrap();
+        assert_eq!(csr.n_edges(), w.written);
+
+        // A clean write says only what it wrote.
+        let clean = write_edges_csr(dir, 2, &by_id, &edges[..1]).unwrap();
+        assert_eq!(clean.to_string(), "1 edges in csr");
     }
 
     #[test]

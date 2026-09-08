@@ -301,7 +301,7 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
     // ── Step 7: rebuild the v2 store (THE load-bearing step) ───
     println!("  · rebuilding v2 store (atoms.lance + edges.csr) ...");
     match build_and_write_store(&atlas_dir, &atlas_id).await {
-        Ok(p) => println!("  ✓ rebuilt {}", p.display()),
+        Ok(w) => println!("  ✓ rebuilt {} ({})", w.lance.display(), w.edges),
         Err(e) => {
             eprintln!(
                 "error: rebuilding v2 store: {e}\n  atoms.json/edges.json ARE patched; \

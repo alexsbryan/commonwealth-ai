@@ -1863,6 +1863,24 @@ means one thing.
   read path consults it and a store with no marker keeps serving the walk until
   an operator rebuilds it.
 
+  **The writer counts what it cannot seat, by reason** (2026-09-08). The CSR
+  is atom × atom, and `edges.json` is not: the resolvers write `Grounds` edges
+  from a claim or state to the CHUNK that evidences it, so on every literary
+  atlas a share of the declared graph has no seat in the CSR by construction —
+  32 of 109 on brothers-karamazov-book-1, every one a `Grounds` edge to a
+  `sec_NNNNN` reference. Until then `write_edges_csr` skipped them with a bare
+  `continue`, and the gap was visible only to someone who read the CSR header
+  beside `edges.json`. `write_edges_csr` now returns `store::CsrWrite`
+  (`written`, `evidence_refs`, `dangling`, `dangling_samples`), `write_store`
+  and `build_and_write_store` return `StoreWrite { lance, edges }`, and
+  `atlas migrate-all` / `enrich atlas-patch-code` print the line when anything
+  was skipped. The two reasons are kept apart because they are different
+  facts: an endpoint that was never atom-shaped is evidence (debug-level,
+  counted); an endpoint that IS atom-shaped and names no atom is a dangling
+  reference, a defect upstream (warn, with samples). Which is which is decided
+  by `AtomId::atom_type()` — the one reading of the `<type>-<index|hash>`
+  prefix the constructors write (§10.6).
+
   **`CSR_VERSION` was the other candidate and is REFUSED.** Bumping the header
   would force the rebuild structurally, but `CsrEdges::open` rejects a
   stale-version CSR with no fallback, so it would take every corpus's walk dark

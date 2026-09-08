@@ -626,3 +626,48 @@ fn atom_envelope_exposes_id_and_depth_without_matching() {
     assert_eq!(env.id().as_str(), "entity-0005");
     assert_eq!(env.enrichment_depth(), EnrichmentDepth::Structural);
 }
+
+/// `AtomId::atom_type` is the one reading of the prefix the constructors
+/// write. Failing input: add a constructor with a new prefix and forget the
+/// arm — that id reads as "not an atom" and a CSR writer files its edges
+/// under evidence instead of dangling.
+#[test]
+fn atom_id_prefix_names_the_type_the_constructor_wrote() {
+    let cases: Vec<(AtomId, AtomType)> = vec![
+        (AtomId::entity(1), AtomType::Entity),
+        (AtomId::event(1), AtomType::Event),
+        (AtomId::state(1), AtomType::State),
+        (AtomId::relation(1), AtomType::Relation),
+        (AtomId::claim(1), AtomType::Claim),
+        (AtomId::question(1), AtomType::Question),
+        (AtomId::configuration(1), AtomType::Configuration),
+        (
+            AtomId::argument_reconstruction(1),
+            AtomType::ArgumentReconstruction,
+        ),
+        (AtomId::position(1), AtomType::Position),
+        (AtomId::opposition(1), AtomType::Opposition),
+        (AtomId::summary(1), AtomType::Summary),
+        (AtomId::summary_content_hash("n1", "c1"), AtomType::Summary),
+    ];
+    for (id, want) in cases {
+        assert_eq!(id.atom_type(), Some(want), "{}", id.as_str());
+        // The table and the constructor agree on the spelling.
+        assert!(
+            id.as_str().starts_with(&format!("{}-", want.id_prefix())),
+            "{} is not minted under {}-",
+            id.as_str(),
+            want.id_prefix()
+        );
+    }
+    // Every variant has a prefix and no two share one.
+    let prefixes: std::collections::HashSet<&str> =
+        AtomType::ALL.iter().map(|t| t.id_prefix()).collect();
+    assert_eq!(prefixes.len(), AtomType::ALL.len());
+    // What the resolvers put on a Grounds edge's target: a chunk, not an atom.
+    assert_eq!(AtomId::from_raw("sec_0007").atom_type(), None);
+    assert_eq!(AtomId::from_raw("0").atom_type(), None);
+    assert_eq!(AtomId::from_raw("").atom_type(), None);
+    // A prefix nobody mints is not an atom either.
+    assert_eq!(AtomId::from_raw("chunk-0001").atom_type(), None);
+}

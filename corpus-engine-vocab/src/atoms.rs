@@ -79,6 +79,21 @@ impl AtomId {
         Self(s.into())
     }
 
+    /// The atom type this id's prefix names, or `None` when the id is not
+    /// atom-shaped at all — a chunk reference (`sec_0007`), a doc anchor, a
+    /// raw string some edge carried through [`Self::from_raw`].
+    ///
+    /// This is the ONE reading of the `<type>-<index|hash>` convention the
+    /// constructors above write (ARCH §10.6): a writer that has to decide
+    /// whether an id it cannot resolve was ever meant to be an atom asks
+    /// here, and the answer separates "an edge to evidence, by construction"
+    /// from "a dangling edge, a defect". `config-` and `argument-` are the
+    /// prefixes as written, which are not the [`AtomType::label`]s.
+    pub fn atom_type(&self) -> Option<AtomType> {
+        let (prefix, _) = self.0.split_once('-')?;
+        AtomType::ALL.into_iter().find(|t| t.id_prefix() == prefix)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -1106,6 +1121,28 @@ pub enum AtomType {
 }
 
 impl AtomType {
+    /// The id prefix an atom of this type is minted under — `entity-0001`,
+    /// `config-0001`, `argument-0001`. One table, read by [`AtomId::atom_type`]
+    /// and mirrored by the `AtomId` constructors; the round-trip test in
+    /// `atoms/tests.rs` keeps the two in step. Note `config` and `argument`
+    /// are NOT the [`Self::label`]s.
+    pub fn id_prefix(&self) -> &'static str {
+        match self {
+            AtomType::Entity => "entity",
+            AtomType::Event => "event",
+            AtomType::State => "state",
+            AtomType::Relation => "relation",
+            AtomType::Claim => "claim",
+            AtomType::Question => "question",
+            AtomType::Configuration => "config",
+            AtomType::ArgumentReconstruction => "argument",
+            AtomType::Position => "position",
+            AtomType::Opposition => "opposition",
+            AtomType::Asset => "asset",
+            AtomType::Summary => "summary",
+        }
+    }
+
     /// Every atom kind, in on-disk byte order (see `store::kind_u8`). The
     /// closed set as DATA, so a consumer that needs to iterate kinds — a
     /// per-kind count, a UI filter list — does not hand-roll a twelfth

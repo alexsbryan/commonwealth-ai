@@ -173,9 +173,15 @@ pub async fn run(args: &[String]) -> i32 {
         let mut store_built = false;
         let store_state = if store_needs_build(&atlas_dir) {
             match build_and_write_store(&atlas_dir, corpus_id).await {
-                Ok(_) => {
+                Ok(w) => {
                     stores += 1;
                     store_built = true;
+                    // The edge accounting is the writer's, printed here so
+                    // "built" never hides a graph that lost a third of its
+                    // declared edges on the way in (ARCH §18.3).
+                    if w.edges.skipped() > 0 {
+                        println!("{corpus_id:<46}  store: {}", w.edges);
+                    }
                     "built"
                 }
                 Err(e) => {
