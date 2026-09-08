@@ -1076,10 +1076,12 @@ impl Runtime {
         let folder_meta = self.folder_metadata_snapshot().await;
         self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
             .await;
-        // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE): inject summaries AFTER
-        // the full leaf pipeline (reweight → … → ppr-rerank) so they cannot
-        // perturb leaf retrieval/ranking — QA-neutral by construction. Reuses
-        // the same `embedding` as the early path so the A/B isolates TIMING.
+        // Late summary injection: append whole-work summaries AFTER the full
+        // leaf pipeline (reweight → … → ppr-rerank) so they cannot perturb leaf
+        // retrieval/ranking — QA-neutral by construction. The position was
+        // `SOVEREIGN_RAPTOR_LATE`'s until ei-5c retired the injector and the
+        // flag with it; it is unconditional now, because there is one producer
+        // and the early position is the one that cost 14 points.
         //
         // This block used to append the summaries at the END and justify it
         // with "the summaries fill remaining budget, which DeepQuery's larger

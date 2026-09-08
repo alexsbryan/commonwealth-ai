@@ -594,8 +594,10 @@ pub(crate) fn cap_chunks_per_article(
         // retrieval:
         //   - atom-enum: one-chunk-per-entity, atlas-directed, bounded by
         //     SOVEREIGN_ATOM_ENUM_TOPK.
-        //   - raptor: top-M whole-document summaries, collapsed-tree-
-        //     directed, bounded by SOVEREIGN_RAPTOR_TOP_M.
+        //   - the atlas walk's Summary atoms: whole-document summaries,
+        //     map-directed, bounded by the thematic row's own seed quota
+        //     (`SeedPolicy::budgets`, 8 — the number `SOVEREIGN_RAPTOR_TOP_M`
+        //     carried before ei-5c retired the injector it belonged to).
         // Capping either by (corpus_id, title) would silently drop exactly
         // the directed evidence — a RAPTOR summary carries title=<slug> and
         // corpus_id=<corpus>, so it collides with the article's own leaf

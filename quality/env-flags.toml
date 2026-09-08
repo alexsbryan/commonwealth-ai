@@ -431,7 +431,7 @@ name = "SOVEREIGN_RAPTOR_TOP_M"
 cluster = "retrieval"
 default = "see helper"
 status = "deprecated"
-purpose = "RETIRED 2026-09-07 (order ei-5c); no longer read. It bounded how many RAPTOR summary nodes the retrieval-time injector added, and ei-5c deleted that injector; whole-work summaries now reach retrieval as the atlas walk's Summary atoms, which the walk itself bounds. A corpus gets those atoms from `svrn enrich summary-atoms <corpus>` — data, not a knob. Setting this has no effect. Record: sovereign/DEFAULTS_LEDGER.md."
+purpose = "RETIRED 2026-09-07 (order ei-5c); no longer read. It bounded how many RAPTOR summary nodes the retrieval-time injector added, and ei-5c deleted that injector; whole-work summaries now reach retrieval as the atlas walk's Summary atoms, bounded by the navigation map's thematic row (SeedPolicy::budgets). Its shipped default of 8 was carried across verbatim into that row's Summary quota (corpus-engine-vocab SUMMARY_SEED_BUDGET), so the volume of late-appended summary text is unchanged by the port — this flag's number outlived the flag. A corpus gets those atoms from `svrn enrich summary-atoms <corpus>` — data, not a knob. Setting this has no effect. Record: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_RAPTOR_MIN_LEVEL"

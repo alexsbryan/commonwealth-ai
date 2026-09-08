@@ -82,8 +82,8 @@ pub const MAP_NODE_CAP: usize = 64;
 
 /// Over-fetch factor for a KIND-FILTERED seed pool.
 ///
-/// A filtered row asks the ANN table for `max_seeds * SEED_OVERFETCH` nearest
-/// atoms and keeps the best `max_seeds` that pass the filter. Without it, a
+/// A filtered row asks the ANN table for [`seed_pool_size`] nearest atoms and
+/// keeps the best that pass the filter and its quotas. Without it, a
 /// row that seeds on `Configuration` gets zero seeds whenever the twelve
 /// nearest atoms happen to be Claims — the filter would subtract rather than
 /// select, and a policy-driven walk would ground LESS than the constant it
@@ -183,7 +183,7 @@ pub async fn ground(
     // selects within a wider pool instead of subtracting from a narrow one.
     let filtered = seed_filter_is_active(walk);
     let ann_k = if filtered {
-        max_seeds.saturating_mul(SEED_OVERFETCH)
+        seed_pool_size(walk, max_seeds)
     } else {
         max_seeds
     };
@@ -672,6 +672,35 @@ fn is_summary_grain(graph: &dyn AtlasProvider, atom_id: &str) -> bool {
         .atom(atom_id)
         .map(|a| a.kind().grain() == kernel_types::Grain::Summary)
         .unwrap_or(false)
+}
+
+/// How many nearest atoms to ask the ANN table for, given the row.
+///
+/// A filtered row over-fetches so the filter SELECTS within a wider pool
+/// instead of subtracting from a narrow one — without it a row that seeds on
+/// `Configuration` gets nothing whenever the twelve nearest atoms are Claims.
+///
+/// The quota term is the ei-5c half and it is not cosmetic. A kind with a
+/// [`SeedPolicy::budgets`] quota draws slots ON TOP of `max_seeds`, so the
+/// pool has to be able to hold both; sizing it for `max_seeds` alone would let
+/// a summary-dense atlas fill the fetched window with the very kind the quota
+/// then refuses, and the leaves it was protecting would starve inside the
+/// pool rather than at the filter. That would be the displacement this order
+/// removed, reappearing one step upstream and invisible in the ledger —
+/// `dropped_seed_budget` would count the refusals and nothing would count the
+/// leaves that were never fetched.
+///
+/// Saturating throughout: a map may declare any `u32`, and a pool size that
+/// wrapped would be a silent under-fetch.
+fn seed_pool_size(walk: &WalkPolicy, max_seeds: usize) -> usize {
+    let quota: usize = walk
+        .seed
+        .budgets
+        .values()
+        .fold(0usize, |a, &b| a.saturating_add(b as usize));
+    max_seeds
+        .saturating_add(quota)
+        .saturating_mul(SEED_OVERFETCH)
 }
 
 /// Does this row filter its seeds at all? An unfiltered row seeds on whatever

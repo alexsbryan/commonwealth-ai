@@ -152,12 +152,24 @@ pub struct WalkLedger {
     pub summary_expansions_suppressed: usize,
     /// Summary nodes carried out for late append — rule R3.
     pub summaries_appended: usize,
-    /// Candidates the row's per-kind seed QUOTA refused
-    /// ([`SeedPolicy::budgets`]) — admitted by kind, and then dropped because
-    /// that kind's quota was already full. Distinct from
-    /// [`Self::dropped_seed_kind`], which is the kind filter saying no: this
-    /// one is the walk saying "yes, but not at another kind's expense", and
-    /// the two would be indistinguishable in one counter.
+    /// Candidates admitted BY KIND and then refused because a quota was full.
+    ///
+    /// Two quotas feed it, deliberately as one number, because they are one
+    /// concept: a kind named in the row's `SeedPolicy::budgets` has its own,
+    /// and every other admitted kind shares `max_seeds` — which IS the default
+    /// quota, and was the only one before ei-5c. So this counter reads "the
+    /// walk wanted more seeds than it was allowed", whichever allowance bound
+    /// it.
+    ///
+    /// Distinct from [`Self::dropped_seed_kind`], which is the kind filter
+    /// saying NO. This one is the walk saying "yes, but not at another kind's
+    /// expense", and collapsing the two would hide exactly the ei-7a
+    /// displacement: a Summary refused for being a Summary and a Summary
+    /// refused for being the ninth are different facts about the map.
+    ///
+    /// Before ei-5c the shared-pool half was not counted at all — a candidate
+    /// past `max_seeds` was simply not pushed — so a walk that discarded half
+    /// its pool looked identical to one that had a small pool.
     pub dropped_seed_budget: usize,
 }
 

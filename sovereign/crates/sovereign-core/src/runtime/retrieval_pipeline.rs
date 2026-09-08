@@ -3069,7 +3069,7 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 18-step core (`demand_plan` is the
+        // Shared 3-step head + shared 17-step core (`demand_plan` is the
         // first core step, I4-A); the pipelines differ ONLY in their tails
         // (KQ: audited truncate; deep: plain truncate + strategy-driven
         // top-sources expansion).
@@ -3086,12 +3086,18 @@ mod tests {
         // travelled to both consumers as typed data, so the chunk was a
         // weaker duplicate of a fact the prompt builders could read directly.
         // It now renders through `unavailability::unavailability_guidance`.
-        assert_eq!(&kq[..21], &deep[..21]);
-        assert_eq!(kq.len(), 23);
-        assert_eq!(deep.len(), 24);
-        assert_eq!(&kq[21..], &["truncate_merged", "scope_audit"]);
+        //
+        // It LOST `raptor_grounding_early` on 2026-09-07 (ei-5c). That step
+        // ran the retrieval-time RAPTOR injector — a second grounding
+        // implementation outside corpus-engine — and whole-work summaries
+        // reach the pool through `atlas_grounding`'s walk now, appended at the
+        // late position by the handlers rather than injected at rung 13.
+        assert_eq!(&kq[..20], &deep[..20]);
+        assert_eq!(kq.len(), 22);
+        assert_eq!(deep.len(), 23);
+        assert_eq!(&kq[20..], &["truncate_merged", "scope_audit"]);
         assert_eq!(
-            &deep[21..],
+            &deep[20..],
             &["truncate_merged", "top_sources_expand", "scope_audit"]
         );
         // BOTH tails must END with the audit: it audits the final pool, so a

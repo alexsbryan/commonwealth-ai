@@ -89,7 +89,7 @@ fn render() -> String {
            now, and whether a corpus HAS them is a data state\n\
            (`svrn enrich summary-atoms <corpus>`), not a knob. Setting\n\
            any of the five has no effect. See\n\
-           `sovereign/DEFAULTS_LEDGER.md`.\n
+           `sovereign/DEFAULTS_LEDGER.md`.\n\
          - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit\n\
            snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).\n\
            Never set in normal operation.\n",

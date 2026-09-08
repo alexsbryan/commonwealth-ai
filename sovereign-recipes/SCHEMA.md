@@ -1019,6 +1019,7 @@ Where a walk starts. `kinds` are on-disk `atom_type` tags (`Entity`, `State`, `C
 | `kinds` | `Vec<AtomType>` | no | type default | Atom kinds to seed on — the `atom_type` tag as written on disk. |
 | `entity_types` | `Vec<EntityType>` | no | type default | When `kinds` includes `Entity`, only entities of these types (`concept`, `person`, `work`, …). Empty means any entity. |
 | `declared` | `bool` | no | type default | Also seed on the declared types (`shape.types`) and their subtypes. |
+| `budgets` | `BTreeMap<AtomType, u32>` | no | type default | **How many seed slots one kind may take, per kind that declares a quota.** A kind named here draws from its OWN quota; every other admitted kind shares the walk's `max_seeds` pool as before. So a kind with a quota can never take a slot from a kind without one — which is the whole point, and the difference between this and simply listing fewer kinds. Why the field exists, measured rather than reasoned. ei-7a added `Summary` to the thematic row's [`Self::kinds`] and A/B'd it on a SEP subset built for the purpose: OFF 47/66 twice, ON 40/66 and 39/66 — −7.5/66 on a HARD lane. The mechanism was not scoring displacement (`atlas::ground`'s R1/R2 already refuse that) but SEED-RACE displacement: `Summary` won about 1.1% of the seed slots against ~21k entity and argument seeds, and every slot it won was a leaf seed that did not happen. One score-ordered pool cannot express "reachable but never at a leaf's expense", so the walk could not be made sole and the retrieval-time injector had to stay. An EMPTY map is the pre-ei-5c behaviour exactly: no kind has a quota, so all of them share `max_seeds`. That is the failing input for the displacement fixture — clear this map and the fixture goes red. |
 
 ## `WalkPolicy`
 
@@ -1038,7 +1039,7 @@ One row of the navigation table: how to walk for one question kind.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `thematic` | `WalkPolicy` | no | `WalkPolicy::thematic()` | "What is this about?" — Configuration + concept Entity; Involves → Tension → Grounds; 2 hops. |
+| `thematic` | `WalkPolicy` | no | `WalkPolicy::thematic()` | "What is this about?" — Configuration + concept Entity + Summary (quota [`SUMMARY_SEED_BUDGET`]); Involves → Tension → Grounds → Configures; 2 hops. |
 | `trajectory` | `WalkPolicy` | no | `WalkPolicy::trajectory()` | "How does X change?" — Entity + State; Transition, Causes; 2 hops. |
 | `tension` | `WalkPolicy` | no | `WalkPolicy::tension()` | "Where does it disagree?" — Claim + Position; Tension, OpposesIn; 1 hop. |
 | `enumeration` | `WalkPolicy` | no | `WalkPolicy::enumeration()` | "Which X?" — the declared types and subtypes; no walk. |

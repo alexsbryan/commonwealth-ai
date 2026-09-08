@@ -65,19 +65,20 @@ const MANUFACTURED: &[(&str, &str)] = &[
     // Atlas claim atoms injected as virtual chunks when a question is an
     // overview ask and the pool has no anchor.
     ("atom_enum_claim", "an atlas claim atom, not an indexed row"),
-    // A conversation RAPTOR rollup: model-authored prose ABOUT conversation
-    // text. The legacy bag said the same thing with metadata["source"]="raptor"
-    // compared at three sites.
-    (
-        "raptor_summary",
-        "model-authored summary; may orient, may not be quoted",
-    ),
-    // ei-7a. The SAME rollup text, reached by the atlas walk instead of by the
-    // injector above — one grain, two producers, kept apart here so the census
-    // says which path put a summary in the pool. It comes off this list the
-    // day a Summary atom's text is fetched back through a `CorpusIndex` door
-    // rather than carried on the atom; today it is not index content at all,
-    // because a summary is prose a model wrote ABOUT the index.
+    // `raptor_summary` was here until ei-5c (2026-09-07) and came off the list
+    // the way this test's own message says a producer should: the code went, so
+    // the row went, in the same commit. It was the retrieval-time RAPTOR
+    // injector's chunk (`raptor_scored_chunk`), and the injector was a second
+    // grounding implementation outside corpus-engine. Deleting a producer is
+    // the only way this list ever shrinks, and the `gone` assertion below is
+    // what makes forgetting to shrink it fail rather than rot.
+    //
+    // ei-7a. A rollup's text, reached by the atlas walk. It was one of TWO
+    // producers of this grain while the port ran and is the only one now. It
+    // comes off this list the day a Summary atom's text is fetched back
+    // through a `CorpusIndex` door rather than carried on the atom; today it
+    // is not index content at all, because a summary is prose a model wrote
+    // ABOUT the index.
     (
         "atlas_summary",
         "a walked Summary atom's text; not an indexed row",

@@ -10,7 +10,7 @@ ordered list of named steps run by one tracing runner (one
 `chunks_before/after/delta`). The governing principle: **the intent
 decides HOW to answer (model tier, expansion, synthesis shape) — never
 WHERE knowledge lives.** Both pipelines share the same 3-step
-evidence-gathering head and 13-step core (incl. the FR-9 governance
+evidence-gathering head and 12-step core (incl. the FR-9 governance
 active-set filter); they differ only in their
 tails. Step ORDER is bench-tuned data, pinned by golden tests — see
 the module doc in `retrieval_pipeline.rs` for design rationale and the
@@ -156,7 +156,6 @@ now, and whether a corpus HAS them is a data state
 (`svrn enrich summary-atoms <corpus>`), not a knob. Setting
 any of the five has no effect. See
 `sovereign/DEFAULTS_LEDGER.md`.
-
-         - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit
+- **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit
 snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).
 Never set in normal operation.

@@ -333,10 +333,22 @@ mod tests {
             .join("atlas_cmd/migrate_all.rs");
         let whole = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-        whole
+        let prod = whole
             .split_once("#[cfg(test)]")
-            .map(|(p, _)| p.to_string())
-            .unwrap_or_else(|| panic!("{}: no test module to split on", path.display()))
+            .map(|(p, _)| p)
+            .unwrap_or_else(|| panic!("{}: no test module to split on", path.display()));
+        // COMMENTS OUT. The module doc RECORDS the fork this guard forbids —
+        // it names `load_atlas_context` and `build_persistent_ann_seed_table`
+        // to say what the verb used to do and what it cost — and a scan that
+        // counted prose would make writing that history impossible. The
+        // hazard is a CALL, so the scan reads calls. (Caught by this test
+        // failing on its own commit, which is the guard working: it was
+        // watching the file, just not the right half of it.)
+        prod.lines()
+            .map(str::trim_start)
+            .filter(|l| !l.starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// `migrate-all` must SEED THROUGH THE ONE WRITER, not build a seed table

@@ -806,6 +806,15 @@ fn ontology_outcome(corpus: &str, atlas_dir: &Path) -> ToolOutcome {
         if walk.seed.declared {
             seeds.push("declared types + subtypes".to_string());
         }
+        // The per-kind seed QUOTA (ei-5c). Rendered beside the seeds because
+        // it is the answer to the question the seed list alone raises — this
+        // row seeds on Summary AND on Entity, so which one gets the slots? A
+        // quota'd kind draws from its own pool and cannot take a leaf's, and
+        // a reader who cannot see that number cannot tell a map that reaches
+        // summaries from one that is drowning in them.
+        for (k, n) in &walk.seed.budgets {
+            seeds.push(format!("{} at most {n}", tag(k)));
+        }
         let edges: Vec<String> = walk.walk.iter().map(tag).collect();
         text.push_str(&format!(
             "- navigation.{}: seed {} | walk {} | hops {} | budget {}\n",
@@ -984,8 +993,18 @@ mod tests {
         // sovereign-core. The literal is spelled out here rather than
         // interpolated from the constant on purpose: a test that reads the
         // same constant the renderer reads cannot notice the number moving.
+        //
+        // ei-5c added two things a reader of this row needs. `Summary at most
+        // 8` is the per-kind seed quota: the row seeds on Summary AND on
+        // Entity, so the seed list alone leaves "which one gets the slots?"
+        // unanswered, and the answer is that a quota'd kind draws from its own
+        // pool and cannot take a leaf's. `→ Configures` is the edge that lets
+        // a walk seeded on a Configuration LEAVE it — the row listed
+        // Configuration as a seed and no edge a Configuration has, so it was a
+        // terminus by accident. Both literals are spelled out for the same
+        // reason as `budget 12`.
         assert!(
-            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 12"),
+            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Grounds → Configures | hops 2 | budget 12"),
             "{}",
             out.text
         );

@@ -13,7 +13,7 @@ use corpus_engine_vocab::taxonomy::EntityType;
 // split.
 use crate::atlas_traversal::question_kind::KindSource;
 use crate::types::EmbedFn;
-use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
@@ -457,6 +457,40 @@ async fn a_quota_keeps_summaries_reachable_without_costing_a_leaf_seed() {
         SUMMARY_SEED_BUDGET as usize,
         "the summaries are still carried out — R3's cap is the same quota"
     );
+}
+
+/// The fetched pool must be able to hold the quota AND the unbudgeted slots.
+///
+/// Failing input, and it is the reason the function exists: size the pool on
+/// `max_seeds` alone (drop the `quota` term) and the pre-registered thematic
+/// row fetches 48 where it needs 80. On a summary-dense atlas the fetched
+/// window fills with the kind the quota then refuses, and the leaves the quota
+/// was protecting starve INSIDE the pool — upstream of the filter, so
+/// `dropped_seed_budget` counts the refusals and nothing counts the leaves
+/// that were never fetched. The displacement, one step earlier and invisible.
+#[test]
+fn the_fetched_pool_holds_the_quota_on_top_of_the_shared_slots() {
+    let n = NavigationPolicy::default();
+    let thematic = n.walk(QuestionKind::Thematic);
+    assert_eq!(
+        seed_pool_size(thematic, 12),
+        (12 + SUMMARY_SEED_BUDGET as usize) * 4,
+        "the pool must fetch for max_seeds PLUS every declared quota"
+    );
+
+    // A row with no quota is unchanged — the pre-ei-5c size exactly.
+    let tension = n.walk(QuestionKind::Tension);
+    assert_eq!(seed_pool_size(tension, 12), 12 * 4);
+
+    // A map may declare any `u32`, and the property that matters is that the
+    // result cannot WRAP: a wrapped pool size is a tiny number, i.e. a silent
+    // under-fetch, which is the failure mode this whole function is about.
+    // Asserted as "at least the quota" rather than as `usize::MAX`, because
+    // saturation is not reached on a 64-bit usize and pinning the exact
+    // product would be pinning the target's word size.
+    let mut wild = WalkPolicy::thematic();
+    wild.seed.budgets.insert(AtomType::Summary, u32::MAX);
+    assert!(seed_pool_size(&wild, 12) >= u32::MAX as usize);
 }
 
 /// R3's cap and the row's quota are ONE number. A map that declares a
