@@ -20,6 +20,8 @@
 //! [`EdgeType`]. No spelling is minted here — a row is written in the
 //! on-disk tags the atoms and edges already carry.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::atoms::AtomType;
@@ -91,6 +93,29 @@ pub struct SeedPolicy {
     /// Also seed on the declared types (`shape.types`) and their subtypes.
     #[serde(default)]
     pub declared: bool,
+    /// **How many seed slots one kind may take, per kind that declares a
+    /// quota.** A kind named here draws from its OWN quota; every other
+    /// admitted kind shares the walk's `max_seeds` pool as before. So a kind
+    /// with a quota can never take a slot from a kind without one — which is
+    /// the whole point, and the difference between this and simply listing
+    /// fewer kinds.
+    ///
+    /// Why the field exists, measured rather than reasoned. ei-7a added
+    /// `Summary` to the thematic row's [`Self::kinds`] and A/B'd it on a SEP
+    /// subset built for the purpose: OFF 47/66 twice, ON 40/66 and 39/66 —
+    /// −7.5/66 on a HARD lane. The mechanism was not scoring displacement
+    /// (`atlas::ground`'s R1/R2 already refuse that) but SEED-RACE
+    /// displacement: `Summary` won about 1.1% of the seed slots against
+    /// ~21k entity and argument seeds, and every slot it won was a leaf seed
+    /// that did not happen. One score-ordered pool cannot express "reachable
+    /// but never at a leaf's expense", so the walk could not be made sole and
+    /// the retrieval-time injector had to stay.
+    ///
+    /// An EMPTY map is the pre-ei-5c behaviour exactly: no kind has a quota,
+    /// so all of them share `max_seeds`. That is the failing input for the
+    /// displacement fixture — clear this map and the fixture goes red.
+    #[serde(default)]
+    pub budgets: BTreeMap<AtomType, u32>,
 }
 
 /// One row of the navigation table: how to walk for one question kind.
@@ -149,6 +174,23 @@ pub struct WalkPolicy {
 /// One number, one home; the rows below all cite it.
 pub const DEFAULT_BUDGET: u32 = 12;
 
+/// The seed quota the pre-registered `thematic` row gives [`AtomType::Summary`]
+/// — and, because a Summary seed neither expands nor scores a leaf, the number
+/// of summaries one walk can carry out.
+///
+/// EIGHT, and not a fresh guess: it is `SOVEREIGN_RAPTOR_TOP_M`'s shipped
+/// default in the retrieval-time RAPTOR injector this walk replaces. Carrying
+/// the number across means the volume of late-appended summary text is
+/// unchanged by the port, so a lane delta is attributable to the WALK reaching
+/// the summaries rather than to more of them arriving (§18.4 — validate the
+/// instrument before the result).
+///
+/// ONE number, one home: `atlas::ground`'s R3 truncation reads this row's
+/// budget rather than a constant of its own, so the count that may SEED and the
+/// count that may be APPENDED cannot drift apart (ARCH §10.6). It replaced
+/// `ground::SUMMARY_APPEND_CAP`, which was the second copy.
+pub const SUMMARY_SEED_BUDGET: u32 = 8;
+
 /// The pre-registered exemplars for one kind — `EPISTEMIC_INDEX.md` §2.2's own
 /// gloss of the kind, plus the two or three phrasings a reader actually types.
 ///
@@ -177,14 +219,39 @@ impl WalkPolicy {
     /// A Summary seed does NOT expand and does NOT score leaf evidence —
     /// see `atlas::ground`'s R1/R2 and [`AtomType::grain`]. Listing it here
     /// makes it reachable; it does not make it a route.
+    ///
+    /// Two ei-5c changes, both repairs of the same shape as that one — the
+    /// table saying a kind is reachable while nothing in the table can reach
+    /// it:
+    ///
+    /// - **`Summary` gets a [`SeedPolicy::budgets`] quota.** Reachable was not
+    ///   enough: ei-7a measured −7.5/66 on SEP because every Summary seed came
+    ///   out of a leaf seed's slot. With the quota, Summary seeds compete only
+    ///   with each other and a leaf keeps its own; the ei-7a fixture is the
+    ///   watched failing input (clear the map, it goes red).
+    /// - **`Configures` joins the edge list.** The row seeds on
+    ///   `Configuration` and lists no edge kind a Configuration has, so a
+    ///   thematic walk seeded on one could not leave it — a terminus by
+    ///   accident rather than by rule, unlike Summary's R1. `Configures` is an
+    ///   EXISTING kind (spec §3 forbids a private one): it has carried a CSR
+    ///   type byte and an `edge_weight` of 0.6 since ATLAS_STORAGE_V2, minted
+    ///   for exactly this relation and emitted by nothing. `atlas::store`'s
+    ///   writer derives it from `Configuration.constituent_atoms` now, so the
+    ///   edge the walk follows and the field the atom carries are one fact.
     pub fn thematic() -> Self {
         Self {
             seed: SeedPolicy {
                 kinds: vec![AtomType::Configuration, AtomType::Entity, AtomType::Summary],
                 entity_types: vec![EntityType::Concept],
                 declared: false,
+                budgets: BTreeMap::from([(AtomType::Summary, SUMMARY_SEED_BUDGET)]),
             },
-            walk: vec![EdgeType::Involves, EdgeType::Tension, EdgeType::Grounds],
+            walk: vec![
+                EdgeType::Involves,
+                EdgeType::Tension,
+                EdgeType::Grounds,
+                EdgeType::Configures,
+            ],
             hops: 2,
             budget: DEFAULT_BUDGET,
             exemplars: exemplars(&[
@@ -203,6 +270,7 @@ impl WalkPolicy {
                 kinds: vec![AtomType::Entity, AtomType::State],
                 entity_types: Vec::new(),
                 declared: false,
+                budgets: BTreeMap::new(),
             },
             walk: vec![EdgeType::Transition, EdgeType::Causes],
             hops: 2,
@@ -226,6 +294,7 @@ impl WalkPolicy {
                 kinds: vec![AtomType::Claim, AtomType::Position],
                 entity_types: Vec::new(),
                 declared: false,
+                budgets: BTreeMap::new(),
             },
             walk: vec![EdgeType::Tension, EdgeType::OpposesIn],
             hops: 1,
@@ -246,6 +315,7 @@ impl WalkPolicy {
                 kinds: Vec::new(),
                 entity_types: Vec::new(),
                 declared: true,
+                budgets: BTreeMap::new(),
             },
             walk: Vec::new(),
             hops: 0,
@@ -266,6 +336,7 @@ impl WalkPolicy {
                 kinds: vec![AtomType::Entity],
                 entity_types: Vec::new(),
                 declared: false,
+                budgets: BTreeMap::new(),
             },
             walk: vec![EdgeType::Involves],
             hops: 1,
@@ -315,8 +386,9 @@ impl WalkPolicy {
 /// key you mean, because an omitted `seed` is an empty seed, not the default.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NavigationPolicy {
-    /// "What is this about?" — Configuration + concept Entity; Involves →
-    /// Tension → Grounds; 2 hops.
+    /// "What is this about?" — Configuration + concept Entity + Summary
+    /// (quota [`SUMMARY_SEED_BUDGET`]); Involves → Tension → Grounds →
+    /// Configures; 2 hops.
     #[serde(default = "WalkPolicy::thematic")]
     pub thematic: WalkPolicy,
     /// "How does X change?" — Entity + State; Transition, Causes; 2 hops.
@@ -398,9 +470,21 @@ mod tests {
             vec![AtomType::Configuration, AtomType::Entity, AtomType::Summary]
         );
         assert_eq!(t.seed.entity_types, vec![EntityType::Concept]);
+        // ei-5c: `Configures` joins the edge list so a walk seeded on a
+        // Configuration can leave it, and `Summary` gets its own seed quota so
+        // it cannot take a leaf's slot.
         assert_eq!(
             t.walk,
-            vec![EdgeType::Involves, EdgeType::Tension, EdgeType::Grounds]
+            vec![
+                EdgeType::Involves,
+                EdgeType::Tension,
+                EdgeType::Grounds,
+                EdgeType::Configures
+            ]
+        );
+        assert_eq!(
+            t.seed.budgets,
+            BTreeMap::from([(AtomType::Summary, SUMMARY_SEED_BUDGET)])
         );
         assert_eq!((t.hops, t.budget), (2, DEFAULT_BUDGET));
 
@@ -424,6 +508,49 @@ mod tests {
         assert_eq!(t.hops, 1);
 
         assert_eq!(n.rows().count(), QuestionKind::ALL.len());
+
+        // Only the thematic row declares a quota. A quota on every row would
+        // be a cap on seeding in general; this field exists to hold ONE kind
+        // out of the leaf race, and the other four rows seed only leaf kinds.
+        for (kind, w) in n.rows() {
+            if kind == QuestionKind::Thematic {
+                continue;
+            }
+            assert!(
+                w.seed.budgets.is_empty(),
+                "{kind:?} declares a seed quota; only thematic should"
+            );
+        }
+        assert!(WalkPolicy::unfiltered().seed.budgets.is_empty());
+    }
+
+    /// A quota is data, so it round-trips as data: a map may set its own
+    /// (a corpus whose readers want more or fewer summaries) and a map that
+    /// says nothing gets the pre-registered one. Failing input: drop
+    /// `#[serde(default)]` from `budgets`, or serialise the key as anything
+    /// but the on-disk `atom_type` tag.
+    #[test]
+    fn a_seed_quota_is_declared_data_not_a_constant() {
+        let text = serde_json::to_string(&NavigationPolicy::default()).unwrap();
+        assert!(
+            text.contains("\"budgets\":{\"Summary\":8}"),
+            "the quota must write the on-disk atom_type tag: {text}"
+        );
+
+        let declared = serde_json::json!({
+            "thematic": { "seed": { "kinds": ["Summary"], "budgets": { "Summary": 2 } },
+                          "walk": ["Involves"], "hops": 1, "budget": 6 }
+        });
+        let n: NavigationPolicy = serde_json::from_value(declared).unwrap();
+        assert_eq!(n.thematic.seed.budgets.get(&AtomType::Summary), Some(&2));
+
+        // A row that omits `budgets` has none — the pre-ei-5c behaviour, which
+        // is what makes the displacement fixture's negative arm expressible.
+        let silent = serde_json::json!({
+            "thematic": { "seed": { "kinds": ["Summary"] }, "walk": [], "hops": 1, "budget": 6 }
+        });
+        let n: NavigationPolicy = serde_json::from_value(silent).unwrap();
+        assert!(n.thematic.seed.budgets.is_empty());
     }
 
     /// A JSON document with no `navigation` key — every `ontology.json`

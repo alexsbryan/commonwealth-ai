@@ -325,6 +325,42 @@ impl Runtime {
                 "atlas-grounding: Summary atoms carried out for late append"
             );
             summaries_out.extend(grounding.summaries.iter().cloned());
+        } else if selection
+            .walk
+            .seed
+            .kinds
+            .contains(&corpus_engine::enrichment::atlas::AtomType::Summary)
+        {
+            // ei-5c: the walk is the ONLY producer of whole-work summaries now
+            // — `apply_raptor_grounding` cosined `conv_raptor_nodes` at this
+            // position until this commit. So a corpus that HAS the RAPTOR rows
+            // and has not had them projected into its atlas is a corpus whose
+            // summaries are simply gone, and the pool looks exactly like a
+            // corpus that never had any. That is the substitution ARCH §18.3
+            // forbids, and the migration is one command, so the absence is
+            // NAMED with the command that fixes it.
+            //
+            // Costed to the row: only the thematic row seeds `Summary`, and
+            // only when it yielded none — so this is at most one sidecar stat
+            // per candidate corpus on the questions where a summary was
+            // actually wanted, never on the leaf path.
+            if let Some(engine) = self.corpus_engine.as_ref() {
+                let unprojected: Vec<&str> = corpus_ids
+                    .iter()
+                    .filter(|id| engine.raptor_index_meta(id).is_some())
+                    .map(String::as_str)
+                    .collect();
+                if !unprojected.is_empty() {
+                    tracing::info!(
+                        label,
+                        corpora = %unprojected.join(","),
+                        "atlas-grounding: these corpora carry RAPTOR summary rows but no \
+                         Summary atoms, so the walk reached none — whole-work summaries are \
+                         ABSENT for them until `svrn enrich summary-atoms <corpus>` projects \
+                         the rows into their atlases"
+                    );
+                }
+            }
         }
 
         let before = chunks.len();

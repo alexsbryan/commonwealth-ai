@@ -8,9 +8,20 @@
 //! | arm             | change vs baseline                                  |
 //! |-----------------|-----------------------------------------------------|
 //! | baseline        | shipped defaults (env force-cleared for isolation)  |
-//! | raptor_off      | `SOVEREIGN_RAPTOR_GROUNDING=0`                      |
 //! | conv_ppr_off    | `SOVEREIGN_CONV_PPR_WEIGHT=0`                       |
 //! | with_atlas      | `--with-atlas <ids>` (only when `--atlas` given)    |
+//!
+//! There was a `raptor_off` arm here (`SOVEREIGN_RAPTOR_GROUNDING=0`) until
+//! 2026-09-07. Order ei-5c deleted the retrieval-time RAPTOR injector, so the
+//! flag is no longer read and the arm would have force-cleared nothing,
+//! measured the unablated system, and reported the result as an ablation —
+//! the silent substitution ARCH_PRINCIPLES §18.3 forbids. Whole-work summaries
+//! now reach retrieval through the atlas walk's `Summary` atoms, which is a
+//! DATA state of the corpus (`svrn enrich summary-atoms <corpus>`), not a
+//! knob: A/B it by comparing corpora that have those atoms against corpora
+//! that do not. Past runs keyed on `raptor_off` (e.g.
+//! sovereign/bench/ablation/2026-07-31-sep-knob-matrix.json) stand as records
+//! of the flagged era.
 //!
 //! Every rep is a SUBPROCESS so the knob env vars are read fresh by the
 //! in-process production pipeline (several are cached at construction time —
@@ -66,7 +77,6 @@ const SEPARATION_FLOOR: f64 = 0.02;
 /// environment (then selectively set) so an operator's ambient shell
 /// exports cannot contaminate the baseline.
 const MATRIX_ENV: &[&str] = &[
-    "SOVEREIGN_RAPTOR_GROUNDING",
     "SOVEREIGN_CONV_PPR_WEIGHT",
     "SOVEREIGN_PREFIX_STATE",
     // The whole rerank family, not just the two the `--rerank` arms set.
@@ -128,7 +138,7 @@ const HELP: Help = Help {
         ),
         HelpSection::Notes(
             "Runs each bank through `eval run --prod-pipeline --isolate` under the \
-             declared knob matrix (baseline / raptor_off / conv_ppr_off / \
+             declared knob matrix (baseline / conv_ppr_off / \
              doc_cluster_on / with_atlas when --atlas is given), --reps subprocess \
              reps per arm (default 3). --limit is eval run's retrieval pool size \
              per question (default 30 — the SP2 bench register; NOT a question \
@@ -635,10 +645,6 @@ async fn run(rest: &[String]) -> i32 {
 
     let mut arms: Vec<ArmSpec> = vec![
         ArmSpec::retrieval("baseline", vec![]),
-        ArmSpec::retrieval(
-            "raptor_off",
-            vec![("SOVEREIGN_RAPTOR_GROUNDING", "0".into())],
-        ),
         ArmSpec::retrieval(
             "conv_ppr_off",
             vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())],

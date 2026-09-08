@@ -170,6 +170,21 @@ total across the workspace):
 (`:296`). So registered went **16 → 15** and the total **27 → 26** —
 net **−1**. Real, and half the size the commit note claimed.
 
+**ei-5c's movement (2026-09-07):** the five `SOVEREIGN_RAPTOR_*` knobs in
+the registered list above stopped gating anything. Order ei-5c deleted the
+retrieval-time RAPTOR injector
+(`sovereign-core/src/runtime/retrieval/raptor_grounding.rs`) because the atlas
+walk now reaches the same summaries as `Summary` atoms and appends them at the
+same late position — one walk, one producer. The registry rows are kept and
+marked `deprecated` rather than deleted, since the names may still be exported
+in an operator's shell, but by this section's own predicate they no longer
+qualify: a re-measure should read **10 registered, 21 total**. What decides
+whether a corpus's summaries reach retrieval is now a data state — does its
+atlas carry `Summary` atoms (`svrn enrich summary-atoms <corpus>`) — not a
+knob, which is the shape `ENRICHMENT_ROADMAP_SIZING.md`'s D2 (knob-retirement
+protocol) asked for.
+Record: `sovereign/DEFAULTS_LEDGER.md`.
+
 **Follow-up this census creates:** registering the 11 grandfathered vars
 is a prerequisite for the target of ≤4, since a var nobody has
 registered cannot be deleted with a decision attached. That work is not

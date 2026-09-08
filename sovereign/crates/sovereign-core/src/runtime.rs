@@ -136,9 +136,9 @@ pub(crate) use self::merge_select::{
 pub(crate) use self::question_analysis::{
     cap_chunks_per_article, comparison_axis, extract_commitment_phrase,
     extract_comparison_entities, extract_question_entities, locator_hint_from_coarse,
-    parse_metalingual_locator, project_retrieved_chunks, raptor_late_inject_enabled,
-    reserve_atom_enum_chunks, reserve_chunks_per_entity, reserve_summary_chunks,
-    MetalingualLocator, COARSE_CONVERSATION_ARCHIVE_EMBED, COARSE_CONVERSATION_LOCATOR_DIRECT,
+    parse_metalingual_locator, project_retrieved_chunks, reserve_atom_enum_chunks,
+    reserve_chunks_per_entity, reserve_summary_chunks, MetalingualLocator,
+    COARSE_CONVERSATION_ARCHIVE_EMBED, COARSE_CONVERSATION_LOCATOR_DIRECT,
     COARSE_CONVERSATION_LOCATOR_EMBED,
 };
 pub(crate) use self::retrieval_helpers::{

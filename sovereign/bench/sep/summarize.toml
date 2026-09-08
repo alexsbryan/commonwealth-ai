@@ -20,7 +20,11 @@ Method (zero new harness code): the questions are "comprehensive overview"
 prompts; `expected_facts` are the work's major canonical themes. Under
 `--synth`, the strict + LLM-judge fact scorers then measure *theme coverage* of
 the generated summary — facts-judge (paraphrase-tolerant) is the headline
-number. Run A/B on `SOVEREIGN_RAPTOR_GROUNDING` (0 vs 1), same as the SEP bench.
+number. The comparison is no longer a flag: order ei-5c (2026-09-07) deleted the
+retrieval-time RAPTOR injector, and the summaries now reach retrieval as
+`Summary` atoms on the atlas walk. What varies is a DATA state of the corpus —
+whether its atlases carry those atoms — so the two arms are two corpus states
+(before and after `svrn enrich summary-atoms sep`), not two values of an env var.
 
 Theme authoring note: themes are canonical for each topic, not corpus-derived.
 That's fine — the A/B is RELATIVE (same themes both arms), so any theme that is

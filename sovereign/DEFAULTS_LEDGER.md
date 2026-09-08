@@ -2250,9 +2250,40 @@ it is an experiment (then it should not be default-on). Resolve it with the
   committed and is the template for any daemon-side knob. The original
   harness (`scratchpad/arm_runner.py`) never was.
 
-### RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`
-- Default **on**, status shipped (`env-flags.toml`). Summary nodes as
-  virtual chunks earned the default.
+### ~~RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`~~ — RETIRED 2026-09-07
+- **What was on by default:** summary nodes as virtual chunks, injected at
+  retrieval time by `runtime/retrieval/raptor_grounding.rs` with the position
+  picked by `SOVEREIGN_RAPTOR_LATE` (late since 2026-08-10). That earned the
+  default, and the finding it earned survives the knob.
+- **RETIRED 2026-09-07 (order ei-5c), with its four sibling knobs**
+  (`SOVEREIGN_RAPTOR_LATE`, `_TOP_M`, `_MIN_LEVEL`, `_DEDUPE`). Not a
+  reversal — a merge. The atlas walk
+  (`corpus_engine::enrichment::atlas::ground::ground`) now reaches the same
+  RAPTOR summaries as `Summary` atoms, and
+  `retrieval/atlas_grounding.rs::append_atlas_summaries` appends them at the
+  same late position. Two producers of the same rows at the same seam is two
+  implementations of one decision; the injector is the one that goes. One
+  walk, one producer.
+- **Deleted:** `runtime/retrieval/raptor_grounding.rs`
+  (`apply_raptor_grounding`, `raptor_scored_chunk`, `RaptorCand`),
+  `raptor_late_inject_enabled` in `question_analysis.rs`, the three call sites
+  (retrieval_pipeline rung 7, `retrieval/mod.rs`,
+  `handlers/knowledge_query.rs`), and the `raptor_off` arm of `svrn bench
+  enrichment-ablate` — an arm whose knob is dead force-clears nothing,
+  measures the unablated system, and reports it as an ablation. The five
+  `quality/env-flags.toml` rows are KEPT and marked `deprecated`: the names
+  may still be exported in an operator's shell, and a reader who finds one
+  there needs to be told it does nothing.
+- **What replaced it is not a knob.** Whether a corpus's summaries reach
+  retrieval is now a DATA state — does its atlas carry `Summary` atoms.
+  `svrn enrich summary-atoms <corpus>` projects the corpus's existing
+  `raptor_summaries.lance` rows into them, reusing the stored embeddings, so
+  it needs no RAPTOR pass and no re-embed; a corpus with no RAPTOR nodes has
+  nothing to project. The summarize banks
+  (`bench/sep/summarize.toml`, `summarize_obscure.toml`,
+  `bench/wikipedia/summarize.toml`) are A/B'd that way now: two corpus states,
+  before and after that migration, not two values of an env var.
+- **Nothing to review by:** there is no flag left to review.
 
 ## `SOVEREIGN_DR_AUDIT_BATCH_LOCATE` — the audit's location loop, batched
 

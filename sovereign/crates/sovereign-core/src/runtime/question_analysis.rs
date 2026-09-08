@@ -602,7 +602,7 @@ pub(crate) fn cap_chunks_per_article(
         // chunks (and the no-fragment section sub-cap) and, scoring lower
         // than a query-term-dense leaf, loses its slot to its own leaves.
         // That is the precise summary we injected it to surface. Tagged in
-        // `enumerate_typed_atom_chunks` / `apply_raptor_grounding`.
+        // `enumerate_typed_atom_chunks` / the atlas walk's Summary append.
         if c.metadata
             .get("source")
             .map(|s| s == "atom-enum" || s == "raptor")
@@ -746,16 +746,21 @@ pub(crate) fn reserve_atom_enum_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredCh
 /// silently demote them below base chunks. No-op when the pool holds none.
 ///
 /// **The predicate is the typed grain, not `metadata["source"] == "raptor"`
-/// (ei-7a).** Two producers now put a rollup in the pool — the retiring
-/// injector (`raptor_grounding.rs`, producer `raptor_summary`) and the walk's
-/// own late append (producer `atlas_summary`) — and "is this a summary?" must
-/// have ONE answer for both (ARCH §10.6). The string tag answered only for the
-/// first, so an atlas-walked summary would have been appended at the tail and
-/// then cut by the very budget this function exists to protect: the same
-/// defect measured on `summary_proof_theory` (pool=40, admitted=28,
-/// raptor_admitted=0 of 8; invariant 3035f3a4), reintroduced under a new name.
+/// (ei-7a).** Two producers put a rollup in the pool while the port ran — the
+/// retrieval-time injector (producer `raptor_summary`) and the walk's own late
+/// append (producer `atlas_summary`) — and "is this a summary?" had to have ONE
+/// answer for both (ARCH §10.6). The string tag answered only for the first, so
+/// an atlas-walked summary would have been appended at the tail and then cut by
+/// the very budget this function exists to protect: the same defect measured on
+/// `summary_proof_theory` (pool=40, admitted=28, raptor_admitted=0 of 8;
+/// invariant 3035f3a4), reintroduced under a new name.
 /// `ChunkProvenance::grain()` is the typed fact that replaced that compare;
 /// this is the fourth site to stop making it.
+///
+/// ei-5c retired the injector, so `atlas_summary` is the only producer today.
+/// The typed predicate STAYS: it is right for one producer as well as two, and
+/// reverting to the string tag would restore a compare that a third producer
+/// would silently fail again.
 ///
 /// Order-only, as before: the chunk SET is unchanged.
 pub(crate) fn reserve_summary_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
@@ -845,35 +850,4 @@ pub(crate) fn project_retrieved_chunks(
             })
         })
         .collect()
-}
-
-/// `SOVEREIGN_RAPTOR_LATE` (default ON — set `=0` to disable) — inject RAPTOR
-/// summaries AFTER the leaf merge/rerank pipeline instead of before it, so they
-/// cannot perturb leaf retrieval or ranking. This is the default mode because
-/// on the SEP bench it makes raptor QA-NEUTRAL (sources 76→86, at/above the
-/// no-raptor 85 baseline — the residual harm additive truncation couldn't
-/// reach, since sparse-pool questions are displaced UPSTREAM of the truncate)
-/// while keeping the summarization gain (+5 judge over no-raptor) and running
-/// slightly FASTER than early injection (raptor no longer drags ~8 chunks
-/// through reweight/sort/graph-expand). Early injection (LATE=0) lets summaries
-/// participate in graph-expansion but costs source-coverage QA. Independent of
-/// SOVEREIGN_RAPTOR_GROUNDING, which still gates raptor on/off overall.
-///
-/// **What LATE means is TIMING, not tail placement.** Until 2026-08-10 the two
-/// late-inject call sites also *appended* the summaries at the end of the pool
-/// and justified it with "DeepQuery's larger budget admits them". Measured
-/// (invariant 3035f3a4): it does not. On summary_proof_theory the deep prompt
-/// was pool=40, admitted=28, raptor_admitted=**0 of 8** — tail-placed summaries
-/// sit behind every leaf, so the prompt char budget cuts them first and the
-/// bench's pool truncate drops the same tail. Late-inject was therefore de
-/// facto DISABLING raptor grounding on big-pool turns, not making it neutral.
-/// Both sites now call [`reserve_summary_chunks`] after injecting — the same
-/// reserve the early path gets at `cap_and_reserve` (pipeline step 13), which
-/// late injection lands after. Post-rerank TIMING is what buys leaf-ranking
-/// neutrality and it is unchanged; only the within-pool ORDER moved, and the
-/// chunk set is byte-identical either way.
-pub(crate) fn raptor_late_inject_enabled() -> bool {
-    std::env::var("SOVEREIGN_RAPTOR_LATE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(true)
 }

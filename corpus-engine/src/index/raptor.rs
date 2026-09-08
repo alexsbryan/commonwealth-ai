@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! RAPTOR summary-node ANN index — a derived, per-corpus LanceDB table over
 //! RAPTOR collapsed-tree *summary* embeddings, replacing the brute-force
-//! cosine scan in `apply_raptor_grounding`. Kept **separate** from the leaf
+//! cosine scan the retired `apply_raptor_grounding` ran. Kept **separate** from the leaf
 //! `chunks.lance` so summary retrieval stays a distinct top-M (mixing them
 //! would let leaf retrieval surface summaries organically and re-introduce
 //! the displacement the late-injection design engineered out).
@@ -106,7 +106,7 @@ fn lance_path(corpus_dir: &Path) -> PathBuf {
 
 /// Arrow schema for the derived table. The vector column is named `embedding`
 /// (matching the leaf convention) so `create_index(&["embedding"], …)` is
-/// uniform. Only the columns `apply_raptor_grounding` needs to rebuild the
+/// uniform. Only the columns the summary reader needs to rebuild the
 /// virtual `ScoredChunk` — no `centroid_embedding` or JSON columns.
 fn raptor_summary_schema(dim: usize) -> SchemaRef {
     Arc::new(Schema::new(vec![
@@ -423,7 +423,7 @@ fn cosine_from_list_row(list: &FixedSizeListArray, row: usize, query: &[f32]) ->
 /// re-rank has a wide net).
 ///
 /// `min_level` filtering and dedupe are the **caller's** job
-/// (`apply_raptor_grounding` over-fetches `fetch_m = top_m * K`, then filters
+/// (the retired injector over-fetched `fetch_m = top_m * K`, then filtered
 /// by level, dedupes by `conv_uuid`, and truncates) — the `only_if` +
 /// `nearest_to` push-down is unverified on lancedb 0.27, and M is tiny.
 ///

@@ -22,7 +22,6 @@ mod conv_tiered;
 pub(crate) mod corpus_search;
 pub(crate) mod history;
 pub(crate) mod query_expansion;
-mod raptor_grounding;
 mod source_expansion;
 mod turn_prepass;
 
@@ -304,45 +303,27 @@ impl Runtime {
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
             self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories, &lane)
                 .await;
-            // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE) — see the KQ path.
-            // Appended post-rerank so leaf ranking is untouched. corpus_embedding
-            // is block-local to the corpus-search arm and out of scope here, so
-            // re-derive the SAME query embedding (build_retrieval_query →
-            // embed_query) — isolates injection TIMING, not the embedding.
-            if raptor_late_inject_enabled() {
-                let late_emb = self
-                    .inference
-                    .embed_query(&build_retrieval_query(message, context))
-                    .await
-                    .unwrap_or_default();
-                self.apply_raptor_grounding(
-                    &late_emb,
-                    &mut all_chunks,
-                    "DeepQuery",
-                    context.conversation.enabled_corpora.as_deref(),
-                    &lane,
-                )
-                .await;
-                // Then RESERVE them to the head of the pool — the same
-                // `reserve_summary_chunks` the early path gets for free at
-                // `cap_and_reserve` (pipeline step 13). Late injection lands
-                // AFTER that step, so until now late-injected summaries were
-                // the only RAPTOR chunks in the system with no reserve at
-                // all: appended at the tail, they sat behind every leaf in
-                // both windows that read this pool. Measured on
-                // summary_proof_theory (2026-08-10, invariant 3035f3a4):
-                // pool=40, admitted=28, raptor_admitted=0 — the prompt saw
-                // zero of eight, and the bench's own truncate drops the same
-                // tail. Reserving is ORDER-ONLY: the chunk SET is untouched,
-                // so nothing retrieval found is lost from `chunks`.
-                all_chunks = reserve_summary_chunks(std::mem::take(&mut all_chunks));
-            }
-            // ei-7a: the SAME late position, for the summaries the atlas walk
-            // reached at rung 8. Two producers, one placement — the injector
-            // above is what this replaces, and running them side by side is
-            // how the two arms of the lane are switched (the injector is
-            // env-gated; the walk's summaries arrive only when a corpus's
-            // atlases actually carry `Summary` atoms).
+            // Whole-work summaries, at the LATE position — appended
+            // post-rerank so leaf ranking is untouched, then reserved to the
+            // head of the pool. Both halves are load-bearing and were learnt
+            // the hard way: injection TIMING buys leaf-ranking neutrality
+            // (pre-merge cost SEP −14 points, 2026-06-08), and head PLACEMENT
+            // is what keeps the prompt's char budget from cutting them
+            // straight back out (summary_proof_theory: pool=40, admitted=28,
+            // raptor_admitted=0 of 8, invariant 3035f3a4). Both live inside
+            // `append_atlas_summaries` now, so a caller cannot get either
+            // wrong.
+            //
+            // ONE producer since ei-5c. `apply_raptor_grounding` stood here
+            // until then, cosining the query against `conv_raptor_nodes`
+            // beside a walk that knew nothing about it — a second grounding
+            // implementation outside corpus-engine, which is what
+            // EPISTEMIC_INDEX §1's Walk row forbids. The summaries it served
+            // are the same rows; they reach retrieval as `Summary` atoms the
+            // walk seeds on under the thematic row's quota
+            // (`svrn enrich summary-atoms <corpus>` is what puts them in an
+            // atlas). A corpus that has the RAPTOR rows and not the atoms is
+            // NAMED at this call, never silently un-summarised.
             crate::runtime::retrieval::atlas_grounding::append_atlas_summaries(
                 &mut all_chunks,
                 &atlas_summaries,

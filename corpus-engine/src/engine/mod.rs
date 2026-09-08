@@ -2695,7 +2695,8 @@ impl CorpusEngine {
     /// ANN search over a corpus's derived RAPTOR summary-node table
     /// (`raptor_summaries.lance`, built by
     /// `sovereign_tools::raptor_index::build_corpus_raptor_index`). Replaces
-    /// the brute-force cosine scan in `apply_raptor_grounding`. Returns up to
+    /// the brute-force cosine scan the retired `apply_raptor_grounding` ran
+    /// (ei-5c, 2026-09-07). Returns up to
     /// `fetch_m` hits (`score = 1 - cosine_distance`); `Ok(vec![])` when the
     /// corpus has no index built yet, so the caller falls back to the scan.
     /// `min_level`/dedupe are applied caller-side over the over-fetched set.

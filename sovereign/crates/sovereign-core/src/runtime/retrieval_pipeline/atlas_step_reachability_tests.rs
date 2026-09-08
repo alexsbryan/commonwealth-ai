@@ -66,10 +66,12 @@ fn the_only_pipeline_without_atlas_grounding_is_the_one_without_corpus_search() 
         "attached-doc turns intentionally drop atlas grounding"
     );
     // And it is dropped for the stated reason — the corpus head is gone
-    // too, not just the grounding step.
+    // too, not just the grounding step. `raptor_grounding_early` was the
+    // sibling this checked against until ei-5c retired it; `store_search` is
+    // the head itself, and a step whose absence proves the same condition.
     assert!(
-        !without.contains(&"raptor_grounding_early"),
-        "the same no-corpus-search condition drops the RAPTOR early inject; \
+        !without.contains(&"store_search"),
+        "the same no-corpus-search condition drops the corpus head; \
          if these two ever diverge the reason given here is stale"
     );
 }

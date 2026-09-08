@@ -241,7 +241,9 @@ pub trait ConvTieredReader: Send + Sync {
 
     /// Every RAPTOR node for a corpus at or above `min_level` (0 = all,
     /// incl. leaves). The corpus-wide collapsed-tree pool for query-time
-    /// cosine grounding — see `Runtime::apply_raptor_grounding`.
+    /// cosine grounding. That reader was `Runtime::apply_raptor_grounding`,
+    /// retired 2026-09-07 (ei-5c); the rows reach retrieval as `Summary` atoms
+    /// the atlas walk seeds on (`svrn enrich summary-atoms <corpus>`).
     async fn list_corpus_raptor_nodes(
         &self,
         corpus_id: &str,

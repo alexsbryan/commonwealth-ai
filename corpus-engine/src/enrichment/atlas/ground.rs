@@ -42,11 +42,9 @@
 //! that distinction is what the SEP evidence-site defect hid behind for
 //! months (see [`super::evidence_site`]).
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::atlas_traversal::question_kind::{shared_classifier, KindScore, KindSource};
-use crate::types::EmbedFn;
-use corpus_engine_vocab::ontology::{NavigationPolicy, OntologyPolicies, QuestionKind, WalkPolicy};
+use corpus_engine_vocab::ontology::{OntologyPolicies, WalkPolicy, SUMMARY_SEED_BUDGET};
 
 use super::atoms::AtomType;
 use super::context::{
@@ -60,6 +58,18 @@ use super::provider::AtlasProvider;
 // same door: `ground::{ground, resolve_evidence}` rather than two module
 // paths for one pipeline.
 pub use super::resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
+
+mod report;
+mod select;
+
+// The split is a FILE split, not an API split: every name below was in
+// `ground.rs` before ei-5c and every `atlas::ground::…` path still resolves
+// (ARCH §10.6 — a re-export, never a twin).
+pub(crate) use report::Reach;
+pub use report::{
+    Degradation, Grounding, MapNode, MapSection, PolicySource, SummaryNode, WalkLedger,
+};
+pub use select::{navigation_policy_for, select_walk, WalkSelection};
 
 /// How many nodes of the traversed neighbourhood the map section carries.
 ///
@@ -82,267 +92,6 @@ pub const MAP_NODE_CAP: usize = 64;
 /// The unfiltered row does not over-fetch, so the path
 /// `apply_atlas_grounding` has always taken is unchanged by this file.
 const SEED_OVERFETCH: usize = 4;
-
-/// Which map decided the walk — recorded because a mixed-corpus query has
-/// several atlases and only one can supply the row.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PolicySource {
-    /// One atlas declared a navigation section; its id is here.
-    Declared(String),
-    /// No atlas in scope declared one, so the pre-registered table
-    /// (`EPISTEMIC_INDEX.md` §2.2) applies. This is the normal case for
-    /// every atlas written before ei-2-map.
-    PreRegistered,
-}
-
-impl PolicySource {
-    pub fn label(&self) -> String {
-        match self {
-            PolicySource::Declared(id) => format!("declared by {id}"),
-            PolicySource::PreRegistered => "pre-registered defaults".to_string(),
-        }
-    }
-}
-
-/// One idea node the walk passed through — the map section's unit.
-#[derive(Debug, Clone)]
-pub struct MapNode {
-    /// The atlas this atom belongs to.
-    pub atlas: String,
-    pub atom_id: String,
-    pub name: String,
-    pub kind: AtomType,
-    /// The `entity_type` / claim subtype tag, or empty.
-    pub subtype: String,
-    /// 0 for a seed, 1 or 2 for a hop.
-    pub hop: u8,
-    /// The edge kind followed to REACH this node. `None` for a seed.
-    pub via: Option<EdgeType>,
-    /// The node this one was reached from. `None` for a seed.
-    pub from: Option<String>,
-    /// Accumulated walk weight: seed cosine × edge weight × confidence ×
-    /// hop decay.
-    pub score: f32,
-}
-
-/// The nodes and edges a walk traversed, for the reader.
-///
-/// `EPISTEMIC_INDEX.md` §4: `ask` returns cited passages **and a map
-/// section** — "the idea nodes traversed, their kinds, and the edges
-/// followed, so the answer can be connected and the ledger is visible".
-#[derive(Debug, Clone, Default)]
-pub struct MapSection {
-    /// Traversed nodes, highest walk weight first, capped at
-    /// [`MAP_NODE_CAP`].
-    pub nodes: Vec<MapNode>,
-    /// How many nodes the walk actually reached, before the cap.
-    pub reached: usize,
-}
-
-impl MapSection {
-    /// Was the node list cut down to fit the cap?
-    pub fn truncated(&self) -> bool {
-        self.reached > self.nodes.len()
-    }
-
-    /// The distinct edge kinds followed, in traversal order of first use.
-    pub fn edge_kinds(&self) -> Vec<EdgeType> {
-        let mut seen = Vec::new();
-        for n in &self.nodes {
-            if let Some(e) = n.via {
-                if !seen.contains(&e) {
-                    seen.push(e);
-                }
-            }
-        }
-        seen
-    }
-}
-
-/// Why a walk yielded what it yielded. Every field is a decision the walk
-/// made, not a measurement of the world (ARCH §9).
-#[derive(Debug, Clone, Default)]
-pub struct WalkLedger {
-    /// Graphs offered to the walk.
-    pub graphs: usize,
-    /// Graphs that carry an ANN seed table. A graph without one contributes
-    /// name-match seeds only, and none at all when no atom bag was loaded.
-    pub graphs_with_ann: usize,
-    /// Atom bags offered — the name-match seed source. Zero is legitimate
-    /// (`corpus-mcp` serves without one) and is a NAMED degradation, not a
-    /// quiet loss of half the seeding.
-    pub bags: usize,
-    /// Seed candidates before the row's kind filter.
-    pub seed_candidates: usize,
-    /// Seeds the walk actually started from.
-    pub seeds: usize,
-    /// Candidates the row's `seed.kinds` / `entity_types` / `declared`
-    /// filter rejected.
-    pub dropped_seed_kind: usize,
-    /// Seed kinds the row lists that no candidate carried. The spec's "the
-    /// walker skips absent kinds and says so in the ledger" — said about the
-    /// SEED POOL, which is what the walk can observe without a scan.
-    pub seed_kinds_unseen: Vec<AtomType>,
-    /// Edges the row's `walk` list excluded.
-    pub dropped_edge_kind: usize,
-    /// Edges the walk followed.
-    pub edges_followed: usize,
-    /// Distinct atoms in the neighbourhood, seeds included.
-    pub nodes_reached: usize,
-    /// Evidence requests emitted.
-    pub requests: usize,
-    /// Neighbourhood atoms that carried no evidence anchor at all — they can
-    /// never become a citation, and a walk that reaches only these looks
-    /// exactly like a walk that reached nothing.
-    pub atoms_without_evidence: usize,
-    /// Seeds whose kind is [`Grain::Summary`](kernel_types::Grain::Summary).
-    /// The order's third done-when: "atlas_retrieval shows Summary seeds in
-    /// the yield ledger" is this counter.
-    pub summary_seeds: usize,
-    /// Times a Summary was reached and NOT expanded from — rule R1. Counted
-    /// so the hold-out is visible at `tracing=debug` rather than being a
-    /// silent branch (principle 1): a walk where this is 0 on a corpus that
-    /// has Summary atoms is a walk where the hold-out did not fire.
-    pub summary_expansions_suppressed: usize,
-    /// Summary nodes carried out for late append — rule R3.
-    pub summaries_appended: usize,
-}
-
-/// A named thing that was NOT available, stated rather than defaulted
-/// (principle 6, ARCH §18.3). `ask` puts every one of these in its result
-/// text; `apply_atlas_grounding` logs them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Degradation {
-    /// No graph in scope carries `atlas/atoms_ann.lance`. Seeding falls back
-    /// to name-match over the bag, and to nothing at all without a bag.
-    NoSeedTable,
-    /// No atom bag was loaded, so no name-match seeds. The ANN table alone
-    /// still seeds.
-    NoAtomBag,
-    /// The question could not be classified; the walk ran the unfiltered row.
-    Unclassified(KindSource),
-    /// The row lists seed kinds that nothing in the seed pool carried.
-    SeedKindsUnseen(Vec<AtomType>),
-    /// The walk reached atoms but none carried an evidence anchor.
-    NoEvidenceAnchors,
-    /// The map section was cut to [`MAP_NODE_CAP`].
-    MapTruncated { reached: usize },
-}
-
-impl Degradation {
-    /// One sentence, for a result body or a log line.
-    pub fn sentence(&self) -> String {
-        match self {
-            Degradation::NoSeedTable => "no ANN seed table on any atlas in scope — the walk \
-                 seeded by name match only; run `svrn atlas backfill-ann <corpus>`"
-                .to_string(),
-            Degradation::NoAtomBag => {
-                "no atom bag loaded — name-match seeding was unavailable and the walk seeded \
-                 from the ANN table alone"
-                    .to_string()
-            }
-            Degradation::Unclassified(src) => format!(
-                "question kind {} — the walk ran the unfiltered row (no seed-kind or \
-                 edge-kind filter, 2 hops)",
-                src.as_str()
-            ),
-            Degradation::SeedKindsUnseen(kinds) => format!(
-                "the map's row seeds on {}, which nothing in the seed pool carried",
-                kinds
-                    .iter()
-                    .map(|k| k.label())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Degradation::NoEvidenceAnchors => {
-                "the walk reached idea nodes but none carried an evidence anchor, so nothing \
-                 can be cited"
-                    .to_string()
-            }
-            Degradation::MapTruncated { reached } => {
-                format!("the map section shows the top {MAP_NODE_CAP} of {reached} nodes reached")
-            }
-        }
-    }
-}
-
-/// Everything one walk produced.
-#[derive(Debug, Clone)]
-pub struct SummaryNode {
-    /// The Summary atom this came from.
-    pub atom_id: String,
-    /// Where the summarised chunks live — the same site a
-    /// [`ChunkRequest`] carries, so a consumer attributes a summary to
-    /// the same corpus it would attribute a chunk to.
-    pub site: EvidenceSite,
-    /// The paraphrase. Never quotable: this is
-    /// [`Grain::Summary`](kernel_types::Grain::Summary) text.
-    pub text: String,
-    /// The walk weight that reached it. Orders the summaries among
-    /// THEMSELVES; deliberately never compared against a
-    /// [`ChunkRequest::score`], because the two are not on one scale and
-    /// putting them on one is the whole failure this design avoids.
-    pub score: f32,
-}
-
-/// The most summaries one walk carries out.
-///
-/// 8, which is not a fresh guess: it is `SOVEREIGN_RAPTOR_TOP_M`'s
-/// shipped default in the injector this replaces
-/// (`raptor_grounding.rs`). Carrying the number across means the volume
-/// of late-appended summary text is unchanged by the port, so a lane
-/// delta is attributable to the WALK reaching them rather than to more
-/// of them arriving (§18.4 — validate the instrument before the result).
-pub const SUMMARY_APPEND_CAP: usize = 8;
-
-pub struct Grounding {
-    /// Evidence requests, highest score first. Hand these to
-    /// [`resolve_evidence`].
-    pub requests: Vec<ChunkRequest>,
-    /// Summary-grain nodes the walk reached, highest weight first, for
-    /// LATE append by the consumer — rule R3.
-    ///
-    /// A separate field from [`Self::requests`] on purpose, and this is
-    /// the load-bearing line of the whole port. Summaries do not consume
-    /// [`Self::budget`], are never sorted against leaf requests, and are
-    /// appended after the leaf pipeline has finished — the position that
-    /// was MEASURED QA-neutral (SEP sources 86% vs an 85% no-RAPTOR
-    /// baseline, 2026-06-08) after the pre-merge position measured −14
-    /// points. Put them in `requests` and that result is re-opened.
-    pub summaries: Vec<SummaryNode>,
-    /// The row that was executed, and where it came from.
-    pub kind: QuestionKind,
-    pub kind_source: KindSource,
-    /// The classifier's raw scores, when one ran — for the log line that
-    /// makes a borderline abstain reviewable.
-    pub kind_score: Option<KindScore>,
-    pub policy_source: PolicySource,
-    /// How many chunks the resolve step may keep — the row's `budget`.
-    pub budget: usize,
-    pub map: MapSection,
-    pub ledger: WalkLedger,
-    pub degradations: Vec<Degradation>,
-}
-
-impl Grounding {
-    /// An empty result that still says why. Never a bare `Vec::new()`: a
-    /// caller must be able to tell "nothing was relevant" from "the walk
-    /// could not run".
-    fn empty(selection: &WalkSelection, degradations: Vec<Degradation>) -> Self {
-        Self {
-            requests: Vec::new(),
-            summaries: Vec::new(),
-            kind: selection.kind,
-            kind_source: selection.kind_source,
-            kind_score: selection.kind_score,
-            policy_source: selection.policy_source.clone(),
-            budget: 0,
-            map: MapSection::default(),
-            ledger: WalkLedger::default(),
-            degradations,
-        }
-    }
-}
 
 /// The atlas ids that could hold atoms citing a chunk — the chunk → atlas id
 /// derivation, in ONE place.
@@ -382,140 +131,6 @@ pub fn candidate_atlas_ids(corpus_id: &str, title: Option<&str>) -> Vec<String> 
         out.push(format!("{corpus_id}-{t}"));
     }
     out
-}
-
-/// Which navigation map governs this walk.
-///
-/// The first graph in scope that DECLARED one wins; otherwise the
-/// pre-registered table. A mixed-corpus query is the ambiguous case the spec
-/// left open, and it is resolved by declaration-beats-default rather than by
-/// merging two maps into a third that neither corpus wrote.
-///
-/// Note `AtlasGraph::ontology()` is `Some` only for a corpus that declared
-/// TYPES (`with_ontology` drops the rest), so a built-in pipeline's atlas
-/// reaches the pre-registered table here even when its `ontology.json` is on
-/// disk — which is correct, because those files carry no `navigation`
-/// override either.
-pub fn navigation_policy_for(graphs: &[&dyn AtlasProvider]) -> (NavigationPolicy, PolicySource) {
-    for g in graphs {
-        if let Some(p) = g.ontology() {
-            return (
-                p.navigation.clone(),
-                PolicySource::Declared(g.atlas_corpus_id().to_string()),
-            );
-        }
-    }
-    (NavigationPolicy::default(), PolicySource::PreRegistered)
-}
-
-/// One decision about HOW to walk, taken once: which row, from whose map,
-/// on what evidence.
-///
-/// Bundled rather than passed as five arguments because they are one
-/// decision and a caller must not be able to pair a `Thematic` kind with the
-/// `Tension` row, or report a declared policy source for the defaults.
-#[derive(Debug, Clone)]
-pub struct WalkSelection {
-    pub kind: QuestionKind,
-    pub walk: WalkPolicy,
-    pub kind_source: KindSource,
-    /// The classifier's raw scores, when one ran — what makes a borderline
-    /// abstain reviewable instead of mysterious.
-    pub kind_score: Option<KindScore>,
-    pub policy_source: PolicySource,
-}
-
-impl WalkSelection {
-    /// The row a caller that ALREADY knows the kind wants — an `ask` argument,
-    /// a test. Skips the embedder entirely and records that a caller, not a
-    /// centroid, decided.
-    pub fn named(kind: QuestionKind, policy: &NavigationPolicy, source: PolicySource) -> Self {
-        Self {
-            kind,
-            walk: policy.walk(kind).clone(),
-            kind_source: KindSource::Caller,
-            kind_score: None,
-            policy_source: source,
-        }
-    }
-
-    /// The unfiltered row under a named reason — the one place
-    /// "unclassified" is turned into a walk.
-    fn unfiltered(
-        kind_source: KindSource,
-        kind_score: Option<KindScore>,
-        source: PolicySource,
-    ) -> Self {
-        Self {
-            kind: QuestionKind::Thematic,
-            walk: WalkPolicy::unfiltered(),
-            kind_source,
-            kind_score,
-            policy_source: source,
-        }
-    }
-
-    /// One line naming the row and why it was chosen — for `ask`'s result
-    /// text and for the log.
-    pub fn describe(&self) -> String {
-        let mut s = format!(
-            "{} ({}, {}): {} hops, budget {}",
-            self.kind.as_str(),
-            self.kind_source.as_str(),
-            self.policy_source.label(),
-            self.walk.hops,
-            self.walk.budget
-        );
-        if let Some(k) = self.kind_score {
-            s.push_str(&format!(" [sim {:.3}, margin {:.3}]", k.sim, k.margin));
-        }
-        s
-    }
-}
-
-/// Classify the question and read its row.
-///
-/// Separated from [`ground`] so a caller that already KNOWS the kind uses
-/// [`WalkSelection::named`] and skips the embedder, and so the classification
-/// decision has one home.
-pub async fn select_walk(
-    question_embedding: &[f32],
-    policy: &NavigationPolicy,
-    policy_source: PolicySource,
-    embed: Option<&EmbedFn>,
-) -> WalkSelection {
-    let Some(embed) = embed else {
-        return WalkSelection::unfiltered(KindSource::ClassifierUnavailable, None, policy_source);
-    };
-    let Some(classifier) = shared_classifier(policy, embed).await else {
-        // Two reasons, distinguished: the map declared no exemplars at all,
-        // or the embedder failed. `classifiable()` answers which.
-        let src = if policy.classifiable().is_empty() {
-            KindSource::NoClassifier
-        } else {
-            KindSource::ClassifierUnavailable
-        };
-        return WalkSelection::unfiltered(src, None, policy_source);
-    };
-    match classifier.classify(question_embedding) {
-        (Some(kind), score) => WalkSelection {
-            kind,
-            walk: policy.walk(kind).clone(),
-            kind_source: KindSource::Classified,
-            kind_score: score,
-            policy_source,
-        },
-        (None, score) => WalkSelection::unfiltered(KindSource::Abstained, score, policy_source),
-    }
-}
-
-/// Where a node was reached from, and how.
-#[derive(Debug, Clone)]
-struct Reach {
-    weight: f32,
-    hop: u8,
-    via: Option<EdgeType>,
-    from: Option<String>,
 }
 
 /// **The walk.** Seed, expand, aggregate — driven by one [`WalkPolicy`] row.
@@ -670,10 +285,23 @@ pub async fn ground(
     candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
     ledger.seed_candidates = candidates.len();
 
-    // ── 2. The row's seed filter ────────────────────────────────────────
+    // ── 2. The row's seed filter, then its per-kind quotas ──────────────
+    //
+    // Admission is by KIND (`seed_admits`); how many slots an admitted kind
+    // may take is the row's [`SeedPolicy::budgets`]. A kind that declares a
+    // quota draws from its own; every other kind shares `max_seeds` exactly as
+    // before, so a quota can never take a slot from a kind that has none.
+    //
+    // This is the ei-7a defect's fix and it is a POLICY field, not a special
+    // case for Summary: the pool is score-ordered, so before the quota the
+    // only way to stop a reachable kind winning a leaf's slot was to make it
+    // unreachable. Measured cost of having no such field: −7.5/66 on the SEP
+    // subset A/B, which is what kept the retrieval-time injector alive.
     let mut seen_kinds: BTreeSet<AtomType> = BTreeSet::new();
     let seeds: Vec<(String, String, f32)> = if filtered {
         let mut kept = Vec::new();
+        let mut budget_used: BTreeMap<AtomType, usize> = BTreeMap::new();
+        let mut unbudgeted = 0usize;
         for (cid, aid, s) in candidates {
             let Some(graph) = graph_by_id.get(cid.as_str()) else {
                 continue;
@@ -682,13 +310,30 @@ pub async fn ground(
                 ledger.dropped_seed_kind += 1;
                 continue;
             };
-            seen_kinds.insert(atom.kind());
-            if seed_admits(walk, *graph, atom.kind(), atom.subtype()) {
-                if kept.len() < max_seeds {
-                    kept.push((cid, aid, s));
-                }
-            } else {
+            let kind = atom.kind();
+            seen_kinds.insert(kind);
+            if !seed_admits(walk, *graph, kind, atom.subtype()) {
                 ledger.dropped_seed_kind += 1;
+                continue;
+            }
+            match walk.seed.budgets.get(&kind) {
+                Some(&quota) => {
+                    let used = budget_used.entry(kind).or_insert(0);
+                    if *used < quota as usize {
+                        *used += 1;
+                        kept.push((cid, aid, s));
+                    } else {
+                        ledger.dropped_seed_budget += 1;
+                    }
+                }
+                None => {
+                    if unbudgeted < max_seeds {
+                        unbudgeted += 1;
+                        kept.push((cid, aid, s));
+                    } else {
+                        ledger.dropped_seed_budget += 1;
+                    }
+                }
             }
         }
         // Which of the row's listed kinds nothing in the pool carried. Said
@@ -927,11 +572,23 @@ pub async fn ground(
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    summaries.truncate(SUMMARY_APPEND_CAP);
+    // R3's cap IS the row's Summary seed quota — one number, one home
+    // (ARCH §10.6). A Summary seed neither expands (R1) nor scores a leaf
+    // (R2), so the count that may seed and the count that may be appended are
+    // the same decision; they were two constants until ei-5c and could drift.
+    // A row that declares no quota (the unfiltered row, a map written before
+    // this field) gets the pre-registered one, named rather than unbounded.
+    let summary_cap = walk
+        .seed
+        .budgets
+        .get(&AtomType::Summary)
+        .copied()
+        .unwrap_or(SUMMARY_SEED_BUDGET) as usize;
+    summaries.truncate(summary_cap);
     ledger.summaries_appended = summaries.len();
 
     // ── 5. The map section ──────────────────────────────────────────────
-    let map = build_map(&neighborhood, &graph_by_id);
+    let map = report::build_map(&neighborhood, &graph_by_id);
     if map.truncated() {
         degradations.push(Degradation::MapTruncated {
             reached: map.reached,
@@ -953,6 +610,8 @@ pub async fn ground(
         seed_candidates = ledger.seed_candidates,
         seeds = ledger.seeds,
         dropped_seed_kind = ledger.dropped_seed_kind,
+        dropped_seed_budget = ledger.dropped_seed_budget,
+        seed_budgets = ?walk.seed.budgets,
         seed_kinds_unseen = ?ledger.seed_kinds_unseen,
         dropped_edge_kind = ledger.dropped_edge_kind,
         edges_followed = ledger.edges_followed,
@@ -1064,515 +723,5 @@ fn declares(policies: &OntologyPolicies, graph: &dyn AtlasProvider, subtype: &st
         .any(|t| t.name == subtype || graph.is_subtype_of(subtype, &t.name))
 }
 
-fn build_map(
-    neighborhood: &HashMap<(String, String), Reach>,
-    graph_by_id: &HashMap<&str, &dyn AtlasProvider>,
-) -> MapSection {
-    let mut nodes: Vec<MapNode> = Vec::with_capacity(neighborhood.len().min(MAP_NODE_CAP));
-    let mut ordered: Vec<(&(String, String), &Reach)> = neighborhood.iter().collect();
-    ordered.sort_by(|a, b| {
-        b.1.weight
-            .partial_cmp(&a.1.weight)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            // Ties broken by id so the map is deterministic across runs —
-            // a map that reorders between two identical queries is not
-            // evidence of anything.
-            .then_with(|| a.0.cmp(b.0))
-    });
-    for ((atlas_id, atom_id), reach) in ordered.iter().take(MAP_NODE_CAP) {
-        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
-            continue;
-        };
-        let Some(atom) = graph.atom(atom_id) else {
-            continue;
-        };
-        nodes.push(MapNode {
-            atlas: atlas_id.clone(),
-            atom_id: atom_id.clone(),
-            name: atom.name().to_string(),
-            kind: atom.kind(),
-            subtype: atom.subtype().to_string(),
-            hop: reach.hop,
-            via: reach.via,
-            from: reach.from.clone(),
-            score: reach.weight,
-        });
-    }
-    MapSection {
-        nodes,
-        reached: neighborhood.len(),
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use corpus_engine_vocab::taxonomy::EntityType;
-
-    use crate::enrichment::atlas::ann_store::AnnSeedTable;
-    use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
-    use crate::enrichment::atlas::projection::AtomRecord;
-    use corpus_engine_vocab::atoms::ChunkRef;
-    use corpus_engine_vocab::edges::EdgeProvenance;
-
-    // ── The displacement fixture (§18.1) ────────────────────────────────
-    //
-    // One rollup atom whose evidence is five chunks, and five ordinary
-    // atoms with one chunk each. The rollup matches the question better
-    // than any single leaf does — which is the NORMAL case for a rollup,
-    // not a contrived one: a paraphrase of a whole region is written to
-    // be about the region.
-    //
-    // Everything below is shared by the two tests that follow. They
-    // differ in ONE field — the rollup atom's `kind` — and that field is
-    // the whole hold-out. Keeping both directions as tests is deliberate:
-    // a guard whose failing input is not itself run is a guard nobody has
-    // watched fail (ARCH §18.1), and "I disabled it once locally" is not
-    // evidence anybody can re-check.
-
-    const ROLLUP_CHUNKS: [&str; 5] = ["c1", "c2", "c3", "c4", "c5"];
-    const LEAF_CHUNKS: [&str; 5] = ["c6", "c7", "c8", "c9", "c10"];
-
-    struct FixtureAtlas {
-        site: EvidenceSite,
-        atoms: std::collections::HashMap<String, AtomRecord>,
-        edges: Vec<(String, String, EdgeType)>,
-    }
-
-    fn record(id: &str, kind: AtomType, content: &str, chunks: &[&str]) -> AtomRecord {
-        AtomRecord {
-            id: id.to_string(),
-            kind,
-            name: String::new(),
-            label: String::new(),
-            content: content.to_string(),
-            subtype: String::new(),
-            description: String::new(),
-            excerpt: String::new(),
-            confidence: 0.0,
-            salience: 0.0,
-            aliases: Vec::new(),
-            participants: Vec::new(),
-            evidence: chunks
-                .iter()
-                .map(|c| ChunkRef::new(*c, Some(format!("preview of {c}"))))
-                .collect(),
-            payload: Vec::new(),
-        }
-    }
-
-    /// `rollup_kind` is the ONLY variable. `Summary` is the shipped
-    /// behaviour; any leaf-grain kind reproduces the pre-ei-7a mechanism.
-    fn fixture(rollup_kind: AtomType) -> FixtureAtlas {
-        let mut atoms = std::collections::HashMap::new();
-        atoms.insert(
-            "rollup".to_string(),
-            record(
-                "rollup",
-                rollup_kind,
-                "a paraphrase of the whole region",
-                &ROLLUP_CHUNKS,
-            ),
-        );
-        let mut edges = Vec::new();
-        for (i, chunk) in LEAF_CHUNKS.iter().enumerate() {
-            let id = format!("leaf{i}");
-            atoms.insert(
-                id.clone(),
-                record(&id, AtomType::Claim, "an ordinary claim", &[chunk]),
-            );
-            // The rollup cites the leaves it summarises. This is what makes
-            // the hazard structural rather than incidental: EvidenceFor is
-            // exactly the edge the port introduces, and it fans out over the
-            // whole subtree by construction.
-            edges.push(("rollup".to_string(), id, EdgeType::EvidenceFor));
-        }
-        FixtureAtlas {
-            site: EvidenceSite::derive("fixture"),
-            atoms,
-            edges,
-        }
-    }
-
-    impl AtlasProvider for FixtureAtlas {
-        // Named, not defaulted, exactly as the trait requires: a fixture that
-        // borrowed "atom-class" would let a test assert against a store it is
-        // not, which is the silent-identical-arms failure the required method
-        // exists to make visible.
-        fn provider_class(&self) -> &'static str {
-            "fixture-class"
-        }
-
-        fn atlas_corpus_id(&self) -> &str {
-            "fixture"
-        }
-        fn site(&self) -> &EvidenceSite {
-            &self.site
-        }
-        fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
-            self.atoms.get(atom_id).map(AtomView::new)
-        }
-        fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
-            self.atoms
-                .get(atom_id)
-                .map(|a| a.evidence.iter().map(EvidenceRef::new).collect())
-                .unwrap_or_default()
-        }
-        fn edges_from(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-            self.edges
-                .iter()
-                .filter(|(s, _, _)| s == atom_id)
-                .map(|(s, t, k)| EdgeView {
-                    source: s.as_str(),
-                    target: t.as_str(),
-                    edge_type: *k,
-                    confidence: 1.0,
-                    provenance: EdgeProvenance::Derived,
-                })
-                .collect()
-        }
-        fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-            self.edges
-                .iter()
-                .filter(|(_, t, _)| t == atom_id)
-                .map(|(s, t, k)| EdgeView {
-                    source: s.as_str(),
-                    target: t.as_str(),
-                    edge_type: *k,
-                    confidence: 1.0,
-                    provenance: EdgeProvenance::Derived,
-                })
-                .collect()
-        }
-        fn ann_seed_table(&self) -> Option<&std::sync::Arc<AnnSeedTable>> {
-            None
-        }
-        fn ontology(&self) -> Option<&OntologyPolicies> {
-            None
-        }
-    }
-
-    /// The bag that seeds the walk by name match. The rollup's embedding
-    /// IS the question (cosine 1.0); the leaves are further away. A
-    /// rollup outscoring its own leaves is the ordinary case.
-    fn fixture_bag() -> AtlasContext {
-        let mut entries = vec![AtlasEntry {
-            atom_id: "rollup".to_string(),
-            canonical_name: "rollup".to_string(),
-            embed_text: "rollup".to_string(),
-            embedding: vec![1.0, 0.0],
-        }];
-        for i in 0..LEAF_CHUNKS.len() {
-            entries.push(AtlasEntry {
-                atom_id: format!("leaf{i}"),
-                canonical_name: format!("leaf{i}"),
-                embed_text: format!("leaf{i}"),
-                embedding: vec![0.5, 0.866],
-            });
-        }
-        AtlasContext {
-            atlas_corpus_id: "fixture".to_string(),
-            entries,
-            top_k: 32,
-        }
-    }
-
-    async fn walk_fixture(rollup_kind: AtomType) -> Grounding {
-        let atlas = fixture(rollup_kind);
-        let bag = fixture_bag();
-        // Names every atom so seeding is deterministic and does not depend
-        // on an ANN table the fixture deliberately does not have.
-        let question = "rollup leaf0 leaf1 leaf2 leaf3 leaf4";
-        ground(
-            question,
-            &[1.0, 0.0],
-            &[&bag],
-            &[&atlas as &dyn AtlasProvider],
-            &WalkSelection::unfiltered(KindSource::Abstained, None, PolicySource::PreRegistered),
-            12,
-        )
-        .await
-    }
-
-    fn requested_chunks(g: &Grounding) -> Vec<String> {
-        g.requests
-            .iter()
-            .map(|r| r.selector.as_str().to_string())
-            .collect()
-    }
-
-    /// THE FAILING INPUT, kept runnable. With the rollup carrying a
-    /// LEAF-grain kind — which is exactly what a RAPTOR summary was
-    /// before `AtomType::Summary` existed — its weight lands on all five
-    /// of the chunks it covers, and those chunks outrank every leaf. This
-    /// is the −14pt SEP source-coverage mechanism (2026-06-08) reproduced
-    /// deterministically, with no model and no corpus.
-    ///
-    /// If this test ever goes green-by-accident (no displacement), the
-    /// sibling test below is proving nothing and both need re-deriving.
-    #[tokio::test]
-    async fn a_leaf_grain_rollup_displaces_the_leaf_chunks_it_covers() {
-        let g = walk_fixture(AtomType::Claim).await;
-        let chunks = requested_chunks(&g);
-        let top: Vec<&String> = chunks.iter().take(ROLLUP_CHUNKS.len()).collect();
-        for c in ROLLUP_CHUNKS {
-            assert!(
-                top.iter().any(|t| t.as_str() == c),
-                "rollup chunk {c} should have crowded the top; got {chunks:?}"
-            );
-        }
-        assert!(
-            g.summaries.is_empty(),
-            "a leaf-grain atom is not carried as a summary"
-        );
-        assert_eq!(g.ledger.summary_seeds, 0);
-    }
-
-    /// THE GUARD. Same fixture, same scores, same edges — the rollup is
-    /// `Summary` grain. R2 keeps its weight off every leaf request, so the
-    /// five leaf chunks are the whole request list and the rollup's text
-    /// leaves by the other door (R3) instead.
-    #[tokio::test]
-    async fn a_summary_seed_cannot_displace_a_leaf_chunk() {
-        let g = walk_fixture(AtomType::Summary).await;
-        let chunks = requested_chunks(&g);
-
-        for c in ROLLUP_CHUNKS {
-            assert!(
-                !chunks.iter().any(|r| r == c),
-                "summary-covered chunk {c} entered the requests; the hold-out did not fire \
-                 ({chunks:?})"
-            );
-        }
-        for c in LEAF_CHUNKS {
-            assert!(
-                chunks.iter().any(|r| r == c),
-                "leaf chunk {c} was displaced ({chunks:?})"
-            );
-        }
-
-        // R3: the text is carried, not dropped — the capability survives
-        // the hold-out. Losing it would be the other way to pass this test
-        // and is not a fix.
-        assert_eq!(
-            g.summaries.len(),
-            1,
-            "the summary is carried for late append"
-        );
-        assert_eq!(g.summaries[0].atom_id, "rollup");
-        assert!(g.summaries[0].text.contains("paraphrase"));
-
-        // R1 + the ledger: the hold-out is VISIBLE, not silent.
-        assert_eq!(g.ledger.summary_seeds, 1);
-        assert!(
-            g.ledger.summary_expansions_suppressed >= 1,
-            "R1 never fired: {:?}",
-            g.ledger
-        );
-        assert_eq!(g.ledger.summaries_appended, 1);
-    }
-
-    /// The chunk → atlas id derivation, in both shapes, and its agreement
-    /// with `EvidenceSite`'s reading in the other direction. Failing input:
-    /// drop the self-hosted candidate, or emit the child for a titleless
-    /// chunk.
-    #[test]
-    fn candidate_atlas_ids_covers_both_layouts_and_agrees_with_evidence_site() {
-        let ids = candidate_atlas_ids("sep", Some("freewill"));
-        assert_eq!(ids, vec!["sep".to_string(), "sep-freewill".to_string()]);
-        // The inverse holds: the child id reads back to the parent corpus.
-        assert_eq!(
-            EvidenceSite::derive("sep-freewill").chunk_corpus().as_str(),
-            "sep"
-        );
-
-        // A chunk with no title has exactly one candidate — its own corpus.
-        assert_eq!(
-            candidate_atlas_ids("wikipedia", None),
-            vec!["wikipedia".to_string()]
-        );
-        assert_eq!(
-            candidate_atlas_ids("wikipedia", Some("   ")),
-            vec!["wikipedia".to_string()]
-        );
-        // …and a chunk titled after its own corpus yields ONE candidate, not
-        // a `bk-1-bk-1` that addresses nothing. This is the literary shape,
-        // not a corner case: every chunk of `brothers-karamazov-book-1` is
-        // titled with its corpus id.
-        assert_eq!(
-            candidate_atlas_ids("bk-1", Some("bk-1")),
-            vec!["bk-1".to_string()]
-        );
-    }
-
-    /// The unfiltered row admits everything and does NOT over-fetch — the
-    /// path `apply_atlas_grounding` has always taken. Failing input: make
-    /// `seed_filter_is_active` true for the unfiltered row.
-    #[test]
-    fn the_unfiltered_row_is_the_status_quo_ante() {
-        let w = WalkPolicy::unfiltered();
-        assert!(!seed_filter_is_active(&w));
-        assert!(w.walk.is_empty(), "no edge filter");
-        assert_eq!(w.hops, 2);
-        assert_eq!(w.budget, corpus_engine_vocab::ontology::DEFAULT_BUDGET);
-    }
-
-    /// Every classified row DOES filter, or the map is not driving anything.
-    #[test]
-    fn every_pre_registered_row_filters_its_seeds() {
-        let p = NavigationPolicy::default();
-        for (kind, w) in p.rows() {
-            assert!(
-                seed_filter_is_active(w),
-                "{} declares no seed filter",
-                kind.as_str()
-            );
-        }
-    }
-
-    /// The enumeration row seeds on declared types only — so it can never
-    /// fire on a corpus that declared nothing, which is the I5 gate.
-    #[test]
-    fn the_enumeration_row_is_inert_without_a_declaration() {
-        let p = NavigationPolicy::default();
-        let w = p.walk(QuestionKind::Enumeration);
-        assert!(w.seed.declared && w.seed.kinds.is_empty());
-        assert_eq!(w.hops, 0, "enumeration lists its seeds, it does not walk");
-    }
-
-    /// The thematic row narrows `Entity` to concepts and leaves
-    /// `Configuration` unnarrowed — the two arms of `seed_admits`.
-    #[test]
-    fn an_entity_type_narrows_only_the_entity_seed() {
-        let p = NavigationPolicy::default();
-        let w = p.walk(QuestionKind::Thematic);
-        assert_eq!(w.seed.entity_types, vec![EntityType::Concept]);
-        assert!(w.seed.kinds.contains(&AtomType::Configuration));
-        // `Configuration` carries whatever subtype it likes and still seeds;
-        // `Entity` must be a concept.
-        assert_eq!(EntityType::Concept.as_str_repr(), "concept");
-    }
-
-    /// Every degradation renders a sentence a reader can act on — none is an
-    /// empty string or a bare enum name.
-    #[test]
-    fn every_degradation_says_something_actionable() {
-        let all = [
-            Degradation::NoSeedTable,
-            Degradation::NoAtomBag,
-            Degradation::Unclassified(KindSource::Abstained),
-            Degradation::SeedKindsUnseen(vec![AtomType::Configuration]),
-            Degradation::NoEvidenceAnchors,
-            Degradation::MapTruncated { reached: 900 },
-        ];
-        for d in all {
-            let s = d.sentence();
-            assert!(s.len() > 20, "{d:?} -> {s:?}");
-            assert!(s.chars().next().unwrap().is_lowercase() || s.starts_with("the"));
-        }
-        assert!(Degradation::SeedKindsUnseen(vec![AtomType::Configuration])
-            .sentence()
-            .contains("configuration"));
-    }
-
-    /// No graphs is an EMPTY grounding that still names why — never a bare
-    /// vec the caller reads as "nothing was relevant".
-    #[tokio::test]
-    async fn a_walk_with_no_graphs_says_why_it_is_empty() {
-        let g = ground(
-            "what is this about",
-            &[0.1, 0.2],
-            &[],
-            &[],
-            &WalkSelection::unfiltered(KindSource::Abstained, None, PolicySource::PreRegistered),
-            12,
-        )
-        .await;
-        assert!(g.requests.is_empty());
-        assert!(g
-            .degradations
-            .contains(&Degradation::Unclassified(KindSource::Abstained)));
-    }
-
-    /// An empty embedding cannot seed, and says so rather than returning an
-    /// unexplained empty list.
-    #[tokio::test]
-    async fn an_empty_embedding_cannot_seed() {
-        let g = ground(
-            "anything",
-            &[],
-            &[],
-            &[],
-            &WalkSelection::named(
-                QuestionKind::Thematic,
-                &NavigationPolicy::default(),
-                PolicySource::PreRegistered,
-            ),
-            12,
-        )
-        .await;
-        assert!(g.requests.is_empty());
-        assert_eq!(g.ledger.seeds, 0);
-    }
-
-    /// With no classifier available the walk runs the unfiltered row and the
-    /// source says which — it does not silently pick a kind.
-    #[tokio::test]
-    async fn no_embedder_means_the_unfiltered_row_named_as_such() {
-        let sel = select_walk(
-            &[0.1, 0.2],
-            &NavigationPolicy::default(),
-            PolicySource::PreRegistered,
-            None,
-        )
-        .await;
-        assert_eq!(sel.kind, QuestionKind::Thematic);
-        assert_eq!(sel.walk, WalkPolicy::unfiltered());
-        assert_eq!(sel.kind_source, KindSource::ClassifierUnavailable);
-        assert!(sel.kind_source.is_degradation());
-        assert!(sel.kind_score.is_none());
-        // …and it SAYS so, in one line a reader can act on.
-        assert!(sel.describe().contains("classifier-unavailable"));
-    }
-
-    /// A map that carries no exemplars anywhere yields `NoClassifier`, which
-    /// is a DIFFERENT fact from an unreachable embedder.
-    #[tokio::test]
-    async fn a_map_with_no_exemplars_is_distinguished_from_a_dead_embedder() {
-        let mut policy = NavigationPolicy::default();
-        for row in [
-            &mut policy.thematic,
-            &mut policy.trajectory,
-            &mut policy.tension,
-            &mut policy.enumeration,
-            &mut policy.lookup,
-        ] {
-            row.exemplars.clear();
-        }
-        let embed: EmbedFn = std::sync::Arc::new(|_: &str| {
-            Box::pin(async { Ok(vec![1.0_f32, 0.0]) })
-                as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>,
-                >
-        });
-        let sel = select_walk(
-            &[1.0, 0.0],
-            &policy,
-            PolicySource::PreRegistered,
-            Some(&embed),
-        )
-        .await;
-        assert_eq!(sel.kind_source, KindSource::NoClassifier);
-        assert_eq!(sel.walk, WalkPolicy::unfiltered());
-    }
-
-    /// No declared navigation anywhere means the pre-registered table, and
-    /// the source says so rather than looking like a corpus's own choice.
-    #[test]
-    fn an_undeclared_scope_uses_the_pre_registered_table() {
-        let (policy, src) = navigation_policy_for(&[]);
-        assert_eq!(policy, NavigationPolicy::default());
-        assert_eq!(src, PolicySource::PreRegistered);
-        assert_eq!(src.label(), "pre-registered defaults");
-    }
-}
+mod tests;

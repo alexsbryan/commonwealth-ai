@@ -1651,7 +1651,15 @@ means one thing.
   the atlas dir, applied INSIDE `backfill_ann`, so all four author sites (the
   atlas writer, `svrn atlas backfill-ann`, `enrich build`'s Backfill step,
   `atlas migrate-all`) get it with no signature change and `AtlasSeeding`
-  gains no arm. Two properties are deliberate. The map is a FLOOR, never a
+  gains no arm. `atlas migrate-all` only became one of the four at ei-5c
+  (2026-09-07): it had kept its own ANN step — `load_atlas_context` under the
+  production retrieval filter, then `build_persistent_ann_seed_table` — which
+  is the same filter-authors-the-table defect one layer up, and it stamped no
+  population marker, so the result read as fresh. Measured on the ei-7a
+  fixture: it rebuilt the table from the always-seeded pair and dropped all
+  2,004 `Summary` rows, exit 0. It calls `backfill_ann` now, watched by
+  `the_ann_step_seeds_through_the_one_writer`, which names the two forked
+  symbols the file may no longer contain and the writer it must. Two properties are deliberate. The map is a FLOOR, never a
   ceiling — `AtlasContextFilter::admits_atom` UNIONS the population with what
   the filter itself admits, so nothing loses a seed it had; not theoretical,
   since SEP's `ArgumentReconstruction` atoms appear in no pre-registered row
@@ -1716,14 +1724,17 @@ means one thing.
   synthesis + the typed-extension pass into `atlas/atoms.json` —
   see TIERED_RETRIEVAL.md's typed-extension section); document
   corpora never touch the atom-graph atlas. Query-time
-  grounding (`apply_raptor_grounding`) reads those summary nodes via a
+  grounding read those summary nodes directly through `apply_raptor_grounding`
+  until ei-5c retired it (2026-09-07); they reach retrieval as atlas `Summary`
+  atoms now, projected from the same rows by `svrn enrich summary-atoms`. The
   derived per-corpus `raptor_summaries.lance` ANN index — built at the
   end of `enrich raptor` (or standalone via `enrich raptor-index
   <corpus>`) by `sovereign-tools/src/raptor_index.rs` over the pure
   `corpus-engine::index::raptor` primitives, with a `max(created_at)`
   freshness gate and the brute-force `conv_raptor_nodes` cosine scan as
-  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`). The injected virtual
-  chunk carries `metadata["raptor_node_id"]` (provenance handle back to
+  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`), and is what the projection
+  reads. The injected virtual
+  chunk carried `metadata["raptor_node_id"]` (provenance handle back to
   the node's `quote_spans` / `evidence_chunk_ids` — ECONOMY §7.8's
   carriage thread, landed 2026-08-14) and renders in the synthesis
   prompt under a dedicated "## Source overviews (derived summaries)"
@@ -1814,7 +1825,7 @@ means one thing.
     through a `summaries_out` parameter into
     `PipelineState::atlas_summaries` (a threaded step product, like
     `title_expand_titles`), and `append_atlas_summaries` appends them as
-    virtual chunks at the LATE site `raptor_grounding.rs` occupies today
+    virtual chunks at the LATE site `raptor_grounding.rs` occupied
     — `retrieval/mod.rs` for deep, `prepare_knowledge_query_plan` for KQ
     — never at rung 8, which is the early position that cost the 14
     points. `reserve_raptor_chunks` became
@@ -1826,23 +1837,55 @@ means one thing.
     budget that admitted 0 of 8 on `summary_proof_theory`. One grain, two
     producers — the producer stays distinguishable in the trace and in
     `metadata["summary_producer"]`. `merge_select` is unchanged; its pin
-    already reads the grain.
+    already reads the grain. Since ei-5c there is one producer again, and the
+    typed predicate STAYS: it is right for one as well as two, and the string
+    compare is what a third producer would silently fail.
 
-  `raptor_grounding.rs` is NOT retired. The order that added the kind
-  would have deleted it once both lanes were within band, and the lanes
-  cannot judge it on this box: `conv_raptor_nodes` is EMPTY in both
-  stores, so the tree — `children_node_ids`, `evidence_chunk_ids` — is
-  gone, and the surviving artifacts are SEP's 11,181-row
-  `raptor_summaries.lance` (summary text + embedding only; the JSON tree
-  columns are dropped at build time) plus a 37-node `_raptor_checkpoint`
-  for one article, `computational-complexity`. The published HuggingFace
-  snapshot is an index-dir tarball and carries exactly the same two.
-  Wikipedia and every other one of 2,160 corpora have no RAPTOR artifact
-  at all, so the wikipedia lane cannot distinguish the arms. Deleting the
-  injector would therefore remove a capability that is live on SEP today
-  and replace it with atoms that cannot be written at that scale. The
-  deletion is gated on a full-SEP RAPTOR rebuild, which is a control
-  write and an operator decision.
+  **`raptor_grounding.rs` IS retired, ei-5c (2026-09-07)** — the walk is the
+  ONE producer of whole-work summaries, and `apply_raptor_grounding`,
+  `raptor_scored_chunk`, `raptor_late_inject_enabled`, the
+  `raptor_grounding_early` pipeline step, the five `SOVEREIGN_RAPTOR_*` flags
+  and the `raptor_off` ablation arm went with it. Deleted, not folded into a
+  caller, which is §10.6's other legal outcome: the injector reads
+  `conv_raptor_nodes` / `raptor_summaries.lance` where the walk reads `Summary`
+  ATOMS, so there was no call to delegate to. What made the deletion possible
+  is the SEED QUOTA below; what it costs is stated in the next paragraph rather
+  than left to be discovered.
+
+  The blocker ei-7a recorded was a measurement, and it was about seeds. Making
+  `Summary` reachable made it a COMPETITOR: seeds come from one score-ordered
+  pool capped at `max_seeds`, a rollup is written to be about a whole region so
+  it outscores any single leaf on a thematic question, and the SEP subset A/B
+  read OFF 47/66 twice against ON 40/66 and 39/66 — −7.5/66 on a HARD lane,
+  with Summary taking about 1.1% of slots against ~21k entity and argument
+  seeds. `SeedPolicy::budgets` is the field that was missing: a kind that
+  declares a quota draws from its OWN pool, every other kind shares `max_seeds`
+  as before, and the pre-registered `thematic` row declares `{Summary: 8}`.
+  Eight is not a new number — it is `SOVEREIGN_RAPTOR_TOP_M`'s shipped default
+  in the injector, carried across so the VOLUME of late-appended summary text
+  is unchanged by the port and a lane delta is attributable to the walk
+  reaching them (§18.4). `ground.rs`'s R3 truncation reads that row instead of
+  the `SUMMARY_APPEND_CAP` constant it replaces, so the count that may seed and
+  the count that may be appended are one decision. Watched failing both ways:
+  `without_a_quota_summaries_take_every_seed_slot` (twenty summaries take all
+  twelve slots and the walk emits ZERO leaf requests) beside
+  `a_quota_keeps_summaries_reachable_without_costing_a_leaf_seed`.
+
+  **What the deletion costs, today, on this box.** The walk can only reach
+  summaries an atlas actually CARRIES, and `svrn enrich summary-atoms
+  <corpus>` is what puts them there. It has been run on the ei-7a fixture and
+  nowhere else, so `sep` — 11,181 `raptor_summaries.lance` rows, live until
+  this commit — has NO whole-work summaries in retrieval, and neither does any
+  other corpus. That is a real capability regression and it is NAMED rather
+  than defaulted: `apply_atlas_grounding` logs, on a thematic walk that reached
+  no summary, which candidate corpora carry RAPTOR rows without Summary atoms
+  and names the command that fixes it (ARCH §18.3). The migration is not this
+  order's to run — it is a control write over 1,770 per-article atlases — and
+  the operator's decision folds it into the rebuild `sep` and `wikipedia` are
+  already due for pooling reasons (ei-6b, 2026-09-07): one battery re-embeds
+  the chunks, projects the Summary atoms, and rebuilds the seed tables under
+  the budgeted population, rather than three passes over the same 1,770
+  directories.
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
 for status table, landing-by-landing scope, and validation targets.
@@ -3046,16 +3089,23 @@ reordering is an explicit, reviewed act. Per-intent differences
 code, and both pipelines share `shared_head_steps()` — which knowledge
 sources exist is a property of the install, not of the intent label. The
 injection helpers themselves (`apply_atlas_grounding`,
-`apply_raptor_grounding`, `meta_atlas_boost`, `fan_out_decomposed_queries`,
+`meta_atlas_boost`, `fan_out_decomposed_queries`,
 `expand_from_top_sources`, …) are `impl Runtime` methods under
 `runtime/retrieval/` (the 2026-07-12 split of the former 5,000-line
 `retrieval.rs` into 11 concern modules);
 
 **`apply_atlas_grounding` is a CALLER since ei-4-walk (2026-09-04), not the
 walk.** The walk itself is `corpus_engine::enrichment::atlas::ground` and its
-policy — seed kinds, edge kinds, hops, evidence budget — comes from the
-corpus's own `atlas/ontology.json` `navigation` section
-(`EPISTEMIC_INDEX.md` §2.2), not from constants at the call site. What stays
+policy — seed kinds, PER-KIND SEED QUOTAS, edge kinds, hops, evidence budget —
+comes from the corpus's own `atlas/ontology.json` `navigation` section
+(`EPISTEMIC_INDEX.md` §2.2), not from constants at the call site. Since ei-5c
+(2026-09-07) it is also the ONLY grounding implementation the retrieval path
+has: `apply_raptor_grounding` was the second, and it is deleted. The walk's
+source is four files rather than one — `ground.rs` performs the three steps,
+`ground/select.rs` decides which row, `ground/report.rs` holds the ledger, the
+degradations, the map section and the result, `ground/tests.rs` the tests —
+split along the seam the module's own doc draws, with every
+`atlas::ground::…` path unchanged by re-export (ARCH §3.1, §10.6). What stays
 here is what only a `Runtime` can do: choose the atlases in scope (through
 `ground::candidate_atlas_ids`, the one home of the chunk → atlas id
 derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
@@ -7111,7 +7161,7 @@ number and not an exit, at the cost of a second file. Accepted instead:
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| The walk, as one function | `corpus-engine/src/enrichment/atlas/ground.rs` (new, 1,165 — the +1 file / +1,350 lines named above) | `ground()`, the question-kind selection and the drop ledger are one decision path; `resolve.rs` (501) was already split out of it to keep it under the ceiling. The only seam that would take it under 800 is the ledger, and the ledger is what makes the walk glassbox (ARCH §9) — splitting it from the walk it records is the wrong cut. Due when a second walk shape needs the same ledger. |
+| ~~The walk, as one function~~ — **DISCHARGED by ei-5c, 2026-09-07** | `corpus-engine/src/enrichment/atlas/ground.rs` (was 1,165, then 1,578 after ei-7a, then 1,815 after this order's seed-quota fixture) | This row said the only seam under 800 was the ledger and that splitting it from the walk it records was the wrong cut. It was right about the ledger and wrong about "only": the module's own doc names THREE steps, and step 1 — classify the question onto a row — is separable in fact, not just on paper (it is the one part that touches the embedder for anything but the question, and `WalkSelection::named` skips it entirely). Split four ways: `ground.rs` 731 (the walk), `ground/select.rs` 143 (which row), `ground/report.rs` 337 (ledger, degradations, map, result — the ledger DID come out, and it kept the walk glassbox because `WalkLedger` is fields the walk writes, not logic it runs), `ground/tests.rs` 668. Every file under 800, so nothing entered ARCH §3.1's approach band and the oversized row is gone rather than moved. |
 
 **ei-7c's numbers, as that row asked for them (2026-09-04, branch `ei-7c`).**
 Measured file-by-file out of git across `301cdc93c..HEAD`, `.rs` only,
@@ -7379,7 +7429,7 @@ this order did not touch `quality/baselines/`.
 
 | File | Before | After | Delta | Why |
 |---|---|---|---|---|
-| `corpus-engine/src/enrichment/atlas/ground.rs` | 1165 | 1578 | +413 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). |
+| ~~`corpus-engine/src/enrichment/atlas/ground.rs`~~ **PAID by ei-5c, 2026-09-07** | 1165 | 1578 | +413 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). Split four ways rather than re-baselined — see §10.1o. |
 | `corpus-engine/src/enrichment/atlas/context.rs` | 2168 | 2230 | +62 (slack 50) | The `Summary` arm of `render_atom_entry` plus its fixture. Twelve lines over slack, and the arm is the difference between a kind the map seeds on and a kind the renderer silently drops — see the write-side entry above. |
 
 `corpus-engine-vocab/src/atoms.rs` was the third row here (+148 for the
@@ -7407,6 +7457,50 @@ cite a fiction — caught by the gate on 2026-09-05, in this very row.)
 twice — `Asset` at 2.1, `Summary` at 2.5 — and the natural split when it next
 crosses is one module per kind inside the atoms module, not a line trim. (Again
 in prose, for the docs-gate reason above.)
+
+### 10.1o Size — one walk, split four ways, and one derivation that got its own file (ei-5c-seed-race, 2026-09-07)
+
+This order arrived owing two arch-gate rows and leaves owing none of its own.
+The baseline bump is still the seat's at merge; this order did not touch
+`quality/baselines/`.
+
+**`ground.rs` — PAID, not deferred.** §10.1n deferred it at 1,578 and this
+order took it to 1,815 (the seed-race fixture and its two directions), so the
+choice was a second deferral or a split. Split, along the seam the module's own
+doc has drawn since ei-4-walk — three steps, and step 1 is separable in fact:
+
+| file | lines | question it answers |
+|---|---|---|
+| `corpus-engine/src/enrichment/atlas/ground.rs` | 731 | the walk: seed, expand, aggregate |
+| `corpus-engine/src/enrichment/atlas/ground/select.rs` | 143 | which row, from whose map, on what evidence |
+| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 337 | what the walk says about itself — ledger, degradations, map, result |
+| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 668 | the tests |
+
+Every one under 800, so this is a real cut and not a shuffle: the oversized row
+disappears and NOTHING enters ARCH §3.1's approach band, which is the failure
+mode that band ratchet exists to catch ("frozen so a split cannot refill").
+Public paths are unchanged — `ground.rs` re-exports both children whole, so
+every `atlas::ground::WalkLedger` and `atlas::ground::select_walk` still
+resolves (§10.6: a re-export, never a twin).
+
+**`store.rs` — avoided rather than accepted.** The `Configures` derivation and
+its three tests are ~155 lines, and `store.rs` is already past the ceiling at
+1,274, so adding them there would have been a fifth `GREW past slack` row for a
+file this order has no business growing. They live in
+`corpus-engine/src/enrichment/atlas/store/configures.rs` (155) instead, which is
+also the better cut: the derivation answers one question no other part of the
+store write asks — which field is secretly an edge list — and the store's job is
+the CSR and the Lance table, not the vocabulary. `store.rs` ends at 1,292
+against a 1,274 baseline, +18, inside slack.
+
+**`context.rs` is NOT this order's.** §10.1n's row for it stands unchanged:
+2,168 → 2,230 is ei-7a's `render_atom_entry` arm, already on `main` at this
+branch's base, and this order does not touch the file. The remaining arch-gate
+findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
+`runner.rs`, `quality_lane_cmd/chat_ask.rs`, `quality_check_cmd.rs`,
+`grounding/tests.rs`, `chaos_monkey/score.rs`, `mesh/daemon.rs`,
+`session_state.rs`, the `AGENTS.md` instruction surface and the approach band —
+are upstream's; `git diff main...HEAD` touches none of them.
 
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 

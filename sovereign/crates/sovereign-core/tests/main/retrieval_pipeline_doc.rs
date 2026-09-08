@@ -27,7 +27,7 @@ ordered list of named steps run by one tracing runner (one\n\
 `chunks_before/after/delta`). The governing principle: **the intent\n\
 decides HOW to answer (model tier, expansion, synthesis shape) — never\n\
 WHERE knowledge lives.** Both pipelines share the same 3-step\n\
-evidence-gathering head and 13-step core (incl. the FR-9 governance\n\
+evidence-gathering head and 12-step core (incl. the FR-9 governance\n\
 active-set filter); they differ only in their\n\
 tails. Step ORDER is bench-tuned data, pinned by golden tests — see\n\
 the module doc in `retrieval_pipeline.rs` for design rationale and the\n\
@@ -70,7 +70,6 @@ fn render() -> String {
     md.push_str(
         "\n## Verdict buckets (2026-06-10 flag audit)\n\n\
          - **Validated, default ON** — `SOVEREIGN_ATLAS_GROUNDING`,\n\
-           `SOVEREIGN_RAPTOR_GROUNDING` (+`_LATE` position),\n\
            `SOVEREIGN_HISTORY_RETRIEVAL`; router-side:\n\
            `SOVEREIGN_KQ_EFFORT_TIER`, `SOVEREIGN_ROUTER_ROBUST_COARSE`\n\
            (both A/B-validated 2026-06-09). Disable only for A/B runs.\n\
@@ -81,8 +80,16 @@ fn render() -> String {
            `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `SOVEREIGN_COMPACTION_DISABLE`.\n\
            Flipping one ON in prod requires its own bench A/B.\n\
          - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`,\n\
-           `_TOP_M/_MIN_LEVEL/_DEDUPE`, `DECOMP_DECAY`,\n\
-           `CONV_PPR_WEIGHT` family. Sub-knobs of their parent feature.\n\
+           `DECOMP_DECAY`, `CONV_PPR_WEIGHT` family. Sub-knobs of their\n\
+           parent feature.\n\
+         - **Retired** — the `SOVEREIGN_RAPTOR_*` family (2026-09-07,\n\
+           order ei-5c). The retrieval-time summary injector they gated\n\
+           was a second grounding implementation outside corpus-engine;\n\
+           whole-work summaries reach the pool through the atlas walk\n\
+           now, and whether a corpus HAS them is a data state\n\
+           (`svrn enrich summary-atoms <corpus>`), not a knob. Setting\n\
+           any of the five has no effect. See\n\
+           `sovereign/DEFAULTS_LEDGER.md`.\n
          - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit\n\
            snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).\n\
            Never set in normal operation.\n",

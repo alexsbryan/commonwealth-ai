@@ -6,8 +6,11 @@ Whole-article SUMMARIZATION bank for the RAPTOR-on-Wikipedia due-diligence
 pilot (2026-06-08). Mirrors sovereign/bench/sep/summarize.toml: comprehensive
 "give me an overview of the whole topic" prompts whose `expected_facts` are the
 article's major canonical themes, scored as THEME COVERAGE under --synth
-(facts-judge, paraphrase-tolerant, is the headline). Run A/B on
-SOVEREIGN_RAPTOR_GROUNDING (0 vs 1) with --isolate (scope to wikipedia).
+(facts-judge, paraphrase-tolerant, is the headline). Run with --isolate (scope
+to wikipedia). There is no flag to A/B since order ei-5c (2026-09-07): the
+retrieval-time injector is gone and the summaries arrive as `Summary` atoms on
+the atlas walk, so the two arms are two corpus states — atlases without those
+atoms, and atlases after `svrn enrich summary-atoms wikipedia`.
 
 Restricted to the 8 pilot articles that built level-1 (cross-section) RAPTOR
 nodes — i.e. the richest trees, exactly where whole-work summarization is
@@ -17,7 +20,9 @@ equally and cancels out of the delta.
 
 NOTE: RAPTOR was built per-article via `enrich raptor wikipedia --group-by-article
 --titles-file` on these 12 pilot articles only; the other ~51k articles have no
-RAPTOR nodes, so this bank must stay scoped to these articles.
+RAPTOR nodes, so this bank must stay scoped to these articles. The `Summary`
+atoms are projected from those same rows, so an article with no RAPTOR nodes has
+nothing for `svrn enrich summary-atoms` to project either.
 """
 
 [bank.latency_budget]

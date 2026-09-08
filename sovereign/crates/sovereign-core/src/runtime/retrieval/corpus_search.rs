@@ -965,21 +965,32 @@ fn apply_corpus_allow_list(
 
 #[cfg(test)]
 mod allow_list_tests {
-    use super::super::raptor_grounding::raptor_scored_chunk;
     use super::apply_corpus_allow_list;
     use super::corpora_outside_scope;
     use super::corpora_outside_seal;
     use super::rerank_config_for_corpus;
 
+    /// A pool chunk carrying nothing but its corpus id — all these tests read.
+    ///
+    /// It was `raptor_grounding::raptor_scored_chunk` until ei-5c retired that
+    /// injector, which made a summary constructor the fixture for an audit that
+    /// has nothing to do with summaries: the bleed audit is about WHICH CORPUS
+    /// a chunk names, and borrowing a producer to say so tied this test to a
+    /// production path it does not test. Built here now, so the next producer
+    /// to retire does not take these three tests with it.
     fn chunk(corpus: &str) -> corpus_engine::ScoredChunk {
-        raptor_scored_chunk(
-            "conv/1".to_string(),
-            corpus.to_string(),
-            0,
-            "body".to_string(),
-            0.5,
-            "node-1".to_string(),
-        )
+        corpus_engine::ScoredChunk {
+            content: "body".to_string(),
+            title: Some("conv/1".to_string()),
+            url: None,
+            corpus_id: corpus.to_string(),
+            score: 0.5,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: Some(0.5),
+            provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate(corpus),
+        }
     }
 
     /// THE GENERALISATION TEST for audit D1.
@@ -1165,32 +1176,11 @@ mod allow_list_tests {
     #[test]
     fn corpora_outside_seal_flags_only_disallowed() {
         let chunks = vec![
-            raptor_scored_chunk(
-                "c1".into(),
-                "wikipedia".into(),
-                0,
-                "a".into(),
-                0.9,
-                "n1".into(),
-            ),
-            raptor_scored_chunk("c2".into(), "sep".into(), 0, "b".into(), 0.8, "n2".into()),
+            chunk("wikipedia"),
+            chunk("sep"),
             // `atlas:sep` is a virtual chunk over the `sep` corpus.
-            raptor_scored_chunk(
-                "c3".into(),
-                "atlas:sep".into(),
-                0,
-                "c".into(),
-                0.7,
-                "n3".into(),
-            ),
-            raptor_scored_chunk(
-                "c4".into(),
-                "conversation-history".into(),
-                0,
-                "d".into(),
-                0.6,
-                "n4".into(),
-            ),
+            chunk("atlas:sep"),
+            chunk("conversation-history"),
         ];
         // No seal → nothing flagged.
         assert!(corpora_outside_seal(&chunks, None).is_empty());

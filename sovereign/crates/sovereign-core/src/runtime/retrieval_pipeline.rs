@@ -45,7 +45,6 @@
 //! | 4 | `title_expand` | `SOVEREIGN_TITLE_EXPAND=1` | `expand_question_to_titles` → fan-out; titles kept for reserve |
 //! | 5 | `noise_floor` | — | `drop_no_overlap_chunks` |
 //! | 6 | `searched_corpora_snapshot` | — | records the corpora SEARCH reached, for the bleed audit; must precede every injector |
-//! | 7 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` on AND `SOVEREIGN_RAPTOR_LATE=0` | `apply_raptor_grounding` |
 //! | 8 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` (default on) | `apply_atlas_grounding` + per-corpus trace |
 //! | 9 | `reweight_and_sort` | — | `reweight_by_query_relevance` + `cross_corpus_sort_cmp` |
 //! | 10 | `atom_enum` | `SOVEREIGN_ATOM_ENUM=1` | `enumerate_typed_atom_chunks`. AFTER the reweight on purpose (2026-08-05, audit D1): this is the first stage whose ranking separates on-topic (~0.70) from off-topic (~0.035), and the injector scopes itself from it. Ahead of it, scope came from RRF-fused noise where everything scored ~0.03 |
@@ -194,11 +193,6 @@ const FLAG_ATOM_ENUM: EnvFlag = EnvFlag {
     default: "off",
     purpose: "Enumeration-class questions get the corpus's top-degree typed atoms injected as virtual chunks (post-floor).",
 };
-const FLAG_RAPTOR_GROUNDING: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_RAPTOR_GROUNDING",
-    default: "on",
-    purpose: "RAPTOR collapsed-tree summary nodes injected as virtual chunks. SOVEREIGN_RAPTOR_LATE picks early (pre-merge) vs late (post-rerank) injection.",
-};
 const FLAG_GRAPH_NEIGHBOR_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND",
     default: "off",
@@ -237,11 +231,6 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_NOFILTER", default: "off", purpose: "Disable the enumeration-question classifier filter." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_RELATIONS", default: "off", purpose: "Include relation atoms in the enumeration." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_OVERVIEW", default: "on", purpose: "Overview/summary questions (\"most important thing in X\", \"summarize X\") inject the scoped corpus's atlas Claim atoms as virtual chunks (the corpus's key points) so the answer grounds on them instead of abstaining over an anchorless pool. Default ON (set =0 to disable). Independent of SOVEREIGN_ATOM_ENUM; detected by question shape (no LLM call)." }),
-        ("raptor_grounding_early", FLAG_RAPTOR_GROUNDING),
-        ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_LATE", default: "on", purpose: "Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge." }),
-        ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_TOP_M", default: "see helper", purpose: "Top-M summary nodes injected." }),
-        ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_MIN_LEVEL", default: "see helper", purpose: "Minimum tree level for injected summaries." }),
-        ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_DEDUPE", default: "see helper", purpose: "Collapse one entry's multi-level nodes to its best." }),
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
         ("ppr_struct_spawn", FLAG_PPR_EXPAND),
         ("ppr_struct_expand", FLAG_PPR_EXPAND),
@@ -1031,12 +1020,6 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
             step_searched_corpora_snapshot,
         ),
         step(
-            "raptor_grounding_early",
-            StepKind::Injector,
-            Some(FLAG_RAPTOR_GROUNDING),
-            step_raptor_grounding_early,
-        ),
-        step(
             "atlas_grounding",
             StepKind::Injector,
             Some(FLAG_ATLAS_GROUNDING),
@@ -1162,8 +1145,7 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
         steps.extend(shared_head_steps());
     } else {
         core.retain(|s| {
-            s.name != "raptor_grounding_early"
-                && s.name != "atlas_grounding"
+            s.name != "atlas_grounding"
                 // No corpus retrieval ⇒ no pool to seed from and no
                 // pool to inject into — the PPR lane pair is inert
                 // weight on attached-doc turns.
@@ -1597,35 +1579,6 @@ fn step_scope_audit<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
             StepOutcome {
                 note: Some(format!("scope bleed ({basis}): {}", bleed.join(", "))),
                 ..StepOutcome::default()
-            }
-        }
-    })
-}
-
-fn step_raptor_grounding_early<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
-    Box::pin(async move {
-        // RAPTOR collapsed-tree grounding, EARLY position
-        // (SOVEREIGN_RAPTOR_LATE=0): summaries enter before the merge
-        // so they participate in expansion + rerank. The DEFAULT (late
-        // on) injects post-rerank instead — that call stays with the
-        // prompt-assembly code in the handlers, outside this pipeline.
-        if !raptor_late_inject_enabled() {
-            rt.apply_raptor_grounding(
-                &st.embedding,
-                &mut st.chunks,
-                st.label,
-                st.enabled_corpora,
-                &st.lane,
-            )
-            .await;
-            StepOutcome::default()
-        } else {
-            StepOutcome {
-                note: Some("late-inject mode — early injection skipped".into()),
-                ..Default::default()
             }
         }
     })
@@ -3054,7 +3007,6 @@ mod tests {
                 "title_expand",
                 "noise_floor",
                 "searched_corpora_snapshot",
-                "raptor_grounding_early",
                 "atlas_grounding",
                 "reweight_and_sort",
                 // atom_enum sits AFTER reweight_and_sort deliberately — the
@@ -3092,7 +3044,6 @@ mod tests {
                 "title_expand",
                 "noise_floor",
                 "searched_corpora_snapshot",
-                "raptor_grounding_early",
                 "atlas_grounding",
                 "reweight_and_sort",
                 // atom_enum sits AFTER reweight_and_sort deliberately — the
@@ -3161,13 +3112,13 @@ mod tests {
         assert!(!names.contains(&"scope_personal_filter"));
         assert!(!names.contains(&"store_search"));
         assert!(!names.contains(&"atlas_grounding"));
-        assert!(!names.contains(&"raptor_grounding_early"));
         assert!(!names.contains(&"ppr_struct_spawn"));
         assert!(!names.contains(&"ppr_struct_expand"));
         // I4-A: the demand planner is inert without a corpus pool.
         assert!(!names.contains(&"demand_plan"));
-        // Head (3) + demand_plan + the 4 corpus-only core steps = 8 fewer.
-        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 8);
+        // Head (3) + demand_plan + the 3 corpus-only core steps = 7 fewer.
+        // Was 8 until ei-5c retired `raptor_grounding_early`, the fourth.
+        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 7);
     }
 
     /// The personal-scope retain predicate: metadata stamp first,

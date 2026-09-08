@@ -34,17 +34,16 @@ dated convergence/divergence log.
 | 10 | `title_expand` | `Injector` | `SOVEREIGN_TITLE_EXPAND` |
 | 11 | `noise_floor` | `Filter(NoQueryOverlap)` | — |
 | 12 | `searched_corpora_snapshot` | `Inert` | — |
-| 13 | `raptor_grounding_early` | `Injector` | `SOVEREIGN_RAPTOR_GROUNDING` |
-| 14 | `atlas_grounding` | `Injector` | `SOVEREIGN_ATLAS_GROUNDING` |
-| 15 | `reweight_and_sort` | `Filter(CapExceeded)` | — |
-| 16 | `atom_enum` | `Injector` | `SOVEREIGN_ATOM_ENUM` |
-| 17 | `graph_neighbor_expand` | `Injector` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 18 | `ppr_struct_expand` | `Injector` | `SOVEREIGN_PPR_EXPAND` |
-| 19 | `dedupe_merged` | `Filter(Duplicate)` | — |
-| 20 | `cap_and_reserve` | `Filter(NotSelectedByObjective)` | — |
-| 21 | `governance_active_set` | `Filter(DeadLaw)` | — |
-| 22 | `truncate_merged` | `Filter(BudgetExhausted)` | — |
-| 23 | `scope_audit` | `Inert` | — |
+| 13 | `atlas_grounding` | `Injector` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 14 | `reweight_and_sort` | `Filter(CapExceeded)` | — |
+| 15 | `atom_enum` | `Injector` | `SOVEREIGN_ATOM_ENUM` |
+| 16 | `graph_neighbor_expand` | `Injector` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 17 | `ppr_struct_expand` | `Injector` | `SOVEREIGN_PPR_EXPAND` |
+| 18 | `dedupe_merged` | `Filter(Duplicate)` | — |
+| 19 | `cap_and_reserve` | `Filter(NotSelectedByObjective)` | — |
+| 20 | `governance_active_set` | `Filter(DeadLaw)` | — |
+| 21 | `truncate_merged` | `Filter(BudgetExhausted)` | — |
+| 22 | `scope_audit` | `Inert` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -62,18 +61,17 @@ dated convergence/divergence log.
 | 10 | `title_expand` | `Injector` | `SOVEREIGN_TITLE_EXPAND` |
 | 11 | `noise_floor` | `Filter(NoQueryOverlap)` | — |
 | 12 | `searched_corpora_snapshot` | `Inert` | — |
-| 13 | `raptor_grounding_early` | `Injector` | `SOVEREIGN_RAPTOR_GROUNDING` |
-| 14 | `atlas_grounding` | `Injector` | `SOVEREIGN_ATLAS_GROUNDING` |
-| 15 | `reweight_and_sort` | `Filter(CapExceeded)` | — |
-| 16 | `atom_enum` | `Injector` | `SOVEREIGN_ATOM_ENUM` |
-| 17 | `graph_neighbor_expand` | `Injector` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
-| 18 | `ppr_struct_expand` | `Injector` | `SOVEREIGN_PPR_EXPAND` |
-| 19 | `dedupe_merged` | `Filter(Duplicate)` | — |
-| 20 | `cap_and_reserve` | `Filter(NotSelectedByObjective)` | — |
-| 21 | `governance_active_set` | `Filter(DeadLaw)` | — |
-| 22 | `truncate_merged` | `Filter(BudgetExhausted)` | — |
-| 23 | `top_sources_expand` | `Injector` | — |
-| 24 | `scope_audit` | `Inert` | — |
+| 13 | `atlas_grounding` | `Injector` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 14 | `reweight_and_sort` | `Filter(CapExceeded)` | — |
+| 15 | `atom_enum` | `Injector` | `SOVEREIGN_ATOM_ENUM` |
+| 16 | `graph_neighbor_expand` | `Injector` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 17 | `ppr_struct_expand` | `Injector` | `SOVEREIGN_PPR_EXPAND` |
+| 18 | `dedupe_merged` | `Filter(Duplicate)` | — |
+| 19 | `cap_and_reserve` | `Filter(NotSelectedByObjective)` | — |
+| 20 | `governance_active_set` | `Filter(DeadLaw)` | — |
+| 21 | `truncate_merged` | `Filter(BudgetExhausted)` | — |
+| 22 | `top_sources_expand` | `Injector` | — |
+| 23 | `scope_audit` | `Inert` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -119,11 +117,6 @@ asserts every step-level gate appears here.
 | atom_enum | `SOVEREIGN_ATOM_ENUM_NOFILTER` | off | Disable the enumeration-question classifier filter. |
 | atom_enum | `SOVEREIGN_ATOM_ENUM_RELATIONS` | off | Include relation atoms in the enumeration. |
 | atom_enum | `SOVEREIGN_ATOM_ENUM_OVERVIEW` | on | Overview/summary questions ("most important thing in X", "summarize X") inject the scoped corpus's atlas Claim atoms as virtual chunks (the corpus's key points) so the answer grounds on them instead of abstaining over an anchorless pool. Default ON (set =0 to disable). Independent of SOVEREIGN_ATOM_ENUM; detected by question shape (no LLM call). |
-| raptor_grounding_early | `SOVEREIGN_RAPTOR_GROUNDING` | on | RAPTOR collapsed-tree summary nodes injected as virtual chunks. SOVEREIGN_RAPTOR_LATE picks early (pre-merge) vs late (post-rerank) injection. |
-| raptor_grounding_early | `SOVEREIGN_RAPTOR_LATE` | on | Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. |
-| raptor_grounding_early | `SOVEREIGN_RAPTOR_TOP_M` | see helper | Top-M summary nodes injected. |
-| raptor_grounding_early | `SOVEREIGN_RAPTOR_MIN_LEVEL` | see helper | Minimum tree level for injected summaries. |
-| raptor_grounding_early | `SOVEREIGN_RAPTOR_DEDUPE` | see helper | Collapse one entry's multi-level nodes to its best. |
 | graph_neighbor_expand | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | off | Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). |
 | ppr_struct_spawn | `SOVEREIGN_PPR_EXPAND` | on (dark without a reranker) | PPR walk + typed causal/contested edges over the wikipedia link graph propose answer-side articles; a cross-encoder admission gate (requires rerank_fn — SOVEREIGN_RERANK_MODEL_PATH) injects only CE-yes candidates, placed mid-pool. Spawned early, joined late: overlaps the core steps. =0/false/off/no disables (RETRIEVAL_REDESIGN.md S4 attempt log). |
 | ppr_struct_expand | `SOVEREIGN_PPR_EXPAND` | on (dark without a reranker) | PPR walk + typed causal/contested edges over the wikipedia link graph propose answer-side articles; a cross-encoder admission gate (requires rerank_fn — SOVEREIGN_RERANK_MODEL_PATH) injects only CE-yes candidates, placed mid-pool. Spawned early, joined late: overlaps the core steps. =0/false/off/no disables (RETRIEVAL_REDESIGN.md S4 attempt log). |
@@ -143,7 +136,6 @@ asserts every step-level gate appears here.
 ## Verdict buckets (2026-06-10 flag audit)
 
 - **Validated, default ON** — `SOVEREIGN_ATLAS_GROUNDING`,
-`SOVEREIGN_RAPTOR_GROUNDING` (+`_LATE` position),
 `SOVEREIGN_HISTORY_RETRIEVAL`; router-side:
 `SOVEREIGN_KQ_EFFORT_TIER`, `SOVEREIGN_ROUTER_ROBUST_COARSE`
 (both A/B-validated 2026-06-09). Disable only for A/B runs.
@@ -154,8 +146,17 @@ wikipedia_learn/V36_FINDINGS.md), `SOVEREIGN_QUERY_DECOMP`,
 `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `SOVEREIGN_COMPACTION_DISABLE`.
 Flipping one ON in prod requires its own bench A/B.
 - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`,
-`_TOP_M/_MIN_LEVEL/_DEDUPE`, `DECOMP_DECAY`,
-`CONV_PPR_WEIGHT` family. Sub-knobs of their parent feature.
-- **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit
+`DECOMP_DECAY`, `CONV_PPR_WEIGHT` family. Sub-knobs of their
+parent feature.
+- **Retired** — the `SOVEREIGN_RAPTOR_*` family (2026-09-07,
+order ei-5c). The retrieval-time summary injector they gated
+was a second grounding implementation outside corpus-engine;
+whole-work summaries reach the pool through the atlas walk
+now, and whether a corpus HAS them is a data state
+(`svrn enrich summary-atoms <corpus>`), not a knob. Setting
+any of the five has no effect. See
+`sovereign/DEFAULTS_LEDGER.md`.
+
+         - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit
 snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).
 Never set in normal operation.

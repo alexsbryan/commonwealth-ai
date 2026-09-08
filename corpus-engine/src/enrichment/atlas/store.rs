@@ -33,6 +33,8 @@ use super::edges::{Edge, EdgeProvenance, EdgeType};
 use super::projection::{project, AtomRecord};
 use super::{AtomEnvelope, AtomType};
 
+mod configures;
+
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
 /// columns or the edges.csr binary format).
 pub const STORE_FORMAT_VERSION: u32 = 1;
@@ -555,7 +557,16 @@ pub async fn write_store(
         rows.push(AtomRow::from_record(local_id, &rec));
     }
     let lance = write_atoms_lance(atlas_dir, &rows).await?;
-    write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, edges)?;
+    let configures = configures::derive_configures_edges(atoms, edges);
+    if !configures.is_empty() {
+        tracing::debug!(
+            atlas = %atlas_dir.display(),
+            derived = configures.len(),
+            "atlas store: Configures edges derived from Configuration.constituent_atoms"
+        );
+    }
+    let all: Vec<Edge> = edges.iter().cloned().chain(configures).collect();
+    write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, &all)?;
     Ok(lance)
 }
 
@@ -870,7 +881,7 @@ mod tests {
     use crate::enrichment::atlas::{AtomId, ChunkRef, Edge, EdgeId};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
-    fn entity(idx: usize, name: &str) -> AtomEnvelope {
+    pub(crate) fn entity(idx: usize, name: &str) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
             id: AtomId::entity(idx),
             canonical_name: name.into(),

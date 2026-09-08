@@ -13,13 +13,16 @@ This bank picks SPECIALIST entries (proof theory, Frege's theorem, Principia,
 recursive functions, common knowledge, Ibn Rushd) where a general 35B's
 parametric knowledge is thin — so retrieval is load-bearing and RAPTOR's
 context-coverage advantage should translate into ANSWER-coverage gains. The
-raptor=OFF facts-judge column self-reveals obscurity: if it's near-ceiling
+no-summaries facts-judge column self-reveals obscurity: if it's near-ceiling
 (~94% like the famous bank), the model knew it anyway; if it's lower, retrieval
-mattered and the RAPTOR delta is the real signal.
+mattered and the summary delta is the real signal.
 
 Themes are canonical-from-knowledge (not corpus-derived → no circular bias
-toward the raptor arm). A/B on SOVEREIGN_RAPTOR_GROUNDING, same as the others.
-All 6 works have rich RAPTOR trees (16–34 nodes).
+toward the summary arm). Since order ei-5c (2026-09-07) there is no flag to A/B:
+the retrieval-time injector is gone and summaries arrive as `Summary` atoms on
+the atlas walk, so the arms are two corpus states — atlases without those atoms,
+and atlases after `svrn enrich summary-atoms sep`. All 6 works have rich RAPTOR
+trees (16–34 nodes), which is what those atoms are projected from.
 
 v1 (2026-06-08).
 """

@@ -19,12 +19,24 @@
 //!
 //! Idempotent: skips a store/columnar already current vs its source, and an ANN
 //! table that already exists for an unchanged store. Re-runnable and safe to
-//! interrupt. The ANN step uses the PRODUCTION grounding filter
-//! (`AtlasContextFilter::default()`, env-aware) so the table matches exactly what
-//! the daemon seeds from; it only touches corpora that already have an embeddings
-//! cache (it never bulk-embeds the resident set). The `read_v2` flip is reversible
-//! (delete the marker) and `load_from_disk` falls back to rkyv if a store is
-//! absent/unreadable, so a flip can never strand an atlas.
+//! interrupt. The ANN step goes through the ONE seed-table writer,
+//! `atlas_context_manager::backfill_ann` — the same call `svrn atlas
+//! backfill-ann`, the `enrich build` Backfill step and the atlas writer make —
+//! so the table's POPULATION is the corpus's own navigation map
+//! (`seed_population`) and its marker is stamped with it. It only touches
+//! corpora that already have an embeddings cache (it never bulk-embeds the
+//! resident set). The `read_v2` flip is reversible (delete the marker) and
+//! `load_from_disk` falls back to rkyv if a store is absent/unreadable, so a
+//! flip can never strand an atlas.
+//!
+//! It did NOT go through that writer until ei-5c, and the consequence was
+//! measured: this verb loaded the bag under `AtlasContextFilter::default()` and
+//! called `build_persistent_ann_seed_table` itself, which is the retrieval
+//! filter authoring the writer's table — the exact disagreement `seed_population`
+//! exists to close (ARCH §10.6, one decider). It rebuilt the table from the
+//! always-seeded pair and DROPPED all 2,004 `Summary` rows from the ei-7a
+//! fixture, and because it never stamped a population marker the result read as
+//! fresh. Two implementations of one question, one of them silent.
 
 use std::path::Path;
 
@@ -35,8 +47,8 @@ use corpus_engine::wikipedia_graph_present;
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
-use crate::eval_cmd::runner::{self, AtlasContextFilter};
-use sovereign_core::atlas_context::build_persistent_ann_seed_table;
+use crate::eval_cmd::runner::AtlasContextFilter;
+use sovereign_tools::atlas_context_manager::{backfill_ann, BackfillOutcome};
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
@@ -123,13 +135,12 @@ pub async fn run(args: &[String]) -> i32 {
     // would re-probe once per corpus, 1,081 times.
     let mut session: Option<ChatSession> = None;
     let mut session_err: Option<String> = None;
-    // PRODUCTION grounding filter — the ANN table must cover exactly the atom
-    // universe the manager seeds from (its `AtlasContextFilter::default()`).
-    let prod = AtlasContextFilter::default();
-    // Was a six-field hand-copy of `prod` into a renamed near-twin
-    // (`AtlasLoadFilter`). Same type now, so the copy is the value — and a
-    // field added to the filter can no longer be silently left behind here.
-    let filter = prod.clone();
+    // The PRODUCTION grounding filter carries the quality knobs
+    // (`min_description_chars`, the depth allowlist, the cap); the corpus's
+    // navigation map carries the KINDS, and `backfill_ann` derives them. This
+    // verb passes the same filter the atlas writer passes, and decides nothing
+    // about the population itself.
+    let filter = AtlasContextFilter::default();
 
     println!(
         "{:<46} {:>7} {:>8} {:>5}  track",
@@ -185,79 +196,65 @@ pub async fn run(args: &[String]) -> i32 {
         // admits the corpus. Builds the stragglers (embedded but no table yet)
         // and leaves current tables as-is; fresh corpora get their table via
         // `svrn atlas backfill-ann`.
-        let ann_state: &str = if !ann_table_present(&atlas_dir)
-            && !atlas_dir.join("atoms.embeddings.bin").exists()
-        {
-            "n/a"
-        } else if ann_table_present(&atlas_dir) && !store_built {
-            "current"
-        } else {
-            // Load the seedable atoms. The production grounding filter
-            // (min_description_chars=200, entities) matches the manager's seeding
-            // universe, but it silently empties short-description prose corpora
-            // (enron-class). Fall back ONCE to a relaxed description floor so those
-            // still seed one-shot; a corpus that's STILL empty carries only
-            // non-Entity surfaces (investigation graphs) and is genuinely
-            // unseedable — skip it without an error rather than reporting failure.
-            // FIRST corpus that actually needs to embed pays for the session;
-            // the rest of the run reuses it, and a failure is remembered so a
-            // dead daemon costs one probe, not one per corpus.
-            if session.is_none() && session_err.is_none() {
-                match build_session(&globals).await {
-                    Ok(s) => session = Some(s),
-                    Err(e) => session_err = Some(e.to_string()),
-                }
-            }
-            match session.as_ref() {
-                // Named, never defaulted (ARCH §18.3). This corpus asked for a
-                // table and did not get one, so the row reads `err`, not `n/a`
-                // — and control falls through, so the store stays built and the
-                // read_v2 flip below still happens, exactly as on any other ANN
-                // failure.
-                None => {
-                    errs += 1;
-                    eprintln!(
-                        "  {corpus_id}: ann needs the daemon and it is not reachable: {}",
-                        session_err.as_deref().unwrap_or("unknown")
-                    );
-                    "err"
-                }
-                Some(session) => {
-                    let strict =
-                        runner::load_atlas_context(session, corpus_id, prod.top_k, &filter).await;
-                    let ctx = match strict {
-                        Ok(ctx) if !ctx.entries.is_empty() => Some(ctx),
-                        _ => {
-                            let relaxed = AtlasContextFilter {
-                                min_description_chars: 1,
-                                ..filter.clone()
-                            };
-                            runner::load_atlas_context(session, corpus_id, prod.top_k, &relaxed)
-                                .await
-                                .ok()
-                                .filter(|c| !c.entries.is_empty())
-                        }
-                    };
-                    match ctx {
-                        Some(ctx) => {
-                            match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
-                                Ok(_) => {
-                                    anns += 1;
-                                    "built"
-                                }
-                                Err(e) => {
-                                    errs += 1;
-                                    eprintln!("  {corpus_id}: ann build: {e}");
-                                    "err"
-                                }
-                            }
-                        }
-                        // No seedable atoms even at the relaxed floor (non-Entity surfaces).
-                        None => "none",
+        let ann_state: &str =
+            if !ann_table_present(&atlas_dir) && !atlas_dir.join("atoms.embeddings.bin").exists() {
+                "n/a"
+            } else if ann_table_present(&atlas_dir) && !store_built {
+                "current"
+            } else {
+                // FIRST corpus that actually needs to embed pays for the session;
+                // the rest of the run reuses it, and a failure is remembered so a
+                // dead daemon costs one probe, not one per corpus.
+                if session.is_none() && session_err.is_none() {
+                    match build_session(&globals).await {
+                        Ok(s) => session = Some(s),
+                        Err(e) => session_err = Some(e.to_string()),
                     }
                 }
-            }
-        };
+                match session.as_ref() {
+                    // Named, never defaulted (ARCH §18.3). This corpus asked for a
+                    // table and did not get one, so the row reads `err`, not `n/a`
+                    // — and control falls through, so the store stays built and the
+                    // read_v2 flip below still happens, exactly as on any other ANN
+                    // failure.
+                    None => {
+                        errs += 1;
+                        eprintln!(
+                            "  {corpus_id}: ann needs the daemon and it is not reachable: {}",
+                            session_err.as_deref().unwrap_or("unknown")
+                        );
+                        "err"
+                    }
+                    Some(session) => {
+                        // The ONE writer. It derives the population from this
+                        // corpus's navigation map, seeds under it, and stamps the
+                        // population marker in the same call — none of which this
+                        // verb may decide for itself.
+                        let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(
+                            session.inference.clone(),
+                        );
+                        match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {
+                            Ok(BackfillOutcome::Built(_)) => {
+                                anns += 1;
+                                "built"
+                            }
+                            // A corpus the filter empties carries only surfaces the
+                            // grounding filter does not admit. Reported as `none`,
+                            // never as a build (ARCH §18.3). The relaxed-floor retry
+                            // this branch used to make is gone with the fork: one
+                            // filter, the one the daemon seeds with — the same rule
+                            // `backfill_ann`'s own doc records for `svrn atlas
+                            // backfill-ann`.
+                            Ok(BackfillOutcome::NoSeedableAtoms { .. }) => "none",
+                            Err(e) => {
+                                errs += 1;
+                                eprintln!("  {corpus_id}: ann build: {e}");
+                                "err"
+                            }
+                        }
+                    }
+                }
+            };
 
         // 3) flip read_v2 (reversible; rkyv stays the fallback).
         let flip_state: &str = if !flip {
@@ -325,6 +322,61 @@ mod tests {
     /// `no_session_bootstrap_in_this_verb` and as `lib.rs`'s harness guard.
     fn session_builder() -> String {
         ["build", "session"].join("_")
+    }
+
+    /// The production half of this file — the same split
+    /// `migrate_all_builds_no_session_before_it_needs_one` uses, so a doc
+    /// comment or an assertion literal cannot answer for the code.
+    fn production_source() -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("atlas_cmd/migrate_all.rs");
+        let whole = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        whole
+            .split_once("#[cfg(test)]")
+            .map(|(p, _)| p.to_string())
+            .unwrap_or_else(|| panic!("{}: no test module to split on", path.display()))
+    }
+
+    /// `migrate-all` must SEED THROUGH THE ONE WRITER, not build a seed table
+    /// of its own.
+    ///
+    /// What it did until ei-5c: loaded the bag under
+    /// `AtlasContextFilter::default()` and called
+    /// `build_persistent_ann_seed_table` directly. That is the RETRIEVAL filter
+    /// authoring the writer's table — Entity-only in production — so this verb
+    /// rebuilt every table it touched from the always-seeded pair and wrote no
+    /// population marker, which made the result read as fresh. Measured on the
+    /// ei-7a SEP fixture: all 2,004 `Summary` rows dropped, exit 0, every count
+    /// in the report looking right. Two implementations of one question (ARCH
+    /// §10.6), and the silent one won.
+    ///
+    /// Positional, like its sibling, because the defect is a CALL SITE and not
+    /// a value: the behavioural proof is in the commit body (rebuild the
+    /// fixture's table with each binary and diff the per-kind census). Failing
+    /// inputs, both directions (§18.6): name either forked symbol again (hop 1
+    /// goes red), or stop naming the writer (the positive control goes red).
+    #[test]
+    fn the_ann_step_seeds_through_the_one_writer() {
+        let prod = production_source();
+        for forked in [
+            ["build", "persistent", "ann", "seed", "table"].join("_"),
+            ["load", "atlas", "context"].join("_"),
+        ] {
+            assert!(
+                !prod.contains(&forked),
+                "migrate_all.rs names `{forked}` — it is authoring a seed table \
+                 instead of asking `backfill_ann` for one, so the population is \
+                 this verb's filter rather than the corpus's navigation map"
+            );
+        }
+        let writer = ["backfill", "ann"].join("_");
+        assert!(
+            prod.contains(&writer),
+            "nothing in migrate_all.rs calls `{writer}`, so either the ANN \
+             sub-step is gone or this guard is checking nothing"
+        );
     }
 
     /// `svrn atlas migrate-all` must not build a `ChatSession` before it knows

@@ -388,7 +388,9 @@ impl SqliteStateStore {
     /// Every RAPTOR node for a corpus at or above `min_level`
     /// (`min_level = 0` = all nodes incl. leaves; `1` = section/doc
     /// summaries only). The corpus-wide collapsed-tree pool for
-    /// query-time cosine grounding (`Runtime::apply_raptor_grounding`).
+    /// query-time cosine grounding. Its reader was
+    /// `Runtime::apply_raptor_grounding` until 2026-09-07 (ei-5c); the rows are
+    /// projected into atlas `Summary` atoms and reached by the walk now.
     /// Mirrors `list_conv_raptor_nodes` but drops the `conv_uuid`
     /// predicate.
     pub async fn list_corpus_raptor_nodes(

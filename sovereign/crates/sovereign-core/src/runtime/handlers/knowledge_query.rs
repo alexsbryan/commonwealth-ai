@@ -1095,21 +1095,12 @@ impl Runtime {
         // the same `reserve_summary_chunks` the early path already gets at
         // `cap_and_reserve` (pipeline step 13, which late injection lands
         // after). Order-only: the chunk SET is unchanged.
-        if raptor_late_inject_enabled() {
-            self.apply_raptor_grounding(
-                &embedding,
-                &mut chunks,
-                "KnowledgeQuery",
-                context.conversation.enabled_corpora.as_deref(),
-                &lane,
-            )
-            .await;
-            chunks = reserve_summary_chunks(std::mem::take(&mut chunks));
-        }
-        // ei-7a: the atlas walk's own summaries, at the SAME late position and
-        // for the same reason — see `append_atlas_summaries`. The injector
-        // above and this call are the two arms of the port; when the injector
-        // retires, this is what remains.
+        //
+        // ei-5c retired the injector that stood here and left this call, which
+        // is what "when the injector retires, this is what remains" meant. The
+        // placement argument above is unchanged and now lives inside
+        // `append_atlas_summaries`; only the PRODUCER moved, from a cosine
+        // scan beside the walk to the walk itself.
         crate::runtime::retrieval::atlas_grounding::append_atlas_summaries(
             &mut chunks,
             &atlas_summaries,

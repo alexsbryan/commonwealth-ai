@@ -4,6 +4,19 @@
 
 **Scope.** Almost everything lands on substrate that already exists: LanceDB (already drives leaf-chunk vector search in corpus-engine), the `conv_raptor_nodes` SQLite table (source of truth, already built by `enrich raptor`), and the `apply_raptor_grounding` wire-in (already env-gated + late-injected, shipped 2026-06-08). The genuinely *new* pieces are: a derived `raptor_summaries.lance` table per corpus, a `build_raptor_index` step, a `search_raptor_summaries` query primitive, and the freshness gate. The [landing map](#landing-map--new-vs-reuse) calls out new vs reuse.
 
+**Superseded in part, 2026-09-07 (order ei-5c).** The consumer this contract
+was written against — `apply_raptor_grounding`, the retrieval-time injector —
+is deleted. It was a second grounding implementation living outside
+corpus-engine, which `EPISTEMIC_INDEX.md` §1's Walk row forbids, and the
+summaries it served now reach retrieval as `Summary` atoms the atlas walk seeds
+on (`svrn enrich summary-atoms <corpus>` projects the rows into a corpus's
+atlases; the stored 1024-d vector becomes the seed row, so nothing is
+re-embedded). Everything BELOW the injector is untouched and still shipped:
+`raptor_summaries.lance`, `build_raptor_index`, `search_raptor_summaries`, the
+sidecar and the freshness gate. Read every "wire-in" section here as history —
+the table, the codec and the query primitive are current; the call sites named
+in them are not.
+
 **Status.** Phase 1 **SHIPPED 2026-06-08**. Built per this contract: `corpus-engine/src/index/raptor.rs` (pure-LanceDB `RaptorSummaryRow`/`RaptorHit`/`build_raptor_index`/`search_raptor_summaries` + `raptor_summaries.meta.json` sidecar), `CorpusEngine::search_raptor_summaries`/`raptor_index_meta` accessors, `sovereign-tools/src/raptor_index.rs::build_corpus_raptor_index` (the `conv_raptor_nodes` read→map→build glue), the `apply_raptor_grounding` index-fast-path + scan fallback + `max(created_at)` freshness gate (`corpus_raptor_version` on `ConvTieredReader`), and the `enrich raptor` auto-hook + standalone `enrich raptor-index <corpus>` verb. Parity / unit / freshness tests green. **One deviation** — see [decision 4](#decisions): the injected score is the EXACT cosine recomputed from the stored embedding, not `1 − _distance`. Still a **scaling prerequisite, not a current blocker** — it changes throughput, not answers — see [When is this needed](#when-is-this-needed).
 
 ---
