@@ -7498,7 +7498,7 @@ against a 1,274 baseline, +18, inside slack.
 branch's base, and this order does not touch the file. The remaining arch-gate
 findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
 `runner.rs`, `quality_lane_cmd/chat_ask.rs`, `quality_check_cmd.rs`,
-`grounding/tests.rs`, `chaos_monkey/score.rs`, `mesh/daemon.rs`,
+`grounding/tests.rs`, `chaos_monkey/score.rs`, `sovereign/crates/sovereign-mesh/src/daemon.rs`,
 `session_state.rs`, the `AGENTS.md` instruction surface and the approach band —
 are upstream's; `git diff main...HEAD` touches none of them.
 

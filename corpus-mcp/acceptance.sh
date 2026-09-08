@@ -685,13 +685,25 @@ fi
 #
 #   THE THEME BAR (>=3 themes each with a cited passage): asserted only where
 #   the FIXTURE can carry it, and the precondition is read off the atlas on
-#   disk BEFORE the call, never inferred from the result. Today's ANN seed
-#   table is Entity-only — `writer::seed_atlas` seeds through
-#   `AtlasContextFilter::default()`, whose `include_configurations` and
-#   `include_tensions` are `false` — so a corpus whose themes are
-#   `Configuration` atoms cannot seed them however good the walk is. That is a
-#   seed-coverage fact (ei-3), and asserting through it would report the
-#   corpus's state as the host's.
+#   disk BEFORE the call, never inferred from the result.
+#
+#   That precondition EXCLUDED `Configuration` atoms when it was written, and
+#   the reason it gave — "the ANN seed table is Entity-only, `writer::seed_atlas`
+#   seeds through `AtlasContextFilter::default()`, whose `include_configurations`
+#   is false" — has stopped being true in two steps. ei-3c made the table's
+#   population the corpus's own navigation map, whose `thematic` row lists
+#   `Configuration`; ei-5c gave the same row a `Configures` edge, so a walk that
+#   seeds on one can also LEAVE it rather than sitting on a terminus. A
+#   Configuration is a seedable theme now, on the same terms as a concept
+#   Entity: it must carry an evidence anchor, because a theme with nothing to
+#   cite cannot clear a bar that is about cited passages.
+#
+#   This widens what the precondition ADMITS, not what the bar accepts. The bar
+#   is still >=3 themes each with a cited passage, and a corpus that cannot
+#   reach it still reports COULD-NOT-JUDGE rather than passing quietly. The
+#   corpus this moves is `brothers-karamazov-book-1`: 1 concept Entity plus 2
+#   Configurations with evidence, which is exactly 3 — so the bar goes live
+#   there and the walk, not the fixture, answers for it.
 #
 # Each corpus is run in its OWN host process, because the host serves the
 # corpora it was opened with and each walk needs its own atlas.
@@ -715,9 +727,12 @@ out, corpus, atoms_path = sys.argv[1], sys.argv[2], sys.argv[3]
 # ── the fixture precondition, read off disk, before anything is judged ──
 # How many atoms this corpus has that the thematic row can BOTH seed on and
 # cite: an Entity of entity_type `concept` (the literary pipeline's `theme`,
-# per `pipelines/ontologies/literary_atlas.toml`) carrying an evidence anchor.
-# Configurations are counted apart and NOT included: the ANN seed table is
-# entity-only today, so they can be in the map's row and still be unseedable.
+# per `pipelines/ontologies/literary_atlas.toml`), or a `Configuration` — the
+# interpretive structure the work as a whole enacts, which is a theme by any
+# reading — each carrying an evidence anchor. Configurations are ALSO counted
+# apart, because "how many of the seedable ones are Configurations" is what
+# tells a reader whether ei-3c's population and ei-5c's `Configures` edge are
+# doing the work.
 seedable, configurations = 0, 0
 try:
     for a in json.load(open(atoms_path))["atoms"]:
@@ -725,6 +740,7 @@ try:
         has_evidence = bool(d.get("evidence")) or bool(d.get("first_appearance"))
         if a["atom_type"] == "Configuration":
             configurations += 1
+            seedable += has_evidence
         elif a["atom_type"] == "Entity" and d.get("entity_type") == "concept" and has_evidence:
             seedable += 1
 except FileNotFoundError:
@@ -787,11 +803,10 @@ if seedable >= BAR:
           + "; ".join(f"{themes[a]['name']!r} <- {p['title']}" for a, p in list(cited.items())[:BAR]))
 else:
     print(f"acceptance: ask({corpus}) theme bar -> COULD-NOT-JUDGE: the atlas holds {seedable} "
-          f"seedable theme atom(s), under the bar of {BAR}, so this corpus cannot exercise it "
-          f"({configurations} Configuration atom(s) are excluded because the ANN seed table is "
-          f"entity-only - AtlasContextFilter::default(), writer::seed_atlas). The bar goes live "
-          f"here the moment seed coverage widens; it is NOT waived, and the mechanism assertions "
-          f"above ran.")
+          f"seedable theme atom(s) with an evidence anchor ({configurations} of its atoms are "
+          f"Configurations), under the bar of {BAR}, so this corpus cannot exercise it. The bar "
+          f"goes live here the moment the fixture carries {BAR}; it is NOT waived, and the "
+          f"mechanism assertions above ran.")
 ASKPY
 done
 
