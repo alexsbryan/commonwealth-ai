@@ -168,10 +168,18 @@ the RESPONSE BODY before reading the load: `model_not_available` /
 `model_not_ready` means the stack is not there (`slot-decodes` unmet, a true
 `never-ran`), and only a body about queueing or wait is about contention.
 
-While you are there: `/status`'s `inference.resident` does not describe what
-the daemon is holding. The same run showed a process holding ~42 GB WIRED with
-residency reporting `[]`, and a freshly booted one at 22.7 GB RSS with the
-same empty list. Do not gate on that field.
+While you are there, two `/status` fields that do not agree and neither of
+which is safe to gate on, both observed 2026-09-08 on this host:
+
+- `inference.resident` listed three models — fast, primary, embed, all
+  `resident: true` — while `inference.loaded_models` was `[]` in the same
+  response. One of them is wrong and the reader cannot tell which.
+- `inference.resident` was `[]` while `process.rss_mb` was 34,265; the
+  pre-restart process was reported holding ~42 GB wired with the same empty
+  list. Residency does not describe what the daemon is holding.
+
+The covariate this repo does read off `/status` is `process.uptime_seconds`,
+which is monotone within a process and therefore says the one thing it claims.
 
 ## 7. Retrieval pipeline knobs
 
