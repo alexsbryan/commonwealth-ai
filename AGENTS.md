@@ -46,7 +46,7 @@ You are a Senior Architect. You look to apply SOLID principles and best practice
 2. **Don't whack moles.** Instrument, reproduce, understand — *then* fix. *(§0)*
 3. **Write for the next reader,** and land the doc change in the same commit as the code. *(§0, §1)*
 4. **Cite, don't recall.** Verify before you claim it — from `grep`, from `symbols`, or from a run you just did. *(§11)*
-5. **A gate you have not watched fail is not a gate.** Four verdicts, not two: passed, failed, could-not-judge, never-ran. *(§18.1, §18.2)*
+5. **A gate you have not watched fail is not a gate.** Four verdicts, not two: passed, failed, could-not-judge, never-ran — and the two that make no claim are owed, not free. An abstention you have not watched be necessary is not rigor. *(§18.1, §18.2)*
 6. **Never silently substitute.** Refuse, or name the substitution in the response. Absence is reported, never defaulted. *(§18.3)*
 7. **Validate the instrument before the result.** One run is not a measurement. *(§18.4, §18.5)*
 8. **One decider, one name.** One implementation per threshold, scorer, schema and key; one accessor per path; identity from essence, never a counter or an address. *(§10.6, §7.5)*
@@ -71,6 +71,7 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | A claim in commit or PR body that a function exists, without a citation | §11.1 |
 | An assertion in English prose rather than in a test | §7.2 |
 | A check with no failing input you can name | §18.1 |
+| An abstention branch with no run that demanded it | §18.2 |
 | A guard asserting on a field the subject supplies or echoes back | §18.1 |
 | An `Err` collapsed into a success-shaped value | §18.3 |
 | A single-run delta reported as a result | §18.5 |

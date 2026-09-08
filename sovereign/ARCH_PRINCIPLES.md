@@ -28,7 +28,9 @@ evidence.
 4. **Cite, don't recall.** Verify before you claim it — from `grep`, from
    `symbols`, or from a run you just did. *(§11)*
 5. **A gate you have not watched fail is not a gate.** Four verdicts, not two:
-   passed, failed, could-not-judge, never-ran. *(§18.1, §18.2)*
+   passed, failed, could-not-judge, never-ran — and the two that make no claim
+   are owed, not free. An abstention you have not watched be necessary is not
+   rigor. *(§18.1, §18.2)*
 6. **Never silently substitute.** Refuse, or name the substitution in the
    response. Absence is reported, never defaulted. *(§18.3)*
 7. **Validate the instrument before the result.** One run is not a measurement.
@@ -982,6 +984,7 @@ automatically a block.
 | A claim in commit or PR body that a function exists, without a citation | §11.1 |
 | An assertion in English prose rather than in a test                 | §7.2 |
 | A check with no failing input you can name                          | §18.1 |
+| An abstention branch with no run that demanded it                   | §18.2 |
 | A guard asserting on a field the subject supplies or echoes back    | §18.1 |
 | An `Err` collapsed into a success-shaped value                      | §18.3 |
 | A single-run delta reported as a result                             | §18.5 |
@@ -1082,6 +1085,37 @@ strength of a table of zeros (`143acf9f`).
 
 Give each verdict its own exit code. `sovereign-test.sh` exiting 4 on a
 zero-test run is this principle already in force.
+
+**The two that make no claim are owed, not free.** `passed` and `failed` each
+assert something you can be wrong about. `could-not-judge` and `never-ran`
+assert nothing, so nothing ever pushes back on them — which makes abstention
+the dominant move for whoever writes the check. It is always available, always
+defensible, and it cites this section. So it needs a price, and the price is
+§18.1's own test turned on the abstention branch itself: **an abstention you
+have not watched be necessary is not rigor.** Build the check so it answers.
+Run it. Add the handling when a condition you actually hit produces a wrong
+answer, and name that run in the commit. An abstention written at build time is
+a guess about which case will be hard, and the guess fails in the expensive
+direction: the hatch becomes the main path.
+
+Watched here, 2026-09-07. `host-quiet:4` was declared on five instruments so a
+contended host could not score a latency regression. The threshold was never
+derived — what was measured is a spread, 50.7 tok/s at load 3.7 against 17.8 at
+load 32 — and on the host that runs it the precondition is unmet most of the
+time, so every wall-clock row reported could-not-judge naming the load. Three
+consecutive runs learned nothing and the table read as careful. **A repeated
+could-not-judge for one reason is a defect in the instrument, not a fact about
+the world.**
+
+The rule that follows, for preconditions specifically: **a precondition may
+assert that the SUBJECT of the measurement exists; it may not assert that the
+WORLD is convenient.** `port-listening`, `slot-decodes`, `corpus-installed` and
+`binary` all say "the thing under test is not here" — cheap, rare, and a true
+`never-ran`. `host-quiet` says "conditions are not nice", which is
+unfalsifiable, fires constantly, and converts a measurement problem into a
+standing excuse. When the world is inconvenient, change what you measure — a
+same-run ratio, a load-invariant counter — rather than waiting for a world you
+do not have.
 
 ### 18.3 Never silently substitute, and never substitute for absence
 
