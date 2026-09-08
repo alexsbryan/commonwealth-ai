@@ -20,9 +20,10 @@
 #      EPISTEMIC_INDEX.md §4: a recipe, two bare llama-server processes
 #      (chat + embed), acquire -> chunk -> embed -> index -> the atlas
 #      enrichment, with no daemon anywhere. Scored against
-#      sovereign-recipes/wessex-hoard/truth.json by the recall table in
-#      scripts/setup-numismatics-corpus.sh, beside the daemon-built
-#      wessex-hoard control, and then asked a question through `ask`.
+#      sovereign-recipes/wessex-hoard/truth.json by `scripts/truth-recall.py`
+#      (expected facts hit over expected facts, one scorer over both atlases),
+#      beside the daemon-built wessex-hoard control, and then asked a question
+#      through `ask`.
 #      This leg is the SLOW one (a live model over ~20 chapters), so it is
 #      opt-in via ACCEPT_INGEST=1 and reports NEVER-RAN by name otherwise
 #      (ARCH §18.2) rather than being silently absent.
@@ -301,9 +302,11 @@ PY
 # structured output as plain `response_format: json_schema`.
 #
 # It is scored two ways, both against artefacts that already existed:
-#   - `truth.json` recall, through the same recall table the daemon-built
-#     hoard is judged by (`scripts/setup-numismatics-corpus.sh --atlas`).
-#     The bar is the CONTROL's own row, printed beside it.
+#   - `truth.json` recall, through `scripts/truth-recall.py` — the ONE scorer,
+#     run over the control's atoms.json and this run's. The bar is the
+#     CONTROL's own recall, printed beside it. The yield table in
+#     `scripts/setup-numismatics-corpus.sh --atlas` still runs for both and is
+#     printed as a diagnostic; two of its six rows count atoms, not facts.
 #   - `ask`, appended to ASK_CORPORA below, so the new corpus goes through
 #     the identical mechanism assertions the installed fixtures do.
 if [[ -z "$ACCEPT_INGEST" ]]; then
@@ -372,7 +375,7 @@ else
   [[ -f "$ing_atlas/ontology.json" ]] || fail "no ontology.json at $ing_atlas"
   [[ -f "$ing_atlas/atoms.json" ]]    || fail "no atoms.json at $ing_atlas"
 
-  # THE BAR: the same recall table, on the same truth.json, for both atlases.
+  # THE BAR: truth.json recall on the same truth.json, for both atlases.
   # `--recipe-unchanged` because the staged recipe and the committed one have
   # checkout-fresh mtimes; the structural type-name comparison still runs.
   if [[ -n "$INGEST_CHAPTERS" ]]; then
@@ -382,44 +385,53 @@ else
          "was built from; the recall table is not comparable. Wall measured:" \
          "${ingest_secs}s for $n_ch chapter(s)."
   else  # the real bar: the whole manifest, comparable to the control
-  echo "--- truth.json recall: CONTROL (daemon-built wessex-hoard) ---"
+  # The daemon-built atlas this run is judged against. Named once, from the
+  # fixture's own id, because `setup-numismatics-corpus.sh` reads
+  # `sovereign-recipes/wessex-hoard/truth.json` and nothing else: there is one
+  # control, and a second spelling of it would be a second decision.
+  control_atoms="$DATA_ROOT/indexes/wessex-hoard/atlas/atoms.json"
+
+  # The per-atlas STRUCTURAL table, printed for both — a diagnostic now, not the
+  # bar. Two of its six rows (`coin family`, `attribution`) are raw YIELD over a
+  # corpus that over-produces on purpose, so diffing the two runs' `got` columns
+  # answers "which atlas emitted more atoms", not "which reached the catalogued
+  # facts". Until 2026-09-07 that column diff WAS this leg's verdict, and it
+  # failed the 2026-09-05 bare-endpoint run for emitting 40 attribution atoms
+  # against the control's 49 while both reached every coin, mint and ruler.
+  # Watched on a fixture the same day: 60 fabricated attribution claims carrying
+  # a declared grade and naming none of the seven labelled scholars score every
+  # row `ok` with every column >= the control — the old comparison PASSED that
+  # atlas; `truth-recall.py` reads 14/21 and fails it.
+  echo "--- structural yield table (DIAGNOSTIC): CONTROL (daemon-built wessex-hoard) ---"
   "$repo/scripts/setup-numismatics-corpus.sh" --atlas wessex-hoard --recipe-unchanged \
-    2>&1 | tee "$work/recall-control.txt" || true
-  echo "--- truth.json recall: THIS RUN ($INGEST_CORPUS, bare endpoints) ---"
+    2>&1 | tee "$work/table-control.txt" || true
+  echo "--- structural yield table (DIAGNOSTIC): THIS RUN ($INGEST_CORPUS, bare endpoints) ---"
   set +e
   "$repo/scripts/setup-numismatics-corpus.sh" --atlas "$INGEST_CORPUS" --recipe-unchanged \
-    2>&1 | tee "$work/recall-bare.txt"
-  recall_rc=$?
+    2>&1 | tee "$work/table-bare.txt"
+  table_rc=$?
   set -e
-  python3 - "$work/recall-control.txt" "$work/recall-bare.txt" "$recall_rc" <<'RECALLPY'
-import re, sys
-control, bare, rc = sys.argv[1], sys.argv[2], int(sys.argv[3])
-def bars(path):
-    out = {}
-    for line in open(path):
-        m = re.match(r"\s{2}(\S(?:.*?\S)?)\s+(\d+) / (\d+)\s+(ok|MISSED)", line)
-        if m:
-            out[m.group(1)] = (int(m.group(2)), int(m.group(3)), m.group(4))
-    return out
-c, b = bars(control), bars(bare)
-if not c:
-    sys.exit("acceptance: FAIL - the control produced no recall table to compare against")
-if not b:
-    sys.exit(f"acceptance: FAIL - the bare-endpoint run produced no recall table (exit {rc})")
-worse = []
-print(f"  {'bar':<22} {'bare':>9}  {'control':>9}")
-for name, (cg, cw, _cs) in c.items():
-    bg, bw, _bs = b.get(name, (0, cw, "MISSED"))
-    print(f"  {name:<22} {bg:>4} / {bw:<4} {cg:>4} / {cw:<4}"
-          + ("" if bg >= cg else "   <-- BELOW CONTROL"))
-    if bg < cg:
-        worse.append(f"{name}: {bg} vs {cg}")
-if rc != 0:
-    sys.exit(f"acceptance: FAIL - the bare-endpoint atlas missed a truth.json bar (exit {rc})")
-if worse:
-    sys.exit("acceptance: FAIL - recall below the daemon-built control on: " + "; ".join(worse))
-print("acceptance: corpus ingest -> truth.json recall >= the daemon-built control on every bar")
-RECALLPY
+  echo "acceptance: the table above is the per-atlas structural gate (exit $table_rc);" \
+       "two of its rows are yield, so it is REPORTED, not compared. The bar is below."
+
+  # THE BAR (EPISTEMIC_INDEX.md §6 row 3): expected facts hit over expected
+  # facts, ONE scorer over both atlases, and PASS is recall(candidate) >=
+  # recall(control). `--gate` is what makes it this leg's exit code; the same
+  # invocation without it is the EI3 instrument
+  # (`scripts/ei3-acceptance-recall.sh`), so there is one scorer and one name.
+  echo "--- THE BAR: truth.json recall, one scorer over both atlases ---"
+  [[ -f "$control_atoms" ]] || fail "COULD-NOT-JUDGE — no control atlas at $control_atoms; the bar is relative to the daemon-built corpus and there is nothing to be relative to"
+  set +e
+  python3 "$repo/scripts/truth-recall.py" --truth "$FIXTURE_DIR/truth.json" \
+    --control "$control_atoms" --candidate "$ing_atlas/atoms.json" --gate \
+    2>&1 | tee "$work/truth-recall.txt"
+  bar_rc=${PIPESTATUS[0]}
+  set -e
+  case "$bar_rc" in
+    0) echo "acceptance: corpus ingest -> truth.json recall >= the daemon-built control" ;;
+    1) fail "truth.json recall below the daemon-built control (the classes are named above)" ;;
+    *) fail "COULD-NOT-JUDGE — the recall scorer exited $bar_rc; the bar was not scored" ;;
+  esac
   fi
   # ── the §6 row-3 bar for THIS corpus: attribution claims, cited, connected ──
   #

@@ -167,6 +167,18 @@ id           = "EI3-recipe-to-answer"
 one_line     = "corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the daemon-built corpus"
 derives_from = "EPISTEMIC_INDEX.md §4, §6 row 3"
 status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+# Registered 2026-09-07 (ei-3c). The target is the bar's own wording, not a new
+# number: "recall >= the daemon-built corpus" IS candidate/control >= 1.0. The
+# instrument runs the llama-server arm of acceptance.sh live (the chain half of
+# the bar; a failing chain is value 0.0, not could-not-judge) and scores the
+# recall half with `scripts/truth-recall.py` over the control's atoms.json and
+# the newest bare-endpoint atlas the ingest leg left behind. The ingest itself
+# is 60-90 min against a live chat model (5,418 s measured 2026-09-05) and is
+# the LANE's work, not the measure's -- the artefact's age rides in the row.
+instrument   = "scripts/ei3-acceptance-recall.sh"
+timeout_s    = 900   # run-tier: llama-server load + the read arm. Absent, the loader read-tiers it at 10 s and it can never be judged.
 
 [[bar]]
 id           = "EI4-self-describing-atlas"
@@ -187,6 +199,64 @@ id           = "EI5-one-walk"
 one_line     = "One grounding implementation in corpus-engine, driven by the corpus's navigation policy; sovereign-core and corpus-mcp both call it"
 derives_from = "EPISTEMIC_INDEX.md §1 Walk row, §2.2"
 status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "a second walk kept behind a flag is still a second walk -- ARCH §10.6 says the lower crate is the decider and the other becomes a caller IN THE SAME COMMIT, so a value of 0.0 here is a defect to fix, never a number to tune"
+# Registered 2026-09-07 (ei-3c). STRUCTURAL: the bar is a count of walk
+# implementations, so it is decided from DEFINITION SITES, not from behaviour --
+# a run cannot tell you how many walks exist, only which one it took. Four
+# conditions, all cited at main 084e11fb6:
+#   1. `pub async fn ground(` defined exactly ONCE in corpus-engine
+#      (corpus-engine/src/enrichment/atlas/ground.rs:530)
+#   2. sovereign-core calls it
+#      (sovereign/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs:296)
+#   3. corpus-mcp calls it (corpus-mcp/src/tools.rs:429)
+#   4. NO second walk is DEFINED outside corpus-engine. The one that exists today
+#      is the RAPTOR late-carry injector: `apply_raptor_grounding`
+#      (sovereign/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:105)
+#      and its gate `raptor_late_inject_enabled`
+#      (sovereign/crates/sovereign-core/src/runtime/question_analysis.rs:875).
+# So 1.0 means ONE WALK, not "no RAPTOR": the summaries reach answers through
+# `ground()`'s Summary seeds under its budget, which is what the spec's RAPTOR
+# row ("the separate injector retires") already says. Watched failing: at
+# 084e11fb6 this reads 0.0 naming `apply_raptor_grounding`; it flips to 1.0 when
+# that definition goes (ei-5c). Read-tier -- four greps, no build, well under the
+# loader's 10 s cap, so no timeout_s.
+instrument   = '''python3 - <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+
+def files(*roots):
+    for r in roots:
+        for p in Path(r).rglob("*.rs"):
+            yield p
+
+CE = ["corpus-engine/src"]
+OUTSIDE = ["sovereign/crates/sovereign-core/src", "corpus-mcp/src"]
+# The pinned second-walk symbols. A DEFINITION of either outside corpus-engine is
+# the second implementation; a mere mention (a doc comment, a test name) is not.
+SECOND = ("fn apply_raptor_grounding", "fn raptor_late_inject_enabled")
+
+reasons = []
+defs = [f"{p}" for p in files(*CE) if "pub async fn ground(" in p.read_text(errors="ignore")]
+if len(defs) != 1:
+    reasons.append(f"corpus-engine defines the walk {len(defs)} times: {defs}")
+for root, name in ((OUTSIDE[0], "sovereign-core"), (OUTSIDE[1], "corpus-mcp")):
+    if not any("ground::ground(" in p.read_text(errors="ignore") for p in files(root)):
+        reasons.append(f"{name} does not call ground::ground()")
+for p in files(*OUTSIDE):
+    txt = p.read_text(errors="ignore")
+    for sym in SECOND:
+        if sym in txt:
+            reasons.append(f"a second walk is defined outside corpus-engine: {sym.split()[1]} in {p}")
+
+for r in reasons:
+    print("ei5:", r, file=sys.stderr)
+sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+print(json.dumps({"value": 0.0 if reasons else 1.0, "commit": sha or None,
+                  "artifact": "corpus-engine/src/enrichment/atlas/ground.rs",
+                  "reasons": reasons}))
+PY'''
 
 [[bar]]
 id           = "EI6-no-inference-stack"
