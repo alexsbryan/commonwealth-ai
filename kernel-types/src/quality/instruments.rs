@@ -14,7 +14,7 @@
 //!
 //! Every other open set in this repo already became a registry
 //! (`env-flags.toml`, `operational-anchors.toml`, `arch-probes.toml`,
-//! `requirements.toml`, `check-lanes.toml`). This is the last one that was
+//! `requirements.toml`). This is the last one that was
 //! prose. ARCH §4: open sets are registries.
 //!
 //! WHAT IS CLOSED HERE, and what deliberately is not. [`Kind`],
@@ -25,6 +25,16 @@
 //! schema's authority.
 
 use std::collections::BTreeMap;
+
+use super::Trigger;
+
+/// What an instrument with no measured cost and no declared reservation
+/// costs a venue budget, in seconds.
+///
+/// A placeholder, and it says so. Zero would be the silent substitution: an
+/// untimed instrument would then always "fit" and a venue would start work it
+/// cannot finish (ARCH §18.3).
+pub const UNMEASURED_RESERVATION_SECS: u64 = 60;
 
 /// One instrument: something you can run that renders a verdict about this
 /// repo, plus everything a reader needs to decide whether its green is worth
@@ -68,6 +78,83 @@ pub struct Instrument {
     /// half `QUALITY_SURFACE.md` carried as prose because no schema could
     /// hold it. Optional; most instruments have none.
     pub load_bearing: Vec<LoadBearing>,
+
+    // ── The execution half (merged from `check-lanes.toml`, 2026-09-07) ──
+    //
+    // Everything above describes what an instrument IS. Everything below is
+    // what a RUNNER needs to actually run it. The two tables were separate
+    // until this merge and their fields collided on three names with
+    // different meanings; the collisions are decided in the field docs here,
+    // not papered over.
+    /// What kind of claim this instrument's verdict is: `invariant` (a
+    /// ceiling, a route, an absence — nothing a model decided) or `judged` (a
+    /// model produced part of the verdict).
+    ///
+    /// ORTHOGONAL to [`Kind`], which is the SHAPE. `check-lanes.toml` spelled
+    /// this axis `kind`, and both axes are load-bearing: a `bench` may be
+    /// judged or not, and a reader needs to know which before reading a
+    /// green. They are not collapsed.
+    pub claim: Claim,
+    /// The argv to execute, when it differs from splitting [`Self::command`]
+    /// on whitespace.
+    ///
+    /// `command` stays the literal string a human types because it is also
+    /// the closure gate's census key. A lane whose command carries `--`
+    /// separators and `{report}` placeholders cannot round-trip through that
+    /// string, so it declares argv exactly.
+    pub argv: Option<Vec<String>>,
+    /// Seconds a runner RESERVES for this instrument out of its venue budget.
+    ///
+    /// Not the same claim as [`Self::cost`], which is a MEASURED actual (or
+    /// `unmeasured`). A reservation may deliberately sit above the highest
+    /// observed actual, because under-reserving starves an instrument that
+    /// would have finished. Where it is absent the rule is
+    /// [`Self::reservation_secs`] — named in code, so it cannot drift from
+    /// prose.
+    pub est_secs: Option<u64>,
+    /// The question bank this instrument asks, repo-relative. Hashed into a
+    /// run fingerprint: change the questions and last week's numbers stop
+    /// being comparable.
+    pub bank: Option<String>,
+    /// How a runner reads this instrument's verdict.
+    pub verdict: VerdictSource,
+    /// Exit codes that mean COULD-NOT-JUDGE rather than failed.
+    ///
+    /// Declared per instrument, never inferred. `concept-gate` exits 3 and 4
+    /// when the graph cannot judge the commit in front of it, and
+    /// `sovereign-test.sh` exits 4 on zero tests and 5 on an unattributable
+    /// run — all four are "no verdict", and every one of them is a distinct
+    /// convention that a runner guessing a range would get wrong somewhere.
+    pub could_not_judge_exits: Vec<i32>,
+    /// A regular expression over changed paths. When a venue supplies a
+    /// change set and none of it matches, this instrument is not SELECTED —
+    /// which is selection, printed by name, not a verdict (ARCH §18.3).
+    /// Absent means "always selected".
+    pub when_changed: Option<String>,
+}
+
+/// What kind of claim a verdict is. `check-lanes.toml`'s `kind`, renamed to
+/// stop colliding with [`Kind`]'s different question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Claim {
+    /// A ceiling, a route, an absence — nothing a model decided.
+    Invariant,
+    /// A model produced part of the verdict.
+    Judged,
+}
+
+/// Where a runner reads an instrument's verdict from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VerdictSource {
+    /// Exit 0 is passed; anything else is failed, except the codes
+    /// [`Instrument::could_not_judge_exits`] names. What every gate, suite
+    /// and script in this repo already speaks.
+    ExitCode,
+    /// A [`crate::Judgement`] on the LAST stdout line
+    /// (`sovereign_cli_shared::lane_verdict`). The lane protocol: exit codes
+    /// cannot express could-not-judge, and `bench all` exits 1 for regressed,
+    /// stale AND missing-baseline — three different claims under one number.
+    JudgementLine,
 }
 
 /// A flag whose absence silently weakens an instrument.
@@ -168,6 +255,11 @@ pub enum BaselineKind {
     Count,
     /// Recorded measurements compared with a band.
     Metrics,
+    /// A per-stack-fingerprint directory: `<path>/<fingerprint>/latest.json`
+    /// is this instrument's baseline for the stack it is running against.
+    /// `check-lanes.toml`'s `baseline_dir`, folded in as a fourth kind rather
+    /// than a second field (ARCH §10.6).
+    Fingerprint,
     /// Nothing — the instrument's verdict is absolute.
     None,
 }
@@ -221,6 +313,9 @@ pub struct Registry {
     /// this repo is data (ARCH §6). It is also the field a reader checks when
     /// they want to know whether a surface is actually covered.
     pub censused_surfaces: Vec<String>,
+    /// How each VENUE runs the instruments that select into it — budget,
+    /// concurrency, hoisted prepare steps. See [`Trigger`].
+    pub triggers: Vec<Trigger>,
 }
 
 /// The line posture prints every session — the closure trigger.
@@ -233,6 +328,37 @@ pub struct Coverage {
 }
 
 impl Instrument {
+    /// The argv a runner executes.
+    ///
+    /// Declared `argv` wins; otherwise the human `command` is split on
+    /// whitespace, which is exactly right for the ratchets
+    /// (`cargo xtask docs-gate`) and wrong for anything carrying quotes or a
+    /// shell operator — which is why `argv` exists rather than a shell.
+    pub fn argv(&self) -> Vec<String> {
+        match &self.argv {
+            Some(a) => a.clone(),
+            None => self.command.split_whitespace().map(String::from).collect(),
+        }
+    }
+
+    /// Seconds a venue budget must hold open for this instrument.
+    ///
+    /// THE RULE, in code rather than in prose (the order's own instruction):
+    /// a declared `est_secs` is a RESERVATION and wins. Absent, a MEASURED
+    /// `cost_secs` reserves from the measurement, rounded up — a 4.2 s gate
+    /// reserves 5, never 4, because a reservation that rounds down is a
+    /// reservation that starves. With neither, the instrument has never been
+    /// timed and reserves [`UNMEASURED_RESERVATION_SECS`], a declared
+    /// placeholder rather than a zero: reserving nothing for an untimed
+    /// instrument would let a venue start one it cannot finish.
+    pub fn reservation_secs(&self) -> u64 {
+        match (self.est_secs, self.cost) {
+            (Some(e), _) => e,
+            (None, Cost::Secs(s)) if s.is_finite() && s >= 0.0 => s.ceil() as u64,
+            _ => UNMEASURED_RESERVATION_SECS,
+        }
+    }
+
     /// True when some CI job runs it.
     pub fn in_ci(&self) -> bool {
         self.runs_in.iter().any(|r| matches!(r, RunsIn::Ci(_)))
@@ -328,11 +454,32 @@ impl Registry {
             );
         }
 
+        let triggers = match super::triggers::parse_triggers(&value) {
+            Ok(t) => t,
+            Err(mut e) => {
+                errors.append(&mut e);
+                Vec::new()
+            }
+        };
+        // A trigger for a venue no instrument selects into is a venue that
+        // would run nothing while reporting green — the closure gate's own
+        // failure mode, applied to itself (ARCH §18.1).
+        for t in &triggers {
+            if !instruments.iter().any(|i| i.runs_in.contains(&t.id)) {
+                errors.push(format!(
+                    "trigger `{}` governs a venue no instrument declares in `runs_in` — it would \
+                     run nothing and report green",
+                    t.id.label()
+                ));
+            }
+        }
+
         if errors.is_empty() {
             Ok(Registry {
                 instruments,
                 not_instruments,
                 censused_surfaces,
+                triggers,
             })
         } else {
             Err(errors)
@@ -416,6 +563,22 @@ impl Registry {
             .collect();
         v.sort_by(|a, b| a.id.cmp(&b.id));
         v
+    }
+
+    /// The trigger governing one venue, if the registry declares it.
+    pub fn trigger(&self, venue: &RunsIn) -> Option<&Trigger> {
+        self.triggers.iter().find(|t| &t.id == venue)
+    }
+
+    /// Every instrument that runs in one venue, in declared order.
+    ///
+    /// Selection, not judgement: an instrument absent from this list did not
+    /// pass, it was never asked. Callers print what they selected.
+    pub fn for_venue(&self, venue: &RunsIn) -> Vec<&Instrument> {
+        self.instruments
+            .iter()
+            .filter(|i| i.runs_in.contains(venue))
+            .collect()
     }
 
     pub fn get(&self, id: &str) -> Option<&Instrument> {
@@ -507,6 +670,63 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
 
     let also_invoked_as = string_list(row, "also_invoked_as");
 
+    let claim = enum_field(row, "claim", &id, &mut errors, Claim::parse, CLAIM_WORDS);
+    let argv = match row.get("argv") {
+        None => None,
+        Some(toml::Value::Array(_)) => {
+            let a = string_list(row, "argv");
+            if a.is_empty() {
+                errors.push(at(
+                    "`argv`, when declared, must be a non-empty array of strings",
+                ));
+            }
+            Some(a)
+        }
+        Some(_) => {
+            errors.push(at("`argv` must be an array of strings"));
+            None
+        }
+    };
+    let est_secs = match row.get("est_secs") {
+        None => None,
+        Some(toml::Value::Integer(n)) if *n >= 0 => Some(*n as u64),
+        Some(_) => {
+            errors.push(at("`est_secs` must be a non-negative integer of seconds"));
+            None
+        }
+    };
+    let bank = str_field(row, "bank");
+    let verdict = match row.get("verdict") {
+        // The default is the one every gate and script in this repo already
+        // speaks. A row that wants the lane protocol says so.
+        None => Some(VerdictSource::ExitCode),
+        Some(_) => enum_field(
+            row,
+            "verdict",
+            &id,
+            &mut errors,
+            VerdictSource::parse,
+            VERDICT_WORDS,
+        ),
+    };
+    let mut could_not_judge_exits = Vec::new();
+    if let Some(v) = row.get("could_not_judge_exits") {
+        match v.as_array() {
+            Some(a) => {
+                for n in a {
+                    match n.as_integer().and_then(|n| i32::try_from(n).ok()) {
+                        Some(c) => could_not_judge_exits.push(c),
+                        None => errors.push(at(
+                            "`could_not_judge_exits` entries must be exit-code integers",
+                        )),
+                    }
+                }
+            }
+            None => errors.push(at("`could_not_judge_exits` must be an array of integers")),
+        }
+    }
+    let when_changed = str_field(row, "when_changed");
+
     let mut load_bearing = Vec::new();
     if let Some(toml::Value::Array(rows)) = row.get("load_bearing") {
         for lb in rows {
@@ -527,7 +747,19 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
         Some(fidelity),
         Some(cost),
         Some(baseline),
-    ) = (kind, command, doc, enforcement, fidelity, cost, baseline)
+        Some(claim),
+        Some(verdict),
+    ) = (
+        kind,
+        command,
+        doc,
+        enforcement,
+        fidelity,
+        cost,
+        baseline,
+        claim,
+        verdict,
+    )
     else {
         if errors.is_empty() {
             errors.push(at(
@@ -553,6 +785,13 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
         doc,
         also_invoked_as,
         load_bearing,
+        claim,
+        argv,
+        est_secs,
+        bank,
+        verdict,
+        could_not_judge_exits,
+        when_changed,
     })
 }
 
@@ -560,6 +799,8 @@ const KIND_WORDS: &str = "gate|suite|bench|probe|control|check";
 const ENFORCEMENT_WORDS: &str = "hard|advisory|tracked";
 const PRECONDITION_WORDS: &str = "port-listening:<port>, slot-decodes:<slot>, \
      corpus-installed:<id>, binary:<name>, container:<name>, host-quiet";
+const CLAIM_WORDS: &str = "invariant|judged";
+const VERDICT_WORDS: &str = "exit-code|judgement-line";
 const RUNS_IN_WORDS: &str = "prepush, precommit, ci:<job>, weekly:<job>, smoke:<phase>, \
      check, nightly, run-if-stale, by-hand";
 
@@ -740,11 +981,46 @@ impl Fidelity {
     }
 }
 
+impl Claim {
+    pub fn parse(s: &str) -> Option<Claim> {
+        Some(match s {
+            "invariant" => Claim::Invariant,
+            "judged" => Claim::Judged,
+            _ => return None,
+        })
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Claim::Invariant => "invariant",
+            Claim::Judged => "judged",
+        }
+    }
+}
+
+impl VerdictSource {
+    pub fn parse(s: &str) -> Option<VerdictSource> {
+        Some(match s {
+            "exit-code" => VerdictSource::ExitCode,
+            "judgement-line" => VerdictSource::JudgementLine,
+            _ => return None,
+        })
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            VerdictSource::ExitCode => "exit-code",
+            VerdictSource::JudgementLine => "judgement-line",
+        }
+    }
+}
+
 impl BaselineKind {
     pub fn parse(s: &str) -> Option<BaselineKind> {
         Some(match s {
             "count" => BaselineKind::Count,
             "metrics" => BaselineKind::Metrics,
+            "fingerprint" => BaselineKind::Fingerprint,
             "none" => BaselineKind::None,
             _ => return None,
         })
@@ -754,6 +1030,7 @@ impl BaselineKind {
         match self {
             BaselineKind::Count => "count",
             BaselineKind::Metrics => "metrics",
+            BaselineKind::Fingerprint => "fingerprint",
             BaselineKind::None => "none",
         }
     }
@@ -852,12 +1129,107 @@ impl Cost {
 mod tests {
     use super::*;
 
+    /// THE RESERVATION RULE, watched in all three states. It is the one
+    /// place `cost_secs` (a measured actual) and `est_secs` (what a budget
+    /// holds open) are allowed to meet, and the merge that brought both
+    /// fields into one table is the reason it has to be code.
+    #[test]
+    fn a_reservation_is_the_est_then_the_measurement_then_a_named_placeholder() {
+        let inst = |extra: &str| {
+            let rows = GOOD.replace("cost_secs = 4.2", extra);
+            parse(&rows).instruments.pop().unwrap()
+        };
+        // Declared reservation wins outright, even over a measurement.
+        assert_eq!(
+            inst("cost_secs = 4.2\nest_secs = 90").reservation_secs(),
+            90
+        );
+        // No reservation: round the measurement UP. 4.2 reserves 5, never 4 —
+        // a reservation that rounds down starves the instrument it is for.
+        assert_eq!(inst("cost_secs = 4.2").reservation_secs(), 5);
+        // Neither: a named placeholder, never a zero.
+        assert_eq!(
+            inst("cost_secs = \"unmeasured\"").reservation_secs(),
+            UNMEASURED_RESERVATION_SECS
+        );
+    }
+
+    /// `command` is the human string and the census key; `argv` is what runs.
+    /// A lane whose command carries `--` separators cannot round-trip through
+    /// the string, which is why both exist.
+    #[test]
+    fn argv_is_the_declared_one_or_the_command_split() {
+        let split = parse(GOOD).instruments.pop().unwrap();
+        assert_eq!(split.argv(), vec!["cargo", "xtask", "arch-gate"]);
+        let declared = parse(&GOOD.replace(
+            "doc = ",
+            "argv = [\"svrn\", \"bench\", \"all\", \"--\", \"svrn\", \"bench\", \"all\"]\ndoc = ",
+        ))
+        .instruments
+        .pop()
+        .unwrap();
+        assert_eq!(declared.argv().len(), 7);
+        assert_eq!(declared.argv()[3], "--");
+    }
+
+    /// `claim` and `kind` are two axes and the merge kept both. A row missing
+    /// the new one is refused rather than defaulted to `invariant`: guessing
+    /// would silently label a model-produced verdict as an invariant, which
+    /// is the one thing a reader uses this field to tell apart.
+    #[test]
+    fn claim_is_required_and_is_not_kind() {
+        let e = errors(&GOOD.replace("claim = \"invariant\"\n", ""));
+        assert!(e.iter().any(|m| m.contains("claim")), "{e:?}");
+        let judged = parse(&GOOD.replace("claim = \"invariant\"", "claim = \"judged\""))
+            .instruments
+            .pop()
+            .unwrap();
+        assert_eq!(judged.claim, Claim::Judged);
+        assert_eq!(judged.kind, Kind::Gate);
+    }
+
+    /// A trigger governing a venue nothing selects into would run nothing and
+    /// report green — the closure gate's own failure mode (ARCH §18.1).
+    #[test]
+    fn a_trigger_for_a_venue_no_instrument_runs_in_is_refused() {
+        let e = errors(&format!(
+            "{GOOD}\n[[trigger]]\nid = \"nightly\"\nbudget_secs = 60\non_fail = \"block\"\n"
+        ));
+        assert!(e.iter().any(|m| m.contains("run nothing")), "{e:?}");
+        // The same trigger against a venue the row DOES declare parses.
+        let ok = parse(&format!(
+            "{GOOD}\n[[trigger]]\nid = \"prepush\"\nbudget_secs = 60\non_fail = \"block\"\n"
+        ));
+        assert_eq!(ok.triggers.len(), 1);
+        assert_eq!(ok.for_venue(&RunsIn::Prepush).len(), 1);
+        assert!(ok.trigger(&RunsIn::Prepush).is_some());
+        assert!(ok.trigger(&RunsIn::Check).is_none());
+    }
+
+    /// The lane protocol is opt-in per row. Defaulting every instrument to it
+    /// would make every gate in the repo `never-ran`, since none of them
+    /// prints a verdict line.
+    #[test]
+    fn the_verdict_source_defaults_to_exit_code_and_junk_is_refused() {
+        assert_eq!(
+            parse(GOOD).instruments.pop().unwrap().verdict,
+            VerdictSource::ExitCode
+        );
+        let lane = parse(&GOOD.replace("doc = ", "verdict = \"judgement-line\"\ndoc = "))
+            .instruments
+            .pop()
+            .unwrap();
+        assert_eq!(lane.verdict, VerdictSource::JudgementLine);
+        assert!(!errors(&GOOD.replace("doc = ", "verdict = \"vibes\"\ndoc = ")).is_empty());
+    }
+
     /// A complete row, so every refusal below differs from it in exactly one
     /// way and the test names what that way is.
     const GOOD: &str = r#"
 [[instrument]]
 id = "arch-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask arch-gate"
 cost_secs = 4.2
 enforcement = "hard"

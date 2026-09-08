@@ -294,6 +294,7 @@ censused_surfaces = [".github/workflows/ci.yml"]
 [[instrument]]
 id = "docs-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask docs-gate"
 cost_secs = 2.2
 enforcement = "hard"
@@ -306,6 +307,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
 [[instrument]]
 id = "wizard-verify"
 kind = "gate"
+claim = "invariant"
 command = "scripts/wizard-verify.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"

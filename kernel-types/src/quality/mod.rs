@@ -19,6 +19,7 @@
 
 mod instruments;
 mod render;
+mod triggers;
 
 pub use render::{
     coverage_line, render_fidelity, render_layers, render_load_bearing, render_map, render_where,
@@ -26,6 +27,8 @@ pub use render::{
 };
 
 pub use instruments::{
-    Baseline, BaselineKind, Cost, Coverage, Enforcement, Fidelity, Instrument, Kind,
-    NotAnInstrument, Precondition, Registry, RunsIn,
+    Baseline, BaselineKind, Claim, Cost, Coverage, Enforcement, Fidelity, Instrument, Kind,
+    NotAnInstrument, Precondition, Registry, RunsIn, VerdictSource, UNMEASURED_RESERVATION_SECS,
 };
+
+pub use triggers::{Prepare, Trigger, VenueAction};

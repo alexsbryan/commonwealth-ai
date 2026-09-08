@@ -84,7 +84,7 @@ UPDATE_BASELINE=""
 # are daemon-owned and unaffected.
 REBUILD=""
 # THE LEAN TIER IS NOT HERE ANY MORE. `svrn quality check` is the ~30-minute
-# curated breakage check (lanes in `quality/check-lanes.toml`, item subsets in
+# curated breakage check (lanes in `quality/instruments.toml`, item subsets in
 # `sovereign/bench/smoke.toml`), and it does what --quick could not: it writes
 # a durable lane table and reports four verdicts per lane instead of an exit
 # code. This script is the FULL/nightly run only.

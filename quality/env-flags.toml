@@ -1521,7 +1521,7 @@ name = "SOVEREIGN_QUALITY_BASELINE_DIR"
 cluster = "quality"
 default = "unset"
 status = "shipped"
-purpose = "Absolute path to this lane's `baseline_dir` from quality/check-lanes.toml. Set by `svrn quality check`; unset or empty means the lane declared no baseline and must compare against nothing (could-not-judge on its baseline-derived rows, never a pass)."
+purpose = "Absolute path to this lane's fingerprint baseline from quality/instruments.toml (a `baseline` row of kind `fingerprint`). Set by `svrn quality check`; unset or empty means the lane declared no baseline and must compare against nothing (could-not-judge on its baseline-derived rows, never a pass)."
 
 [[flag]]
 name = "SOVEREIGN_QUALITY_MINT"

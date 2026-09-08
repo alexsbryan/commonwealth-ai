@@ -20,8 +20,14 @@
 #
 # Every other open set in this repo is already a registry (`env-flags.toml`,
 # `operational-anchors.toml`, `backlog-ruler.toml`, `arch-probes.toml`,
-# `requirements.toml`, `check-lanes.toml`). This was the last one in prose.
+# `requirements.toml`). This was the last one in prose.
 # ARCH §4: closed sets are enums, open sets are registries.
+#
+# `quality/check-lanes.toml` was the TWELFTH list, and the only one that was
+# already a registry — which made it the worst of them, because two tables
+# answering "what runs here" is ARCH §10.6's violation with a straight face.
+# It was merged into this file and DELETED on 2026-09-07; the five field
+# collisions and how each was decided are recorded above the eight lane rows.
 #
 # ── The closure loop ────────────────────────────────────────────────
 #
@@ -32,6 +38,18 @@
 # gate was watched red on `wizard-verify.sh`, `daemon-soak.sh`,
 # `daemon-supervised.sh` and `mesh-soak.sh` before it was watched green
 # (ARCH §18.1).
+#
+# WHAT IS NOT HERE, so the next reader does not go looking. The lint/test
+# WATCHERS were an `[[instrument]]` with `runs_in = []` until 2026-09-07. They
+# are a DECLARED OPT-OUT, not a gap — `.sovereign/sovereign.toml` sets
+# `[watchers] enabled = false` (2026-05-31: the parallel cargo fan OOM'd the
+# daemon under a resident big model) — and a healthy absence read as the same
+# finding as four real soaks nothing schedules (ARCH §18.3). They are also not
+# a command any censused surface invokes, so an exemption for them matched
+# nothing and this gate said so. `sovereign doctor` reports the opt-out as
+# Passed and AGENTS.md tells sessions not to diagnose it; the gate for compile
+# and test feedback is the two `scripts/sovereign-*.sh` wrappers, both
+# registered below.
 #
 # Censused surfaces: `.github/workflows/{ci,weekly}.yml`,
 # `scripts/{pre-push,pre-commit,desktop-smoke,run-if-stale}.sh`, and
@@ -49,12 +67,52 @@
 #                      control NEGATIVE control — breaks something on purpose
 #                              and requires the instrument above it to notice
 #                      check   a composed lane runner with its own lane table
+#   claim            invariant | judged (required) — what KIND of claim the
+#                    verdict is: a ceiling, a route, an absence (nothing a
+#                    model decided), or a verdict a model produced part of.
+#                    ORTHOGONAL to `kind`, which is the shape. This was
+#                    `check-lanes.toml`'s `kind`; the two axes collided on one
+#                    name and both are load-bearing, so neither was collapsed
 #   command          the literal command a human types (required). ALSO the
 #                    census key: the closure gate matches observed invocations
 #                    against these strings
-#   cost_secs        measured seconds, or the string "unmeasured" (required —
+#   argv             optional; the exact argv to execute when it differs from
+#                    splitting `command` on whitespace. The eight check lanes
+#                    need it (`--` separators, `{report}` placeholders);
+#                    everything else splits
+#   cost_secs        MEASURED seconds, or the string "unmeasured" (required —
 #                    an untimed instrument SAYS so, it does not omit the field)
-#   enforcement      hard | advisory | tracked (required)
+#   est_secs         optional; the seconds a venue budget RESERVES. Different
+#                    claim from `cost_secs`: a reservation may deliberately
+#                    sit above the highest observed actual, because
+#                    under-reserving starves an instrument that would have
+#                    finished. Absent, the reservation comes from the
+#                    measurement rounded UP; with neither it is a declared
+#                    placeholder, never zero. The rule is
+#                    `Instrument::reservation_secs` — in code, so it cannot
+#                    drift from this paragraph
+#   verdict          optional; exit-code (default) | judgement-line. The eight
+#                    check lanes SAY their verdict on their last stdout line,
+#                    because an exit code cannot express could-not-judge and
+#                    `bench all` exits 1 for regressed, stale AND
+#                    missing-baseline. Everything else is read on its exit code
+#   could_not_judge_exits
+#                    optional; exit codes that mean COULD-NOT-JUDGE rather
+#                    than failed. Declared, never inferred: `concept-gate`
+#                    exits 3 and 4 when the graph cannot judge the commit,
+#                    `sovereign-test.sh` exits 4 on zero tests and 5 on an
+#                    unattributable run — every one a distinct convention a
+#                    guessed range would get wrong somewhere
+#   when_changed     optional; a regex over changed paths. When a venue
+#                    supplies a change set and none of it matches, the
+#                    instrument is not SELECTED — selection printed by name,
+#                    never a verdict substituted for one
+#   bank             optional; the question bank, repo-relative. Hashed into
+#                    the run fingerprint: change the questions and last week's
+#                    numbers stop being comparable
+#   enforcement      hard | advisory | tracked (required). `check-lanes.toml`
+#                    spelled `advisory` as `soft`; one concept under two names,
+#                    converged on this file's word 2026-09-07
 #   fidelity         F0..F5 (required) — how far this sits from what a user
 #                    runs, generalised from QUALITY_SURFACE.md's desktop table:
 #                      F0 unit · F1 mocked backend · F2 real binary + fixture
@@ -64,13 +122,16 @@
 #                    `quality/check-lanes.toml`'s, argument included:
 #                    `port-listening:<port>`, `slot-decodes:<slot>`,
 #                    `corpus-installed:<id>`, `binary:<name>`,
-#                    `host-quiet:<max 1-min load>`. `container:<name>` is the
-#                    one spelling the lane runner does not have — the shell
-#                    harnesses need it and no lane does. Phase 1 merges the two
-#                    tables and the superset becomes the one closed set
-#                    (ARCH §10.6)
-#   baseline         { kind = "count" | "metrics" | "none", path = "..." }
-#                    (required; `none` carries no path)
+#                    `host-quiet:<max 1-min load>`, `container:<name>`. THE
+#                    MERGE LANDED 2026-09-07: this superset is the one closed
+#                    set, `kernel_types::quality::Precondition`, and both the
+#                    lane runner and the shell harnesses read it (ARCH §10.6)
+#   baseline         { kind = "count" | "metrics" | "fingerprint" | "none",
+#                    path = "..." } (required; `none` carries no path).
+#                    `fingerprint` is `check-lanes.toml`'s `baseline_dir`:
+#                    `<path>/<fingerprint>/latest.json` is the baseline for
+#                    the stack this run is against. One field, four kinds —
+#                    not two fields answering one question (ARCH §10.6)
 #   negative_control a `quality/sabotage/*.toml` mutant id, the id of a
 #                    `control`-kind instrument here, or the literal "none"
 #                    (required — "none" is a word so the row gets COUNTED;
@@ -119,6 +180,7 @@ censused_surfaces = [
 [[instrument]]
 id = "docs-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask docs-gate"
 cost_secs = 2.2
 enforcement = "hard"
@@ -131,6 +193,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
 [[instrument]]
 id = "arch-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask arch-gate"
 cost_secs = 4.2
 enforcement = "hard"
@@ -143,6 +206,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §3.1"
 [[instrument]]
 id = "boundary-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask boundary-gate"
 cost_secs = 0.1
 enforcement = "hard"
@@ -155,6 +219,7 @@ doc = "quality/ARCH_LAYERS.toml [[package]]"
 [[instrument]]
 id = "layer-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask layer-gate"
 cost_secs = 0.1
 enforcement = "hard"
@@ -167,6 +232,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §8"
 [[instrument]]
 id = "lock-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask lock-gate"
 cost_secs = 0.1
 enforcement = "hard"
@@ -179,6 +245,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §8.2"
 [[instrument]]
 id = "layout-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask layout-gate"
 cost_secs = 2.6
 enforcement = "hard"
@@ -191,6 +258,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §3"
 [[instrument]]
 id = "env-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask env-gate"
 cost_secs = 2.6
 enforcement = "hard"
@@ -206,8 +274,9 @@ load_bearing = [
 [[instrument]]
 id = "clock-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask clock-gate"
-cost_secs = "unmeasured"
+cost_secs = 0.96
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/clock_reads.txt" }
@@ -218,6 +287,7 @@ doc = "sovereign/ARCH_PRINCIPLES.md §9"
 [[instrument]]
 id = "concept-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask concept-gate"
 cost_secs = 5.3
 enforcement = "advisory"
@@ -233,6 +303,7 @@ load_bearing = [
 [[instrument]]
 id = "size-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask size-gate"
 cost_secs = 4.5
 enforcement = "advisory"
@@ -249,6 +320,7 @@ load_bearing = [
 [[instrument]]
 id = "instrument-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo xtask instrument-gate"
 cost_secs = 0.04
 enforcement = "hard"
@@ -261,6 +333,7 @@ doc = "quality/instruments.toml (this file)"
 [[instrument]]
 id = "deletion-manifest"
 kind = "gate"
+claim = "invariant"
 command = "python3 scripts/deletion-manifest.py --verify"
 cost_secs = 1.0
 enforcement = "advisory"
@@ -273,6 +346,7 @@ doc = "quality/DELETION.md"
 [[instrument]]
 id = "api-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo run -p xtask -- api-gate"
 cost_secs = "unmeasured"
 enforcement = "advisory"
@@ -289,13 +363,14 @@ load_bearing = [
 [[instrument]]
 id = "lint-gate"
 kind = "gate"
+claim = "invariant"
 command = "cargo run -p xtask -- lint-gate --from /tmp/clippy.json"
 cost_secs = "unmeasured"
 enforcement = "advisory"
 fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/clippy_counts.tsv" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "scripts/pre-push.sh (header — why it is not a push gate)"
 
 # ── The two scripts that are the local gate ──────────────────────────
@@ -303,6 +378,7 @@ doc = "scripts/pre-push.sh (header — why it is not a push gate)"
 [[instrument]]
 id = "sovereign-lint"
 kind = "gate"
+claim = "invariant"
 command = "./scripts/sovereign-lint.sh --human --full"
 cost_secs = 27.0
 enforcement = "hard"
@@ -310,16 +386,41 @@ fidelity = "F0"
 preconditions = ["container:sovereign-vulkan"]
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["prepush", "smoke:0", "by-hand"]
+runs_in = ["smoke:0", "by-hand"]
 doc = "AGENTS.md §Compilation and test feedback"
 load_bearing = [
   { flag = "--full", why = "without it the run scopes to the crates owning uncommitted changes plus direct dependents; the banner names the scope, so a scoped clean run cannot be read as a repo-wide guarantee" },
   { flag = "--all-targets (always on since 2026-08-07)", why = "compiles #[cfg(test)] code, so a test module that does not build fails here rather than minutes later in the test run" },
 ]
 
+# The SCOPED twin, and it is a different instrument because it checks less.
+# `pre-push.sh` never ran the full-workspace form: it exported
+# SOVEREIGN_CHANGED_PATHS and let the script resolve the crates owning the
+# diff plus their direct dependents, which is the only reason a compile fits
+# inside a one-minute budget. Registering the two as one row would have let a
+# scoped green be read as a workspace green — the banner in the script says
+# the scope for exactly that reason, and the registry now says it too.
+[[instrument]]
+id = "sovereign-lint-scoped"
+kind = "gate"
+claim = "invariant"
+command = "./scripts/sovereign-lint.sh --human"
+cost_secs = 22.0
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush"]
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\\.toml$|^sovereign/scripts/cli-journey-.*\\.sh$|^sovereign/scripts/tests/)"
+doc = "scripts/pre-push.sh (header — why the compile runs alongside the ratchets)"
+load_bearing = [
+  { flag = "SOVEREIGN_CHANGED_PATHS", why = "without it the script resolves the WHOLE workspace and the push costs minutes instead of ~22s. The venue exports it from the push range" },
+]
+
 [[instrument]]
 id = "sovereign-test"
 kind = "suite"
+claim = "invariant"
 command = "./scripts/sovereign-test.sh --human"
 cost_secs = 45.0
 enforcement = "hard"
@@ -339,25 +440,27 @@ load_bearing = [
 [[instrument]]
 id = "pre-push"
 kind = "suite"
+claim = "invariant"
 command = "./scripts/pre-push.sh"
 cost_secs = 22.0
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["prepush"]
+runs_in = ["by-hand"]
 doc = "scripts/pre-push.sh (header — the one-minute budget)"
 
 [[instrument]]
 id = "pre-commit"
 kind = "probe"
+claim = "invariant"
 command = "./scripts/pre-commit.sh"
 cost_secs = "unmeasured"
 enforcement = "advisory"
 fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["precommit"]
+runs_in = ["by-hand"]
 doc = "scripts/pre-commit.sh (header)"
 load_bearing = [
   { flag = "CO_PRECOMMIT_STAGED / CO_PRECOMMIT_SELF", why = "the only way to exercise the warn path by hand without staging a peer's file — §18.1 says watch it fire" },
@@ -368,6 +471,7 @@ load_bearing = [
 [[instrument]]
 id = "rustfmt"
 kind = "gate"
+claim = "invariant"
 command = "cargo fmt --all --check"
 cost_secs = 6.0
 enforcement = "hard"
@@ -375,11 +479,13 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:fmt"]
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^rustfmt\\.toml$)"
 doc = "scripts/pre-push.sh (header)"
 
 [[instrument]]
 id = "shell-selftests"
 kind = "suite"
+claim = "invariant"
 command = "bash scripts/tests/run-all.sh"
 cost_secs = 10.3
 enforcement = "hard"
@@ -392,6 +498,7 @@ doc = "scripts/tests/"
 [[instrument]]
 id = "hook-selftests"
 kind = "suite"
+claim = "invariant"
 command = "bash .claude/hooks/tests/run-all.sh"
 cost_secs = 45.0
 enforcement = "advisory"
@@ -407,6 +514,7 @@ load_bearing = [
 [[instrument]]
 id = "cli-journey-selftest"
 kind = "control"
+claim = "invariant"
 command = "sovereign/scripts/tests/cli-journey-selftest.sh"
 cost_secs = 3.0
 enforcement = "hard"
@@ -422,6 +530,7 @@ load_bearing = [
 [[instrument]]
 id = "bench-compile"
 kind = "gate"
+claim = "invariant"
 command = "cargo check --workspace --benches --features corpus-engine/treesitter,sovereign-cli/dev-tools"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -436,6 +545,7 @@ doc = ".github/workflows/ci.yml (job test)"
 [[instrument]]
 id = "feature-matrix"
 kind = "gate"
+claim = "invariant"
 command = "cargo hack check --each-feature --no-dev-deps"
 cost_secs = "unmeasured"
 enforcement = "advisory"
@@ -449,6 +559,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "feature-powerset"
 kind = "gate"
+claim = "invariant"
 command = "cargo hack check --feature-powerset --depth 2 --no-dev-deps"
 cost_secs = "unmeasured"
 enforcement = "advisory"
@@ -462,6 +573,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "module-cycles"
 kind = "probe"
+claim = "invariant"
 command = "cargo modules dependencies --acyclic -p <crate>"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -475,6 +587,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "build-timings"
 kind = "bench"
+claim = "invariant"
 command = "cargo build --workspace --timings -j 3"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -487,6 +600,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "doc-coverage"
 kind = "probe"
+claim = "invariant"
 command = "cargo doc --no-deps (RUSTDOCFLAGS=--show-coverage, pinned nightly)"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -499,6 +613,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "rustsec-advisories"
 kind = "probe"
+claim = "invariant"
 command = "cargo deny check advisories"
 cost_secs = "unmeasured"
 enforcement = "advisory"
@@ -513,6 +628,7 @@ doc = ".github/workflows/weekly.yml (header)"
 [[instrument]]
 id = "quality-check"
 kind = "check"
+claim = "judged"
 command = "svrn quality check"
 cost_secs = 1745.0
 enforcement = "hard"
@@ -530,6 +646,7 @@ load_bearing = [
 [[instrument]]
 id = "ci-bench"
 kind = "bench"
+claim = "judged"
 command = "./scripts/sovereign-ci-bench.sh --quick"
 cost_secs = 2400.0
 enforcement = "hard"
@@ -547,6 +664,7 @@ load_bearing = [
 [[instrument]]
 id = "routing-replay"
 kind = "bench"
+claim = "invariant"
 command = "sovereign-cli-llm bench routing-replay --bank <bank> --bridge-url <url>"
 cost_secs = 1200.0
 enforcement = "hard"
@@ -560,6 +678,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "inner-chaos-calibrate"
 kind = "control"
+claim = "judged"
 command = "sovereign-cli-llm eval inner-chaos --calibrate"
 cost_secs = 300.0
 enforcement = "hard"
@@ -576,6 +695,7 @@ load_bearing = [
 [[instrument]]
 id = "inner-chaos-soak"
 kind = "probe"
+claim = "judged"
 command = "sovereign-cli-llm eval inner-chaos --minutes <n> --journal <path>"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -591,6 +711,7 @@ doc = "sovereign/bench/chaos_monkey/README.md"
 [[instrument]]
 id = "desktop-check"
 kind = "gate"
+claim = "invariant"
 command = "npm run check"
 cost_secs = 10.0
 enforcement = "hard"
@@ -606,6 +727,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-vitest"
 kind = "suite"
+claim = "invariant"
 command = "npm run test"
 cost_secs = 10.0
 enforcement = "hard"
@@ -618,6 +740,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 [[instrument]]
 id = "desktop-e2e-synthetic"
 kind = "suite"
+claim = "invariant"
 command = "npm run test:e2e"
 also_invoked_as = ["npx playwright test"]
 cost_secs = 420.0
@@ -634,6 +757,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-sabotage"
 kind = "control"
+claim = "invariant"
 command = "npm run sabotage"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -650,6 +774,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-e2e-real"
 kind = "suite"
+claim = "invariant"
 command = "npm run test:e2e:real"
 cost_secs = 3000.0
 enforcement = "hard"
@@ -668,6 +793,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-e2e-faults"
 kind = "suite"
+claim = "invariant"
 command = "npm run test:e2e:faults"
 cost_secs = 1200.0
 enforcement = "hard"
@@ -685,6 +811,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-journeys"
 kind = "suite"
+claim = "invariant"
 command = "npm run test:journeys"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -697,6 +824,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-demo"
 kind = "suite"
+claim = "invariant"
 command = "npm run demo"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -713,6 +841,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-demo-export"
 kind = "probe"
+claim = "invariant"
 command = "npm run demo:export"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -725,6 +854,7 @@ doc = "sovereign/crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md"
 [[instrument]]
 id = "desktop-a11y"
 kind = "probe"
+claim = "invariant"
 command = "npm run a11y"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -737,6 +867,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 [[instrument]]
 id = "desktop-soak"
 kind = "probe"
+claim = "invariant"
 command = "npm run soak"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -750,6 +881,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 [[instrument]]
 id = "desktop-breaker"
 kind = "probe"
+claim = "invariant"
 command = "npm run breaker"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -762,6 +894,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 [[instrument]]
 id = "desktop-chaos"
 kind = "probe"
+claim = "invariant"
 command = "npm run chaos"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -775,6 +908,7 @@ doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
 [[instrument]]
 id = "desktop-ttfi"
 kind = "bench"
+claim = "invariant"
 command = "npm run test:ttfi"
 cost_secs = 300.0
 enforcement = "tracked"
@@ -787,6 +921,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-report-ttfi"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:ttfi"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -799,6 +934,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-report-soak"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:soak"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -811,6 +947,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-report-breaker"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:breaker"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -823,6 +960,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-report-journeys"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:journeys"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -835,6 +973,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "desktop-invoke-coverage"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:coverage"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -850,6 +989,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-invoke-coverage-real"
 kind = "probe"
+claim = "invariant"
 command = "npm run report:coverage:real"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -862,13 +1002,14 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tes
 [[instrument]]
 id = "desktop-invoke-coverage-gate"
 kind = "gate"
+claim = "invariant"
 command = "npm run report:coverage:gate"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F0"
 baseline = { kind = "metrics", path = "test-artifacts/ledger-synthetic.jsonl" }
 negative_control = "none"
-runs_in = []
+runs_in = ["ci:desktop"]
 doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#how-we-know-the-tests-themselves-are-worth-anything"
 load_bearing = [
   { flag = "--min-percent 35", why = "the ratchet floor. RAISE it as coverage lands; setting it aspirationally high and muting the failure is how a floor stops being read" },
@@ -877,6 +1018,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-judge-calibration"
 kind = "control"
+claim = "judged"
 command = "node tests/e2e/scripts/calibrate-judge.mjs"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -895,6 +1037,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-smoke"
 kind = "suite"
+claim = "invariant"
 command = "scripts/desktop-smoke.sh"
 cost_secs = 14400.0
 enforcement = "hard"
@@ -912,6 +1055,7 @@ load_bearing = [
 [[instrument]]
 id = "desktop-soak-py"
 kind = "probe"
+claim = "invariant"
 command = "scripts/desktop-soak.py --mode dual"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -925,6 +1069,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "smoke-attach-mode"
 kind = "probe"
+claim = "invariant"
 command = "sovereign/scripts/smoke-attach-mode.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -938,6 +1083,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 [[instrument]]
 id = "mtp-probe"
 kind = "bench"
+claim = "invariant"
 command = "scripts/mtp-probe.sh --n 5 --max-tokens 200"
 cost_secs = 180.0
 enforcement = "tracked"
@@ -953,6 +1099,7 @@ doc = "sovereign/bench/README.md"
 [[instrument]]
 id = "run-if-stale"
 kind = "control"
+claim = "invariant"
 command = "scripts/run-if-stale.sh --self-test"
 cost_secs = "unmeasured"
 enforcement = "advisory"
@@ -969,6 +1116,7 @@ load_bearing = [
 [[instrument]]
 id = "contract-nightly"
 kind = "suite"
+claim = "invariant"
 command = "sovereign/scripts/cli-journey-nightly.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -982,6 +1130,7 @@ doc = "sovereign/docs/cli-contract.toml (journeys)"
 [[instrument]]
 id = "cli-journey-verify"
 kind = "suite"
+claim = "invariant"
 command = "sovereign/scripts/cli-journey-verify.sh --tier 2"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -998,6 +1147,7 @@ load_bearing = [
 [[instrument]]
 id = "co-sweep"
 kind = "probe"
+claim = "invariant"
 command = "scripts/co-sweep.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1010,6 +1160,7 @@ doc = "scripts/run-if-stale.sh (header)"
 [[instrument]]
 id = "oicp-conformance"
 kind = "check"
+claim = "invariant"
 command = "scripts/oicp-conformance-lane.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -1025,6 +1176,7 @@ doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row)"
 [[instrument]]
 id = "drift-detect"
 kind = "probe"
+claim = "invariant"
 command = "sovereign drift detect"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1038,6 +1190,7 @@ doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row)"
 [[instrument]]
 id = "arch-report"
 kind = "probe"
+claim = "invariant"
 command = "sovereign code arch-report"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1050,6 +1203,7 @@ doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row)"
 [[instrument]]
 id = "capability-map"
 kind = "probe"
+claim = "invariant"
 command = "sovereign code capability-map"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1058,21 +1212,6 @@ baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
 doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
-
-[[instrument]]
-id = "watchers"
-kind = "probe"
-command = "sovereign daemon start (lint/test watchers)"
-cost_secs = "unmeasured"
-enforcement = "tracked"
-fidelity = "F0"
-baseline = { kind = "none" }
-negative_control = "none"
-runs_in = []
-doc = "AGENTS.md §Compilation and test feedback"
-load_bearing = [
-  { flag = "[watchers] enabled = false", why = "DISABLED in .sovereign/sovereign.toml since 2026-05-31 — the parallel cargo fan OOM'd the daemon under a resident big model. A declared opt-out is a healthy absence, which is why posture and doctor both report it Passed; the gate is the two toolbox scripts" },
-]
 
 
 # ── The four the doc's "off the map" paragraph named ─────────────────
@@ -1085,6 +1224,7 @@ load_bearing = [
 [[instrument]]
 id = "wizard-verify"
 kind = "gate"
+claim = "invariant"
 command = "scripts/wizard-verify.sh"
 cost_secs = 900.0
 enforcement = "hard"
@@ -1102,6 +1242,7 @@ load_bearing = [
 [[instrument]]
 id = "daemon-soak"
 kind = "probe"
+claim = "invariant"
 command = "scripts/daemon-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1109,36 +1250,39 @@ fidelity = "F3"
 preconditions = ["host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "daemon-soak-report"
 kind = "probe"
+claim = "invariant"
 command = "scripts/daemon-soak-report.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "daemon-supervised"
 kind = "suite"
+claim = "invariant"
 command = "scripts/daemon-supervised.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F4"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "mesh-soak"
 kind = "suite"
+claim = "invariant"
 command = "scripts/mesh-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1146,7 +1290,7 @@ fidelity = "F3"
 preconditions = ["binary:podman", "host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "commonwealth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "the podman backend", why = "real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled" },
@@ -1157,6 +1301,7 @@ load_bearing = [
 [[instrument]]
 id = "xtask-quality"
 kind = "suite"
+claim = "invariant"
 command = "cargo xtask quality"
 cost_secs = 21.0
 enforcement = "hard"
@@ -1173,6 +1318,7 @@ load_bearing = [
 [[instrument]]
 id = "throughput-probe"
 kind = "bench"
+claim = "invariant"
 command = "scripts/throughput_probe.py"
 cost_secs = 400.0
 enforcement = "tracked"
@@ -1180,19 +1326,20 @@ fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet:4"]
 baseline = { kind = "metrics", path = "sovereign/bench" }
 negative_control = "none"
-runs_in = ["check", "smoke:1"]
+runs_in = ["smoke:1"]
 doc = "sovereign/bench/README.md"
 
 [[instrument]]
 id = "clippy-json"
 kind = "gate"
+claim = "invariant"
 command = "cargo clippy --workspace --all-targets --message-format=json"
 cost_secs = "unmeasured"
 enforcement = "advisory"
 fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = []
+runs_in = ["by-hand"]
 doc = "corpus-engine/xtask/src/lint_gate.rs"
 load_bearing = [
   { flag = "--message-format=json", why = "lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child" },
@@ -1201,18 +1348,20 @@ load_bearing = [
 [[instrument]]
 id = "dst-scenarios"
 kind = "suite"
+claim = "invariant"
 command = "cargo test -p sovereign-mesh --features dst,treesitter --test main dst_scenarios"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "dst-fe19-convergence"
-runs_in = []
-doc = ".github/workflows/ci.yml (the commented-out `dst` job)"
+runs_in = ["ci:test", "by-hand"]
+doc = ".github/workflows/ci.yml (why the `dst` job is shelved: `dst` resolves in the workspace feature set, so the `test` job already runs these 7)"
 
 [[instrument]]
 id = "cli-contract-live-verify"
 kind = "check"
+claim = "invariant"
 command = "sovereign/scripts/cli-contract-live-verify.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1226,6 +1375,7 @@ doc = "sovereign/docs/TESTING_SURFACE.md"
 [[instrument]]
 id = "cli-journey-sandbox"
 kind = "suite"
+claim = "invariant"
 command = "sovereign/scripts/cli-journey-sandbox.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1241,6 +1391,7 @@ load_bearing = [
 [[instrument]]
 id = "check-desktop-version"
 kind = "gate"
+claim = "invariant"
 command = "scripts/check-desktop-version.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"
@@ -1253,6 +1404,7 @@ doc = ".github/workflows/desktop-release.yml"
 [[instrument]]
 id = "windows-crosscheck"
 kind = "gate"
+claim = "invariant"
 command = "scripts/windows-crosscheck.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
@@ -1262,6 +1414,377 @@ baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
 doc = ".github/workflows/desktop-release.yml"
+
+# ── The eight lanes of `svrn quality check` ──────────────────────────
+#
+# MERGED FROM `quality/check-lanes.toml` on 2026-09-07, which is now deleted.
+# Two tables answering "what runs here" was the ARCH §10.6 violation this
+# section closes; five collisions were DECIDED rather than papered over, and
+# each decision is recorded in the field docs at the top of this file:
+#
+#   kind          two orthogonal axes, both kept. `kind` stays the SHAPE
+#                 (gate|suite|bench|probe|control|check); the lanes' own
+#                 `kind` (invariant|judged) became `claim`, which every row in
+#                 this file now carries.
+#   enforcement   `advisory` and `soft` were one concept under two names.
+#                 Converged on ADVISORY — this file's word, and `xtask
+#                 quality_cmd::Enforcement`'s. All eight lanes were `hard`, so
+#                 the merge cost zero data edits; the renamed variant is
+#                 `quality_check_cmd::LaneEnforcement::Soft -> Advisory`.
+#   cost          BOTH kept, because they are different claims. `cost_secs` is
+#                 a MEASURED actual (or the word `unmeasured`); `est_secs` is
+#                 a RESERVATION a budget holds open, deliberately above the
+#                 highest observed actual because under-reserving starves a
+#                 lane that would have finished. Where `est_secs` is absent
+#                 the reservation comes from the measurement, rounded up —
+#                 the rule is `Instrument::reservation_secs`, in code, so it
+#                 cannot drift from this paragraph.
+#   baseline      the lanes' `baseline_dir` is a fourth BaselineKind,
+#                 `fingerprint`: `<path>/<fingerprint>/latest.json`. One
+#                 field, four kinds, rather than two fields answering one
+#                 question.
+#   preconditions the superset closed set was already pre-registered in this
+#                 file's own header. `container:<name>` is the shell
+#                 harnesses' spelling the lane runner lacked; it is now in
+#                 `kernel_types::quality::Precondition`, which both read.
+#
+# `verdict = "judgement-line"` is what separates these eight from every other
+# row: a lane SAYS its verdict on its last stdout line, because exit codes
+# cannot express could-not-judge and `bench all` exits 1 for regressed, stale
+# AND missing-baseline. Everything else in this file is read on its exit code.
+#
+# The `est_secs` values were re-set 2026-09-04 and again 2026-09-05 from
+# measured runs on this host; the actuals are in `cost_secs` beside them.
+# ONE run is not a measurement (ARCH §18.5) — read these as first actuals.
+
+[[instrument]]
+id = "chat-ask"
+kind = "bench"
+claim = "judged"
+command = "svrn quality lane chat-ask"
+argv = ["svrn", "quality", "lane", "chat-ask"]
+cost_secs = 251.0
+est_secs = 300
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "binary:sovereign-cli-llm",
+]
+baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
+bank = "sovereign/bench/quality-check/chat-ask.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
+
+# EVERY row of this lane is wall-clock (TTFT, decode tok/s), so the whole lane
+# is could-not-judge on a contended host rather than failed. Run 1 measured
+# 17.8 tok/s against a 50 tok/s bar at load 32 and called it a FAILURE; the bar
+# was fine and the machine was busy (note d596639c). chat-ask declares the same
+# rule at ROW level, in its own bank, because only one of its seventeen rows is
+# wall-clock.
+[[instrument]]
+id = "throughput"
+kind = "bench"
+claim = "invariant"
+command = "svrn quality lane throughput"
+argv = ["svrn", "quality", "lane", "throughput"]
+cost_secs = 180.0
+est_secs = 150
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "slot-decodes:fast",
+  "binary:python3",
+  "host-quiet:4",
+]
+baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/throughput" }
+bank = "sovereign/bench/quality-check/throughput.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "scripts/throughput_probe.py (the probe this lane wraps and finally compares)"
+
+# ── The six sampled lanes ───────────────────────────────────────────
+#
+# These already existed and already ran. What they never did was SAY a
+# verdict: `bench all` exits 1 for regressed, stale AND missing-baseline;
+# `knowledge-gym` exits 3 for "below 0.9"; `chaos-monkey` exits 4 for
+# "measured nothing". So each is wrapped by `quality lane bench`, which runs
+# the verb UNCHANGED and reads the report it writes.
+#
+# `{report}` is the file the wrapper tells the verb to write; `{ids:<subset>}`
+# expands to the ids `sovereign/bench/smoke.toml` declares, each repeated after
+# the flag before it, so a curated list never lives in two files.
+#
+# HARD ON CATASTROPHE ONLY. At six probes and ten questions a one-item flip is
+# 12-20 points and a tolerance band is noise (RUNBOOK §6), so the scores are
+# tracked with no band and the gating rows are the ones no sample size makes
+# ambiguous: an errored item, an empty answer, an all-zero tally, an abstention
+# on an answerable probe, a confabulation on an absent one. Drift is the
+# nightly's question — `scripts/sovereign-ci-bench.sh` runs the full banks
+# against committed per-lane baselines.
+
+[[instrument]]
+id = "routing"
+kind = "bench"
+claim = "invariant"
+command = "svrn quality lane bench --id routing"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
+  "svrn", "bench", "all",
+  "--bench-root", "sovereign/bench",
+  "--routing-only",
+  "--filter", "routing/cells_v1",
+  "--smoke-subset", "routing-v1",
+  "--report", "{report}",
+]
+cost_secs = 38.0
+est_secs = 80
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
+baseline = { kind = "none" }
+bank = "sovereign/bench/routing/cells_v1.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/routing/README.md"
+
+# Two commands, because no single `--filter` selects sep AND wikipedia and
+# inventing a filter language to make it one would be a worse trade than
+# running the verb twice.
+[[instrument]]
+id = "retrieval-prod"
+kind = "bench"
+claim = "invariant"
+command = "svrn quality lane bench --id retrieval-prod"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
+  "svrn", "bench", "all",
+  "--bench-root", "sovereign/bench",
+  "--filter", "sep/questions",
+  "--prod-pipeline", "--isolate",
+  "--smoke-subset", "retrieval-prod-v1",
+  "--report", "{report}",
+  "--",
+  "svrn", "bench", "all",
+  "--bench-root", "sovereign/bench",
+  "--filter", "wikipedia/questions",
+  "--prod-pipeline", "--isolate",
+  "--smoke-subset", "retrieval-prod-v1",
+  "--report", "{report}",
+]
+cost_secs = 57.0
+est_secs = 90
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "corpus-installed:sep",
+  "corpus-installed:wikipedia",
+]
+baseline = { kind = "none" }
+bank = "sovereign/bench/sep/questions.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/sep/README.md"
+
+# In-process: this one reads the corpus's own atoms.json and runs no model,
+# which is why a full golden costs 30 s rather than minutes.
+[[instrument]]
+id = "enrichment-f1"
+kind = "bench"
+claim = "invariant"
+command = "svrn quality lane bench --id enrichment-f1"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "enrichment-f1", "--reader", "bench-all", "--",
+  "svrn", "bench", "all",
+  "--bench-root", "sovereign/bench",
+  "--filter", "literary/bk-book-1",
+  "--smoke-subset", "enrichment-f1-v1",
+  "--report", "{report}",
+]
+cost_secs = "unmeasured"
+est_secs = 20
+enforcement = "hard"
+fidelity = "F2"
+verdict = "judgement-line"
+preconditions = ["corpus-installed:brothers-karamazov-book-1"]
+baseline = { kind = "none" }
+bank = "sovereign/bench/literary/bk-book-1.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/literary/README.md"
+
+[[instrument]]
+id = "chaos-monkey"
+kind = "bench"
+claim = "judged"
+command = "svrn quality lane bench --id chaos-monkey"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
+  "svrn", "bench", "chaos-monkey", "run",
+  "--bank", "sovereign/bench/chaos_monkey/secret_agent.toml",
+  "--manifest", "sovereign/bench/chaos_monkey/manifest.toml",
+  "--corpus", "chaos-secret-agent",
+  "--smoke-subset", "chaos-monkey-v2",
+  "--out", "{report}",
+]
+cost_secs = 397.0
+est_secs = 450
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "corpus-installed:chaos-secret-agent",
+]
+baseline = { kind = "none" }
+bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/chaos_monkey/README.md"
+
+# The one lane of the six that ALREADY selected by id (`--fixture <slug>`,
+# repeatable), so it gets no new flag — `{ids:…}` expands the declared slugs
+# into that existing door.
+[[instrument]]
+id = "knowledge-gym"
+kind = "bench"
+claim = "judged"
+command = "svrn quality lane bench --id knowledge-gym"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "knowledge-gym", "--reader", "knowledge-gym", "--",
+  "svrn", "knowledge-gym", "run", "--json",
+  "--fixture", "{ids:knowledge-gym-v1}",
+]
+cost_secs = 36.0
+est_secs = 50
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/knowledge-gym/README.md"
+
+[[instrument]]
+id = "synth"
+kind = "bench"
+claim = "judged"
+command = "svrn quality lane bench --id synth"
+argv = [
+  "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
+  "svrn", "bench", "all",
+  "--bench-root", "sovereign/bench",
+  "--synth",
+  "--filter", "sep/questions",
+  "--smoke-subset", "synth-v2",
+  "--report", "{report}",
+]
+cost_secs = 272.0
+est_secs = 330
+enforcement = "hard"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "corpus-installed:sep",
+]
+baseline = { kind = "none" }
+bank = "sovereign/bench/sep/questions.toml"
+negative_control = "none"
+runs_in = ["check"]
+doc = "sovereign/bench/sep/README.md"
+
+
+# ── [[trigger]] — how each VENUE runs its selection ──────────────────
+#
+# `runs_in` says WHERE an instrument runs. It does not say how, and the
+# difference is not decoration: a naive "run everything tagged `prepush`, in
+# declared order" is THREE TIMES SLOWER than the shell it replaced, because
+# `scripts/pre-push.sh` carried two facts that such a selection throws away.
+# Both are properties of the venue, not of any instrument, so both are
+# declared here (the code is `kernel_types::quality::Trigger`).
+#
+#   budget_secs         wall budget for the whole selection.
+#   concurrency         how many instruments may be in flight. `pre-push.sh`
+#                       launched the workspace compile at :380 and waited at
+#                       :565 so it overlapped the ratchets; serial, the
+#                       one-minute budget is gone before the gates start. The
+#                       runner schedules longest-reservation-first, which is
+#                       what makes two slots behave the way the hand-written
+#                       launch-then-wait did.
+#   min_runway_secs     below this much budget left, an instrument is not
+#                       STARTED — it would be killed mid-flight and report a
+#                       cap that says nothing about the code. Per venue
+#                       because the scale differs by three orders of
+#                       magnitude: a check lane wants 60 s of runway, a
+#                       0.04 s ratchet does not.
+#   on_fail             what a FAILED instrument does to the venue's exit
+#                       code. Distinct from `enforcement`, which is the
+#                       instrument's half: enforcement says "may this row
+#                       fail a run", this says "and does the venue then
+#                       stop". `pre-commit` runs real checks and still exits
+#                       0 — advisory by operator directive 2026-08-06 — so
+#                       collapsing the two would make that venue unstateable.
+#   on_could_not_judge  the same for a could-not-judge. Separate because
+#                       `pre-push` blocks on a gate that said no and only
+#                       WARNS on one that could not run here — its UNVERIFIED
+#                       list, "nothing in this push can fix a native
+#                       toolchain that isn't installed". Defaults to
+#                       `on_fail` (the stricter direction).
+#   [[trigger.prepare]] a step run ONCE before the selection, and the argv
+#                       prefix rewrite it buys. `pre-push.sh:299` built the
+#                       xtask binary before the gates, "hoisted out of the
+#                       gate function", precisely so eleven `cargo xtask …`
+#                       invocations would not queue on the cargo lock — the
+#                       file says it twice (:96, :367): "the concurrency
+#                       silently becomes a queue". The rewrite is why the
+#                       build is worth anything, so it is declared beside it:
+#                       `command` stays the literal string a human types
+#                       (it is also the closure gate's census key) while the
+#                       runner executes `target/debug/xtask <gate>`.
+#
+# A trigger whose venue no instrument declares in `runs_in` is REFUSED: it
+# would run nothing and report green, which is the failure mode this whole
+# registry exists to end (ARCH §18.1).
+
+[[trigger]]
+id = "prepush"
+budget_secs = 60
+concurrency = 2
+min_runway_secs = 1
+on_fail = "block"
+on_could_not_judge = "report"
+
+[[trigger.prepare]]
+command = ["cargo", "build", "--quiet", "-p", "xtask"]
+substitute_from = ["cargo", "xtask"]
+substitute_to = ["target/debug/xtask"]
+
+[[trigger]]
+id = "check"
+budget_secs = 1800
+concurrency = 1
+# Verbatim from ci-bench's `run_lane`: under a minute of runway is not a lane,
+# it is a lane that will be killed and report a TIMEOUT saying nothing about
+# the code.
+min_runway_secs = 60
+on_fail = "block"
+# A HARD lane goes red on could-not-judge too: "suddenly nothing to judge" on
+# a gated surface is a regression signal, not a pass.
+on_could_not_judge = "block"
 
 # ── Commands the census reaches that verify nothing ──────────────────
 #

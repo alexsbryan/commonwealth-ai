@@ -51,7 +51,7 @@ ceiling_floor_ms = 250
 # tok/s at 1-minute load 3.7 and 17.8 tok/s at load 32 on this machine — a
 # 2.8x spread no threshold absorbs without going blind on the quiet case.
 #
-# Declared HERE rather than in `quality/check-lanes.toml` because it guards
+# Declared HERE rather than in `quality/instruments.toml` because it guards
 # ONE ROW. The lane's other sixteen rows — route, gate outcome, both halves
 # answered, not abstained, useful — are claims about the ANSWER, and a busy
 # machine does not change them; making the whole lane could-not-judge under

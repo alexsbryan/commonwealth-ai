@@ -36,7 +36,8 @@
 //!
 //! # The argv is data
 //!
-//! `quality/check-lanes.toml` carries the whole inner command line, so
+//! `quality/instruments.toml` carries the whole inner command line in the
+//! lane's `argv`, so
 //! adding a lane is an edit to a table. Two substitutions happen inside it:
 //!
 //! - `{report}` — the file the inner verb should write, one per command.
