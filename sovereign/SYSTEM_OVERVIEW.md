@@ -286,7 +286,7 @@ crates/
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp, opaque Payload, Ed25519 authorship, admission into one total order, sync digest. Zero I/O, zero clock; deps are oplog + ed25519 + serde + hex
 ├── commonwealth-rail         # The ring rail's JOURNAL — one append-only JSONL log per namespace under <root>/rings/<ns>/, single-writer door + peer ingest; re-exports -rail-core wholesale
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
-├── commonwealth-state        # MeshStore — gossip-replicated SQLite KV w/ TTL GC
+├── commonwealth-state        # MeshStore — SQLite KV w/ TTL GC; since cw-lift 4 a local PROJECTION of the ring rail (rail_kv vocabulary + fold, rail_outbox table), not a gossip replica
 ├── commonwealth-test-harness # SimulatedMesh, SimulatedNode, MockLlamaServer
 └── oicp-conformance          # OICP protocol conformance suite
 ```
@@ -5625,10 +5625,59 @@ portfolio, knowledge fan-out, ledger accuracy. Deterministic timing
 
 ### Distributed state + apps
 
-`commonwealth-state::MeshStore` — gossip-replicated SQLite KV (WAL
-mode): `StoreEntry { app_id, key, value: Bytes, timestamp, origin:
-NodeId }`, LWW conflict resolution, per-`app_id` namespace,
-`RetentionGc` for TTL.
+`commonwealth-state::MeshStore` — SQLite KV (WAL mode):
+`StoreEntry { app_id, key, value: Bytes, timestamp, origin: NodeId }`,
+LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL.
+
+**It is a PROJECTION of the ring rail since cw-lift 4, not a replica,
+and readers are unchanged.** `get` / `scan` / `list_keys` answer exactly
+what they did; what changed is where a row comes from and where a write
+goes. Truth is the ring journal — an append-only signed log on disk, one
+directory per namespace — and this store is the fold of it:
+
+- **Out.** `set` / `append` / `delete` write the row and insert a
+  `rail_outbox` row in the SAME transaction (`backend.rs`), drained by
+  the pump in `sovereign-mesh` via `MeshStore::outbox_take(limit)` /
+  `outbox_ack(&[id])`. `merge_entry` deliberately does NOT enqueue — it
+  is the receive side, and a row that re-entered the outbox would echo
+  around the mesh forever. The SENDER-side privacy guard is inside
+  `enqueue_on`, not at the call site: `is_gossip_excluded` is the one
+  predicate, so an excluded namespace cannot enter the queue even by a
+  caller who forgot (ARCH §7.1).
+- **Vocabulary + fold.** `commonwealth-state::rail_kv` — one act,
+  `{"k", "v" (base64, absent on a tombstone), "t", "d"}`, and
+  `project(&Admission) -> Projection { rows, unreadable }`. Per key the
+  act with the greatest `(t, actor, id)` among admitted NON-VOIDED ops
+  wins. `t` is the ORIGINAL write time, not the journal line's
+  `ts_unix`: a snapshot re-append after a seal is a new LINE carrying an
+  old WRITE, and folding on the line would hand every key to whoever
+  snapshotted last. Acts this build cannot read (another app's
+  vocabulary on the same rail — `mesh-measurements` — or a peer on an
+  unknown shape) are COUNTED in `unreadable`, never dropped silently
+  (ARCH §18.3). Tie-break on `(actor, id)` also closes the cross-node
+  divergence `merge_entry_equal_timestamp_keeps_incumbent` pinned as a
+  known limitation: on the rail there is no arrival order to depend on.
+- **In.** `MeshStore::apply_projection(app_id, rows, origin_of) ->
+  Applied { merged, deleted, unattributed }`. Values go through
+  `merge_entry` (LWW at `t`); a tombstone deletes only what is not newer
+  than it, in one statement so a concurrent `set` cannot be taken. An
+  actor the roster cannot place is counted `unattributed` and skipped
+  rather than attributed to an invented `NodeId`. An excluded `app_id`
+  is refused with an `Err` naming it — the RECEIVER-side privacy guard,
+  the half `routes_app_internal` used to do inbound.
+- **A replicating `app_id` is a ring namespace verbatim**, and a
+  namespace names a DIRECTORY (`<root>/rings/<ns>/`), so it must satisfy
+  `commonwealth-rail`'s `valid_namespace` — `[a-z0-9_-]{1,64}`. The one
+  offender in the workspace was renamed rather than the charset widened:
+  `corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED` is
+  `wikipedia-newsworthy-tracked` (was `…:tracked`). A colon is legal on
+  POSIX and APFS and is not on NTFS, and the desktop ships on Windows
+  linking `sovereign-mesh` and through it `commonwealth-rail`.
+
+`all_entries_for_gossip` + `merge_entry` are the OLD contract — the whole
+store, at peers, on a timer. Both are still present because the sender
+that used them (gossip Step 4) is deleted in a later step of cw-lift 4,
+not because there are two replication paths.
 
 `commonwealth-app` — mesh app platform: `MeshAppManifest`
 (gossiped), `AppPermissions` (`mesh_store_read`/`_write`,

@@ -15,14 +15,26 @@
 //!   store.set(app_id, key, value, origin)   write locally
 //!   store.get(app_id, key)                  read
 //!   store.scan(app_id, prefix)              read a range
+//!   store.outbox_take(limit) / _ack(ids)    what this node wrote, for the rail
+//!   store.apply_projection(app_id, rows, ..) what the ring says we hold
 //!   store.all_entries_for_gossip()          what may leave this machine
 //!   store.merge_entry(entry)                take a peer's row, if newer
 //! ```
 //!
-//! A daemon polls `all_entries_for_gossip` on one side and hands what it
-//! receives to `merge_entry` on the other. That is the whole replication
-//! contract, and this crate implements neither end of the wire — see "not
-//! here" below.
+//! **THIS IS A PROJECTION NOW, NOT A REPLICA (cw-lift 4).** The truth is the
+//! ring journal — an append-only signed log on disk, one per namespace — and
+//! what this store holds is the fold of it. A local `set`/`append`/`delete`
+//! queues one act in the `rail_outbox` table, in the SAME transaction as the
+//! row change; the pump in `sovereign-mesh` drains that onto the journal, and
+//! what a peer sends comes back through [`rail_kv::project`] and
+//! [`MeshStore::apply_projection`]. **Readers are unchanged**: `get`, `scan`
+//! and `list_keys` answer exactly what they did.
+//!
+//! `all_entries_for_gossip` + `merge_entry` are the OLD contract — the whole
+//! store, at peers, on a timer. They are still here because the sender that
+//! used them is deleted in a later step, not because there are two replication
+//! paths; there is one, and it is the rail. This crate implements neither end
+//! of a wire — see "not here" below.
 //!
 //! # Three decisions worth knowing before reading the code
 //!
@@ -93,6 +105,7 @@ pub mod error;
 pub mod gc;
 pub mod peer_preferences;
 pub mod processed_shards;
+pub mod rail_kv;
 pub mod store;
 
 pub use activity::{current_activity, served_for, ActivityEmitter, ACTIVITY_APP_ID};
@@ -104,4 +117,5 @@ pub use peer_preferences::{
     PEER_PREFERENCES_APP_ID, PORTFOLIO_PRIVATE_APP_ID,
 };
 pub use processed_shards::{processed_shards_key, union_processed_shards, PROCESSED_SHARDS_APP_ID};
-pub use store::{MeshStore, StoreEntry};
+pub use rail_kv::{project, KvOp, Projected, Projection};
+pub use store::{Applied, MeshStore, OutboxRow, StoreEntry};

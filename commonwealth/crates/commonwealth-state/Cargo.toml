@@ -7,6 +7,14 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+# The rail's FOLD, and only the fold — `Payload`, `Admission`, admission's one
+# definition of "surviving". NOT `commonwealth-rail`, which is the journal on
+# disk: this crate has no filesystem opinion and the pump that appends lives in
+# `sovereign-mesh`. Both crates sit in `mesh-foundation` and both are members
+# of the `commonwealth` package, so this is a sideways edge inside the
+# substrate; the forbidden direction is the reverse one (rail -> state), which
+# quality/ARCH_LAYERS.toml blocks by name.
+commonwealth-rail-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -14,6 +22,16 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
 bytes = "1.0"
+# A store value is `Bytes` and JSON has no byte string. 0.22 matches the one
+# other first-party direct dependant (`sovereign-mesh`), so the workspace keeps
+# one version of it in the graph (ARCH §8.2).
+base64 = "0.22"
+
+[dev-dependencies]
+# The rail's ONE set of op fixtures, from the crate that declares them. The
+# projection tests fold REAL signed ops through REAL admission, so what they
+# prove is the fold and not a hand-built `Admission` that agrees with itself.
+commonwealth-rail-core = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

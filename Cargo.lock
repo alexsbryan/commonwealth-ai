@@ -2054,8 +2054,10 @@ dependencies = [
 name = "commonwealth-state"
 version = "0.6.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "commonwealth-core",
+ "commonwealth-rail-core",
  "rusqlite",
  "serde",
  "serde_json",

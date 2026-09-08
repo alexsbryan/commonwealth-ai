@@ -428,8 +428,21 @@ mod tests {
         assert!(is_gossip_excluded("atos-approvals"));
         // The tracked set is the newsworthy namespace that DOES have a
         // cross-peer consumer: the leader writes it, every node reads
-        // it to pick its partition. It must keep replicating.
-        assert!(!is_gossip_excluded("wikipedia-newsworthy:tracked"));
+        // it to pick its partition. It must keep replicating — which
+        // since cw-lift 4 means it must also be spellable as a ring
+        // namespace, i.e. a directory name. It was
+        // `wikipedia-newsworthy:tracked` until then; a colon is not a
+        // legal NTFS path component and the desktop ships on Windows.
+        // `corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED`
+        // is the one place the value lives; this literal is the
+        // cross-crate pin, and it is here rather than there because
+        // corpus-engine cannot see this list.
+        assert!(!is_gossip_excluded("wikipedia-newsworthy-tracked"));
+        assert!(
+            !"wikipedia-newsworthy-tracked".contains(':'),
+            "a replicating app_id names a ring DIRECTORY (commonwealth-rail's \
+             `valid_namespace` is the rule); this one may not carry a colon"
+        );
     }
 
     /// **Structural invariant pin** for the work atlas privacy model.

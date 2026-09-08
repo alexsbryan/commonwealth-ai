@@ -9,7 +9,9 @@
 //!   ownership count.
 //!
 //! The watcher writes its state to `MeshStore` under three app_ids
-//! (`wikipedia-newsworthy:tracked`, `:portal`, `:job`). This command
+//! (`wikipedia-newsworthy-tracked`, `:portal`, `:job` — the first is
+//! colon-free because it replicates, and a replicating app_id is a ring
+//! namespace, which is a directory name). This command
 //! reads the same store directly so the operator sees ground truth
 //! without going via the running daemon's HTTP surface.
 //!

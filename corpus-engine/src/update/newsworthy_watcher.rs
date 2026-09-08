@@ -57,7 +57,24 @@ use crate::recipe::{ChunkerConfig, ExtractorConfig};
 
 /// MeshStore namespace for tracked-article rows. Keyed by
 /// `tracked:<title>` with the title normalised (spaces → underscores).
-pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy:tracked";
+///
+/// **Colon-free since cw-lift 4, and it has to be.** This namespace is the
+/// one on this list that REPLICATES (the `:status` and `:portal` siblings are
+/// gossip-excluded), and a replicating `app_id` is now used verbatim as a ring
+/// namespace — which names a DIRECTORY, `<root>/rings/<ns>/`. `:` is not a
+/// legal path component on NTFS, and the desktop ships on Windows
+/// (`scripts/build-desktop-windows.sh`) linking `sovereign-mesh` and through
+/// it `commonwealth-rail`. The alternative was widening the rail's
+/// `valid_namespace` charset for every future namespace to keep one spelling
+/// here; renaming ONE constant is the cheaper decider to change, and a mapping
+/// table would have been two names for one thing (ARCH §10.6). Every reader
+/// goes through this constant, so the value is the only thing that moved.
+///
+/// The rows written under the old spelling are orphaned rather than migrated:
+/// `run_leader_step` re-derives a `TrackedArticle` from the next daily portal
+/// page, so the cost is one tick of `first_seen_at`, and in the shipped daemon
+/// `MeshStore` is `in_memory()` and loses them on every restart anyway.
+pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy-tracked";
 
 /// KV namespace for daily portal-page idempotency markers. Keyed by
 /// `portal:<YYYY-MM-DD>`. Written and read only inside

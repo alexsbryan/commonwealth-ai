@@ -28,6 +28,41 @@ pub struct StoreEntry {
     pub origin: NodeId,
 }
 
+/// One local write waiting to go onto the ring journal.
+///
+/// `deleted` and `value: None` say the same thing, and both are here because
+/// the column is what the pump filters on and the `Option` is what it hands
+/// [`rail_kv::to_payload`](crate::rail_kv::to_payload). They cannot disagree —
+/// `an_outbox_rows_two_spellings_of_a_tombstone_agree` is the pin.
+#[derive(Debug, Clone)]
+pub struct OutboxRow {
+    pub id: i64,
+    pub app_id: String,
+    pub key: String,
+    /// `None` is a tombstone.
+    pub value: Option<Bytes>,
+    /// Unix seconds — the ORIGINAL write time, and what the fold orders by.
+    pub t: u64,
+    pub deleted: bool,
+}
+
+/// What one [`MeshStore::apply_projection`] did.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Applied {
+    /// Rows whose value the store took. A row the store already held at an
+    /// equal-or-newer timestamp is not one of these — LWW rejected it, which
+    /// is the mechanism working rather than an absence.
+    pub merged: usize,
+    /// Tombstones that removed a row this node held.
+    pub deleted: usize,
+    /// Rows dropped because their actor resolves to no node. REPORTED, never
+    /// defaulted to some other node's id (ARCH §18.3): a non-zero count here
+    /// means the roster and the journal disagree about who is in the ring, and
+    /// the caller is the only one who can say whether that is a peer who just
+    /// left or a bug.
+    pub unattributed: usize,
+}
+
 /// The distributed KV store. Thread-safe; clone freely (backed by `Arc`).
 #[derive(Clone)]
 pub struct MeshStore {
@@ -49,18 +84,14 @@ impl MeshStore {
         use std::sync::Mutex;
         let conn = Connection::open_in_memory()
             .map_err(|e| Error::Backend(format!("in-memory open failed: {e}")))?;
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             CREATE TABLE IF NOT EXISTS store (
-                 app_id    TEXT NOT NULL,
-                 key       TEXT NOT NULL,
-                 value     BLOB NOT NULL,
-                 timestamp INTEGER NOT NULL,
-                 origin    BLOB NOT NULL,
-                 PRIMARY KEY (app_id, key)
-             );",
-        )
-        .map_err(|e| Error::Backend(format!("in-memory init failed: {e}")))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL;")
+            .map_err(|e| Error::Backend(format!("in-memory pragma failed: {e}")))?;
+        // The SAME DDL the file store runs. This used to be a second copy,
+        // which is how a table added to one and not the other passes every
+        // test (ARCH §10.6) — and in production this IS the store, so the
+        // copy that mattered was this one.
+        conn.execute_batch(crate::backend::SCHEMA)
+            .map_err(|e| Error::Backend(format!("in-memory init failed: {e}")))?;
         Ok(Self {
             backend: Arc::new(crate::backend::SqliteBackend {
                 conn: Mutex::new(conn),
@@ -86,19 +117,31 @@ impl MeshStore {
     }
 
     /// Write an entry with the current time as timestamp. Returns true if written (LWW).
+    ///
+    /// This is a LOCAL write, so it also queues the act for the rail — see
+    /// [`MeshStore::outbox_take`]. `merge_entry` deliberately does not: that
+    /// is the receive side, and a row learned from a peer that re-entered the
+    /// outbox would echo around the mesh forever.
     pub fn set(&self, app_id: &str, key: &str, value: Bytes, origin: NodeId) -> Result<bool> {
         let timestamp = now_secs();
-        let entry = StoreEntry {
-            app_id: app_id.to_string(),
-            key: key.to_string(),
-            value,
+        let origin_bytes = origin.as_bytes().to_vec();
+        let written = self.backend.upsert_if_newer_and_enqueue(
+            app_id,
+            key,
+            &value,
             timestamp,
-            origin,
-        };
-        self.merge_entry(entry)
+            &origin_bytes,
+        )?;
+        tracing::debug!(app_id, key, timestamp, written, "mesh_store.set");
+        Ok(written)
     }
 
     /// Append `value` to an existing entry or create it. Values are newline-joined.
+    ///
+    /// Composed of `get` + `set`, so the rail carries the WHOLE combined value
+    /// as one act rather than a delta. That is the right shape here: the fold
+    /// is last-write-wins over whole values, and a delta would need every
+    /// prior act to have arrived before it could mean anything.
     pub fn append(&self, app_id: &str, key: &str, value: Bytes, origin: NodeId) -> Result<()> {
         let existing = self.get(app_id, key)?;
         let new_value = match existing {
@@ -115,8 +158,16 @@ impl MeshStore {
     }
 
     /// Delete an entry. Returns true if something was deleted.
+    ///
+    /// A local delete, so it queues a TOMBSTONE for the rail. A key this node
+    /// does not hold queues nothing: it is not a fact about the mesh — the key
+    /// may be live on a peer that has simply not reached us yet, and a
+    /// tombstone stamped `now` would take it.
     pub fn delete(&self, app_id: &str, key: &str) -> Result<bool> {
-        self.backend.delete(app_id, key)
+        let t = now_secs();
+        let deleted = self.backend.delete_and_enqueue(app_id, key, t)?;
+        tracing::debug!(app_id, key, t, deleted, "mesh_store.delete");
+        Ok(deleted)
     }
 
     /// List all keys for an app.
@@ -177,6 +228,132 @@ impl MeshStore {
             entry.timestamp,
             &origin_bytes,
         )
+    }
+
+    // ── The rail: what leaves, and what arrives ──────────────
+
+    /// Take up to `limit` queued writes for the pump, oldest first.
+    ///
+    /// Rows stay queued until [`MeshStore::outbox_ack`], so a crash between
+    /// the append and the ack re-sends rather than loses — the rail's op id is
+    /// content-derived, so a duplicate append is the same op.
+    pub fn outbox_take(&self, limit: usize) -> Result<Vec<OutboxRow>> {
+        let rows = self.backend.outbox_take(limit)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| OutboxRow {
+                id: r.id,
+                app_id: r.app_id,
+                key: r.key,
+                value: r.value.map(Bytes::from),
+                t: r.t,
+                deleted: r.deleted,
+            })
+            .collect())
+    }
+
+    /// Drop queued writes the pump has put on the rail. Returns how many rows
+    /// went away.
+    pub fn outbox_ack(&self, ids: &[i64]) -> Result<usize> {
+        let removed = self.backend.outbox_ack(ids)?;
+        tracing::debug!(asked = ids.len(), removed, "mesh_store.outbox_ack");
+        Ok(removed)
+    }
+
+    /// How many writes are waiting for the pump.
+    pub fn outbox_len(&self) -> Result<usize> {
+        self.backend.outbox_len()
+    }
+
+    /// Apply one namespace's projection — what the fold of the ring journal
+    /// says this node should hold.
+    ///
+    /// `origin_of` resolves a rail actor (a signing public key) to the
+    /// [`NodeId`] a `StoreEntry` records. It is a parameter rather than
+    /// something this crate reads, because the roster that answers it lives in
+    /// the mesh and this crate has no mesh.
+    ///
+    /// Three things it refuses or reports rather than guesses (ARCH §18.3):
+    ///
+    /// - **An excluded `app_id` is refused outright** — the RECEIVER-side
+    ///   privacy guard. A peer that puts a private namespace on the ring gets
+    ///   it projected NOWHERE, and the refusal is an `Err` naming the
+    ///   namespace, not a quiet no-op that reads as "nothing to do".
+    /// - **An actor with no `NodeId` is counted `unattributed` and skipped.**
+    ///   `StoreEntry.origin` has to name a node, and inventing one — a zero
+    ///   id, our own — would attribute a peer's write to somebody who did not
+    ///   make it.
+    /// - **A tombstone deletes only what is not newer than it.** A delete at
+    ///   `t` must not take a `set` at `t+1` that arrived first.
+    pub fn apply_projection(
+        &self,
+        app_id: &str,
+        rows: &[crate::rail_kv::Projected],
+        origin_of: impl Fn(&str) -> Option<NodeId>,
+    ) -> Result<Applied> {
+        if crate::peer_preferences::is_gossip_excluded(app_id) {
+            tracing::debug!(app_id, "mesh_store.projection_refused_excluded");
+            return Err(Error::Backend(format!(
+                "'{app_id}' never leaves a machine, so nothing a peer sent may be \
+                 projected into it"
+            )));
+        }
+        let mut applied = Applied::default();
+        for row in rows {
+            let Some(origin) = origin_of(&row.actor) else {
+                applied.unattributed += 1;
+                tracing::debug!(
+                    app_id,
+                    key = %row.key,
+                    actor = %row.actor,
+                    "mesh_store.projection_unattributed"
+                );
+                continue;
+            };
+            match &row.value {
+                Some(value) => {
+                    let accepted = self.merge_entry(StoreEntry {
+                        app_id: app_id.to_string(),
+                        key: row.key.clone(),
+                        value: value.clone(),
+                        timestamp: row.t,
+                        origin,
+                    })?;
+                    if accepted {
+                        applied.merged += 1;
+                    }
+                    tracing::debug!(
+                        app_id,
+                        key = %row.key,
+                        t = row.t,
+                        accepted,
+                        "mesh_store.projection_merge"
+                    );
+                }
+                None => {
+                    let removed = self.backend.delete_if_not_newer(app_id, &row.key, row.t)?;
+                    if removed {
+                        applied.deleted += 1;
+                    }
+                    tracing::debug!(
+                        app_id,
+                        key = %row.key,
+                        t = row.t,
+                        removed,
+                        "mesh_store.projection_tombstone"
+                    );
+                }
+            }
+        }
+        tracing::debug!(
+            app_id,
+            rows = rows.len(),
+            merged = applied.merged,
+            deleted = applied.deleted,
+            unattributed = applied.unattributed,
+            "mesh_store.projection_applied"
+        );
+        Ok(applied)
     }
 
     /// Delete entries older than `ttl_seconds`. Returns count deleted.
@@ -620,5 +797,332 @@ mod tests {
         // Scan is scoped to app_id.
         let scoped = store.scan("other", "model:").unwrap();
         assert_eq!(scoped.len(), 1);
+    }
+
+    // ── The outbox: what this node wrote, for the rail ──────
+
+    /// **THE SENDER-SIDE PRIVACY GUARD.** The outbox is now the only thing
+    /// that leaves this machine, so it is the chokepoint
+    /// `all_entries_for_gossip` used to be. An excluded namespace must never
+    /// appear in it — not filtered later, not filtered by the pump: absent.
+    ///
+    /// The named failing input is any of the writes below reaching the queue.
+    /// Watched red by deleting the `is_gossip_excluded` guard in
+    /// `backend::enqueue_on`: eight rows queued instead of one.
+    #[test]
+    fn an_excluded_namespace_never_enters_the_outbox() {
+        use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID, GOSSIP_EXCLUDED_APP_IDS};
+
+        let store = MeshStore::in_memory().unwrap();
+        // Every excluded namespace there is, written through the ordinary
+        // door. Driving the LIST rather than a hand-picked few means a
+        // namespace added to it later is covered without editing this test.
+        for app in GOSSIP_EXCLUDED_APP_IDS {
+            store
+                .set(app, "k", Bytes::from("private"), node(1))
+                .unwrap();
+        }
+        store
+            .set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("public"), node(1))
+            .unwrap();
+
+        let queued = store.outbox_take(100).unwrap();
+        assert_eq!(
+            queued.len(),
+            1,
+            "only the public write is queued: {queued:?}"
+        );
+        assert_eq!(queued[0].app_id, CONTRIBUTIONS_APP_ID);
+
+        // Excluded is not the same as unwritten — the rows are all here.
+        for app in GOSSIP_EXCLUDED_APP_IDS {
+            assert!(store.get(app, "k").unwrap().is_some(), "{app} lost its row");
+        }
+
+        // A DELETE in an excluded namespace queues no tombstone either. A
+        // tombstone names a key, and the key is the private half.
+        assert!(store.delete(ACTIVITY_APP_ID, "k").unwrap());
+        assert_eq!(store.outbox_take(100).unwrap().len(), 1);
+    }
+
+    /// A LOCAL write queues an act; a write learned from a peer does not.
+    /// `merge_entry` is the receive side, and a row that re-entered the outbox
+    /// would be republished by every node that saw it, forever.
+    #[test]
+    fn a_local_write_queues_an_act_and_a_received_one_does_not() {
+        let store = MeshStore::in_memory().unwrap();
+        store.set("app", "a", Bytes::from("1"), node(1)).unwrap();
+        assert!(store.delete("app", "a").unwrap());
+        assert_eq!(store.outbox_len().unwrap(), 2, "set + delete");
+
+        store.outbox_ack(&[1, 2]).unwrap();
+        store
+            .merge_entry(StoreEntry {
+                app_id: "app".into(),
+                key: "fromapeer".into(),
+                value: Bytes::from("v"),
+                timestamp: 9_000,
+                origin: node(2),
+            })
+            .unwrap();
+        assert_eq!(
+            store.outbox_len().unwrap(),
+            0,
+            "a row learned from a peer must not be re-published"
+        );
+
+        // A write LWW rejected queues nothing either — there is no act.
+        assert!(!store
+            .merge_entry(StoreEntry {
+                app_id: "app".into(),
+                key: "fromapeer".into(),
+                value: Bytes::from("older"),
+                timestamp: 1,
+                origin: node(2),
+            })
+            .unwrap());
+        assert!(!store.delete("app", "never-existed").unwrap());
+        assert_eq!(store.outbox_len().unwrap(), 0);
+    }
+
+    /// **`append` LOSES a write inside one second, and has since it was
+    /// written.** This is a pin on a DEFECT, not a contract — read the name.
+    ///
+    /// It composes as `get` + `set`, `set` stamps `now_secs()`, and
+    /// `upsert_if_newer` refuses an equal timestamp (deliberately: that is how
+    /// a tie keeps the incumbent). So a second `append` in the same wall-clock
+    /// second writes nothing, and `append` throws away the `bool` that would
+    /// have said so — an unsuccessful write in a success-shaped return
+    /// (ARCH §18.3).
+    ///
+    /// It ships unfixed here because `MeshStore::append` has NO production
+    /// caller — the ledgers spell append-only in the KEY instead
+    /// (`ContributionEmitter`, `ActivityEmitter`) — so a fix would be a
+    /// second timestamp rule minted for nobody (ARCH §10.6). Whoever gives it
+    /// a caller owns the fix, and this test is what turns red when they do.
+    ///
+    /// The rail half is right either way: when the write DOES land it queues
+    /// the whole combined value rather than a delta, because the fold is
+    /// last-write-wins over whole values.
+    #[test]
+    fn append_within_one_second_is_lost_and_queues_nothing() {
+        let store = MeshStore::in_memory().unwrap();
+        store
+            .set("app", "log", Bytes::from("one"), node(1))
+            .unwrap();
+        store
+            .append("app", "log", Bytes::from("two"), node(1))
+            .unwrap();
+        assert_eq!(
+            store.get("app", "log").unwrap().unwrap().value.as_ref(),
+            b"one",
+            "DEFECT: the appended value was dropped, and `append` returned Ok"
+        );
+        assert_eq!(store.outbox_len().unwrap(), 1, "only the `set` is queued");
+
+        // What it does when the clock HAS moved: the whole combined value,
+        // one act. A fresh store, planted at second 1 through `merge_entry`,
+        // so the test does not have to sleep to get a moved clock.
+        let store = MeshStore::in_memory().unwrap();
+        store
+            .merge_entry(StoreEntry {
+                app_id: "app".into(),
+                key: "log".into(),
+                value: Bytes::from("one"),
+                timestamp: 1,
+                origin: node(1),
+            })
+            .unwrap();
+        store
+            .append("app", "log", Bytes::from("two"), node(1))
+            .unwrap();
+        let queued = store.outbox_take(100).unwrap();
+        assert_eq!(queued.len(), 1, "the append landed, and it is one act");
+        assert_eq!(
+            queued[0].value.as_deref(),
+            Some(&b"one\ntwo"[..]),
+            "the rail carries the whole value, not a delta"
+        );
+    }
+
+    /// The two spellings of "this is a tombstone" cannot disagree. They are
+    /// both here because the column is what a query filters on and the
+    /// `Option` is what the pump hands `rail_kv::to_payload`.
+    #[test]
+    fn an_outbox_rows_two_spellings_of_a_tombstone_agree() {
+        let store = MeshStore::in_memory().unwrap();
+        store.set("app", "a", Bytes::from(""), node(1)).unwrap();
+        assert!(store.delete("app", "a").unwrap());
+        for row in store.outbox_take(100).unwrap() {
+            assert_eq!(
+                row.deleted,
+                row.value.is_none(),
+                "row {row:?} says two different things"
+            );
+        }
+    }
+
+    /// Take is non-destructive and ack is what removes: the pump appends
+    /// first and acks after, so a crash between them re-sends rather than
+    /// loses. The rail's op id is content-derived, so a duplicate append is
+    /// the same op.
+    #[test]
+    fn outbox_take_leaves_the_rows_and_ack_removes_them() {
+        let store = MeshStore::in_memory().unwrap();
+        for i in 0..5 {
+            store
+                .set("app", &format!("k{i}"), Bytes::from("v"), node(1))
+                .unwrap();
+        }
+        let first = store.outbox_take(2).unwrap();
+        assert_eq!(first.len(), 2, "the limit is honoured");
+        assert_eq!(
+            store.outbox_take(2).unwrap().len(),
+            2,
+            "taking must not consume"
+        );
+
+        let ids: Vec<i64> = first.iter().map(|r| r.id).collect();
+        assert_eq!(store.outbox_ack(&ids).unwrap(), 2);
+        assert_eq!(store.outbox_len().unwrap(), 3);
+        // Acking the same ids again reports zero rather than erroring — the
+        // caller is a loop and a spurious Err would be logged forever.
+        assert_eq!(store.outbox_ack(&ids).unwrap(), 0);
+        assert_eq!(store.outbox_ack(&[]).unwrap(), 0);
+    }
+
+    // ── The projection: what the ring says we hold ──────────
+
+    fn projected(
+        key: &str,
+        value: Option<&[u8]>,
+        t: u64,
+        actor: &str,
+    ) -> crate::rail_kv::Projected {
+        crate::rail_kv::Projected {
+            key: key.to_string(),
+            value: value.map(Bytes::copy_from_slice),
+            t,
+            actor: actor.to_string(),
+        }
+    }
+
+    /// **THE RECEIVER-SIDE PRIVACY GUARD.** A peer that puts a private
+    /// namespace on the ring gets it projected NOWHERE, and the refusal is an
+    /// `Err` naming the namespace rather than a quiet `Ok(0 rows)` that reads
+    /// as "there was nothing to do" (ARCH §18.3). This is the half the old
+    /// `routes_app_internal` inbound check did.
+    #[test]
+    fn apply_projection_refuses_an_excluded_namespace() {
+        use crate::GOSSIP_EXCLUDED_APP_IDS;
+
+        let store = MeshStore::in_memory().unwrap();
+        let rows = [projected("k", Some(b"leaked"), 100, "aa")];
+        for app in GOSSIP_EXCLUDED_APP_IDS {
+            let err = store
+                .apply_projection(app, &rows, |_| Some(node(1)))
+                .expect_err("an excluded namespace must be refused, not applied");
+            assert!(
+                err.to_string().contains(app),
+                "the refusal must name the namespace: {err}"
+            );
+            assert!(store.get(app, "k").unwrap().is_none(), "{app} was written");
+        }
+        // The control: a public namespace goes through the same call.
+        let applied = store
+            .apply_projection("contributions", &rows, |_| Some(node(1)))
+            .unwrap();
+        assert_eq!(applied.merged, 1);
+    }
+
+    /// An actor the roster cannot place is COUNTED and skipped. Inventing an
+    /// origin — a zero id, our own — would attribute a peer's write to
+    /// somebody who did not make it, and `StoreEntry.origin` is what every
+    /// per-peer reader resolves by.
+    #[test]
+    fn apply_projection_reports_an_unattributable_actor_rather_than_inventing_an_origin() {
+        let store = MeshStore::in_memory().unwrap();
+        let rows = [
+            projected("known", Some(b"v"), 100, "aa"),
+            projected("stranger", Some(b"v"), 100, "zz"),
+        ];
+        let applied = store
+            .apply_projection("app", &rows, |actor| (actor == "aa").then(|| node(7)))
+            .unwrap();
+        assert_eq!(applied.merged, 1);
+        assert_eq!(applied.unattributed, 1);
+        assert_eq!(store.get("app", "known").unwrap().unwrap().origin, node(7));
+        assert!(
+            store.get("app", "stranger").unwrap().is_none(),
+            "an unplaceable actor's row is not written under some other node"
+        );
+    }
+
+    /// A tombstone deletes only what is not NEWER than it. The failing input
+    /// is a delete at `t` racing a `set` at `t+1` that arrived first: without
+    /// the bound the tombstone takes a live row and the key is gone from this
+    /// node until somebody writes it again.
+    #[test]
+    fn a_tombstone_does_not_take_a_row_written_after_it() {
+        let store = MeshStore::in_memory().unwrap();
+        let plant = |key: &str, ts: u64| {
+            store
+                .merge_entry(StoreEntry {
+                    app_id: "app".into(),
+                    key: key.to_string(),
+                    value: Bytes::from("live"),
+                    timestamp: ts,
+                    origin: node(1),
+                })
+                .unwrap()
+        };
+        plant("newer", 200);
+        plant("older", 100);
+        plant("equal", 150);
+
+        let applied = store
+            .apply_projection(
+                "app",
+                &[
+                    projected("newer", None, 150, "aa"),
+                    projected("older", None, 150, "aa"),
+                    projected("equal", None, 150, "aa"),
+                    // A tombstone for a key this node never held is not a
+                    // failure; there is simply nothing to take.
+                    projected("absent", None, 150, "aa"),
+                ],
+                |_| Some(node(1)),
+            )
+            .unwrap();
+
+        assert_eq!(applied.deleted, 2, "`older` and `equal`, not `newer`");
+        assert!(
+            store.get("app", "newer").unwrap().is_some(),
+            "a tombstone must not take a row written after it"
+        );
+        assert!(store.get("app", "older").unwrap().is_none());
+        assert!(
+            store.get("app", "equal").unwrap().is_none(),
+            "a delete at the row's own second wins — the write happened, then the delete"
+        );
+    }
+
+    /// Applying a projection does NOT re-queue it. The whole point of the
+    /// receive side going through `merge_entry` is that a row learned from a
+    /// peer cannot echo back onto the rail.
+    #[test]
+    fn applying_a_projection_queues_nothing() {
+        let store = MeshStore::in_memory().unwrap();
+        store
+            .apply_projection(
+                "app",
+                &[
+                    projected("a", Some(b"v"), 100, "aa"),
+                    projected("b", None, 100, "aa"),
+                ],
+                |_| Some(node(1)),
+            )
+            .unwrap();
+        assert_eq!(store.outbox_len().unwrap(), 0);
     }
 }
