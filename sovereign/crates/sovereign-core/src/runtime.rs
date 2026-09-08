@@ -268,7 +268,9 @@ pub mod retrieval_pipeline;
 /// that turns a `Runtime` into `TurnFrame`s, so a host does not have to be
 /// in the same process as the store to learn what a turn concluded.
 pub mod serve;
-pub use serve::{collect_turn, message_metadata, serve_turn, CollectedTurn, TurnSink};
+pub use serve::{
+    collect_turn, drive_stream_handle, message_metadata, serve_turn, CollectedTurn, TurnSink,
+};
 /// G4 — the per-turn stage attribution ledger
 /// (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1). Measurement and
 /// reporting only; nothing in the runtime branches on it.

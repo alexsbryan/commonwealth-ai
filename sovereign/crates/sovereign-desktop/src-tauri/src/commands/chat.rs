@@ -148,7 +148,7 @@ pub async fn send_message_stream(
     // what the previous non-streaming branch did with its pending uuid.
     let pending_id = uuid::Uuid::new_v4().to_string();
 
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
+    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
     let (started_tx, started_rx) = tokio::sync::oneshot::channel::<String>();
     let sink = DesktopTurnSink {
         frames: frame_tx,
@@ -183,126 +183,13 @@ pub async fn send_message_stream(
 
     // Render the frames as the events the frontend already listens for. The
     // payload shapes are unchanged, so no TypeScript moved with this.
-    let app = app_handle.clone();
-    let conv_for_events = conversation_id.clone();
-    let fallback_id = pending_id.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut full_text = String::new();
-        let mut real_message_id: Option<String> = None;
-
-        while let Some(frame) = frame_rx.recv().await {
-            match frame {
-                TurnFrame::Token { message_id, chunk } => {
-                    if !message_id.is_empty() {
-                        real_message_id = Some(message_id);
-                    }
-                    full_text.push_str(&chunk);
-                    let _ = app.emit(
-                        "message-chunk",
-                        MessageChunkPayload {
-                            conversation_id: conv_for_events.clone(),
-                            message_id: real_message_id
-                                .clone()
-                                .unwrap_or_else(|| fallback_id.clone()),
-                            chunk,
-                        },
-                    );
-                }
-                TurnFrame::StreamError { message, .. } => {
-                    let _ = app.emit(
-                        "message-error",
-                        MessageErrorPayload {
-                            conversation_id: conv_for_events.clone(),
-                            message_id: real_message_id
-                                .clone()
-                                .unwrap_or_else(|| fallback_id.clone()),
-                            message,
-                        },
-                    );
-                    return;
-                }
-                TurnFrame::Complete { message_id, .. } => {
-                    if !message_id.is_empty() {
-                        real_message_id = Some(message_id);
-                    }
-                    let emit_id = real_message_id
-                        .clone()
-                        .unwrap_or_else(|| fallback_id.clone());
-
-                    // The persisted blob, read IN PROCESS. `serve_turn`
-                    // projects typed provenance for callers across a socket;
-                    // this one owns the store, and the frontend's
-                    // `MessageCompletePayload.metadata` is the raw shape it
-                    // has always received. Reading it here is what let this
-                    // command adopt the shared driver without a frontend
-                    // change.
-                    let metadata = match (&store_for_metadata, &real_message_id) {
-                        (Some(store), Some(id)) => {
-                            message_metadata(store.as_ref(), &conv_for_events, id).await
-                        }
-                        // A turn that never started (a graceful guard) has no
-                        // row to read. Mark the intent so the turn is visible
-                        // to the provenance surface and the loading state
-                        // clears, instead of an intent-less blank.
-                        _ => Some(serde_json::json!({
-                            "intent": if full_text == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT {
-                                "oversize_guidance"
-                            } else if full_text == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT {
-                                "clarification"
-                            } else {
-                                "error"
-                            }
-                        })),
-                    };
-
-                    // Strip phantom tool-call envelopes the chat model
-                    // reflexes for code/lookup questions — chat wires no
-                    // executable tools, so the raw call must not leak.
-                    //
-                    // EXEMPT recipe-author: that path parses and EXECUTES
-                    // tool calls from the assistant's prose server-side
-                    // before this point, so present_answer must not touch its
-                    // display. EXEMPT a cancelled turn: it is shown exactly
-                    // as it streamed, and present_answer's empty-input path
-                    // would substitute a fallback that both misrepresents a
-                    // turn the user stopped AND breaks stream integrity
-                    // (concat(chunks) == full_text).
-                    let is_recipe_author = metadata
-                        .as_ref()
-                        .and_then(|m| m.get("intent"))
-                        .and_then(|v| v.as_str())
-                        == Some("RecipeAuthor");
-                    let was_cancelled = metadata
-                        .as_ref()
-                        .and_then(|m| m.get("provenance"))
-                        .and_then(|p| p.get("finish_reason"))
-                        .and_then(|f| f.as_str())
-                        == Some("cancelled");
-                    let full_text = if is_recipe_author || was_cancelled {
-                        std::mem::take(&mut full_text)
-                    } else {
-                        sovereign_core::pipeline::presenter::present_answer(&full_text)
-                    };
-
-                    let _ = app.emit(
-                        "message-complete",
-                        MessageCompletePayload {
-                            conversation_id: conv_for_events.clone(),
-                            message_id: emit_id,
-                            full_text,
-                            metadata,
-                        },
-                    );
-                    // Sidebar: updated_at bumped; title may auto-update.
-                    let _ = app.emit("conversations:changed", ());
-                    return;
-                }
-                // No narration channel is installed, and queue position is a
-                // shared-hub concern.
-                TurnFrame::Narration { .. } | TurnFrame::QueuePosition { .. } => {}
-            }
-        }
-    });
+    tauri::async_runtime::spawn(render_turn_frames(
+        app_handle,
+        frame_rx,
+        conversation_id,
+        pending_id.clone(),
+        store_for_metadata,
+    ));
 
     // Return as soon as the turn HAS an id, not when it produces output — the
     // frontend puts its placeholder on screen and retrieval is most of a cold
@@ -345,6 +232,137 @@ impl sovereign_core::runtime::TurnSink for DesktopTurnSink {
             .take()
         {
             let _ = tx.send(message_id.to_string());
+        }
+    }
+}
+
+/// The ONE frame renderer: turn frames in, the frontend's event vocabulary
+/// out. Every turn-shaped command drives the one driver (`serve_turn` or
+/// `drive_stream_handle`) through [`DesktopTurnSink`] and renders through
+/// this loop — the payload shapes are unchanged, so no TypeScript moves
+/// with any conversion onto it (sv-surface rung 0).
+///
+/// `fallback_id` keys the placeholder for a turn that never mints an id
+/// (graceful guards, the document path); a command that already knows its
+/// id passes it here so the events are consistent from the first chunk.
+async fn render_turn_frames(
+    app: tauri::AppHandle,
+    mut frame_rx: tokio::sync::mpsc::UnboundedReceiver<TurnFrame>,
+    conversation_id: String,
+    fallback_id: String,
+    store_for_metadata: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+) {
+    let mut full_text = String::new();
+    let mut real_message_id: Option<String> = None;
+
+    while let Some(frame) = frame_rx.recv().await {
+        match frame {
+            TurnFrame::Token { message_id, chunk } => {
+                if !message_id.is_empty() {
+                    real_message_id = Some(message_id);
+                }
+                full_text.push_str(&chunk);
+                let _ = app.emit(
+                    "message-chunk",
+                    MessageChunkPayload {
+                        conversation_id: conversation_id.clone(),
+                        message_id: real_message_id
+                            .clone()
+                            .unwrap_or_else(|| fallback_id.clone()),
+                        chunk,
+                    },
+                );
+            }
+            TurnFrame::StreamError { message, .. } => {
+                let _ = app.emit(
+                    "message-error",
+                    MessageErrorPayload {
+                        conversation_id: conversation_id.clone(),
+                        message_id: real_message_id
+                            .clone()
+                            .unwrap_or_else(|| fallback_id.clone()),
+                        message,
+                    },
+                );
+                return;
+            }
+            TurnFrame::Complete { message_id, .. } => {
+                if !message_id.is_empty() {
+                    real_message_id = Some(message_id);
+                }
+                let emit_id = real_message_id
+                    .clone()
+                    .unwrap_or_else(|| fallback_id.clone());
+
+                // The persisted blob, read IN PROCESS. The driver projects
+                // typed provenance for callers across a socket; this surface
+                // owns the store, and the frontend's
+                // `MessageCompletePayload.metadata` is the raw shape it has
+                // always received.
+                let metadata = match (&store_for_metadata, &real_message_id) {
+                    (Some(store), Some(id)) => {
+                        message_metadata(store.as_ref(), &conversation_id, id).await
+                    }
+                    // A turn that never started (a graceful guard) has no
+                    // row to read. Mark the intent so the turn is visible
+                    // to the provenance surface and the loading state
+                    // clears, instead of an intent-less blank.
+                    _ => Some(serde_json::json!({
+                        "intent": if full_text == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT {
+                            "oversize_guidance"
+                        } else if full_text == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT {
+                            "clarification"
+                        } else {
+                            "error"
+                        }
+                    })),
+                };
+
+                // Strip phantom tool-call envelopes the chat model
+                // reflexes for code/lookup questions — chat wires no
+                // executable tools, so the raw call must not leak.
+                //
+                // EXEMPT recipe-author: that path parses and EXECUTES
+                // tool calls from the assistant's prose server-side
+                // before this point, so present_answer must not touch its
+                // display. EXEMPT a cancelled turn: it is shown exactly
+                // as it streamed, and present_answer's empty-input path
+                // would substitute a fallback that both misrepresents a
+                // turn the user stopped AND breaks stream integrity
+                // (concat(chunks) == full_text).
+                let is_recipe_author = metadata
+                    .as_ref()
+                    .and_then(|m| m.get("intent"))
+                    .and_then(|v| v.as_str())
+                    == Some("RecipeAuthor");
+                let was_cancelled = metadata
+                    .as_ref()
+                    .and_then(|m| m.get("provenance"))
+                    .and_then(|p| p.get("finish_reason"))
+                    .and_then(|f| f.as_str())
+                    == Some("cancelled");
+                let full_text = if is_recipe_author || was_cancelled {
+                    std::mem::take(&mut full_text)
+                } else {
+                    sovereign_core::pipeline::presenter::present_answer(&full_text)
+                };
+
+                let _ = app.emit(
+                    "message-complete",
+                    MessageCompletePayload {
+                        conversation_id: conversation_id.clone(),
+                        message_id: emit_id,
+                        full_text,
+                        metadata,
+                    },
+                );
+                // Sidebar: updated_at bumped; title may auto-update.
+                let _ = app.emit("conversations:changed", ());
+                return;
+            }
+            // No narration channel is installed, and queue position is a
+            // shared-hub concern.
+            TurnFrame::Narration { .. } | TurnFrame::QueuePosition { .. } => {}
         }
     }
 }
@@ -670,77 +688,61 @@ pub async fn redirect_turn(
         guard.as_ref().map(Arc::clone)
     };
 
+    // The session's conversation routes the events; read it before the
+    // acquire consumes the session's place in the flow.
+    let conversation_id = runtime
+        .sessions
+        .get(&session_id)
+        .map(|s| s.conversation_id.clone())
+        .ok_or_else(|| format!("session {session_id} not found"))?;
+
+    // The acquire is redirect's own: cancel the in-flight sampler, write the
+    // routing signal, and start the replacement stream with the synthetic
+    // REDIRECT classification — one implementation, in the runtime. The
+    // DRIVE is the one driver's: the hand-rolled drain this replaced was
+    // already missing `present_answer` stripping and the graceful guards
+    // the plain path learned (sv-surface rung 0).
     let handle = runtime
         .redirect_turn_stream(&session_id, &intent_hint)
         .await
         .map_err(|e| e.to_string())?;
-
     let message_id = handle.message_id.clone();
-    let message_id_for_return = handle.message_id.clone();
-    let conversation_id_owned = {
-        // Pull conversation_id from the session so we know where
-        // chunks should be routed. The session lookup above already
-        // confirmed it exists.
-        runtime
-            .sessions
-            .get(&session_id)
-            .map(|s| s.conversation_id.clone())
-            .unwrap_or_default()
+
+    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
+    let sink = DesktopTurnSink {
+        frames: frame_tx,
+        // The id is already known — no started handshake to publish.
+        started: std::sync::Mutex::new(None),
     };
-    let app = app_handle.clone();
-    let mut stream = handle.stream;
-    let store_ref = store_for_metadata.clone();
 
-    tauri::async_runtime::spawn(async move {
-        let mut full_text = String::new();
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(chunk) => {
-                    full_text.push_str(&chunk);
-                    let _ = app.emit(
-                        "message-chunk",
-                        MessageChunkPayload {
-                            conversation_id: conversation_id_owned.clone(),
-                            message_id: message_id.clone(),
-                            chunk,
-                        },
-                    );
-                }
-                Err(e) => {
-                    let _ = app.emit(
-                        "message-error",
-                        MessageErrorPayload {
-                            conversation_id: conversation_id_owned.clone(),
-                            message_id: message_id.clone(),
-                            message: e.to_string(),
-                        },
-                    );
-                    return;
-                }
-            }
+    tauri::async_runtime::spawn({
+        let store = store_for_metadata.clone();
+        let conv = conversation_id.clone();
+        async move {
+            let Some(store) = store else {
+                return;
+            };
+            sovereign_core::runtime::drive_stream_handle(
+                handle,
+                store.as_ref(),
+                &conv,
+                // No narration subscription on this surface yet.
+                None,
+                &sink,
+            )
+            .await;
         }
-
-        let metadata = match store_ref {
-            Some(ref store) => {
-                message_metadata(store.as_ref(), &conversation_id_owned, &message_id).await
-            }
-            None => None,
-        };
-
-        let _ = app.emit(
-            "message-complete",
-            MessageCompletePayload {
-                conversation_id: conversation_id_owned,
-                message_id,
-                full_text,
-                metadata,
-            },
-        );
-        let _ = app.emit("conversations:changed", ());
     });
+    tauri::async_runtime::spawn(render_turn_frames(
+        app_handle,
+        frame_rx,
+        conversation_id,
+        message_id.clone(),
+        store_for_metadata,
+    ));
 
     Ok(StreamStartedResponse {
-        message_id: message_id_for_return,
+        message_id,
         streaming: true,
     })
 }
@@ -772,6 +774,9 @@ pub async fn resume_session(
         guard.as_ref().map(Arc::clone)
     };
 
+    // The acquire is resume's own: the synthetic CONTINUATION classification
+    // with the session's provenance in its rationale. The DRIVE is the one
+    // driver's (sv-surface rung 0).
     let resume = sovereign_core::types::ResumeSession {
         session_id,
         intent_hint,
@@ -780,64 +785,43 @@ pub async fn resume_session(
         .resume_session_stream(&message, &conversation_id, resume)
         .await
         .map_err(|e| e.to_string())?;
-
     let message_id = handle.message_id.clone();
-    let message_id_for_return = handle.message_id.clone();
-    let conversation_id_owned = conversation_id.clone();
-    let app = app_handle.clone();
-    let mut stream = handle.stream;
-    let store_ref = store_for_metadata.clone();
 
-    tauri::async_runtime::spawn(async move {
-        let mut full_text = String::new();
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(chunk) => {
-                    full_text.push_str(&chunk);
-                    let _ = app.emit(
-                        "message-chunk",
-                        MessageChunkPayload {
-                            conversation_id: conversation_id_owned.clone(),
-                            message_id: message_id.clone(),
-                            chunk,
-                        },
-                    );
-                }
-                Err(e) => {
-                    let _ = app.emit(
-                        "message-error",
-                        MessageErrorPayload {
-                            conversation_id: conversation_id_owned.clone(),
-                            message_id: message_id.clone(),
-                            message: e.to_string(),
-                        },
-                    );
-                    return;
-                }
-            }
+    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
+    let sink = DesktopTurnSink {
+        frames: frame_tx,
+        // The id is already known — no started handshake to publish.
+        started: std::sync::Mutex::new(None),
+    };
+
+    tauri::async_runtime::spawn({
+        let store = store_for_metadata.clone();
+        let conv = conversation_id.clone();
+        async move {
+            let Some(store) = store else {
+                return;
+            };
+            sovereign_core::runtime::drive_stream_handle(
+                handle,
+                store.as_ref(),
+                &conv,
+                // No narration subscription on this surface yet.
+                None,
+                &sink,
+            )
+            .await;
         }
-
-        let metadata = match store_ref {
-            Some(ref store) => {
-                message_metadata(store.as_ref(), &conversation_id_owned, &message_id).await
-            }
-            None => None,
-        };
-
-        let _ = app.emit(
-            "message-complete",
-            MessageCompletePayload {
-                conversation_id: conversation_id_owned,
-                message_id,
-                full_text,
-                metadata,
-            },
-        );
-        let _ = app.emit("conversations:changed", ());
     });
+    tauri::async_runtime::spawn(render_turn_frames(
+        app_handle,
+        frame_rx,
+        conversation_id,
+        message_id.clone(),
+        store_for_metadata,
+    ));
 
     Ok(StreamStartedResponse {
-        message_id: message_id_for_return,
+        message_id,
         streaming: true,
     })
 }

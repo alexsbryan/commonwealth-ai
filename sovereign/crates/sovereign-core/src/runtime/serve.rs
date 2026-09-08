@@ -327,6 +327,41 @@ pub async fn serve_turn(
         }
     };
 
+    drive_stream_handle(handle, store, conversation_id, narration_rx, sink).await;
+}
+
+/// Drive an ALREADY-ACQUIRED stream handle to a sink — the second half of
+/// [`serve_turn`], factored so a caller that acquires its handle through a
+/// richer path still drains, projects and completes through the ONE
+/// implementation (ARCH §10.6).
+///
+/// The callers this exists for are session redirect and session resume:
+/// both acquire through runtime methods that carry a synthetic
+/// classification (rationale and coarse tags the plain intent pin does
+/// not) and pre-work of their own (redirect cancels the in-flight sampler
+/// and writes the routing signal). Their ACQUIRE is one implementation
+/// each in the runtime; what must never be a second implementation is the
+/// drive — the chunk loop, the narration interleave, and the terminal
+/// metadata projection that makes a turn's result a value. Before this
+/// factor existed, the desktop drained both of those by hand, and its
+/// hand-rolled loops were already missing what [`serve_turn`]'s drain had
+/// taught the plain path: `present_answer` envelope stripping and the
+/// graceful-guard render — a re-derived loop reproduces the gaps of the
+/// loop it re-derives.
+///
+/// Fires [`TurnSink::on_turn_started`] with the handle's id immediately —
+/// for a caller that already knows the id, that is a no-op it is free to
+/// ignore.
+pub async fn drive_stream_handle(
+    handle: super::types::StreamHandle,
+    store: &dyn StateStore,
+    conversation_id: &str,
+    narration_rx: Option<broadcast::Receiver<TurnNarration>>,
+    sink: &dyn TurnSink,
+) {
+    use futures::StreamExt;
+
+    let mut narration_rx = narration_rx;
     let message_id = handle.message_id.clone();
     sink.on_turn_started(&message_id);
     let mut stream = handle.stream;
