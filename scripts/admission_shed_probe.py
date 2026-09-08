@@ -100,6 +100,17 @@ LOG_EVENTS = {
 TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 
 
+def log_files() -> list[pathlib.Path]:
+    """Every file the daemon's stderr trail currently lives in.
+
+    ONE accessor (ARCH §10.6). The daemon copy-truncates past a size cap, so
+    "the log" is the live file plus whatever `.bak` copies the rotation left;
+    a reader that knows only the live file silently loses a whole window.
+    `daemon-concurrency-soak.py` classifies deaths out of the same set.
+    """
+    return [DAEMON_ERR] + sorted(DAEMON_ERR.parent.glob(DAEMON_ERR.name + ".*.bak"))
+
+
 def census_log(lo_utc: str, hi_utc: str) -> dict:
     """Count the queue's own events inside this arm's window.
 
@@ -111,7 +122,7 @@ def census_log(lo_utc: str, hi_utc: str) -> dict:
     inside the arm costs nothing.
     """
     counts = {k: 0 for k in LOG_EVENTS}
-    files = [DAEMON_ERR] + sorted(DAEMON_ERR.parent.glob(DAEMON_ERR.name + ".*.bak"))
+    files = log_files()
     seen_any = False
     for f in files:
         if not f.exists():
