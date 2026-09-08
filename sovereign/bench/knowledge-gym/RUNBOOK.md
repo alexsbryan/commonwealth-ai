@@ -113,49 +113,54 @@ the path it ran on, plus the four-verdict distribution. Aim for ≥ 90% on
 every fixture; 100% on the structural ones (citation faithfulness, no
 fabrication).
 
-## What the subset scored when it was retargeted (2026-09-07)
+## What the retarget measured, and what it caught (2026-09-07 → 08)
 
-Three runs, one binary, n=3 per fixture, same daemon and same model
-(`primary`), so the columns differ only in the surface and the fixture
-edit:
+The gym was retargeted to the production path on 2026-09-07 and the subset
+scored **0/9** there against **9/9** on `--raw` — same questions, same
+daemon, same model, zero abstentions on either run. That gap was the finding:
+the daemon's function-calling adapter held every contract these fixtures
+assert, and the product held none of them.
 
-| run | 01 | 05 | 06 | total | abstained |
-|---|---|---|---|---|---|
-| `--raw` before the retarget (old 05 question) | 3/3 | 0/3 | 3/3 | 6/9 | 0 |
-| `--raw` after (new 05 question, widened gap judge) | 3/3 | 3/3 | 3/3 | **9/9** | 0 |
-| production path (`executor`) | 0/3 | 0/3 | 0/3 | **0/9** | 0 |
-| production path, `--sabotage no-tool-offered` | 0/3 | 0/3 | 0/3 | 0/9 | 0 |
+The ledger named three production-side mechanisms, all since fixed by the
+work this lane was measuring:
 
-Zero abstentions on all four. Every replay rendered passed or failed.
+1. **A native `tool_calls` response reached the loop as an empty completion.**
+   `ChatMessage` did not deserialise the field, so a daemon answering with
+   `content: ""` plus the call in `choices[0].message.tool_calls` arrived as a
+   blank answer — and an empty string is a valid answer, so nothing reported a
+   problem. Fixed at the wire boundary in `7f2663024`.
+2. **The path lost the evidence.** `knowledge_lookup` returns
+   `StepOutput::Json(KnowledgeLookupResponse)`, which has no `answer` key.
+   Both consumers read exactly that key and substituted a string —
+   `"No results."` in the executor, `"(no answer field)"` in the attached-doc
+   handler — so a 2-row envelope reached the model as a literal "No results."
+   and it retried the same lookup 2-3 times chasing nothing. Both now go
+   through the shared formatter.
+3. **The prompt named a tool that was not offered.**
+   `build_retrieval_reasoning_prompt` hardcoded
+   `<tool_call>{"tool":"search",…}</tool_call>` as its one worked example
+   whatever `available_tools` held, so a model offered only
+   `knowledge_lookup` emitted `search` first on 6 of 9 replays and got
+   `Tool 'search' not available.`
 
-The 9/9 → 0/9 gap is the whole point of the retarget: the model's
-function-calling adapter holds every contract these fixtures assert, and
-the product holds none of them. Two mechanisms in the ledger, both
-production-side and both outside this order's seam:
+**Where it stands.** Re-measured at `e69448909`, n=3, model `primary`:
 
-1. **The path loses the evidence.** `knowledge_lookup` returns
-   `StepOutput::Json(KnowledgeLookupResponse)`, which has no `answer`
-   key (`sovereign-tools/src/knowledge_lookup/mod.rs:122-126`, `:561`).
-   Both consumers read exactly that key and substitute a string:
-   `executor.rs:1192-1195` → `"No results."`, and
-   `runtime/handlers/attached_doc.rs:292-296` → `"(no answer field)"`.
-   So the model is handed a literal "No results." for a 2-row envelope.
-   The gym reports it as `! EVIDENCE NOT DELIVERED — knowledge_lookup:
-   2 row(s) returned, path counted 0` (4 of 9 replays), and the model
-   retries the same lookup 2-3 times chasing nothing. Zero evidence ids
-   were cited on any of the 9 replays.
-2. **The prompt names a tool that is not offered.**
-   `build_retrieval_reasoning_prompt` hardcodes
-   `<tool_call>{"tool":"search",…}</tool_call>` as its one worked
-   example, whatever `available_tools` holds. A model offered ONLY
-   `knowledge_lookup` still emits `search` first on 6 of 9 replays and
-   gets `Tool 'search' not available.`
+| run | 01 | 05 | 06 | total | exit | abstained |
+|---|---|---|---|---|---|---|
+| production path (`executor`) | 3/3 | 3/3 | 3/3 | **9/9** | 0 | 0 |
+| production path, `--sabotage no-tool-offered` | 0/3 | 0/3 | 0/3 | **0/9** | 3 | 0 |
 
-**The sabotage is watched red at the ledger, not just the total.** The
-totals are both 0/9, so the aggregate alone proves nothing; the ledger
-does. Un-sabotaged, the tool fired on 6 of 9 replays and the evidence
-note appeared 4 times. Sabotaged, the tool fired on **0 of 9** and the
-note appeared 0 times — nothing fired, so nothing was lost.
+At n=3 this lane's numbers move by 11 points per replay, so read 8/9 and 9/9
+as the same result: the run that landed the fixes measured 8/9 with one
+replay reading the evidence and answering from it without citing the
+handles — model behaviour, and exactly what the fixtures exist to catch.
+`SYSTEM_OVERVIEW.md` carries that run's full verdict counts.
+
+**A green lane is only worth the sabotage that still fires.** The two rows
+that matter are the last two: the tool fired on 9/9 replays un-sabotaged and
+**0/9** sabotaged, and the exit codes separate (0 vs 3). Re-run the sabotage
+whenever this lane goes green for a new reason — a gate nobody has watched
+fail is not a gate (ARCH §18.1).
 
 ## Add a fixture from a real bug
 

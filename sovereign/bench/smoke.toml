@@ -163,12 +163,15 @@ ids = [
 # It now asks a project knowledge-base question against an empty envelope, so
 # the honesty half is what is measured and the lookup is a reasonable move.
 #
-# MEASURED on the retarget (one binary, one daemon, n=3, model `primary`,
-# ZERO abstentions on every run): the subset scores 9/9 on `--raw` and 0/9
-# through the production path. That gap is the finding, not a regression —
-# the model's function-calling adapter holds every contract these fixtures
-# assert and the product holds none of them. `knowledge-gym/RUNBOOK.md`
-# carries the table and the two production-side mechanisms the ledger names.
+# MEASURED on the retarget (2026-09-07, one binary, one daemon, n=3, model
+# `primary`, ZERO abstentions): the subset scored 9/9 on `--raw` and 0/9
+# through the production path. That gap was the finding, not a regression —
+# and it held three real defects, all since fixed by the work this lane was
+# measuring (a native tool_calls response arriving as an empty completion; the
+# `.answer` collapse that handed the model "No results." for a 2-row envelope;
+# a prompt hardcoding a tool it was not offering). Re-measured at e69448909
+# the production path is 9/9, and `--sabotage no-tool-offered` still takes it
+# to 0/9 with exit 3. `knowledge-gym/RUNBOOK.md` carries the table.
 
 [[subset]]
 subset_id = "knowledge-gym-v1"
