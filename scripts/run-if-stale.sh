@@ -113,31 +113,54 @@ daemon_claim_verdict() {
 }
 
 # ── the lane registry ───────────────────────────────────────────────────
-# Open set → registry (ARCH_PRINCIPLES §4), keyed by lane id. Each preset is
-# just (marker, command); the --marker/--cmd form below is the same thing
-# spelled by hand, which is what keeps the self-test honest — it exercises the
-# real decision path, not a copy of it.
+#
+# THE LANES ARE DATA, and the data is `quality/instruments.toml` — every row
+# whose `runs_in` contains `run-if-stale`, with the `[[trigger]]` of that name
+# declaring the budget and what a red does. This file held its own copy of the
+# list until 2026-09-07: three ids, three markers and three hardcoded paths,
+# which is a second dispatch table for a question the registry already
+# answered, and adding a login lane meant editing both (ARCH §10.6).
+#
+# What is left is the venue's own half, and all of it: the marker, the
+# staleness window, the daemon claim, and the launchd plists. A preset is now
+# just (marker, command) derived from the id — the `--marker/--cmd` form below
+# is the same thing spelled by hand, which is what keeps the self-test honest.
+SVRN=""
+for _c in "$REPO/target/debug/sovereign-cli" "$(command -v svrn 2>/dev/null)" \
+          "$(command -v sovereign 2>/dev/null)"; do
+  [ -n "$_c" ] && [ -x "$_c" ] && { SVRN="$_c"; break; }
+done
+
 lane_preset() {
-  case "$1" in
-    contract-nightly)
-      LABEL="contract-nightly"
-      MARKER="$STATE_DIR/contract-nightly.last"
-      CMD="$REPO/sovereign/scripts/cli-journey-nightly.sh"
-      ;;
-    co-sweep)
-      LABEL="co-sweep"
-      MARKER="$STATE_DIR/co-sweep.last"
-      CMD="$REPO/scripts/co-sweep.sh"
-      ;;
-    oicp-conformance)
-      LABEL="oicp-conformance"
-      MARKER="$STATE_DIR/oicp-conformance.last"
-      CMD="$REPO/scripts/oicp-conformance-lane.sh"
-      ;;
-    *) return 1 ;;
-  esac
+  # newlines -> spaces: `lane_ids` prints one per line and this is a
+  # whole-word membership test, not a substring one.
+  case " $(lane_ids | tr '\n' ' ')" in *" $1 "*) ;; *) return 1 ;; esac
+  LABEL="$1"
+  MARKER="$STATE_DIR/$1.last"
+  CMD="$SVRN quality check --trigger run-if-stale --lane $1"
 }
-LANES=(contract-nightly co-sweep oicp-conformance)
+
+# The declared lanes, one per line. A FAILURE HERE IS LOUD, never an empty
+# list: a guard that reads "no lanes" installs a trigger that fires into
+# nothing, which is exactly the shape `wizard-verify.sh` took for ten days
+# while a doc said it was covered (ARCH §18.3). `--list` exits 4 on an empty
+# selection for the same reason.
+_LANE_IDS=""
+lane_ids() {
+  [ -n "$_LANE_IDS" ] && { printf '%s\n' "$_LANE_IDS"; return 0; }
+  if [ -z "$SVRN" ]; then
+    echo "run-if-stale: no sovereign-cli — cannot read the lane registry. NOT running anything." >&2
+    echo "              build it: cargo build -p sovereign-cli --features dev-tools" >&2
+    exit 2
+  fi
+  _LANE_IDS="$("$SVRN" quality check --trigger run-if-stale --list 2>/dev/null)" || {
+    echo "run-if-stale: \`$SVRN quality check --trigger run-if-stale --list\` failed — the lane" >&2
+    echo "              registry could not be read. NOT running anything (an empty list would" >&2
+    echo "              read as \"nothing is due today\")." >&2
+    exit 2
+  }
+  printf '%s\n' "$_LANE_IDS"
+}
 
 # Marker age in whole hours; empty string when there is no marker at all.
 # Two states, never collapsed: "never run" is not "very stale" — one means the
@@ -216,7 +239,7 @@ case "${1:-}" in
   --self-test)   MODE=selftest ;;
   --write-plists) MODE=plists ;;
   --write-oneshot) MODE=oneshot ;;
-  --list)        printf '%s\n' "${LANES[@]}"; exit 0 ;;
+  --list)        lane_ids; exit 0 ;;
   --marker)
     MODE=run
     while [ $# -gt 0 ]; do
@@ -230,18 +253,18 @@ case "${1:-}" in
     [ -n "$MARKER" ] && [ -n "$CMD" ] || { echo "run-if-stale: --marker and --cmd are both required" >&2; exit 2; }
     LABEL="${LABEL:-adhoc}"
     ;;
-  "") echo "run-if-stale: name a lane (${LANES[*]}) or pass --status/--self-test/--write-plists" >&2; exit 2 ;;
+  "") echo "run-if-stale: name a lane ($(lane_ids | tr "\n" " ")) or pass --status/--self-test/--write-plists" >&2; exit 2 ;;
   -*) echo "run-if-stale: unknown option \`$1\`" >&2; exit 2 ;;
   *)
     LANE="$1"
-    lane_preset "$LANE" || { echo "run-if-stale: unknown lane \`$LANE\` (have: ${LANES[*]})" >&2; exit 2; }
+    lane_preset "$LANE" || { echo "run-if-stale: unknown lane \`$LANE\` (have: $(lane_ids | tr "\n" " "))" >&2; exit 2; }
     ;;
 esac
 
 # ── --status ────────────────────────────────────────────────────────────
 if [ "$MODE" = status ]; then
   echo "run-if-stale: window ${STALE_HOURS}h · state $STATE_DIR"
-  for l in "${LANES[@]}"; do
+  for l in $(lane_ids); do
     lane_preset "$l"
     age="$(marker_age_hours "$MARKER")"
     if [ -z "$age" ]; then
@@ -266,8 +289,8 @@ fi
 # "Run-if-stale launchd triggers"); this mode does not re-raise them.
 if [ "$MODE" = oneshot ]; then
   lane="${2:-}"
-  [ -n "$lane" ] || { echo "run-if-stale --write-oneshot: name a lane (${LANES[*]})" >&2; exit 2; }
-  lane_preset "$lane" || { echo "run-if-stale: unknown lane \`$lane\` (have: ${LANES[*]})" >&2; exit 2; }
+  [ -n "$lane" ] || { echo "run-if-stale --write-oneshot: name a lane ($(lane_ids | tr "\n" " "))" >&2; exit 2; }
+  lane_preset "$lane" || { echo "run-if-stale: unknown lane \`$lane\` (have: $(lane_ids | tr "\n" " "))" >&2; exit 2; }
   mkdir -p "$STATE_DIR"
   label="com.svrn.$lane-oneshot"
   plist="$STATE_DIR/$label.plist"
@@ -310,7 +333,7 @@ if [ "$MODE" = plists ]; then
   mkdir -p "$AGENTS" "$STATE_DIR"
   written=()
   missing=()
-  for l in "${LANES[@]}"; do
+  for l in $(lane_ids); do
     lane_preset "$l"
     label="com.svrn.$l-onboot"
     plist="$AGENTS/$label.plist"

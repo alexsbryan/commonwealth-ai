@@ -1835,6 +1835,22 @@ on_fail = "block"
 # a gated surface is a regression signal, not a pass.
 on_could_not_judge = "block"
 
+[[trigger]]
+id = "run-if-stale"
+# Four hours. These are the login-triggered maintenance lanes and one of them
+# is a full CLI-journey nightly; the guard fires them at most once per 20-hour
+# window, so the budget is a ceiling on a runaway, not a schedule.
+budget_secs = 14400
+# ONE at a time. `scripts/run-if-stale.sh` is invoked per lane by launchd and
+# keeps a staleness marker per lane, so a lane's own invocation is the unit —
+# this venue never runs two together and declaring 2 here would be a lie about
+# what the guard does.
+concurrency = 1
+min_runway_secs = 60
+overrun = "kill"
+on_fail = "block"
+on_could_not_judge = "block"
+
 # ── Commands the census reaches that verify nothing ──────────────────
 #
 # Every exemption carries a reason. The closure gate has NO skip-list of its

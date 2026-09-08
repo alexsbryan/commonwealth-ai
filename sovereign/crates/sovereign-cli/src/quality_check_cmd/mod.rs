@@ -103,6 +103,14 @@ struct Args {
     table: Option<PathBuf>,
     /// `--dry-run` prints the selection and runs nothing.
     dry_run: bool,
+    /// `--list` prints one selected id per line and runs nothing.
+    ///
+    /// The machine-readable half of `--dry-run`. It exists because a shell
+    /// venue needs the id set to build its own state — `run-if-stale.sh` keys
+    /// a staleness marker per lane — and parsing the human table would be a
+    /// second reader of a rendering nobody promised to keep, which is the
+    /// defect `scripts/lib/ci-bench-verdict.sh` is 130 lines of.
+    list: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -113,6 +121,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         mint: false,
         table: None,
         dry_run: false,
+        list: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -137,6 +146,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             }
             "--mint" => out.mint = true,
             "--dry-run" => out.dry_run = true,
+            "--list" => out.list = true,
             "--lane-table" | "--registry" => {
                 let v = args.get(i + 1).ok_or("--registry needs a path")?;
                 out.table = Some(PathBuf::from(v));
@@ -272,6 +282,29 @@ pub async fn run(args: &[String]) -> i32 {
 
     let budget_secs = parsed.budget_secs.unwrap_or(trigger.budget_secs);
 
+    if parsed.list {
+        for l in &lanes {
+            println!("{}", l.id);
+        }
+        // An EMPTY listing is not a listing. A venue whose selection is empty
+        // has nothing to run, and a caller that read zero lines as "no lanes
+        // today" would install a trigger that fires into nothing — the exact
+        // shape `wizard-verify.sh` took for ten days. Exit 4 AND a reason: a
+        // bare exit code is an absence reported as a number, which is the
+        // thin end of reporting it not at all (ARCH §18.3).
+        if lanes.is_empty() {
+            eprintln!(
+                "no instrument runs in `{venue_word}`{} — this venue would fire into nothing",
+                if deselected.is_empty() {
+                    String::new()
+                } else {
+                    format!(" after `when_changed` deselected {}", deselected.join(", "))
+                }
+            );
+            return 4;
+        }
+        return 0;
+    }
     if parsed.dry_run {
         print_selection(&venue_word, &trigger, &lanes, &deselected, budget_secs);
         return 0;
@@ -621,6 +654,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "Print the selection, the run order and the budget arithmetic; run nothing.",
             ),
             (
+                "--list",
+                "Print one selected instrument id per line and run nothing. Exit 4 if the selection is empty.",
+            ),
+            (
                 "--budget-secs <n>",
                 "Override the trigger's declared wall budget. An instrument with less runway than the trigger's min is could-not-judge, not a pass.",
             ),
@@ -729,6 +766,8 @@ on_could_not_judge = "block"
         assert_eq!(a.budget_secs, Some(600));
         assert!(a.mint);
         assert!(a.dry_run);
+        assert!(!a.list);
+        assert!(parse_args(&["--list".into()]).unwrap().list);
         // No trigger means the check lanes — the behaviour before this flag
         // existed, kept.
         assert_eq!(parse_args(&[]).unwrap().trigger, None);
