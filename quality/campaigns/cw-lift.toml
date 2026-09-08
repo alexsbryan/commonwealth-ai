@@ -160,6 +160,64 @@ status    = "active"
 #       Closes (b) above: the append door reads the rail's own roster origin,
 #       so a DERIVED namespace no longer refuses this node's own key.
 #       +355 is the same MECHANICAL all-files number 4a's row carries.
+#   4b  the store is a projection with an outbox, and the daemon pumps it
+#                                             195cb16f3 ea4da7b68 DONE +2843
+#       2c proper, in two halves because the crate boundary is real.
+#       `commonwealth-state` got the KV vocabulary, the fold, the outbox and
+#       `apply_projection` — no I/O, no clock, no journal, and a dep on
+#       commonwealth-rail-CORE rather than the journal-on-disk crate.
+#       `sovereign-mesh` got the pump: drain the outbox every 2 s onto the
+#       namespace's journal, seal + snapshot at SEAL_AFTER_OWN_OPS, and project
+#       every namespace once per ring round (not inside `exchange` — half the
+#       ops a node receives arrive by a peer's PUSH through a route this loop
+#       never runs, and a projection hung off our own pulled count would be
+#       blind to exactly the direction a local write creates).
+#       BOTH PRIVACY GUARDS ARE STRUCTURAL AND ON OPPOSITE ENDS: an excluded
+#       app_id cannot enter `rail_outbox` (the guard is inside the store's own
+#       write transaction, not at the call site) and cannot leave
+#       `apply_projection` (an Err naming it, never a quiet Ok(0 rows)).
+#       +2843 is the MECHANICAL all-files number 4a's rows use, no curation.
+#   4c  the six namespaces ride it — ZERO per-namespace code
+#                                             (same two commits)  DONE     +0
+#       K8's whole risk was that six namespaces had Step 4 and nothing else for
+#       anti-entropy: `inference`, `contributions`, `corpus-engine`, `notes`,
+#       `work-atlas`, `wikipedia-newsworthy-tracked`. Not one needed a line.
+#       A replicating `app_id` IS a ring namespace verbatim, so the whole set
+#       is a seven-entry list (`ring_roster::DAEMON_OWN_NAMESPACES`, each entry
+#       the constant its owning subsystem already exports, so a rename on the
+#       writing side is a compile error rather than a namespace that quietly
+#       stops replicating) and every mechanism above it is namespace-generic.
+#       The ONE cost was a rename, paid at 4b: `wikipedia-newsworthy:tracked`
+#       carried a colon, a namespace names a DIRECTORY, and a colon is not a
+#       legal NTFS path component on a desktop that ships for Windows.
+#       This row exists because "zero lines" is a result and an empty ladder
+#       row would read as work not done.
+#   2e  the second replication path is deleted; census 3 -> 1
+#                                             d82a39538  DONE  -484
+#       Deleted: gossip.rs Step 4 (full mesh_store snapshot to EVERY online
+#       peer every 10 s), `gossip::broadcast_now`, `POST /internal/app/state`
+#       + `recv_app_state` + the whole `routes_app_internal.rs`,
+#       `AppStateGossipBody`/`GossipStoreEntry` and the base64 stub pair,
+#       `MeshStore::all_entries_for_gossip`, `backend::all_rows`,
+#       `PushOutcome`/`PushStatusLedger`/the payload gauge, and
+#       `app_state_privacy.rs`.
+#       THE CENSUS IS MEASURED, NOT ASSERTED — 3 -> 1 by
+#       `every_sender_of_replicated_state_is_declared`, and the file moved with
+#       its subject (`gossip_push_surfacing.rs` -> `replication_sender_census
+#       .rs`; its other half tested the deleted push's 413 branch).
+#       A ONE-ROW TABLE IS THE WEAKER INSTRUMENT and the file says so: the scan
+#       looks only for the routes it declares, so deleting a sender AND its row
+#       can never turn it red. The sabotage changed accordingly — a second
+#       `/internal/ring/sync` site in join.rs, watched red, reverted.
+#       THE PRIVACY GUARD the deleted route carried is not lost: outbound it is
+#       `backend::enqueue_on`, inbound `apply_projection`, and the hostile-peer
+#       half nothing covered is a new two-node test that pushes a private
+#       namespace through the REAL `/internal/ring/sync` — B holds the line on
+#       disk (the ingest is author-blind by design) and holds it in no store.
+#       K7 GETS AN ANSWER IT DID NOT HAVE: a work-atlas release now PROPAGATES,
+#       because the rail carries a delete as a tombstone where the old
+#       enumeration only stopped re-sending a live row. The cross_node
+#       assertion is inverted, deliberately, with the old behaviour named.
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
@@ -785,6 +843,31 @@ status       = "open"
 # are available NOW, ahead of 1b. Small in lines (~95), large in class: a
 # forked wire type drifts silently and no gate here sees it. `converge shape`
 # is the gate that would, and today it is a mirror with no exit code.
+#
+# ── THE CUT LANDED, 2026-09-08 (rung 2e). ──
+#
+# The sequencing paragraph above priced it correctly and it is now history: the
+# unsigned 10 s full-snapshot push is deleted, and so is the event-driven
+# `broadcast_now` beside it on the same route. SENDERS OF REPLICATED STATE:
+# 3 -> 1, and the 1 is `/internal/ring/sync`. That number is MEASURED by
+# `sovereign-mesh/tests/main/replication_sender_census.rs::every_sender_of_
+# replicated_state_is_declared` (renamed from `gossip_push_surfacing.rs`), not
+# asserted here — it scans every workspace member's src/, drops everything from
+# the first `#[cfg(test)]`, and diffs the URL-join sites against a declared
+# table.
+#
+# READ THE INSTRUMENT'S OWN LIMIT BEFORE QUOTING THE NUMBER: at one row the
+# scan can no longer catch a deletion that also removes its row, because it
+# only looks for routes it declares. What it still catches — and the only thing
+# it claims — is a SECOND site on the surviving route. Sabotaged and watched
+# red at 2e by adding one to join.rs.
+#
+# ALSO STALE ABOVE, and left for the owner of the shape tier rather than
+# quietly edited: the `converge shape` block's REMAINING list names
+# `GossipStoreEntry`, which no longer exists — it went with the route at 2e,
+# together with `backend::all_rows` (the third typing of the MeshStore row).
+# The cross-family group count in `cw-wire-contract-halves` is therefore one
+# lower than its floor_basis records; re-measure before quoting it.
 floor        = 0.0
 floor_basis  = "structural — svrn code dry-report ran 2026-09-04 and found no copy-paste twin (the RAN block above); zero is the measured start"
 target       = 1.0
