@@ -59,6 +59,39 @@ ceiling_floor_ms = 250
 # Load is now RECORDED per row in `target/quality-check/<stamp>/summary.json`
 # and gates nothing (ARCH §18.2; the enum's doc on
 # `kernel_types::quality::Precondition` carries the rule).
+#
+# ── The normaliser that was proposed here, and the measurement that killed it
+#
+# The plan was to make this row a SAME-RUN RATIO — `worst_total_ms` over the
+# `throughput` lane's decode tok/s from the same run — on the theory that a
+# divisor measured on the same box at the same moment cancels the host. It
+# does not, and the pre-registered bar (residual spread under 1.25x, derived
+# from `admission-continuation`'s own 1.3x latency band: a normaliser whose
+# residual is as wide as the band it feeds cannot separate a regression from
+# the machine) was written down before the data. Measured 2026-09-08, n=6
+# paired runs, n=3 per load condition, on a daemon that never restarted and
+# shed nothing:
+#
+#   #  1-min load  decode tok/s  chat-ask worst ms  normalised (ms x tok/s)
+#   1     7.46        25.7            34,674              891
+#   2     7.16        44.3            67,665            2,998
+#   3    10.73        14.5            56,924              825
+#   4     5.41        34.3            43,335            1,486
+#   5     3.90        44.9            43,935            1,973
+#   6     8.35        42.2            41,367            1,746
+#
+#                          full range   low(3.9-7.2) vs high(7.5-10.7) median
+#   raw decode tok/s          3.10x                  1.72x
+#   raw worst_total_ms        1.95x                  1.06x
+#   NORMALISED                3.63x                  2.21x
+#
+# The divisor MOVED — 3.10x across these samples, wider than the 2.8x that
+# motivated the whole exercise — so the load range was ample. Dividing by it
+# still made the metric WORSE on both readings, 1.95x to 3.63x and 1.06x to
+# 2.21x. A short fixed-workload decode is not a scale factor for a whole turn
+# through retrieval, draft, citation and audit; the two share a host and
+# nothing else, so the ratio adds the divisor's noise to the numerator's.
+# No normaliser ships. The row is TRACKED and `per-stage calls` gates.
 
 [bank]
 id = "chat-ask"

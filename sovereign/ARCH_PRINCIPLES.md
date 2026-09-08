@@ -1150,6 +1150,23 @@ The lesson that generalises past preconditions: before building a correction
 for a measurement, confirm the measurement is obtainable at all in the
 condition you are correcting for.
 
+**And the correction itself was then measured, and refused.** The proposed
+replacement for the guard was a same-run ratio: divide a latency row by the
+`throughput` lane's decode tok/s from the same run, on the theory that a
+divisor taken on the same box at the same moment cancels the host. Bar
+pre-registered before the data at 1.25x residual spread. Result at n=6 paired
+runs, n=3 per condition, no restarts and no refusals: the divisor moved 3.10x
+across the sampled load range — wider than the 2.8x that motivated the
+exercise — and dividing by it made the whole-turn latency WORSE, 1.95x raw to
+3.63x normalised across the range, 1.06x to 2.21x between condition medians. A
+short fixed-workload decode is not a scale factor for a turn through
+retrieval, draft, citation and audit: the two share a host and nothing else,
+so the ratio adds the divisor's noise to the numerator's. The normaliser was
+not shipped. What shipped instead is the load recorded as a covariate and
+`hard` moved onto the load-invariant counters that were already there —
+which is what §18.2 says to do when the world is inconvenient: change what you
+measure, and prefer the quantity that does not move with the machine.
+
 ### 18.3 Never silently substitute, and never substitute for absence
 
 If you cannot do what was asked, refuse — or name the substitution in the

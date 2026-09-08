@@ -25,6 +25,12 @@
 # errored or came back empty). ARCH §18.2; the same commit deleted the
 # `host-quiet` precondition that used to stand in front of the lane, because
 # the guard and the bar were two halves of one mistake.
+#
+# This lane was also to be the DIVISOR for a same-run latency ratio. Measured
+# and rejected the same day: n=6 paired runs, the divisor itself moving 3.10x
+# across the load range, and normalising by it made `chat-ask`'s whole-turn
+# latency worse (1.95x raw to 3.63x normalised). The table and the
+# pre-registered bar are in chat-ask.toml, beside the row it would have fed.
 
 schema_version = 1
 
