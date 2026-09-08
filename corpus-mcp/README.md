@@ -172,6 +172,32 @@ re-derived here:
   pooling, before a byte is downloaded. Snapshots published before then carry
   no such field, and the refusal says so rather than printing a bare cosine.
 
+### Every restore is judged now, including a local one
+
+`svrn corpus snapshot restore --archive <path>` used to extract whatever it was
+handed — no probe, no verdict. A snapshot in the wrong embedding space
+installed silently, on the one path with no deadline to stop it. Both restore
+paths now run the same decision:
+
+- If the manifest **declares** an embedder config and it differs from yours,
+  the restore is refused off the manifest, naming the difference, before a byte
+  is extracted.
+- If it declares none (every snapshot published before 2026-09-07), a sample of
+  the archive's own chunks is re-embedded through your endpoint and compared to
+  the stored vectors — the 0.92 bar above.
+- If neither can be answered — no embedder reachable, say — the verdict is
+  `COULD-NOT-JUDGE` **and the extracted index is removed**. An unjudged archive
+  is not installed.
+
+You can see the whole loop locally, with no network:
+
+```bash
+svrn corpus snapshot publish my-corpus --output /tmp/my-corpus.tar.zst
+svrn corpus snapshot restore --archive /tmp/my-corpus.tar.zst --into /tmp/coldroot \
+     --embedding-model <your embed model> --embedding-dim 1024
+# → ✓ Restored — accepted (embedding-space probe, probe cosine 0.9999)
+```
+
 So on a bare endpoint against one of the two stale snapshots, expect this:
 
     corpus-mcp serve --corpus sep
