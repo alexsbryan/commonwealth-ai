@@ -17,7 +17,6 @@
 //!   store.scan(app_id, prefix)              read a range
 //!   store.outbox_take(limit) / _ack(ids)    what this node wrote, for the rail
 //!   store.apply_projection(app_id, rows, ..) what the ring says we hold
-//!   store.all_entries_for_gossip()          what may leave this machine
 //!   store.merge_entry(entry)                take a peer's row, if newer
 //! ```
 //!
@@ -30,11 +29,11 @@
 //! [`MeshStore::apply_projection`]. **Readers are unchanged**: `get`, `scan`
 //! and `list_keys` answer exactly what they did.
 //!
-//! `all_entries_for_gossip` + `merge_entry` are the OLD contract — the whole
-//! store, at peers, on a timer. They are still here because the sender that
-//! used them is deleted in a later step, not because there are two replication
-//! paths; there is one, and it is the rail. This crate implements neither end
-//! of a wire — see "not here" below.
+//! The OLD contract — `all_entries_for_gossip`, the whole store POSTed at
+//! every peer on a ten-second timer — is gone at cw-lift rung 2e together with
+//! the sender and the receiving route. `merge_entry` outlived it as the fold's
+//! own upsert. There is ONE replication path and it is the rail. This crate
+//! implements neither end of a wire — see "not here" below.
 //!
 //! # Three decisions worth knowing before reading the code
 //!
@@ -59,8 +58,9 @@
 //! preferences that let you quietly serve a peer less. They are not filtered
 //! at the call site: [`GOSSIP_EXCLUDED_APP_IDS`] is a const list,
 //! [`is_gossip_excluded`] is the one predicate, and
-//! [`MeshStore::all_entries_for_gossip`] applies it — so a private namespace
-//! is off the wire by construction rather than by every caller remembering
+//! `backend::enqueue_on` applies it inside the write transaction, so a private
+//! namespace never enters the outbox and is off the wire by construction
+//! rather than by every caller remembering
 //! (ARCH §7). If you add a namespace that must stay local, the list is the
 //! only place to say so.
 //!
@@ -89,10 +89,10 @@
 //!
 //! # What is deliberately not here
 //!
-//! No wire, no server, no scheduler. Something has to call
-//! `all_entries_for_gossip`, put the rows on a socket, and call `merge_entry`
-//! on the far side; this crate supplies both ends of that contract and neither
-//! end of the transport. In the shipped daemon that caller is `sovereign-mesh`.
+//! No wire, no server, no scheduler. Something has to drain the outbox onto a
+//! journal, carry the journal, and call `apply_projection` on the far side;
+//! this crate supplies both ends of that contract and neither end of the
+//! transport. In the shipped daemon that caller is `sovereign-mesh`.
 //!
 //! [`RetentionGc`] is here and is **not spawned by anything that ships** —
 //! read its docs before wiring it, because starting it begins deleting rows

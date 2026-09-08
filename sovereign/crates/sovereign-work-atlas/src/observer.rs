@@ -269,10 +269,10 @@ impl AtlasObserver {
                 "work_atlas:observation_recorded"
             );
 
-            // Immediate fan-out so peers see the signal within the
-            // round-trip rather than the next 10s gossip round.
-            // Private observations skip this — `broadcast_now` would
-            // refuse anyway, and the namespace is gossip-excluded.
+            // Hurry the write onto the ring so peers see the signal within
+            // the round-trip rather than on the pump's and the round's own
+            // clocks. Private observations skip it — their namespace never
+            // enters the outbox, so there would be nothing to hurry.
             if session.privacy == Privacy::Public {
                 let key = WorkAtlasStore::observation_key(session.session_id, &path);
                 self.broadcaster

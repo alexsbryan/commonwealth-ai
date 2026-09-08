@@ -48,8 +48,8 @@ mod finish_reason_streaming;
 mod gossip_auth;
 #[path = "main/gossip_integration.rs"]
 mod gossip_integration;
-#[path = "main/gossip_push_surfacing.rs"]
-mod gossip_push_surfacing;
+#[path = "main/replication_sender_census.rs"]
+mod replication_sender_census;
 #[path = "main/guest_lender_routing.rs"]
 mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]

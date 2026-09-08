@@ -3322,12 +3322,14 @@ impl EmbeddedDaemon {
 
         // Ring-ledger replication: one round immediately, then every minute —
         // or as soon as the KV pump signs a local write, whichever comes
-        // first. ONE `Notify`, held by both halves: the pump raises it, the
-        // sync loop selects on it beside its interval. The pump also rebuilds
-        // the mesh store from the journals on disk before its first drain,
-        // which is the boot half of "the journal is truth" — production
+        // first. ONE `Notify`, and it lives on `AppState` (§7.5) because rung
+        // 2e added a third party to it: the KV pump raises it after an append,
+        // the work atlas's broadcaster raises it when a claim is written, and
+        // the sync loop selects on it beside its interval. The pump also
+        // rebuilds the mesh store from the journals on disk before its first
+        // drain, which is the boot half of "the journal is truth" — production
         // `MeshStore` is `in_memory()`.
-        let ring_write_nudge = Arc::new(tokio::sync::Notify::new());
+        let ring_write_nudge = app_state.ring_write_nudge();
         let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
             app_state.clone(),
             crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,

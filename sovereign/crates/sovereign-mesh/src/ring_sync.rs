@@ -2,17 +2,26 @@
 //! The ring journal's own replication loop — slower than gossip, and by
 //! digest rather than by snapshot.
 //!
-//! # Why this is not a namespace on the gossip push
+//! # Why this is a digest and not a snapshot
 //!
-//! `gossip.rs` Step 4 ships a **full mesh-store snapshot to every online peer
-//! every ten seconds** — 8,640 rounds a day. A household writes on the order
-//! of 3,500 journal ops a year, call it 1.5 MB, so riding that push would cost
-//! roughly **246 GB/day of egress per node** and would tax every other
-//! namespace on the same body forever. Bandwidth is the binding constraint
-//! for this feature and it binds on day one.
+//! `gossip.rs` used to carry a fourth step that shipped a **full mesh-store
+//! snapshot to every online peer every ten seconds** — 8,640 rounds a day. A
+//! household writes on the order of 3,500 journal ops a year, call it 1.5 MB,
+//! so riding that push would have cost roughly **246 GB/day of egress per
+//! node** and taxed every other namespace on the same body forever. Bandwidth
+//! is the binding constraint for this feature and it binds on day one.
 //!
 //! So: a sixty-second cadence (ample for money), and an exchange whose
 //! request is a ~600-byte digest rather than the journal.
+//!
+//! At cw-lift rung 2e that argument stopped being a comparison and became the
+//! whole story: the push, its `/internal/app/state` route and the
+//! event-driven `broadcast_now` beside it are deleted, `MeshStore` is a
+//! projection of these journals on both sides of the wire, and this is the ONE
+//! sender of replicated state in the workspace. The nudge is what keeps that
+//! affordable for a latency-sensitive writer — `AppState::ring_write_nudge`
+//! starts a round when a local write reaches a journal, so the sixty seconds
+//! is a ceiling on idleness rather than on a write.
 //!
 //! # The exchange
 //!
@@ -1491,6 +1500,99 @@ mod tests {
             value_at(&b_state, KV, "public").as_deref(),
             Some(&b"shared"[..]),
             "control: the public write on the same tick did travel"
+        );
+    }
+
+    /// **(d2) A peer's private namespace is TAKEN by the rail and REFUSED by
+    /// the projection.**
+    ///
+    /// (d) is the sender-side half: a private write on this node never enters
+    /// the outbox, so it never travels. This is the receiver-side half, and it
+    /// is the guard the deleted `POST /internal/app/state` route used to carry
+    /// in its handler — mTLS proves a caller is in the mesh, not that it runs
+    /// honest code, so the invariant has to survive a peer that puts a private
+    /// namespace on the ring deliberately. Rung 2e deleted route and handler
+    /// together; this is where the invariant lives now.
+    ///
+    /// The rail DOES accept the ops, and the first assertion pins that rather
+    /// than hiding it: a namespace is a directory and `/internal/ring/sync`
+    /// ingests without judging an author, by design (an op's signature is
+    /// checked at the fold, not at the listener). So the line is on B's disk.
+    /// What refuses is `MeshStore::apply_projection`, and the store is the only
+    /// thing any reader reads. The control is a public op carried over the same
+    /// route in the same test — without it, a B that ingested nothing at all
+    /// would pass.
+    ///
+    /// Watched RED by pointing `PRIVATE` at a namespace that is NOT on
+    /// `GOSSIP_EXCLUDED_APP_IDS` (`notes`): everything else about the test is
+    /// unchanged, the ops travel the same route, and the store assertion goes
+    /// red because the projection now takes them. That is the sabotage
+    /// available from this crate — the guard itself is
+    /// `apply_projection`'s and `commonwealth-state` watches it red by
+    /// deleting the arm (`apply_projection_refuses_an_excluded_namespace`).
+    #[tokio::test]
+    async fn a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection() {
+        const PRIVATE: &str = "notes-private";
+        assert!(
+            commonwealth_state::GOSSIP_EXCLUDED_APP_IDS.contains(&PRIVATE),
+            "this test is about an excluded namespace"
+        );
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[13u8; 32]),
+            SigningKey::from_bytes(&[14u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(51), NodeId::from_u128(52));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+        let now = commonwealth_core::clock::unix_now_secs();
+
+        // A is hostile: it writes the private namespace onto its own journal
+        // directly, which is what a peer running patched code would do. Its own
+        // store is never asked, so the outbox guard (d) pins is not in the way.
+        let a_private = a_rail.journal(PRIVATE).unwrap();
+        assert_eq!(
+            a_private
+                .ingest_all(&[kv_op(PRIVATE, &ka, 0, "secret", Some(b"mine"), now)])
+                .unwrap(),
+            1
+        );
+        let a_public = a_rail.journal(KV).unwrap();
+        assert_eq!(
+            a_public
+                .ingest_all(&[kv_op(KV, &ka, 0, "public", Some(b"shared"), now)])
+                .unwrap(),
+            1
+        );
+
+        // Both namespaces go to B through the real route.
+        let url = serve(internal_router(b_state.clone())).await;
+        let client = reqwest::Client::new();
+        for journal in [&a_private, &a_public] {
+            let out = exchange(&client, &url, &a_rail, journal).await;
+            assert!(out.stop.is_none(), "{:?}", out.stop);
+        }
+
+        // The rail took both — B holds the private line on disk. If this fails
+        // the test below proves nothing, because nothing arrived.
+        assert_eq!(
+            b_rail.journal(PRIVATE).unwrap().read().unwrap().0.len(),
+            1,
+            "the ingest is author-blind and namespace-blind, and that is the design"
+        );
+
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+
+        assert_eq!(
+            value_at(&b_state, PRIVATE, "secret"),
+            None,
+            "a private namespace a peer pushed reached no reader"
+        );
+        assert_eq!(
+            value_at(&b_state, KV, "public").as_deref(),
+            Some(&b"shared"[..]),
+            "control: an ordinary namespace over the same route in the same test did land"
         );
     }
 

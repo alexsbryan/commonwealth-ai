@@ -28,9 +28,12 @@
 //!
 //! # Nothing here validates an op, and that is the design
 //!
-//! Sibling route `/internal/app/state` validates nothing about an entry
-//! either — the difference is that here it does not matter. An op carries its
-//! author in an Ed25519 signature over a message that binds the namespace, so
+//! Its deleted sibling `/internal/app/state` validated nothing about an entry
+//! either, and there it mattered: an entry was a bare `(app_id, key, value,
+//! timestamp, origin)` and the receiver had only the sender's word for any of
+//! it, which is why that route had to carry a hand-written privacy check. Here
+//! an op carries its author in an Ed25519 signature over a message that binds
+//! the namespace, so
 //! a forged or replayed op does not become a balance: it becomes a
 //! [`RailGap`](commonwealth_rail::RailGap) the next time anybody
 //! folds. Checking here instead would put a second answer beside the fold's
@@ -40,6 +43,15 @@
 //! This port is reachable by any peer that can route to this host (see the
 //! module header on `routes_internal`), so "who may write to my journal" is a
 //! question the signature answers and the listener cannot.
+//!
+//! The one thing a signature cannot answer is "may this namespace exist on my
+//! machine at all", and that is not asked here either: a peer may put a
+//! `notes-private` journal on our disk and this route will take it. It reaches
+//! no reader, because `MeshStore::apply_projection` refuses an excluded
+//! namespace and the store is the only thing anything reads
+//! (`sovereign-mesh::ring_sync`'s
+//! `a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`).
+//! That is the guard this route's deleted sibling used to carry inline.
 
 use axum::extract::State;
 use axum::http::StatusCode;

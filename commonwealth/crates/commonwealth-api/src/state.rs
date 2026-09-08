@@ -725,6 +725,21 @@ pub struct AppStateInner {
     /// [`AppStateInner::self_dial_signer`] is: `AppState` never holds raw key
     /// material and this crate needs no crypto dependency.
     pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_rail::RingRail>>>,
+    /// "A local write is queued; run the ring round now rather than at the
+    /// next sixty-second tick."
+    ///
+    /// ONE `Notify` per daemon, held here rather than passed around, because
+    /// three unrelated places raise or wait on it — the KV pump after an
+    /// append, `ring_sync`'s loop as its early wake-up, and the work atlas's
+    /// broadcaster when a claim is written for a peer to see. A second
+    /// `Notify` would be a second answer to "what wakes replication" (ARCH
+    /// §10.6), and threading one through three constructors is how the second
+    /// one gets minted.
+    ///
+    /// Always present: a nudge nobody is waiting on stores one permit and
+    /// costs nothing, so there is no `Option` and no "the daemon has not
+    /// installed it yet" branch to get wrong.
+    pub ring_write_nudge: Arc<tokio::sync::Notify>,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -1409,6 +1424,16 @@ impl AppState {
             .clone()
     }
 
+    /// The wake-up that makes a local store write travel now.
+    ///
+    /// Raised by the KV pump after it signs a write onto a journal, and by the
+    /// work atlas after it writes a claim a peer is waiting on; awaited by the
+    /// ring-sync loop beside its interval. One accessor, one `Notify` (ARCH
+    /// §7.5).
+    pub fn ring_write_nudge(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.inner.ring_write_nudge)
+    }
+
     /// Install the ring rail's storage. The daemon calls this at startup with
     /// its data directory and a signer built from the node `SigningKey`.
     pub fn install_ring_rail(&self, rail: Arc<commonwealth_rail::RingRail>) {
@@ -1700,6 +1725,7 @@ impl AppState {
                 self_iroh_dialinfo: std::sync::RwLock::new(None),
                 self_dial_signer: std::sync::RwLock::new(None),
                 ring_rail: std::sync::RwLock::new(None),
+                ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),

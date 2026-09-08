@@ -10,11 +10,13 @@
 //!
 //! Design contract (per Mesh Health design §5):
 //!
-//! 1. **Local only, never gossiped.** The
-//!    `peer_preferences` `app_id` is excluded from
-//!    [`MeshStore::all_entries_for_gossip`] by the
-//!    `gossip_excluded_app_ids` filter — the structural invariant
-//!    is pinned by `gossip_excludes_peer_preferences_app_id`.
+//! 1. **Local only, never replicated.** The
+//!    `peer_preferences` `app_id` is excluded by the
+//!    [`is_gossip_excluded`] predicate, which `backend::enqueue_on`
+//!    applies inside the store's own write transaction — the
+//!    structural invariant is pinned by
+//!    `gossip_excludes_peer_preferences_app_id` and, behaviourally, by
+//!    `store::tests::an_excluded_namespace_never_enters_the_outbox`.
 //!
 //! 2. **Multiplier clamped to `(0.0, 1.0]` at construction.** The
 //!    constructor returns `Err` for any other value — there is no
@@ -178,9 +180,9 @@ impl PeerPreferenceStore {
 ///
 /// Two reasons put a namespace here, and the list does not separate
 /// them because the mechanism is the same: `is_gossip_excluded` is the
-/// ONE predicate (ARCH_PRINCIPLES §10.6) and
-/// [`MeshStore::all_entries_for_gossip`] is the ONE place it is
-/// applied.
+/// ONE predicate (ARCH_PRINCIPLES §10.6), applied in two places that
+/// cannot be routed around: `backend::enqueue_on` on the way out and
+/// [`MeshStore::apply_projection`] on the way in.
 ///
 /// 1. **Structural privacy** (ARCH_PRINCIPLES §7) — records that must
 ///    never leave the local node. The first five entries.
@@ -248,9 +250,11 @@ impl PeerPreferenceStore {
 ///   NOT private and it still travels; it travels on the ring rail instead,
 ///   which is a journal on disk rather than an in-memory buffer, so a node's
 ///   history stops evaporating on restart. Its entry here is the receiving
-///   half: `routes_app_internal.rs` refuses an excluded namespace inbound, so
-///   a peer on an older build cannot re-create the dead KV namespace on this
-///   node. There is no writer left on this side (`sovereign_mesh::
+///   half: [`MeshStore::apply_projection`] refuses an excluded namespace
+///   inbound, so a peer on an older build cannot re-create the dead KV
+///   namespace on this node. (That refusal was `routes_app_internal.rs`'s
+///   until cw-lift 2e deleted the route; the predicate did not change.)
+///   There is no writer left on this side (`sovereign_mesh::
 ///   measurements_rail` is the only publisher and it appends to the journal),
 ///   which is exactly the shape `notes-private` already has.
 ///
@@ -394,9 +398,9 @@ mod tests {
     /// reader ever seeing two copies of one measurement from two transports.
     ///
     /// This pins the LIST, not the behaviour (ARCH §18.1). The outbound gate
-    /// is `store::tests::private_namespaces_never_enter_the_gossip_set`,
-    /// which replicates A → B through `all_entries_for_gossip` and fails on
-    /// the entry count; it carries this namespace.
+    /// is `store::tests::an_excluded_namespace_never_enters_the_outbox`,
+    /// which drives this whole list through the store's write door and fails
+    /// on the queued count; it carries this namespace.
     #[test]
     fn the_measurements_namespace_left_the_wire_for_the_rail() {
         assert!(is_gossip_excluded("mesh-measurements"));
@@ -411,11 +415,11 @@ mod tests {
     /// This pins the LIST, which is a register of decisions and their
     /// reasons; it is not the behavioural gate and should not be read
     /// as one (ARCH §18.1). The gates are
-    /// `store::tests::private_namespaces_never_enter_the_gossip_set`,
-    /// which replicates A → B through `all_entries_for_gossip` and
-    /// fails on the entry count if any of these rejoins the wire, and
-    /// `commonwealth-api`'s `receiver_rejects_gossiped_private_namespaces`
-    /// for the inbound half. Both carry two of these four namespaces.
+    /// `store::tests::an_excluded_namespace_never_enters_the_outbox`,
+    /// which drives the whole list through the store's write door and
+    /// fails on the queued count if any of these rejoins the wire, and
+    /// `store::tests::apply_projection_refuses_an_excluded_namespace`
+    /// for the inbound half. Both drive every namespace on this list.
     #[test]
     fn gossip_excludes_namespaces_with_no_cross_peer_consumer() {
         // Single unsuffixed `last_tick` key — replicating it made a

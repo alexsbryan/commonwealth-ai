@@ -192,33 +192,14 @@ impl MeshStore {
         Ok(entries)
     }
 
-    /// Return all entries for gossip broadcast. Filters out
-    /// `app_id` namespaces that are explicitly local-only — see
-    /// [`crate::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`]. The
-    /// exclusion is structural: a private operator preference
-    /// must never propagate to the peer it penalizes, and the
-    /// invariant is pinned by tests in the
-    /// `peer_preferences` module.
-    pub fn all_entries_for_gossip(&self) -> Result<Vec<StoreEntry>> {
-        let rows = self.backend.all_rows()?;
-        let mut entries = Vec::with_capacity(rows.len());
-        for row in rows {
-            if crate::peer_preferences::is_gossip_excluded(&row.app_id) {
-                continue;
-            }
-            let origin = node_id_from_bytes(&row.origin)?;
-            entries.push(StoreEntry {
-                app_id: row.app_id,
-                key: row.key,
-                value: Bytes::from(row.value),
-                timestamp: row.timestamp,
-                origin,
-            });
-        }
-        Ok(entries)
-    }
-
-    /// Merge an entry from gossip (LWW). Returns true if the entry was accepted.
+    /// Merge one row a peer authored (LWW). Returns true if the entry was
+    /// accepted — a row this node already holds at an equal-or-newer timestamp
+    /// is rejected, which is the mechanism working rather than a failure.
+    ///
+    /// The receive half, and deliberately NOT an enqueue: a row that re-entered
+    /// the outbox would echo around the mesh forever. Its one production caller
+    /// is [`MeshStore::apply_projection`] — until cw-lift rung 2e it was also
+    /// `/internal/app/state`'s handler, and that route and its sender are gone.
     pub fn merge_entry(&self, entry: StoreEntry) -> Result<bool> {
         let origin_bytes = entry.origin.as_bytes().to_vec();
         self.backend.upsert_if_newer(
@@ -528,38 +509,6 @@ mod tests {
         assert!(store.get("myapp", "nope").unwrap().is_none());
     }
 
-    /// Defence-in-depth pin for the peer-preferences privacy
-    /// invariant (ARCH_PRINCIPLES §7.2 + §7.4). The
-    /// `peer_preferences` namespace must NEVER appear in the
-    /// gossip-broadcast set, even when an entry has been written
-    /// to the store. A regression here would cause private
-    /// affinity adjustments to leak to the peer being penalized
-    /// — silently breaking the social-not-algorithmic sanction
-    /// property.
-    #[test]
-    fn all_entries_for_gossip_excludes_peer_preferences_namespace() {
-        let store = MeshStore::in_memory().unwrap();
-        // Write a peer preference and a normal entry.
-        store
-            .set(
-                "peer_preferences",
-                "deadbeef",
-                Bytes::from("private"),
-                node(1),
-            )
-            .unwrap();
-        store
-            .set("contributions", "ev1", Bytes::from("public"), node(1))
-            .unwrap();
-        let gossipable = store.all_entries_for_gossip().unwrap();
-        // Only the contributions entry survives the filter.
-        assert_eq!(gossipable.len(), 1);
-        assert_eq!(gossipable[0].app_id, "contributions");
-        // But direct read still works — the entry IS persisted, just
-        // not gossiped.
-        assert!(store.get("peer_preferences", "deadbeef").unwrap().is_some());
-    }
-
     #[test]
     fn merge_entry_lww() {
         let store = MeshStore::in_memory().unwrap();
@@ -641,108 +590,6 @@ mod tests {
             store.get("a", "k").unwrap().unwrap().value.as_ref(),
             b"incumbent"
         );
-    }
-
-    /// **Wire-layer privacy: private namespaces never leave the node.**
-    /// `all_entries_for_gossip` is the ONLY enumeration the gossip
-    /// sender (`sovereign-mesh::gossip` Step 4) ships to peers, so it is
-    /// the load-bearing chokepoint. Replicate node A → node B exactly
-    /// as the sender does and assert no excluded namespace crosses,
-    /// while the public namespace does. Mirrors the work-atlas
-    /// `cross_node` tests at the layer where the namespace constants
-    /// live (`peer_preferences`, `activity-private`).
-    #[test]
-    fn private_namespaces_never_enter_the_gossip_set() {
-        use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID};
-
-        let a = MeshStore::in_memory().unwrap();
-        a.set(
-            crate::peer_preferences::PEER_PREFERENCES_APP_ID,
-            "peer",
-            Bytes::from("affinity"),
-            node(1),
-        )
-        .unwrap();
-        a.set(ACTIVITY_APP_ID, "usage", Bytes::from("tokens=42"), node(1))
-            .unwrap();
-        a.set(
-            "work-atlas-private",
-            "session",
-            Bytes::from("scope"),
-            node(1),
-        )
-        .unwrap();
-        a.set("notes-private", "n1", Bytes::from("secret note"), node(1))
-            .unwrap();
-        // cw-lift 2b: excluded for having no cross-peer consumer rather
-        // than for privacy. Same predicate, same chokepoint — and the
-        // count assertion below is what fails if either comes back.
-        a.set("atos-sessions", "sess1", Bytes::from("{}"), node(1))
-            .unwrap();
-        a.set(
-            "wikipedia-newsworthy:status",
-            "last_tick",
-            Bytes::from("{}"),
-            node(1),
-        )
-        .unwrap();
-        // cw-lift 2d: excluded because it MOVED to the ring rail, not because
-        // it is private. Nothing on this side writes it any more; the entry
-        // is what stops a peer on an older build putting it back on the wire,
-        // and this count is what fails if it rejoins.
-        a.set(
-            "mesh-measurements",
-            "1700000000-abc",
-            Bytes::from("{}"),
-            node(1),
-        )
-        .unwrap();
-        a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1))
-            .unwrap();
-
-        // The sender ships exactly this set.
-        let gossiped = a.all_entries_for_gossip().unwrap();
-        for e in &gossiped {
-            assert!(
-                !crate::peer_preferences::is_gossip_excluded(&e.app_id),
-                "excluded namespace '{}' entered the gossip set",
-                e.app_id
-            );
-        }
-        assert_eq!(
-            gossiped.len(),
-            1,
-            "only the public contributions entry gossips"
-        );
-        assert_eq!(gossiped[0].app_id, CONTRIBUTIONS_APP_ID);
-
-        // Replicate into B as the sender→receiver path does.
-        let b = MeshStore::in_memory().unwrap();
-        for e in gossiped {
-            b.merge_entry(e).unwrap();
-        }
-
-        // B learned the public entry and NONE of the private ones.
-        assert!(b.get(CONTRIBUTIONS_APP_ID, "ev1").unwrap().is_some());
-        for (app, key) in [
-            (crate::peer_preferences::PEER_PREFERENCES_APP_ID, "peer"),
-            (ACTIVITY_APP_ID, "usage"),
-            ("work-atlas-private", "session"),
-            ("notes-private", "n1"),
-            ("atos-sessions", "sess1"),
-            ("wikipedia-newsworthy:status", "last_tick"),
-        ] {
-            assert!(
-                b.get(app, key).unwrap().is_none(),
-                "excluded entry {app}/{key} leaked to peer B"
-            );
-        }
-        // And A still has everything locally — excluded ≠ deleted.
-        assert!(a.get(ACTIVITY_APP_ID, "usage").unwrap().is_some());
-        assert!(a
-            .get("wikipedia-newsworthy:status", "last_tick")
-            .unwrap()
-            .is_some());
     }
 
     #[test]

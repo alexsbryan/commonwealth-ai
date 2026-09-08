@@ -29,12 +29,12 @@ use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::{Convergence, PeerEntry, PeerStore, PeerStoreError};
 
-/// [`PeerStore`] backed by the gossiped [`MeshStore`].
+/// [`PeerStore`] backed by the ring-projected [`MeshStore`].
 ///
-/// A thin projection: four of the store's fourteen methods, which is what the
-/// port's consumers call. The rest — `append`, `merge_entry`,
-/// `all_entries_for_gossip`, the four `gc_*` — are the mesh's own business and
-/// stay reachable through [`MeshPeerStore::inner`] inside this crate.
+/// A thin projection: four of the store's methods, which is what the port's
+/// consumers call. The rest — `append`, `merge_entry`, `apply_projection`, the
+/// outbox pair, the four `gc_*` — are the mesh's own business and stay
+/// reachable through [`MeshPeerStore::inner`] inside this crate.
 #[derive(Clone)]
 pub struct MeshPeerStore {
     inner: Arc<MeshStore>,

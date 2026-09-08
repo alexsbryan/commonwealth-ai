@@ -2,8 +2,8 @@
 //! Append-only ledger-event store backed by [`MeshStore`].
 //!
 //! Why piggy-back on `MeshStore` instead of a sibling SQLite table:
-//! the existing store already has WAL persistence, gossip
-//! replication via `all_entries_for_gossip`, and LWW merge
+//! the existing store already has WAL persistence, ring
+//! replication via the outbox and the fold, and LWW merge
 //! semantics. Writing events under a dedicated `app_id` reuses all
 //! of that for free. The append-only invariant is enforced by the
 //! key shape — every event's key contains a unique

@@ -164,13 +164,16 @@ both files owe a fix in the same commit (§1.1).
   (`work_queue.rs:70-73`) is never constructed; merge treats an empty model stamp as a wildcard
   (`sharding.rs:632-641`); the re-embed sample check is report-only (`shard_manager.rs:749-792`).
 - Queue discovery: the coordinator writes the handoff blob to its own `mesh_store`; peers learn it
-  from the gossip round's Step 4 push and scan `mesh_store` on a 30s tick (`auto_ingest.rs`).
-  **Corrected 2026-09-04: the "sender half is missing" reason was false** — `gossip.rs` Step 4 has
+  from replication and scan `mesh_store` on a 30s tick (`auto_ingest.rs`).
+  **Corrected 2026-09-04: the "sender half is missing" reason was false** — `gossip.rs` Step 4 had
   been a periodic full-snapshot sender on the 10 s round since it landed. **Closed 2026-09-04
   (cw-lift 2c):** the unicast is deleted. Its targets were a strict subset of the round's, and the
-  consumer it fed polls at 30 s, so the <= 10 s it bought was inside that poll. `recv_app_state`'s
-  `base64_decode` is still a stub that treats `value_b64` as raw UTF-8 — now paired with an
-  `encode_value` in the same module, so replacing it is one edit rather than four.
+  consumer it fed polls at 30 s, so the <= 10 s it bought was inside that poll.
+  **Superseded 2026-09-08 (cw-lift 2e):** Step 4 itself is deleted, with `/internal/app/state`,
+  `recv_app_state` and its `value_b64` stub. The handoff row is a `MeshStore` write like any other,
+  so it is queued in `rail_outbox`, signed onto the `corpus-engine` ring journal by the KV pump and
+  carried by `/internal/ring/sync` — the ONE sender of replicated state. A rail payload's value is
+  real base64 (`commonwealth-state::rail_kv`), so the stub is gone rather than relocated.
 
 ## Identity dies at the server; the tensor port is open *(staff pass)*
 

@@ -236,7 +236,7 @@ pub struct ServingProfile {
 ///   is on the headless variant and the desktop's reload names its profile in
 ///   the refusal instead of reporting a missing installation.
 /// - `mesh_store` — the store the work atlas writes into, so its entries reach
-///   gossip's `all_entries_for_gossip`. Without it the daemon builds a private
+///   the rail outbox and travel. Without it the daemon builds a private
 ///   in-memory store and atlas data is invisible across the mesh.
 /// - `convergence_recorder` — the ONE convergence record the notes publish
 ///   sink, the ingest poller and `/status` all stamp and read. A second copy

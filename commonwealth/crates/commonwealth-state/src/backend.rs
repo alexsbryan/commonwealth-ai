@@ -286,30 +286,6 @@ impl SqliteBackend {
         Ok(rows)
     }
 
-    /// Return all rows for gossip replication.
-    pub fn all_rows(&self) -> Result<Vec<AllRow>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare_cached("SELECT app_id, key, value, timestamp, origin FROM store")
-            .map_err(|e| Error::Backend(format!("prepare failed: {e}")))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(AllRow {
-                    app_id: row.get(0)?,
-                    key: row.get(1)?,
-                    value: row.get(2)?,
-                    timestamp: row.get(3)?,
-                    origin: row.get(4)?,
-                })
-            })
-            .map_err(|e| Error::Backend(format!("query failed: {e}")))?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| Error::Backend(format!("row error: {e}")))?;
-
-        Ok(rows)
-    }
-
     /// Delete all entries older than `cutoff_timestamp`.
     pub fn delete_older_than(&self, cutoff_timestamp: u64) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
@@ -397,10 +373,10 @@ fn delete_on(conn: &Connection, app_id: &str, key: &str) -> Result<bool> {
 /// machine.
 ///
 /// THE SENDER-SIDE PRIVACY GUARD, and it is here rather than at the call site
-/// on purpose (ARCH §7.1). `all_entries_for_gossip` was the old chokepoint and
-/// worked the same way: one predicate, applied where the bytes leave, so a
-/// private namespace is off the wire by construction rather than by every
-/// caller remembering. Pinned by
+/// on purpose (ARCH §7.1). `all_entries_for_gossip` was the old chokepoint,
+/// deleted with its sender at cw-lift rung 2e, and it worked the same way: one
+/// predicate, applied where the bytes leave, so a private namespace is off the
+/// wire by construction rather than by every caller remembering. Pinned by
 /// `an_excluded_namespace_never_enters_the_outbox`.
 fn enqueue_on(
     conn: &Connection,

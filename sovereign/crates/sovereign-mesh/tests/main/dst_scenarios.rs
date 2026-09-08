@@ -9,19 +9,37 @@
 
 use sovereign_mesh::dst::{check_all, DstMesh, FaultSchedule, Quiescence};
 
-/// PR1 smoke test: two nodes converge a mesh_store key via the **real** gossip
-/// path (`run_one_round`) — not the `sync_mesh_state` broadcast shortcut — and
-/// the default invariant pack holds at quiescence.
+/// PR1 smoke test, **inverted at cw-lift rung 2e**: two nodes converge their
+/// MEMBER LISTS via the real gossip path (`run_one_round`) — not the
+/// `sync_mesh_state` broadcast shortcut — and a `mesh_store` key written on one
+/// of them does NOT cross, because gossip does not carry store state any more.
 ///
-/// This proves the whole PR1 scaffold end-to-end: the per-node `FaultTransport`
-/// install seam carries gossip; the injected `TestClock` keeps the harness's
-/// epoch-0 member records live (so nothing decays); and the in-process
-/// invariant snapshot reads cleanly.
+/// It asserted the opposite until 2e, and that is worth saying plainly rather
+/// than editing quietly: gossip Step 4 pushed a full store snapshot to every
+/// online peer on the same round, and this test was its end-to-end proof. Step
+/// 4 is deleted; a store write now travels as a signed act on its namespace's
+/// ring journal, carried by `/internal/ring/sync`. **The DST harness drives
+/// gossip rounds and nothing else** — no rail, no pump, no ring round — so it
+/// is the wrong instrument for the new path and re-homing it would mean
+/// per-node signing keys and derived rosters in `SimulatedNodeBuilder`, a
+/// harness change and not this rung (§10.2). The property it used to hold —
+/// a store write crossing to a peer over a real listener — is
+/// `ring_sync::tests::a_local_store_write_reaches_a_peers_store_through_the_ring`.
+///
+/// What it is now is the STRUCTURAL pin that keeps them apart: if anyone puts
+/// store state back on the gossip round, the last assertion goes red here. The
+/// convergence assertion above it is the control — without it a mesh where
+/// gossip did nothing at all would pass.
+///
+/// It also still proves the PR1 scaffold end to end: the per-node
+/// `FaultTransport` install seam carries gossip; the injected `TestClock` keeps
+/// the harness's epoch-0 member records live (so nothing decays); and the
+/// in-process invariant snapshot reads cleanly.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn dst_two_nodes_converge_mesh_store_key() {
+async fn dst_gossip_converges_the_member_list_and_not_the_store() {
     let dst = DstMesh::start(2).await;
 
-    // Node 0 writes a key; emergent gossip must carry it to node 1.
+    // Node 0 writes a key. Nothing on the gossip path should carry it.
     dst.store_set(0, "dst-smoke", "k", b"hello-mesh");
 
     let q = dst.gossip_until_quiescent(8).await;
@@ -30,11 +48,20 @@ async fn dst_two_nodes_converge_mesh_store_key() {
         "member views did not converge: {q:?}"
     );
 
-    // The key propagated over the wire to node 1's mesh_store.
+    // The control is the line above: the rounds really ran and really reached
+    // the peer. This is the pin.
     assert_eq!(
-        dst.store_get(1, "dst-smoke", "k").as_deref(),
+        dst.store_get(1, "dst-smoke", "k"),
+        None,
+        "gossip carried mesh_store state to a peer — Step 4 is deleted and the \
+         ring is the one sender (cw-lift 2e)"
+    );
+    // …and the write is still local, so this is an absence on the wire rather
+    // than a store that did not take the write.
+    assert_eq!(
+        dst.store_get(0, "dst-smoke", "k").as_deref(),
         Some(b"hello-mesh".as_ref()),
-        "mesh_store key did not converge to node 1 via real gossip"
+        "the writer lost its own row, which would make the assertion above vacuous"
     );
 
     // The default invariant pack holds at quiescence.

@@ -98,8 +98,10 @@ use commonwealth_core::mesh::MemberRecord;
 /// router may send different classes over different transports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TrafficClass {
-    /// Member-list anti-entropy + mesh_store/app-state push
-    /// (`/internal/gossip`, `/internal/app/state`).
+    /// Member-list anti-entropy (`/internal/gossip`), and the ring
+    /// journal's digest exchange (`/internal/ring/sync`) which shares its
+    /// client and its timeout. The mesh_store snapshot push that used to ride
+    /// this class was deleted at cw-lift rung 2e together with its route.
     Gossip,
     /// Corpus queue/collaborate/ingest-partition, pipeline pause —
     /// internal-port control traffic.

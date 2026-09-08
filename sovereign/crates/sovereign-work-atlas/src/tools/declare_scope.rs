@@ -162,10 +162,10 @@ impl DeclareScopeTool {
 
         self.store.put_claim(privacy, &claim).map_err(map_err)?;
 
-        // Public claims fan out immediately. Private claims never
-        // broadcast (their namespace is in `GOSSIP_EXCLUDED_APP_IDS`)
-        // — `broadcast_now` itself enforces this as a third privacy
-        // layer, but we also guard here so we don't even attempt.
+        // Public claims are hurried onto the ring. Private claims are not:
+        // their namespace is in `GOSSIP_EXCLUDED_APP_IDS`, so the store never
+        // queued the write and there is nothing to hurry. Guarding here as
+        // well means we do not even attempt it.
         if privacy == Privacy::Public {
             let key = format!("claim:{}", claim.claim_id);
             self.broadcaster.broadcast(privacy.app_id(), &key).await;

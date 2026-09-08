@@ -32,7 +32,6 @@ pub mod openai_types;
 pub mod principal;
 pub mod reshaping;
 pub mod responses_types;
-pub mod routes_app_internal;
 pub mod routes_apps;
 pub mod routes_completions;
 pub mod routes_edit_predictions;

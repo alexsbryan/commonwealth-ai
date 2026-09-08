@@ -5223,12 +5223,14 @@ does not carry (which would otherwise produce ops every node reports as
 `UnknownSigner` forever, silently). It has no opinion about whether an amount
 is positive, because it cannot have one.
 
-**Replication is its own loop, because riding the gossip push would cost
+**Replication is its own loop, because riding the gossip push would have cost
 ~246 GB/day per node** (`sovereign-mesh/src/ring_sync.rs` +
-`/internal/ring/sync`, ring-deploy S3). `gossip.rs` Step 4 ships a full
+`/internal/ring/sync`, ring-deploy S3). `gossip.rs` Step 4 shipped a full
 mesh-store snapshot to every online peer every 10s — 8,640 rounds/day — and a
-household's ~3,500 ops/yr ≈ 1.5 MB would ride every one of them, taxing every
-other namespace on that body forever. The journal gets a **60-second cadence**
+household's ~3,500 ops/yr ≈ 1.5 MB would have ridden every one of them, taxing
+every other namespace on that body forever. **Step 4 is deleted (cw-lift 2e)**
+and this loop is the only sender left, so that comparison is now history rather
+than a choice between two live paths. The journal gets a **60-second cadence**
 and syncs by **digest**: `{actor → contiguous high-water mark}`, ~600 bytes
 regardless of history. *Contiguous* is load-bearing — a node holding seq 0 and
 2 that advertised `2` would be answered "nothing above 2" and seq 1 would
@@ -5502,7 +5504,7 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
-| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus as much of what the caller lacks as fits `RING_SYNC_OPS_BUDGET_BYTES`. Both `ops` arrays are budgeted and the sender repeats the exchange, so one body is not the unit of convergence. Own route on its own 60s cadence, not a namespace on `/internal/app/state`'s 10s full-snapshot push. |
+| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus as much of what the caller lacks as fits `RING_SYNC_OPS_BUDGET_BYTES`. Both `ops` arrays are budgeted and the sender repeats the exchange, so one body is not the unit of convergence. Own route on its own 60s cadence; `/internal/app/state`'s 10s full-snapshot push was the alternative and was deleted at cw-lift 2e, leaving this the ONE receiver and its loop the ONE sender of replicated state. |
 | `POST /v1/rail/append`, `GET /v1/rail/log` | The ring rail. Appends one signed act to the caller's namespace, and reads back the admitted acts (already in the one order every node applies them) + gaps. The payload is the app's and the rail does not read inside it, so there is no balance here to return. The namespace comes from `Scope::Rails` on the grant, never from the request; an operator (no grant) passes `?namespace=`. Mounted on `Operator` and `Rail`, and on neither `Peer` nor `Guest` — a ring rail is loopback-only in M0. |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
@@ -5706,7 +5708,11 @@ directory per namespace — and this store is the fold of it:
   actor the roster cannot place is counted `unattributed` and skipped
   rather than attributed to an invented `NodeId`. An excluded `app_id`
   is refused with an `Err` naming it — the RECEIVER-side privacy guard,
-  the half `routes_app_internal` used to do inbound.
+  the half `routes_app_internal` used to do inbound before rung 2e deleted
+  that route. Pinned end to end by `sovereign-mesh::ring_sync`'s
+  `a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`:
+  a hostile peer's private namespace IS ingested by `/internal/ring/sync`
+  (the rail is author-blind, by design) and reaches no store.
 - **A replicating `app_id` is a ring namespace verbatim**, and a
   namespace names a DIRECTORY (`<root>/rings/<ns>/`), so it must satisfy
   `commonwealth-rail`'s `valid_namespace` — `[a-z0-9_-]{1,64}`. The one
@@ -5761,10 +5767,12 @@ directory per namespace — and this store is the fold of it:
   app's journal (§7.1). A `MeshStore` `app_id` that is NOT on the list
   appends nothing and says so, which is the loud failure.
 
-`all_entries_for_gossip` + `merge_entry` are the OLD contract — the whole
-store, at peers, on a timer. Both are still present because the sender
-that used them (gossip Step 4) is deleted in a later step of cw-lift 4,
-not because there are two replication paths.
+`all_entries_for_gossip` was the OLD contract — the whole store, at peers, on
+a timer — and it is **deleted at cw-lift 2e** together with gossip Step 4,
+`broadcast_now`, the `/internal/app/state` route, `recv_app_state`,
+`AppStateGossipBody`/`GossipStoreEntry` and `backend::all_rows`. `merge_entry`
+survives as the fold's own LWW upsert, called only from `apply_projection`.
+There is ONE replication path.
 
 `commonwealth-app` — mesh app platform: `MeshAppManifest`
 (gossiped), `AppPermissions` (`mesh_store_read`/`_write`,
@@ -7889,7 +7897,7 @@ every chaos bank on disk.
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store gossip replication | `commonwealth-api/src/routes_app_internal.rs` · `sovereign-mesh/src/gossip.rs` | Gossip replicates the `Mesh` member list in Steps 1-3 and the mesh_store in Step 4. `POST /internal/app/state` is the ONE receiver and `recv_app_state` is the one handler; `AppStateGossipBody` / `GossipStoreEntry` are now the ONE declaration of the wire shape, with `From<&StoreEntry>` projecting a row onto it — before cw-lift 2c there were three hand-written `json!` literals of those five fields and nothing making them agree with the struct that parses them. **The periodic sender EXISTS** — Step 4, a full-snapshot anti-entropy push on the 10 s round. **Senders of replicated state: 3** (this push, the ring digest, `broadcast_now`'s single-entry POST), down from 4 — `corpus_collaborate`'s queue-handoff unicast was deleted at 2c: its targets were a subset of the round's and the consumer it fed polls at 30 s. The count is `cw-twin-visibility`'s instrument and is pinned structurally by `gossip_push_surfacing::every_sender_of_replicated_state_is_declared`, so a fourth is a build failure rather than a later grep. **Step 4 did NOT go at 2e (kill bar K8).** It is the only anti-entropy for every namespace `all_entries_for_gossip` still yields — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `mesh-measurements`, `wikipedia-newsworthy-tracked` — and only `mesh-measurements` fits the ring journal today; the rest wait on retention. Deleting it would end replication, not move it. Its byte gauge is `RING_SYNC_OPS_BUDGET_BYTES`, the one decider (§10.6), not a second `MAX_REQUEST_BODY_BYTES / 2`. Note `FANOUT = 2` governs Steps 1-3 only — Step 4 hits EVERY online peer, so a bandwidth model built on `FANOUT` understates it by N/2. |
+| mesh_store replication | `sovereign-mesh/src/ring_sync.rs` · `rail_kv_pump.rs` · `commonwealth-state/src/rail_kv.rs` | **Senders of replicated state: 1**, and it is the ring digest exchange. `sovereign-mesh/src/gossip.rs` replicates the `Mesh` member list and nothing else. Gossip Step 4 — a full mesh-store snapshot POSTed to EVERY online peer on the 10 s round — and `broadcast_now`'s event-driven single-entry POST beside it were deleted at cw-lift 2e, with the route they wrote (`POST /internal/app/state`), its handler `recv_app_state`, the `AppStateGossipBody`/`GossipStoreEntry` wire types, `MeshStore::all_entries_for_gossip` and `backend::all_rows`. The count went 4 → 3 at 2c (`corpus_collaborate`'s queue-handoff unicast) → 1 at 2e. It is `cw-twin-visibility`'s instrument and is pinned structurally by `sovereign-mesh/tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared` (formerly `gossip_push_surfacing.rs`), so a second sender on the surviving route is a build failure rather than a later grep. **K8 is paid, not waived:** the six namespaces that had only Step 4 for anti-entropy — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `wikipedia-newsworthy-tracked` — replicate through the outbox → journal → digest path 2c and 2d built, with zero per-namespace code. `FANOUT = 2` now governs the whole gossip module rather than three of its four steps. The work atlas's same-round-trip claim visibility is `MeshBroadcaster`, which drains the outbox through `rail_kv_pump::pump_once` and raises `AppState::ring_write_nudge` — no wire of its own. |
 | Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
 

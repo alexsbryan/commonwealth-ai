@@ -18,10 +18,26 @@
 //!
 //! Reuses `Mesh::merge_from` for the actual last-writer-wins
 //! reconciliation. This module is just the network plumbing on top.
+//!
+//! # The member list, and nothing else
+//!
+//! Until cw-lift rung 2e this loop had a fourth step: a full `mesh_store`
+//! snapshot POSTed to EVERY online peer on the same ten-second round, plus a
+//! `broadcast_now` that pushed one entry the same way for the work atlas.
+//! Both are gone, and with them the route they wrote to
+//! (`POST /internal/app/state`) and the enumeration they read from
+//! (`MeshStore::all_entries_for_gossip`).
+//!
+//! Store state replicates on the ring now: a write is queued in the store's
+//! own transaction, [`crate::rail_kv_pump`] signs it onto its namespace's
+//! journal, and [`crate::ring_sync`] carries it by digest. That leaves ONE
+//! sender of replicated state in the workspace — `/internal/ring/sync` — which
+//! is `cw-twin-visibility`'s instrument and is pinned by
+//! `tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared`.
+//! So `FANOUT` now governs the whole module rather than three of its four
+//! steps.
 use std::time::{Duration, Instant};
 
-use commonwealth_api::routes_app_internal::{AppStateGossipBody, GossipStoreEntry};
-use commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
@@ -92,92 +108,6 @@ pub(crate) fn gossip_client() -> Result<&'static reqwest::Client, &'static str> 
         })
         .as_ref()
         .map_err(String::as_str)
-}
-
-// The point at which this module warns about its own payload is
-// `RING_SYNC_OPS_BUDGET_BYTES` — imported, not re-derived.
-//
-// It used to be a second constant here, `MESH_STORE_PAYLOAD_WARN_BYTES`,
-// spelling `MAX_REQUEST_BODY_BYTES / 2` a second time. Two names for one
-// arithmetic is two deciders (§10.6): the number a sender stops at and the
-// number a sender warns at are the same question about the same receiver,
-// and the ring's copy is the one with a budget behind it rather than only a
-// log line.
-//
-// WHY A GAUGE AT ALL. mesh_store replication is full-snapshot anti-entropy,
-// so the payload only grows. Two ceilings sit above it and both fail
-// silently: the receiver's 8 MiB body limit (a 413 that this module logged
-// at `debug`), and — nearer — the shared client's 3s total POST timeout,
-// which a multi-MB body over a relay-class link trips well before 8 MiB
-// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2). Half the limit is the
-// point where an operator still has room to act.
-//
-// The ring answered the same question with a BUDGET and chunking (rung 2f);
-// this push has neither, which is the honest difference between the two
-// senders and the reason this one is still scheduled for deletion.
-//
-// (Imported at the top of the module with the rest.)
-
-/// The outcome of one round's mesh_store push to one peer. A closed
-/// set, so an enum — the whole point is that "rejected with a status"
-/// and "never got a reply" are DIFFERENT failures with different
-/// operator responses, and collapsing them into a bool would lose
-/// exactly the distinction the rail exists to surface (§2.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PushOutcome {
-    /// Some address accepted the snapshot.
-    Ok,
-    /// A peer answered with a non-success status (413 when the
-    /// snapshot outgrew its body limit, 401/404 on a version skew).
-    Rejected(u16),
-    /// No address produced a reply at all — dial failure, TLS, or the
-    /// 3s client timeout.
-    Transport,
-}
-
-impl PushOutcome {
-    fn label(&self) -> &'static str {
-        match self {
-            PushOutcome::Ok => "ok",
-            PushOutcome::Rejected(_) => "rejected",
-            PushOutcome::Transport => "transport_error",
-        }
-    }
-}
-
-/// Rate limiter for push-failure surfacing: remembers the last outcome
-/// per peer so a persistent failure is reported ONCE, on the
-/// transition, instead of once per 10s round forever.
-///
-/// Per-peer per-TRANSITION rather than per-round is the whole design.
-/// A round-rate warn on a 4-peer mesh with one broken peer is 8,640
-/// lines a day, which operators filter out, which is functionally the
-/// same silence this replaces. A transition-rate warn is one line when
-/// it breaks and one when it recovers — and the recovery line is why
-/// `Ok` is recorded too rather than just clearing the entry.
-#[derive(Default)]
-struct PushStatusLedger {
-    last: std::collections::HashMap<commonwealth_core::ids::NodeId, PushOutcome>,
-}
-
-impl PushStatusLedger {
-    /// Record `outcome` for `peer`. Returns `true` when it differs from
-    /// the last recorded outcome (including the first sighting of a
-    /// non-`Ok` outcome) — i.e. when it is worth a line.
-    fn note(&mut self, peer: commonwealth_core::ids::NodeId, outcome: PushOutcome) -> bool {
-        match self.last.insert(peer, outcome) {
-            // First ever sighting: worth a line only if it is a failure.
-            // A first success is the expected state, not news.
-            None => outcome != PushOutcome::Ok,
-            Some(previous) => previous != outcome,
-        }
-    }
-}
-
-fn push_status_ledger() -> &'static std::sync::Mutex<PushStatusLedger> {
-    static LEDGER: std::sync::OnceLock<std::sync::Mutex<PushStatusLedger>> =
-        std::sync::OnceLock::new();
-    LEDGER.get_or_init(|| std::sync::Mutex::new(PushStatusLedger::default()))
 }
 
 /// After this long without a successful gossip contact, a peer is
@@ -791,206 +721,6 @@ pub async fn run_one_round(
         }
     }
 
-    // ── Step 4: mesh_store replication ──────────────────────────────
-    //
-    // The Mesh gossip above only syncs the member list. Entries in
-    // `mesh_store` (queue-mode IngestionHandoffs, app-state blobs)
-    // needs its own push, and THIS IS IT — the one and only periodic
-    // sender. Three documents and one production comment used to say
-    // otherwise ("nothing has ever been the sender"); every one of them
-    // was written before this step landed and none was updated with it,
-    // which is how a rung meant to delete it was priced against a sender
-    // that supposedly did not exist.
-    //
-    // Payload: full snapshot (anti-entropy). LWW merge on the receiver
-    // (`mesh_store::merge_entry`) makes duplicates cheap.
-    //
-    // FAN-OUT IS EVERY ONLINE PEER, NOT `FANOUT`. Steps 1-3 above pick at
-    // most `FANOUT` targets; this step does not. A bandwidth model built
-    // on `FANOUT` understates this push by N/2.
-    //
-    // WHY IT IS STILL HERE (cw-lift rung 2e, kill bar K8). It is the ONLY
-    // anti-entropy for every namespace `all_entries_for_gossip` still
-    // yields, and after rung 2b that set is the ones with a real
-    // cross-peer consumer: `inference`, `contributions`, `corpus-engine`,
-    // `notes`, `work-atlas`, `mesh-measurements`,
-    // `wikipedia-newsworthy-tracked`. Only `mesh-measurements` fits the
-    // ring journal today — the other five wait on retention, which the
-    // journal does not have — so deleting this loop would not move
-    // replication anywhere, it would end it. It also carries
-    // `broadcast_now`'s recovery: that push is fire-and-forget and its
-    // documented fallback is this round.
-    if let Ok(entries) = app_state.inner.mesh_store.all_entries_for_gossip() {
-        if !entries.is_empty() {
-            // The receiver's OWN types, built through its own
-            // `From<&StoreEntry>` — not a hand-written `json!` of the same
-            // five field names (§10.6). Three of those literals existed
-            // before rung 2c and nothing made them agree with the struct
-            // that has to parse them.
-            let store_body = AppStateGossipBody {
-                entries: entries.iter().map(GossipStoreEntry::from).collect(),
-            };
-
-            // ── Payload gauge ──────────────────────────────────────
-            //
-            // Serialise ONCE, here, and post the bytes: the gauge then
-            // measures the exact body that goes on the wire rather
-            // than an estimate of it, and the fan-out below stops
-            // re-serialising the same snapshot per peer per address.
-            let store_bytes = match serde_json::to_vec(&store_body) {
-                Ok(b) => b,
-                Err(e) => {
-                    warn!(error = %e, "gossip: mesh_store snapshot failed to serialise — skipping replication this round");
-                    return Ok(());
-                }
-            };
-            let payload_bytes = store_bytes.len();
-            tracing::debug!(
-                payload_bytes,
-                entries = entries.len(),
-                warn_at_bytes = RING_SYNC_OPS_BUDGET_BYTES,
-                limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
-                "gossip: mesh_store payload gauge"
-            );
-            if payload_bytes >= RING_SYNC_OPS_BUDGET_BYTES {
-                warn!(
-                    payload_bytes,
-                    entries = entries.len(),
-                    warn_at_bytes = RING_SYNC_OPS_BUDGET_BYTES,
-                    limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
-                    pct_of_limit = (payload_bytes * 100)
-                        / commonwealth_api::server::MAX_REQUEST_BODY_BYTES.max(1),
-                    "gossip: mesh_store snapshot is past half the receiver's body limit — \
-                     full-snapshot replication only grows; past the limit peers stop \
-                     converging, and the 3s POST timeout trips before that on a relay link"
-                );
-            }
-
-            // Re-read the peer list — the earlier loop consumed `selection`.
-            let store_targets: Vec<PeerContact> = {
-                let mesh = app_state.inner.mesh.read().await;
-                mesh.members
-                    .values()
-                    .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-                    .map(peer_contact)
-                    .collect()
-            };
-
-            for contact in store_targets {
-                let peer_id = contact.node_id;
-                let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
-                // The PEER-level outcome, decided after every address
-                // has had its turn. Per-ADDRESS failure is expected on
-                // a multi-homed peer (a stale LAN IP behind a working
-                // Tailscale address) and stays at debug; what an
-                // operator needs surfaced is "this peer is not taking
-                // our snapshot", which is only knowable once the
-                // address list is exhausted.
-                let mut outcome = PushOutcome::Transport;
-                let mut last_detail = String::new();
-                for ep in &endpoints {
-                    let url = format!("{}/internal/app/state", ep.base_url);
-                    let push_start = Instant::now();
-                    match http
-                        .post(&url)
-                        .header(reqwest::header::CONTENT_TYPE, "application/json")
-                        .body(store_bytes.clone())
-                        .send()
-                        .await
-                    {
-                        Ok(resp) if resp.status().is_success() => {
-                            let push_ms = push_start.elapsed().as_millis() as u64;
-                            tracing::debug!(
-                                peer = %peer_id,
-                                url = %url,
-                                push_ms,
-                                payload_bytes,
-                                entries = entries.len(),
-                                "gossip: mesh_store pushed to peer"
-                            );
-                            outcome = PushOutcome::Ok;
-                            break; // one working address is enough
-                        }
-                        Ok(resp) => {
-                            let push_ms = push_start.elapsed().as_millis() as u64;
-                            let status = resp.status();
-                            tracing::debug!(
-                                peer = %peer_id,
-                                url = %url,
-                                push_ms,
-                                status = %status,
-                                "gossip: mesh_store push rejected"
-                            );
-                            outcome = PushOutcome::Rejected(status.as_u16());
-                            last_detail = status.to_string();
-                            break;
-                        }
-                        Err(e) => {
-                            let push_ms = push_start.elapsed().as_millis() as u64;
-                            tracing::debug!(
-                                peer = %peer_id,
-                                url = %url,
-                                push_ms,
-                                error = %e,
-                                "gossip: mesh_store push failed, trying next address"
-                            );
-                            outcome = PushOutcome::Transport;
-                            last_detail = e.to_string();
-                        }
-                    }
-                }
-                if endpoints.is_empty() {
-                    last_detail = "no addresses on record".to_string();
-                }
-
-                // ── Surfacing rail ────────────────────────────────
-                //
-                // Both failure branches were `debug`, which the shipped
-                // daemon never emits — so mesh_store replication could
-                // stop working entirely and every surface stayed green.
-                // Rate-limited per peer per TRANSITION, not per round:
-                // see `PushStatusLedger`.
-                let transition = push_status_ledger()
-                    .lock()
-                    .map(|mut l| l.note(peer_id, outcome))
-                    .unwrap_or(true);
-                if transition {
-                    match outcome {
-                        PushOutcome::Ok => info!(
-                            peer = %peer_id,
-                            outcome = outcome.label(),
-                            payload_bytes,
-                            entries = entries.len(),
-                            "gossip: mesh_store replication to peer RECOVERED"
-                        ),
-                        PushOutcome::Rejected(status) => warn!(
-                            peer = %peer_id,
-                            outcome = outcome.label(),
-                            status,
-                            detail = %last_detail,
-                            payload_bytes,
-                            entries = entries.len(),
-                            addresses_tried = endpoints.len(),
-                            "gossip: mesh_store push REJECTED by peer — this peer's view of \
-                             app state, handoffs and manifests is no longer converging \
-                             (413 here means the snapshot outgrew the receiver's body limit)"
-                        ),
-                        PushOutcome::Transport => warn!(
-                            peer = %peer_id,
-                            outcome = outcome.label(),
-                            detail = %last_detail,
-                            payload_bytes,
-                            entries = entries.len(),
-                            addresses_tried = endpoints.len(),
-                            "gossip: mesh_store push FAILED on every address — this peer's \
-                             view of app state, handoffs and manifests is no longer converging"
-                        ),
-                    }
-                }
-            }
-        }
-    }
-
     Ok(())
 }
 
@@ -1071,131 +801,6 @@ pub async fn announce_presence_change(app_state: &AppState, change: PresenceChan
         announced,
         "gossip: announced departure (self-tombstone pushed to online peers)"
     );
-}
-
-/// Fire-and-forget broadcast of a single mesh_store entry to every
-/// online peer. Used by latency-sensitive writers (e.g. the work
-/// atlas's `declare_scope`) that need a claim visible across the
-/// mesh in the same round-trip rather than waiting up to one full
-/// `DEFAULT_GOSSIP_INTERVAL` for the next anti-entropy round.
-///
-/// Best-effort: unreachable peers are logged at `warn` (one line per
-/// failure) and skipped. The next gossip round will pick the entry
-/// up via the normal anti-entropy path anyway, so a transient peer
-/// outage doesn't lose the write.
-///
-/// Privacy: the caller is responsible for ensuring `app_id` is not
-/// in `GOSSIP_EXCLUDED_APP_IDS`. The store's own `set` already
-/// permits writes to excluded namespaces (the exclusion happens at
-/// the gossip-read boundary, not the write boundary), so a sloppy
-/// caller could in principle broadcast a Private record. The work
-/// atlas's typed facade only calls `broadcast_now` for Public claims
-/// — Private claims skip this entirely.
-pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
-    if commonwealth_state::is_gossip_excluded(app_id) {
-        // Defence-in-depth: even if a caller passed a private app_id,
-        // refuse to broadcast it. This is the third privacy layer
-        // for the work atlas — store-level mapping + gossip filter +
-        // this guard.
-        tracing::warn!(app_id, "work_atlas:broadcast_now refused private app_id");
-        return;
-    }
-
-    let entry = match app_state.inner.mesh_store.get(app_id, key) {
-        Ok(Some(e)) => e,
-        Ok(None) => {
-            tracing::debug!(app_id, key, "broadcast_now: no entry");
-            return;
-        }
-        Err(e) => {
-            tracing::warn!(app_id, key, error = %e, "broadcast_now: store read failed");
-            return;
-        }
-    };
-
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-    // Same body type as the round above, one entry wide.
-    let wire = AppStateGossipBody {
-        entries: vec![GossipStoreEntry::from(&entry)],
-    };
-    let wire = match serde_json::to_vec(&wire) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::warn!(app_id, key, error = %e, "broadcast_now: serialise failed");
-            return;
-        }
-    };
-
-    let targets: Vec<PeerContact> = {
-        let mesh = app_state.inner.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-            .map(peer_contact)
-            .collect()
-    };
-
-    if targets.is_empty() {
-        return;
-    }
-
-    let http = match gossip_client() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!(error = %e, "broadcast_now: client build failed");
-            return;
-        }
-    };
-
-    // Fan out concurrently — claim writers shouldn't pay
-    // serial latency for slow peers.
-    let transport = app_state.peer_transport();
-    let mut handles = Vec::with_capacity(targets.len());
-    for contact in targets {
-        let peer_id = contact.node_id;
-        let http = http.clone();
-        let body = wire.clone();
-        let body_len = body.len();
-        let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
-        handles.push(tokio::spawn(async move {
-            for ep in endpoints {
-                let url = format!("{}/internal/app/state", ep.base_url);
-                match http
-                    .post(&url)
-                    .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body.clone())
-                    .send()
-                    .await
-                {
-                    Ok(resp) if resp.status().is_success() => return,
-                    Ok(resp) => {
-                        tracing::debug!(
-                            peer = %peer_id,
-                            url = %url,
-                            status = %resp.status(),
-                            "work_atlas:broadcast_now peer rejected"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::debug!(
-                            peer = %peer_id,
-                            url = %url,
-                            error = %e,
-                            "work_atlas:broadcast_now peer unreachable, trying next addr"
-                        );
-                    }
-                }
-            }
-            tracing::warn!(
-                peer = %peer_id,
-                body_len,
-                "work_atlas:broadcast_now_failed (all addrs exhausted)"
-            );
-        }));
-    }
-    for h in handles {
-        let _ = h.await;
-    }
 }
 
 async fn gossip_with_peer(
@@ -1470,107 +1075,6 @@ mod select_round_peers_tests {
             "FANOUT=2 × (60s / 10s) = 12 online peers"
         );
     }
-}
-
-#[cfg(test)]
-mod push_surfacing_tests {
-    use super::{
-        max_online_peers_before_false_offline, PushOutcome, PushStatusLedger,
-        RING_SYNC_OPS_BUDGET_BYTES,
-    };
-    use commonwealth_core::ids::NodeId;
-    use std::time::Duration;
-
-    fn nid(n: u128) -> NodeId {
-        NodeId::from_u128(n)
-    }
-
-    /// RED-FIRST (order mesh-scale-t0, item 1). Before the fix there was
-    /// no ledger at all — both push-failure branches logged at `debug`,
-    /// which the shipped daemon never emits, so mesh_store replication
-    /// could stop entirely with every surface staying green. This test
-    /// does not compile against the pre-fix module.
-    ///
-    /// What it pins is the rate-limiting CONTRACT the order asked for:
-    /// per peer, per status TRANSITION, not per round.
-    #[test]
-    fn failures_surface_once_per_transition_not_once_per_round() {
-        let mut ledger = PushStatusLedger::default();
-        let peer = nid(1);
-
-        // First success is the expected state — not news.
-        assert!(!ledger.note(peer, PushOutcome::Ok));
-
-        // It breaks: one line.
-        assert!(ledger.note(peer, PushOutcome::Transport));
-        // …and stays broken for the next 8,639 rounds of the day: silence.
-        for _ in 0..8_639 {
-            assert!(!ledger.note(peer, PushOutcome::Transport));
-        }
-
-        // The failure CHANGES SHAPE — a peer that was unreachable now
-        // answers with 413. Different failure, different operator
-        // response, so it must not be swallowed by the rate limiter.
-        assert!(ledger.note(peer, PushOutcome::Rejected(413)));
-        assert!(!ledger.note(peer, PushOutcome::Rejected(413)));
-        // A different status is a different transition.
-        assert!(ledger.note(peer, PushOutcome::Rejected(401)));
-
-        // Recovery is news too — otherwise the operator is left holding
-        // a warn with no matching all-clear.
-        assert!(ledger.note(peer, PushOutcome::Ok));
-        assert!(!ledger.note(peer, PushOutcome::Ok));
-    }
-
-    /// A first sighting that is already a failure must surface — the
-    /// "no previous entry" case is the one a naive `!= previous` gets
-    /// wrong, and it is also the common one after a daemon restart.
-    #[test]
-    fn a_peer_broken_from_the_first_round_still_surfaces() {
-        let mut ledger = PushStatusLedger::default();
-        assert!(ledger.note(nid(2), PushOutcome::Rejected(413)));
-    }
-
-    /// Peers are tracked independently — one broken peer must not
-    /// suppress another's first failure.
-    #[test]
-    fn the_ledger_is_per_peer() {
-        let mut ledger = PushStatusLedger::default();
-        assert!(ledger.note(nid(1), PushOutcome::Transport));
-        assert!(ledger.note(nid(2), PushOutcome::Transport));
-    }
-
-    /// ONE decider for the replication byte budget (§10.6), and this is
-    /// the assertion that keeps it one: the number this push warns at and
-    /// the number the ring exchange stops at are the same constant, and
-    /// both are derived from the receiver's limit rather than typed.
-    ///
-    /// Reworked at cw-lift rung 2c. Until then this file declared
-    /// `MESH_STORE_PAYLOAD_WARN_BYTES` — the identical
-    /// `MAX_REQUEST_BODY_BYTES / 2` under a second name — and this test
-    /// pinned that copy against the limit, which is a weaker property: two
-    /// derivations of one number both stay "derived" right up until one of
-    /// them is edited.
-    #[test]
-    fn the_payload_warn_is_half_the_receivers_limit() {
-        assert_eq!(
-            RING_SYNC_OPS_BUDGET_BYTES * 2,
-            commonwealth_api::server::MAX_REQUEST_BODY_BYTES
-        );
-        assert_eq!(RING_SYNC_OPS_BUDGET_BYTES, 4 * 1024 * 1024);
-        // The identifier this replaced must not come back. A second
-        // spelling is how the two drift.
-        //
-        // The needle is assembled with `concat!` deliberately: this file is
-        // its own haystack, so writing the joined literal here would make
-        // the assertion match ITSELF and fail on the fixed code. It did,
-        // once, which is the cheapest possible demonstration that the scan
-        // really reads this file.
-        assert!(
-            !include_str!("gossip.rs").contains(concat!("const ", "MESH_STORE_PAYLOAD_WARN_BYTES")),
-            "a second name for MAX_REQUEST_BODY_BYTES / 2 is a second decider"
-        );
-    }
 
     /// The rail the loop now checks. Named here so the formula's
     /// operating meaning is pinned next to the code that warns on it:
@@ -1579,9 +1083,9 @@ mod push_surfacing_tests {
     #[test]
     fn the_online_population_rail_matches_the_shipped_constants() {
         let ceiling = max_online_peers_before_false_offline(
-            super::FANOUT,
-            super::DEFAULT_GOSSIP_INTERVAL,
-            super::DEFAULT_OFFLINE_THRESHOLD,
+            FANOUT,
+            DEFAULT_GOSSIP_INTERVAL,
+            DEFAULT_OFFLINE_THRESHOLD,
         );
         assert_eq!(ceiling, 12, "fanout 2 × floor(60s / 10s)");
         assert!(12 > ceiling - 1);
@@ -1591,8 +1095,8 @@ mod push_surfacing_tests {
         assert_eq!(
             max_online_peers_before_false_offline(
                 2,
-                Duration::ZERO,
-                super::DEFAULT_OFFLINE_THRESHOLD
+                std::time::Duration::ZERO,
+                DEFAULT_OFFLINE_THRESHOLD
             ),
             usize::MAX
         );

@@ -46,8 +46,8 @@ Four entities: **Node** (mesh `node_id`, reused — no parallel identity scheme)
 Spec §6 mandates: "A Private Session MUST result in zero MeshStore records for that Session, its Claims, or its Observations replicated." This is a user-trust invariant, so three layers each independently enforce it:
 
 1. **Store level (structural).** `Privacy::app_id()` is a `const fn` returning one of two hardcoded literals — `"work-atlas"` or `"work-atlas-private"`. No code path constructs an app_id from runtime data. The violation is impossible to *express*. Pinned by `privacy_app_id_returns_hardcoded_literals` in `model.rs`.
-2. **Gossip level (structural).** `"work-atlas-private"` is in `GOSSIP_EXCLUDED_APP_IDS` in `commonwealth-state::peer_preferences`. The gossip loop's `all_entries_for_gossip` filters at the slice; a private record cannot reach the network even if a writer asks. Pinned by `gossip_excludes_work_atlas_private_app_id`.
-3. **Read level (defence-in-depth).** `work_in_flight` filters its results to Public records regardless of whether the caller has visibility into Private ones. `broadcast_now` in `sovereign-mesh::gossip` also rejects calls with a private app_id, logging at WARN — a sloppy caller cannot trigger a leak.
+2. **Wire level (structural), on BOTH ends.** `"work-atlas-private"` is in `GOSSIP_EXCLUDED_APP_IDS` in `commonwealth-state::peer_preferences`. Outbound, `backend::enqueue_on` applies the predicate inside the store's own write transaction, so a private record is not in the outbox and there is nothing for the pump to sign — it never gets a ring journal (`an_excluded_namespace_never_enters_the_outbox`, and end to end `an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store`). Inbound, `MeshStore::apply_projection` refuses the namespace with an `Err`, so a peer that puts `work-atlas-private` on the ring deliberately reaches no reader here (`a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`). The list itself is pinned by `gossip_excludes_work_atlas_private_app_id`.
+3. **Read level (defence-in-depth).** `work_in_flight` filters its results to Public records regardless of whether the caller has visibility into Private ones.
 
 Toggling Public ↔ Private does not retroactively republish prior records. The toggle starts a new Session; the old Session keeps its original app_id until TTL drops it (spec §6).
 
@@ -148,9 +148,37 @@ recorded.
 
 ## Broadcast model
 
-Spec §7 calls for immediate fan-out on Claim writes (don't make a peer wait 10s for the next gossip round). `sovereign-mesh::gossip::broadcast_now(app_id, key)` reads the single entry and POSTs to every online peer's `/internal/app/state`, in parallel, fire-and-forget. Best-effort: unreachable peers are skipped with a WARN — the next gossip round will pick it up via the normal anti-entropy path.
+Spec §7 calls for immediate fan-out on Claim writes — don't make a peer wait a
+full replication cycle to see a claim. **It is no longer a fan-out, and since
+cw-lift rung 2e nothing here puts bytes on a socket.**
 
-Session updates do NOT trigger immediate fan-out (they're high-volume and the peers don't act on them); Observation writes (Phase 2) also won't.
+A claim write is an ordinary `MeshStore::set`, and the store queues it in
+`rail_outbox` in the same transaction as the row. Two hops then carry it: the
+KV pump signs it onto the `work-atlas` ring journal, and the ring-sync loop
+exchanges digests with peers. On their own clocks that is up to 2 s + up to
+60 s. `MeshBroadcaster` (`sovereign-mesh/src/work_atlas_broadcaster.rs`) is
+what makes it now: it calls `rail_kv_pump::pump_once` — the pump's own body,
+not a second spelling of it — and then raises `AppState::ring_write_nudge`,
+which the ring-sync loop waits on beside its interval. By the time
+`declare_scope` returns, the claim is signed onto the journal and a round has
+been asked for.
+
+What went with the old model: `gossip::broadcast_now`, the
+`POST /internal/app/state` route it wrote to, and the ten-second full-snapshot
+gossip round that was its documented recovery. There is no fire-and-forget POST
+to lose any more — the write is durable on the journal before the call returns,
+and the ring's anti-entropy is what redelivers it to a peer that was offline.
+
+**A release now propagates.** The old path enumerated LIVE rows, so a deleted
+claim simply stopped being re-sent and a peer kept its copy until its own TTL
+gc swept it. The rail carries a delete as a TOMBSTONE, so a release reaches
+peers — and, per K7, survives until the seal that retires it.
+`tests/cross_node.rs::release_propagates_as_a_tombstone` is the pin, and it is
+the assertion that was inverted at 2e.
+
+Session updates do NOT trigger the hurry (they're high-volume and the peers
+don't act on them); Observation writes (Phase 2) also don't — they travel on
+the pump's ordinary 2 s tick.
 
 ## Observability (ARCH §9)
 
@@ -164,7 +192,7 @@ Session updates do NOT trigger immediate fan-out (they're high-volume and the pe
 | `work_atlas:query` | debug | `WorkInFlightTool::execute` |
 | `work_atlas:resource_may_i` | debug | `ResourceMayITool::execute` (scope, verdict, node) |
 | `work_atlas:claim_node_fallback_session` | debug | node attribution fell back to the session row (claim written by an older binary) |
-| `work_atlas:broadcast_now_failed` | warn | per-peer failure in `broadcast_now` |
+| `work_atlas: claim hurried onto the ring` | debug | `MeshBroadcaster::broadcast` — what the outbox drain appended, deferred and refused |
 | `work_atlas:repo_id_missing` | warn | `repo_id::resolve` error path; daemon serve continues but `declare_scope` rejects |
 | `mcp:tool_call dispatched` | debug | `mcp_router::handle_tool_call`, includes redacted token |
 
@@ -226,7 +254,7 @@ The existing `blast` tool gains a `concurrent: [{ claim_id, session_id, intent, 
 2. Applies its own 30 s per-path debounce — the spec's minimum interval between observation upserts. The coordinator's 800 ms debounce coalesces editor save-storms; the observer's 30 s on top stabilises the signal peers see.
 3. For each non-debounced path: reads any existing `ObservationRecord` (preserves `first_observed_at`, bumps `event_count`), writes the updated record under `work-atlas:observation:<session_id>:<path>` (or `work-atlas-private` when the configured privacy is Private), and calls `broadcaster.broadcast(...)` for Public records. Paths are normalized to **repo-relative** at write time (as are `declare_scope` file scopes) — the canonical shape every `work_in_flight --match_mode=file` query should use. An empty scope in file mode matches everything (the supported "all live signals" query).
 
-The broadcaster is a `DeferredBroadcaster` at observer construction time — the daemon's `AppState` isn't reachable when the watcher coordinator starts. A spawned task in `start_daemon` polls `daemon.app_state()` for up to 30 s and swaps the real `MeshBroadcaster` in once available. Until then, observations still propagate via the regular 10 s gossip round (just slower).
+The broadcaster is a `DeferredBroadcaster` at observer construction time — the daemon's `AppState` isn't reachable when the watcher coordinator starts. A spawned task in `start_daemon` polls `daemon.app_state()` for up to 30 s and swaps the real `MeshBroadcaster` in once available. Until then, observations still propagate on the pump's own 2 s tick and the ring's 60 s round (just slower) — the write is queued either way, so nothing is lost by the wire-up window.
 
 `work_in_flight` queries claims and observations independently, applies confidence grades (claims always `declared`; observations graded `active` / `recent` from `now - last_observed_at` against the spec windows), excludes the caller's own session, and returns both arrays.
 
@@ -263,7 +291,7 @@ These are intentionally out of scope and called out so future-you doesn't think 
 - `sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs` — `sovereign claim` dispatch incl. `may-i` / `take` (daemon-first; the in-process fallback lives here too).
 - `commonwealth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
 - `commonwealth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.
-- `sovereign/crates/sovereign-mesh/src/gossip.rs::broadcast_now` — immediate fan-out helper.
+- `sovereign/crates/sovereign-mesh/src/work_atlas_broadcaster.rs::MeshBroadcaster` — the hurry: `rail_kv_pump::pump_once` + `AppState::ring_write_nudge`. (Was `gossip.rs::broadcast_now`, deleted at cw-lift 2e with the route it POSTed to.)
 - `sovereign/crates/sovereign-mesh/src/mcp_router.rs` — `X-Agent-Session` extraction.
 - `sovereign/crates/sovereign-core/src/types.rs::ToolContext` — `agent_session_token` field.
 - `sovereign/crates/sovereign-tools/src/code/blast_radius.rs` — `concurrent` field injection.

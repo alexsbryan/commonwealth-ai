@@ -6,7 +6,6 @@ use axum::Router;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::routes_app_internal;
 use crate::routes_apps;
 use crate::routes_completions;
 use crate::routes_edit_predictions;
@@ -460,15 +459,11 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/node/activity",
             post(routes_internal::node_activity),
         )
-        // App gossip endpoints.
-        .route(
-            "/internal/app/state",
-            post(routes_app_internal::recv_app_state),
-        )
-        // Ring-ledger anti-entropy. Its OWN route on its own cadence rather
-        // than a namespace riding `/internal/app/state`: that push ships a
-        // full snapshot to every online peer every 10s, which for a ledger
-        // that only grows is a bandwidth bill that never stops climbing.
+        // Ring-ledger anti-entropy — the ONE receiver of replicated state.
+        // `/internal/app/state` sat beside it until cw-lift rung 2e and took
+        // a full mesh-store snapshot from every online peer every 10s; the
+        // store is a projection of these journals now, so a ledger that only
+        // grows is carried by digest instead of by snapshot.
         .route("/internal/ring/sync", post(routes_internal::ring_sync))
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static

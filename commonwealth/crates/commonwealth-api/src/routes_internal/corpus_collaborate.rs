@@ -7,6 +7,13 @@
 //! or (b) directly notifies each peer with a static partition (the
 //! legacy push path, kept under `SOVEREIGN_USE_LEGACY_PARTITION=1`
 //! for rolling-upgrade compatibility).
+//!
+//! **The `ingest_partition` POST is an RPC, not a sender of replicated
+//! state.** It hands one named peer one work assignment and reads the answer;
+//! nothing it sends is a row any store holds or converges on. It is therefore
+//! not on `replication_sender_census`'s table, and adding it would make that
+//! census answer a different question than the one
+//! `cw-twin-visibility` asks.
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -533,21 +540,22 @@ pub async fn corpus_collaborate(
 
         // Write the handoff announcement into the local mesh_store. That
         // is the WHOLE announcement: `ShardManager::load_handoff` and
-        // `discover_and_spawn_pull_loops` read it here, and the gossip
-        // round's anti-entropy push carries the row to every online peer
-        // within one `DEFAULT_GOSSIP_INTERVAL`.
+        // `discover_and_spawn_pull_loops` read it here, and the write is
+        // queued in `rail_outbox` in the same transaction, so the KV pump
+        // signs it onto the `corpus-engine` ring journal and
+        // `/internal/ring/sync` carries it to peers.
         //
         // This used to be followed by a hand-rolled fan-out of the same
         // row to `candidates`, under a comment asserting the periodic
-        // sender did not exist. It has existed since it landed
+        // sender did not exist. It had existed since it landed
         // (`sovereign-mesh/src/gossip.rs`, Step 4), the round's targets
-        // are a SUPERSET of `candidates` (every online peer, against
+        // were a SUPERSET of `candidates` (every online peer, against
         // online AND embed-compatible AND allowlisted here), and the
         // consumer this fed polls at `auto_ingest::CHECK_INTERVAL` = 30 s
         // — so the <= 10 s the unicast bought was inside the poll it was
-        // buying it for. Deleted by cw-lift rung 2c; the census of
-        // senders is pinned in `sovereign-mesh/tests/main/
-        // gossip_push_surfacing.rs`.
+        // buying it for. Deleted by cw-lift rung 2c; Step 4 itself went at
+        // 2e and the census of senders (now ONE) is pinned in
+        // `sovereign-mesh/tests/main/replication_sender_census.rs`.
         let gossip_key = format!("handoff:{}", handoff.handoff_id);
         let handoff_bytes = match serde_json::to_vec(&handoff) {
             Ok(b) => b,
@@ -587,7 +595,8 @@ pub async fn corpus_collaborate(
             handoff = %handoff.handoff_id,
             units = unit_count,
             // Eligible, not notified: this handler no longer sends
-            // anything — the gossip round replicates the handoff row.
+            // anything — the handoff row is a `MeshStore` write, so the
+            // outbox and the ring carry it like any other.
             peers_eligible = candidates.len(),
             "corpus_collaborate: pull-based queue registered"
         );

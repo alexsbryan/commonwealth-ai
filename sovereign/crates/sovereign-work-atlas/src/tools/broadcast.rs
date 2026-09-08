@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Indirection seam for the work atlas's "broadcast a claim now"
+//! Indirection seam for the work atlas's "make this claim visible now"
 //! requirement (§7 of the spec).
 //!
-//! The actual broadcast lives in `sovereign-mesh::gossip::broadcast_now`
-//! and needs `AppState`, which would create a circular crate-dep if
-//! the work-atlas tools called it directly. This trait lets the
-//! daemon wire the real broadcaster in from the outside while tests
-//! and standalone callers can use [`NullBroadcaster`].
+//! The implementation lives in `sovereign-mesh::MeshBroadcaster` and needs
+//! `AppState`, which would create a circular crate-dep if the work-atlas tools
+//! called it directly. This trait lets the daemon wire the real one in from
+//! the outside while tests and standalone callers use [`NullBroadcaster`].
+//!
+//! It is not a fan-out any more. Until cw-lift rung 2e the implementation
+//! POSTed the entry to every online peer; now the claim write has already been
+//! queued for the ring by `MeshStore::set`, and what the implementation does
+//! is hurry the two hops that carry it (drain the outbox onto the journal,
+//! then ask the ring round to run). A dropped call therefore costs latency and
+//! never the write.
 //!
 //! The watcher coordinator starts before `AppState` is ready, so
 //! [`DeferredBroadcaster`] lets cmd_serve construct an empty
@@ -21,9 +27,10 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait ClaimBroadcaster: Send + Sync + std::fmt::Debug {
-    /// Best-effort: fan out the entry at `(app_id, key)` to every
-    /// online peer. Must not block on slow peers — implementors
-    /// should spawn tasks per peer.
+    /// Best-effort: make the write at `(app_id, key)` visible to peers as
+    /// soon as this node can, rather than on the replication path's own
+    /// clock. Must not block on slow peers, and must be safe to skip — the
+    /// write is durable and travels either way.
     async fn broadcast(&self, app_id: &str, key: &str);
 }
 

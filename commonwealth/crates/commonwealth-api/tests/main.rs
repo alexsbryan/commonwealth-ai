@@ -18,8 +18,6 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-#[path = "main/app_state_privacy.rs"]
-mod app_state_privacy;
 #[path = "main/client_auth.rs"]
 mod client_auth;
 #[path = "main/control_plane_not_shed.rs"]
