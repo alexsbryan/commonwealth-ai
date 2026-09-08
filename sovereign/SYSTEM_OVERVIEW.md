@@ -1677,7 +1677,31 @@ means one thing.
   fixture: it rebuilt the table from the always-seeded pair and dropped all
   2,004 `Summary` rows, exit 0. It calls `backfill_ann` now, watched by
   `the_ann_step_seeds_through_the_one_writer`, which names the two forked
-  symbols the file may no longer contain and the writer it must. Two properties are deliberate. The map is a FLOOR, never a
+  symbols the file may no longer contain and the writer it must. **Since
+  map-conversion rung 3 (2026-09-08) `migrate-all` also CONVERTS**: between
+  the store step and the ANN step it calls
+  `sovereign_enrichment_build::pipeline_map::ensure_pipeline_map`, which
+  reads the corpus's `enrichment/<id>/config.json`, resolves the pipeline
+  through the one resolver, and writes `atlas/ontology.json` from
+  `declared_ontology()` when there is none (`written`), rewrites a built-in
+  map that no longer matches what its pipeline declares (`refresh` — every
+  map written before rung 2 lacked the rows), leaves an author-declared
+  `custom_atlas` map alone (`author`), and names `no-cfg` / `unreg` rather
+  than guessing; the `map` column carries the verdict. The write goes through
+  `write_pipeline_map`, the SAME function the resolve step calls at build
+  time, so a converted atlas and a rebuilt one carry identical bytes. Order
+  matters: the seed population is derived from that file, so the map lands
+  before the table. On the walk side the rows reach the walker two ways
+  short of the defaults, neither gated on declared types:
+  `AtlasProvider::navigation()` returns `NavigationSource::Declared` for a
+  file with rows (engineering's typeless map included — `AtlasGraph` keeps
+  the rows apart from the `with_ontology` gate) and
+  `NavigationSource::PipelineDefault` when the daemon's loader
+  (`atlas_context_manager::attach_pipeline_map`) attached the pipeline's map
+  to a not-yet-converted atlas from its config, reported as
+  `PolicySource::PipelineDefault` in every ledger line. `seed_population`
+  labels a typeless file `Declared` now too, so the table's author and the
+  walk agree by construction. Two properties are deliberate. The map is a FLOOR, never a
   ceiling — `AtlasContextFilter::admits_atom` UNIONS the population with what
   the filter itself admits, so nothing loses a seed it had; not theoretical,
   since SEP's `ArgumentReconstruction` atoms appear in no pre-registered row

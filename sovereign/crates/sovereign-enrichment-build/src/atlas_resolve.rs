@@ -402,26 +402,16 @@ pub async fn resolve_into_dir(
     // pipeline's own (`declared_ontology`), not this config's — one decider.
     match super::pipeline_resolve::resolve_pipeline(cfg) {
         Some(pipeline) => {
-            let map = pipeline.declared_ontology();
-            let ontology_version = cfg
-                .ontology
-                .as_ref()
-                .map(|spec| spec.ontology_version)
-                .unwrap_or(
-                    corpus_engine::enrichment::atlas::AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
-                );
-            match corpus_engine::enrichment::atlas::write_atlas_ontology(
-                atlas_dir,
-                pipeline.id(),
-                ontology_version,
-                &map,
-            ) {
-                Ok(path) => println!(
+            // The ONE writer, shared with `svrn atlas migrate-all`'s converter
+            // (`pipeline_map`), so a built atlas and a converted one carry the
+            // same bytes for the same pipeline.
+            match super::pipeline_map::write_pipeline_map(atlas_dir, cfg, &*pipeline) {
+                Ok(w) => println!(
                     "  ✓ wrote {} ({} declared type(s), ontology version {}, pipeline {})",
-                    path.display(),
-                    map.shape.types.len(),
-                    ontology_version,
-                    pipeline.id()
+                    w.path.display(),
+                    w.declared_types,
+                    w.ontology_version,
+                    w.pipeline
                 ),
                 Err(e) => eprintln!("warning: writing ontology.json: {e}"),
             }

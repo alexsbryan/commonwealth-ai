@@ -35,6 +35,45 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
+/// The walker's fallback for an atlas whose `ontology.json` has not been
+/// converted in yet (map-conversion rung 3): its enrichment config names the
+/// pipeline that built it, and that pipeline's declared map is attached under
+/// `PolicySource::PipelineDefault` — the same rows `svrn atlas migrate-all`
+/// would write beside the atoms, named as not-yet-written. A graph that
+/// already carries a map is returned untouched (`with_pipeline_map` is a
+/// no-op then), and a recipe-declared config (`ontology` present) is left
+/// alone: its map is the author's, written by the build.
+///
+/// This host can read the config (`sovereign-enrichment-catalog`) and the
+/// registry (`corpus-engine`); it cannot reach the build crate's resolver,
+/// which is why the custom path is excluded rather than resolved here.
+fn attach_pipeline_map(
+    graph: sovereign_core::atlas_context::AtlasGraph,
+    corpus_id: &str,
+) -> sovereign_core::atlas_context::AtlasGraph {
+    if graph.navigation().is_some() {
+        return graph;
+    }
+    let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(corpus_id) else {
+        return graph;
+    };
+    if cfg.ontology.is_some() {
+        return graph;
+    }
+    match corpus_engine::enrichment::pipeline::PipelineRegistry::builtin().get(&cfg.pipeline_id) {
+        Some(p) => {
+            tracing::debug!(
+                corpus = corpus_id,
+                pipeline = p.id(),
+                "atlas-graph: no ontology.json; walking under the pipeline's declared map \
+                 (run `svrn atlas migrate-all` to write it beside the atoms)"
+            );
+            graph.with_pipeline_map(p.id(), p.declared_ontology().navigation)
+        }
+        None => graph,
+    }
+}
+
 /// The ONE `atoms.json` → embedded-bag loader and the filter that governs it.
 /// Both moved DOWN to `corpus_engine::enrichment::atlas::context_loader`
 /// (order ei-5a-build-cut): every type they touch was already corpus-engine's,
@@ -305,7 +344,7 @@ impl AtlasContextManager {
         // (e.g. wikipedia — columnar WikipediaGraph, no atom store) is skipped.
         let graph =
             match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
-                Ok(g) => g,
+                Ok(g) => attach_pipeline_map(g, corpus_id),
                 Err(e) => {
                     tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
                     return false;
@@ -636,7 +675,7 @@ impl AtlasContextProvider for AtlasContextManager {
         {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
-                let graph = Arc::new(graph);
+                let graph = Arc::new(attach_pipeline_map(graph, atlas_corpus_id));
                 tracing::info!(
                     corpus = atlas_corpus_id,
                     atoms = graph.atom_count(),

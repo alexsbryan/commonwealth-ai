@@ -83,7 +83,7 @@ pub use ground::{
 };
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use inventory::{AtlasInventory, RowFit, RowInert};
-pub use provider::{open_walk_provider, open_walk_provider_blocking, AtlasProvider};
+pub use provider::{open_walk_provider, open_walk_provider_blocking, AtlasProvider, NavigationSource};
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{
     fold, resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b,

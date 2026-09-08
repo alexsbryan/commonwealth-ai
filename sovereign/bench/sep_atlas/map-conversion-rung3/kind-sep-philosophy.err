@@ -1,0 +1,15 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+warning: 1 expected_fact(s) in sovereign/bench/sep/questions.toml cannot be scored by the keyword scorer and are excluded from every fact ratio:
+  comparative_mencius_xunzi_human_nature: "li"
+  Every token is under 3 alphanumeric chars. Spell the value out ("80 percent") or add surrounding words to make it matchable.
+atlas kind: map = declared by pipeline `philosophy_atlas` (not yet written beside any atlas)
+atlas kind: census over 1771 atlas(es): atoms entity:88801 event:6750 state:23984 relation:19807 claim:59100 question:33949 configuration:4817 argument:13610; edges transition:3440 tension:2817 involves:58823
+atlas kind: row fit: thematic fits, trajectory fits, tension fits, enumeration inert:seeds, lookup fits
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+atlas kind: inter-centroid cosine 0.718 (thematic~lookup) .. 0.401 (tension~lookup), mean 0.571
+atlas kind: rows that run on this corpus: tension 9, trajectory 1; 0 classified winner(s) inert
+atlas kind: 10/21 classified, 11 abstained (abstain:both 1, abstain:margin 10); classified kinds: tension 9, trajectory 1

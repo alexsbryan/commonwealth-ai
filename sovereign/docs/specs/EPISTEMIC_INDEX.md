@@ -464,6 +464,19 @@ lane names an owner and a scheduled measurement before it is accepted.
    instead; widening the shared manifest is banked.
 7. Ports, one per commit, each measured on its lane: RAPTOR, field model,
    wikipedia store.
+8. Map conversion (order `epistemic-index-map-conversion`, 2026-09-08): the
+   rows fire on the atlases we already have, by CONVERTING, never by
+   regenerating. Rung 1 — a row is checked against what the atlases in
+   scope carry before it runs, and an inert winner falls through by name
+   (§2.2). Rung 2 — every built-in pipeline declares rows written against
+   what it emits, ratcheted. Rung 3 — `svrn atlas migrate-all` writes each
+   installed atlas its pipeline's `ontology.json` from `config.json`
+   (idempotent; refreshes a stale built-in map; never touches an author's),
+   and the daemon's loader attaches the pipeline's map to an atlas not yet
+   converted (`PolicySource::PipelineDefault`); a typeless map's rows reach
+   the walk too. Rung 4 — `svrn atlas map-check <corpus>`, the preflight.
+   Rungs 5–6 — the paired SEP lane (bars: rows fired ≥ 11/21, facts ≥
+   152/159) and the generated-answer comparison against the fallback.
 
 Each step is its own commit with the lane numbers in the body, and each
 updates this file's §1 "Today" column and `SYSTEM_OVERVIEW.md` in the same

@@ -128,7 +128,7 @@ fn row_for(
 /// read beside the union; a corpus with no summary anywhere (a wiki-class
 /// store has no `atoms.json`) reads as zero, and the caller says so rather
 /// than judging rows against nothing.
-fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
+pub(crate) fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
     let mut union = AtlasInventory::default();
     let mut read = 0usize;
     let mut unreadable = 0usize;
@@ -190,8 +190,23 @@ fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
     (union, read)
 }
 
-/// The map a corpus walks under, and where it came from.
-fn policy_for(corpus: Option<&str>) -> (NavigationPolicy, String) {
+/// The map a corpus walks under, and where it came from. `--pipeline` asks
+/// instead for a built-in pipeline's DECLARED map — what a corpus would walk
+/// under once `svrn atlas migrate-all` has written that map beside its atoms
+/// — so the effect of a map on a bank is measurable before any file changes.
+pub(crate) fn policy_for(corpus: Option<&str>, pipeline: Option<&str>) -> (NavigationPolicy, String) {
+    if let Some(id) = pipeline {
+        return match corpus_engine::enrichment::pipeline::PipelineRegistry::builtin().get(id) {
+            Some(p) => (
+                p.declared_ontology().navigation,
+                format!("declared by pipeline `{id}` (not yet written beside any atlas)"),
+            ),
+            None => (
+                NavigationPolicy::default(),
+                format!("pre-registered defaults (`{id}` is not a registered pipeline)"),
+            ),
+        };
+    }
     if let Some(id) = corpus {
         let atlas_dir = paths::index_root(id).join(ATLAS_DIRNAME);
         if let Some(file) = read_atlas_ontology(&atlas_dir) {
@@ -203,9 +218,43 @@ fn policy_for(corpus: Option<&str>) -> (NavigationPolicy, String) {
                 ),
             );
         }
+        // No file: the loader's fallback (map-conversion rung 3) — the
+        // corpus's own config names its pipeline, else the first `<id>-*`
+        // sibling's does (the `sep` umbrella has no config; its articles do).
+        let mut candidates = vec![id.to_string()];
+        let prefix = format!("{id}-");
+        if let Ok(entries) = std::fs::read_dir(paths::enrichment_dir()) {
+            let mut sibs: Vec<String> = entries
+                .flatten()
+                .filter_map(|e| e.file_name().to_str().map(String::from))
+                .filter(|n| n.starts_with(&prefix))
+                .collect();
+            sibs.sort();
+            candidates.extend(sibs);
+        }
+        for c in candidates {
+            let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(&c)
+            else {
+                continue;
+            };
+            if cfg.ontology.is_some() {
+                continue;
+            }
+            if let Some(p) = corpus_engine::enrichment::pipeline::PipelineRegistry::builtin()
+                .get(&cfg.pipeline_id)
+            {
+                return (
+                    p.declared_ontology().navigation,
+                    format!(
+                        "pipeline default `{}` for `{id}` (via {c}'s config; no atlas/ontology.json yet — run `svrn atlas migrate-all`)",
+                        p.id()
+                    ),
+                );
+            }
+        }
         return (
             NavigationPolicy::default(),
-            format!("pre-registered defaults (`{id}` has no atlas/ontology.json)"),
+            format!("pre-registered defaults (`{id}` has no atlas/ontology.json and no config names a pipeline)"),
         );
     }
     (
@@ -215,13 +264,18 @@ fn policy_for(corpus: Option<&str>) -> (NavigationPolicy, String) {
 }
 
 fn usage() -> i32 {
-    eprintln!("usage: svrn atlas kind [--corpus <id>] [--bank <questions.toml>] [--json] [<question> ...]");
+    eprintln!(
+        "usage: svrn atlas kind [--corpus <id>] [--pipeline <id>] [--bank <questions.toml>] [--json] [<question> ...]"
+    );
     eprintln!(
         "  runs the question-kind classifier over a bank (or the questions given) and prints"
     );
     eprintln!("  the race: winner, sim, margin, runner-up, and which gate refused on an abstain.");
     eprintln!(
         "  --corpus reads that corpus's atlas/ontology.json map; otherwise the pre-registered map."
+    );
+    eprintln!(
+        "  --pipeline uses a built-in pipeline's declared map instead — what --corpus would read after migrate-all."
     );
     2
 }
@@ -235,6 +289,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
     let mut corpus: Option<String> = None;
+    let mut pipeline: Option<String> = None;
     let mut bank: Option<String> = None;
     let mut json = false;
     let mut questions: Vec<(String, String)> = Vec::new();
@@ -253,6 +308,13 @@ pub async fn run(args: &[String]) -> i32 {
                     return usage();
                 };
                 bank = Some(v.clone());
+                i += 2;
+            }
+            "--pipeline" => {
+                let Some(v) = rest.get(i + 1) else {
+                    return usage();
+                };
+                pipeline = Some(v.clone());
                 i += 2;
             }
             "--json" => {
@@ -287,7 +349,7 @@ pub async fn run(args: &[String]) -> i32 {
         return usage();
     }
 
-    let (policy, policy_source) = policy_for(corpus.as_deref());
+    let (policy, policy_source) = policy_for(corpus.as_deref(), pipeline.as_deref());
     let rows = policy.classifiable();
     eprintln!("atlas kind: map = {policy_source}");
     // What the corpus carries, and which rows can fire on it at all.

@@ -44,6 +44,7 @@ use corpus_engine::enrichment::atlas::ann_store::ann_table_present;
 use corpus_engine::enrichment::atlas::store::{build_and_write_store, store_needs_build};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::wikipedia_graph_present;
+use sovereign_enrichment_build::pipeline_map::{ensure_pipeline_map, MapConversion};
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
@@ -143,12 +144,12 @@ pub async fn run(args: &[String]) -> i32 {
     let filter = AtlasContextFilter::default();
 
     println!(
-        "{:<46} {:>7} {:>8} {:>5}  track",
-        "corpus", "store", "ann", "flip"
+        "{:<46} {:>7} {:>7} {:>8} {:>5}  track",
+        "corpus", "store", "map", "ann", "flip"
     );
-    println!("{}", "-".repeat(82));
-    let (mut stores, mut anns, mut flips, mut wikis, mut errs) =
-        (0usize, 0usize, 0usize, 0usize, 0usize);
+    println!("{}", "-".repeat(90));
+    let (mut stores, mut maps, mut anns, mut flips, mut wikis, mut errs) =
+        (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
 
     for corpus_id in &corpora {
         let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
@@ -163,8 +164,8 @@ pub async fn run(args: &[String]) -> i32 {
         if wikipedia_graph_present(&indexes_dir, corpus_id) {
             wikis += 1;
             println!(
-                "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki columnar (not this command)",
-                "-", "-", "-"
+                "{corpus_id:<46} {:>7} {:>7} {:>8} {:>5}  wiki columnar (not this command)",
+                "-", "-", "-", "-"
             );
             continue;
         }
@@ -192,6 +193,38 @@ pub async fn run(args: &[String]) -> i32 {
             }
         } else {
             "current"
+        };
+
+        // 1b) the map (map-conversion rung 3; idempotent). BEFORE the ANN
+        // step, because the seed population is derived from this file
+        // (`seed_population`), and an atlas that gets its rows after its
+        // table would be seeded under the defaults it just stopped walking.
+        // Every outcome is a named column value; `author` means an
+        // author-declared map was found and left alone.
+        let map_state: &str = match ensure_pipeline_map(&atlas_dir, corpus_id) {
+            Ok(outcome) => {
+                match &outcome {
+                    MapConversion::Written(w) | MapConversion::Refreshed(w) => {
+                        maps += 1;
+                        println!(
+                            "{corpus_id:<46}  map: {} ({}, {} declared type(s))",
+                            outcome.state(),
+                            w.pipeline,
+                            w.declared_types
+                        );
+                    }
+                    MapConversion::Unregistered(id) => {
+                        println!("{corpus_id:<46}  map: pipeline `{id}` is not registered");
+                    }
+                    _ => {}
+                }
+                outcome.state()
+            }
+            Err(e) => {
+                errs += 1;
+                eprintln!("  {corpus_id}: map: {e}");
+                "err"
+            }
         };
 
         // 2) ANN — scope to embedding-bearing corpora (never bulk-embed the
@@ -284,12 +317,14 @@ pub async fn run(args: &[String]) -> i32 {
             }
         };
 
-        println!("{corpus_id:<46} {store_state:>7} {ann_state:>8} {flip_state:>5}  atom");
+        println!(
+            "{corpus_id:<46} {store_state:>7} {map_state:>7} {ann_state:>8} {flip_state:>5}  atom"
+        );
     }
 
     println!(
-        "\nmigrate-all: {stores} stores built, {anns} ANN tables, {flips} flipped, \
-         {wikis} wiki columnar, {errs} errors (over {} corpora)",
+        "\nmigrate-all: {stores} stores built, {maps} maps written, {anns} ANN tables, \
+         {flips} flipped, {wikis} wiki columnar, {errs} errors (over {} corpora)",
         corpora.len()
     );
     i32::from(errs > 0)

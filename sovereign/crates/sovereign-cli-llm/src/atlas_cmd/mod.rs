@@ -27,6 +27,7 @@ pub mod build_doc_index;
 pub mod enable_incremental;
 pub mod inspect;
 pub mod kind;
+pub mod map_check;
 pub mod migrate_all;
 pub mod migrate_ids;
 pub mod stats;
@@ -79,6 +80,10 @@ const HELP: Help = Help {
                 "Run the question-kind classifier over a bank (or given questions) and print the race — winner, sim, margin, runner-up, and which gate refused on an abstain. --corpus reads that corpus's map.",
             ),
             (
+                "map-check",
+                "Preflight: the corpus's navigation rows × what its atlases carry — fits / inert:seeds / inert:edges per row, or no-map with what the walk falls back to. No daemon.",
+            ),
+            (
                 "backfill-ann",
                 "ATLAS_STORAGE_V2 3b: build the per-corpus ANN seed table (atlas/atoms_ann.lance) so atlas_navigate seeds from atom-ids directly (no per-query resolve).",
             ),
@@ -125,6 +130,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
         "backfill-ann" => backfill_ann::run(&args[1..]).await,
         "kind" => kind::run(&args[1..]).await,
+        "map-check" => map_check::run(&args[1..]).await,
         "migrate-all" => migrate_all::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,
         "typed-extension" => typed_extension::run(&args[1..]).await,

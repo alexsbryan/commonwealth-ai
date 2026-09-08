@@ -61,6 +61,7 @@ pub mod seed_cmd;
 // `enrich_cmd/mod.rs` re-exports them for the ~15 siblings that reach them.
 pub mod corpus_io;
 pub mod inference_client;
+pub mod pipeline_map;
 pub mod pipeline_resolve;
 pub mod providers;
 pub mod source_loader;

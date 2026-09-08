@@ -31,7 +31,9 @@ use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::evidence_site::{ChunkSelector, EvidenceSite};
 use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
+use crate::enrichment::atlas::provider::NavigationSource;
 use crate::enrichment::atlas::store::LancePreload;
+use corpus_engine_vocab::ontology::NavigationPolicy;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
@@ -119,6 +121,25 @@ pub struct AtlasGraph {
     /// graph, which is a real answer rather than a gap. One consumer — see
     /// [`Self::summary_corpus_dir`].
     index_root: Option<PathBuf>,
+    /// The navigation map this atlas walks under, kept APART from
+    /// [`Self::ontology`] because [`Self::with_ontology`] drops a policy set
+    /// that declares no types — right for every declared-type code path (I5),
+    /// wrong for the rows, which a typeless map (engineering) carries all the
+    /// same. Read off `ontology.json` by [`Self::load_lance_from_disk`]
+    /// whether or not types are declared, or attached by a loader from the
+    /// corpus's pipeline ([`Self::with_pipeline_map`]) when there is no file.
+    navigation: Option<NavigationAttachment>,
+}
+
+/// How a navigation map reached this graph — the owned form of
+/// [`NavigationSource`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum NavigationAttachment {
+    Declared(NavigationPolicy),
+    PipelineDefault {
+        pipeline: String,
+        policy: NavigationPolicy,
+    },
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -190,7 +211,43 @@ impl AtlasGraph {
             ann: None,
             ontology: None,
             index_root: None,
+            navigation: None,
         }
+    }
+
+    /// The map this graph walks under, if any — see the field.
+    pub fn navigation(&self) -> Option<NavigationSource<'_>> {
+        match &self.navigation {
+            Some(NavigationAttachment::Declared(p)) => Some(NavigationSource::Declared(p)),
+            Some(NavigationAttachment::PipelineDefault { pipeline, policy }) => {
+                Some(NavigationSource::PipelineDefault { pipeline, policy })
+            }
+            None => None,
+        }
+    }
+
+    /// The rows `ontology.json` carried, types or no types. Set by the disk
+    /// loader; `None` leaves the graph mapless.
+    pub fn with_declared_navigation(mut self, navigation: Option<NavigationPolicy>) -> Self {
+        if let Some(p) = navigation {
+            self.navigation = Some(NavigationAttachment::Declared(p));
+        }
+        self
+    }
+
+    /// Attach a built-in pipeline's declared map to a graph that has no map
+    /// of its own — the loader's fallback for an atlas whose `ontology.json`
+    /// has not been converted in yet. A declared map is never displaced: this
+    /// is a no-op when one is present, so a loader cannot override what the
+    /// atlas dir itself says.
+    pub fn with_pipeline_map(mut self, pipeline: &str, policy: NavigationPolicy) -> Self {
+        if self.navigation.is_none() {
+            self.navigation = Some(NavigationAttachment::PipelineDefault {
+                pipeline: pipeline.to_string(),
+                policy,
+            });
+        }
+        self
     }
 
     /// Set by the disk loader and nobody else: an in-memory caller has no root
@@ -217,12 +274,18 @@ impl AtlasGraph {
     pub fn load_lance_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
         let preload = LancePreload::open_blocking(atlas_dir)
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
-        let ontology = super::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
+        let file = super::writer::read_atlas_ontology(atlas_dir);
+        // The rows are kept whether or not the map declares types; the
+        // declared-type gate is `with_ontology`'s alone.
+        let navigation = file.as_ref().map(|f| f.policies.navigation.clone());
+        let ontology = file.map(|f| f.policies);
         // `<indexes>/<corpus>/atlas` -> `<indexes>`, derived from the path the
         // caller already gave rather than added to the signature: no call site
         // changes and none can pass a root that disagrees with what it opened.
         let root = atlas_dir.parent().and_then(|p| p.parent());
-        let g = Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology);
+        let g = Self::from_lance_preload(atlas_corpus_id, preload)
+            .with_ontology(ontology)
+            .with_declared_navigation(navigation);
         Ok(match root {
             Some(r) => g.with_index_root(r),
             None => g,
@@ -2107,6 +2170,68 @@ mod store_io_tests {
         // Remove the store → Err again (the no-fallback invariant).
         std::fs::remove_dir_all(atlas_dir.join(store::ATOMS_LANCE_DIRNAME)).unwrap();
         assert!(AtlasGraph::load_from_disk("c1", &atlas_dir).is_err());
+    }
+
+    /// map-conversion rung 3: the rows reach the walk two ways short of the
+    /// defaults, and neither depends on declared types. (1) A loader attaches
+    /// a pipeline's map to a mapless graph and the source says so; a declared
+    /// map is never displaced by it. (2) `ontology.json` with rows and NO
+    /// types — engineering's map — still hands its rows to the walk, though
+    /// `ontology()` stays `None` for the declared-type paths. Failing input:
+    /// read the rows through `ontology()` and case (2) reads as mapless.
+    #[test]
+    fn a_typeless_map_and_a_pipeline_default_both_reach_the_walk() {
+        use crate::enrichment::atlas::ground::{navigation_policy_for, PolicySource};
+        use crate::enrichment::atlas::provider::AtlasProvider;
+        use crate::enrichment::atlas::{write_atlas_ontology, AtlasOntologyFile, ATLAS_DIRNAME};
+        use crate::enrichment::ontology::OntologyPolicies;
+        use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let atoms = vec![AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9))];
+        store::write_store_blocking(&atlas_dir, "c1", &atoms, &[]).unwrap();
+
+        // (1) no file: mapless, then the loader's fallback, named.
+        let g = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
+        assert!(g.navigation().is_none());
+        let mut rows = NavigationPolicy::default();
+        rows.tension.hops = 7;
+        let g = g.with_pipeline_map("philosophy_atlas", rows.clone());
+        let (policy, source) = navigation_policy_for(&[&g as &dyn AtlasProvider]);
+        assert_eq!(policy.walk(QuestionKind::Tension).hops, 7);
+        assert_eq!(
+            source,
+            PolicySource::PipelineDefault {
+                atlas: "c1".into(),
+                pipeline: "philosophy_atlas".into()
+            }
+        );
+        assert_eq!(
+            source.label(),
+            "pipeline default `philosophy_atlas` for c1 (no atlas/ontology.json yet)"
+        );
+
+        // (2) a typeless file with rows: declared to the walk, invisible to
+        // the declared-type paths, and the pipeline fallback cannot displace it.
+        let mut typeless = OntologyPolicies::default();
+        typeless.navigation.tension.hops = 3;
+        assert!(!typeless.has_declarations());
+        write_atlas_ontology(
+            &atlas_dir,
+            "engineering_atlas",
+            AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
+            &typeless,
+        )
+        .unwrap();
+        let g = AtlasGraph::load_from_disk("c1", &atlas_dir)
+            .unwrap()
+            .with_pipeline_map("philosophy_atlas", rows);
+        assert!(g.ontology().is_none(), "no types declared");
+        let (policy, source) = navigation_policy_for(&[&g as &dyn AtlasProvider]);
+        assert_eq!(policy.walk(QuestionKind::Tension).hops, 3);
+        assert_eq!(source, PolicySource::Declared("c1".into()));
     }
 
     /// Inc 5: `call_chain` BFSs only `ScipStructural` (call) edges, skips

@@ -33,8 +33,14 @@ use corpus_engine_vocab::ontology::QuestionKind;
 /// several atlases and only one can supply the row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicySource {
-    /// One atlas declared a navigation section; its id is here.
+    /// One atlas's `ontology.json` carries a navigation section; its id is
+    /// here. Types or no types — the rows are the file's either way.
     Declared(String),
+    /// No atlas in scope has a file, but `atlas` is enriched under a
+    /// registered pipeline and the loader attached that pipeline's declared
+    /// map (map-conversion rung 3). The same rows the converted file would
+    /// carry; only the provenance differs, and it is named.
+    PipelineDefault { atlas: String, pipeline: String },
     /// No atlas in scope declared one, so the pre-registered table
     /// (`EPISTEMIC_INDEX.md` §2.2) applies. This is the normal case for
     /// every atlas written before ei-2-map.
@@ -45,6 +51,9 @@ impl PolicySource {
     pub fn label(&self) -> String {
         match self {
             PolicySource::Declared(id) => format!("declared by {id}"),
+            PolicySource::PipelineDefault { atlas, pipeline } => {
+                format!("pipeline default `{pipeline}` for {atlas} (no atlas/ontology.json yet)")
+            }
             PolicySource::PreRegistered => "pre-registered defaults".to_string(),
         }
     }

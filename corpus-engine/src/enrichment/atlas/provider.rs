@@ -65,6 +65,24 @@ use super::ann_store::AnnSeedTable;
 use super::context::{AtlasGraph, AtomView, EdgeView, EvidenceRef};
 use super::evidence_site::EvidenceSite;
 use super::inventory::AtlasInventory;
+use corpus_engine_vocab::ontology::NavigationPolicy;
+
+/// Where an atlas's navigation map came from — the two ways a map reaches
+/// the walk short of the pre-registered defaults.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NavigationSource<'a> {
+    /// `atlas/ontology.json` carries it — written by the pipeline at build
+    /// time, or converted in by `svrn atlas migrate-all`. Types or no types.
+    Declared(&'a NavigationPolicy),
+    /// No file, but the corpus's enrichment config names a built-in pipeline
+    /// and the loader attached that pipeline's declared map. The walk under
+    /// it is the same walk the converted file would give; the difference is
+    /// only that nothing on disk says so yet, and the source names that.
+    PipelineDefault {
+        pipeline: &'a str,
+        policy: &'a NavigationPolicy,
+    },
+}
 
 /// What the grounding walk needs from a store of ideas.
 ///
@@ -124,6 +142,17 @@ pub trait AtlasProvider: Send + Sync {
     /// What this corpus DECLARED — `Some` only when it declared types, so the
     /// `Option` has already answered `has_declarations()` for every consumer.
     fn ontology(&self) -> Option<&OntologyPolicies>;
+
+    /// Which navigation map this atlas walks under, when it has one — the
+    /// map's third role, separated from the type declaration because the two
+    /// come apart: a map can carry rows and declare no types (engineering),
+    /// and a loader can attach a pipeline's map to an atlas that has no
+    /// `ontology.json` yet ([`NavigationSource::PipelineDefault`]). Default:
+    /// the declared ontology's rows, for a store that keeps the whole file.
+    fn navigation(&self) -> Option<NavigationSource<'_>> {
+        self.ontology()
+            .map(|p| NavigationSource::Declared(&p.navigation))
+    }
 
     /// What this atlas carries — atoms per kind, entities per type, edges per
     /// kind — for the row-admissibility check ([`super::inventory`]). Counted
@@ -229,6 +258,10 @@ impl AtlasProvider for AtlasGraph {
 
     fn inventory(&self) -> AtlasInventory {
         AtlasGraph::inventory(self).clone()
+    }
+
+    fn navigation(&self) -> Option<NavigationSource<'_>> {
+        AtlasGraph::navigation(self)
     }
 
     fn summary_corpus_dir(&self) -> Option<std::path::PathBuf> {

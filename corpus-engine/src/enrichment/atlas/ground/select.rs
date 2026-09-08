@@ -25,31 +25,49 @@ use crate::types::EmbedFn;
 use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
 use super::super::inventory::{AtlasInventory, RowFit, RowInert};
-use super::super::provider::AtlasProvider;
+use super::super::provider::{AtlasProvider, NavigationSource};
 use super::PolicySource;
 
 /// Which navigation map governs this walk.
 ///
-/// The first graph in scope that DECLARED one wins; otherwise the
-/// pre-registered table. A mixed-corpus query is the ambiguous case the spec
-/// left open, and it is resolved by declaration-beats-default rather than by
-/// merging two maps into a third that neither corpus wrote.
+/// The first graph in scope whose `ontology.json` carries rows wins
+/// ([`NavigationSource::Declared`], types or no types); failing that, the
+/// first graph a loader attached a pipeline's map to
+/// ([`NavigationSource::PipelineDefault`], map-conversion rung 3); failing
+/// that, the pre-registered table. A mixed-corpus query is the ambiguous case
+/// the spec left open, and it is resolved by declaration-beats-default rather
+/// than by merging two maps into a third that neither corpus wrote.
 ///
-/// Note `AtlasGraph::ontology()` is `Some` only for a corpus that declared
-/// TYPES (`with_ontology` drops the rest), so a built-in pipeline's atlas
-/// reaches the pre-registered table here even when its `ontology.json` is on
-/// disk — which is correct, because those files carry no `navigation`
-/// override either.
+/// Until rung 3 this read `ontology()`, which is `Some` only for a corpus
+/// that declared TYPES — so engineering's typeless map could never reach the
+/// walk, and an installed SEP atlas with no file at all had no way to its
+/// pipeline's rows short of a rebuild. Both come through
+/// [`AtlasProvider::navigation`] now.
 pub fn navigation_policy_for(graphs: &[&dyn AtlasProvider]) -> (NavigationPolicy, PolicySource) {
+    let mut pipeline_default: Option<(NavigationPolicy, PolicySource)> = None;
     for g in graphs {
-        if let Some(p) = g.ontology() {
-            return (
-                p.navigation.clone(),
-                PolicySource::Declared(g.atlas_corpus_id().to_string()),
-            );
+        match g.navigation() {
+            Some(NavigationSource::Declared(p)) => {
+                return (
+                    p.clone(),
+                    PolicySource::Declared(g.atlas_corpus_id().to_string()),
+                );
+            }
+            Some(NavigationSource::PipelineDefault { pipeline, policy }) => {
+                if pipeline_default.is_none() {
+                    pipeline_default = Some((
+                        policy.clone(),
+                        PolicySource::PipelineDefault {
+                            atlas: g.atlas_corpus_id().to_string(),
+                            pipeline: pipeline.to_string(),
+                        },
+                    ));
+                }
+            }
+            None => {}
         }
     }
-    (NavigationPolicy::default(), PolicySource::PreRegistered)
+    pipeline_default.unwrap_or((NavigationPolicy::default(), PolicySource::PreRegistered))
 }
 
 /// A classified row that could not fire, and what ran instead.

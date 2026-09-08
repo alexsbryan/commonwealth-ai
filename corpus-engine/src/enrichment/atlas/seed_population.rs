@@ -139,13 +139,15 @@ fn declared_atom_type(kind: TypeKind) -> AtomType {
 /// anyway. Narrowing the TABLE by it would starve the `lookup` row, which seeds
 /// on any Entity.
 ///
-/// [`PolicySource::Declared`] exactly when the corpus declared TYPES — the same
-/// test [`navigation_policy_for`](super::ground::navigation_policy_for) applies
-/// to `AtlasGraph::ontology()`, so the writer and the walk agree on whose map
-/// is in force by construction rather than by comment.
+/// [`PolicySource::Declared`] exactly when `ontology.json` is present — types
+/// or no types, the same test [`navigation_policy_for`](super::ground::navigation_policy_for)
+/// applies to `AtlasProvider::navigation()` since map-conversion rung 3, so
+/// the writer and the walk agree on whose map is in force by construction
+/// rather than by comment. (Before rung 3 a typeless file's rows were used
+/// here and labelled pre-registered, which was neither.)
 pub fn seed_population(atlas_dir: &Path) -> SeedPopulation {
     let (navigation, declared, source) = match read_atlas_ontology(atlas_dir) {
-        Some(f) if f.policies.has_declarations() => {
+        Some(f) => {
             let declared: Vec<TypeKind> = f.policies.shape.types.iter().map(|t| t.kind).collect();
             (
                 f.policies.navigation,
@@ -153,13 +155,6 @@ pub fn seed_population(atlas_dir: &Path) -> SeedPopulation {
                 PolicySource::Declared(corpus_id_of(atlas_dir)),
             )
         }
-        // An `ontology.json` with no declared types reaches the pre-registered
-        // table at the walk, so it reaches it here too. Same for no file at all.
-        Some(f) => (
-            f.policies.navigation,
-            Vec::new(),
-            PolicySource::PreRegistered,
-        ),
         None => (
             NavigationPolicy::default(),
             Vec::new(),
