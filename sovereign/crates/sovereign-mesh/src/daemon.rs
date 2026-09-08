@@ -33,13 +33,19 @@ const INVITE_TTL_SECS: u64 = 24 * 60 * 60;
 /// in (including for `/internal/join`), so a plaintext LAN caller is
 /// refused. A plaintext mesh keeps the historical `0.0.0.0` bind.
 fn internal_bind_addr(
+    profile: crate::local_only::LocalOnlyProfile,
     require_encryption: bool,
     internal_bind: &str,
     internal_port: u16,
 ) -> std::net::SocketAddr {
-    // Encryption forces loopback regardless of the configured interface:
-    // the iroh acceptor is the sole network ingress on an encrypted mesh.
-    let host = if require_encryption {
+    // Two independent reasons force loopback regardless of the configured
+    // interface, and both are named rather than folded into one flag:
+    //   - the local-only profile — the internal mesh API is UNAUTHENTICATED,
+    //     so a daemon that will never have a peer must not offer it to the
+    //     LAN (this is the profile's only socket-shaped effect; everything
+    //     else it does is a loop that never starts);
+    //   - encryption, where the iroh acceptor is the sole network ingress.
+    let host = if profile.is_local_only() || require_encryption {
         "127.0.0.1"
     } else {
         internal_bind
@@ -152,11 +158,22 @@ fn resolve_client_bind_posture(
     }
 }
 
-/// Effective mDNS-on decision: the `[discovery] mdns` config flag, with
-/// `SOVEREIGN_DISABLE_MDNS` (`=1`/`=true`) as a force-off override for
-/// container/VPC deploys whose network namespace can't bind the multicast
-/// socket. Config-on + env-unset reproduces the historical behaviour.
-fn mdns_enabled_effective(cfg_mdns: bool) -> bool {
+/// Effective mDNS-on decision, in precedence order:
+///
+/// 1. the **local-only profile** — the one decider for "does this daemon
+///    touch the network" (ARCH §10.6). It outranks the two below rather than
+///    standing beside them, which is the whole point of having it: a gate
+///    that could bind a multicast socket behind the profile's back would make
+///    the profile a suggestion;
+/// 2. `SOVEREIGN_DISABLE_MDNS` (`=1`/`=true`), the force-off override for
+///    container/VPC deploys whose network namespace can't bind the socket;
+/// 3. the `[discovery] mdns` config flag.
+///
+/// Config-on + profile-off + env-unset reproduces the historical behaviour.
+fn mdns_enabled_effective(profile: crate::local_only::LocalOnlyProfile, cfg_mdns: bool) -> bool {
+    if profile.is_local_only() {
+        return false;
+    }
     let env_force_off = std::env::var("SOVEREIGN_DISABLE_MDNS")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -273,28 +290,38 @@ enum DaemonState {
         /// Underscore-prefixed because it's held purely for its Drop
         /// impl. `None` when mDNS is disabled (no browse task to stop).
         _browse_handle: Option<BrowseHandle>,
-        /// Aborts the gossip heartbeat loop on Drop. Same pattern
-        /// as `_browse_handle` — tying the task's lifetime to the
-        /// Running variant means stopping the daemon also stops
-        /// gossip; no explicit teardown.
-        _gossip_handle: GossipHandle,
+        /// The four peer-facing loops. `None` means the local-only profile
+        /// did not start that loop — and "did not" is not left to be inferred
+        /// from a `None`: `running_services` is the authoritative census, so
+        /// a declined loop and a forgotten one are distinguishable, which is
+        /// the objection that kept these four non-optional until 2026-09-08.
+        ///
+        /// Aborts the gossip heartbeat loop on Drop. Tying the task's
+        /// lifetime to the Running variant means stopping the daemon also
+        /// stops gossip; no explicit teardown.
+        _gossip_handle: Option<GossipHandle>,
         /// Aborts the peer-assisted ingest handoff loop on Drop. Same pattern
         /// as `_gossip_handle`, and held for the same second reason the gossip
         /// one is not: a spawner that returns nothing can lose its
         /// `tokio::spawn` in a stray three-line diff and stay silent about it
         /// for five weeks (`ec7ca66c`, 2026-07-21 — see
         /// `auto_ingest::CollaborateHandle`).
-        _collaborate_handle: crate::auto_ingest::CollaborateHandle,
+        _collaborate_handle: Option<crate::auto_ingest::CollaborateHandle>,
         /// Aborts the ring-journal anti-entropy loop on Drop. Its own handle
         /// and its own cadence rather than a step inside gossip — see
         /// [`crate::ring_sync`] for the bandwidth arithmetic that forces it.
-        _ring_sync_handle: crate::ring_sync::RingSyncHandle,
+        _ring_sync_handle: Option<crate::ring_sync::RingSyncHandle>,
         /// Aborts the mesh-store outbox pump on Drop — the loop that signs
         /// local store writes onto their ring journals and seals the daemon's
         /// own namespaces. Same pattern and the same second reason as
         /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
         /// its `tokio::spawn` in a stray diff and stay silent about it.
-        _rail_kv_pump_handle: crate::rail_kv_pump::RailKvPumpHandle,
+        _rail_kv_pump_handle: Option<crate::rail_kv_pump::RailKvPumpHandle>,
+        /// The network posture this boot resolved, and what it produced.
+        /// Read by [`EmbeddedDaemon::running_services`] — the boot
+        /// assertion's instrument (ARCH §18.1).
+        local_only: crate::local_only::LocalOnlyProfile,
+        running_services: crate::local_only::RunningServices,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -2015,6 +2042,32 @@ impl EmbeddedDaemon {
         }
     }
 
+    /// **What this boot actually spawned**, and the profile that decided it.
+    /// `None` when the daemon is stopped.
+    ///
+    /// This is the falsifiable half of the local-only claim (ARCH §18.1). The
+    /// named failing input: delete any one of the four gates in
+    /// `start_daemon` and
+    /// `local_only_boot::a_local_only_daemon_spawns_no_network_service` names
+    /// the service that came back. Config alone cannot be that instrument —
+    /// it says what was ASKED for, not what happened.
+    pub async fn running_services(
+        &self,
+    ) -> Option<(
+        crate::local_only::LocalOnlyProfile,
+        crate::local_only::RunningServices,
+    )> {
+        let state = self.state.read().await;
+        match &*state {
+            DaemonState::Running {
+                local_only,
+                running_services,
+                ..
+            } => Some((*local_only, running_services.clone())),
+            DaemonState::Stopped => None,
+        }
+    }
+
     /// Snapshot of peers discovered via mDNS on the local network.
     /// Empty when the daemon is stopped or no peers have advertised
     /// on `_commonwealth._tcp.local.` yet.
@@ -2597,6 +2650,38 @@ impl EmbeddedDaemon {
         // plaintext lockout (listener binds, WS-C) and the require-mode
         // iroh transport install (WS-B) further down.
         let require_encryption = mesh.require_encryption;
+
+        // ── The local-only profile: resolved ONCE, here, and read by every
+        // gate below (ARCH §10.6). Before it, mDNS and iroh each decided for
+        // themselves and the three mesh loops decided nothing at all — see
+        // `crate::local_only` for the census that made this the deliverable.
+        let local_only = {
+            let c = self.setup_config.read().await;
+            crate::local_only::LocalOnlyProfile::resolve(c.daemon.local_only)
+        };
+        // The one contradiction the profile cannot absorb, refused loudly
+        // rather than silently resolved either way (ARCH §18.3). An encrypted
+        // mesh MUST be dialable by key, which means an iroh endpoint and a
+        // relay; "local-only" means no such thing exists. Downgrading to
+        // plaintext would break the mesh's own policy; binding the endpoint
+        // would make the profile a lie. So the daemon says which two settings
+        // disagree and stops.
+        if local_only.is_local_only() && require_encryption {
+            return Err(MeshError::Config(format!(
+                "local-only profile (source: {}) contradicts this mesh's \
+                 require_encryption: an encrypted mesh must be dialable by key \
+                 (iroh endpoint + relay), which the local-only profile refuses to \
+                 bind. Unset [daemon] local_only / {}, or use an unencrypted mesh.",
+                local_only.source().as_str(),
+                crate::local_only::ENV_VAR,
+            )));
+        }
+        // What this boot actually spawns, recorded at each spawn site and
+        // stored on the Running variant. The profile's claim is about this
+        // list, and a list is falsifiable where a config value is not
+        // (ARCH §18.1).
+        let mut running_services = crate::local_only::RunningServices::default();
+
         let node_name = mesh
             .members
             .get(&node_id)
@@ -2954,8 +3039,12 @@ impl EmbeddedDaemon {
         // router is loopback-only too — the iroh acceptor (which forwards
         // here) is the sole network path in, including for
         // `/internal/join`. Plaintext LAN callers get connection-refused.
-        let internal_addr: SocketAddr =
-            internal_bind_addr(require_encryption, &internal_bind, internal_port);
+        let internal_addr: SocketAddr = internal_bind_addr(
+            local_only,
+            require_encryption,
+            &internal_bind,
+            internal_port,
+        );
 
         let mesh_state = Arc::new(RwLock::new(MeshState::from_app_state(&app_state).await));
 
@@ -2972,7 +3061,7 @@ impl EmbeddedDaemon {
         // `[discovery] seed_addrs`) instead.
         let mdns_enabled = {
             let c = self.setup_config.read().await;
-            mdns_enabled_effective(c.discovery.mdns)
+            mdns_enabled_effective(local_only, c.discovery.mdns)
         };
         let (mdns, browse_handle): (Option<Arc<MdnsDiscovery>>, Option<BrowseHandle>) =
             if mdns_enabled {
@@ -2994,9 +3083,12 @@ impl EmbeddedDaemon {
                 let browse_handle = mdns
                     .browse(peer_tx)
                     .map_err(|e| MeshError::Network(format!("mDNS browse failed: {e}")))?;
+                running_services.record(crate::local_only::MeshService::MdnsAdvertise);
+                running_services.record(crate::local_only::MeshService::MdnsBrowse);
                 (Some(mdns), Some(browse_handle))
             } else {
                 info!(
+                    profile = local_only.label(),
                     "mesh: mDNS discovery disabled — forming mesh from static \
                      seeds only (no multicast advertise/browse)"
                 );
@@ -3287,59 +3379,97 @@ impl EmbeddedDaemon {
             }
         });
 
-        // Spawn the gossip heartbeat task. It uses `app_state` via a
-        // clone (cheap Arc bump) so it stays live independently of
-        // the Running variant's ownership. Aborted on daemon stop by
-        // the `_gossip_handle: Drop` → `JoinHandle::abort()`.
+        // ── The four peer-facing loops, under ONE gate ──────────────────
         //
-        // Log at spawn site (synchronous to `start_daemon`) — the
-        // matching "gossip: loop started" info inside the task fires
-        // when the runtime first polls the future, which can be
-        // later. Seeing "spawning gossip loop" but NOT "loop
-        // started" means the task is queued but starved; seeing
-        // NEITHER means the binary predates this code and a rebuild
-        // is required.
-        info!("spawning gossip loop");
-        // Hand `data_dir` to the gossip loop so it can re-persist
-        // mesh.json after every round — catching the Founder's
-        // /internal/join mutation (which mutates in-memory but used
-        // to leave the on-disk snapshot stale, so a Founder restart
-        // forgot every Joiner and Joiners had to rejoin each time).
+        // Until 2026-09-08 these four spawned unconditionally: a daemon with
+        // no peers, no mesh to join and no intention of having one still ran
+        // a gossip round every 10s, an ingest-handoff poll, ring anti-entropy
+        // every minute and a store pump. mDNS and iroh each had a runtime
+        // off-switch; these had none, so "local-only" was unreachable at
+        // runtime no matter what the manifest said. That is the gap the
+        // fusion census (`crate::local_only`) closed by profile rather than
+        // by package, and this is the gate.
+        //
+        // Each is recorded in `running_services` at its spawn site, so the
+        // boot assertion reads what happened rather than re-deriving what
+        // should have.
         let persist_dir = if self.persistence_enabled() {
             Some(self.data_dir.clone())
         } else {
             None
         };
-        let gossip_handle = gossip::spawn_gossip_loop(
-            app_state.clone(),
-            gossip::DEFAULT_GOSSIP_INTERVAL,
-            gossip::DEFAULT_OFFLINE_THRESHOLD,
-            persist_dir,
-        );
-
-        let collaborate_handle =
-            crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
-
-        // Ring-ledger replication: one round immediately, then every minute —
-        // or as soon as the KV pump signs a local write, whichever comes
-        // first. ONE `Notify`, and it lives on `AppState` (§7.5) because rung
-        // 2e added a third party to it: the KV pump raises it after an append,
-        // the work atlas's broadcaster raises it when a claim is written, and
-        // the sync loop selects on it beside its interval. The pump also
-        // rebuilds the mesh store from the journals on disk before its first
-        // drain, which is the boot half of "the journal is truth" — production
-        // `MeshStore` is `in_memory()`.
+        // ONE `Notify` for "a local write is queued, run the ring round now",
+        // and it lives on `AppState` (§7.5) because rung 2e added a third
+        // party to it: the KV pump raises it after an append, the work
+        // atlas's broadcaster raises it when a claim is written, and the
+        // ring-sync loop waits on it beside its interval.
         let ring_write_nudge = app_state.ring_write_nudge();
-        let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
-            app_state.clone(),
-            crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
-            Arc::clone(&ring_write_nudge),
-        );
-        let rail_kv_pump_handle = crate::rail_kv_pump::spawn_rail_kv_pump(
-            app_state.clone(),
-            crate::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
-            ring_write_nudge,
-        );
+        let (gossip_handle, collaborate_handle, ring_sync_handle, rail_kv_pump_handle) =
+            if local_only.is_local_only() {
+                // Not a skip with a shrug: every one of these four is a
+                // conversation with a peer, and the total answer for a
+                // one-member mesh is that the conversation has no other side.
+                // The mesh-of-one itself is untouched — it is minted,
+                // persisted and served exactly as before (see
+                // `crate::local_only`'s "skips the NETWORK, never the model").
+                (None, None, None, None)
+            } else {
+                // Log at spawn site (synchronous to `start_daemon`) — the
+                // matching "gossip: loop started" info inside the task fires
+                // when the runtime first polls the future, which can be
+                // later. Seeing "spawning gossip loop" but NOT "loop
+                // started" means the task is queued but starved; seeing
+                // NEITHER means the binary predates this code and a rebuild
+                // is required.
+                info!("spawning gossip loop");
+                // Hand `data_dir` to the gossip loop so it can re-persist
+                // mesh.json after every round — catching the Founder's
+                // /internal/join mutation (which mutates in-memory but used
+                // to leave the on-disk snapshot stale, so a Founder restart
+                // forgot every Joiner and Joiners had to rejoin each time).
+                let gossip_handle = gossip::spawn_gossip_loop(
+                    app_state.clone(),
+                    gossip::DEFAULT_GOSSIP_INTERVAL,
+                    gossip::DEFAULT_OFFLINE_THRESHOLD,
+                    persist_dir,
+                );
+                running_services.record(crate::local_only::MeshService::Gossip);
+
+                let collaborate_handle = crate::auto_ingest::spawn_auto_collaborate_loop(
+                    app_state.clone(),
+                    internal_port,
+                );
+                running_services.record(crate::local_only::MeshService::AutoIngestCollaborate);
+
+                // Ring-ledger replication: one round immediately, then every
+                // minute — or as soon as the KV pump signs a local write,
+                // whichever comes first. ONE `Notify`, held by both halves:
+                // the pump raises it, the sync loop selects on it beside its
+                // interval. The pump also rebuilds the mesh store from the
+                // journals on disk before its first drain, which is the boot
+                // half of "the journal is truth" — production `MeshStore` is
+                // `in_memory()`.
+                let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
+                    app_state.clone(),
+                    crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+                    Arc::clone(&ring_write_nudge),
+                );
+                running_services.record(crate::local_only::MeshService::RingSync);
+
+                let rail_kv_pump_handle = crate::rail_kv_pump::spawn_rail_kv_pump(
+                    app_state.clone(),
+                    crate::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
+                    ring_write_nudge,
+                );
+                running_services.record(crate::local_only::MeshService::RailKvPump);
+
+                (
+                    Some(gossip_handle),
+                    Some(collaborate_handle),
+                    Some(ring_sync_handle),
+                    Some(rail_kv_pump_handle),
+                )
+            };
 
         // Re-spawn any solo corpus ingest the daemon was running before
         // restart. The mesh auto-collaborate loop above only handles
@@ -3591,6 +3721,7 @@ impl EmbeddedDaemon {
         // encryption policy still FORCES iroh on: an encrypted mesh
         // must be dialable by key and must dial peers by key.
         let iroh_enabled = crate::iroh_access::resolve_enabled(
+            local_only,
             cfg_iroh_enabled,
             persist::client_exposed(&self.data_dir),
             require_encryption,
@@ -3649,6 +3780,7 @@ impl EmbeddedDaemon {
         // "membership = dialability" collapse. RwLock-based install, so
         // it's exempt from the `Arc::get_mut` ordering constraint above.
         if let Some(access) = &iroh_access {
+            running_services.record(crate::local_only::MeshService::IrohEndpoint);
             install_iroh_access(
                 &app_state,
                 access,
@@ -3758,6 +3890,22 @@ impl EmbeddedDaemon {
                 iroh_relay_cfg.n0_services || !iroh_relay_cfg.relay_urls.is_empty();
             crate::iroh_watchdog::spawn(endpoint, rebuild, cfg)
         });
+        if reachability_watchdog.is_some() {
+            running_services.record(crate::local_only::MeshService::IrohWatchdog);
+        }
+
+        // ── The boot's own account of its network posture (ARCH §9.1) ────
+        // Both halves, because a log of what STARTED cannot show what did
+        // not: `spawned` is the census, `skipped` is the claim. INFO because
+        // this is a lifecycle fact an operator reads once per boot (§9.2).
+        info!(
+            profile = local_only.label(),
+            source = local_only.source().as_str(),
+            spawned = ?running_services.names(),
+            skipped = ?running_services.skipped_names(),
+            internal_bind = %internal_addr,
+            "local_only: daemon network posture resolved"
+        );
 
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
@@ -3770,6 +3918,8 @@ impl EmbeddedDaemon {
             _collaborate_handle: collaborate_handle,
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
+            local_only,
+            running_services,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
@@ -4642,25 +4792,37 @@ mod tests {
         // WS-C receiver lockout: an encrypted mesh binds the internal
         // router loopback-only (iroh acceptor is the sole network path);
         // a plaintext mesh keeps the historical wildcard bind.
-        let encrypted = internal_bind_addr(true, "0.0.0.0", 9742);
+        let net = crate::local_only::LocalOnlyProfile::default();
+        let encrypted = internal_bind_addr(net, true, "0.0.0.0", 9742);
         assert!(
             encrypted.ip().is_loopback(),
             "encrypted mesh must bind internal router loopback-only, got {encrypted}"
         );
         assert_eq!(encrypted.port(), 9742);
 
-        let plaintext = internal_bind_addr(false, "0.0.0.0", 9742);
+        let plaintext = internal_bind_addr(net, false, "0.0.0.0", 9742);
         assert!(
             plaintext.ip().is_unspecified(),
             "plaintext mesh keeps the 0.0.0.0 internal bind, got {plaintext}"
         );
 
         // A configured private bind is honoured on a plaintext mesh...
-        let pinned = internal_bind_addr(false, "10.0.1.4", 9742);
+        let pinned = internal_bind_addr(net, false, "10.0.1.4", 9742);
         assert_eq!(pinned.to_string(), "10.0.1.4:9742");
         // ...but encryption still forces loopback, ignoring the config.
-        let pinned_encrypted = internal_bind_addr(true, "10.0.1.4", 9742);
+        let pinned_encrypted = internal_bind_addr(net, true, "10.0.1.4", 9742);
         assert!(pinned_encrypted.ip().is_loopback());
+
+        // ...and so does the local-only profile, on a plaintext mesh with an
+        // explicitly pinned routable interface: the unauthenticated internal
+        // API is not offered to a LAN this daemon will never talk to.
+        let local = crate::local_only::LocalOnlyProfile::decide(None, true);
+        assert!(internal_bind_addr(local, false, "10.0.1.4", 9742)
+            .ip()
+            .is_loopback());
+        assert!(internal_bind_addr(local, false, "0.0.0.0", 9742)
+            .ip()
+            .is_loopback());
     }
 
     /// covers: UI-22

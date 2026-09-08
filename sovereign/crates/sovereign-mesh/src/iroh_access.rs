@@ -173,19 +173,33 @@ fn rpc_serve_port() -> Option<u16> {
     sovereign_contracts::launch::RpcServe::from_env().port()
 }
 
-/// Resolve whether this daemon's iroh endpoint turns on. Explicit
-/// config wins; otherwise mesh participation decides (the
-/// `client-exposed` marker every explicit create/join surface writes)
-/// — consent-by-mesh-participation, so a meshless daemon never
-/// contacts relay infrastructure. A mesh-wide `require_encryption`
-/// overrides everything: an encrypted mesh cannot run without iroh
-/// (the daemon hard-fails later if the endpoint won't bind, rather
-/// than silently downgrading).
+/// Resolve whether this daemon's iroh endpoint turns on.
+///
+/// The **local-only profile outranks everything** — it is the one decider for
+/// "does this daemon touch the network at all" (ARCH §10.6), so a gate that
+/// could turn a socket on behind its back would make it a suggestion. The
+/// `require_encryption` contradiction is not resolved here by silently
+/// picking a winner: `EmbeddedDaemon::start_daemon` REFUSES to boot a
+/// local-only daemon on an encrypted mesh, loudly and before this is called
+/// (ARCH §18.3), so the `false` returned below is only ever reached in a
+/// configuration that is coherent.
+///
+/// Below the profile: explicit config wins; otherwise mesh participation
+/// decides (the `client-exposed` marker every explicit create/join surface
+/// writes) — consent-by-mesh-participation, so a meshless daemon never
+/// contacts relay infrastructure. A mesh-wide `require_encryption` overrides
+/// those two: an encrypted mesh cannot run without iroh (the daemon
+/// hard-fails later if the endpoint won't bind, rather than silently
+/// downgrading).
 pub fn resolve_enabled(
+    profile: crate::local_only::LocalOnlyProfile,
     cfg_enabled: Option<bool>,
     mesh_participant: bool,
     require_encryption: bool,
 ) -> bool {
+    if profile.is_local_only() {
+        return false;
+    }
     cfg_enabled.unwrap_or(mesh_participant) || require_encryption
 }
 
@@ -711,16 +725,40 @@ mod tests {
 
     #[test]
     fn resolve_enabled_matrix() {
+        use crate::local_only::LocalOnlyProfile;
+        let net = LocalOnlyProfile::default();
         // Explicit config wins over the participation marker…
-        assert!(resolve_enabled(Some(true), false, false));
-        assert!(!resolve_enabled(Some(false), true, false));
+        assert!(resolve_enabled(net, Some(true), false, false));
+        assert!(!resolve_enabled(net, Some(false), true, false));
         // …absent config defers to mesh participation…
-        assert!(resolve_enabled(None, true, false));
-        assert!(!resolve_enabled(None, false, false));
-        // …and require_encryption overrides everything, including an
+        assert!(resolve_enabled(net, None, true, false));
+        assert!(!resolve_enabled(net, None, false, false));
+        // …and require_encryption overrides those two, including an
         // explicit opt-out (an encrypted mesh cannot run without iroh).
-        assert!(resolve_enabled(Some(false), false, true));
-        assert!(resolve_enabled(None, false, true));
+        assert!(resolve_enabled(net, Some(false), false, true));
+        assert!(resolve_enabled(net, None, false, true));
+    }
+
+    /// The local-only profile outranks every other input, including the
+    /// explicit `[iroh] enabled = true` that beats participation, and
+    /// including `require_encryption` — which cannot co-occur, because
+    /// `start_daemon` refuses that pair before reaching here.
+    #[test]
+    fn local_only_profile_beats_every_other_iroh_input() {
+        use crate::local_only::LocalOnlyProfile;
+        let local = LocalOnlyProfile::decide(None, true);
+        assert!(local.is_local_only());
+        for cfg in [None, Some(true), Some(false)] {
+            for participant in [true, false] {
+                for encrypted in [true, false] {
+                    assert!(
+                        !resolve_enabled(local, cfg, participant, encrypted),
+                        "local-only must keep iroh off for \
+                         cfg={cfg:?} participant={participant} encrypted={encrypted}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

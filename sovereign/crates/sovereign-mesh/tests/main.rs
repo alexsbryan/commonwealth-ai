@@ -76,6 +76,8 @@ mod knowledge_served_e2e;
 mod landscape_digest_http_e2e;
 #[path = "main/load_awareness_e2e.rs"]
 mod load_awareness_e2e;
+#[path = "main/local_only_boot.rs"]
+mod local_only_boot;
 #[path = "main/local_only_corpus_locality.rs"]
 mod local_only_corpus_locality;
 #[path = "main/local_pod_smoke.rs"]

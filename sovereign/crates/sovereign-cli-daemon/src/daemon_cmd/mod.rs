@@ -1127,6 +1127,22 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 .and_then(|h| h.into_string().ok())
                 .unwrap_or_else(|| "sovereign".to_string());
             let disc = &config.discovery;
+            // A local-only daemon that dials a seed is not local-only. Refused
+            // here, loudly and by name, rather than letting the profile
+            // quietly turn a fleet joiner into a split-brained solo node
+            // (ARCH §18.3 — refuse, never silently substitute).
+            let profile = sovereign_mesh::LocalOnlyProfile::resolve(config.daemon.local_only);
+            if profile.is_local_only() && disc.join_key.is_some() {
+                eprintln!(
+                    "error: [daemon] local_only is set (source: {}) but [discovery] \
+                     join_key names a mesh to join. A local-only daemon never dials a \
+                     peer. Unset one of them: drop join_key to run a solo node, or \
+                     unset local_only / {}=0 to join the fleet.",
+                    profile.source().as_str(),
+                    sovereign_mesh::local_only::ENV_VAR,
+                );
+                return 1;
+            }
             match disc.join_key.as_deref() {
                 // Configured fleet joiner: try each static seed as a direct
                 // `/internal/join` target (no mDNS needed) until one accepts.
@@ -1177,6 +1193,18 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     return 1;
                 }
                 // No join credential: founder / standalone node.
+                //
+                // This mint is the campaign's CLASS 3 blocker, and under the
+                // local-only profile it is closed WITHOUT a branch here. Its
+                // `return 1` fired on `start_daemon`'s mDNS register/browse
+                // failures — a real solo-node failure on a host whose network
+                // namespace cannot bind the multicast socket. The profile
+                // turns mDNS off inside `start_daemon`, so there is no
+                // multicast bind to fail: the N=1 answer is TOTAL, and an
+                // `if local { skip }` here would be a second decider for a
+                // question the profile already answers (ARCH §10.6). What
+                // remains fatal — AlreadyRunning, "no node in mesh", a client
+                // listener that will not bind — is local and honestly fatal.
                 None => {
                     let mesh_name = format!("{hostname}'s Mesh");
                     match daemon.create_mesh(&mesh_name, &hostname).await {

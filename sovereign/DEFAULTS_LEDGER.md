@@ -30,6 +30,52 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Local-only daemon profile — OFF, `[daemon] local_only` / `SOVEREIGN_LOCAL_ONLY` (2026-09-08)
+
+**What ships.** One decider, `sovereign_mesh::LocalOnlyProfile`, resolved once
+per `start_daemon` from `[daemon] local_only` with a both-directions env
+override. On, it silences every background loop that talks to another machine
+— gossip, the auto-ingest collaborate handoff, ring-sync, the rail KV pump —
+and the two gates that already had their own off-switches (`mDNS`,
+`iroh_access::resolve_enabled`) now READ it rather than deciding beside it. The
+unauthenticated internal API binds loopback. The mesh-of-one is untouched: it
+is still minted, persisted and served, because the solo case is the honest N=1.
+
+**Why it exists at all, rather than a crate boundary.** `cw-lift`'s
+`cw-local-only-daemon` bar claimed a daemon that "compiles and boots with zero
+commonwealth-\* and no iroh". Direct deps reached zero at rung 3b and the claim
+was still false: ten commonwealth crates ride `sovereign-mesh`. The 2026-09-08
+fusion census priced the seam that would remove them — 78 reached items
+(25 mesh-only / 32 local-in-substance / 21 both), **31 unmovable however the
+cut is drawn**, 21 of those the daemon's own lifecycle, **15,634 lines moved
+for zero deleted dependencies**. That is the shim the bar's own K2 warns
+against, so K2 fired and the profile is the honest deliverable.
+
+**Why OFF.** Every existing operator is a networked one, and flipping the
+default would silently stop gossip on installs that depend on it. The
+capability is what needed to exist; the default is not in question.
+
+**Flip condition (falsifiable).** Not "flip the default" — this one graduates
+by being REACHED, not by being made default. It graduates when either:
+
+- `svrn daemon run` grows a `--local-only` flag (or setup offers the posture)
+  and one real install runs on it for a week with no operator report of a
+  missing local capability; or
+- the desktop's single-user Local mode adopts it, which is the population the
+  profile actually describes.
+
+It is **rejected** if a subsystem turns out to need one of the four loops for
+purely local work — the census would show it as a local feature riding a peer
+loop, and the fix would then be to move that work, not to widen the profile.
+
+**Settles it.** `cw-lift` ladder row 4d; the boot assertion is
+`sovereign-mesh/tests/main/local_only_boot.rs`
+(`a_local_only_daemon_spawns_no_network_service` + its control).
+
+**Review by 2026-12-08.** If no consumer has reached it by then, the honest
+reading is that the profile was built for a bar rather than for a user, and it
+should be flipped, wired to a flag, or deleted — not left dark.
+
 ### Reindexer warm LSP tier — OFF, `SOVEREIGN_SCIP_LSP_TIER` (2026-09-04)
 
 **What ships.** On each debounced save the reindexer asks the already-running

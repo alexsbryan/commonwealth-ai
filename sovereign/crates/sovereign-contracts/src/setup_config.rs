@@ -1208,6 +1208,27 @@ pub struct DaemonSection {
     #[serde(default)]
     pub client_token: Option<String>,
 
+    /// **Local-only profile: no discovery, no transport, no mesh loops.**
+    ///
+    /// `false` (the default) is the historical behaviour: a daemon that
+    /// advertises on mDNS, may bind an iroh endpoint, and runs the gossip,
+    /// peer-assisted-ingest, ring-sync and rail-KV-pump loops.
+    ///
+    /// `true` makes this daemon a NETWORK island. It still mints and persists
+    /// its mesh with one member — the solo case is the honest N=1 and every
+    /// reader of membership keeps one shape — but nothing it does reaches
+    /// another machine: no multicast advertise/browse, no iroh endpoint or
+    /// relay contact, no gossip round, no peer ingest handoff, no ring
+    /// anti-entropy, no rail pump, and the internal mesh API binds loopback.
+    /// A `[discovery] join_key` is then a contradiction and the daemon
+    /// refuses to boot rather than dialing a seed anyway.
+    ///
+    /// Resolved once per boot by `sovereign_mesh::LocalOnlyProfile`, which is
+    /// the ONE decider the mDNS and iroh gates also read. Env override in
+    /// both directions: `SOVEREIGN_LOCAL_ONLY=1|0`.
+    #[serde(default = "default_local_only")]
+    pub local_only: bool,
+
     /// Interface the internal mesh API (`:9742`) binds to. Defaults to
     /// `0.0.0.0` (every interface) — the historical behaviour, and the
     /// right choice when a cloud firewall / security group already scopes
@@ -1245,6 +1266,7 @@ impl Default for DaemonSection {
             client_bind: default_client_bind(),
             client_token: None,
             internal_bind: default_internal_bind(),
+            local_only: default_local_only(),
         }
     }
 }
@@ -1522,6 +1544,11 @@ fn default_extras_idle_secs() -> u64 {
 /// where ingest throughput trumps interactive latency.
 fn default_yield_to_foreground_secs() -> u64 {
     60
+}
+/// Default `false`: a daemon is networked unless an operator says otherwise.
+/// The local-only profile ships dark — see `sovereign/DEFAULTS_LEDGER.md`.
+fn default_local_only() -> bool {
+    false
 }
 /// Headless contributor default: serve peers, but one at a time. Bounded by
 /// construction so a CLI daemon is never an unbounded peer fan-out target.
@@ -2586,6 +2613,33 @@ embed = "/m/e.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.daemon.yield_to_foreground_secs, 60);
+    }
+
+    #[test]
+    fn local_only_defaults_to_false_and_is_settable() {
+        // A daemon is NETWORKED unless an operator says otherwise: the
+        // local-only profile ships dark (sovereign/DEFAULTS_LEDGER.md), so an
+        // existing config.toml must keep every mesh loop it had.
+        let bare = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(bare).unwrap();
+        assert!(!cfg.daemon.local_only, "the shipped default is networked");
+
+        let opted_in = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+
+[daemon]
+local_only = true
+"#;
+        let cfg: SetupConfig = toml::from_str(opted_in).unwrap();
+        assert!(cfg.daemon.local_only);
     }
 
     #[test]

@@ -593,6 +593,14 @@ shadows = "iroh.enabled"
 purpose = "Toggle for the iroh (no-VPN) mesh transport."
 
 [[flag]]
+name = "SOVEREIGN_LOCAL_ONLY"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+shadows = "daemon.local_only"
+purpose = "Local-only profile: no mDNS, no iroh, no gossip/collaborate/ring-sync/rail-pump loops, internal API loopback. Honoured in BOTH directions (1|true|yes|on / 0|false|no|off); unrecognised values warn and defer to config."
+
+[[flag]]
 name = "SOVEREIGN_JOIN_HOST"
 cluster = "mesh"
 default = "unset"

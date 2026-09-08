@@ -54,6 +54,7 @@ pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
+pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
 pub mod lsp_tier;
@@ -141,6 +142,7 @@ pub use daemon_services::{
     ServingCore, ServingProfile,
 };
 pub use deep_link::{parse_deep_link, DeepLink};
+pub use local_only::{LocalOnlyProfile, LocalOnlySource, MeshService, RunningServices};
 pub use peer_inference::DeferredDaemon;
 pub use state::MeshState;
 pub use types::*;

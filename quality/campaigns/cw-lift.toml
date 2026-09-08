@@ -6,6 +6,17 @@
 # without them.
 id        = "cw-lift"
 objective = "Commonwealth becomes a liftable substrate package in-repo, so a sovereign daemon runs local-only and mesh is additive"
+# DONE-WHEN MET 2026-09-08, AS A PROFILE, NOT AS A PACKAGE. K2 fired on
+# `cw-local-only-daemon`: a sovereign daemon now boots local-only — no mDNS, no
+# iroh, no gossip/collaborate/ring-sync/rail-pump, internal API loopback, mesh
+# of one still minted and served — under ONE decider (sovereign_mesh::
+# LocalOnlyProfile), watched red by four sabotages. What it is NOT is a
+# package boundary: the ten commonwealth crates still ride sovereign-mesh
+# transitively, and the census that priced the seam (78 items, 31 unmovable,
+# 15,634 lines for 0 deleted deps) is why. The objective sentence stands as
+# written; "runs local-only" is now true and "liftable substrate package" is
+# true of commonwealth's own crates, not of the daemon's dependency on
+# sovereign-mesh. See the cw-local-only-daemon bar's 2026-09-08 closeout.
 spec      = "the approved plan, 2026-09-03; commonwealth/BOUNDARY.md is its committed half"
 register  = "quality/ARCH_LAYERS.toml"
 declared  = "2026-09-04"
@@ -218,6 +229,28 @@ status    = "active"
 #       because the rail carries a delete as a tombstone where the old
 #       enumeration only stopped re-sending a live row. The cross_node
 #       assertion is inverted, deliberately, with the old behaviour named.
+#   4d  THE LOCAL-ONLY DAEMON CLOSEOUT — K2 fired, the profile is the ship
+#                                             <sha>     DONE
+#       Phase 3's closeout, landed in the 4-series because that is where the
+#       shas are. `cw-local-only-daemon`'s K2 says: if the state is genuinely
+#       fused, the honest deliverable is a RUNTIME PROFILE, not a package.
+#       The fusion census measured it fused — 78 reached items, 31 unmovable
+#       however the cut is drawn, 21 of those the daemon's OWN lifecycle
+#       (EmbeddedDaemon, daemon_services::assemble, rpc_warm_http,
+#       persist::resolve_self_node_id), best seam 15,634 lines for ZERO
+#       deleted deps. So: `LocalOnlyProfile` in sovereign-mesh, resolved once
+#       per start_daemon from [daemon] local_only + SOVEREIGN_LOCAL_ONLY
+#       (both directions). The two gates that already had off-switches
+#       (mdns_enabled_effective, iroh_access::resolve_enabled) now READ it
+#       instead of standing beside it, internal_bind_addr reads it, and the
+#       FOUR loops that had no gate at all are behind it.
+#       CLASS 3 CLOSES WITHOUT A BRANCH. daemon_cmd's mint returned 1 on
+#       start_daemon's mDNS register/browse failure; under the profile there
+#       is no multicast bind to fail, so the N=1 answer is total. The one
+#       branch added there is a REFUSAL, not a skip: local_only + a
+#       [discovery] join_key is a contradiction and says so.
+#       The bar's instrument is now the boot assertion, floor 8 -> target 0,
+#       reading 0. Four sabotages, four reds, each naming its own assertion.
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
@@ -618,8 +651,12 @@ kill         = "K1 — the canon composition forces either side to grow a depend
 
 [[bar]]
 id           = "cw-local-only-daemon"
-one_line     = "CLAIM: a sovereign daemon can compile and boot with zero commonwealth-* and no iroh"
+one_line     = "CLAIM: a sovereign daemon compiles with zero DIRECT commonwealth-* deps and boots local-only — no discovery, no transport, no mesh loops — under one runtime profile. The transitive closure rides sovereign-mesh, which the census measured as the daemon's OWN lifecycle, not a package boundary."
 derives_from = "P2, measured 2026-09-04 — and the plan named only half the blockers"
+# STATUS STAYS "open" — the vocabulary is a closed set (co-lineage.py
+# BAR_STATUS) and a bar closes on a MEASUREMENT ROW reading `met`, not on a
+# word here. K2 fired 2026-09-08 and the deliverable landed; the row below
+# records the reading.
 status       = "open"
 # THREE BLOCKERS, MEASURED. The plan recorded the first line of the second.
 #   1. sovereign-cli-daemon takes FOUR direct commonwealth deps —
@@ -726,11 +763,108 @@ status       = "open"
 # CLASSES; read as sites it would have been 7.0. This campaign has already
 # lost one bar to an instrument that was never written down (cw-net-deletion,
 # fa69be382). Naming it here rather than leaving a second one implicit.
-floor        = 3.0
-floor_basis  = "measured 2026-09-04: the three blocker classes above — direct commonwealth-* deps in sovereign-cli-daemon (Cargo.toml:56-63), two unconditional iroh forcings, one mesh-mint-to-boot site (daemon_cmd/mod.rs:1174-1186)"
+# ── K2 FIRED — RUNTIME PROFILE. CLOSEOUT 2026-09-08 ─────────────────────────
+#
+# K2's own text: "if extracting drags AppState the fusion is real, and the
+# honest deliverable is a RUNTIME PROFILE, not a package. Say that rather than
+# shipping a shim and calling it a boundary." The fusion census answered it,
+# and the answer arrives from a different number than K2 expected.
+#
+# THE MEASUREMENT (fusion census, HEAD 6cc8da6ed; every row names its command).
+# 78 distinct `sovereign_mesh::` items reached from sovereign-cli-daemon
+# (105 sites, 11 files, 29 mesh modules — rung 3c's count reproduces exactly):
+#     (a) MESH-ONLY               25   peer_inference, deep_link, peer_adapter,
+#                                      persist::load, mesh_http, ring_roster, …
+#     (b) LOCAL-ONLY IN SUBSTANCE 32   reindexer, projects, worker_*,
+#                                      watched_folder_setup, corpus_watch_http,
+#                                      project_http, slot_aliases, … — 10 of
+#                                      them clean on every column
+#     (c) BOTH                    21   daemon_services 15, EmbeddedDaemon 4,
+#                                      rpc_warm_http 1, resolve_self_node_id 1
+# A clean intra-crate cut EXISTS: 17 modules / 12,540 lines, severed by moving
+# one env helper (auto_resume::env_truthy). Adding the four near-clean modules
+# reaches 47 of 78 for 21 modules / 15,634 lines. **31 items stay behind
+# however the cut is drawn**, and AppState is not what blocks them —
+# `EmbeddedDaemon` is. Twenty-one of the thirty-one are class (c): the
+# daemon's own lifecycle and HTTP composition, which is not a mesh feature and
+# has nowhere else to live.
+#
+# SO THE SEAM DOES NOT CLOSE THE BAR. `cargo tree -p sovereign-cli-daemon -e
+# normal` is 845 crates, 10 of them commonwealth-*, and `-i` on each gives the
+# SAME terminal edge: every one rides sovereign-mesh, there is no second path.
+# A `sovereign-local` crate leaving 31 items behind moves 15,634 lines,
+# deletes ZERO dependencies, and the manifest still reads `sovereign-mesh`.
+# By K2's own test that is the shim it warns against. (The seam is a real
+# crate-graph improvement; it is not this bar's closeout, and it is not
+# ledgered as one.)
+#
+# WHAT LANDED INSTEAD — the profile, and the half of it that already existed.
+# §19 inventory first: mDNS and iroh already had runtime off-switches
+# (`mdns_enabled_effective`, `iroh_access::resolve_enabled` + SOVEREIGN_IROH).
+# What did not exist was anything answering "is this daemon local-only", so
+# the two knew nothing of each other and FOUR loops had no gate at all —
+# gossip (daemon.rs), auto_ingest collaborate, ring_sync, and the rail KV pump
+# W2 added beside it. `sovereign_mesh::local_only::LocalOnlyProfile` is now
+# that one decider (§10.6), resolved once in start_daemon from
+# `[daemon] local_only` + `SOVEREIGN_LOCAL_ONLY` (honoured in BOTH directions;
+# an unrecognised value warns and defers rather than reading as false, §18.3).
+# The two existing gates READ it; `internal_bind_addr` reads it; the four
+# loops are behind it. `local_only` + `require_encryption` is refused AT BOOT
+# BY NAME — without that refusal the daemon still stops, but on WS-B's "iroh
+# endpoint failed to bind", which names neither setting that disagrees.
+#
+# THE MESH-OF-ONE STAYS. The profile skips the NETWORK, not the model: the
+# Mesh is minted, persisted and served with one member, and `/v1/models`
+# answers. An `Option<Mesh>` would fork every reader of membership; the solo
+# case is the honest N=1 and it is what the order's THE PRINCIPLE section
+# required.
+#
+# CLASS 3 CLOSED WITHOUT A BRANCH. `daemon_cmd/mod.rs:1174-1186` returned 1 on
+# `create_mesh` failure, and rung 3b established that its live failure modes
+# include start_daemon's mDNS register/browse. Under the profile mDNS never
+# binds, so there is no such failure to be fatal — a TOTAL answer, not an
+# `if local { skip }`. The single branch added at that site is a REFUSAL: a
+# local-only daemon carrying a `[discovery] join_key` is a contradiction and
+# says so by name rather than silently split-braining into a solo node.
+#
+# THE BLOCKER-CLASS READING, since 3c's instrument is being retired and a
+# retired instrument still owes its last number:
+#   class 1 (direct commonwealth-* dep by PATH)     CLOSED at 3b, still 0
+#   class 2 (unconditional iroh forcing)            STANDS at compile time
+#             (`sovereign-mesh/Cargo.toml:46`), REFUSED WITH DATA at 3b — the
+#             no-iroh arm would have no consumer while the daemon cannot drop
+#             sovereign-mesh, so nothing would build it. CLOSED AT RUNTIME:
+#             the profile leaves the endpoint unbound.
+#   class 3 (mesh-mint-to-boot site)                CLOSED by the paragraph
+#             above.
+# 2.0 -> 1.0 on the old instrument, and the one that remains is the one this
+# campaign already decided not to pay for. That is why the count is not the
+# instrument any more: it can only move by a decision already refused.
+#
+# THE NEW INSTRUMENT IS A BOOT ASSERTION, and it is falsifiable where a
+# manifest count is not. `EmbeddedDaemon` records what it spawned in a
+# `RunningServices` census (a closed set of eight background services, ARCH
+# §2) read back by `running_services()`. The test boots with the profile ON
+# and a config that asks for mDNS *and* iroh — so the assertion is a real
+# differential, not a restatement of config — and counts the census.
+# WATCHED RED, four sabotages, each turning exactly its own assertion:
+#   four-loop gate removed  -> spawned `gossip`  [gossip, auto_ingest_
+#                              collaborate, ring_sync, rail_kv_pump]
+#   mDNS gate stops reading -> spawned `mdns_advertise`  [+ mdns_browse]
+#   iroh gate stops reading -> spawned `iroh_endpoint`   [+ iroh_watchdog]
+#   the refusal removed     -> refused, but not by name
+# The CONTROL (`the_control_a_networked_daemon_spawns_every_gated_loop`) boots
+# the same code with the profile off and asserts all four start, so the first
+# test cannot pass vacuously the day someone deletes the spawns.
+#
+# SHIPPED DEFAULT-OFF: sovereign/DEFAULTS_LEDGER.md carries the row, its flip
+# condition (the profile graduates by being REACHED — a `--local-only` flag or
+# the desktop's Local mode — not by a default flip) and a 2026-12-08 review-by.
+floor        = 8.0
+floor_basis  = "measured 2026-09-08: before the profile, a daemon booted with [discovery] mdns=true and [iroh] enabled=true spawned all EIGHT members of the RunningServices closed set — mdns_advertise, mdns_browse, gossip, auto_ingest_collaborate, ring_sync, rail_kv_pump, iroh_endpoint, iroh_watchdog — with no runtime posture able to stop the middle four at all. The prior instrument (blocker classes, 3c) read 2.0 here and is retired at 1.0; its final reading is in the closeout block above."
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "count of BLOCKER CLASSES REMAINING (not sites), each measured by PATH not name prefix: (1) sovereign-cli-daemon has a DIRECT dep whose manifest path is under commonwealth/ ; (2) an unconditional iroh feature forcing IN THE DAEMON'S OWN TREE ; (3) a mesh-mint-to-boot site. Re-derived 2026-09-05 by rung 3c — see the CLOSEOUT block above for why each of the three words in this sentence had to change."
+instrument   = "sovereign-mesh/tests/main/local_only_boot.rs :: a_local_only_daemon_spawns_no_network_service — boot an EmbeddedDaemon with the local-only profile ON (and a config that asks for mDNS and iroh), then count RunningServices, the census start_daemon records at each spawn site. The number is that count; the test also asserts /v1/models answers and the mesh holds exactly one member, so a daemon made quiet by being made useless does not read as a pass. Its control (the_control_a_networked_daemon_spawns_every_gated_loop) boots the same code with the profile off and requires all four gated loops. Replaces the blocker-class count, which could only move by a decision this campaign already refused (class 2, iroh — see 3b)."
 kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines, 44 crossing refs) cannot be cut without a shim over ~300 lines. Then local and mesh state are genuinely fused and the honest deliverable is a RUNTIME PROFILE, not a package. Say that rather than shipping a shim and calling it a boundary."
 
 [[bar]]
