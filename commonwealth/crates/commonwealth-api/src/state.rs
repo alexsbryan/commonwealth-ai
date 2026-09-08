@@ -12,7 +12,7 @@ use commonwealth_app::proxy::AppPortMap;
 use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::{Mesh, NodeStatus};
+use commonwealth_core::mesh::Mesh;
 use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
@@ -878,10 +878,6 @@ pub struct AppStateInner {
     /// Stored separately from the published value so a yield window can rise
     /// and fall without destroying the coding-activity signal underneath it.
     pub activity_inference_availability: RwLock<f32>,
-    /// Hard capability gate: true iff the daemon's startup probe confirmed
-    /// the configured model can be loaded. false (default) means this node
-    /// joins as storage-only and is excluded from inference routing.
-    pub local_inference_capable: std::sync::atomic::AtomicBool,
     /// Optional callback fired after any `Mesh` mutation by the
     /// route handlers. Set by the embedded daemon to the
     /// `persist::save` function so `/internal/join` accepts survive
@@ -1327,15 +1323,6 @@ impl AppState {
     pub fn install_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
         self.inner.slot_aliases.store(Arc::new(aliases));
     }
-    /// Return a snapshot of the registered slot alias names (both
-    /// bare and `commonwealth/`-prefixed) suitable for inclusion in
-    /// `/v1/models`. Stable order: alphabetical, deterministic.
-    pub fn slot_alias_names(&self) -> Vec<String> {
-        let map = self.inner.slot_aliases.load();
-        let mut names: Vec<String> = map.keys().cloned().collect();
-        names.sort();
-        names
-    }
 
     /// Replace the servable-model-files allowlist atomically. Daemon
     /// startup calls this once after the slot table is built; the
@@ -1747,7 +1734,6 @@ impl AppState {
                 newsworthy_force_tick: RwLock::new(None),
                 local_inference_availability: RwLock::new(1.0_f32),
                 activity_inference_availability: RwLock::new(1.0_f32),
-                local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
                 next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
@@ -1889,22 +1875,6 @@ impl AppState {
     /// the old or new value but never garbage.
     pub fn set_self_node_id(&self, new_id: NodeId) {
         self.inner.self_node_id_swap.store(Arc::new(new_id));
-    }
-
-    /// Record whether this node's model probe succeeded at startup.
-    /// Called by the daemon after `probe_inference_capability()` completes,
-    /// before mDNS announce or the first gossip round.
-    pub fn set_local_inference_capable(&self, capable: bool) {
-        self.inner
-            .local_inference_capable
-            .store(capable, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    /// Read the current hard capability gate for use in gossip payloads.
-    pub fn local_inference_capable(&self) -> bool {
-        self.inner
-            .local_inference_capable
-            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Install the in-process inference service. Same Arc-get_mut
@@ -2566,24 +2536,6 @@ impl AppState {
         let budget = self.storage_budget_bytes()?;
         let used = self.storage_used_bytes();
         Some(budget.saturating_sub(used))
-    }
-
-    /// Count online members.
-    pub async fn online_member_count(&self) -> usize {
-        let mesh = self.inner.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| {
-                m.is_active() && (m.status == NodeStatus::Online || m.status == NodeStatus::Busy)
-            })
-            .count()
-    }
-
-    /// Total member count (active members only — a tombstoned/departed node
-    /// still circulates for convergence but is not counted).
-    pub async fn total_member_count(&self) -> usize {
-        let mesh = self.inner.mesh.read().await;
-        mesh.members.values().filter(|m| m.is_active()).count()
     }
 }
 

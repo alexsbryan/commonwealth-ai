@@ -112,10 +112,6 @@ impl Payload {
     pub fn as_value(&self) -> &Value {
         &self.0
     }
-
-    pub fn into_value(self) -> Value {
-        self.0
-    }
 }
 
 /// Rebuild `value` in its one canonical spelling: objects keyed in sorted

@@ -20,12 +20,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bytes::Bytes;
 
 use commonwealth_core::contributions::{
-    aggregate, LedgerEvent, LedgerEventKind, NodeContributions, DEFAULT_WINDOW_DAYS,
+    aggregate, LedgerEvent, LedgerEventKind, NodeContributions,
 };
 use commonwealth_core::ids::NodeId;
 use std::collections::HashMap;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::store::MeshStore;
 
 /// `app_id` namespace used for ledger events inside `MeshStore`.
@@ -158,12 +158,6 @@ pub fn current_contributions(
     Ok(aggregate(&events, now, window_secs, peer_capabilities))
 }
 
-/// Default window (matches `DEFAULT_WINDOW_DAYS`). Re-exported so
-/// the daemon and CLI don't need to import from two crates.
-pub fn default_window_days() -> u32 {
-    DEFAULT_WINDOW_DAYS
-}
-
 /// Default cadence for the hourly `StorageSnapshot` background
 /// task. Aligned with `RetentionGc::DEFAULT_INTERVAL` so a single
 /// daemon clock tick handles both rollups.
@@ -289,14 +283,10 @@ fn fmt_node(id: &NodeId) -> String {
     prefix
 }
 
-// Surface the unused-Error-import compiler hint as a real type
-// alias so callers can match on it.
-#[doc(hidden)]
-pub type _ContributionStoreError = Error;
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use commonwealth_core::contributions::DEFAULT_WINDOW_DAYS;
 
     fn nid(byte: u8) -> NodeId {
         NodeId::from_u128(byte as u128)

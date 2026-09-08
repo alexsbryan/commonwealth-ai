@@ -70,11 +70,6 @@ impl MeshPeerStore {
             .map_err(to_port_error)
     }
 
-    /// Wrap a store this crate already holds.
-    pub fn from_store(inner: Arc<MeshStore>) -> Self {
-        Self { inner }
-    }
-
     /// The underlying store, for the mesh-side machinery that needs the whole
     /// surface (gossip enumeration, GC, merge). Crate-private: a consumer that
     /// could reach through the port to the concrete store would make the port
