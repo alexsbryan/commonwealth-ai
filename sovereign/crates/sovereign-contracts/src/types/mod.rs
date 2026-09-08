@@ -30,7 +30,7 @@ pub type EntityInventory = std::collections::HashSet<String>;
 // Sovereign's SLOT_POLICY did NOT move: see `crate::slot_policy`.
 pub use crate::oicp::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, PromptShape, ProviderCapabilities,
-    SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
+    SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema, TurnAdmission,
 };
 
 /// User-configurable inference parameters, sourced from `DesktopConfig`.

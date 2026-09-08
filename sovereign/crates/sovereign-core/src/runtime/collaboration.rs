@@ -328,6 +328,7 @@ pub(crate) async fn run_collaboration(
     );
 
     let refine_req = CompletionRequest {
+        admission: None,
         prompt: refine_prompt,
         system_message: Some(refine_system),
         preferred_speed: Speed::Slow,

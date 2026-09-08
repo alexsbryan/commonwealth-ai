@@ -291,6 +291,7 @@ pub async fn score_facts_judge(
         );
 
         let request = sovereign_core::types::CompletionRequest {
+            admission: None,
             prompt,
             system_message: Some(
                 "You evaluate whether answers convey concepts. Be generous: \
@@ -597,6 +598,7 @@ pub async fn score_sources_loose(
     });
 
     let request = sovereign_core::types::CompletionRequest {
+        admission: None,
         prompt,
         system_message: Some(
             "You evaluate whether source articles are topically covered by retrieved \
@@ -926,6 +928,7 @@ pub async fn score_essay_readiness(
         sovereign_core::types::Speed::Fast
     };
     let request = sovereign_core::types::CompletionRequest {
+        admission: None,
         prompt,
         system_message: Some(
             "You evaluate retrieval-set sufficiency for essay writing across four \

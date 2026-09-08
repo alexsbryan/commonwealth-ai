@@ -442,7 +442,10 @@ impl FastShortCoalescer {
     /// blocking thread. Each job's `oneshot::Sender` resolves with
     /// its individual `(text, tokens)` slice.
     async fn dispatch_batch(slot: Arc<ModelSlot>, quirks: ModelQuirks, batch: Vec<CoalescerJob>) {
-        let permit = match ModelSlot::acquire_inflight(&slot, "fast_short_batch").await {
+        let permit = match // The coalescer batches SEVERAL callers' requests, so there is no one
+        // turn whose admission this permit continues. Unadmitted by
+        // construction, not by omission (ARCH §18.3).
+        ModelSlot::acquire_inflight(&slot, "fast_short_batch", None).await {
             Ok(p) => p,
             Err(e) => {
                 let msg = e.to_string();
@@ -2377,8 +2380,12 @@ impl EmbeddedLlamaCpp {
     ///
     /// `slot_label` distinguishes primary from the code model, which
     /// hot-swaps through the same slot; `phase` names the entry point.
-    async fn acquire_lazy(&self, phase: &'static str) -> Result<super::model_slot::SlotPermit> {
-        super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase).await
+    async fn acquire_lazy(
+        &self,
+        phase: &'static str,
+        admission: Option<&sovereign_core::types::TurnAdmission>,
+    ) -> Result<super::model_slot::SlotPermit> {
+        super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase, admission).await
     }
 
     /// Pick which slot should serve this request.
@@ -2647,7 +2654,7 @@ impl EmbeddedLlamaCpp {
         };
         // This path always targets the configured primary, so it is distributable.
         let distributable = true;
-        let _permit = self.acquire_lazy("reload_primary").await?;
+        let _permit = self.acquire_lazy("reload_primary", None).await?;
         let primary_lock = Arc::clone(&self.primary);
         let backend = Arc::clone(&self.primary_backend);
         let ctx_size = self.primary_ctx_size;
@@ -2902,7 +2909,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // Acquire the slot's inflight permit BEFORE spawn_blocking
             // so concurrent callers queue at the async layer, not in
             // the blocking pool. See ModelSlot.inflight docs.
-            let _permit = ModelSlot::acquire_inflight(&slot, "complete/extras").await?;
+            let _permit =
+                ModelSlot::acquire_inflight(&slot, "complete/extras", request.admission.as_ref())
+                    .await?;
             let request = request.clone();
             let slot_label_owned = slot_name.clone();
             let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
@@ -3035,7 +3044,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     pool_size,
                     "dispatching to primary sibling"
                 );
-                let _permit = ModelSlot::acquire_inflight(&slot, "complete/primary").await?;
+                let _permit = ModelSlot::acquire_inflight(
+                    &slot,
+                    "complete/primary",
+                    request.admission.as_ref(),
+                )
+                .await?;
                 let request = request.clone();
                 let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
                     let _permit = _permit;
@@ -3135,7 +3149,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // layer; otherwise concurrent callers stack up blocking
             // threads waiting on `primary.blocking_lock()`. See the
             // `lazy_inflight` field doc.
-            let _permit = self.acquire_lazy("complete/lazy").await?;
+            let _permit = self
+                .acquire_lazy("complete/lazy", request.admission.as_ref())
+                .await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -3262,7 +3278,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // the gate they all park blocking-pool threads and clone
             // 8 KB prompts; with it, only one proceeds and the rest
             // queue cheaply as async tasks.
-            let _permit = ModelSlot::acquire_inflight(&slot, "complete/fast").await?;
+            let _permit =
+                ModelSlot::acquire_inflight(&slot, "complete/fast", request.admission.as_ref())
+                    .await?;
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
@@ -3407,8 +3425,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                      and dispatch — retry the request"
                 )));
             };
-            let _permit =
-                ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/extras").await?;
+            let _permit = ModelSlot::acquire_inflight(
+                &slot,
+                "complete_stream_with_finish/extras",
+                request.admission.as_ref(),
+            )
+            .await?;
             let slot_label_owned = slot_name.clone();
             tokio::task::spawn_blocking(move || {
                 let _permit = _permit;
@@ -3492,9 +3514,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     streaming = true,
                     "dispatching to primary sibling"
                 );
-                let _permit =
-                    ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/primary_pool")
-                        .await?;
+                let _permit = ModelSlot::acquire_inflight(
+                    &slot,
+                    "complete_stream_with_finish/primary_pool",
+                    request.admission.as_ref(),
+                )
+                .await?;
                 let quirks = self.primary_quirks.clone();
                 tokio::task::spawn_blocking(move || {
                     // Hold the permit for the streaming task's lifetime.
@@ -3559,7 +3584,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // must stay local (distributing a non-primary slot is the §3 crash).
             let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
             let _permit = self
-                .acquire_lazy("complete_stream_with_finish/lazy")
+                .acquire_lazy(
+                    "complete_stream_with_finish/lazy",
+                    request.admission.as_ref(),
+                )
                 .await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
@@ -3643,8 +3671,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             });
         } else {
             let slot = Arc::clone(&self.fast);
-            let _permit =
-                ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/fast").await?;
+            let _permit = ModelSlot::acquire_inflight(
+                &slot,
+                "complete_stream_with_finish/fast",
+                request.admission.as_ref(),
+            )
+            .await?;
             let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
                 let _permit = _permit;
@@ -3996,7 +4028,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // Acquire the same lazy-slot inflight permit `complete()` /
         // `complete_stream()` use, so a warmup can't race a hot-swap
         // out from under an in-flight request.
-        let _permit = self.acquire_lazy("warmup_primary").await?;
+        let _permit = self.acquire_lazy("warmup_primary", None).await?;
         let primary_lock = Arc::clone(&self.primary);
         let backend = Arc::clone(&self.primary_backend);
         let ctx_size = self.primary_ctx_size;

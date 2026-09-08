@@ -510,6 +510,7 @@ impl Runtime {
         };
         let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
         let request = CompletionRequest {
+            admission: None,
             prompt,
             system_message: Some(system),
             preferred_speed: Speed::Fast,

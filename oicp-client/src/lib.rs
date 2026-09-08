@@ -2243,6 +2243,7 @@ mod tests {
         let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 
         let request = CompletionRequest {
+            admission: None,
             prompt: "Hi".to_string(),
             system_message: Some("You are helpful.".to_string()),
             preferred_speed: Speed::Fast,
@@ -2283,6 +2284,7 @@ mod tests {
         let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 
         let request = CompletionRequest {
+            admission: None,
             prompt: "Review this code".to_string(),
             system_message: None,
             preferred_speed: Speed::Slow,

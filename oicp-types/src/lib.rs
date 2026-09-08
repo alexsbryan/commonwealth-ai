@@ -48,6 +48,7 @@ pub mod version;
 pub use completion::{
     latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,
     PromptShape, ProviderCapabilities, SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
+    TurnAdmission,
 };
 pub use error::{InferenceError, InferenceResult};
 pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};

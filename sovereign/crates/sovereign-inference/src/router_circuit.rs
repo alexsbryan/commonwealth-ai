@@ -65,6 +65,7 @@ impl HealthCheckable for RouterCircuitChecker {
                 HealthIssue::RouterCircuitOpen { .. } => {
                     // Send a minimal probe to see if the backend has recovered.
                     let probe = CompletionRequest {
+                        admission: None,
                         prompt: "ping".into(),
                         system_message: None,
                         preferred_speed: Speed::Fast,

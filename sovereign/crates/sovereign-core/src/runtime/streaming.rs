@@ -976,6 +976,14 @@ impl Runtime {
         // (Primary), unchanged from the prior explicit Slow.
         let mut request = Workload::Passthrough.request(format_history_as_prompt(&context, 24));
         request.system_message = Some(system);
+        // The DRAFT carries the turn's admission too (order
+        // `admission-continuation` (3)). A turn that has been admitted,
+        // routed and retrieved for is not new load when it reaches
+        // synthesis: five of the measured turns died whole right here with
+        // `host busy: ~30000 ms predicted wait at queue position 1`. The
+        // refusal-retry and soft-landing continuations `.clone()` this
+        // request, so they inherit it.
+        crate::runtime::admission::stamp(&mut request);
 
         let message_id = uuid::Uuid::new_v4().to_string();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
@@ -1366,6 +1374,15 @@ impl Runtime {
             query_embedding,
             grounding_verdict,
         } = plan;
+        // The DRAFT carries the turn's admission too (order
+        // `admission-continuation` (3)). A turn that has been admitted,
+        // routed and retrieved for is not new load when it reaches
+        // synthesis: five of the measured turns died whole right here with
+        // `host busy: ~30000 ms predicted wait at queue position 1`. The
+        // refusal-retry and soft-landing continuations `.clone()` this
+        // request, so they inherit it.
+        let mut request = request;
+        crate::runtime::admission::stamp(&mut request);
         // H1's typed admission verdict, when the native path ran. `None`
         // on every flag-off turn — the streaming path reads it, it never
         // re-derives it. Traced at the boundary so "what did the router
@@ -1678,7 +1695,15 @@ impl Runtime {
         // Copied out before the spawn: `self` does not outlive the task, and a
         // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
         let router_stamp = self.router.stamp();
-        tokio::spawn(stage_ledger_for_turn.scope(async move {
+        // The turn's admission, carried across the spawn. A task-local
+        // does not cross `tokio::spawn` — the same reason the stage ledger
+        // is re-installed on the next line — and without it the GATE's
+        // calls, which are issued from inside this body, would be built
+        // outside the scope and shed as fresh load.
+        let admission_for_turn = crate::runtime::admission::current();
+        tokio::spawn(crate::runtime::admission::scope(
+            admission_for_turn,
+            stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
 
             let (s, model_id) = match inference.complete_stream_with_id_and_finish(&request).await {
@@ -2653,7 +2678,8 @@ impl Runtime {
                     );
                 }
             });
-        }));
+        }),
+        ));
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -2836,6 +2862,7 @@ impl Runtime {
         // closed; see synth.truncation.
         let synth_max = kc.output_budget.hard_ceiling;
         let mut request = CompletionRequest {
+            admission: None,
             prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
@@ -2877,6 +2904,14 @@ impl Runtime {
             prompt_shape: None,
             stable_prefix_len: None,
         };
+        // The DRAFT carries the turn's admission too (order
+        // `admission-continuation` (3)). A turn that has been admitted,
+        // routed and retrieved for is not new load when it reaches
+        // synthesis: five of the measured turns died whole right here with
+        // `host busy: ~30000 ms predicted wait at queue position 1`. The
+        // refusal-retry and soft-landing continuations `.clone()` this
+        // request, so they inherit it.
+        crate::runtime::admission::stamp(&mut request);
         // Phase-1 prompt-budget guard: assembled input + response
         // reservation must fit the context window, or the engine's
         // "Prompt too long" rejection becomes a terminal user-facing
@@ -3203,7 +3238,15 @@ impl Runtime {
         // Copied out before the spawn: `self` does not outlive the task, and a
         // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
         let router_stamp = self.router.stamp();
-        tokio::spawn(stage_ledger_for_turn.scope(async move {
+        // The turn's admission, carried across the spawn. A task-local
+        // does not cross `tokio::spawn` — the same reason the stage ledger
+        // is re-installed on the next line — and without it the GATE's
+        // calls, which are issued from inside this body, would be built
+        // outside the scope and shed as fresh load.
+        let admission_for_turn = crate::runtime::admission::current();
+        tokio::spawn(crate::runtime::admission::scope(
+            admission_for_turn,
+            stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
 
@@ -3667,7 +3710,8 @@ impl Runtime {
                     }
                 });
             }
-        }));
+        }),
+        ));
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));

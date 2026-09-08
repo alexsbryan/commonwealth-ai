@@ -121,6 +121,7 @@ impl Step for ModelStep {
         // pre-OICP consumer, but the OICP envelope is the primary signal, so we
         // don't rely on the provider's `Speed`→`latency_class` rescue.
         let request = CompletionRequest {
+            admission: None,
             prompt,
             system_message,
             preferred_speed: speed_for(self.latency),

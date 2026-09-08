@@ -283,6 +283,76 @@ pub struct CompletionRequest {
     /// See `sovereign/docs/INLINE_COMPLETION.md` §3.1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_shape: Option<PromptShape>,
+
+    /// The already-admitted turn this call CONTINUES, when it continues one.
+    ///
+    /// See [`TurnAdmission`]. Set by the host that admitted the turn;
+    /// `None` on a fresh request, which is every request whose acceptance
+    /// has not yet been decided.
+    ///
+    /// **Never serialized, by construction** (`#[serde(skip)]`). Admission
+    /// is a fact about THIS process's own queue — "I already accepted this
+    /// turn, drafted it, and am now verifying it" — and a field that
+    /// survived a wire hop would let any caller assert it. A request that
+    /// leaves this host for a peer arrives there as what it is: new load
+    /// the peer has not yet accepted, and the peer's own gate decides
+    /// (ARCH §7 — make it structural, not remembered).
+    #[serde(default, skip)]
+    pub admission: Option<TurnAdmission>,
+}
+
+/// Identity of a turn this host has ALREADY ADMITTED.
+///
+/// # What it is for
+///
+/// The model-slot queue sheds a caller whose predicted wait exceeds the
+/// bound, and before this existed the decision was blind: it could not tell
+/// a fresh request from the fourth judge call of a turn the host had
+/// already accepted, retrieved for, drafted and was now verifying. Measured
+/// 2026-09-04 on 32 chat turns under one concurrent `chat ask`: every
+/// `judge_failed_open` exit (5 of 5) was `queue_shed` with ZERO judging
+/// calls answered, and five further turns died whole at the draft with
+/// `host busy: ~30000 ms predicted wait at queue position 1`. Refusing the
+/// tail of accepted work does not shed load — the work is already paid for
+/// — it converts a slow turn into a failed one.
+///
+/// A request carrying one of these is therefore PARKED at the queue rather
+/// than shed. Requests without one keep the shed policy exactly as it was.
+///
+/// # Why an id and not a flag
+///
+/// So the queue's own trace can be joined to the turn that caused the wait.
+/// A boolean would say a continuation waited; the id says WHICH turn's
+/// continuation, which is the difference between a log line and a
+/// diagnosis (ARCH §9).
+///
+/// # Where it comes from
+///
+/// `sovereign_core::runtime::admission::TurnAdmission` — one minter, opened
+/// with the turn's foreground lease and dropped with it, so a token cannot
+/// outlive the turn that earned it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TurnAdmission(std::sync::Arc<str>);
+
+impl TurnAdmission {
+    /// Wrap an already-minted turn id. Minting belongs to the runtime's
+    /// admission module — one decider, one name (ARCH §10.6).
+    #[must_use]
+    pub fn new(id: impl Into<std::sync::Arc<str>>) -> Self {
+        Self(id.into())
+    }
+
+    /// The turn id, as it appears in the queue's tracing events.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for TurnAdmission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 /// How the request's `prompt` reaches the tokenizer. Default is
@@ -363,6 +433,9 @@ impl CompletionRequest {
             evidence_id_allowlist: None,
             lark_grammar: None,
             prompt_shape: None,
+            // Not admitted: `new` builds a FRESH request. A continuation is
+            // stamped by the runtime's admission funnel, never here.
+            admission: None,
             stable_prefix_len: None,
         }
     }

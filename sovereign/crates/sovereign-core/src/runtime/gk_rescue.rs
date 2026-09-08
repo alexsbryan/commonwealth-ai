@@ -87,6 +87,7 @@ pub(crate) async fn rescue_ood_answer(
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let q: String = question.chars().take(600).collect();
     let request = CompletionRequest {
+        admission: None,
         prompt: format!(
             "The user's connected sources don't cover this question. Answer it \
              from your general knowledge, briefly and directly:\n\n{q}"

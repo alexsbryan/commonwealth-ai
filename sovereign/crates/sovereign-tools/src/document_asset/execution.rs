@@ -145,6 +145,7 @@ impl DocumentAssetManager {
         let response = self
             .inference
             .complete(&CompletionRequest {
+                admission: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,
@@ -432,6 +433,7 @@ impl DocumentAssetManager {
         let response = self
             .inference
             .complete(&CompletionRequest {
+                admission: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,
@@ -504,6 +506,7 @@ impl DocumentAssetManager {
         let response = self
             .inference
             .complete(&CompletionRequest {
+                admission: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,

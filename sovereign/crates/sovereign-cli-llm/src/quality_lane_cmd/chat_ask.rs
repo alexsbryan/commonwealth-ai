@@ -23,6 +23,15 @@
 //! | per-stage ceilings | HARD | a stage blew its pre-registered budget |
 //! | per-stage baseline | TRACKED | a stage moved against this stack's last run |
 //! | gate outcome honest | HARD | the action left the allowed set, or it disagrees with the ledger the reader is shown |
+//!
+//! `gate outcome honest` has THREE verdicts, not two. A turn whose judge was
+//! never answered — `judge_failure.reason` set with `calls_answered` 0 — is
+//! could-not-judge: the gate reached no verdict, so there is nothing for the
+//! action to agree or disagree with, and failing the row would score the HOST
+//! rather than the answer. The dishonesty rules still run first and still
+//! bind. The abstention is earned by an observed run, not anticipated (ARCH
+//! §18.2): 5 of 5 `judge_failed_open` exits on this host's 32-turn contended
+//! run were `queue_shed` with zero calls answered (note `d6e13797`).
 //! | both halves answered | HARD | the #57 failure, back |
 //! | not abstained | HARD | an answerable question got a refusal |
 //! | useful | HARD | a reader would not come away with an answer |
@@ -48,7 +57,7 @@ use std::time::Instant;
 
 use kernel_types::Judgement;
 use sovereign_contracts::types::projection::TurnMetadata;
-use sovereign_contracts::types::{StageId, TurnMode};
+use sovereign_contracts::types::{JudgeFailure, JudgeFailureReason, StageId, TurnMode};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_turn_client::{TurnClient, TurnObserver};
@@ -309,6 +318,20 @@ fn gate_u64(meta: &TurnMetadata, key: &str) -> Option<u64> {
     meta.grounding_gate.as_ref()?.get(key)?.as_u64()
 }
 
+/// The turn's `judge_failure` block, read back through the SAME type the
+/// gate wrote it with (ARCH §10.6). Hand-parsing `reason` / `calls_answered`
+/// here would be a second reader of one schema, and the reason token is a
+/// closed set whose spelling belongs to `JudgeFailureReason`, not to this
+/// lane.
+///
+/// Absent on every turn the gate judged — `gate::record_gate_decision`
+/// attaches it only on a fail-open exit — so `None` means "the judge
+/// reached a verdict", never "the field was unreadable".
+fn judge_failure(meta: &TurnMetadata) -> Option<JudgeFailure> {
+    let raw = meta.grounding_gate.as_ref()?.get("judge_failure")?;
+    serde_json::from_value(raw.clone()).ok()
+}
+
 /// **THE ceiling formula.** One implementation, one name (ARCH §10.6).
 ///
 /// `ceiling = max(1.5 x median, median + floor_ms)`
@@ -369,11 +392,19 @@ fn missing_coverage<'a>(visible: &str, must_locate: &'a [String]) -> Vec<&'a str
 }
 
 /// What the `gate outcome honest` row decided, and why.
+///
+/// Three verdicts, not two (ARCH §18.1). [`Honesty::Unjudged`] is the one
+/// added on 2026-09-07, and it is the difference between "this turn lied"
+/// and "this host never answered the question".
 #[derive(Debug, PartialEq, Eq)]
 enum Honesty {
     Honest,
     /// The action and the ledger tell different stories.
     Dishonest(String),
+    /// The gate's judge was never ANSWERED, so there is no verdict for the
+    /// action to agree or disagree with. Not a pass and not a failure —
+    /// the row could not judge.
+    Unjudged(String),
 }
 
 /// **Does this turn's ledger say the same thing its action does?**
@@ -420,6 +451,7 @@ fn gate_outcome_honest(
     verifications: &[String],
     quotes: Option<u64>,
     openable: Option<u64>,
+    judge_failure: Option<JudgeFailure>,
 ) -> Honesty {
     let fail_open_action = matches!(
         action,
@@ -460,6 +492,30 @@ fn gate_outcome_honest(
                 ));
             }
             _ => {}
+        }
+    }
+    // **A judge that never answered is could-not-judge, not a failure**
+    // (order `admission-continuation` (6), moved here from
+    // `registry-1-selections` because it is the same shed class the rest of
+    // that order fixes). The dishonesty rules above still run FIRST and
+    // still bind: a turn claiming `verified` holdings under a fail-open
+    // action is a defect whatever refused the call. What this arm removes is
+    // the OTHER reading — scoring a host that shed every judge call as
+    // though the gate had decided something wrong. `calls_answered == 0`
+    // with a reason is the census saying no judging call came back at all,
+    // so there is no verdict for the row to check the action against.
+    //
+    // `calls_answered > 0` deliberately stays a failure: some calls DID
+    // answer, the ladder had material, and the exit is a real one.
+    if let Some(jf) = judge_failure {
+        if jf.calls_answered == 0 {
+            return Honesty::Unjudged(format!(
+                "`{action}`: the judge was never answered — reason `{}`, \
+                 {} of {} judging call(s) came back",
+                jf.reason.label(),
+                jf.calls_answered,
+                jf.calls_attempted
+            ));
         }
     }
     Honesty::Honest
@@ -813,10 +869,6 @@ async fn assert_question(
         .map(|m| gate_str(m, "action").unwrap_or("(absent)").to_string())
         .collect();
     let located: Vec<Option<u64>> = ledgers.iter().map(|m| gate_u64(m, "located")).collect();
-    let bad_action: Vec<&String> = actions
-        .iter()
-        .filter(|a| !q.allowed_gate_actions.contains(a))
-        .collect();
     let verdicts: Vec<(usize, Honesty)> = runs
         .iter()
         .enumerate()
@@ -843,9 +895,10 @@ async fn assert_question(
                 .unwrap_or_default();
             let quotes = r.metadata.as_ref().and_then(|m| gate_u64(m, "quotes"));
             let openable = r.metadata.as_ref().and_then(|m| gate_u64(m, "openable"));
+            let jf = r.metadata.as_ref().and_then(judge_failure);
             (
                 i + 1,
-                gate_outcome_honest(action, &verifications, quotes, openable),
+                gate_outcome_honest(action, &verifications, quotes, openable, jf),
             )
         })
         .collect();
@@ -853,15 +906,37 @@ async fn assert_question(
         .iter()
         .filter_map(|(i, v)| match v {
             Honesty::Dishonest(why) => Some(format!("run {i}: {why}")),
-            Honesty::Honest => None,
+            Honesty::Honest | Honesty::Unjudged(_) => None,
         })
+        .collect();
+    let unjudged: Vec<String> = verdicts
+        .iter()
+        .filter_map(|(i, v)| match v {
+            Honesty::Unjudged(why) => Some(format!("run {i}: {why}")),
+            Honesty::Honest | Honesty::Dishonest(_) => None,
+        })
+        .collect();
+    // An action outside the bank's allowed set is a failure UNLESS that run
+    // is the could-not-judge case above — `judge_failed_open` is not in any
+    // bank's allow-list precisely because it is the exit a host under load
+    // takes, and failing the row for it scores the HOST, not the answer.
+    let bad_action: Vec<&String> = verdicts
+        .iter()
+        .filter(|(_, v)| !matches!(v, Honesty::Unjudged(_)))
+        .filter_map(|(i, _)| actions.get(i - 1))
+        .filter(|a| !q.allowed_gate_actions.contains(a))
         .collect();
     let holdings_seen: usize = runs
         .iter()
         .filter_map(|r| r.epistemic.as_ref())
         .map(|e| e.holdings.len())
         .sum();
-    if !bad_action.is_empty() {
+    if !dishonest.is_empty() {
+        report.failed(
+            &row("gate outcome honest"),
+            format!("actions {actions:?} — the ledger disagrees with the action — {dishonest:?}"),
+        );
+    } else if !bad_action.is_empty() {
         report.failed(
             &row("gate outcome honest"),
             format!(
@@ -869,10 +944,15 @@ async fn assert_question(
                 q.allowed_gate_actions
             ),
         );
-    } else if !dishonest.is_empty() {
-        report.failed(
+    } else if !unjudged.is_empty() {
+        report.cannot_judge(
             &row("gate outcome honest"),
-            format!("actions {actions:?} allowed, but the ledger disagrees — {dishonest:?}"),
+            format!(
+                "actions {actions:?} — the gate reached no verdict on {} of {} run(s), so \
+                 there is nothing to check the action against: {unjudged:?}",
+                unjudged.len(),
+                runs.len()
+            ),
         );
     } else if holdings_seen == 0 {
         // No holdings anywhere: the action rule passed and the ledger rule
@@ -1311,6 +1391,7 @@ mod tests {
                 "judge_failed_open",
                 &v(&["fail_open", "fail_open"]),
                 None,
+                None,
                 None
             ),
             Honesty::Honest
@@ -1318,6 +1399,7 @@ mod tests {
         let d = gate_outcome_honest(
             "judge_failed_open",
             &v(&["fail_open", "verified"]),
+            None,
             None,
             None,
         );
@@ -1333,10 +1415,10 @@ mod tests {
     #[test]
     fn a_held_action_may_not_carry_an_unjudged_holding() {
         assert_eq!(
-            gate_outcome_honest("released", &v(&["verified", "verified"]), None, None),
+            gate_outcome_honest("released", &v(&["verified", "verified"]), None, None, None),
             Honesty::Honest
         );
-        let d = gate_outcome_honest("released", &v(&["verified", "fail_open"]), None, None);
+        let d = gate_outcome_honest("released", &v(&["verified", "fail_open"]), None, None, None);
         assert!(
             matches!(d, Honesty::Dishonest(ref why) if why.contains("fail_open")),
             "{d:?}"
@@ -1347,6 +1429,7 @@ mod tests {
             gate_outcome_honest(
                 "annotated_marked",
                 &v(&["verified", "failed_once", "fail_open"]),
+                None,
                 None,
                 None
             ),
@@ -1364,19 +1447,102 @@ mod tests {
     #[test]
     fn a_citation_release_is_judged_on_openable_not_on_section_headings() {
         assert_eq!(
-            gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(2), Some(2)),
+            gate_outcome_honest(
+                "citation_grounded",
+                &v(&["verified"]),
+                Some(2),
+                Some(2),
+                None
+            ),
             Honesty::Honest,
             "located is not consulted at all"
         );
-        let d = gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(2), Some(1));
+        let d = gate_outcome_honest(
+            "citation_grounded",
+            &v(&["verified"]),
+            Some(2),
+            Some(1),
+            None,
+        );
         assert!(
             matches!(d, Honesty::Dishonest(ref why) if why.contains("opened")),
             "{d:?}"
         );
         // Quotes released and no openable count reported at all is not a
         // pass either — absence is reported, never defaulted (§18.3).
-        let d = gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(1), None);
+        let d = gate_outcome_honest("citation_grounded", &v(&["verified"]), Some(1), None, None);
         assert!(matches!(d, Honesty::Dishonest(_)), "{d:?}");
+    }
+
+    fn jf(reason: JudgeFailureReason, attempted: u32, answered: u32) -> JudgeFailure {
+        JudgeFailure {
+            reason,
+            calls_attempted: attempted,
+            calls_answered: answered,
+        }
+    }
+
+    /// **A judge nobody answered is could-not-judge, not a failure.**
+    ///
+    /// The measured case: 32 turns under one concurrent `chat ask` produced
+    /// five `judge_failed_open` exits, 5 of 5 `queue_shed`, `calls_answered`
+    /// 0 on every one (note `d6e13797`). The row used to score those as
+    /// FAILED — `judge_failed_open` is in no bank's allow-list — which reads
+    /// as "the gate decided something wrong" when what happened is that the
+    /// host refused every judging call.
+    ///
+    /// FAILS IF the `calls_answered == 0` arm is dropped: the first
+    /// assertion sees `Honest` (no arm at all) or the row's own
+    /// `bad_action` branch turns it into a failure again.
+    #[test]
+    fn a_judge_that_never_answered_is_could_not_judge() {
+        let d = gate_outcome_honest(
+            "judge_failed_open",
+            &v(&["fail_open", "fail_open"]),
+            None,
+            None,
+            Some(jf(JudgeFailureReason::QueueShed, 6, 0)),
+        );
+        assert!(
+            matches!(d, Honesty::Unjudged(ref why) if why.contains("queue_shed") && why.contains("0 of 6")),
+            "{d:?}"
+        );
+    }
+
+    /// The other side of the same bar. A turn where SOME judging call came
+    /// back had material to decide on, so its exit is a real one and stays
+    /// judged — could-not-judge is for an instrument that never spoke, not
+    /// for a bad result (ARCH §18.1).
+    #[test]
+    fn a_judge_that_partly_answered_is_still_judged() {
+        assert_eq!(
+            gate_outcome_honest(
+                "judge_failed_open",
+                &v(&["fail_open", "fail_open"]),
+                None,
+                None,
+                Some(jf(JudgeFailureReason::VerdictUnparseable, 4, 4)),
+            ),
+            Honesty::Honest
+        );
+    }
+
+    /// Could-not-judge NEVER launders a dishonest ledger. A turn that shed
+    /// every judge call and still shows `verified` holdings is the §18.3
+    /// defect whatever refused the call, so the dishonesty rules run first.
+    #[test]
+    fn an_unanswered_judge_does_not_excuse_a_verified_holding() {
+        let d = gate_outcome_honest(
+            "judge_failed_open",
+            &v(&["fail_open", "verified"]),
+            None,
+            None,
+            Some(jf(JudgeFailureReason::QueueShed, 6, 0)),
+        );
+        assert!(
+            matches!(d, Honesty::Dishonest(ref why) if why.contains("verified")),
+            "{d:?}"
+        );
     }
 
     fn bank_text() -> String {

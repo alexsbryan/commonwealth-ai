@@ -132,6 +132,7 @@ async fn main() {
     );
 
     let request = CompletionRequest {
+        admission: None,
         prompt: args.prompt.clone(),
         system_message: None,
         preferred_speed: sovereign_core::types::Speed::Slow,

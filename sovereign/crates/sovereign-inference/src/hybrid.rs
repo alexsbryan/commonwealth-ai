@@ -121,6 +121,7 @@ impl HybridProvider {
             }
 
             let probe = CompletionRequest {
+                admission: None,
                 prompt: "ping".to_string(),
                 system_message: None,
                 preferred_speed: Speed::Fast,

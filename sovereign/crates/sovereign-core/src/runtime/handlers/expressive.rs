@@ -204,6 +204,7 @@ impl Runtime {
             Speed::Fast
         };
         let request = CompletionRequest {
+            admission: None,
             prompt: message.to_string(),
             system_message: Some(system),
             preferred_speed,
@@ -670,6 +671,7 @@ impl Runtime {
             Speed::Fast
         };
         let request = CompletionRequest {
+            admission: None,
             prompt: message.to_string(),
             system_message: Some(system),
             preferred_speed,

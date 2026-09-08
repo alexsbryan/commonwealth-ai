@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The turn-level foreground lease (issue #57 rec 4).
+//! The turn-level foreground lease (issue #57 rec 4) — and, since
+//! 2026-09-07, the turn's ADMISSION.
 //!
 //! A turn is foreground for its whole life. Every public turn entry on
 //! [`Runtime`] wraps its [`StreamHandle`] here so the corpus engine's
@@ -8,11 +9,22 @@
 //! enrichment, the newsworthy tick) parks for the entire turn. One site
 //! for every turn shape; no per-operation bump list. The `_unleased`
 //! bodies live in `streaming.rs`.
+//!
+//! **The lease is now taken BEFORE the body runs, not after it returns.**
+//! It used to be acquired on the handle the `_unleased` body had already
+//! produced, which meant routing and retrieval — the first third of the
+//! turn's wall clock — ran with no lease held at all. Taking it first is
+//! what makes the sentence "a turn that has been admitted, routed and
+//! retrieved holds the lease" true, and it is the precondition for
+//! [`crate::runtime::admission`]: the same object is the token the turn's
+//! model calls carry to the slot queue, so a continuation of accepted work
+//! is parked rather than shed.
 
 use std::pin::Pin;
 
 use futures::Stream;
 
+use super::admission::{self, AdmittedTurn};
 use super::{Intent, ResumeSession, Runtime, StreamHandle};
 use crate::error::Result;
 
@@ -23,7 +35,9 @@ use crate::error::Result;
 /// each model call. One site for every turn shape; nothing to remember.
 struct LeasedTurnStream {
     inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-    _lease: Option<corpus_engine::ForegroundLease>,
+    /// The turn's admission — its foreground lease and the id its model
+    /// calls carried. Held, never read: dropping it ends both, together.
+    _admitted: Option<AdmittedTurn>,
 }
 
 impl Stream for LeasedTurnStream {
@@ -37,16 +51,20 @@ impl Stream for LeasedTurnStream {
 }
 
 impl Runtime {
-    /// Wrap a turn's handle in its foreground lease. With no signal
-    /// installed (no daemon) the wrap is a plain passthrough.
-    fn leased(&self, mut handle: StreamHandle) -> StreamHandle {
-        let lease = self
-            .corpus_engine
-            .as_ref()
-            .and_then(|engine| engine.foreground_lease());
+    /// Admit the turn: take its foreground lease and mint the id its model
+    /// calls carry. `None` with no corpus engine or no signal installed
+    /// (no daemon), in which case every entry below is the passthrough it
+    /// always was.
+    fn admit(&self) -> Option<AdmittedTurn> {
+        self.corpus_engine.as_ref().and_then(AdmittedTurn::open)
+    }
+
+    /// Hand the turn's admission to the stream, so lease and token live
+    /// exactly as long as the turn does.
+    fn leased(&self, mut handle: StreamHandle, admitted: Option<AdmittedTurn>) -> StreamHandle {
         handle.stream = Box::pin(LeasedTurnStream {
             inner: handle.stream,
-            _lease: lease,
+            _admitted: admitted,
         });
         handle
     }
@@ -56,10 +74,13 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
     ) -> Result<StreamHandle> {
-        let h = self
-            .handle_message_stream_unleased(message, conversation_id)
-            .await?;
-        Ok(self.leased(h))
+        let admitted = self.admit();
+        let h = admission::scope(
+            admitted.as_ref().map(AdmittedTurn::token),
+            self.handle_message_stream_unleased(message, conversation_id),
+        )
+        .await?;
+        Ok(self.leased(h, admitted))
     }
 
     pub async fn handle_message_stream_as(
@@ -68,10 +89,13 @@ impl Runtime {
         conversation_id: &str,
         intent: Intent,
     ) -> Result<StreamHandle> {
-        let h = self
-            .handle_message_stream_as_unleased(message, conversation_id, intent)
-            .await?;
-        Ok(self.leased(h))
+        let admitted = self.admit();
+        let h = admission::scope(
+            admitted.as_ref().map(AdmittedTurn::token),
+            self.handle_message_stream_as_unleased(message, conversation_id, intent),
+        )
+        .await?;
+        Ok(self.leased(h, admitted))
     }
 
     pub async fn handle_message_stream_naked(
@@ -79,10 +103,13 @@ impl Runtime {
         message: &str,
         conversation_id: &str,
     ) -> Result<StreamHandle> {
-        let h = self
-            .handle_message_stream_naked_unleased(message, conversation_id)
-            .await?;
-        Ok(self.leased(h))
+        let admitted = self.admit();
+        let h = admission::scope(
+            admitted.as_ref().map(AdmittedTurn::token),
+            self.handle_message_stream_naked_unleased(message, conversation_id),
+        )
+        .await?;
+        Ok(self.leased(h, admitted))
     }
 
     pub async fn resume_session_stream(
@@ -91,10 +118,13 @@ impl Runtime {
         conversation_id: &str,
         resume: ResumeSession,
     ) -> Result<StreamHandle> {
-        let h = self
-            .resume_session_stream_unleased(message, conversation_id, resume)
-            .await?;
-        Ok(self.leased(h))
+        let admitted = self.admit();
+        let h = admission::scope(
+            admitted.as_ref().map(AdmittedTurn::token),
+            self.resume_session_stream_unleased(message, conversation_id, resume),
+        )
+        .await?;
+        Ok(self.leased(h, admitted))
     }
 
     pub async fn redirect_turn_stream(
@@ -102,9 +132,12 @@ impl Runtime {
         session_id: &str,
         intent_hint: &str,
     ) -> Result<StreamHandle> {
-        let h = self
-            .redirect_turn_stream_unleased(session_id, intent_hint)
-            .await?;
-        Ok(self.leased(h))
+        let admitted = self.admit();
+        let h = admission::scope(
+            admitted.as_ref().map(AdmittedTurn::token),
+            self.redirect_turn_stream_unleased(session_id, intent_hint),
+        )
+        .await?;
+        Ok(self.leased(h, admitted))
     }
 }

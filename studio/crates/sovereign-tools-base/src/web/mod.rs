@@ -95,6 +95,7 @@ impl WebSearchTool {
     /// 1-2 clean keyword queries (not sub-queries that reference each other).
     pub(crate) async fn to_search_queries(&self, query: &str) -> Vec<String> {
         let request = CompletionRequest {
+            admission: None,
             prompt: format!(
                 "Convert this into 1-2 concise search engine queries (keywords only, no full sentences). \
                  Each query must be independent and self-contained.\n\n\
@@ -271,6 +272,7 @@ impl WebSearchTool {
             .join("\n\n---\n\n");
 
         let request = CompletionRequest {
+            admission: None,
             prompt: format!(
                 "Answer this question based on the web search results below. \
                  Cite sources by number [1], [2], etc.\n\n\

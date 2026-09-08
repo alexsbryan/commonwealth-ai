@@ -188,6 +188,16 @@ pub(crate) async fn gate_call(
     req: &CompletionRequest,
     mechanism: GateCallMechanism,
 ) -> crate::error::Result<CompletionResponse> {
+    // The turn's ADMISSION rides out on every gate call, stamped HERE
+    // because this is already the one funnel every gate call crosses
+    // (ARCH §10.6). A judge call is the tail of work the host accepted
+    // when it admitted the turn, so the model-slot queue parks it instead
+    // of shedding it — see `runtime::admission`, and the measurement that
+    // 5 of 5 `judge_failed_open` exits were `queue_shed` with zero calls
+    // answered. Outside a turn (background work, tests) this stamps
+    // nothing and copies nothing.
+    let stamped = crate::runtime::admission::stamped(req);
+    let req = stamped.as_ref().unwrap_or(req);
     let started = std::time::Instant::now();
     let out = inference.complete(req).await;
     let ms = started.elapsed().as_millis() as u64;
@@ -512,5 +522,78 @@ mod tests {
         assert!(rows
             .iter()
             .all(|r| r.mechanism == GateCallMechanism::PerClaimJudge));
+    }
+
+    /// **The gate's calls carry the turn's admission.** This funnel is the
+    /// ONLY place the gate ladder's requests are stamped, so if it stops
+    /// stamping, every judge call in a contended turn goes back to being
+    /// shed as fresh load — silently, with the gate's own tests still green.
+    ///
+    /// SABOTAGE: delete the `stamped`/`req` rebinding at the top of
+    /// [`gate_call`] and this fails on the first assertion.
+    #[tokio::test]
+    async fn a_gate_call_inside_an_admitted_turn_carries_the_token() {
+        use crate::types::TurnAdmission;
+        use std::sync::Mutex as StdMutex;
+
+        struct Probe(Arc<StdMutex<Option<Option<TurnAdmission>>>>);
+        #[async_trait::async_trait]
+        impl InferenceProvider for Probe {
+            async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+                *self.0.lock().unwrap() = Some(r.admission.clone());
+                Ok(CompletionResponse {
+                    text: "ok".into(),
+                    tokens_used: 0,
+                    prompt_tokens: 0,
+                    model_id: "probe".into(),
+                    latency_ms: 0,
+                    oicp_meta: None,
+                    finish_reason: None,
+                    completion_tokens: None,
+                })
+            }
+            async fn complete_stream(
+                &self,
+                _r: &CompletionRequest,
+            ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+                unimplemented!("no stream in this probe")
+            }
+            async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+                unimplemented!("no embed in this probe")
+            }
+            fn capabilities(&self) -> ProviderCapabilities {
+                ProviderCapabilities {
+                    max_context_tokens: 4096,
+                    supports_structured_output: false,
+                    relative_speed: Speed::Fast,
+                    relative_reasoning: Depth::Moderate,
+                }
+            }
+        }
+
+        let seen = Arc::new(StdMutex::new(None));
+        let inf = Probe(Arc::clone(&seen));
+        let token = TurnAdmission::new("turn-under-test");
+
+        crate::runtime::admission::scope(Some(token.clone()), async {
+            let _ = gate_call(&inf, &req("judge"), GateCallMechanism::PerClaimJudge).await;
+        })
+        .await;
+        assert_eq!(
+            seen.lock().unwrap().clone(),
+            Some(Some(token)),
+            "a judge call inside an admitted turn must reach the provider carrying the token"
+        );
+
+        // The control: outside a turn, nothing is stamped and nothing is
+        // cloned. A test that only watched the admitted side would pass
+        // just as well if the stamp were unconditional.
+        *seen.lock().unwrap() = None;
+        let _ = gate_call(&inf, &req("judge"), GateCallMechanism::PerClaimJudge).await;
+        assert_eq!(
+            seen.lock().unwrap().clone(),
+            Some(None),
+            "a gate call outside a turn is fresh load"
+        );
     }
 }

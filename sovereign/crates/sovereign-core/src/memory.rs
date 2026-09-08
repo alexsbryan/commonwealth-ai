@@ -792,6 +792,7 @@ pub async fn extract_long_term_memories(
     );
 
     let request = CompletionRequest {
+        admission: None,
         prompt,
         system_message: Some(
             "You extract durable user facts from conversations. Respond with a JSON array of strings only."

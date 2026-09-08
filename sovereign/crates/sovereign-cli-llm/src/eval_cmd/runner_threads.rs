@@ -444,6 +444,7 @@ async fn score_thread_coverage(
     });
 
     let request = sovereign_core::types::CompletionRequest {
+        admission: None,
         prompt,
         system_message: Some(
             "You evaluate whether a tutor's conversation covered each expected \

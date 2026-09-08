@@ -25,6 +25,7 @@ use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
+use sovereign_core::types::TurnAdmission;
 
 use serving_policy::fair_sched::EtaEwma;
 use sovereign_core::error::Error;
@@ -1067,6 +1068,32 @@ impl Drop for QueuedGuard<'_> {
 /// `SOVEREIGN_MAX_QUEUE_WAIT_SECS`.
 pub(crate) const DEFAULT_MAX_QUEUE_WAIT_MS: u64 = 30_000;
 
+/// How much longer than a fresh caller a CONTINUATION of an admitted turn
+/// may park before the host calls the slot stuck.
+///
+/// [`DEFAULT_MAX_QUEUE_WAIT_MS`] encodes one tradeoff, stated in its own
+/// doc: *"a caller who would wait longer than this is better served by an
+/// immediate 'busy, retry in N' than by silence"*. **That tradeoff does not
+/// hold for a continuation.** Telling the fourth judge call of a 40-70 s
+/// turn to retry in 30 s gives the caller nothing — there is no alternative
+/// holder, the retrieval and the draft are already spent, and the measured
+/// outcome was a turn that shipped unverified or died whole
+/// (`runtime::admission`, note `d6e13797`).
+///
+/// The park still needs a LIVENESS bound — that is why the post-park
+/// timeout exists at all, and removing it for admitted calls would bring
+/// back the 62-minute silent park it was written for. So the bound is
+/// widened, not removed, and by a multiple of the one operator threshold
+/// rather than by a second number of its own (ARCH §10.6).
+///
+/// **Four**, derived from the measurement rather than picked: the turns
+/// this contends with run 40-70 s wall on this host, so a continuation must
+/// be able to outwait one whole in-flight turn plus its own prefill. 4 x
+/// 30 s = 120 s is the smallest multiple of the existing bound that covers
+/// the measured worst case with margin. A slot that has not freed in two
+/// minutes is the stuck-slot anomaly the timeout exists to name.
+const ADMITTED_PARK_MULTIPLE: u32 = 4;
+
 /// Seed for a slot's turn EWMA before any turn completes.
 ///
 /// Deliberately SMALL. The seed only matters for the handful of requests
@@ -1261,6 +1288,20 @@ impl Drop for SlotPermit {
 ///   - short predicted wait   -> park, `info` events on both sides
 ///   - long predicted wait    -> SHED with position + retry hint, no park
 ///
+/// **…unless the caller carries a [`TurnAdmission`]**, in which case the
+/// third outcome becomes the second. A request stamped with one is not new
+/// load: it is the tail of a turn this host already accepted, routed,
+/// retrieved for and drafted, and refusing it sheds nothing while turning a
+/// slow turn into a failed one. Measured 2026-09-04 on 32 chat turns under
+/// one concurrent `chat ask`: 5 of 5 `judge_failed_open` exits were
+/// `queue_shed` with zero judging calls answered, plus 5 turns that died
+/// whole at the draft. Fresh requests — a peer's, a background job's, a new
+/// turn's first call — keep the shed policy byte-for-byte unchanged.
+///
+/// The admitted park is BOUNDED, just more loosely: see
+/// [`ADMITTED_PARK_MULTIPLE`]. The liveness guarantee the post-park timeout
+/// exists for is kept; only the patience is different.
+///
 /// **The bound is on PREDICTED WAIT, not on queue depth**, and that is a
 /// measured choice rather than a stylistic one. On 2026-08-06 the same depth
 /// of 8 cost 6.2 s when nine callers shared a prompt prefix and 90.7 s when
@@ -1271,6 +1312,7 @@ impl Drop for SlotPermit {
 pub(super) async fn acquire_with_queue_gauge(
     queue: &Arc<SlotQueue>,
     phase: &'static str,
+    admission: Option<&TurnAdmission>,
 ) -> Result<SlotPermit> {
     use std::sync::atomic::Ordering;
 
@@ -1312,29 +1354,49 @@ pub(super) async fn acquire_with_queue_gauge(
     let predicted_wait_ms = eta.predict_wait_ms(position, 1, in_flight_elapsed_ms);
 
     if queue.max_wait_ms > 0 && predicted_wait_ms > queue.max_wait_ms {
-        // Shed BEFORE parking. Refusing after a wait would be the worst of
-        // both worlds — the caller pays the latency and still gets nothing.
-        // One decider for the retry hint — `Error::queue_shed` derives
-        // it, so this site and the FastShort coalescer's queue-bound
-        // shed cannot drift apart.
-        let shed = Error::queue_shed(position, predicted_wait_ms);
-        let retry_after_secs = match &shed {
-            Error::QueueShed {
-                retry_after_secs, ..
-            } => *retry_after_secs,
-            _ => unreachable!("queue_shed constructs QueueShed"),
-        };
-        tracing::info!(
-            slot = %queue.label,
-            phase,
-            position,
-            predicted_wait_ms,
-            max_wait_ms = queue.max_wait_ms,
-            avg_turn_ms = eta.avg_turn_ms(),
-            retry_after_secs,
-            "inference.queue: SHED — predicted wait exceeds the bound"
-        );
-        return Err(shed);
+        match admission {
+            // THE DECISION, named with the turn that owns it (ARCH §9). An
+            // admitted continuation falls through to the park below instead
+            // of being refused; everything about the wait it then pays is
+            // reported by the existing `info` events on both sides.
+            Some(turn) => {
+                tracing::info!(
+                    slot = %queue.label,
+                    phase,
+                    position,
+                    predicted_wait_ms,
+                    max_wait_ms = queue.max_wait_ms,
+                    admitted_turn = %turn,
+                    "inference.queue: PARK — the caller continues an already-admitted \
+                     turn, so the predicted wait does not shed it"
+                );
+            }
+            // Shed BEFORE parking. Refusing after a wait would be the worst of
+            // both worlds — the caller pays the latency and still gets nothing.
+            // One decider for the retry hint — `Error::queue_shed` derives
+            // it, so this site and the FastShort coalescer's queue-bound
+            // shed cannot drift apart.
+            None => {
+                let shed = Error::queue_shed(position, predicted_wait_ms);
+                let retry_after_secs = match &shed {
+                    Error::QueueShed {
+                        retry_after_secs, ..
+                    } => *retry_after_secs,
+                    _ => unreachable!("queue_shed constructs QueueShed"),
+                };
+                tracing::info!(
+                    slot = %queue.label,
+                    phase,
+                    position,
+                    predicted_wait_ms,
+                    max_wait_ms = queue.max_wait_ms,
+                    avg_turn_ms = eta.avg_turn_ms(),
+                    retry_after_secs,
+                    "inference.queue: SHED — predicted wait exceeds the bound"
+                );
+                return Err(shed);
+            }
+        }
     }
 
     let ahead = queue.queued.fetch_add(1, Ordering::SeqCst) + 1;
@@ -1345,6 +1407,12 @@ pub(super) async fn acquire_with_queue_gauge(
         ahead,
         predicted_wait_ms,
         avg_turn_ms = eta.avg_turn_ms(),
+        // Says whether the parked caller was admitted, on the line that
+        // already reports every park. Without it a log full of parks
+        // cannot distinguish "the token reached the gate" from "nothing
+        // needed to park anyway" — and an instrument that cannot tell
+        // those apart is not one (ARCH §18.4).
+        admitted_turn = admission.map(|t| t.id()),
         "inference.queue: slot busy, waiting for permit"
     );
 
@@ -1365,8 +1433,17 @@ pub(super) async fn acquire_with_queue_gauge(
     // decider, one threshold, one retry hint (§10.6).
     // `max_wait_ms == 0` keeps the documented escape hatch to the
     // pre-M5 unbounded behaviour.
+    // The park's own ceiling. An admitted continuation waits longer before
+    // the slot is called stuck — see `ADMITTED_PARK_MULTIPLE`. Derived from
+    // the ONE threshold, never a second one.
+    let bound_ms = match admission {
+        Some(_) => queue
+            .max_wait_ms
+            .saturating_mul(u64::from(ADMITTED_PARK_MULTIPLE)),
+        None => queue.max_wait_ms,
+    };
     let acquired = if queue.max_wait_ms > 0 {
-        let bound = std::time::Duration::from_millis(queue.max_wait_ms);
+        let bound = std::time::Duration::from_millis(bound_ms);
         match tokio::time::timeout(bound, Arc::clone(&queue.inflight).acquire_owned()).await {
             Ok(res) => res,
             Err(_elapsed) => {
@@ -1384,12 +1461,13 @@ pub(super) async fn acquire_with_queue_gauge(
                     phase,
                     position,
                     waited_ms,
-                    bound_ms = queue.max_wait_ms,
+                    bound_ms,
+                    admitted_turn = admission.map(|t| t.id()),
                     "inference.queue: SHED after parking — the permit did \
                      not free within the wait bound (a stuck slot sheds \
                      instead of hanging the caller)"
                 );
-                return Err(Error::queue_shed(position, queue.max_wait_ms));
+                return Err(Error::queue_shed(position, bound_ms));
             }
         }
     } else {
@@ -1450,8 +1528,9 @@ impl ModelSlot {
     pub(crate) async fn acquire_inflight(
         slot: &Arc<Self>,
         phase: &'static str,
+        admission: Option<&TurnAdmission>,
     ) -> Result<SlotPermit> {
-        acquire_with_queue_gauge(&slot.queue, phase).await
+        acquire_with_queue_gauge(&slot.queue, phase, admission).await
     }
 
     pub(crate) fn load(
@@ -5431,7 +5510,7 @@ mod queue_gauge_tests {
     async fn expect_shed(q: &Arc<SlotQueue>, phase: &'static str) -> Error {
         match tokio::time::timeout(
             std::time::Duration::from_secs(3),
-            acquire_with_queue_gauge(q, phase),
+            acquire_with_queue_gauge(q, phase, None),
         )
         .await
         {
@@ -5465,7 +5544,7 @@ mod queue_gauge_tests {
     #[tokio::test]
     async fn uncontended_acquire_never_touches_the_gauge() {
         let q = queue(1_000, 30_000);
-        let permit = acquire_with_queue_gauge(&q, "test")
+        let permit = acquire_with_queue_gauge(&q, "test", None)
             .await
             .expect("free permit must be granted");
         // The fast path is the common case on an idle host: it must not
@@ -5486,14 +5565,14 @@ mod queue_gauge_tests {
         let q = queue(1_000, 0); // bound disabled — waiters park
         assert_eq!(q.load_reading(), 0, "idle queue must read zero");
 
-        let holder = acquire_with_queue_gauge(&q, "test/holder")
+        let holder = acquire_with_queue_gauge(&q, "test/holder", None)
             .await
             .expect("free permit must be granted");
         assert_eq!(q.load_reading(), 1, "one holder, no waiters");
 
         let q2 = Arc::clone(&q);
         let waiter =
-            tokio::spawn(async move { acquire_with_queue_gauge(&q2, "test/waiter").await });
+            tokio::spawn(async move { acquire_with_queue_gauge(&q2, "test/waiter", None).await });
         wait_until(|| q.depth() == 1, "the waiter to register in the gauge").await;
         assert_eq!(q.load_reading(), 2, "holder + one parked waiter");
 
@@ -5511,7 +5590,7 @@ mod queue_gauge_tests {
     async fn contended_acquire_reports_depth_then_returns_to_zero() {
         // Bound disabled so this test measures the GAUGE, not the shed.
         let q = queue(1_000, 0);
-        let held = acquire_with_queue_gauge(&q, "holder")
+        let held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
@@ -5519,7 +5598,7 @@ mod queue_gauge_tests {
         for _ in 0..2 {
             let q = Arc::clone(&q);
             waiters.push(tokio::spawn(async move {
-                acquire_with_queue_gauge(&q, "waiter")
+                acquire_with_queue_gauge(&q, "waiter", None)
                     .await
                     .map(|p| drop(p))
             }));
@@ -5554,13 +5633,13 @@ mod queue_gauge_tests {
         // a permanently deep queue — and would then SHED on the strength of
         // a fiction, refusing work it could serve.
         let q = queue(1_000, 0);
-        let held = acquire_with_queue_gauge(&q, "holder")
+        let held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
         let qc = Arc::clone(&q);
         let waiter = tokio::spawn(async move {
-            let _ = acquire_with_queue_gauge(&qc, "doomed").await;
+            let _ = acquire_with_queue_gauge(&qc, "doomed", None).await;
         });
         wait_until(|| q.depth() >= 1, "the waiter to park").await;
 
@@ -5585,7 +5664,7 @@ mod queue_gauge_tests {
         // Seed 10 s/turn against a 5 s bound: the first waiter's predicted
         // wait is 10 s, so it must be refused rather than parked.
         let q = queue(10_000, 5_000);
-        let _held = acquire_with_queue_gauge(&q, "holder")
+        let _held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
@@ -5608,18 +5687,123 @@ mod queue_gauge_tests {
         assert_eq!(q.depth(), 0, "a shed caller must never have parked");
     }
 
+    /// **TWO ADMITTED TURNS THROUGH A ONE-SLOT GAUGE** — the case the whole
+    /// admission change exists for, and the one to sabotage.
+    ///
+    /// Turn A holds the only permit. Turn B is the continuation of a turn
+    /// this host already admitted (a judge call, or its draft) and its
+    /// predicted wait is double the bound. Before this change it was refused
+    /// with `QueueShed` and a 30 s retry hint, which on the live host meant
+    /// `judge_failed_open` with zero calls answered, or a turn that died
+    /// whole at the draft. It must PARK, and it must get the permit when A
+    /// finishes.
+    ///
+    /// SABOTAGE, run before trusting the green (ARCH §18.1): drop the
+    /// `Some(turn)` arm from the pre-park gate in
+    /// [`acquire_with_queue_gauge`] — i.e. ignore the lease — and this test
+    /// fails at `expect("turn B must be parked, not shed")` with the
+    /// `QueueShed` that the contended run reports as `queue_shed`.
+    #[tokio::test]
+    async fn an_admitted_continuation_parks_where_a_fresh_request_sheds() {
+        // Seed 10 s/turn against a 5 s bound: predicted wait 10 s, double
+        // the bound — identical conditions for both callers.
+        let q = queue(10_000, 5_000);
+        let turn_a = acquire_with_queue_gauge(&q, "holder", None)
+            .await
+            .expect("turn A takes the permit");
+
+        // THE CONTROL, in the same test rather than a separate one: the
+        // fresh-request path must be byte-identical. A test that only
+        // watched the admitted side would pass just as well if the bound
+        // had been deleted outright.
+        let shed = expect_shed(&q, "fresh").await;
+        assert!(
+            matches!(shed, Error::QueueShed { .. }),
+            "an UNADMITTED caller must still be shed: {shed:?}"
+        );
+        assert_eq!(q.depth(), 0, "the shed caller never parked");
+
+        let admitted = sovereign_core::types::TurnAdmission::new("turn-b");
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move {
+            acquire_with_queue_gauge(&qc, "complete/lazy", Some(&admitted)).await
+        });
+        wait_until(
+            || q.depth() >= 1,
+            "the admitted continuation to PARK rather than be shed",
+        )
+        .await;
+
+        drop(turn_a);
+        let permit = tokio::time::timeout(std::time::Duration::from_secs(3), waiter)
+            .await
+            .expect("the parked continuation must be served once the slot frees")
+            .expect("waiter task")
+            .expect("turn B must be parked, not shed");
+        drop(permit);
+        assert_eq!(q.depth(), 0, "the gauge drains after the continuation runs");
+    }
+
+    /// The admitted park is WIDER, not unbounded. The liveness guarantee the
+    /// post-park timeout exists for (a wl-judge call parked 62 minutes
+    /// behind a stuck slot, with no outcome event) still holds for a
+    /// continuation — it just waits `ADMITTED_PARK_MULTIPLE` times as long
+    /// before calling the slot stuck.
+    ///
+    /// SABOTAGE: make `bound_ms` unconditional (`queue.max_wait_ms`) and the
+    /// admitted caller sheds at 50 ms instead of 200, failing the elapsed
+    /// assertion; remove the timeout entirely and the test hangs at its own
+    /// 3 s ceiling rather than reporting.
+    #[tokio::test]
+    async fn an_admitted_park_is_widened_but_still_bounded() {
+        // 50 ms bound, and a holder that never releases: the only way out is
+        // the post-park timeout.
+        let q = queue(10_000, 50);
+        let _stuck = acquire_with_queue_gauge(&q, "stuck-holder", None)
+            .await
+            .expect("the stuck holder takes the permit");
+
+        let admitted = sovereign_core::types::TurnAdmission::new("turn-b");
+        let started = std::time::Instant::now();
+        let out = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            acquire_with_queue_gauge(&q, "complete/lazy", Some(&admitted)),
+        )
+        .await
+        .expect("the admitted park must still END — an unbounded park is the defect this bounds");
+        let waited = started.elapsed();
+
+        match out {
+            Err(Error::QueueShed { .. }) | Ok(_) => {}
+            Err(ref other) => panic!("expected a bounded QueueShed, got: {other:?}"),
+        }
+        assert!(
+            out.is_err(),
+            "a permit that never frees must eventually shed even an admitted caller"
+        );
+        assert!(
+            waited
+                >= std::time::Duration::from_millis(50 * u64::from(super::ADMITTED_PARK_MULTIPLE)),
+            "the admitted caller waited {waited:?}, less than {}x the {}ms bound — \
+             it was cut off at the FRESH bound",
+            super::ADMITTED_PARK_MULTIPLE,
+            50
+        );
+    }
+
     #[tokio::test]
     async fn zero_bound_never_sheds() {
         // `0` is the escape hatch back to the pre-M5 behaviour every
         // deployment ran before the bound existed. A wildly over-budget
         // predicted wait must still park.
         let q = queue(3_600_000, 0);
-        let held = acquire_with_queue_gauge(&q, "holder")
+        let held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
         let qc = Arc::clone(&q);
-        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter").await });
+        let waiter =
+            tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter", None).await });
         wait_until(
             || q.depth() >= 1,
             "the waiter to park despite a 1 h estimate",
@@ -5648,7 +5832,7 @@ mod queue_gauge_tests {
     #[tokio::test]
     async fn a_stuck_slot_sheds_with_a_named_error_instead_of_parking_forever() {
         let q = queue(100, 200); // seed under the bound -> parks; bound = 200 ms
-        let _held = acquire_with_queue_gauge(&q, "holder")
+        let _held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
@@ -5660,7 +5844,7 @@ mod queue_gauge_tests {
         // than none — the same rule `expect_shed` lives by).
         let err = match tokio::time::timeout(
             std::time::Duration::from_secs(3),
-            acquire_with_queue_gauge(&q, "complete/lazy"),
+            acquire_with_queue_gauge(&q, "complete/lazy", None),
         )
         .await
         {
@@ -5706,11 +5890,12 @@ mod queue_gauge_tests {
         let q = queue(100, 5_000);
 
         // Depth 1 at a 100 ms estimate: comfortably admitted.
-        let held = acquire_with_queue_gauge(&q, "holder")
+        let held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("holder");
         let qc = Arc::clone(&q);
-        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "fast-turn").await });
+        let waiter =
+            tokio::spawn(async move { acquire_with_queue_gauge(&qc, "fast-turn", None).await });
         wait_until(|| q.depth() >= 1, "the cheap waiter to park").await;
         drop(held);
         let first = waiter.await.expect("task").expect("cheap turn is admitted");
@@ -5722,7 +5907,7 @@ mod queue_gauge_tests {
             q.record_turn(60_000);
         }
 
-        let _held2 = acquire_with_queue_gauge(&q, "holder")
+        let _held2 = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("holder");
         let err = expect_shed(&q, "slow-turn").await;
@@ -5738,15 +5923,14 @@ mod queue_gauge_tests {
         // point died — a bare "permit closed" left the caller guessing
         // across thirteen call sites.
         let q = queue(1_000, 0);
-        let _held = acquire_with_queue_gauge(&q, "holder")
+        let _held = acquire_with_queue_gauge(&q, "holder", None)
             .await
             .expect("first caller takes the permit");
 
         let qc = Arc::clone(&q);
-        let waiter =
-            tokio::spawn(
-                async move { acquire_with_queue_gauge(&qc, "complete_stream/fast").await },
-            );
+        let waiter = tokio::spawn(async move {
+            acquire_with_queue_gauge(&qc, "complete_stream/fast", None).await
+        });
         wait_until(|| q.depth() >= 1, "the waiter to park").await;
         q.close_for_test();
 

@@ -130,6 +130,7 @@ impl<'a> TypedLlmCall<'a> {
             // add a `Workload` field to `TypedLlmCall` (or split callers), then
             // route via `for_workload`.
             let request = CompletionRequest {
+                admission: None,
                 prompt: user,
                 system_message: Some(self.system.to_string()),
                 preferred_speed: self.speed,

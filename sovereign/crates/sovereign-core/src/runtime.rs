@@ -159,6 +159,10 @@ pub(crate) use self::formatters::{
 };
 
 pub mod acquisition;
+/// The turn's ADMISSION — the foreground lease as the token that says
+/// "this host already accepted this turn", so the model-slot queue parks a
+/// continuation instead of shedding it. Nothing branches on it but that.
+mod admission;
 mod code_trace;
 mod collaboration;
 pub mod epistemic;
