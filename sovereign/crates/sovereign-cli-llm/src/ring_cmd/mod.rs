@@ -503,13 +503,26 @@ fn op_line(op: &serde_json::Value) -> String {
         .and_then(|t| t.as_i64())
         .map(short_stamp)
         .unwrap_or_else(|| "?".into());
-    let mut what = match op.get("payload") {
-        Some(p) => p.to_string(),
+    let corrects = op.get("corrects").and_then(|c| c.as_str());
+    // `null` and absent are the same fact here and the wire has used both.
+    let payload = op.get("payload").filter(|p| !p.is_null());
+    let mut what = match (payload, corrects) {
+        (Some(p), _) => p.to_string(),
         // A correction that states no replacement is not an empty act, it is
         // a withdrawal — saying "voids X" and nothing else is the truth.
-        None => "(no replacement)".to_string(),
+        (None, Some(_)) => "(no replacement)".to_string(),
+        // A seal carries nothing BY DESIGN — it is delivery, not meaning, so
+        // `AdmittedOp::applies` is false and no reducer sees it. It reached
+        // the terminal wearing the correction's fallback and read as
+        // "(no replacement)", which says a withdrawal happened: the opposite
+        // of what a seal does, on the one act that DELETES things.
+        //
+        // The two absences identify it without a second field on the wire: a
+        // `Record` always carries a payload and a `Correct` always names what
+        // it corrects, so nothing else can present as neither.
+        (None, None) => "(sealed — everything this key wrote before is retired)".to_string(),
     };
-    if let Some(target) = op.get("corrects").and_then(|c| c.as_str()) {
+    if let Some(target) = corrects {
         what = format!("corrects {} → {what}", short_id(target));
     }
     let mark = if op.get("voided").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -599,6 +612,26 @@ mod tests {
             line.contains("no replacement"),
             "a correction that states nothing must not read as an empty act: {line}"
         );
+
+        // A seal carries neither, and it is not a withdrawal of anything. It
+        // rendered as "(no replacement)" until 4a made seals reachable from
+        // the terminal, which said the opposite of the truth on the one act
+        // that deletes.
+        let seal = serde_json::json!({
+            "person": "alex", "ts_unix": 1_756_512_000, "voided": false,
+        });
+        let line = op_line(&seal);
+        assert!(line.contains("sealed"), "{line}");
+        assert!(
+            !line.contains("no replacement"),
+            "a seal is not a withdrawal: {line}"
+        );
+        // Both spellings of "no payload" reach the same reading.
+        let explicit_null = serde_json::json!({
+            "person": "alex", "ts_unix": 1_756_512_000,
+            "payload": serde_json::Value::Null, "voided": false,
+        });
+        assert_eq!(op_line(&explicit_null), line);
     }
 
     /// The one namespace whose roster is derived is refused by BOTH commands
