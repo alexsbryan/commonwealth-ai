@@ -1,0 +1,5 @@
+acceptance: recipe new -> wrote my-coins.toml from the numismatics template
+acceptance: recipe new -> refuses to overwrite, and did not touch the file
+acceptance: FAIL — the discovery ladder did not name the 'llama-server' rung: corpus-mcp: endpoint candidate ollama http://localhost:11434/v1 — 2 model(s) listed, first `qwen3:0.6b`
+corpus-mcp: host http://localhost:11434: baseline OpenAI-compatible path — http://localhost:11434/oicp/v1/capabilities returned 404 Not Found
+Error: POST http://localhost:11434/v1/embeddings returned 501 Not Implemented: {"error":{"message":"This server does not support embeddings. Start it with `--embeddings`","type":"api_error","param":null,"code":null}}

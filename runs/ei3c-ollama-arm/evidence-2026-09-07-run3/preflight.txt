@@ -1,0 +1,7 @@
+preflight 2026-09-07T21:58:40-07:00
+HOME=/home/alexbryan PATH=/home/alexbryan/.local/ollama/bin:/home/alexbryan/.local/lspmux-shim:/home/alexbryan/dev/commonwealth-ai/sovereign/target/release:/home/alexbryan/.opencode/bin:/home/alexbryan/.cargo/bin:/home/alexbryan/.nvm/versions/node/v20.20.2/bin:/home/alexbryan/.local/bin:/home/alexbryan/bin:/usr/local/bin:/usr/bin
+toolbox      PASS /run/.containerenv — must run INSIDE sovereign-vulkan; llama-server needs Vulkan, ROCm x A3B SEGVs on the host
+acceptance   PASS acceptance: preflight ok — embed model /home/alexbryan/dev/commonwealth-ai/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf, host /home/alexbryan/dev/ei3c-wt/target/debug/corpus-mcp
+ollama       PASS /home/alexbryan/.local/ollama/bin/ollama
+ollama-runs  PASS the binary executes here (a tarball built for another libc would fail HERE, not at serve)
+sep-index    PASS /home/alexbryan/.svrnmesh/indexes/sep — the arm's corpus_list target

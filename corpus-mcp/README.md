@@ -48,11 +48,52 @@ corpus-mcp ingest my-coins.toml --chat-url  http://localhost:8090/v1 \
 ### Ollama
 
 Ollama is the shape these commands are written for — one process, one URL,
-both models — and it is the first rung of the ladder for that reason. It is
-NOT the tested default: the acceptance suite runs against `llama-server`,
-which is what the development host has. The Ollama path is exercised by the
-same code on the same flags and has not been run end to end against a live
-Ollama; if you find a difference, it is a bug and not a design.
+both models — and it is the first rung of the ladder for that reason. It was
+run against a live Ollama for the first time on 2026-09-07 (v0.33.3, installed
+under `~/.local/ollama` with no root; artefacts in
+`runs/ei3c-ollama-arm/evidence-2026-09-07-run3/`). What that measured:
+
+- **Discovery works.** The ladder named Ollama at rung 1 and stopped there —
+  `endpoint candidate ollama http://localhost:11434/v1 — 2 model(s) listed`.
+- **The width matches.** `qwen3-embedding:0.6b` returns **1024-d**, the width
+  the shipped indexes were built at, so `corpus_list` reports `sep — 1024-d,
+  vector + full-text` and nothing degrades to full-text.
+- **You must name the embedding model.** With no `--embed-model`, corpus-mcp
+  sends the first id `GET /v1/models` returns. Ollama serves chat AND
+  embeddings from one URL and lists them in its own order, so that first id was
+  `qwen3:0.6b` — the chat model — and `POST /v1/embeddings` came back **501 Not
+  Implemented**. Pass it explicitly:
+
+```sh
+ollama pull qwen3-embedding:0.6b
+corpus-mcp serve --corpus sep --base-url http://localhost:11434/v1 \
+                 --embed-model qwen3-embedding:0.6b
+```
+
+  That invocation served `sep` over stdio and answered `corpus_list`. This is
+  the one place the single-URL shape costs you a flag, and it is a rough edge
+  in the default, not in Ollama.
+
+Installing it without root, which is how the run above was done:
+
+```sh
+curl -LO https://github.com/ollama/ollama/releases/download/v0.33.3/ollama-linux-amd64.tar.zst
+curl -LO https://github.com/ollama/ollama/releases/download/v0.33.3/sha256sum.txt
+sha256sum -c <(grep ollama-linux-amd64.tar.zst sha256sum.txt)
+mkdir -p ~/.local/ollama && tar --zstd -C ~/.local/ollama -xf ollama-linux-amd64.tar.zst
+export PATH="$HOME/.local/ollama/bin:$PATH" OLLAMA_MODELS="$HOME/.local/share/ollama"
+ollama serve &
+ollama pull qwen3-embedding:0.6b && ollama pull qwen3:0.6b
+```
+
+The tarball is 1.4 GB and unpacks to 2.2 GB. **On an integrated GPU it runs on
+the CPU unless you say otherwise**: this run logged `dropping integrated GPU; to
+enable, set OLLAMA_IGPU_ENABLE=1` for `AMD Radeon 8060S Graphics (RADV
+GFX1151)` and fell back to `inference compute id=cpu`. On a machine whose only
+GPU is integrated — a Strix Halo, say — `OLLAMA_IGPU_ENABLE=1` **is** the GPU
+path. The measurement above was taken on the CPU, which is fine for it: it is
+about discovery, model choice and embedding width, none of which is a function
+of the device.
 
 ### A named corpus is pulled if you do not have it — but read this first
 

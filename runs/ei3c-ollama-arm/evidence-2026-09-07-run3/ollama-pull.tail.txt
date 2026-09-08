@@ -1,0 +1,9 @@
+verifying sha256 digest ⠋ [K[?25h[?2026l[?2026h[?25l[A[A[1Gpulling manifest [K
+verifying sha256 digest ⠙ [K[?25h[?2026l[?2026h[?25l[A[A[1Gpulling manifest [K
+verifying sha256 digest ⠹ [K[?25h[?2026l[?2026h[?25l[A[A[1Gpulling manifest [K
+verifying sha256 digest ⠸ [K[?25h[?2026l[?2026h[?25l[A[A[1Gpulling manifest [K
+writing manifest [K
+success [K[?25h[?2026l
+NAME                    ID              SIZE      MODIFIED               
+qwen3:0.6b              7df6b6e09427    522 MB    Less than a second ago    
+qwen3-embedding:0.6b    ac6da0dfba84    639 MB    About a minute ago        

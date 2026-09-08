@@ -185,19 +185,51 @@ grep -q 'never overwrites' "$work/recipe-clobber.err" \
   || fail "the refusal still modified the file"
 echo "acceptance: recipe new -> refuses to overwrite, and did not touch the file"
 
-# The discovery ladder. Pointed at ports nothing serves, so what is asserted is
-# the REPORT, not whatever happens to be up on the machine running this.
-if SOVEREIGN_DAEMON_URL="http://127.0.0.1:1" "$CORPUS_MCP" serve </dev/null \
-     >/dev/null 2>"$work/ladder.err"; then
-  fail "serve succeeded with no endpoint reachable anywhere"
+# The discovery ladder. What is asserted is the REPORT — but which report is
+# available depends on the machine, and until 2026-09-07 this pretended it did
+# not. The old assertion demanded that all three rungs be named, which is only
+# true when NONE of them answers: the ladder stops at the first live rung by
+# design. So the first host that installed Ollama — §4's own documented default,
+# rung 1 — failed this step for the ladder behaving exactly as specified
+# (run 3, runs/ei3c-ollama-arm/evidence-2026-09-07-run3/acceptance-head.log).
+# A check that encodes the world it was written in is not a check.
+#
+# So: find which rung answers HERE, then assert what that world can actually
+# show — the live rung named, and every rung BEFORE it named as probed and
+# refused. Rungs after it are not expected, because they are never reached.
+# `SOVEREIGN_DAEMON_URL` still points rung 3 at a dead port, so the daemon rung
+# is never the live one and the assertion below is about 1 and 2 only.
+live_rung=""; preceding=()
+if curl -sf -m 3 "http://localhost:11434/v1/models" >/dev/null 2>&1; then
+  live_rung="ollama"
+elif curl -sf -m 3 "http://localhost:8080/v1/models" >/dev/null 2>&1; then
+  live_rung="llama-server"; preceding=(ollama 11434)
 fi
-for rung in ollama llama-server "oicp daemon" 11434 8080; do
-  grep -q -- "$rung" "$work/ladder.err" \
-    || fail "the discovery ladder did not name the '$rung' rung: $(cat "$work/ladder.err")"
-done
-grep -q 'no inference endpoint found' "$work/ladder.err" \
-  || fail "an absent endpoint was not reported as an absence (ARCH §18.3)"
-echo "acceptance: discovery -> all three rungs probed and named, absence reported"
+SOVEREIGN_DAEMON_URL="http://127.0.0.1:1" "$CORPUS_MCP" serve </dev/null \
+  >/dev/null 2>"$work/ladder.err" && ladder_rc=0 || ladder_rc=$?
+if [[ -z "$live_rung" ]]; then
+  # Nothing answers anywhere: the full assertion, including the absence report.
+  (( ladder_rc != 0 )) || fail "serve succeeded with no endpoint reachable anywhere"
+  for rung in ollama llama-server "oicp daemon" 11434 8080; do
+    grep -q -- "$rung" "$work/ladder.err" \
+      || fail "the discovery ladder did not name the '$rung' rung: $(cat "$work/ladder.err")"
+  done
+  grep -q 'no inference endpoint found' "$work/ladder.err" \
+    || fail "an absent endpoint was not reported as an absence (ARCH §18.3)"
+  echo "acceptance: discovery -> all three rungs probed and named, absence reported"
+else
+  grep -q -- "$live_rung" "$work/ladder.err" \
+    || fail "a live '$live_rung' rung answered and the ladder did not name it: $(cat "$work/ladder.err")"
+  for rung in ${preceding[@]+"${preceding[@]}"}; do
+    grep -q -- "$rung" "$work/ladder.err" \
+      || fail "the ladder reached '$live_rung' without naming the earlier '$rung' rung it must have refused: $(cat "$work/ladder.err")"
+  done
+  echo "acceptance: discovery -> the '$live_rung' rung answered first and the ladder named it" \
+       "${preceding[*]:+(after naming ${preceding[*]} as probed)}"
+  echo "acceptance: discovery -> the no-endpoint-anywhere arm is COULD-NOT-JUDGE on this host" \
+       "(ARCH §18.2): a live rung short-circuits it, and the ladder's ports are compiled in," \
+       "so only a machine with nothing on :11434 or :8080 can judge it."
+fi
 
 # ARCH §18.3, the rule that matters most here: an endpoint the caller NAMED is
 # refused when it does not answer, never swapped for one that does. A

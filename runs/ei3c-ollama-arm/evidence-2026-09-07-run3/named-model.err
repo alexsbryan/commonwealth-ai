@@ -1,0 +1,8 @@
+corpus-mcp: endpoint candidate --base-url http://127.0.0.1:11434/v1 — 2 model(s) listed, first `qwen3:0.6b`
+corpus-mcp: host http://127.0.0.1:11434: baseline OpenAI-compatible path — http://127.0.0.1:11434/oicp/v1/capabilities returned 404 Not Found
+corpus-mcp: embeddings via http://127.0.0.1:11434/v1/embeddings, model `qwen3-embedding:0.6b`, 1024-d (baseline (OpenAI-compatible))
+corpus-mcp: data root /home/alexbryan/.svrnmesh
+[2m2026-09-08T05:01:32.804810Z[0m [33m WARN[0m [2mcorpus_engine::engine[0m[2m:[0m Corpus 'sep' records embedding model 'qwen-embedding-0.6b' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+corpus-mcp: corpus `sep`: atlas has no `atoms_ann.lance` — `ask` will walk from name matches only; run `svrn atlas backfill-ann sep`
+corpus-mcp: serving 1 corpus: sep
+corpus-mcp: ready on stdio
