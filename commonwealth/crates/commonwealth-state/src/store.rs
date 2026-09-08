@@ -3,8 +3,18 @@
 //!
 //! Each entry is scoped to an `app_id` + `key`. Conflict resolution is LWW
 //! (last-write-wins) using a Unix-second `timestamp`. The underlying storage
-//! is SQLite (WAL mode) via `SqliteBackend`. Entries are replicated across
-//! nodes through the gossip layer.
+//! is SQLite (WAL mode) via `SqliteBackend`.
+//!
+//! **What this store holds is decided by the fold, not by its writers.** Since
+//! cw-lift 4 an entry is replicated by the ring rail rather than by gossip, and
+//! [`MeshStore::apply_projection`] re-derives every row from the journal on
+//! every round. Three consequences that catch callers out:
+//!
+//! - A local `delete` is an ACT ([`MeshStore::delete`] queues a tombstone). A
+//!   local sweep is not, so [`MeshStore::gc_app`] and its siblings only stay
+//!   swept when the fold agrees — see [`crate::retention`].
+//! - `merge_entry` is the receive half and deliberately queues nothing.
+//! - An excluded `app_id` never enters the outbox and is refused inbound.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -67,6 +77,17 @@ pub struct Applied {
     /// tombstone is an op that says "delete this", and a reconciliation is the
     /// absence of an op in a set an actor has vouched is whole.
     pub reconciled: usize,
+    /// Rows this call REMOVED because they are older than the namespace's
+    /// declared retention window (`crate::retention`). A third kind of removal
+    /// and its own count: a tombstone is an author's decision, a reconciliation
+    /// is an author's silence, and an expiry is neither — it is a fact about
+    /// `t` that every node in the ring derives identically and nobody publishes.
+    pub expired: usize,
+    /// Rows the fold offered that this call REFUSED to (re-)insert, for the
+    /// same window. Counted apart from `expired` because it is the half that
+    /// proves the loop is closed: a non-zero `expired` says the sweep ran, and
+    /// a non-zero `withheld` says the journal tried to undo it and could not.
+    pub withheld: usize,
 }
 
 /// The distributed KV store. Thread-safe; clone freely (backed by `Arc`).
@@ -292,6 +313,34 @@ impl MeshStore {
     /// fresh set of rows with a stale live set would be able to retire a key on
     /// the strength of a claim made about a different journal (ARCH §10.6).
     ///
+    /// # The retention floor
+    ///
+    /// A namespace may declare a window in [`crate::retention`], and this is
+    /// the one place it can be enforced. The store is a projection: a row a
+    /// sweep deleted has no incumbent, so `merge_entry` re-inserts it from the
+    /// journal on the very next round, and `RetentionGc`'s thirty days on the
+    /// contributions ledger were undone within a minute forever
+    /// (`ring_sync::tests::a_retention_sweep_is_not_undone_by_the_next_projection`).
+    /// So retention is part of the fold's decision, from the SAME table the
+    /// sweep reads — two cutoffs would spend every round undoing each other
+    /// (ARCH §10.6).
+    ///
+    /// Both directions, because either alone leaves a hole: a projected row
+    /// below the floor is not merged (`withheld`), and a held row below it is
+    /// retired (`expired`) whether it aged in place or a peer's fold put it
+    /// there. The sweep is therefore a byproduct of the round on any node that
+    /// projects, and `RetentionGc` remains the bound on a node that does not —
+    /// `run_one_round` returns before projecting anything when the mesh has no
+    /// online peer.
+    ///
+    /// **An expiry is not `self_id`-exempt, and that is not the same hazard the
+    /// reconciliation has.** Reconciling self reads our own outbox lag as
+    /// another actor's retirement; the floor reads nothing of anyone's — it is
+    /// `now` minus a constant, compared against a `t` this node stamped. A row
+    /// of ours old enough to expire while still queued has been queued for the
+    /// whole window, and the queued act still travels: peers withhold it on
+    /// arrival by the same arithmetic.
+    ///
     /// **`self_id` is skipped, and that is the direction of truth rather than a
     /// special case.** For every other actor the journal is upstream of this
     /// store: what we hold on their behalf is a fold of what they signed. For
@@ -317,7 +366,29 @@ impl MeshStore {
             )));
         }
         let mut applied = Applied::default();
+        // Read once for the whole call: every row is judged against ONE floor,
+        // so a fold cannot keep a row and retire its neighbour because the
+        // clock ticked between them.
+        let floor = crate::retention::floor_now(app_id);
         for row in rows {
+            if floor.is_some_and(|f| row.t < f) {
+                // Before the origin lookup on purpose. An expired row needs no
+                // author: attributing it would only file it under
+                // `unattributed` when the roster cannot place it, which reads
+                // as a roster/journal disagreement and is not one. A TOMBSTONE
+                // below the floor is withheld too, and loses nothing — every
+                // row it could delete is at or below its own `t` and so is
+                // expired by the same floor.
+                applied.withheld += 1;
+                tracing::debug!(
+                    app_id,
+                    key = %row.key,
+                    t = row.t,
+                    floor,
+                    "mesh_store.projection_withheld_expired"
+                );
+                continue;
+            }
             let Some(origin) = origin_of(&row.actor) else {
                 applied.unattributed += 1;
                 tracing::debug!(
@@ -404,6 +475,23 @@ impl MeshStore {
             }
         }
 
+        // ── What the retention window no longer holds.
+        //
+        // LAST, so a row this round merged is judged on the same floor as one
+        // that was already here — the fold cannot leave a row above the floor
+        // in the store and the sweep cannot take one it just let in.
+        if let Some(f) = floor {
+            applied.expired = self.backend.delete_older_than_in_app(app_id, f)?;
+            if applied.expired > 0 {
+                tracing::debug!(
+                    app_id,
+                    floor = f,
+                    expired = applied.expired,
+                    "mesh_store.projection_expired"
+                );
+            }
+        }
+
         tracing::debug!(
             app_id,
             rows = rows.len(),
@@ -411,6 +499,8 @@ impl MeshStore {
             merged = applied.merged,
             deleted = applied.deleted,
             reconciled = applied.reconciled,
+            expired = applied.expired,
+            withheld = applied.withheld,
             unattributed = applied.unattributed,
             "mesh_store.projection_applied"
         );
@@ -423,6 +513,12 @@ impl MeshStore {
     /// Correct only where every app's entries are refreshed or dead;
     /// prefer [`MeshStore::gc_app`] when you mean to bound one
     /// namespace.
+    ///
+    /// **On a rail-backed namespace the cutoff is not yours to choose.** These
+    /// four are a sweep of a PROJECTION, and a row deleted at a cutoff the fold
+    /// does not share is re-inserted on the next round. Take the cutoff from
+    /// [`crate::retention`], which is what [`crate::RetentionGc`] does and what
+    /// [`MeshStore::apply_projection`] reads.
     pub fn gc(&self, ttl_seconds: u64) -> Result<usize> {
         self.gc_before(now_secs().saturating_sub(ttl_seconds))
     }
@@ -1004,9 +1100,14 @@ mod tests {
             );
             assert!(store.get(app, "k").unwrap().is_none(), "{app} was written");
         }
-        // The control: a public namespace goes through the same call.
+        // The control: a public namespace goes through the same call. Its row
+        // is stamped `now` rather than reusing the fixture's `t: 100` — the
+        // ledger declares a thirty-day retention window and the fold applies
+        // it, so a 1970 timestamp would be withheld for a reason that has
+        // nothing to do with what this test is about.
+        let live = unsealed(vec![projected("k", Some(b"leaked"), now_secs(), "aa")]);
         let applied = store
-            .apply_projection("contributions", &rows, |_| Some(node(1)), me())
+            .apply_projection("contributions", &live, |_| Some(node(1)), me())
             .unwrap();
         assert_eq!(applied.merged, 1);
     }
@@ -1255,5 +1356,221 @@ mod tests {
             .unwrap();
         assert_eq!(applied.reconciled, 0);
         assert!(store.get("app", "k").unwrap().is_some());
+    }
+
+    // ── The retention floor: the projection's half of the window ──
+
+    /// **The bug this closes.** The store is a projection, so a row a sweep
+    /// deleted has no incumbent and the next fold re-inserts it. Both halves
+    /// are here because either alone leaves the loop open: the fold must not
+    /// (re-)take a row past the window (`withheld`), and it must take out one
+    /// that is already here (`expired`).
+    ///
+    /// Watched RED by deleting the `floor.is_some_and(..)` arm from the row
+    /// loop — `withheld` is 0 and the swept row is back — and again by deleting
+    /// the `delete_older_than_in_app` block, which leaves `expired` 0 and the
+    /// aged-in-place row in the store.
+    #[test]
+    fn the_projection_neither_takes_nor_keeps_a_row_past_the_retention_window() {
+        const LEDGER: &str = crate::CONTRIBUTIONS_APP_ID;
+        let store = MeshStore::in_memory().unwrap();
+        let now = now_secs();
+        let floor = crate::retention::floor_at(LEDGER, now).expect("the ledger declares a window");
+        // A day either side of the boundary, so no clock tick between this
+        // read and the one inside `apply_projection` can move a row across it.
+        let (expired_t, fresh_t) = (floor - 86_400, now - 60);
+
+        // The row is ALREADY HERE — planted through `merge_entry`, which is
+        // how a peer's fold put it here before it aged out.
+        store
+            .merge_entry(StoreEntry {
+                app_id: LEDGER.into(),
+                key: "aged-in-place".into(),
+                value: Bytes::from("v"),
+                timestamp: expired_t,
+                origin: node(1),
+            })
+            .unwrap();
+
+        let rows = unsealed(vec![
+            projected("from-the-journal", Some(b"v"), expired_t, "aa"),
+            projected("in-window", Some(b"v"), fresh_t, "aa"),
+        ]);
+        let applied = store
+            .apply_projection(LEDGER, &rows, |_| Some(node(1)), me())
+            .unwrap();
+
+        assert_eq!(
+            applied.withheld, 1,
+            "the fold re-took an expired row: {applied:?}"
+        );
+        assert_eq!(
+            applied.expired, 1,
+            "an aged-in-place row survived: {applied:?}"
+        );
+        assert_eq!(
+            applied.merged, 1,
+            "the in-window row must still land: {applied:?}"
+        );
+        assert!(store.get(LEDGER, "from-the-journal").unwrap().is_none());
+        assert!(store.get(LEDGER, "aged-in-place").unwrap().is_none());
+        assert!(
+            store.get(LEDGER, "in-window").unwrap().is_some(),
+            "the window took only what is past it"
+        );
+    }
+
+    /// The control the test above needs: a namespace that declares NO window
+    /// is not swept for age at all. Without it, `expired`/`withheld` firing on
+    /// every namespace would look identical from inside the ledger's test — and
+    /// `work-atlas` claims, `processed_shards` markers and
+    /// `corpus-engine/handoff:*` records are all deliberately never rewritten.
+    #[test]
+    fn a_namespace_with_no_declared_window_is_never_swept_for_age() {
+        const UNDECLARED: &str = "processed_shards";
+        assert_eq!(crate::retention::window_days(UNDECLARED), None);
+        let store = MeshStore::in_memory().unwrap();
+        store
+            .merge_entry(StoreEntry {
+                app_id: UNDECLARED.into(),
+                key: "corpus:shard-0".into(),
+                value: Bytes::from("v"),
+                timestamp: 100,
+                origin: node(1),
+            })
+            .unwrap();
+        let rows = unsealed(vec![projected("ancient", Some(b"v"), 100, "aa")]);
+        let applied = store
+            .apply_projection(UNDECLARED, &rows, |_| Some(node(1)), me())
+            .unwrap();
+        assert_eq!((applied.expired, applied.withheld), (0, 0), "{applied:?}");
+        assert_eq!(applied.merged, 1);
+        assert!(store.get(UNDECLARED, "corpus:shard-0").unwrap().is_some());
+        assert!(store.get(UNDECLARED, "ancient").unwrap().is_some());
+    }
+
+    /// The sweep and the fold agree ROW FOR ROW, because they read one window
+    /// (ARCH §10.6). Asserted behaviourally: the same three rows put through
+    /// `RetentionGc::sweep` and through `apply_projection` leave the same two
+    /// survivors. Two cutoffs that differ by an hour would pass a check on the
+    /// constants and fail here on the row between them.
+    #[test]
+    fn the_sweep_and_the_fold_keep_exactly_the_same_rows() {
+        const LEDGER: &str = crate::CONTRIBUTIONS_APP_ID;
+        let now = now_secs();
+        let floor = crate::retention::floor_at(LEDGER, now).unwrap();
+        let ages = [
+            ("old", floor - 86_400),
+            ("edge", floor + 60),
+            ("new", now - 60),
+        ];
+
+        let plant = || {
+            let store = std::sync::Arc::new(MeshStore::in_memory().unwrap());
+            for (key, t) in ages {
+                store
+                    .merge_entry(StoreEntry {
+                        app_id: LEDGER.into(),
+                        key: key.into(),
+                        value: Bytes::from("v"),
+                        timestamp: t,
+                        origin: node(1),
+                    })
+                    .unwrap();
+            }
+            store
+        };
+        let survivors = |store: &MeshStore| -> Vec<String> {
+            let mut k = store.list_keys(LEDGER).unwrap();
+            k.sort();
+            k
+        };
+
+        let swept = plant();
+        crate::RetentionGc::for_namespace(
+            std::sync::Arc::clone(&swept),
+            LEDGER,
+            std::time::Duration::from_secs(3_600),
+        )
+        .expect("the ledger declares a window")
+        .sweep()
+        .unwrap();
+
+        let folded = plant();
+        folded
+            .apply_projection(LEDGER, &unsealed(vec![]), |_| Some(node(1)), me())
+            .unwrap();
+
+        assert_eq!(survivors(&swept), vec!["edge", "new"], "the sweep");
+        assert_eq!(survivors(&folded), survivors(&swept), "the fold disagrees");
+    }
+
+    /// **Why the work atlas's eviction is safe and a sweep is not.**
+    ///
+    /// `WorkAtlasGc` drops an expired claim through `MeshStore::delete` (via
+    /// `MeshPeerStore`), which queues a TOMBSTONE — so the fold carries the
+    /// removal instead of undoing it. The same row taken by `gc_app_before`
+    /// queues nothing, and on a namespace that declares no retention window
+    /// there is no floor either, so the next fold puts it straight back.
+    ///
+    /// Both halves in one test, because the difference between them IS the
+    /// finding: on a projection, a delete is an act and a sweep is a wish.
+    /// A namespace that needs rows dropped for age declares a window
+    /// (`crate::retention`); one that needs a specific row dropped calls
+    /// `delete`. There is no third way, and the second assertion is what says
+    /// so out loud.
+    #[test]
+    fn a_delete_survives_the_fold_and_an_undeclared_sweep_does_not() {
+        const ATLAS: &str = "work-atlas";
+        assert_eq!(
+            crate::retention::window_days(ATLAS),
+            None,
+            "the atlas evicts by its own per-record deadline, not by row age"
+        );
+        let store = MeshStore::in_memory().unwrap();
+        let now = now_secs();
+        let claim = |k: &str| projected(k, Some(b"claim"), now - 10, "aa");
+
+        store
+            .apply_projection(
+                ATLAS,
+                &unsealed(vec![claim("evicted"), claim("swept")]),
+                |_| Some(node(1)),
+                me(),
+            )
+            .unwrap();
+
+        // The atlas's door: a delete queues a tombstone.
+        assert!(store.delete(ATLAS, "evicted").unwrap());
+        let queued = store.outbox_take(8).unwrap();
+        assert_eq!(queued.len(), 1, "{queued:?}");
+        assert!(queued[0].deleted && queued[0].value.is_none());
+
+        // The other door: a sweep queues nothing at all.
+        assert_eq!(store.gc_app_before(ATLAS, now).unwrap(), 1);
+        assert_eq!(
+            store.outbox_take(8).unwrap().len(),
+            1,
+            "a sweep is not an act — the outbox still holds only the tombstone"
+        );
+
+        // The next fold. The tombstone is on the journal by now; the sweep is
+        // on no journal anywhere, so the row it took is still a winning row.
+        let next = unsealed(vec![
+            projected("evicted", None, queued[0].t, "aa"),
+            claim("swept"),
+        ]);
+        store
+            .apply_projection(ATLAS, &next, |_| Some(node(1)), me())
+            .unwrap();
+        assert!(
+            store.get(ATLAS, "evicted").unwrap().is_none(),
+            "a tombstone the fold carries keeps the row gone"
+        );
+        assert!(
+            store.get(ATLAS, "swept").unwrap().is_some(),
+            "and a sweep with neither a tombstone nor a declared window is \
+             undone by the next round — which is why there is no third way"
+        );
     }
 }

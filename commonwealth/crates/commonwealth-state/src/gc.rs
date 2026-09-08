@@ -3,6 +3,11 @@
 //!
 //! Runs on a periodic interval and deletes entries older than `ttl_seconds`.
 //! Shuts down when the watch channel fires.
+//!
+//! **The cutoff comes from [`crate::retention`], not from the caller.** The
+//! store is a projection of the ring journal, so a sweep at a cutoff the fold
+//! does not share is undone by the next round — see
+//! [`RetentionGc::for_namespace`], which is the constructor the daemon uses.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,23 +16,17 @@ use tracing::{debug, warn};
 
 use crate::store::MeshStore;
 
-/// IMPLEMENT_ME (2026-08-24, daemon-convergence): **this GC has no
-/// production spawner.** Its only one was
-/// `commonwealth-daemon/src/main.rs:789`, and that crate was deleted as
-/// vestigial. The sovereign daemon has never spawned it either, so
-/// nothing bounds the contributions ledger on any shipped configuration
-/// — `research/scale-analysis/MESH_SCALE_T0_JOURNAL.md` already flagged
-/// the ledger as growing without bound for exactly this reason.
+/// The periodic sweep. The sovereign daemon spawns exactly one — the
+/// contributions ledger, through [`RetentionGc::for_namespace`].
 ///
-/// Deliberately left unwired rather than silently re-homed: spawning it
-/// from the sovereign daemon is a behaviour change (it starts deleting
-/// rows on a live store), not a mechanical port, and it needs the
-/// `app_scope` decision below made on purpose — the deleted daemon used
-/// a 7-day TTL that was *narrower* than its own 30-day read window.
-///
-/// Whoever next needs a bounded ledger: wire it with an explicit
-/// `app_scope`, or delete this type and accept unbounded growth in
-/// writing. Do not leave it in this third state.
+/// **It is not the only thing that bounds a rail-backed namespace, and it
+/// is not redundant with the thing that is.** `apply_projection` applies
+/// the same floor on every fold, so on a node with an online peer this
+/// sweep removes what the round would have removed anyway. On a node with
+/// NO online peer nothing projects at all — `ring_sync::run_one_round`
+/// returns before the fold when the peer list is empty — and this task is
+/// then the only bound on a store that is `in_memory()` in the shipped
+/// daemon. One window, read by both (ARCH §10.6).
 pub struct RetentionGc {
     store: Arc<MeshStore>,
     ttl_seconds: u64,
@@ -49,8 +48,35 @@ impl RetentionGc {
         }
     }
 
+    /// A GC for a namespace that DECLARES a retention window
+    /// ([`crate::retention`]), with the TTL taken from that declaration
+    /// rather than from the caller.
+    ///
+    /// This is the constructor to use. The window is the projection's floor
+    /// too, and a sweep whose cutoff differs from the fold's is undone by the
+    /// next round — so the number cannot be a parameter here without being two
+    /// numbers (ARCH §10.6, §7.1).
+    ///
+    /// `None` when the namespace declares no window: absence is reported, never
+    /// defaulted to some cutoff this call invented (ARCH §18.3). A caller that
+    /// gets `None` has asked for retention on a namespace nobody has said how
+    /// long to keep, and spawning a sweep on a guess would delete live rows.
+    pub fn for_namespace(store: Arc<MeshStore>, app_id: &str, interval: Duration) -> Option<Self> {
+        let ttl_seconds = crate::retention::window_secs(app_id)?;
+        Some(Self {
+            store,
+            ttl_seconds,
+            interval,
+            app_scope: Some(app_id.to_string()),
+        })
+    }
+
     /// Restrict this GC to a single `app_id`, leaving every other app's
     /// entries alone. Unset, it sweeps the whole store.
+    ///
+    /// Prefer [`RetentionGc::for_namespace`] for a namespace with a declared
+    /// window — this form lets the caller pick a cutoff, and on a rail-backed
+    /// namespace a cutoff the fold does not share is undone every round.
     ///
     /// Scope it unless you have checked every app sharing the store. One
     /// [`MeshStore`] holds apps with opposite retention semantics: the

@@ -6,6 +6,18 @@
 //! `last_activity_at` that the work atlas uses. This module scans
 //! every 60s and drops anything past its deadline. Cheap: a handful
 //! of records per node.
+//!
+//! **Every drop here goes through `PeerStore::delete`, and that is what makes
+//! it stick.** On a meshed node the port is `MeshPeerStore`, whose store is a
+//! PROJECTION of the ring journal: `delete` queues a tombstone, so the fold
+//! carries the removal, while a sweep of the same rows would leave no act
+//! anywhere and the next round would put them back. That is not hypothetical —
+//! it is what `RetentionGc` was doing to the contributions ledger until
+//! 2026-09-08 (`commonwealth_state::retention`). A row age is also the wrong
+//! question for this crate: a claim's deadline is its own `ttl_expires_at`, so
+//! the atlas declares no retention window and is never swept for age. Keep it
+//! that way — an eviction here is a decision about ONE record, which is exactly
+//! what a tombstone is for.
 
 use std::sync::Arc;
 use std::time::Duration;

@@ -1892,4 +1892,140 @@ mod tests {
              arrive by a route this loop never runs: {round:?}"
         );
     }
+
+    /// **(f) Retention on a rail-backed namespace stays retained.**
+    ///
+    /// RED-FIRST, and the direction is the whole point: the store is a
+    /// PROJECTION now, so a row a local sweep deletes has no incumbent and the
+    /// next round's `merge_entry` puts it straight back from the journal. The
+    /// sweep runs on a 60s-ish cadence and the fold runs on a 60s round, so a
+    /// 30-day retention window on a meshed node is undone within a minute,
+    /// every minute, forever.
+    #[tokio::test]
+    async fn a_retention_sweep_is_not_undone_by_the_next_projection() {
+        const LEDGER: &str = commonwealth_state::CONTRIBUTIONS_APP_ID;
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[15u8; 32]),
+            SigningKey::from_bytes(&[16u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(61), NodeId::from_u128(62));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, _b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        let now = commonwealth_core::clock::unix_now_secs();
+        let window = u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS) * 86_400;
+        let floor = now - window;
+        // Two ledger events A signed: one a day past the aggregation window,
+        // one inside it. Days apart from the boundary, so no clock tick
+        // between the plant and the sweep can move which side either is on.
+        let a_journal = a_rail.journal(LEDGER).unwrap();
+        assert_eq!(
+            a_journal
+                .ingest_all(&[
+                    kv_op(LEDGER, &ka, 0, "old-event", Some(b"1"), floor - 86_400),
+                    kv_op(LEDGER, &ka, 1, "fresh-event", Some(b"1"), now - 60),
+                ])
+                .unwrap(),
+            2
+        );
+
+        let url = serve(internal_router(b_state.clone())).await;
+        let out = exchange(&reqwest::Client::new(), &url, &a_rail, &a_journal).await;
+        assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert!(
+            value_at(&b_state, LEDGER, "fresh-event").is_some(),
+            "control: the ledger replicated at all"
+        );
+
+        // B's retention sweep, at the ONE cutoff the namespace's readers use.
+        b_state
+            .inner
+            .mesh_store
+            .gc_app_before(LEDGER, floor)
+            .unwrap();
+        assert_eq!(
+            value_at(&b_state, LEDGER, "old-event"),
+            None,
+            "control: the sweep did delete the row"
+        );
+
+        // …and now one more round of the very thing that fills the store.
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, LEDGER, "old-event"),
+            None,
+            "the projection put back a row retention had just taken"
+        );
+        assert!(
+            value_at(&b_state, LEDGER, "fresh-event").is_some(),
+            "and it took only the expired one"
+        );
+    }
+
+    /// **(f2) The author's own sweep is not undone by the author's own
+    /// journal, and it puts nothing on the rail.**
+    ///
+    /// The other half of (f). A's store leads its journal by an outbox drain,
+    /// so `apply_projection` deliberately does not reconcile A's own rows
+    /// against A's sealed live set — which means the ONLY thing that can keep
+    /// A's expired rows out of A's store is the fold itself refusing them.
+    ///
+    /// The outbox assertion is the second claim: expiry emits no traffic. Every
+    /// node derives the same floor from the same `t`, so retention needs no
+    /// message — and a tombstone per retired row would grow the journal
+    /// retention exists to bound.
+    #[tokio::test]
+    async fn an_authors_own_retention_sweep_is_not_undone_and_puts_nothing_on_the_rail() {
+        const LEDGER: &str = commonwealth_state::CONTRIBUTIONS_APP_ID;
+        let ka = SigningKey::from_bytes(&[17u8; 32]);
+        let kb = SigningKey::from_bytes(&[18u8; 32]);
+        let (a_id, b_id) = (NodeId::from_u128(71), NodeId::from_u128(72));
+        let da = tempfile::tempdir().unwrap();
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, kv_mesh(&ka, &kb, a_id, b_id));
+
+        let now = commonwealth_core::clock::unix_now_secs();
+        let window = u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS) * 86_400;
+        let floor = now - window;
+        let a_journal = a_rail.journal(LEDGER).unwrap();
+        assert_eq!(
+            a_journal
+                .ingest_all(&[
+                    kv_op(LEDGER, &ka, 0, "old-event", Some(b"1"), floor - 86_400),
+                    kv_op(LEDGER, &ka, 1, "fresh-event", Some(b"1"), now - 60),
+                ])
+                .unwrap(),
+            2
+        );
+        crate::rail_kv_pump::project_all_on_disk(&a_state).await;
+        assert!(
+            value_at(&a_state, LEDGER, "fresh-event").is_some(),
+            "control: A folded its own journal"
+        );
+
+        a_state
+            .inner
+            .mesh_store
+            .gc_app_before(LEDGER, floor)
+            .unwrap();
+        assert_eq!(
+            a_state.inner.mesh_store.outbox_len().unwrap(),
+            0,
+            "an expiry is not a delete: it publishes nothing, because every \
+             node derives the same floor from the same `t`"
+        );
+
+        crate::rail_kv_pump::project_all_on_disk(&a_state).await;
+        assert_eq!(
+            value_at(&a_state, LEDGER, "old-event"),
+            None,
+            "A's own journal put back a row A's own retention had just taken"
+        );
+        assert!(
+            value_at(&a_state, LEDGER, "fresh-event").is_some(),
+            "and it took only the expired one"
+        );
+    }
 }

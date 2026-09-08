@@ -3571,12 +3571,12 @@ impl EmbeddedDaemon {
         // toward `MAX_REQUEST_BODY_BYTES` (8 MiB) and, before that, the
         // 3s POST timeout (MESH_SCALE_100_USERS_1000_CORPORA.md §7.2).
         //
-        // TTL is the AGGREGATION WINDOW, not a second independently
-        // chosen number: every reader
-        // (`current_contributions`, `commonwealth balance`) aggregates
-        // over `DEFAULT_WINDOW_DAYS`, so a row older than that is
-        // provably invisible to every reader. One decider (§10.6) —
-        // widen the window and the retention follows.
+        // TTL is the AGGREGATION WINDOW, and this call site does not get
+        // to spell it: `commonwealth_state::retention` declares it once,
+        // and `MeshStore::apply_projection` reads the SAME table on every
+        // fold. That coupling is not decoration — the store is a
+        // projection of the ring journal, so a sweep at a cutoff of its
+        // own is re-inserted by the next round (ARCH §10.6).
         //
         // SCOPED to the contributions app on purpose. This daemon's
         // `MeshStore` also carries processed-shards dedup markers and
@@ -3584,26 +3584,38 @@ impl EmbeddedDaemon {
         // never rewritten; a whole-store age sweep would delete those
         // and re-open completed ingest work. See `RetentionGc::app_scope`.
         let gc_store = app_state.inner.mesh_store.clone();
-        let ledger_ttl_secs =
-            u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS).saturating_mul(86_400);
-        let (gc_shutdown_tx, gc_shutdown_rx) = tokio::sync::watch::channel(false);
-        tokio::spawn(async move {
-            let _hold_shutdown_tx = gc_shutdown_tx;
-            commonwealth_state::RetentionGc::new(
-                gc_store,
-                ledger_ttl_secs,
-                commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
-            )
-            .scoped_to_app(commonwealth_state::CONTRIBUTIONS_APP_ID)
-            .run(gc_shutdown_rx)
-            .await;
-        });
-        info!(
-            app_scope = commonwealth_state::CONTRIBUTIONS_APP_ID,
-            ttl_days = commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
-            interval_secs = commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL.as_secs(),
-            "RetentionGc started (contributions ledger)"
-        );
+        match commonwealth_state::RetentionGc::for_namespace(
+            gc_store,
+            commonwealth_state::CONTRIBUTIONS_APP_ID,
+            commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
+        ) {
+            Some(gc) => {
+                let (gc_shutdown_tx, gc_shutdown_rx) = tokio::sync::watch::channel(false);
+                tokio::spawn(async move {
+                    let _hold_shutdown_tx = gc_shutdown_tx;
+                    gc.run(gc_shutdown_rx).await;
+                });
+                info!(
+                    app_scope = commonwealth_state::CONTRIBUTIONS_APP_ID,
+                    ttl_days = commonwealth_state::retention::window_days(
+                        commonwealth_state::CONTRIBUTIONS_APP_ID
+                    ),
+                    interval_secs =
+                        commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL.as_secs(),
+                    "RetentionGc started (contributions ledger)"
+                );
+            }
+            // Reported, never defaulted to a cutoff this site invented
+            // (§18.3). The only way here is the ledger losing its row in
+            // `retention::RETENTION_WINDOW_DAYS`, and an unbounded ledger
+            // is a thing the operator should read in the log rather than
+            // discover as memory growth.
+            None => warn!(
+                app_scope = commonwealth_state::CONTRIBUTIONS_APP_ID,
+                "RetentionGc not started: this namespace declares no retention \
+                 window, so nothing bounds it"
+            ),
+        }
 
         // Stall sweep — any non-terminal `_enrichment_state.json`
         // older than STALL_THRESHOLD_SECS is rewritten as `Stalled`

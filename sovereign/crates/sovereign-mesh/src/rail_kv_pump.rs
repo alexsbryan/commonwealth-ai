@@ -59,6 +59,28 @@
 //!
 //! The threshold stays where it is: `SEAL_AFTER_OWN_OPS` is priced on journal
 //! bytes (~594 a line) and the cost it was raised for is gone, not smaller.
+//!
+//! # Retention rides the fold, and through the fold it reaches the journal
+//!
+//! A namespace may declare a retention window
+//! (`commonwealth_state::retention`). It is enforced in
+//! [`MeshStore::apply_projection`](commonwealth_state::MeshStore::apply_projection),
+//! because that is the only place it CAN be: the store is a projection, so a
+//! row a sweep deletes has no incumbent and `merge_entry` puts it back on the
+//! next round. `RetentionGc`'s thirty days on the contributions ledger were
+//! undone every minute until 2026-09-08, on every node with an online peer
+//! ([`crate::ring_sync`]'s `a_retention_sweep_is_not_undone_by_the_next_projection`).
+//!
+//! An expiry publishes NOTHING. The floor is `now` minus a constant and `t` is
+//! on every op, so every node derives the same answer without being told — and
+//! a tombstone per retired row would add a journal line to every node in the
+//! mesh for each row retention exists to remove.
+//!
+//! [`snapshot`] is how the store's bound becomes the journal's: it re-appends
+//! this node's live set FROM THE STORE, so a row the floor keeps out is a row
+//! the snapshot does not carry above the new floor, and the compaction behind
+//! the seal deletes its line. Same decision, reached twice, with no second
+//! number (ARCH §10.6).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -565,11 +587,12 @@ pub fn is_kv_namespace(namespace: &str) -> bool {
 /// arrives with the origin the ROSTER places its signature at, never one the
 /// sender supplied (ARCH §18.1).
 ///
-/// Returns the number of store rows this fold moved — merged, tombstoned, or
-/// retired by a sealed actor's live set — or `None` when the namespace was
-/// not projected at all — a measurements ring, a journal that would not admit,
-/// or a namespace `apply_projection` refuses on privacy grounds. The two are
-/// different facts and a `0` for both would hide the second (ARCH §18.2).
+/// Returns the number of store rows this fold moved — merged, tombstoned,
+/// retired by a sealed actor's live set, or expired past the namespace's
+/// retention window — or `None` when the namespace was not projected at all —
+/// a measurements ring, a journal that would not admit, or a namespace
+/// `apply_projection` refuses on privacy grounds. The two are different facts
+/// and a `0` for both would hide the second (ARCH §18.2).
 pub async fn project_namespace(
     app_state: &AppState,
     rail: &RingRail,
@@ -629,6 +652,8 @@ pub async fn project_namespace(
                 merged = applied.merged,
                 deleted = applied.deleted,
                 reconciled = applied.reconciled,
+                expired = applied.expired,
+                withheld = applied.withheld,
                 unattributed = applied.unattributed,
                 gaps = admission.gaps.len(),
                 "rail kv pump: projected a namespace into the store"
@@ -640,7 +665,7 @@ pub async fn project_namespace(
                     "rail kv pump: the roster and the journal disagree about who is in this ring"
                 );
             }
-            Some(applied.merged + applied.deleted + applied.reconciled)
+            Some(applied.merged + applied.deleted + applied.reconciled + applied.expired)
         }
         Err(e) => {
             // The receiver-side privacy guard firing is not a bug in this

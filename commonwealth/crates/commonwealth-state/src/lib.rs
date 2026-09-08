@@ -81,7 +81,8 @@
 //!   activity           what this node did locally — never gossiped
 //!   peer_preferences   privately serve a peer less; clamped to (0.0, 1.0]
 //!   processed_shards   which corpus shards each peer has finished
-//!   gc                 delete rows past a TTL — see the warning on RetentionGc
+//!   retention          how long each namespace's rows are worth holding
+//!   gc                 sweep rows past that window — see RetentionGc
 //! ```
 //!
 //! [`PeerPreference`] is worth one more line because the clamp is the design:
@@ -96,9 +97,12 @@
 //! this crate supplies both ends of that contract and neither end of the
 //! transport. In the shipped daemon that caller is `sovereign-mesh`.
 //!
-//! [`RetentionGc`] is here and is **not spawned by anything that ships** —
-//! read its docs before wiring it, because starting it begins deleting rows
-//! from a live store and the scope decision has to be made on purpose.
+//! [`RetentionGc`] is here, and the sovereign daemon spawns it scoped to the
+//! contributions ledger. Its cutoff is NOT a parameter: it comes from
+//! [`retention`], the same table [`MeshStore::apply_projection`] reads. On a
+//! rail-backed namespace the store is a projection, so a sweep with a cutoff of
+//! its own is undone by the next fold — one window, read twice, or the two
+//! spend every round arguing (ARCH §10.6).
 
 pub mod activity;
 mod backend;
@@ -108,6 +112,7 @@ pub mod gc;
 pub mod peer_preferences;
 pub mod processed_shards;
 pub mod rail_kv;
+pub mod retention;
 pub mod store;
 
 pub use activity::{current_activity, served_for, ActivityEmitter, ACTIVITY_APP_ID};
@@ -120,4 +125,5 @@ pub use peer_preferences::{
 };
 pub use processed_shards::{processed_shards_key, union_processed_shards, PROCESSED_SHARDS_APP_ID};
 pub use rail_kv::{project, KvOp, Projected, Projection};
+pub use retention::RETENTION_WINDOW_DAYS;
 pub use store::{Applied, MeshStore, OutboxRow, StoreEntry};

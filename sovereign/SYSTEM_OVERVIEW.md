@@ -5424,7 +5424,9 @@ than listing it uncovered.
 Deliberately deferred with a named trigger: the namespace has **no retention
 bound** (`gc_app` cannot serve — it compares `entry.timestamp`, which for a
 write-once event is creation time, so a TTL deletes history and a partial
-restore resurrects corrected expenses). Checkpoints land when one exchange
+restore resurrects corrected expenses; and since cw-lift 4 it could not serve
+anyway, because the store is a projection and a swept row returns on the next
+fold unless the namespace declares a window in `commonwealth-state::retention`). Checkpoints land when one exchange
 passes half the receiver's body limit — the sync route warns at exactly that
 line, reusing the gauge `gossip.rs` already keeps on the mesh-store snapshot.
 
@@ -5679,7 +5681,8 @@ portfolio, knowledge fan-out, ledger accuracy. Deterministic timing
 
 `commonwealth-state::MeshStore` — SQLite KV (WAL mode):
 `StoreEntry { app_id, key, value: Bytes, timestamp, origin: NodeId }`,
-LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL.
+LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL at
+the window `commonwealth-state::retention` declares.
 
 **It is a PROJECTION of the ring rail since cw-lift 4, not a replica,
 and readers are unchanged.** `get` / `scan` / `list_keys` answer exactly
@@ -5716,7 +5719,8 @@ directory per namespace — and this store is the fold of it:
   divergence `merge_entry_equal_timestamp_keeps_incumbent` pinned as a
   known limitation: on the rail there is no arrival order to depend on.
 - **In.** `MeshStore::apply_projection(app_id, &Projection, origin_of,
-  self_id) -> Applied { merged, deleted, reconciled, unattributed }`. The
+  self_id) -> Applied { merged, deleted, reconciled, expired, withheld,
+  unattributed }`. The
   whole `Projection` goes in rather than its rows, because the live sets below
   are the same fold's second answer and pairing fresh rows with a stale claim
   would retire a key on the strength of a different journal (§10.6). Values go
@@ -5755,6 +5759,34 @@ directory per namespace — and this store is the fold of it:
   `a_seal_carries_a_delete_the_peer_never_received` and
   `a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark`
   (`ring_sync`), and `apply_projection_never_reconciles_this_nodes_own_rows`
+  (`commonwealth-state`).
+- **Retention is part of the fold, because on a projection nothing else can
+  be** (`commonwealth-state::retention`, 2026-09-08). A row a local sweep
+  deletes has no incumbent, so the next round's `merge_entry` re-inserts it
+  from the journal — `RetentionGc`'s thirty days on `contributions` were undone
+  within a minute, every minute, on any node with an online peer, and the
+  work atlas's 60 s sweep escaped only because it evicts through
+  `MeshStore::delete` (a tombstone, an act) rather than through `gc_app`. The
+  window is now declared once per namespace in `retention::RETENTION_WINDOW_DAYS`
+  — `contributions` at `DEFAULT_WINDOW_DAYS`, which is the window its readers
+  aggregate over, so a row past it is provably invisible — and BOTH sides read
+  it: the fold refuses a row below the floor (`withheld`) and retires a held
+  one (`expired`), and `RetentionGc::for_namespace` takes its TTL from the same
+  table rather than from its caller (§10.6). Two cutoffs would spend every
+  round undoing each other. **An expiry publishes nothing**: the floor is `now`
+  minus a constant and `t` is on every op, so every node derives it identically
+  — a tombstone per retired row would add a journal line on every node in the
+  mesh for each row retention exists to remove. The store bound reaches the
+  JOURNAL through the seal: `snapshot` re-appends the live set FROM THE STORE,
+  so a row the floor keeps out is not carried above the new floor and the
+  compaction deletes its line. `RetentionGc` is still the bound on a node with
+  no online peer, because `run_one_round` returns before projecting anything
+  when the peer list is empty. Pins:
+  `a_retention_sweep_is_not_undone_by_the_next_projection` and
+  `an_authors_own_retention_sweep_is_not_undone_and_puts_nothing_on_the_rail`
+  (`ring_sync`), `the_projection_neither_takes_nor_keeps_a_row_past_the_retention_window`,
+  `the_sweep_and_the_fold_keep_exactly_the_same_rows` and
+  `a_delete_survives_the_fold_and_an_undeclared_sweep_does_not`
   (`commonwealth-state`).
 - **A replicating `app_id` is a ring namespace verbatim**, and a
   namespace names a DIRECTORY (`<root>/rings/<ns>/`), so it must satisfy
