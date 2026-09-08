@@ -25,7 +25,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use commonwealth_knowledge::GuestGrant;
-use commonwealth_rail::{RailAct, RailError, RingJournal, RingRail};
+use commonwealth_rail::{RailAct, RailError, RingJournal, RingRail, RosterOrigin};
 use serde::Deserialize;
 
 use crate::client_auth::Guest;
@@ -43,6 +43,29 @@ pub struct RailQuery {
 
 fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
+}
+
+/// What a not-in-roster refusal tells the operator to DO, in the words of
+/// whoever owns this namespace's roster.
+///
+/// The rail's own sentence names `svrn ring roster add … --self`, which is
+/// right for a ring written by hand and wrong for one whose roster is derived:
+/// the CLI refuses that command there (`ring_cmd::refuse_derived_roster`), so
+/// the sentence would send a person to a door that will not open. On a derived
+/// namespace the condition is not "you forgot to add yourself", it is "this
+/// node is not in a mesh" — the same words the mesh's own publish route
+/// already gives for the same condition, `sovereign-mesh/src/mesh_http.rs:715`
+/// (ARCH §10.6: one condition, one thing said about it).
+///
+/// The origin is asked of the rail, never inferred from the namespace's name
+/// and never matched out of the error's prose.
+fn not_in_roster_refusal(origin: RosterOrigin, e: &RailError) -> String {
+    match origin {
+        RosterOrigin::Derived => "this node is not in a mesh yet, so every op it writes would be \
+             unreadable to every peer — `svrn mesh create` or join one first."
+            .into(),
+        RosterOrigin::File => e.to_string(),
+    }
 }
 
 /// Resolve which namespace this request acts on.
@@ -203,6 +226,10 @@ pub async fn append(
             }
             Json(out).into_response()
         }
+        Err(e @ RailError::NotInRoster { .. }) => err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            not_in_roster_refusal(rail.roster_origin(journal.namespace()), &e),
+        ),
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -280,8 +307,75 @@ pub async fn log(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
+
     use commonwealth_knowledge::Scope;
+    use commonwealth_rail::{Roster, RosterSource};
+
+    use super::*;
+
+    /// Enough of a signer to build a rail. Nothing here signs anything: the
+    /// refusal under test is decided before a signature exists.
+    struct Unclaimed;
+    impl commonwealth_rail::RingSigner for Unclaimed {
+        fn actor(&self) -> String {
+            "ab".repeat(32)
+        }
+        fn sign(&self, _ns: &str, _ts: i64, _seq: u64, _body: &str) -> String {
+            String::new()
+        }
+    }
+
+    /// A roster that is computed — the shape `mesh-measurements` installs.
+    /// Empty, because a node that is in no mesh derives no members, which is
+    /// exactly the state that reaches this refusal.
+    struct Membership;
+    impl RosterSource for Membership {
+        fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>> {
+            Box::pin(async { Ok(Roster::new(Default::default())) })
+        }
+    }
+
+    /// The refusal `append` would render for `ns`, asked of a real rail so the
+    /// origin comes from `RingRail` and not from a fixture.
+    fn refusal_on(ns: &str, derived: bool) -> String {
+        let rail = RingRail::new("/nonexistent", Arc::new(Unclaimed));
+        if derived {
+            rail.derive_roster(ns, Arc::new(Membership)).unwrap();
+        }
+        let e = RailError::NotInRoster {
+            actor: "ab".repeat(32),
+            namespace: ns.to_string(),
+        };
+        not_in_roster_refusal(rail.roster_origin(ns), &e)
+    }
+
+    /// The fix a refusal names has to be a command the reader can actually
+    /// run. `svrn ring roster add` is REFUSED on a derived namespace, so
+    /// naming it there sends the operator to a door that will not open.
+    #[test]
+    fn a_derived_namespace_is_refused_in_the_meshs_words_not_the_roster_files() {
+        let why = refusal_on("mesh-measurements", true);
+        assert!(why.contains("svrn mesh"), "must name the mesh: {why}");
+        assert!(
+            !why.contains("roster add"),
+            "must not send them to a refused command: {why}"
+        );
+    }
+
+    /// The negative control: on a hand-written ring `roster add` IS the fix,
+    /// and the rail's own sentence is still what the operator sees. Without
+    /// this the test above passes for a renderer that says "mesh" always.
+    #[test]
+    fn a_file_namespace_still_names_the_roster_command() {
+        let why = refusal_on("house-expenses", false);
+        assert!(
+            why.contains("svrn ring roster add"),
+            "must name the fix: {why}"
+        );
+        assert!(!why.contains("svrn mesh"), "{why}");
+    }
 
     fn grant_with(scopes: Vec<Scope>) -> Guest {
         Guest(Arc::new(GuestGrant {

@@ -27,6 +27,16 @@ fn a_namespace_cannot_be_a_path() {
         "",
         "Has-Caps",
         "with space",
+        // A colon is refused DELIBERATELY and the charset is not widening to
+        // admit one. It is legal on POSIX and APFS and it is not on NTFS,
+        // where it separates a file from an alternate data stream — and the
+        // desktop ships on Windows (`scripts/build-desktop-windows.sh`)
+        // linking `sovereign-mesh` and through it this crate. cw-lift 4 makes
+        // every replicating `MeshStore` app_id a namespace here, and the one
+        // app_id in the workspace that carried a colon
+        // (`wikipedia-newsworthy:tracked`) was RENAMED rather than this rule
+        // relaxed for every namespace that comes after it.
+        "has:colon",
         &"x".repeat(65),
     ] {
         assert!(
@@ -89,9 +99,13 @@ fn the_door_refuses_to_author_under_a_key_the_ring_does_not_know() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let stranger = journal.append(record("x"), &key(42), &ring());
-    let Err(RailError::Rejected(why)) = stranger else {
+    let Err(e @ RailError::NotInRoster { .. }) = stranger else {
         panic!("the door authored an op nobody in the ring can read");
     };
+    // TYPED, so the renderer that knows where this namespace's roster comes
+    // from can say something else (`routes_rail::not_in_roster_refusal`).
+    // The Display is still the hand-written ring's instruction.
+    let why = e.to_string();
     assert!(
         why.contains("roster add"),
         "the refusal must name the fix: {why}"

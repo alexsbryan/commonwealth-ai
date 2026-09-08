@@ -17,6 +17,11 @@
 //! and the app owns one validator that its own door and its own reducer both
 //! call, exactly as this module used to.
 //!
+//! The second of those is [`RailError::NotInRoster`] rather than a sentence,
+//! because the command that fixes it depends on whether this namespace's
+//! roster is a file or is DERIVED ([`RingRail::roster_origin`]) — the door
+//! does not know, and the renderer does.
+//!
 //! The journal is **truth**; the mesh store is only a transport buffer. In
 //! production `MeshStore` is `in_memory()`, so anything treating it as
 //! durable loses the log on restart.
@@ -357,15 +362,15 @@ impl RingJournal {
         // sentence naming the command that fixes it. Checked against OUR
         // roster and OUR key, never against a field the caller supplied
         // (ARCH §18.1).
+        // TYPED, not a sentence: the command that fixes this depends on where
+        // this namespace's roster comes from, and the door does not know —
+        // `RingRail::roster_origin` does. A renderer picking the right words
+        // by matching on the prose would be the string `match` §2.1 forbids.
         if roster.person_for(&actor).is_none() {
-            return Err(RailError::Rejected(format!(
-                "this node signs as {}… and nobody in the `{}` roster claims that \
-                 key, so every op it writes would be unreadable to the ring — add \
-                 yourself first with `svrn ring roster add <you> --self --ring {}`",
-                &actor[..actor.len().min(12)],
-                self.namespace,
-                self.namespace,
-            )));
+            return Err(RailError::NotInRoster {
+                actor: actor.clone(),
+                namespace: self.namespace.clone(),
+            });
         }
         // A payload is canonical by construction, so by the time one is a
         // `Payload` there is nothing left for the door to check. This assert

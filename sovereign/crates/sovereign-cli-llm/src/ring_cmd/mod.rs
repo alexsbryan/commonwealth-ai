@@ -54,6 +54,9 @@
 //! the daemon ignores. See [`refuse_derived_roster`]. `ring log` and
 //! `ring seal` go over HTTP, and the daemon's rail has ONE roster reader that
 //! knows this namespace derives (cw-lift 4a follow-up), so both work on it.
+//! When the door refuses a write there it is because this node is in no mesh,
+//! and it says exactly that — `svrn mesh create`, or join one — rather than
+//! naming the `roster add` this namespace refuses.
 
 use std::collections::BTreeMap;
 

@@ -325,6 +325,28 @@ pub enum RailError {
     /// it is the 422 body an app shows a person.
     #[error("refused: {0}")]
     Rejected(String),
+    /// Authoring under a key this namespace's roster does not claim.
+    ///
+    /// Typed rather than one more [`RailError::Rejected`] sentence because
+    /// the FIX depends on where the roster comes from, and only the caller
+    /// holding the rail knows that ([`RingRail::roster_origin`] in
+    /// `commonwealth-rail`). The Display below is the right instruction for a
+    /// ring written by hand from the CLI; a namespace whose roster is DERIVED
+    /// has no such command, and its renderer says so. Recognising this case
+    /// by matching on the prose would be the string `match` §2.1 forbids —
+    /// and the prose is a 422 body, so it is allowed to change.
+    #[error(
+        "this node signs as {}… and nobody in the `{namespace}` roster claims that \
+         key, so every op it writes would be unreadable to the ring — add \
+         yourself first with `svrn ring roster add <you> --self --ring {namespace}`",
+        actor_prefix(.actor)
+    )]
+    NotInRoster { actor: String, namespace: String },
+}
+
+/// Enough of an actor key to recognise, short enough to read in a sentence.
+fn actor_prefix(actor: &str) -> String {
+    actor.chars().take(12).collect()
 }
 
 // ── Signing without holding key material ─────────────────────
