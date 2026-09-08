@@ -83,6 +83,7 @@ from admission_shed_probe import (  # noqa: E402
     CLI,
     DAEMON_ERR,
     DEATH_DAEMON_GONE,
+    DEATH_SHED,
     LOAD_QUESTION,
     TS_RE,
     ask,
@@ -152,6 +153,20 @@ DEATH_HOST_HEADROOM = "host_headroom"
 DEATH_LISTENER_LOST = "listener_lost"
 DEATH_SIGNAL = "signal"
 DEATH_CRASH = "crash"
+# THE PROCESS LIVED AND SERVED NOBODY. Watched necessary on 2026-09-08: for
+# ~50 minutes this daemon answered `/status` with 200, advertised twelve
+# models on `/v1/models`, and could not complete one inference — a
+# `Weak<AppState>` above an `Arc::get_mut` block made three installers
+# silently no-op, so it booted with no model plan (fixed in 35a2f18fb).
+# Nothing crashed, nothing logged an error, the pid never changed and the
+# port never stopped answering. Every detector above would have called that
+# window CLEAN. A soak that passes a total inference outage is not an ops
+# lens, so a run in which not one turn was answered is never a pass — the
+# same rule `sovereign-test.sh` applies when a filtered run matches no tests.
+DEATH_UNSERVING = "unserving"
+# The daemon REFUSED, deliberately and in its own words. Not an outage and
+# not a pass: the run measured a busy host, which is a different question.
+DEATH_SHED_OUT = "shed_out"
 ALIVE = "clean"
 
 # Ordered most specific first: the jetsam line CONTAINS the plain shutdown
@@ -169,6 +184,8 @@ DEATH_CLASSES = [p[0] for p in DEATH_PATTERNS] + [
     DEATH_CRASH,
     DEATH_SIGTERM_UNATTRIBUTED,
     DEATH_SELF_STOP,
+    DEATH_UNSERVING,
+    DEATH_SHED_OUT,
 ]
 
 # Classes this soak may report as a CAUGHT DEFECT (exit 1). Everything else
@@ -180,6 +197,7 @@ DEATH_ATTRIBUTABLE = {
     DEATH_HOST_HEADROOM,
     DEATH_LISTENER_LOST,
     DEATH_CRASH,
+    DEATH_UNSERVING,
 }
 
 
@@ -292,6 +310,14 @@ def port_serving() -> bool | None:
     phantom-Running daemon has a live process, a valid pidfile and a dead
     port, so process liveness alone cannot reach that class and a class no
     input can reach is the §18.1 smell.
+
+    IT IS NOT A HEALTH CHECK and nothing here treats it as one. A 200 from
+    `/v1/models` says a listener is bound and a catalogue can be rendered; it
+    said exactly that for ~50 minutes on 2026-09-08 while the daemon could not
+    complete a single inference. `/status`'s own two readiness fields
+    disagreed with each other in the same window (`inference.resident` with
+    three models, `inference.loaded_models` empty). The only honest readiness
+    evidence is a decode, and this soak's own turns are the decodes.
 
     `None` means the probe itself could not run — reported, not defaulted.
     """
@@ -522,6 +548,25 @@ def classify_daemon_death(
     )
 
 
+def residual_class(
+    *, restarts: int, gone: bool, phantom: bool, served_nobody: bool, all_shed: bool
+) -> str | None:
+    """What happened when the daemon's log said NOTHING.
+
+    A pure function so the self-test can reach it. Order is the point: a
+    process that went away outranks a port that stopped answering, which
+    outranks a daemon that answered everything and served nobody — because a
+    dead process explains the other two and neither explains it.
+    """
+    if restarts or gone:
+        return DEATH_CRASH
+    if phantom:
+        return DEATH_LISTENER_LOST
+    if served_nobody:
+        return DEATH_SHED_OUT if all_shed else DEATH_UNSERVING
+    return None
+
+
 def inject(kind: str, pid: int | None) -> dict:
     """Break the daemon on purpose. The negative control's whole body.
 
@@ -596,6 +641,29 @@ def self_test() -> int:
     case("an ordinary stop", f'{stamp}  INFO daemon: shutdown signal received '
          'signal="SIGTERM" pid=1 rss_mb=900', DEATH_SIGNAL)
     case("nothing happened", "", None)
+
+    def residual(name, expect, **kw):
+        nonlocal fails
+        base = dict(restarts=0, gone=False, phantom=False, served_nobody=False,
+                    all_shed=False)
+        got = residual_class(**(base | kw))
+        ok = got == expect
+        fails += 0 if ok else 1
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}: expected {expect}, got {got}")
+
+    # The residual ladder — what the run concludes when the log is silent.
+    residual("process replaced", DEATH_CRASH, restarts=1)
+    residual("pidfile names a corpse", DEATH_CRASH, gone=True)
+    residual("port stopped answering", DEATH_LISTENER_LOST, phantom=True)
+    # THE 2026-09-08 OUTAGE, as a case. Up by every process check, serving
+    # nobody. This is the one the instrument could not see before.
+    residual("answered everything, served nobody", DEATH_UNSERVING,
+             served_nobody=True)
+    residual("refused everything, in its own words", DEATH_SHED_OUT,
+             served_nobody=True, all_shed=True)
+    residual("a dead process outranks an idle port", DEATH_CRASH,
+             gone=True, phantom=True, served_nobody=True)
+    residual("nothing wrong", None)
 
     globals()["log_files"] = real_log_files
     globals()["os_confirms_memory_kill"] = real_oracle
@@ -797,18 +865,31 @@ def main() -> int:
     # is a blind spot in whichever direction it was chosen.
     gone = watch.pid_not_alive_samples > 0
     phantom = watch.phantom_running_samples > 0
-    died = bool(log_class) or restarts > 0 or gone or phantom
-    death_class = log_class or (
-        DEATH_CRASH
-        if (restarts or gone)
-        else (DEATH_LISTENER_LOST if phantom else None)
+
+    # SERVED NOBODY. Checked before the process-liveness detectors, because
+    # this is the failure they cannot see: the daemon is up by every one of
+    # them and the user gets nothing. A run that drove turns and answered
+    # none of them did not pass, whatever the pid did.
+    kinds_all = Counter(r.get("death_kind", "unclassified") for r in rows if r["died"])
+    answered = sum(1 for r in rows if not r["died"])
+    served_nobody = bool(rows) and answered == 0
+    all_shed = served_nobody and kinds_all.get(DEATH_SHED, 0) == len(rows)
+
+    residual = residual_class(
+        restarts=restarts,
+        gone=gone,
+        phantom=phantom,
+        served_nobody=served_nobody,
+        all_shed=all_shed,
     )
+    died = bool(log_class) or residual is not None
+    death_class = log_class or residual
     # A death this run cannot pin on the load is COULD-NOT-JUDGE, not a
     # finding — the fourth verdict, and the one that keeps a peer's
     # `daemon stop` from being scored as the defect (ARCH §18.2).
     could_not_judge = died and death_class not in DEATH_ATTRIBUTABLE
 
-    kinds = Counter(r.get("death_kind", "unclassified") for r in rows if r["died"])
+    kinds = kinds_all
     loads = sorted(r["load1_at_start"] for r in rows)
     walls = sorted(r["wall_ms"] for r in rows if not r["died"])
     peak_rss_mb = round(max(watch.rss_samples) / 1024) if watch.rss_samples else None
@@ -834,6 +915,10 @@ def main() -> int:
         "turns_driven": len(rows),
         "turns_answered": len(walls),
         "turns_died": sum(1 for r in rows if r["died"]),
+        # The readiness evidence that is not a probe. A daemon answering
+        # `/v1/models` with twelve models and serving none of them reads as
+        # healthy on every other field in this file.
+        "served_nobody": served_nobody,
         # The user-visible cost of the daemon's death, kept apart from the
         # daemon-side verdict above: this is what a client actually saw.
         "client_death_kinds": dict(kinds),
@@ -889,7 +974,12 @@ def main() -> int:
         print(json.dumps(summary, indent=2))
         return 2
     if died:
-        print(f"  FAILED            the daemon died: `{death_class}`")
+        print(f"  FAILED            `{death_class}`")
+        if served_nobody:
+            print(
+                f"  served            0 of {len(rows)} turns answered — the "
+                "process and the port say nothing about this"
+            )
         print(f"  evidence          {evidence or '(no receipt — pidfile changed)'}")
         print(f"  corroboration     {corroboration}")
         print(f"  restarts          {restarts}, came back: {summary['daemon_up_at_end']}")
