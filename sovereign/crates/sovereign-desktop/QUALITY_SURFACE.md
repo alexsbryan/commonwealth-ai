@@ -274,8 +274,19 @@ be asked about before: what no CI job runs, and what NOTHING runs (nine today).
   for them. Unit tests were green; the journey was broken. It is now
   `desktop-smoke.sh` Phase 6. **When you add a harness, add it to the layer
   table in the same commit** — that table is the only thing standing between a
-  good instrument and this outcome. `daemon-soak.sh`, `daemon-supervised.sh`
-  and `mesh-soak.sh` are still off it.
+  good instrument and this outcome. Of the three this paragraph named,
+  2026-09-08 resolved two, and neither the way the paragraph expected:
+  `mesh-soak.sh` was not off any map — the weekly `mesh-soak-nightly`
+  workflow has been running it on Saturdays and the REGISTRY said
+  `by-hand`, which is the opposite error and just as misleading; and
+  `daemon-supervised.sh` is not an instrument at all, it is the daemon's
+  service manager, so it is a `[[not_instrument]]` now. `daemon-soak.sh`
+  is genuinely off every map and stays there: it needs `unshare`, `nft`,
+  `ip`, `timeout` and a repo-root `models/` tree, and none of the five
+  exists on the host that carries this fleet's only login-triggered
+  scheduler. What covers the failure this fleet actually keeps hitting —
+  the daemon under two concurrent chat turns — is
+  `scripts/daemon-concurrency-soak.py`, and it runs in `run-if-stale`.
 
 If you are about to cut a release, `scripts/desktop-smoke.sh` is the closest
 thing to a complete answer, and it is not cheap. Budget for it — and read its
