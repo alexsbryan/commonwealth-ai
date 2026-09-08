@@ -1082,9 +1082,11 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // the same HTTP one `corpus-mcp` uses against the local daemon; if that is
     // not up, the verdict is COULD-NOT-JUDGE by name and the restored index is
     // REMOVED rather than left in place unjudged (§18.3).
-    let embed_base = sovereign_contracts::setup_config::client_daemon_base();
     let embed: corpus_engine::EmbedFn = corpus_engine::embed_http::http_embed_fn(
-        format!("{}/embeddings", embed_base.trim_end_matches('/')),
+        format!(
+            "{}/embeddings",
+            sovereign_cli_shared::urls::daemon_v1_base()
+        ),
         parsed.embedding_model.clone(),
     );
     let acceptance = corpus_engine::judge_restored_snapshot(

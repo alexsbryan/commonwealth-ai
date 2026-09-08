@@ -45,6 +45,30 @@ pub fn v1_models_url(port: u16) -> String {
     format!("http://localhost:{port}/v1/models")
 }
 
+/// The daemon's OpenAI-compatible `/v1` base, honouring the same knob
+/// [`daemon_base_url`] does.
+///
+/// [`daemon_base_url`] returns a ROOT (`http://localhost:9741`) because the
+/// override knob is a root and its own doc says "every caller appends
+/// `/v1/…`". That is a real trap: a caller who forgets gets a 404 from a live,
+/// healthy daemon, which reads as "the daemon is broken" rather than "you
+/// built the wrong URL". It cost `snapshot restore --archive` its embedding
+/// probe on 2026-09-08 — `POST http://localhost:9741/embeddings: 404 Not
+/// Found`, an unjudgeable restore, correctly refused for the wrong reason.
+///
+/// One accessor per path (§10.6): append endpoint segments to THIS, not to
+/// `daemon_base_url`. A knob already ending in `/v1` is honoured as-is rather
+/// than doubled.
+pub fn daemon_v1_base() -> String {
+    let base = daemon_base_url();
+    let base = base.trim_end_matches('/');
+    if base.ends_with("/v1") {
+        base.to_string()
+    } else {
+        format!("{base}/v1")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,6 +81,29 @@ mod tests {
     #[test]
     fn url_helpers_use_supplied_port() {
         assert_eq!(v1_models_url(9741), "http://localhost:9741/v1/models");
+    }
+
+    /// The exact input that 404'd on 2026-09-08: a daemon ROOT with an
+    /// endpoint appended straight onto it. `daemon_v1_base` is the answer, and
+    /// these are the three shapes the knob can arrive in.
+    #[test]
+    fn daemon_v1_base_adds_the_version_segment_exactly_once() {
+        // SAFETY: single-threaded test setting a process env knob it also
+        // clears; the helper reads it through `daemon_url_override`.
+        for (knob, want) in [
+            ("http://localhost:9741", "http://localhost:9741/v1"),
+            ("http://localhost:9741/", "http://localhost:9741/v1"),
+            ("http://127.0.0.1:19741/v1", "http://127.0.0.1:19741/v1"),
+        ] {
+            unsafe { std::env::set_var("SOVEREIGN_DAEMON_URL", knob) };
+            assert_eq!(
+                daemon_v1_base(),
+                want,
+                "a daemon base of `{knob}` must yield `{want}` — appending an endpoint to the \
+                 bare root is the 404 that cost `snapshot restore` its probe"
+            );
+        }
+        unsafe { std::env::remove_var("SOVEREIGN_DAEMON_URL") };
     }
 
     #[test]
