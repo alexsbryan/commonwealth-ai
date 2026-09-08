@@ -1,0 +1,6 @@
+preflight rc=0
+serve rc=0
+pull rc=0
+acceptance rc=1
+named-model rc=0
+DONE rc=1

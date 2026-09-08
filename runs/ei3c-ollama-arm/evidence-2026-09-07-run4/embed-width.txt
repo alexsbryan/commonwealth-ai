@@ -1,0 +1,4 @@
+qwen3-embedding:0.6b: 1024-d
+models listed, in the order corpus-mcp sees them (it takes the FIRST when --embed-model is absent):
+    qwen3:0.6b
+    qwen3-embedding:0.6b

@@ -1,0 +1,10 @@
+acceptance: recipe new -> wrote my-coins.toml from the numismatics template
+acceptance: recipe new -> refuses to overwrite, and did not touch the file
+acceptance: discovery -> the 'ollama' rung answered first and the ladder named it 
+acceptance: discovery -> the no-endpoint-anywhere arm is COULD-NOT-JUDGE on this host (ARCH §18.2): a live rung short-circuits it, and the ladder's ports are compiled in, so only a machine with nothing on :11434 or :8080 can judge it.
+acceptance: discovery -> a named --base-url is refused, never substituted
+acceptance: ollama -> reachable at http://127.0.0.1:11434/v1
+corpus-mcp: endpoint candidate --base-url http://127.0.0.1:11434/v1 — 2 model(s) listed, first `qwen3:0.6b`
+corpus-mcp: host http://127.0.0.1:11434: baseline OpenAI-compatible path — http://127.0.0.1:11434/oicp/v1/capabilities returned 404 Not Found
+Error: POST http://127.0.0.1:11434/v1/embeddings returned 501 Not Implemented: {"error":{"message":"This server does not support embeddings. Start it with `--embeddings`","type":"api_error","param":null,"code":null}}
+acceptance: FAIL — corpus-mcp against Ollama exited non-zero
