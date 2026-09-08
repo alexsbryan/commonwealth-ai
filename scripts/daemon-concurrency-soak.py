@@ -34,6 +34,7 @@ happened to the process", out of the daemon's OWN stable log vocabulary plus
 the pidfile, and it is the side the verdict is taken from.
 
 Usage:
+  scripts/daemon-concurrency-soak.py --self-test          # offline, no daemon
   scripts/daemon-concurrency-soak.py --minutes 30
   scripts/daemon-concurrency-soak.py --minutes 2 --inject-death sigkill \\
       --inject-at 20 --expect-death crash          # the negative control
@@ -401,7 +402,17 @@ def os_confirms_memory_kill(pid: int, at_utc: str) -> tuple[bool | None, str]:
                 "--end",
                 hi,
                 "--predicate",
-                f'eventMessage CONTAINS "memorystatus: killing" '
+                # `senderImagePath` pins the KERNEL as the speaker. Without
+                # it this query answers itself: `log show`'s own invocation is
+                # logged with its full argv, that argv contains the literal
+                # "memorystatus: killing" and the pid, and the line lands
+                # inside the window whenever the death was recent — i.e. in
+                # every live run. The offline self-test caught it on its first
+                # execution; it is the §18.1 smell (a guard matching data the
+                # query itself supplies) hiding inside the fix for a different
+                # instance of the same smell.
+                f'senderImagePath CONTAINS "kernel" '
+                f'AND eventMessage CONTAINS "memorystatus: killing" '
                 f'AND eventMessage CONTAINS "{pid}"',
             ],
             capture_output=True,
@@ -413,7 +424,10 @@ def os_confirms_memory_kill(pid: int, at_utc: str) -> tuple[bool | None, str]:
     if r.returncode != 0:
         return None, f"`log show` exited {r.returncode}: {r.stderr.strip()[:200]}"
     for line in r.stdout.splitlines():
-        if "memorystatus: killing" in line and str(pid) in line:
+        # Belt and braces on the same trap: the compact format names the
+        # emitting process, and only `kernel[...]` counts as the kernel
+        # saying it.
+        if "kernel[" in line and "memorystatus: killing" in line and str(pid) in line:
             return True, line.strip()[:400]
     # AN EMPTY ANSWER IS NOT A NEGATIVE ANSWER. macOS `memorystatus` lines are
     # debug-level; whether they survive to the persisted store is a system
@@ -425,13 +439,18 @@ def os_confirms_memory_kill(pid: int, at_utc: str) -> tuple[bool | None, str]:
         [
             "/usr/bin/log", "show", "--style", "compact",
             "--start", lo, "--end", hi,
-            "--predicate", 'eventMessage CONTAINS "memorystatus"',
+            "--predicate",
+            'senderImagePath CONTAINS "kernel" AND eventMessage CONTAINS "memorystatus"',
         ],
         capture_output=True,
         text=True,
         timeout=180,
     )
-    lines = [ln for ln in awake.stdout.splitlines() if "memorystatus" in ln]
+    lines = [
+        ln
+        for ln in awake.stdout.splitlines()
+        if "kernel[" in ln and "memorystatus" in ln
+    ]
     if not lines:
         return None, (
             f"no memorystatus lines AT ALL in {lo}..{hi} (local) — the kernel "
@@ -521,8 +540,90 @@ def inject(kind: str, pid: int | None) -> dict:
         return {"kind": kind, "sent": False, "why": str(e)}
 
 
+def self_test() -> int:
+    """Watch the classifier tell the classes apart, with no daemon involved.
+
+    The `--expect-death` control needs a live daemon and three minutes; this
+    needs neither, so there is no excuse for the closed set going unchecked.
+    Every case is a receipt this daemon actually writes, and the cases that
+    matter are the two that look identical in the log and are not: a jetsam
+    the kernel confirms, and one it does not.
+    """
+    import tempfile
+
+    global log_files
+    real_log_files = log_files
+    real_oracle = globals()["os_confirms_memory_kill"]
+    fails = 0
+
+    def case(name, line, expect, *, self_stopped=False, oracle=(False, "stub")):
+        nonlocal fails
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / "daemon.err"
+            f.write_text(line + "\n" if line else "")
+            globals()["log_files"] = lambda: [f]
+            globals()["os_confirms_memory_kill"] = lambda *_a, **_k: oracle
+            got, _ev, _corr = classify_daemon_death(
+                "2026-01-01T00:00:00", "2030-01-01T00:00:00", self_stopped
+            )
+        ok = got == expect
+        fails += 0 if ok else 1
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}: expected {expect}, got {got}")
+
+    stamp = "2026-09-08T05:38:35.444899Z"
+    jetsam_line = (
+        f"{stamp}  WARN daemon: shutdown signal received — peak RSS suggests "
+        'possible jetsam/OOM trigger signal="SIGTERM" pid=86984 rss_mb=44899'
+    )
+    print("── classifier self-test ────────────────────────────────────")
+    # THE PAIR THIS INSTRUMENT EXISTS FOR. One byte of evidence apart in the
+    # daemon's log — nothing — and opposite verdicts, because the kernel is
+    # asked and the daemon is not believed.
+    case("jetsam, kernel CONFIRMS", jetsam_line, DEATH_JETSAM,
+         oracle=(True, "memorystatus: killing_specific_process pid 86984"))
+    case("jetsam, kernel DENIES", jetsam_line, DEATH_SIGTERM_UNATTRIBUTED,
+         oracle=(False, "no kill of pid 86984"))
+    case("jetsam, kernel HAS NO COVERAGE", jetsam_line, DEATH_SIGTERM_UNATTRIBUTED,
+         oracle=(None, "no memorystatus lines at all"))
+    case("this run pulled the trigger", jetsam_line, DEATH_SELF_STOP,
+         self_stopped=True)
+    case("the daemon's own ceiling", f"{stamp}  WARN memory-watch: HARD limit "
+         "breached — initiating graceful restart", DEATH_RSS_HARD)
+    case("the box ran out", f"{stamp}  WARN memory-watch: HOST HEADROOM below "
+         "floor — initiating graceful", DEATH_HOST_HEADROOM)
+    case("phantom-Running", f"{stamp}  WARN listener-watch: client listener "
+         "LOST (phantom-Running) — initiating", DEATH_LISTENER_LOST)
+    case("an ordinary stop", f'{stamp}  INFO daemon: shutdown signal received '
+         'signal="SIGTERM" pid=1 rss_mb=900', DEATH_SIGNAL)
+    case("nothing happened", "", None)
+
+    globals()["log_files"] = real_log_files
+    globals()["os_confirms_memory_kill"] = real_oracle
+
+    # And the ORACLE itself, unstubbed: a pid that cannot exist must come back
+    # unconfirmed, with a detail saying whether it was even watching. An
+    # oracle that answers "no" the same way whether it looked or not is not an
+    # oracle (ARCH §18.3).
+    confirmed, detail = os_confirms_memory_kill(
+        4194303, datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    )
+    ok = confirmed is not True and ("memorystatus" in detail or "no OS" in detail)
+    fails += 0 if ok else 1
+    print(f"  {'PASS' if ok else 'FAIL'}  live oracle on an impossible pid: "
+          f"confirmed={confirmed} — {detail[:90]}")
+
+    print()
+    print("── SELF-TEST: " + ("PASS" if not fails else f"FAIL ({fails})"))
+    return 1 if fails else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--self-test",
+        action="store_true",
+        help="check the death classes are told apart, offline, with no daemon",
+    )
     ap.add_argument("--minutes", type=float, default=30.0)
     ap.add_argument("--corpus", default="sep")
     ap.add_argument(
@@ -543,6 +644,15 @@ def main() -> int:
         "a quota: once the subject is gone there is nothing left to measure",
     )
     ap.add_argument("--inject-death", choices=["sigkill", "sigterm"])
+    ap.add_argument(
+        "--no-restore",
+        action="store_true",
+        help="leave the daemon down after an injected death. The default is to "
+        "bring it back: launchd here declares KeepAlive {SuccessfulExit: false} "
+        "and did NOT relaunch after an injected SIGKILL, so a control that does "
+        "not restore leaves the operator's daemon dead — and a negative control "
+        "nobody dares schedule is one that never runs",
+    )
     ap.add_argument("--inject-at", type=float, default=20.0, help="seconds in")
     ap.add_argument(
         "--expect-death",
@@ -551,6 +661,9 @@ def main() -> int:
         "detected. Without it, any death is a failure",
     )
     a = ap.parse_args()
+
+    if a.self_test:
+        return self_test()
 
     if not CLI.exists():
         print(f"could-not-judge: missing {CLI} — build it first", file=sys.stderr)
@@ -646,6 +759,31 @@ def main() -> int:
     hi = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     elapsed = time.monotonic() - t0
 
+    # Put back what the control broke, BEFORE the verdict is rendered, so a
+    # scheduled control never hands the box back without a daemon. Only ever
+    # after a death this run caused: a daemon that died on its own is
+    # evidence, and restarting it would destroy the state the next reader
+    # needs. Reported in the summary either way.
+    # Read BEFORE any restore. `daemon_up_at_end` answers "did anything bring
+    # it back on its own", and a restore this script performed would answer
+    # yes to a question nobody asked.
+    up_at_end = alive(read_pid())
+    restored: bool | None = None
+    if injected and injected.get("sent") and not a.no_restore:
+        subprocess.run(
+            [str(CLI), "daemon", "start"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=os.environ | {"SOVEREIGN_NO_STALE_WARN": "1"},
+        )
+        for _ in range(30):
+            if port_serving():
+                break
+            time.sleep(5)
+        restored = bool(port_serving()) and alive(read_pid())
+        print(f"[control] daemon restored: {restored}", flush=True)
+
     log_class, evidence, corroboration = classify_daemon_death(
         lo, hi, self_stopped=bool(injected and injected.get("sent"))
     )
@@ -709,8 +847,9 @@ def main() -> int:
         # daemon that dies and returns in 90 s is a latency event, one that
         # dies and stays down is an outage, and a verdict that says only
         # "died" cannot tell an operator which they have.
-        "daemon_up_at_end": alive(read_pid()),
+        "daemon_up_at_end": up_at_end,
         "ended_early_on_death": tail_left is not None,
+        "daemon_restored_after_injection": restored,
         "daemon_peak_rss_mb": peak_rss_mb,
         "daemon_rss_samples": len(watch.rss_samples),
         "load1_median": statistics.median(loads) if loads else None,
