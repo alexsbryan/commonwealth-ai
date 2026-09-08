@@ -240,16 +240,21 @@ pub fn read_snapshot_mark(payload: &Payload) -> Option<u64> {
 
 /// Fold one namespace's admitted ops into the rows a store should hold.
 ///
-/// Per key, the act with the greatest `(t, actor, id)` among the admitted,
+/// Per key, the act with the greatest `(t, actor, seq)` among the admitted,
 /// non-voided ops of this shape wins. All three terms are needed and all
 /// three are the same on every node:
 ///
 /// - `t` is last-write-wins, the rule `MeshStore` has always used.
-/// - `actor` then `id` break a tie. Two nodes writing one key in one second
+/// - `actor` then `seq` break a tie. Two nodes writing one key in one second
 ///   used to DIVERGE — `upsert_if_newer` keeps the incumbent, so each node
 ///   kept whichever value it saw first (pinned as a known limitation by
 ///   `merge_entry_equal_timestamp_keeps_incumbent`). On the rail there is no
 ///   arrival order to depend on, and the tie-break is total.
+/// - `seq` is the last term and not the op id, because ONE actor writing a
+///   key twice inside a second is the common case (a claim bumped, a model
+///   catalogue republished) and `seq` is that actor's program order, while
+///   the id is a content hash that put the two in an arbitrary order — pinned
+///   by `two_writes_by_one_actor_in_one_second_fold_in_program_order`.
 ///
 /// `admission.applied()` is the ONE definition of "surviving" (voided ops
 /// out, seals out); this fold never re-derives it. What it adds on top is the
@@ -281,7 +286,7 @@ pub fn read_snapshot_mark(payload: &Payload) -> Option<u64> {
 pub fn project(admission: &Admission) -> Projection {
     // (t, actor, op id) -> the winning act's value. BTreeMap so `rows` comes
     // out key-ordered on every node without a second sort.
-    let mut best: BTreeMap<String, (u64, String, String, Option<Bytes>)> = BTreeMap::new();
+    let mut best: BTreeMap<String, (u64, String, u64, Option<Bytes>)> = BTreeMap::new();
     let mut unreadable = 0usize;
 
     // Only actors admission gave a floor — an actor that has never sealed makes
@@ -298,7 +303,7 @@ pub fn project(admission: &Admission) -> Projection {
     // CLOSED — the mark below — also land in `marked`. Two collections rather
     // than a flag on one, because they answer different questions: what the
     // actor's post-floor history says, and whether that history is all of it.
-    let mut live: BTreeMap<&str, BTreeMap<String, (u64, String, bool)>> = admission
+    let mut live: BTreeMap<&str, BTreeMap<String, (u64, u64, bool)>> = admission
         .floors
         .keys()
         .map(|a| (a.as_str(), BTreeMap::new()))
@@ -354,7 +359,6 @@ pub fn project(admission: &Admission) -> Projection {
             );
             continue;
         };
-        let id = op.id.as_str();
         if floor.is_some() {
             // This actor's own post-floor history — everything below the floor
             // took the `continue` above — folded on its own. That is the set
@@ -364,20 +368,20 @@ pub fn project(admission: &Admission) -> Projection {
                 .expect("a floor means an entry");
             let wins = match keys.get(&kv.key) {
                 None => true,
-                Some((t, held_id, _)) => (kv.t, id) > (*t, held_id.as_str()),
+                Some((t, held_seq, _)) => (kv.t, op.seq) > (*t, *held_seq),
             };
             if wins {
-                keys.insert(kv.key.clone(), (kv.t, id.to_string(), kv.value.is_some()));
+                keys.insert(kv.key.clone(), (kv.t, op.seq, kv.value.is_some()));
             }
         }
         let wins = match best.get(&kv.key) {
             None => true,
-            Some((t, actor, held_id, _)) => {
-                (kv.t, op.actor.as_str(), id) > (*t, actor.as_str(), held_id.as_str())
+            Some((t, actor, held_seq, _)) => {
+                (kv.t, op.actor.as_str(), op.seq) > (*t, actor.as_str(), *held_seq)
             }
         };
         if wins {
-            best.insert(kv.key, (kv.t, op.actor.clone(), id.to_string(), kv.value));
+            best.insert(kv.key, (kv.t, op.actor.clone(), op.seq, kv.value));
         } else {
             tracing::debug!(
                 key = %kv.key,
@@ -667,6 +671,35 @@ mod tests {
         );
         assert_eq!(forwards.rows.len(), 1);
         assert!(forwards.rows[0].value.is_some());
+    }
+
+    /// One actor, one key, two writes in one second: the later `seq` wins on
+    /// every node. The old last term was the op id, a content hash — so the
+    /// pair of values below is CHOSEN so that the earlier write's id sorts
+    /// higher, which is exactly the case the id rule got backwards.
+    #[test]
+    fn two_writes_by_one_actor_in_one_second_fold_in_program_order() {
+        let alex = key(1);
+        let mut picked = None;
+        for n in 0..64u8 {
+            let first = signed(&alex, 100, 0, write("k", Some(&[b'a', n]), 777));
+            let second = signed(&alex, 100, 1, write("k", Some(&[b'b', n]), 777));
+            if first.id.as_str() > second.id.as_str() {
+                picked = Some((first, second, vec![b'b', n]));
+                break;
+            }
+        }
+        let (first, second, expected) = picked.expect("a value pair whose ids sort against seq");
+        let p = project(&admitted(&[first.clone(), second.clone()]));
+        assert_eq!(p.rows.len(), 1);
+        assert_eq!(
+            p.rows[0].value.as_deref(),
+            Some(&expected[..]),
+            "the second write in program order must win: {:?}",
+            p.rows[0]
+        );
+        let reversed = project(&admitted(&[second, first]));
+        assert_eq!(p, reversed, "arrival order must not matter");
     }
 
     /// A correction voids what it names, and `applied()` is the ONE definition

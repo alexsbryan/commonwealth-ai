@@ -832,7 +832,12 @@ mod tests {
     /// the whole combined value rather than a delta, because the fold is
     /// last-write-wins over whole values.
     #[test]
-    fn append_within_one_second_is_lost_and_queues_nothing() {
+    /// A same-second `append` used to be LOST: `set` stamps `now_secs()`, the
+    /// tie rule refused an equal timestamp, and `append` threw the bool away.
+    /// The store now lets one origin rewrite its own key inside a second, so
+    /// the appended value lands and the WHOLE combined value is queued.
+    #[test]
+    fn append_within_one_second_lands_and_queues_the_whole_value() {
         let store = MeshStore::in_memory().unwrap();
         store
             .set("app", "log", Bytes::from("one"), node(1))
@@ -842,33 +847,46 @@ mod tests {
             .unwrap();
         assert_eq!(
             store.get("app", "log").unwrap().unwrap().value.as_ref(),
-            b"one",
-            "DEFECT: the appended value was dropped, and `append` returned Ok"
+            b"one\ntwo"
         );
-        assert_eq!(store.outbox_len().unwrap(), 1, "only the `set` is queued");
+        assert_eq!(store.outbox_len().unwrap(), 2, "both writes are queued");
+    }
 
-        // What it does when the clock HAS moved: the whole combined value,
-        // one act. A fresh store, planted at second 1 through `merge_entry`,
-        // so the test does not have to sleep to get a moved clock.
+    /// The tie rule, both shapes: the SAME origin rewriting a key in the same
+    /// second wins (program order); a DIFFERENT origin at the same timestamp
+    /// does not (the incumbent keeps, deterministically — see
+    /// `merge_entry_equal_timestamp_keeps_incumbent`).
+    #[test]
+    fn a_same_second_rewrite_by_the_same_origin_wins() {
         let store = MeshStore::in_memory().unwrap();
-        store
-            .merge_entry(StoreEntry {
-                app_id: "app".into(),
-                key: "log".into(),
-                value: Bytes::from("one"),
-                timestamp: 1,
-                origin: node(1),
-            })
-            .unwrap();
-        store
-            .append("app", "log", Bytes::from("two"), node(1))
-            .unwrap();
-        let queued = store.outbox_take(100).unwrap();
-        assert_eq!(queued.len(), 1, "the append landed, and it is one act");
+        assert!(store
+            .set("app", "k", Bytes::from("first"), node(1))
+            .unwrap());
+        assert!(
+            store
+                .set("app", "k", Bytes::from("second"), node(1))
+                .unwrap(),
+            "the daemon's own second write in one second was being dropped"
+        );
         assert_eq!(
-            queued[0].value.as_deref(),
-            Some(&b"one\ntwo"[..]),
-            "the rail carries the whole value, not a delta"
+            store.get("app", "k").unwrap().unwrap().value.as_ref(),
+            b"second"
+        );
+        let ts = store.get("app", "k").unwrap().unwrap().timestamp;
+        let rival = StoreEntry {
+            app_id: "app".into(),
+            key: "k".into(),
+            value: Bytes::from("rival"),
+            timestamp: ts,
+            origin: node(2),
+        };
+        assert!(
+            !store.merge_entry(rival).unwrap(),
+            "another origin at the same second is refused"
+        );
+        assert_eq!(
+            store.get("app", "k").unwrap().unwrap().value.as_ref(),
+            b"second"
         );
     }
 
