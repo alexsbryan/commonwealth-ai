@@ -84,6 +84,18 @@ try:
 except Exception as ex:
     print("   edges.json:", ex)
 PYEOF
+  # ALREADY DONE is a legitimate outcome and must not be re-run. A second
+  # pass would `cp -a` the REBUILT files over the pre-ei5c ones and destroy the
+  # restore point this backup exists to be — the migration is idempotent, the
+  # backup is not. Keyed on the backup's existence rather than on the markers,
+  # because the markers being current is exactly what a second pass produces.
+  if [[ -d "$bak" ]]; then
+    echo "-- ALREADY DONE: $bak exists, so this corpus was rebuilt under this"
+    echo "   branch already. Skipping — re-running would copy the REBUILT files"
+    echo "   over the pre-ei5c ones and there would be nothing to restore."
+    echo "   To redo deliberately: mv \"$bak\"/* \"$d\"/ && rmdir \"$bak\""
+    return 0
+  fi
   mkdir -p "$bak" || return 1
   for f in atoms.lance edges.csr atoms_ann.lance atoms_ann.population edges.csr.derivation; do
     [[ -e "$d/$f" ]] && { cp -a "$d/$f" "$bak/" || return 1; }
@@ -116,7 +128,15 @@ leg 0-reseed-bk reseed
 # a limit-10 run against a limit-30 baseline read a 21-fact regression that
 # did not exist). `--prod-pipeline` is the only mode that reaches
 # `apply_atlas_grounding`; the run announces its mode and leg-a greps it back.
-sep_run() { local ix=$1 tag="$OUT/a-sep-run$ix"
+sep_run() {
+  # THREE separate statements, and that is the whole fix. `local ix=$1
+  # tag="...$ix"` expands every WORD of the `local` command BEFORE any of its
+  # assignments run, so `$ix` is unbound — silent under default bash, fatal
+  # under `set -u`, which this script sets. It cost a launch: ten legs
+  # returned rc=1 inside one second and the shape read exactly like a dead
+  # daemon.
+  local ix; ix=$1
+  local tag; tag="$OUT/a-sep-run$ix"
   RUST_LOG="warn,retrieval_audit=debug" \
   "$CLI" eval run --bank sovereign/bench/sep/questions.toml \
     --prod-pipeline --isolate --limit 30 --format json --output "${tag}.json" \
@@ -137,8 +157,12 @@ leg a-sep-run2 sep_run 2
 # embedded, a difference of exactly the 2,004 Summary atoms). So these arms are
 # byte-identical to the ones ei-7a measured at OFF 47/66 / ON 40,39/66, and the
 # only thing that moved between then and now is the walk.
-subset_run() { local arm=$1 ix=$2 corpus=$3 tag="$OUT/b-${arm}-run${ix}"
-  local bank="$OUT/questions-$corpus.toml"
+subset_run() {
+  local arm; arm=$1
+  local ix; ix=$2
+  local corpus; corpus=$3
+  local tag; tag="$OUT/b-${arm}-run${ix}"
+  local bank; bank="$OUT/questions-$corpus.toml"
   # DERIVED from the control bank with only `corpus` swapped — a checked-in
   # copy would be a second decider for the question set (ei-7a's rule, kept).
   sed "s/^corpus = \"sep\"/corpus = \"$corpus\"/" sovereign/bench/sep/questions.toml > "$bank"
@@ -160,7 +184,9 @@ leg b-off-run2 subset_run off 2 raptor-subset-off
 # ── leg c: EI1 — the thematic synth lane, n=3, on the 35B ──────────────────
 # Same flags as the floor (16f121a46: `--synth --isolate`, no --limit). n=3
 # because the floor is n=2 and the bar is read against the synth band.
-ei1_run() { local ix=$1 tag="$OUT/c-ei1-run$ix"
+ei1_run() {
+  local ix; ix=$1
+  local tag; tag="$OUT/c-ei1-run$ix"
   RUST_LOG="warn,retrieval_audit=debug" \
   "$CLI" eval run --bank sovereign/bench/literary/thematic-bk-book-1.toml \
     --synth --isolate --format json --output "${tag}.json" > "${tag}.log" 2>&1
