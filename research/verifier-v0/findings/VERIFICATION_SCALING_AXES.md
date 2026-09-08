@@ -304,3 +304,108 @@ binary probes in the register the checkpoint was trained on and that we have
 validated at 4B; G asks a 4B for a calibrated 20-way prior that the paper
 never tested below 10B and that our checkpoint has never seen. G stays worth
 doing, as a training target rather than a knob.
+
+---
+
+## 8. Addendum — M, the independent-verifier axis: measured, and dead on this task (2026-09-08)
+
+**Added by a session asking a different question and arriving here.** The mesh
+hypothesis under examination was: *groundedness scales with the number of
+independent checks, so a mesh gets more grounded as it grows.* C, K and G are
+all knobs one node turns alone. **M — how many independent judges are
+combined — is the only axis a second node can buy**, and it is the axis this
+doc did not name.
+
+Pre-registration, prediction and kill bars are in the header of
+`scripts/ensemble_axis.py`, written before any ensemble number existed.
+**The prediction was +0.02 AUC. The measurement is −0.035, CI entirely below
+zero.** Every combiner tested loses to the best single judge, on both metrics,
+without exception.
+
+### Instrument first (§18.4)
+
+`runs/headroom/` already holds per-item scores for three judges on the same
+joined control bank, so M costs **zero inference** — it is a join. All three
+single-judge numbers reproduce Addendum 4/5 exactly before anything is
+combined: incumbent 0.6404 (published 0.640), rung-1000 0.8479 (0.848),
+vanilla-4b 0.7634 (0.763); journal-strong FA 34.0 / 18.6 / 20.6%, all three on
+the nose. `our_margin`, not `our_max_p`, is the doc's score variable.
+(Noted, not averaged: the incumbent column differs on 7/222 rows between the
+two run files.)
+
+### Result — n=222 (144 grounded / 78 real fabrications), joined evidence
+
+Baseline: rung-1000 alone @ tau 0.5 — **catch 80.8% @ FA 27.8%**, AUC 0.8479.
+
+| members | rule | AUC | ΔAUC | catch@matched-FA | Δcatch |
+|---|---|---|---|---|---|
+| rung+incumbent | mean | 0.7985 | −0.0495 | 78.2% | −2.6pt |
+| rung+vanilla | mean | 0.8133 | −0.0346 | 73.1% | −7.7pt |
+| all three | mean | 0.8024 | −0.0456 | 73.1% | −7.7pt |
+| all three | min | 0.7323 | −0.1156 | 60.3% | −20.5pt |
+| all three | max | 0.7849 | −0.0630 | 70.5% | −10.3pt |
+
+Twelve cells (4 combos × 3 parameter-free rules); all twelve negative. Best on
+catch is rung+incumbent[mean] at −2.6pt, bootstrap 95% CI [−15.4, +6.4]pt —
+**killed by its own bar.** The AUC delta for rung+vanilla is tighter and
+unambiguous: −0.0346, CI [−0.0505, −0.0201].
+
+### Why — the errors are NESTED, not complementary
+
+The oracle bound (an item counts caught if *any* judge flags it at its own
+matched-FA tau — a ceiling, not a method):
+
+| set | catch | vs rung alone |
+|---|---|---|
+| rung-1000 alone | 61/78 = 78.2% | — |
+| vanilla-4b alone | 52/78 = 66.7% | — |
+| **oracle union(rung, vanilla)** | 62/78 = 79.5% | **−1.3pt** |
+| oracle union(all three) | 67/78 = 85.9% | +5.1pt |
+
+**Vanilla-4b adds exactly one item rung-1000 misses.** That is not a combiner
+failure — there is nothing to combine. Both are Qwen3.5-4B; rung-1000 is a
+LoRA over the other's base. **Same lineage is not independence.** Different
+weights over one base model produce nested error sets, and averaging a strong
+judge with a nested weaker one can only pull correct scores toward wrong ones.
+
+The incumbent — the only genuinely different family in the panel — is the
+*only* source of complementary signal (+5.1pt oracle, 6 items rung misses).
+And it is too weak overall (46.2% catch) for any parameter-free rule to import
+those 6 without its other 42 misses. Extracting them needs per-item trust
+weighting, which needs a labelled set to fit; on n=222 that is fitting the
+instrument, and it is not done here.
+
+### What this changes
+
+- **"More nodes ⇒ more grounded" is refuted for the absolute-thresholding
+  gate.** Not weakened — every cell negative, the strongest CI excluding zero.
+- **The membership claim fails in its strong form.** "Any independent node
+  contributes" is false: adding the collapsed incumbent to rung-1000 costs
+  0.05 AUC. A mesh verification fan needs a **competence floor and a lineage
+  requirement**, not a node count.
+- **Independence is a property of model lineage, not of process.** This is the
+  transferable finding. A diverse panel is untested and remains the real test
+  of the thesis; a panel of one family is now measured and it is inert.
+- The E2 (C=4) recommendation is untouched and stands. Decomposing one judge's
+  question is not the same move as adding a second judge, and this result is
+  evidence *for* preferring it: the within-judge axis has headroom the
+  across-judge axis does not.
+
+### Scope — what this does NOT license
+
+- **n=222, 78 fabrications.** The catch-delta CI is ±11pt; this bank sees large
+  effects, not small ones. The AUC CIs are tight (±0.015) because AUC uses all
+  pairs.
+- **Two of three judges share a base model,** which is the finding but also the
+  limit: a genuinely diverse panel (different families) was never run.
+- **The incumbent sits in a known-collapsed regime** on joined evidence
+  (Addendum 4: control FA 88.9%). Its weakness is partly an artifact, and this
+  is the most likely way the result is too pessimistic.
+- **This is thresholding.** §2 already says ranking is the regime where small
+  verifiers ensemble well, and best-of-N peer answer selection is filed to
+  `drb1-race`. **M is dead for the gate; it is untested and still open for
+  answer selection**, which is where a mesh would actually rank candidates.
+
+Reproduce: `scripts/ensemble_axis.py` (AUC + bootstrap + miss overlap) and
+`scripts/ensemble_axis_op.py` (combiners + operating point + oracle bound).
+Both refuse to report if the single-judge numbers stop reproducing.
