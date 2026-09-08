@@ -64,6 +64,7 @@ use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use super::ann_store::AnnSeedTable;
 use super::context::{AtlasGraph, AtomView, EdgeView, EvidenceRef};
 use super::evidence_site::EvidenceSite;
+use super::inventory::AtlasInventory;
 
 /// What the grounding walk needs from a store of ideas.
 ///
@@ -123,6 +124,14 @@ pub trait AtlasProvider: Send + Sync {
     /// What this corpus DECLARED — `Some` only when it declared types, so the
     /// `Option` has already answered `has_declarations()` for every consumer.
     fn ontology(&self) -> Option<&OntologyPolicies>;
+
+    /// What this atlas carries — atoms per kind, entities per type, edges per
+    /// kind — for the row-admissibility check ([`super::inventory`]). Counted
+    /// from what the store will actually walk, so the check and the walk
+    /// cannot disagree about what is there. Whether the corpus DECLARED types
+    /// is the scope's question, answered once by [`AtlasInventory::of`] from
+    /// [`Self::ontology`]; a store reports counts only.
+    fn inventory(&self) -> AtlasInventory;
 
     // ── provided ────────────────────────────────────────────────────────
     //
@@ -216,6 +225,10 @@ impl AtlasProvider for AtlasGraph {
 
     fn ontology(&self) -> Option<&OntologyPolicies> {
         AtlasGraph::ontology(self)
+    }
+
+    fn inventory(&self) -> AtlasInventory {
+        AtlasGraph::inventory(self).clone()
     }
 
     fn summary_corpus_dir(&self) -> Option<std::path::PathBuf> {
@@ -406,6 +419,9 @@ mod tests {
         }
         fn ontology(&self) -> Option<&OntologyPolicies> {
             self.ontology.as_ref()
+        }
+        fn inventory(&self) -> AtlasInventory {
+            AtlasInventory::from_records(std::iter::once(&self.record), &Default::default())
         }
     }
 

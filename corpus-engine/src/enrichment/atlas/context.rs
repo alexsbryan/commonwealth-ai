@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::evidence_site::{ChunkSelector, EvidenceSite};
+use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::store::LancePreload;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
@@ -298,6 +299,11 @@ impl AtlasGraph {
     /// cosine seed in [`atlas_navigate`].
     pub fn has_ann_seed_table(&self) -> bool {
         self.ann.is_some()
+    }
+
+    /// The census the store took at open — see [`AtlasInventory`].
+    pub fn inventory(&self) -> &AtlasInventory {
+        self.preload.inventory()
     }
 
     /// Number of atoms in the graph.

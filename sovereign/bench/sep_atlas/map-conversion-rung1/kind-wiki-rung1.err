@@ -1,0 +1,12 @@
+atlas kind: map = pre-registered defaults (`wikipedia` has no atlas/ontology.json)
+atlas kind: opened the wiki-class store for `wikipedia` to take its census (12701 ms)
+atlas kind: census over 3 atlas(es): atoms entity:52194 event:14; edges involves:2286375
+atlas kind: row fit: thematic inert:seeds, trajectory inert:edges, tension inert:seeds, enumeration inert:seeds, lookup fits
+atlas kind: 5 classifiable kind(s): thematic(4 exemplars), trajectory(4 exemplars), tension(4 exemplars), enumeration(4 exemplars), lookup(4 exemplars)
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+atlas kind: gates min_sim=0.340 min_margin=0.050 (SOVEREIGN_QUESTION_KIND_MIN_SIM / _MIN_MARGIN)
+atlas kind: inter-centroid cosine 0.641 (thematic~lookup) .. 0.411 (tension~lookup), mean 0.522
+atlas kind: rows that run on this corpus: unfiltered 4; 4 classified winner(s) inert
+atlas kind: 4/20 classified, 16 abstained (abstain:both 11, abstain:sim 5); classified kinds: tension 4

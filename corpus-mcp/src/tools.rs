@@ -35,7 +35,7 @@ use anyhow::{anyhow, bail, Result};
 use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
-use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasProvider};
+use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
 use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
 use serde_json::{json, Value};
@@ -438,8 +438,15 @@ impl Server {
         let graphs: Vec<&dyn AtlasProvider> =
             targets.iter().filter_map(|t| t.walk.as_deref()).collect();
         let (policy, policy_source) = ground::navigation_policy_for(&graphs);
-        let selection =
-            ground::select_walk(&embedding, &policy, policy_source, Some(&self.embed)).await;
+        let inventory = AtlasInventory::of(&graphs);
+        let selection = ground::select_walk(
+            &embedding,
+            &policy,
+            policy_source,
+            &inventory,
+            Some(&self.embed),
+        )
+        .await;
         // No atom BAG: building one re-embeds every entity per call
         // (`context_loader::load_atlas_context`), which is minutes on a large
         // atlas and is not what a per-question host can pay. The walk seeds

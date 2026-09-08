@@ -1538,7 +1538,7 @@ means one thing.
   `atlas/pattern_findings.json` from the Gaps step. The resolve step writes
   `atlas/ontology.json`
   (`writer::write_atlas_ontology`) so the atlas dir records what it was
-  extracted under, and `_summary.json` (SCHEMA_VERSION 5) carries an
+  extracted under, and `_summary.json` (SCHEMA_VERSION 6) carries an
   `OntologySummary` read back from it plus an `AnnSummary` — `embedded_atoms`,
   the row count of `atoms_ann.lance` (ei-3-index). `ann: None` means there is
   NO seed table and the corpus cannot ground, which is never rendered as a
@@ -1635,8 +1635,11 @@ means one thing.
   `atlas/ontology.json` (`writer::write_atlas_ontology`) for every pipeline
   so the atlas dir records what it was extracted under (see §3 above for the
   built-in maps and the navigation section), and `_summary.json`
-  (SCHEMA_VERSION 5) carries an `OntologySummary` read back from it and an
-  `AnnSummary` with the seed table's row count (ei-3-index).
+  (SCHEMA_VERSION 6) carries an `OntologySummary` read back from it, an
+  `AnnSummary` with the seed table's row count (ei-3-index), and since
+  2026-09-08 `edge_counts` — edges per kind as `edges.csr` holds them, keyed
+  on the CSR's mtime — the on-disk half of the row-admissibility census
+  (`atlas/inventory.rs`).
   **WHICH atoms that seed table holds is the navigation map's decision, not
   the retrieval filter's, since ei-3c (2026-09-04)** (`EPISTEMIC_INDEX.md` §1
   Ideas row, §2.2). It used to seed through `AtlasContextFilter::default()` —
@@ -3230,7 +3233,30 @@ source is four files rather than one — `ground.rs` performs the three steps,
 `ground/select.rs` decides which row, `ground/report.rs` holds the ledger, the
 degradations, the map section and the result, `ground/tests.rs` the tests —
 split along the seam the module's own doc draws, with every
-`atlas::ground::…` path unchanged by re-export (ARCH §3.1, §10.6). What stays
+`atlas::ground::…` path unchanged by re-export (ARCH §3.1, §10.6). **A row
+is checked against what the atlases CARRY before it runs, since order
+epistemic-index-map-conversion rung 1 (2026-09-08)**: `AtlasProvider::
+inventory()` is the census every store takes at open (atoms per kind,
+entities per type, edges per kind as the CSR holds them — ONE tally,
+`AtlasInventory::from_records`), `AtlasInventory::of(graphs)` unions it over
+the scope, and `select_walk` runs `admit_winner` on the classified winner
+(`atlas/inventory.rs`, `ground/select.rs`). A row is admissible iff some
+graph carries one of its seed kinds (an `Entity(concept)` seed needs a
+`concept`; a `declared` seed needs declared types) and, if it walks, one of
+its edge kinds. An inert winner falls to the next kind in race order whose
+row fits and whose sim clears the classifier's own floor, else to the
+unfiltered row — BY NAME: `KindSource::RowInert`,
+`Degradation::RowInert(report)` in the ledger and in `ask`'s text,
+`row_inert=` on the `retrieval_audit` ledger line. Measured before it
+existed: wikipedia's four classified questions all ran the tension row with
+zero seeds (`seed_kinds_unseen=[Claim, Position]`); wikipedia carries
+Entities typed `article` and Involves edges only, so every filtered row but
+lookup is inert there, and those four run the unfiltered row now because
+their runner-ups sit below the floor. `svrn atlas kind --corpus <id>` reports
+the same verdict per question through the same decider — from
+`_summary.json`'s census for atom-class stores (1,771 SEP siblings in 10 s),
+by opening a wiki-class store (12.7 s). `seed_kinds_unseen` stays as the
+per-walk observation for a row that WAS admitted. What stays
 here is what only a `Runtime` can do: choose the atlases in scope (through
 `ground::candidate_atlas_ids`, the one home of the chunk → atlas id
 derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
@@ -7893,10 +7919,11 @@ doc has drawn since ei-4-walk — three steps, and step 1 is separable in fact:
 
 | file | lines | question it answers |
 |---|---|---|
-| `corpus-engine/src/enrichment/atlas/ground.rs` | 756 | the walk: seed, expand, aggregate |
-| `corpus-engine/src/enrichment/atlas/ground/select.rs` | 143 | which row, from whose map, on what evidence |
-| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 349 | what the walk says about itself — ledger, degradations, map, result |
-| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 710 | the tests |
+| `corpus-engine/src/enrichment/atlas/ground.rs` | 785 | the walk: seed, expand, aggregate |
+| `corpus-engine/src/enrichment/atlas/ground/select.rs` | 374 | which row, from whose map, on what evidence — and, since 2026-09-08, whether that row can fire at all (`admit_winner`) |
+| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 367 | what the walk says about itself — ledger, degradations, map, result |
+| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 840 | the tests |
+| `corpus-engine/src/enrichment/atlas/inventory.rs` | 416 | what the atlases in scope CARRY, and which rows fit it |
 
 Two more small files landed beside `store.rs` for the same reason rather than
 growing it: `store/configures.rs` (154, the `Configures` derivation and its

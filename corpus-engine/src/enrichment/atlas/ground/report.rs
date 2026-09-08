@@ -26,7 +26,7 @@ use super::super::context::ChunkRequest;
 use super::super::edges::EdgeType;
 use super::super::evidence_site::EvidenceSite;
 use super::super::provider::AtlasProvider;
-use super::{WalkSelection, MAP_NODE_CAP};
+use super::{RowInertReport, WalkSelection, MAP_NODE_CAP};
 use corpus_engine_vocab::ontology::QuestionKind;
 
 /// Which map decided the walk — recorded because a mixed-corpus query has
@@ -198,6 +198,11 @@ pub enum Degradation {
     NoAtomBag,
     /// The question could not be classified; the walk ran the unfiltered row.
     Unclassified(KindSource),
+    /// The classified row cannot fire on the atlases in scope; the walk ran
+    /// the row the report names instead. Refused BEFORE seeding, from the
+    /// inventory — [`Self::SeedKindsUnseen`] is the per-walk observation
+    /// that remains for a row that was admitted.
+    RowInert(RowInertReport),
     /// The row lists seed kinds that nothing in the seed pool carried.
     SeedKindsUnseen(Vec<AtomType>),
     /// The walk reached atoms but none carried an evidence anchor.
@@ -223,6 +228,7 @@ impl Degradation {
                  edge-kind filter, 2 hops)",
                 src.as_str()
             ),
+            Degradation::RowInert(r) => r.sentence(),
             Degradation::SeedKindsUnseen(kinds) => format!(
                 "the map's row seeds on {}, which nothing in the seed pool carried",
                 kinds

@@ -17,6 +17,7 @@ use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
+use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
 use corpus_engine_vocab::atoms::ChunkRef;
 use corpus_engine_vocab::edges::EdgeProvenance;
@@ -155,6 +156,13 @@ impl AtlasProvider for FixtureAtlas {
     }
     fn ontology(&self) -> Option<&OntologyPolicies> {
         None
+    }
+    fn inventory(&self) -> AtlasInventory {
+        let mut edges = std::collections::BTreeMap::new();
+        for (_, _, k) in &self.edges {
+            *edges.entry(*k).or_insert(0) += 1;
+        }
+        AtlasInventory::from_records(self.atoms.values(), &edges)
     }
 }
 
@@ -658,6 +666,7 @@ async fn no_embedder_means_the_unfiltered_row_named_as_such() {
         &[0.1, 0.2],
         &NavigationPolicy::default(),
         PolicySource::PreRegistered,
+        &AtlasInventory::default(),
         None,
     )
     .await;
@@ -692,11 +701,133 @@ async fn a_map_with_no_exemplars_is_distinguished_from_a_dead_embedder() {
         &[1.0, 0.0],
         &policy,
         PolicySource::PreRegistered,
+        &AtlasInventory::default(),
         Some(&embed),
     )
     .await;
     assert_eq!(sel.kind_source, KindSource::NoClassifier);
     assert_eq!(sel.walk, WalkPolicy::unfiltered());
+}
+
+/// THE FAILING INPUT of order epistemic-index-map-conversion, end to end
+/// through `select_walk`: a question the classifier puts on the tension
+/// row, over a wikipedia-shaped scope (Entities typed `article`, Involves
+/// edges, nothing else). Before the inventory check this selection walked
+/// the tension row with zero seeds (`seed_kinds_unseen=[Claim, Position]
+/// nodes_reached=0`, scratchpad wiki-default.log, 2026-09-08). Now it runs
+/// the lookup row, the only row that fits, and says so by name.
+///
+/// The embedder is a lookup table over the exemplar phrases: tension's
+/// phrases embed to one axis, lookup's to another, the rest to a third, and
+/// the question sits between tension and lookup with tension ahead. The
+/// exemplars are perturbed so the process-wide classifier cache cannot hand
+/// this test a centroid set another test built with another embedder.
+#[tokio::test]
+async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
+    let mut policy = NavigationPolicy::default();
+    for (_, row) in [
+        (QuestionKind::Thematic, &mut policy.thematic),
+        (QuestionKind::Trajectory, &mut policy.trajectory),
+        (QuestionKind::Tension, &mut policy.tension),
+        (QuestionKind::Enumeration, &mut policy.enumeration),
+        (QuestionKind::Lookup, &mut policy.lookup),
+    ] {
+        for e in &mut row.exemplars {
+            e.push_str(" [inert-fallthrough]");
+        }
+    }
+    let tension: Vec<String> = policy.tension.exemplars.clone();
+    let lookup: Vec<String> = policy.lookup.exemplars.clone();
+    let embed: EmbedFn = std::sync::Arc::new(move |text: &str| {
+        let v = if tension.iter().any(|e| e == text) {
+            vec![1.0_f32, 0.0, 0.0]
+        } else if lookup.iter().any(|e| e == text) {
+            vec![0.0, 1.0, 0.0]
+        } else {
+            vec![0.0, 0.0, 1.0]
+        };
+        Box::pin(async move { Ok(v) })
+            as std::pin::Pin<Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>>
+    });
+    // Tension ahead of lookup by a clear margin, both well above the floor.
+    let question = [0.9_f32, 0.5, 0.0];
+
+    // A scope that carries the tension row: the same question walks it.
+    let sep_like = AtlasInventory {
+        atoms: std::collections::BTreeMap::from([(AtomType::Claim, 10), (AtomType::Entity, 5)]),
+        entity_types: std::collections::BTreeMap::from([("concept".to_string(), 5)]),
+        edges: std::collections::BTreeMap::from([(EdgeType::Tension, 3), (EdgeType::Involves, 8)]),
+        declares_types: false,
+    };
+    let sel = select_walk(
+        &question,
+        &policy,
+        PolicySource::PreRegistered,
+        &sep_like,
+        Some(&embed),
+    )
+    .await;
+    assert_eq!(sel.kind, QuestionKind::Tension);
+    assert_eq!(sel.kind_source, KindSource::Classified);
+    assert!(sel.inert.is_none());
+
+    // Wikipedia's scope: the winner is refused and lookup runs, by name.
+    let wiki = AtlasInventory {
+        atoms: std::collections::BTreeMap::from([(AtomType::Entity, 100)]),
+        entity_types: std::collections::BTreeMap::from([("article".to_string(), 100)]),
+        edges: std::collections::BTreeMap::from([(EdgeType::Involves, 400)]),
+        declares_types: false,
+    };
+    let sel = select_walk(
+        &question,
+        &policy,
+        PolicySource::PreRegistered,
+        &wiki,
+        Some(&embed),
+    )
+    .await;
+    assert_eq!(sel.kind, QuestionKind::Lookup);
+    assert_eq!(sel.walk, policy.lookup);
+    assert_eq!(sel.kind_source, KindSource::RowInert);
+    assert!(sel.kind_source.is_degradation());
+    let inert = sel
+        .inert
+        .clone()
+        .expect("an inert selection carries its report");
+    assert_eq!(inert.winner, QuestionKind::Tension);
+    assert_eq!(inert.fell_to, Some(QuestionKind::Lookup));
+    assert_eq!(
+        inert.why.seeds_missing,
+        vec![AtomType::Claim, AtomType::Position]
+    );
+    // The score is the WINNER's, kept so the reader can see what was refused.
+    assert_eq!(sel.kind_score.unwrap().kind, QuestionKind::Tension);
+    assert!(sel.describe().contains("row-inert"));
+    assert!(sel.describe().contains("the walk ran the lookup row"));
+
+    // …and the walk reports it as its own degradation, not as "unclassified".
+    let g = ground("where does it disagree", &question, &[], &[], &sel, 12).await;
+    assert!(g
+        .degradations
+        .iter()
+        .any(|d| matches!(d, Degradation::RowInert(r) if r.fell_to == Some(QuestionKind::Lookup))));
+    assert!(!g
+        .degradations
+        .iter()
+        .any(|d| matches!(d, Degradation::Unclassified(_))));
+
+    // Nothing in scope at all: no row fits, the unfiltered row runs, named.
+    let sel = select_walk(
+        &question,
+        &policy,
+        PolicySource::PreRegistered,
+        &AtlasInventory::default(),
+        Some(&embed),
+    )
+    .await;
+    assert_eq!(sel.walk, WalkPolicy::unfiltered());
+    assert_eq!(sel.kind_source, KindSource::RowInert);
+    assert_eq!(sel.inert.as_ref().unwrap().fell_to, None);
 }
 
 /// No declared navigation anywhere means the pre-registered table, and

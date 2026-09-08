@@ -38,6 +38,8 @@ use serde::{Deserialize, Serialize};
 
 use super::ann_store::{ann_table_mtime_ms, ann_table_present, ann_table_rows};
 use super::atoms::AtomType;
+use super::edges::EdgeType;
+use super::store::{csr_edge_counts, csr_mtime_ms};
 use super::{atoms_content_hash, read_atlas_atoms, AtomEnvelope};
 use crate::enrichment::pipeline::atlas::EnrichmentDepth;
 use tracing::debug;
@@ -61,7 +63,11 @@ const SUMMARY_FILE: &str = "_summary.json";
 // second INPUT to the summary, so it is a second KEY -- a summary computed
 // between the atoms write and the seed write must not stay "current" once the
 // table lands.
-const SCHEMA_VERSION: u32 = 5;
+// v6 (2026-09-08) adds `edge_counts` + `csr_mtime_ms`: edges per kind as the
+// CSR holds them, for the navigation-row admissibility check
+// (`inventory.rs`) and `svrn atlas map-check`. The CSR is a third INPUT, so
+// its mtime is a third KEY, for the reason the seed table's is.
+const SCHEMA_VERSION: u32 = 6;
 
 /// Atlas-level statistics carried in mesh gossip and shown in
 /// `sovereign corpus status` / `sovereign mesh status`.
@@ -129,6 +135,17 @@ pub struct AtlasSummary {
     /// no-coverage summary in place for the life of the atlas. Added in v5.
     #[serde(default)]
     pub ann_mtime_ms: u64,
+    /// Edges per kind in `edges.csr` — the graph the walk follows, so an
+    /// edge to a chunk reference (which has no seat in the CSR) is not
+    /// counted as walkable. Empty when there is no CSR, which
+    /// [`Self::csr_mtime_ms`]` == 0` distinguishes from a CSR with no edges.
+    /// Added in schema v6; read by [`super::inventory::AtlasInventory`].
+    #[serde(default)]
+    pub edge_counts: BTreeMap<EdgeType, u64>,
+    /// `edges.csr` mtime (ms since epoch) when computed; `0` without one.
+    /// The THIRD cache key, beside the atoms file's and the seed table's.
+    #[serde(default)]
+    pub csr_mtime_ms: u64,
 }
 
 /// The ANN seed table's contribution to the summary -- the coverage row
@@ -188,6 +205,8 @@ impl AtlasSummary {
             ontology: None,
             ann: None,
             ann_mtime_ms: 0,
+            edge_counts: BTreeMap::new(),
+            csr_mtime_ms: 0,
         }
     }
 }
@@ -250,6 +269,8 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         ontology: read_ontology_summary(atlas_dir),
         ann: read_ann_summary(atlas_dir),
         ann_mtime_ms: ann_table_mtime_ms(atlas_dir),
+        edge_counts: csr_edge_counts(atlas_dir).unwrap_or_default(),
+        csr_mtime_ms: csr_mtime_ms(atlas_dir),
     })
 }
 
@@ -368,6 +389,7 @@ pub fn read_current_summary(atlas_dir: &Path) -> Option<AtlasSummary> {
     (cached.atoms_mtime_ms == live_mtime_ms
         && cached.atoms_size_bytes == live_size
         && cached.ann_mtime_ms == ann_table_mtime_ms(atlas_dir)
+        && cached.csr_mtime_ms == csr_mtime_ms(atlas_dir)
         && cached.schema_version == SCHEMA_VERSION)
         .then_some(cached)
 }
@@ -423,6 +445,47 @@ mod tests {
             serde_json::to_vec_pretty(&file).unwrap(),
         )
         .unwrap();
+    }
+
+    /// The edge census follows the CSR, and the CSR is a cache key: a
+    /// summary taken before the store lands is stale the moment it does.
+    /// Failing input: drop `csr_mtime_ms` from `read_current_summary`'s key
+    /// and the second read below returns the empty census as current.
+    #[test]
+    fn edge_counts_follow_the_csr_and_key_the_cache() {
+        use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+        let tmp = tempfile::tempdir().unwrap();
+        write_atoms(
+            tmp.path(),
+            &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted],
+        );
+        let before = read_or_compute_summary(tmp.path()).unwrap().unwrap();
+        assert!(before.edge_counts.is_empty());
+        assert_eq!(before.csr_mtime_ms, 0);
+        assert!(read_current_summary(tmp.path()).is_some());
+
+        // The store lands after atoms.json, with one Involves edge.
+        let atoms = read_atlas_atoms(tmp.path()).unwrap().atoms;
+        let edges = vec![Edge {
+            id: EdgeId::from_raw("e1"),
+            edge_type: EdgeType::Involves,
+            source: AtomId::entity(1),
+            target: AtomId::entity(2),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: 1.0,
+            provenance: EdgeProvenance::Derived,
+        }];
+        super::super::store::write_store_blocking(tmp.path(), "c", &atoms, &edges).unwrap();
+        assert!(
+            read_current_summary(tmp.path()).is_none(),
+            "a summary computed before the CSR must not stay current"
+        );
+        let after = read_or_compute_summary(tmp.path()).unwrap().unwrap();
+        assert_eq!(after.edge_counts, BTreeMap::from([(EdgeType::Involves, 1)]));
+        assert!(after.csr_mtime_ms > 0);
+        assert!(read_current_summary(tmp.path()).is_some());
     }
 
     #[test]

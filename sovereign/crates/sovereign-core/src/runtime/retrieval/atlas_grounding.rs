@@ -283,7 +283,9 @@ impl Runtime {
         // tables were built in (see `embed_fn.rs`). Built per call and cheap —
         // `shared_classifier` embeds the exemplars once per process.
         let embed = crate::embed_fn::inference_to_embed_query_fn(Arc::clone(&self.inference));
-        let selection = ground::select_walk(embedding, &policy, policy_source, Some(&embed)).await;
+        let inventory = corpus_engine::enrichment::atlas::AtlasInventory::of(&graph_refs);
+        let selection =
+            ground::select_walk(embedding, &policy, policy_source, &inventory, Some(&embed)).await;
         tracing::debug!(
             target: "retrieval_audit",
             label,

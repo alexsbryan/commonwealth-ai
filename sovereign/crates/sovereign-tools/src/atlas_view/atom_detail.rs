@@ -512,35 +512,8 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
         .collect()
 }
 
-// EdgeType doesn't derive Ord — provide a stable order ourselves.
-trait EdgeTypeOrd {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering;
-}
-
-impl EdgeTypeOrd for EdgeType {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        edge_type_rank(*self).cmp(&edge_type_rank(*other))
-    }
-}
-
-fn edge_type_rank(t: EdgeType) -> u8 {
-    match t {
-        EdgeType::Causes => 0,
-        EdgeType::Transition => 1,
-        EdgeType::Grounds => 2,
-        EdgeType::Tension => 3,
-        EdgeType::Involves => 4,
-        EdgeType::Composes => 5,
-        EdgeType::Configures => 6,
-        EdgeType::Grounding => 7,
-        EdgeType::Framing => 8,
-        EdgeType::Provenance => 9,
-        EdgeType::EvidenceFor => 10,
-        EdgeType::Concedes => 11,
-        EdgeType::OpposesIn => 12,
-        EdgeType::Attaches => 13,
-    }
-}
+// `EdgeType` derives `Ord` since 2026-09-08 (declaration order); the private
+// rank this file carried for sorting is gone with it.
 
 // The three helpers that lived here — `atom_type_of`, `display_name_of` and
 // `scalar_score` — were byte-identical copies of `atom_browse`'s, kept under a

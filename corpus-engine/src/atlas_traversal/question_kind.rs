@@ -82,6 +82,12 @@ pub enum KindSource {
     /// The embedder could not be reached, or its output did not match the
     /// centroid width.
     ClassifierUnavailable,
+    /// A centroid won both gates, but its row cannot fire on the atlases in
+    /// scope — no seed kind or no edge kind carried
+    /// (`atlas::inventory`) — so the walk ran the next admissible row in
+    /// race order, or the unfiltered one. Which, and why, rides on
+    /// `WalkSelection::inert`.
+    RowInert,
 }
 
 impl KindSource {
@@ -94,6 +100,7 @@ impl KindSource {
             KindSource::Abstained => "abstained",
             KindSource::NoClassifier => "no-classifier",
             KindSource::ClassifierUnavailable => "classifier-unavailable",
+            KindSource::RowInert => "row-inert",
         }
     }
 
@@ -103,7 +110,10 @@ impl KindSource {
     pub fn is_degradation(&self) -> bool {
         matches!(
             self,
-            KindSource::Abstained | KindSource::NoClassifier | KindSource::ClassifierUnavailable
+            KindSource::Abstained
+                | KindSource::NoClassifier
+                | KindSource::ClassifierUnavailable
+                | KindSource::RowInert
         )
     }
 }

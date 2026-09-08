@@ -42,6 +42,7 @@ pub mod embeddings;
 pub mod evidence_site;
 pub mod ground;
 pub mod ingestion;
+pub mod inventory;
 pub mod migrate_ids;
 pub mod ontology_coverage;
 pub mod projection;
@@ -81,6 +82,7 @@ pub use ground::{
     MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
 };
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
+pub use inventory::{AtlasInventory, RowFit, RowInert};
 pub use provider::{open_walk_provider, open_walk_provider_blocking, AtlasProvider};
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{

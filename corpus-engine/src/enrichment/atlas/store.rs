@@ -19,7 +19,7 @@
 //!   types / conf), out-edges and a symmetric in-edge CSR, over the interned
 //!   local ids. mmap-friendly so the BFS inner loop stays sync.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -30,6 +30,7 @@ use lancedb::query::ExecutableQuery;
 use memmap2::Mmap;
 
 use super::edges::{Edge, EdgeProvenance, EdgeType};
+use super::inventory::AtlasInventory;
 use super::projection::{project, AtomRecord};
 use super::{AtomEnvelope, AtomType};
 
@@ -594,6 +595,18 @@ impl CsrEdges {
         self.n_edges
     }
 
+    /// Edges per kind, read off the out-direction type bytes. Every edge sits
+    /// exactly once in the out-CSR, so this is the whole walked graph — the
+    /// census [`AtlasInventory`] carries and `_summary.json` persists.
+    pub fn edge_type_counts(&self) -> BTreeMap<EdgeType, u64> {
+        let types = &self.mmap[self.out.typ..self.out.typ + self.n_edges as usize];
+        let mut out = BTreeMap::new();
+        for &t in types {
+            *out.entry(u8_to_edge_type(t)).or_insert(0) += 1;
+        }
+        out
+    }
+
     /// Out-edges of `local_id`:
     /// `(neighbor_local_id, edge_type_u8, confidence, provenance_u8)`.
     /// Empty if `local_id` is out of range.
@@ -773,6 +786,40 @@ where
 /// Read the `CSR_VERSION` from an `edges.csr` header without mmapping the whole
 /// file. `None` if the file is missing, truncated, or has a bad magic — any of
 /// which means the store is unreadable and must be (re)built.
+/// `edges.csr` mtime in ms since the epoch, `0` when there is no CSR. The
+/// summary's third cache key: the store is written AFTER `atoms.json`, so a
+/// summary keyed on the atoms file alone would stay current across the
+/// store landing and carry an empty edge census for the life of the atlas.
+pub fn csr_mtime_ms(atlas_dir: &Path) -> u64 {
+    std::fs::metadata(atlas_dir.join(EDGES_CSR_FILENAME))
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Edges per kind in `edges.csr`, or `None` when there is no readable CSR —
+/// absence, reported as absence, so a store that has not been built reads
+/// differently from one with no edges.
+pub fn csr_edge_counts(atlas_dir: &Path) -> Option<BTreeMap<EdgeType, u64>> {
+    let path = atlas_dir.join(EDGES_CSR_FILENAME);
+    if !path.exists() {
+        return None;
+    }
+    match CsrEdges::open(&path) {
+        Ok(csr) => Some(csr.edge_type_counts()),
+        Err(e) => {
+            tracing::warn!(
+                atlas = %atlas_dir.display(),
+                error = %e,
+                "atlas store: edges.csr present but unreadable; no edge census"
+            );
+            None
+        }
+    }
+}
+
 fn edges_csr_version(path: &Path) -> Option<u32> {
     use std::io::Read;
     let mut hdr = [0u8; 8];
@@ -904,6 +951,9 @@ pub struct LancePreload {
     local_to_str: Vec<String>,
     /// mmap'd CSR adjacency — sync + paged.
     csr: CsrEdges,
+    /// What this store carries, counted once at open from the resident
+    /// records and the CSR's type bytes — the row-admissibility census.
+    inventory: AtlasInventory,
 }
 
 impl LancePreload {
@@ -929,12 +979,19 @@ impl LancePreload {
                 atoms.len()
             ));
         }
+        let inventory = AtlasInventory::from_records(atoms.iter(), &csr.edge_type_counts());
         Ok(Self {
             atoms,
             by_str_id,
             local_to_str,
             csr,
+            inventory,
         })
+    }
+
+    /// The census taken at open — see [`AtlasInventory`].
+    pub fn inventory(&self) -> &AtlasInventory {
+        &self.inventory
     }
 
     /// Sync bridge for [`open`](Self::open) — drives the async read on the

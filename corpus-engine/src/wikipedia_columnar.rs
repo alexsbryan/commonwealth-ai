@@ -20,7 +20,7 @@
 //! `wiki_store::wiki_rows_from_chunks` now writes them from the chunks
 //! directly. `open_wikipedia_graph` has no fallback left to pick.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -33,6 +33,7 @@ use crate::enrichment::atlas::atoms::{AtomType, ChunkRef};
 use crate::enrichment::atlas::context::{AtomView, EdgeView, EvidenceRef};
 use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
 use crate::enrichment::atlas::evidence_site::EvidenceSite;
+use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::provider::AtlasProvider;
 use crate::enrichment::atlas::wiki_store::{WikiArticleRow, ARTICLES_TABLE, EDGES_TABLE};
@@ -713,6 +714,8 @@ pub struct WikiAtlasProvider {
     inn: Vec<(u32, u32)>,
     ann: Option<Arc<AnnSeedTable>>,
     ontology: Option<OntologyPolicies>,
+    /// Counted once at open from the records and adjacency built above.
+    inventory: AtlasInventory,
 }
 
 impl WikiAtlasProvider {
@@ -803,6 +806,10 @@ impl WikiAtlasProvider {
             "wiki atlas provider: resident store built"
         );
 
+        // Every wikilink is an `Involves` (see `views`), so the edge census
+        // is the adjacency length under that one kind.
+        let edge_counts = BTreeMap::from([(EdgeType::Involves, out.len() as u64)]);
+        let inventory = AtlasInventory::from_records(atoms.iter(), &edge_counts);
         Ok(Self {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             site: EvidenceSite::derive(atlas_corpus_id),
@@ -812,6 +819,7 @@ impl WikiAtlasProvider {
             inn,
             ann: None,
             ontology,
+            inventory,
         })
     }
 
@@ -928,6 +936,10 @@ impl AtlasProvider for WikiAtlasProvider {
 
     fn ontology(&self) -> Option<&OntologyPolicies> {
         self.ontology.as_ref()
+    }
+
+    fn inventory(&self) -> AtlasInventory {
+        self.inventory.clone()
     }
 }
 

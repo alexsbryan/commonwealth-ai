@@ -70,7 +70,9 @@ pub(crate) use report::Reach;
 pub use report::{
     Degradation, Grounding, MapNode, MapSection, PolicySource, SummaryNode, WalkLedger,
 };
-pub use select::{navigation_policy_for, select_walk, WalkSelection};
+pub use select::{
+    admit_winner, navigation_policy_for, select_walk, Admission, RowInertReport, WalkSelection,
+};
 pub use summaries::{SourceYield, SummaryQuery, SummaryStage};
 
 /// How many nodes of the traversed neighbourhood the map section carries.
@@ -154,7 +156,11 @@ pub async fn ground(
 ) -> Grounding {
     let walk = &selection.walk;
     let mut degradations = Vec::new();
-    if selection.kind_source.is_degradation() {
+    // An inert row is its own degradation, with the row it fell to; the
+    // generic "ran the unfiltered row" line would be wrong for it.
+    if let Some(inert) = &selection.inert {
+        degradations.push(Degradation::RowInert(inert.clone()));
+    } else if selection.kind_source.is_degradation() {
         degradations.push(Degradation::Unclassified(selection.kind_source));
     }
     if question_embedding.is_empty() || graphs.is_empty() {
@@ -620,6 +626,7 @@ pub async fn ground(
         target: "retrieval_audit",
         kind = selection.kind.as_str(),
         kind_source = selection.kind_source.as_str(),
+        row_inert = selection.inert.as_ref().map(|i| i.sentence()).unwrap_or_default(),
         policy = %selection.policy_source.label(),
         hops = walk.hops,
         budget = walk.budget,

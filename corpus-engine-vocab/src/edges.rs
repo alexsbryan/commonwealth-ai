@@ -40,7 +40,7 @@ impl EdgeId {
 /// string tag for forward compatibility — an older consumer that
 /// doesn't recognise a new edge type should fail loudly rather than
 /// silently dropping it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum EdgeType {
     // Intra-corpus edges (§3)

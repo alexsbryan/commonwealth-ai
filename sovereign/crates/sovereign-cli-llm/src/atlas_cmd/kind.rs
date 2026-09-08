@@ -21,12 +21,23 @@
 //! Reads the corpus's own map when it has one (`atlas/ontology.json`) and the
 //! pre-registered defaults otherwise, and says which. Needs the daemon for the
 //! embedder and nothing else — no session bootstrap, no corpus open.
+//!
+//! Since order epistemic-index-map-conversion it also reads what the corpus
+//! CARRIES — `_summary.json`'s atom and edge census, unioned over the corpus
+//! and its `<id>-*` siblings, the same scope a walk grounds across — and
+//! reports, per classified question, the row that would actually RUN:
+//! `ground::admit_winner`, the walk's own decider, so the instrument cannot
+//! say "tension" where the walk would fall to lookup.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use corpus_engine::atlas_traversal::question_kind::{KindScore, QuestionKindClassifier};
-use corpus_engine::enrichment::atlas::{read_atlas_ontology, ATLAS_DIRNAME};
+use corpus_engine::enrichment::atlas::ground::{admit_winner, Admission};
+use corpus_engine::enrichment::atlas::{
+    open_walk_provider_blocking, read_atlas_ontology, read_or_compute_atlas_summary,
+    AtlasInventory, ATLAS_DIRNAME,
+};
 use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
 
 use crate::chat_cmd::bootstrap::build_inference;
@@ -47,6 +58,13 @@ struct KindRow {
     margin: Option<f32>,
     runner_up: Option<String>,
     runner_up_sim: Option<f32>,
+    /// The row that RUNS for a classified question, once the winner is
+    /// checked against the corpus census: the winner itself, the kind it
+    /// fell to, or `unfiltered`. `None` for an abstain (the unfiltered row
+    /// runs, for the reason `verdict` names) and when no census was read.
+    row: Option<String>,
+    /// Why the winner could not run, when `row` is not the winner.
+    inert: Option<String>,
 }
 
 /// Which gate refused, from the score and the classifier's own gates.
@@ -69,18 +87,97 @@ fn row_for(
     race: Option<Vec<(QuestionKind, f32)>>,
     score: Option<KindScore>,
     gates: (f32, f32),
+    admitted: Option<&(NavigationPolicy, AtlasInventory)>,
 ) -> KindRow {
     let runner = race.as_ref().and_then(|r| r.get(1).copied());
+    let verdict = verdict_for(score, gates);
+    let (row, inert) = match (verdict, score, admitted, race.as_ref()) {
+        ("classified", Some(s), Some((policy, inventory)), Some(race)) => {
+            match admit_winner(s.kind, race, gates.0, policy, inventory) {
+                Admission::Fits => (Some(s.kind.as_str().to_string()), None),
+                Admission::Inert(r) => (
+                    Some(
+                        r.fell_to
+                            .map(|k| k.as_str().to_string())
+                            .unwrap_or_else(|| "unfiltered".to_string()),
+                    ),
+                    Some(r.why.clause()),
+                ),
+            }
+        }
+        _ => (None, None),
+    };
     KindRow {
         id: id.to_string(),
         question: question.to_string(),
-        verdict: verdict_for(score, gates).to_string(),
+        verdict: verdict.to_string(),
         winner: score.map(|s| s.kind.as_str().to_string()),
         sim: score.map(|s| s.sim),
         margin: score.map(|s| s.margin),
         runner_up: runner.map(|(k, _)| k.as_str().to_string()),
         runner_up_sim: runner.map(|(_, s)| s),
+        row,
+        inert,
     }
+}
+
+/// The census a walk over this corpus would consult: the corpus's own
+/// `_summary.json` plus every `<id>-*` sibling's — the per-article children
+/// `ground::candidate_atlas_ids` derives, which is where SEP's atoms live
+/// (the `sep` umbrella's own atlas is empty). Returns how many atlases were
+/// read beside the union; a corpus with no summary anywhere (a wiki-class
+/// store has no `atoms.json`) reads as zero, and the caller says so rather
+/// than judging rows against nothing.
+fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
+    let mut union = AtlasInventory::default();
+    let mut read = 0usize;
+    // A wiki-class store (articles.lance + edges.lance, no atoms.json) has
+    // no `_summary.json` to read, so its census comes from opening it through
+    // the ONE provider opener the walk uses — seconds and a resident copy of
+    // the store, paid because the alternative is an instrument that reports
+    // lookup as inert on a store carrying forty million Involves edges (the
+    // first run of this verb on wikipedia did exactly that, 2026-09-08).
+    let indexes = paths::indexes_dir();
+    if !paths::index_root(corpus)
+        .join(ATLAS_DIRNAME)
+        .join("atoms.json")
+        .exists()
+        && corpus_engine::wikipedia_graph_present(&indexes, corpus)
+    {
+        let t0 = std::time::Instant::now();
+        match open_walk_provider_blocking(&indexes, corpus) {
+            Ok(p) => {
+                union.absorb(AtlasInventory::of(&[p.as_ref()]));
+                read += 1;
+                eprintln!(
+                    "atlas kind: opened the wiki-class store for `{corpus}` to take its census \
+                     ({} ms)",
+                    t0.elapsed().as_millis()
+                );
+            }
+            Err(e) => eprintln!("atlas kind: wiki-class store for `{corpus}`: {e}"),
+        }
+    }
+    let mut dirs = vec![paths::index_root(corpus)];
+    let prefix = format!("{corpus}-");
+    if let Ok(entries) = std::fs::read_dir(paths::indexes_dir()) {
+        for e in entries.flatten() {
+            if e.file_name().to_string_lossy().starts_with(&prefix) {
+                dirs.push(e.path());
+            }
+        }
+    }
+    for dir in dirs {
+        match read_or_compute_atlas_summary(&dir.join(ATLAS_DIRNAME)) {
+            Ok(Some(s)) => {
+                union.absorb(AtlasInventory::from_summary(&s));
+                read += 1;
+            }
+            Ok(None) => {}
+            Err(e) => eprintln!("atlas kind: summary for {}: {e}", dir.display()),
+        }
+    }
+    (union, read)
 }
 
 /// The map a corpus walks under, and where it came from.
@@ -183,6 +280,45 @@ pub async fn run(args: &[String]) -> i32 {
     let (policy, policy_source) = policy_for(corpus.as_deref());
     let rows = policy.classifiable();
     eprintln!("atlas kind: map = {policy_source}");
+    // What the corpus carries, and which rows can fire on it at all.
+    let admitted: Option<(NavigationPolicy, AtlasInventory)> = match corpus.as_deref() {
+        Some(id) => {
+            let (inventory, read) = inventory_for(id);
+            if read == 0 || inventory.is_empty() {
+                eprintln!(
+                    "atlas kind: no atlas census for `{id}` ({read} summaries read) — rows are \
+                     not checked for admissibility; a wiki-class store carries no _summary.json"
+                );
+                None
+            } else {
+                eprintln!(
+                    "atlas kind: census over {read} atlas(es): atoms {}; edges {}",
+                    inventory
+                        .atoms
+                        .iter()
+                        .map(|(k, n)| format!("{}:{n}", k.label()))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    inventory
+                        .edges
+                        .iter()
+                        .map(|(k, n)| format!("{}:{n}", k.label()))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                eprintln!(
+                    "atlas kind: row fit: {}",
+                    policy
+                        .rows()
+                        .map(|(k, w)| format!("{} {}", k.as_str(), inventory.fit(w).verdict()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                Some((policy.clone(), inventory))
+            }
+        }
+        None => None,
+    };
     eprintln!(
         "atlas kind: {} classifiable kind(s): {}",
         rows.len(),
@@ -243,7 +379,7 @@ pub async fn run(args: &[String]) -> i32 {
         };
         let race = classifier.race(&emb);
         let (_, score) = classifier.classify(&emb);
-        out.push(row_for(id, q, race, score, gates));
+        out.push(row_for(id, q, race, score, gates, admitted.as_ref()));
     }
 
     if json {
@@ -256,12 +392,12 @@ pub async fn run(args: &[String]) -> i32 {
         }
     } else {
         println!(
-            "{:<15} {:<11} {:>6} {:>7}  {:<11} {:>6}  {}",
-            "verdict", "winner", "sim", "margin", "runner-up", "sim", "id"
+            "{:<15} {:<11} {:>6} {:>7}  {:<11} {:>6}  {:<11} {}",
+            "verdict", "winner", "sim", "margin", "runner-up", "sim", "row", "id"
         );
         for r in &out {
             println!(
-                "{:<15} {:<11} {:>6} {:>7}  {:<11} {:>6}  {}",
+                "{:<15} {:<11} {:>6} {:>7}  {:<11} {:>6}  {:<11} {}",
                 r.verdict,
                 r.winner.as_deref().unwrap_or("-"),
                 r.sim
@@ -274,6 +410,7 @@ pub async fn run(args: &[String]) -> i32 {
                 r.runner_up_sim
                     .map(|v| format!("{v:.3}"))
                     .unwrap_or_else(|| "-".into()),
+                r.row.as_deref().unwrap_or("-"),
                 r.id,
             );
         }
@@ -282,13 +419,35 @@ pub async fn run(args: &[String]) -> i32 {
     // The footer is the number the ledger used to be read for.
     let mut by_verdict: BTreeMap<&str, usize> = BTreeMap::new();
     let mut by_winner: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut by_row: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut inert = 0usize;
     for r in &out {
         *by_verdict.entry(r.verdict.as_str()).or_default() += 1;
         if r.verdict == "classified" {
             *by_winner
                 .entry(r.winner.as_deref().unwrap_or("-"))
                 .or_default() += 1;
+            if let Some(row) = r.row.as_deref() {
+                *by_row.entry(row).or_default() += 1;
+            }
+            if r.inert.is_some() {
+                inert += 1;
+            }
         }
+    }
+    if admitted.is_some() {
+        eprintln!(
+            "atlas kind: rows that run on this corpus: {}; {inert} classified winner(s) inert",
+            if by_row.is_empty() {
+                "none".to_string()
+            } else {
+                by_row
+                    .iter()
+                    .map(|(k, n)| format!("{k} {n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        );
     }
     let classified = by_verdict.get("classified").copied().unwrap_or(0);
     eprintln!(
@@ -365,10 +524,48 @@ mod tests {
             Some(race),
             Some(score(QuestionKind::Tension, 0.41, 0.02)),
             (0.34, 0.05),
+            None,
         );
         assert_eq!(r.verdict, "abstain:margin");
+        assert!(r.row.is_none());
         assert_eq!(r.winner.as_deref(), Some("tension"));
         assert_eq!(r.runner_up.as_deref(), Some("thematic"));
         assert!((r.runner_up_sim.unwrap() - 0.39).abs() < 1e-6);
+    }
+
+    /// A classified winner is reported as the row that RUNS: on an
+    /// Entity-only census the tension row is inert and the report says
+    /// lookup ran, with the reason — the walk's decider, not a second one.
+    #[test]
+    fn the_row_column_is_what_the_walk_would_run() {
+        use corpus_engine::enrichment::atlas::{AtomType, EdgeType};
+        let inventory = AtlasInventory {
+            atoms: BTreeMap::from([(AtomType::Entity, 10)]),
+            entity_types: BTreeMap::from([("article".to_string(), 10)]),
+            edges: BTreeMap::from([(EdgeType::Involves, 20)]),
+            declares_types: false,
+        };
+        let admitted = (NavigationPolicy::default(), inventory);
+        let race = vec![
+            (QuestionKind::Tension, 0.50),
+            (QuestionKind::Lookup, 0.40),
+            (QuestionKind::Thematic, 0.20),
+        ];
+        let r = row_for(
+            "q1",
+            "where does it disagree",
+            Some(race),
+            Some(score(QuestionKind::Tension, 0.50, 0.10)),
+            (0.34, 0.05),
+            Some(&admitted),
+        );
+        assert_eq!(r.verdict, "classified");
+        assert_eq!(r.winner.as_deref(), Some("tension"));
+        assert_eq!(r.row.as_deref(), Some("lookup"));
+        assert!(r
+            .inert
+            .as_deref()
+            .unwrap()
+            .starts_with("no claim or position atoms"));
     }
 }
