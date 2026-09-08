@@ -143,6 +143,17 @@ names the inferred edges. What is missing is the third role.
    entry. A row that lists nothing supplies nothing, which is right for the
    four rows that do not seed `Summary`.
 
+   The UNFILTERED row — the one an abstained classification runs — composes
+   EVERY source. It is the status quo ante written down, and the
+   retrieval-time injector it stands in for ran on every question regardless
+   of kind, so composing less there would be a narrowing against the world the
+   floors were measured in rather than a neutral choice. It is safe to widen
+   because one budget, one append and one dedupe hold whatever row runs. This
+   is not hypothetical: it carried `[atoms]` alone for one commit, and because
+   the classifier abstains on 15 of 21 SEP questions the thematic row's
+   `raptor` source executed zero times and the lane read exactly what it read
+   with no composition at all.
+
    `Configures` joins the thematic edge list because the row SEEDS on
    `Configuration` and listed no edge kind a Configuration has, so a walk that
    landed on one could not leave it — a terminus by accident, unlike Summary's

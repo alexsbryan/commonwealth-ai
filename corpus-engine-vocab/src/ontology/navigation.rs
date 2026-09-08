@@ -463,13 +463,31 @@ impl WalkPolicy {
             // Never classified onto, so it needs no exemplars — it is the
             // row you get when classification did not happen.
             exemplars: Vec::new(),
-            // The status quo ante includes the summaries the walk already
-            // reached in the atlas, and nothing more: an unfiltered walk is
-            // what `apply_atlas_grounding` did before it read a map, and that
-            // never consulted a RAPTOR table. Composing `Raptor` here would
-            // make an ABSTENTION widen the evidence, which is the opposite of
-            // what an abstention should do.
-            summary_sources: vec![SummarySource::Atoms],
+            // EVERY source, and this row is the reason the value matters more
+            // than it looks.
+            //
+            // It carried `[Atoms]` alone for one commit, on my reasoning that
+            // "an abstention must not widen the evidence". That was wrong, and
+            // wrong against this row's own definition. The status quo ante for
+            // whole-work summaries was `apply_raptor_grounding`, which was
+            // gated on `SOVEREIGN_RAPTOR_GROUNDING` and
+            // `raptor_late_inject_enabled` and NOTHING ELSE — no question-kind
+            // gate anywhere. An abstained question got summaries exactly like
+            // a classified one. So composing nothing here is a NARROWING
+            // against the world this row exists to write down, and against the
+            // world every floor was measured in; it is not neutrality.
+            //
+            // Measured, which is how it was caught: on the SEP bank the
+            // classifier abstains on 15 of 21 questions, so 71% of walks run
+            // THIS row. With `[Atoms]` the thematic row's `raptor` source
+            // never executed once, and the lane read 147/159 twice — identical
+            // to having no composition at all.
+            //
+            // Widening here is safe for the reason the whole design is safe:
+            // one budget, one append, one dedupe, whatever row runs. The
+            // hazard was never that summaries arrive; it was two producers
+            // arriving without a shared cap.
+            summary_sources: SummarySource::ALL.to_vec(),
         }
     }
 }
@@ -637,9 +655,15 @@ mod tests {
                 "{kind:?} composes a summary source; only thematic should"
             );
         }
+        // The unfiltered row composes EVERY source. It is the status quo ante
+        // written down, and the injector it stands in for ran on every
+        // question regardless of kind — so an abstention that composed less
+        // than a classified walk would be a narrowing, not a neutral choice.
+        // Failing input, measured: with `[Atoms]` here, 15 of 21 SEP questions
+        // abstain and the thematic row's `raptor` source never runs at all.
         assert_eq!(
             WalkPolicy::unfiltered().summary_sources,
-            vec![SummarySource::Atoms]
+            SummarySource::ALL.to_vec()
         );
     }
 
