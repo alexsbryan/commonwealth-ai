@@ -51,7 +51,15 @@ command -v svrn >/dev/null && SVRN=svrn || SVRN=sovereign
 command -v "$SVRN" >/dev/null || die preflight-cli
 python3 -c "import lance, pyarrow" 2>/dev/null || die preflight-python-lance
 [[ -d "$INDEXES_ROOT/$ARM_M" ]] || die preflight-arm-m-missing
-[[ -e "$INDEXES_ROOT/$ARM_L" ]] && die preflight-arm-l-exists
+# REUSE_ARM_L: arm L is already built and installed, so run the BANK ONLY.
+# One script, two invocations — the second limit is a second MEASUREMENT of the
+# same two arms, not a second experiment, and forking the script would make the
+# arms two things that merely look alike (ARCH §10.6).
+if [[ -n "${REUSE_ARM_L:-}" ]]; then
+  [[ -d "$INDEXES_ROOT/$ARM_L" ]] || die preflight-arm-l-missing-for-reuse
+else
+  [[ -e "$INDEXES_ROOT/$ARM_L" ]] && die preflight-arm-l-exists
+fi
 BANK="$repo/sovereign/bench/sep/questions.toml"
 [[ -f "$BANK" ]] || die preflight-bank
 # The daemon must answer an embed BEFORE we commit to the long leg.
@@ -79,12 +87,17 @@ done
 mark bank-copies 0
 
 # ── LEG 1: build arm L (the long one, ~33 min at 17 chunk/s) ───────────────
-t0=$(date +%s)
-EMBED_BATCH="${EMBED_BATCH:-128}" python3 "$here/build_last_pooled.py" "$ARM_M" "$ARM_L" \
-  > "$out/build.log" 2>&1
-rc=$?; mark build-arm-l "$rc"
-printf 'build wall=%ss\n' "$(( $(date +%s) - t0 ))" >> "$out/walls.txt"
-[[ $rc -eq 0 ]] || { tail -20 "$out/build.log" >&2; die build-arm-l; }
+if [[ -n "${REUSE_ARM_L:-}" ]]; then
+  echo "run.sh: reusing the installed $ARM_L — bank only, no re-embed" | tee "$out/build.log"
+  mark build-arm-l-reused 0
+else
+  t0=$(date +%s)
+  EMBED_BATCH="${EMBED_BATCH:-128}" python3 "$here/build_last_pooled.py" "$ARM_M" "$ARM_L" \
+    > "$out/build.log" 2>&1
+  rc=$?; mark build-arm-l "$rc"
+  printf 'build wall=%ss\n' "$(( $(date +%s) - t0 ))" >> "$out/walls.txt"
+  [[ $rc -eq 0 ]] || { tail -20 "$out/build.log" >&2; die build-arm-l; }
+fi
 
 # ── LEG 2: validate the instrument BEFORE any bench number ────────────────
 python3 "$here/selfcheck.py" "$ARM_L" "$ARM_M" > "$out/selfcheck.txt" 2>&1

@@ -102,3 +102,35 @@ daemon embed — all of it BEFORE the 33-minute step) → `box-before` →
 `bank-copies` → `build-arm-l` → `selfcheck` → `bank-<arm>-t<n>` ×4 → `score` →
 `VERDICT-*` → `box-after` → `DONE`. A terminal `DONE` marker is written on
 SIGTERM/INT/HUP too, so a kill cannot look like "still running".
+
+---
+
+## Second measurement: `--limit 10` (added 2026-09-08, seat-authorized)
+
+**Why a second limit exists.** The `--limit 30` run came back
+`VERDICT-M-BETTER` at sources 64/66 (97%) and facts 145/159 (91%) for M against
+63/66 and 144/159 for L — a real delta by the pre-registered exact band (trial
+spread was zero on both arms and both metrics), but on a **saturated** scale
+with two slots of headroom. ei-7a measured this same fixture at **48/66 at the
+default `--limit 10`**, so limit 10 leaves ~18 points of room and can actually
+separate the arms. That is the ARCH §18.4 concern — an exact band on a scale
+with no headroom still cannot discriminate — and it is the reason for a second
+measurement, not a reason to re-read the first.
+
+**The limit-30 result stays on the record exactly as it fired**, with the
+ceiling named beside it. This run adds a row; it does not replace one.
+
+**Same arms, same script, same five pre-registered outcomes.** `REUSE_ARM_L=1`
+skips the re-embed (arm L is already built and installed, 33,884 rows, both
+legs indexed, self-probe 0.9999) and runs the bank only — one script with two
+invocations, because the second limit is a second measurement of the same two
+arms and forking the script would make them two things that merely look alike.
+The self-check still runs first and still stops the run if either arm has
+moved. n=2 per arm, both arms the same day, `--prod-pipeline --isolate`.
+
+**Invocation:** `REUSE_ARM_L=1 BANK_LIMIT=10 runs/sep-subset-pooling/run.sh`
+
+**Scope caveat carried into both rows:** this is the sep SUBSET fixture — 21
+questions, 66 expected sources, 159 expected facts, 33,884 chunks from 288
+articles. It is not the full SEP bank, and **no `wikipedia` arm was run at
+all**, though wikipedia is mispooled the same way and is 1,896,488 chunks.

@@ -1,0 +1,3 @@
+selfcheck  raptor-subset-pooled-last        mean=0.9999  per=[0.9999, 0.9999, 0.9998]   (L re-embedded, expect >= 0.99)
+selfcheck  raptor-subset-off                mean=0.6117  per=[0.5702, 0.6416, 0.6234]   (M as it stands, expect ~0.70)
+selfcheck: OK — the two arms are the two spaces they claim to be

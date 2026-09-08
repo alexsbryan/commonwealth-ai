@@ -1,0 +1,9 @@
+arm                                trial     sources       facts  questions
+raptor-subset-off                      1       64/66     145/159         21
+raptor-subset-off                      2       64/66     145/159         21
+raptor-subset-pooled-last              1       63/66     144/159         21
+raptor-subset-pooled-last              2       63/66     144/159         21
+
+L - M:  sources -1   facts -1
+
+VERDICT-M-BETTER  the last-pooled stack REGRESSES on the bench against the model's own spec. That is the finding, and it outranks the re-publish question.

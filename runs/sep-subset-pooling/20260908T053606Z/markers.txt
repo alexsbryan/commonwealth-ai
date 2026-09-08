@@ -1,0 +1,12 @@
+preflight rc=0 2026-09-08T05:36:07Z
+box-before rc=0 2026-09-08T05:36:07Z
+bank-copies rc=0 2026-09-08T05:36:07Z
+build-arm-l rc=0 2026-09-08T05:56:35Z
+selfcheck rc=0 2026-09-08T05:56:36Z
+bank-raptor-subset-off-t1 rc=0 2026-09-08T05:58:32Z
+bank-raptor-subset-pooled-last-t1 rc=0 2026-09-08T06:00:22Z
+bank-raptor-subset-off-t2 rc=0 2026-09-08T06:02:08Z
+bank-raptor-subset-pooled-last-t2 rc=0 2026-09-08T06:04:03Z
+score rc=0 2026-09-08T06:04:03Z
+VERDICT-M-BETTER  the last-pooled stack REGRESSES on the bench against the model's own spec. That is the finding, and it outranks the re-publish question. rc=0 2026-09-08T06:04:03Z
+DONE rc=0

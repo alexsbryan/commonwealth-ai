@@ -1,0 +1,35 @@
+build: raptor-subset-off -> raptor-subset-pooled-last, 33884 rows, re-embedding through http://127.0.0.1:9741/v1/embeddings
+  128/33884  30.5 chunk/s  eta 18.4 min
+  1408/33884  31.8 chunk/s  eta 17.0 min
+  2688/33884  31.3 chunk/s  eta 16.6 min
+  3968/33884  30.5 chunk/s  eta 16.3 min
+  5248/33884  29.7 chunk/s  eta 16.1 min
+  6528/33884  30.2 chunk/s  eta 15.1 min
+  7808/33884  27.9 chunk/s  eta 15.6 min
+  9088/33884  27.9 chunk/s  eta 14.8 min
+  10368/33884  28.3 chunk/s  eta 13.9 min
+  11648/33884  28.3 chunk/s  eta 13.1 min
+  12928/33884  28.5 chunk/s  eta 12.3 min
+  14208/33884  28.6 chunk/s  eta 11.5 min
+  15488/33884  28.9 chunk/s  eta 10.6 min
+  16768/33884  27.8 chunk/s  eta 10.3 min
+  18048/33884  27.6 chunk/s  eta 9.5 min
+  19328/33884  27.7 chunk/s  eta 8.7 min
+  20608/33884  27.9 chunk/s  eta 7.9 min
+  21888/33884  28.0 chunk/s  eta 7.1 min
+  23168/33884  28.2 chunk/s  eta 6.3 min
+  24448/33884  28.3 chunk/s  eta 5.6 min
+  25728/33884  28.2 chunk/s  eta 4.8 min
+  27008/33884  28.3 chunk/s  eta 4.0 min
+  28288/33884  28.3 chunk/s  eta 3.3 min
+  29568/33884  28.3 chunk/s  eta 2.5 min
+  30848/33884  28.3 chunk/s  eta 1.8 min
+  32128/33884  28.1 chunk/s  eta 1.0 min
+  33408/33884  27.8 chunk/s  eta 0.3 min
+  33884/33884  27.8 chunk/s  eta 0.0 min
+build: 33884 vectors at 1024-d in 20.3 min
+build: wrote 33884 rows (indices are NOT copied — building them now)
+build: IVF_PQ partitions=184 sub_vectors=64 distance=cosine
+build: indices built in 8.8s
+build: indexed columns = ['content', 'embedding', 'title']
+build: OK — raptor-subset-pooled-last is 33884 rows, both legs indexed
