@@ -27,9 +27,9 @@ use tokio::task::JoinSet;
 use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
-    apply_edit, discover_source_files, has_dangling_action, parse_response_edits,
-    render_with_line_numbers, run_tests, snapshot_dir, EditAction, Language, ParsedResponse,
-    TestRunResult,
+    apply_edit, discover_artifact_files, discover_source_files, has_dangling_action,
+    parse_response_edits, render_with_line_numbers, run_tests, snapshot_dir, EditAction, Language,
+    ParsedResponse, TestRunResult,
 };
 use crate::types::{
     Polarity, RoundObserver, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus,
@@ -90,6 +90,17 @@ pub async fn run_trial_observed(
     // and the multi-file path (where the user prompt names targets).
     let source_files = discover_source_files(&base_workdir);
     let source_file = source_files.first().cloned();
+    // The model's WORLD: code sources first, then artifact files
+    // (.json/.md/…). Artifacts render but never join `source_files`,
+    // so edit targeting and default_target stay code-only. Without
+    // them an artifact-shaped workdir is invisible and the model
+    // reconstructs the domain from test-failure output (atlas-rung
+    // receipts 2026-09-08).
+    let world_files = {
+        let mut w = source_files.clone();
+        w.extend(discover_artifact_files(&base_workdir));
+        w
+    };
     // The runner named in the command outranks workdir shape: discovery
     // is shallowest-first, so a monorepo's stray scripts/*.py used to
     // pick the Python parser for a cargo run (see `Language::from_verify_cmd`).
@@ -199,7 +210,7 @@ pub async fn run_trial_observed(
             }
         }
 
-        let file_listing = render_source_files(&base_workdir, &source_files);
+        let file_listing = render_source_files(&base_workdir, &world_files);
         let history_block = history
             .iter()
             .rev()
@@ -212,7 +223,7 @@ pub async fn run_trial_observed(
         // The model sees the pristine-baseline file listing on the
         // restart candidate, so the message it generates is grounded
         // in the original code, not the partial-fit winner.
-        let pristine_listing = render_source_files(&pristine_baseline, &source_files);
+        let pristine_listing = render_source_files(&pristine_baseline, &world_files);
         let feedback_block = last_round_feedback.render_with_ties(config.candidates_per_round);
         let regular_messages = vec![
             system_message(),

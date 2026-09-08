@@ -33,5 +33,7 @@ pub use edit::{
 pub use lang::Language;
 pub use parser::{parse_test_output, TestParseResult};
 pub use snapshot::snapshot_dir;
-pub use source::{discover_source_file, discover_source_files, render_with_line_numbers};
+pub use source::{
+    discover_artifact_files, discover_source_file, discover_source_files, render_with_line_numbers,
+};
 pub use test_runner::{run_tests, TestRunResult};

@@ -182,8 +182,13 @@ pub fn has_dangling_action(content: &str) -> bool {
         any_fence = true;
         let lang = cap[1].to_string();
         let body = cap[2].to_string();
-        last_is_action = lang.eq_ignore_ascii_case("json")
-            || (body.trim_start().starts_with('{') && body.contains("\"action\""));
+        // A trailing json-tagged DATA payload is not a dangling action
+        // — the content already arrived (atlas-rung receipts
+        // 2026-09-08). Only a fence that PARSES as an action counts.
+        last_is_action = (lang.eq_ignore_ascii_case("json")
+            || (body.trim_start().starts_with('{') && body.contains("\"action\"")))
+            && (serde_json::from_str::<EditAction>(body.trim()).is_ok()
+                || coerce_action_json(body.trim()).is_some());
     }
     if last_is_action {
         return true;
@@ -211,10 +216,13 @@ pub fn parse_response_edits(content: &str) -> Vec<ParsedResponse> {
     for cap in fence.captures_iter(content) {
         let lang = cap[1].to_string();
         let body = cap[2].to_string();
-        let is_json = lang.eq_ignore_ascii_case("json")
+        let looks_like_action = lang.eq_ignore_ascii_case("json")
             || (body.trim_start().starts_with('{') && body.contains("\"action\""));
-        if is_json {
-            if let Ok(a) = serde_json::from_str::<EditAction>(body.trim()) {
+        if looks_like_action {
+            let action = serde_json::from_str::<EditAction>(body.trim())
+                .ok()
+                .or_else(|| coerce_action_json(body.trim()));
+            if let Some(a) = action {
                 // Consecutive actions are legal when the pending one
                 // carries no source block (MoveLines): a split round
                 // emits a SEQUENCE of relocations, json after json.
@@ -230,8 +238,17 @@ pub fn parse_response_edits(content: &str) -> Vec<ParsedResponse> {
                     }
                 }
                 pending = Some(a);
+                continue;
             }
-            continue;
+            // A json-TAGGED fence that does not parse as an action is a
+            // DATA payload, not a malformed action: models tag JSON
+            // artifact content ```json naturally, and dropping it here
+            // unpaired every artifact write (atlas-rung receipts
+            // 2026-09-08: complete, correct edges.json rejected as
+            // "no action+block found"). Fall through and bind it to
+            // the pending action; a genuinely malformed action header
+            // landing as content is bounded by the strict-improvement
+            // gate, same as every other inference.
         }
         if let Some(a) = pending.take() {
             pairs.push(ParsedResponse {
@@ -327,12 +344,27 @@ fn parse_source_block(content: &str) -> Option<String> {
     }
     let any_closed = Regex::new(r"(?s)```(\w*)\s*\n(.*?)```").unwrap();
     let mut last_non_json: Option<String> = None;
+    let mut last_json_data: Option<String> = None;
     for cap in any_closed.captures_iter(content) {
         if !cap[1].eq_ignore_ascii_case("json") {
             last_non_json = Some(cap[2].to_string());
+        } else {
+            // A ```json-tagged fence that is not an action header is a
+            // DATA payload (artifact writes — atlas-rung receipts
+            // 2026-09-08). Usable as the source block when no code
+            // fence exists; never confused with the action itself.
+            let b = cap[2].to_string();
+            let is_action = serde_json::from_str::<EditAction>(b.trim()).is_ok()
+                || coerce_action_json(b.trim()).is_some();
+            if !is_action {
+                last_json_data = Some(b);
+            }
         }
     }
     if let Some(b) = last_non_json {
+        return Some(b);
+    }
+    if let Some(b) = last_json_data {
         return Some(b);
     }
     // Truncation-friendly: opening fence without close.
@@ -503,6 +535,41 @@ def evaluate(s):
         assert_eq!(edits.len(), 1);
         assert!(edits[0].inferred);
     }
+
+    #[test]
+    fn json_tagged_data_payload_binds_to_pending_action() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"edges.json\"}\n```\n```json\n[\n  {\"src\": \"person-elise-marchand\", \"relation\": \"operated\", \"dst\": \"instrument-reeves-refractor\"}\n]\n```";
+        let edits = parse_response_edits(content);
+        assert_eq!(edits.len(), 1);
+        assert!(
+            matches!(&edits[0].action, EditAction::WriteFile { path: Some(p) } if p == "edges.json")
+        );
+        assert!(edits[0].body.contains("person-elise-marchand"));
+        assert!(!edits[0].inferred);
+    }
+
+    #[test]
+    fn untagged_object_payload_binds_as_data_when_not_an_action() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"atoms.json\"}\n```\n```json\n{\"id\": \"person-henrik-lund\", \"kind\": \"Person\"}\n```";
+        let edits = parse_response_edits(content);
+        assert_eq!(edits.len(), 1);
+        assert!(edits[0].body.contains("\"kind\""));
+    }
+
+    #[test]
+    fn lone_json_data_fence_without_action_is_not_an_edit() {
+        let content = "```json\n[1, 2, 3]\n```";
+        let edits = parse_response_edits(content);
+        assert!(edits.is_empty());
+    }
+
+    #[test]
+    fn source_block_falls_back_to_json_data_fence() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"atoms.json\"}\n```\n```json\n[{\"id\": \"person-henrik-lund\"}]\n```";
+        let r = parse_response(content).unwrap();
+        assert!(matches!(&r.action, EditAction::WriteFile { path: Some(p) } if p == "atoms.json"));
+        assert!(r.body.contains("person-henrik-lund"));
+    }
 }
 
 #[cfg(test)]
@@ -526,6 +593,12 @@ mod dangling_action_tests {
     fn partial_transaction_with_trailing_action_is_dangling() {
         let content = "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```\n```json\n{\"action\": \"write_file\", \"path\": \"b.py\"}\n```";
         assert!(has_dangling_action(content));
+    }
+
+    #[test]
+    fn trailing_json_data_fence_is_not_dangling() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"edges.json\"}\n```\n```json\n[{\"src\": \"a\", \"relation\": \"used\", \"dst\": \"b\"}]\n```";
+        assert!(!has_dangling_action(content));
     }
 }
 

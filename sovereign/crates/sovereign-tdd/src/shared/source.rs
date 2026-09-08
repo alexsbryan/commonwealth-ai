@@ -21,8 +21,25 @@ pub fn discover_source_file(workdir: &Path) -> Option<String> {
 /// unrendered).
 pub fn discover_source_files(workdir: &Path) -> Vec<String> {
     let exts = [".py", ".rs", ".ts", ".tsx", ".go"];
+    discover_by_exts(workdir, &exts)
+}
+
+/// Data files the prompt should render so artifact-shaped workdirs are
+/// VISIBLE: JSON, markdown, config. Deliberately NOT part of
+/// [`discover_source_files`] — edit targeting (default_target =
+/// first source file) stays code-only, so a stray README can never
+/// become the write target of an inferred edit in a code workdir.
+/// Receipts (atlas-rung probe 2026-09-08): with artifacts unrendered
+/// the model reconstructed the corpus from test-failure output and
+/// invented schemas for files it could not see.
+pub fn discover_artifact_files(workdir: &Path) -> Vec<String> {
+    let exts = [".json", ".md", ".toml", ".yaml", ".yml"];
+    discover_by_exts(workdir, &exts)
+}
+
+fn discover_by_exts(workdir: &Path, exts: &[&str]) -> Vec<String> {
     let mut hits: Vec<PathBuf> = Vec::new();
-    walk_for_sources(workdir, workdir, 0, &exts, &mut hits);
+    walk_for_sources(workdir, workdir, 0, exts, &mut hits);
     // Tool configs are infrastructure, not source. They sort FIRST
     // (fewest path components), so without this filter a webapp's
     // `playwright.config.ts` becomes the file the prompt points the
@@ -179,5 +196,23 @@ mod multi_file_tests {
         std::fs::write(tmp.path().join("src/main.ts"), "export {}\n").unwrap();
         let files = discover_source_files(tmp.path());
         assert_eq!(files, vec!["src/main.ts".to_string()]);
+    }
+
+    #[test]
+    fn artifact_files_render_json_and_md_but_stay_out_of_source_discovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("source.md"), "# corpus\n").unwrap();
+        std::fs::write(tmp.path().join("atoms.json"), "[]\n").unwrap();
+        std::fs::write(tmp.path().join("solver.py"), "pass\n").unwrap();
+        std::fs::write(tmp.path().join("test_atoms.py"), "pass\n").unwrap();
+        let artifacts = discover_artifact_files(tmp.path());
+        assert!(artifacts.contains(&"source.md".to_string()));
+        assert!(artifacts.contains(&"atoms.json".to_string()));
+        assert!(!artifacts.iter().any(|f| f.starts_with("test_")));
+        // Edit-target surface unchanged: code only.
+        assert_eq!(
+            discover_source_files(tmp.path()),
+            vec!["solver.py".to_string()]
+        );
     }
 }
