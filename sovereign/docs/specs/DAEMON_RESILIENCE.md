@@ -273,14 +273,47 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   `mesh-soak.sh`'s territory), long-duration cycles.
 - [x] **P3.2** Long-soak gate tooling *(2026-07-18)*:
   `scripts/daemon-soak-report.sh` reads a live install's local
-  artifacts (supervisor.log restart/exit-code breakdown, crash records,
-  daemon.err defense markers + rotated baks, pidfile/uptime) and
-  renders PASS/WARN/FAIL. Local-first — reads files, sends nothing.
+  artifacts (the daemon's OWN exit receipts across the log and its
+  rotated baks, supervisor.log restart/exit-code breakdown where a
+  supervisor exists, crash records, daemon.err defense markers,
+  pidfile/uptime) and renders PASS/WARN/FAIL. `--self-test` is its
+  negative control. Local-first — reads files, sends nothing.
   First run against the dev box: PASS (and the historical supervisor
   log told the before/after story: 68 restarts in the pre-P0 era incl.
   2× SEGV and 16× SIGKILL; 0 since the P0 deploy). The gate itself is
   procedural: the release checklist requires a PASS on ≥48h of uptime —
   the founder-ingress and log-spam bugs were long-uptime-only.
+- [x] **P3.6** Concurrency soak *(2026-09-08)*:
+  `scripts/daemon-concurrency-soak.py` drives >=2 concurrent `chat ask`
+  turns at the resident daemon for a wall window and FAILS, naming the
+  death class, when the daemon does not survive it. It exists because
+  none of P3.1's cases is a *concurrency* case — they cycle a daemon
+  that is otherwise alone — and two in-flight turns is the smallest
+  multi-user shape there is and the one this daemon actually dies under
+  (`product-defects-batch` entry 3). Reuses
+  `scripts/admission_shed_probe.py` for the driver and the client-side
+  death kinds; adds the daemon-side class, an RSS trajectory and an exit
+  code.
+  **The jetsam class is corroborated against the kernel, not taken on
+  the daemon's word.** `log_shutdown_context` calls any SIGTERM above
+  24 GiB peak RSS a possible jetsam, and this daemon carries ~36 GiB
+  three minutes after boot with `inference.resident = []` — so on this
+  hardware the predicate is true of every operator stop. Re-classifying
+  the three receipts of 2026-09-08 against `memorystatus: killing`
+  returns `sigterm_unattributed` for all three (kernel oracle live in
+  every window; no kill of the daemon's pid in any), and one of the
+  three is known to have been a peer's `daemon stop`. **P3.2's report
+  now counts the daemon's own exit receipts** rather than
+  `supervisor.log`, which no launchd or systemd install writes — its
+  crash-loop FAIL was unreachable on every real deployment until
+  2026-09-08, and `--self-test` is the paired mutant that proves it is
+  reachable now.
+  Two facts this lane established that P0 did not know: launchd here
+  declares `KeepAlive { SuccessfulExit = false }` and the SIGTERM path
+  exits 0, so **nothing relaunches the daemon after a memory-shaped
+  death**; and `daemon.pid` still names the dead process afterwards, so
+  a pidfile-only liveness reader sees a steady pid across a hole in
+  service.
 - [ ] **P3.3** Stack-overflow root cause: diagnostics armed
   (RUST_BACKTRACE=full + 8 MiB stacks + panic hook + the report
   surfaces overflow markers across log rotations); no recurrence since
