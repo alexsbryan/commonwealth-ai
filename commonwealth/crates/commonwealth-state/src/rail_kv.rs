@@ -47,6 +47,43 @@
 //! to know (ARCH §10.6). What a foreign act costs is one `unreadable`, which
 //! is reported.
 //!
+//! # The snapshot mark — how a seal says "this is my WHOLE live set"
+//!
+//! A seal retires everything its author wrote below it, and the snapshot that
+//! follows re-appends that author's LIVE rows above the new floor. A tombstone
+//! is not a live row, so a delete would stop travelling the moment the seal
+//! that retired it lands, and a peer that never received the tombstone would
+//! keep the stale value forever. That is the KV shape of K7's "no history past
+//! the next seal", and it is closed HERE rather than left to be remembered
+//! (ARCH §7.1): **a seal followed by its whole snapshot IS the actor's live
+//! set**, so a node that holds all of it may retire every other row of that
+//! actor's — see [`Projection::sealed_actors`].
+//!
+//! "Holds all of it" is the entire difficulty, because the ring's pull is
+//! CHUNKED: a seal can arrive in one chunk and its snapshot in the next, and a
+//! fold at that instant sees an actor whose live set is empty. So the snapshot
+//! ends with a MARK — `{"snap": <the seal's seq>}` — appended after the last
+//! row it covers:
+//!
+//! ```text
+//! seq N      Seal
+//! seq N+1 …  one Record per live row, each carrying its ORIGINAL `t`
+//! seq N+k+1  {"snap": N}
+//! ```
+//!
+//! Holding that mark, with no [`SequenceHole`](commonwealth_rail_core::RailGap::SequenceHole)
+//! for its actor, means every seq from the floor to the mark is on this node —
+//! which is every row of the snapshot. **Neither half of the cheaper
+//! alternatives works.** `Admission::is_complete()` is TRUE on a node holding
+//! only the seal, because the hole audit runs `floor..=highest` and the seal is
+//! both. "Some op landed above the floor" is true of a half-arrived snapshot,
+//! and FALSE of an empty one — and the empty snapshot is exactly the K7 case,
+//! an actor whose last live key was deleted just before it sealed.
+//!
+//! A build that does not know the mark counts it `unreadable` and reconciles
+//! nothing, which is the old behaviour: the marker's failure direction is
+//! always "do not retire" (ARCH §18.3).
+//!
 //! # No float, ever
 //!
 //! [`Payload`] refuses fractional numbers because two nodes must derive
@@ -57,8 +94,9 @@
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use bytes::Bytes;
-use commonwealth_rail_core::{Admission, Payload};
+use commonwealth_rail_core::{Admission, Payload, RailGap};
 use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::{Error, Result};
 
@@ -70,6 +108,11 @@ const F_VALUE: &str = "v";
 const F_TIME: &str = "t";
 /// The payload field saying this act is a delete.
 const F_DELETED: &str = "d";
+/// The payload field of the SNAPSHOT MARK, carrying the seq of the seal whose
+/// snapshot it closes. The one field of that act, and it appears on no other:
+/// the field SET is the discriminator here exactly as it is for a store write
+/// (see the module docs on `kind`).
+const F_SNAPSHOT: &str = "snap";
 
 /// One store write, read back off a journal line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +148,22 @@ pub struct Projection {
     /// empty `rows` beside a non-zero `unreadable` is a very different fact
     /// from an empty `rows` beside a quiet ring (ARCH §18.3).
     pub unreadable: usize,
+    /// Per actor whose seal AND whole snapshot this node holds, every key that
+    /// actor still asserts. See the module docs for what closes a snapshot.
+    ///
+    /// This is the one claim a fold can make about a set it cannot see: a row
+    /// in the store originated by one of these actors and ABSENT from its set
+    /// is retired — tombstoned before the seal, or never re-snapshotted, and
+    /// either way its author no longer asserts it.
+    /// [`MeshStore::apply_projection`](crate::MeshStore::apply_projection) is
+    /// what acts on that.
+    ///
+    /// An actor absent from this map makes NO claim about its whole set, and
+    /// an absent entry is never read as an empty one (ARCH §18.3): a seal
+    /// whose snapshot is still arriving, an actor that has never sealed, and a
+    /// snapshot written by a build that does not mark them all land here, and
+    /// all three mean "retire nothing of theirs".
+    pub sealed_actors: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// Wrap one store write as a rail payload, or say why it cannot travel.
@@ -151,6 +210,34 @@ pub fn from_payload(payload: &Payload) -> Option<KvOp> {
     Some(KvOp { key, value, t })
 }
 
+/// The act that closes a snapshot: "everything of mine that is still live is
+/// at or below this line."
+///
+/// Appended by the snapshotting node AFTER the last row it re-appended, so
+/// holding it — with no hole in that actor's run above the floor — is holding
+/// the whole snapshot. `floor` is the seq of the seal it closes, so a mark left
+/// over from an EARLIER seal (held by a node that has not compacted yet) names
+/// a floor that no longer matches and closes nothing.
+pub fn snapshot_mark(floor: u64) -> Result<Payload> {
+    let mut obj = serde_json::Map::new();
+    obj.insert(F_SNAPSHOT.to_string(), json!(floor));
+    Payload::new(Value::Object(obj))
+        .map_err(|e| Error::Serialization(format!("the snapshot mark cannot go on the rail: {e}")))
+}
+
+/// Read a snapshot mark back off a journal line, or `None` when this line is
+/// not one.
+///
+/// Disjoint from [`from_payload`] by field set, and pinned that way by
+/// `a_mark_is_not_a_store_write_and_a_store_write_is_not_a_mark`.
+pub fn read_snapshot_mark(payload: &Payload) -> Option<u64> {
+    let obj = payload.as_value().as_object()?;
+    if obj.len() != 1 {
+        return None;
+    }
+    obj.get(F_SNAPSHOT)?.as_u64()
+}
+
 /// Fold one namespace's admitted ops into the rows a store should hold.
 ///
 /// Per key, the act with the greatest `(t, actor, id)` among the admitted,
@@ -165,13 +252,58 @@ pub fn from_payload(payload: &Payload) -> Option<KvOp> {
 ///   arrival order to depend on, and the tie-break is total.
 ///
 /// `admission.applied()` is the ONE definition of "surviving" (voided ops
-/// out, seals out); this fold never re-derives it.
+/// out, seals out); this fold never re-derives it. What it adds on top is the
+/// floor: an op strictly below its own actor's
+/// [`Admission::floors`](commonwealth_rail_core::Admission) entry is RETIRED
+/// and does not fold, because that is exactly the set
+/// `RingJournal::compact` deletes. Folding it would make the answer depend on
+/// whether this node's prune had run yet, and would resurrect the keys the
+/// author's snapshot declined to re-append.
+///
+/// # The second answer: whose whole live set this is
+///
+/// Alongside the winning row per key, the fold reports
+/// [`Projection::sealed_actors`] — per actor whose seal AND whole snapshot are
+/// held, the keys that actor still asserts. It is computed HERE, in the same
+/// walk, because it is a reading of the same op set and a second walk somewhere
+/// else would be a second answer to it (ARCH §10.6). Two conditions, both
+/// necessary and argued in the module docs:
+///
+/// - the actor's [`snapshot_mark`] for its CURRENT floor is among the applied
+///   ops, and
+/// - no [`RailGap::SequenceHole`] names that actor, so the run from the floor
+///   to the mark has no missing seq — every row of the snapshot is on this node.
+///
+/// The per-actor fold is over that actor's OWN ops at or above its floor, and
+/// it is deliberately not the namespace-wide winner: a key another actor won is
+/// a row that node holds under the OTHER origin, and reconciliation matches on
+/// origin.
 pub fn project(admission: &Admission) -> Projection {
     // (t, actor, op id) -> the winning act's value. BTreeMap so `rows` comes
     // out key-ordered on every node without a second sort.
-    let mut best: std::collections::BTreeMap<String, (u64, String, String, Option<Bytes>)> =
-        std::collections::BTreeMap::new();
+    let mut best: BTreeMap<String, (u64, String, String, Option<Bytes>)> = BTreeMap::new();
     let mut unreadable = 0usize;
+
+    // Only actors admission gave a floor — an actor that has never sealed makes
+    // no claim about its whole set, and there is nothing here to fill in.
+    let holed: BTreeSet<&str> = admission
+        .gaps
+        .iter()
+        .filter_map(|g| match g {
+            RailGap::SequenceHole { actor, .. } => Some(actor.as_str()),
+            _ => None,
+        })
+        .collect();
+    // Every actor with a floor gets an entry here; the ones whose snapshot is
+    // CLOSED — the mark below — also land in `marked`. Two collections rather
+    // than a flag on one, because they answer different questions: what the
+    // actor's post-floor history says, and whether that history is all of it.
+    let mut live: BTreeMap<&str, BTreeMap<String, (u64, String, bool)>> = admission
+        .floors
+        .keys()
+        .map(|a| (a.as_str(), BTreeMap::new()))
+        .collect();
+    let mut marked: BTreeSet<&str> = BTreeSet::new();
 
     for op in admission.applied() {
         let Some(payload) = op.payload.as_ref() else {
@@ -179,6 +311,40 @@ pub fn project(admission: &Admission) -> Projection {
             // the type's, not the rail's.
             continue;
         };
+        let floor = admission.floors.get(&op.actor).copied();
+        if floor.is_some_and(|f| op.seq < f) {
+            // RETIRED by its own author's seal. `RingJournal::compact` deletes
+            // exactly these lines — strictly below the floor `admit` reported —
+            // so folding them would make this node's answer depend on whether
+            // its local prune had run yet, and would resurrect precisely the
+            // keys a snapshot declined to re-append (ARCH §10.6).
+            tracing::debug!(
+                actor = %op.actor,
+                seq = op.seq,
+                floor = floor.unwrap_or_default(),
+                "rail_kv.retired_by_seal"
+            );
+            continue;
+        }
+        if let Some(closed_floor) = read_snapshot_mark(payload) {
+            // Never a store row, and never `unreadable` — it is this build's
+            // own vocabulary, and a count that fires when nothing is wrong
+            // stops being read (ARCH §18.3).
+            let closes = floor == Some(closed_floor);
+            if closes {
+                if let Some((actor, _)) = live.get_key_value(op.actor.as_str()) {
+                    marked.insert(*actor);
+                }
+            }
+            tracing::debug!(
+                actor = %op.actor,
+                closed_floor,
+                floor = floor.unwrap_or_default(),
+                closes,
+                "rail_kv.snapshot_mark"
+            );
+            continue;
+        }
         let Some(kv) = from_payload(payload) else {
             unreadable += 1;
             tracing::debug!(
@@ -189,6 +355,21 @@ pub fn project(admission: &Admission) -> Projection {
             continue;
         };
         let id = op.id.as_str();
+        if floor.is_some() {
+            // This actor's own post-floor history — everything below the floor
+            // took the `continue` above — folded on its own. That is the set
+            // its snapshot claims to be all of.
+            let keys = live
+                .get_mut(op.actor.as_str())
+                .expect("a floor means an entry");
+            let wins = match keys.get(&kv.key) {
+                None => true,
+                Some((t, held_id, _)) => (kv.t, id) > (*t, held_id.as_str()),
+            };
+            if wins {
+                keys.insert(kv.key.clone(), (kv.t, id.to_string(), kv.value.is_some()));
+            }
+        }
         let wins = match best.get(&kv.key) {
             None => true,
             Some((t, actor, held_id, _)) => {
@@ -207,6 +388,30 @@ pub fn project(admission: &Admission) -> Projection {
         }
     }
 
+    let sealed_actors: BTreeMap<String, BTreeSet<String>> = live
+        .into_iter()
+        .filter_map(|(actor, keys)| {
+            let complete = marked.contains(actor) && !holed.contains(actor);
+            tracing::debug!(
+                actor,
+                marked = marked.contains(actor),
+                holed = holed.contains(actor),
+                live = keys.values().filter(|(_, _, live)| *live).count(),
+                complete,
+                "rail_kv.sealed_actor"
+            );
+            complete.then(|| {
+                (
+                    actor.to_string(),
+                    keys.into_iter()
+                        .filter(|(_, (_, _, live))| *live)
+                        .map(|(key, _)| key)
+                        .collect(),
+                )
+            })
+        })
+        .collect();
+
     let rows: Vec<Projected> = best
         .into_iter()
         .map(|(key, (t, actor, _id, value))| Projected {
@@ -219,11 +424,16 @@ pub fn project(admission: &Admission) -> Projection {
     tracing::debug!(
         rows = rows.len(),
         unreadable,
+        sealed_actors = sealed_actors.len(),
         held = admission.held,
         gaps = admission.gaps.len(),
         "rail_kv.projected"
     );
-    Projection { rows, unreadable }
+    Projection {
+        rows,
+        unreadable,
+        sealed_actors,
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +450,21 @@ mod tests {
         RailAct::Record {
             payload: to_payload(k, v, t).unwrap(),
         }
+    }
+
+    /// The act that closes a snapshot, as its author would have signed it.
+    fn mark(floor: u64) -> RailAct {
+        RailAct::Record {
+            payload: snapshot_mark(floor).unwrap(),
+        }
+    }
+
+    /// What the fold says `actor` still asserts, or `None` when it makes no
+    /// claim at all — the two are different facts and this keeps them so.
+    fn live_set(p: &Projection, k: &commonwealth_rail_core::SigningKey) -> Option<Vec<String>> {
+        p.sealed_actors
+            .get(&commonwealth_rail_core::actor_of(k))
+            .map(|keys| keys.iter().cloned().collect())
     }
 
     fn value_of(p: &Projection, key: &str) -> Option<Bytes> {
@@ -465,5 +690,211 @@ mod tests {
             "a voided write is not a tombstone and not a value; it never happened"
         );
         assert_eq!(p.unreadable, 0, "a void carries no payload to fail to read");
+    }
+
+    /// **The two shapes on this vocabulary do not overlap.** The mark is read
+    /// by field set exactly as a store write is, so the two parsers must
+    /// refuse each other's acts — otherwise a key called `snap` or an extra
+    /// field could turn a row into a claim about a whole live set.
+    #[test]
+    fn a_mark_is_not_a_store_write_and_a_store_write_is_not_a_mark() {
+        let m = snapshot_mark(2_005).unwrap();
+        assert_eq!(read_snapshot_mark(&m), Some(2_005));
+        assert!(
+            from_payload(&m).is_none(),
+            "a mark must never project as a store row"
+        );
+
+        let w = to_payload("snap", Some(b"v"), 9).unwrap();
+        assert!(
+            read_snapshot_mark(&w).is_none(),
+            "a key named `snap` is a key"
+        );
+        assert!(
+            read_snapshot_mark(&Payload::new(json!({"snap": 1, "k": "a"})).unwrap()).is_none(),
+            "a mark carries ONE field; anything else is another act"
+        );
+        assert!(read_snapshot_mark(&Payload::new(json!({"snap": -1})).unwrap()).is_none());
+    }
+
+    /// **A closed snapshot IS the actor's live set, and a retired key is not
+    /// in it.** `gone` was written before the seal and never re-appended —
+    /// which is what a tombstone this node published looks like once the seal
+    /// that retired it lands. It is still a ROW (the retired op is on this
+    /// disk until a prune takes it), and it is not in the live set. That gap
+    /// between the two is the whole reconciliation.
+    #[test]
+    fn a_closed_snapshot_reports_the_actors_whole_live_set() {
+        let alex = key(1);
+        let a = admitted(&[
+            signed(&alex, 100, 0, write("gone", Some(b"stale"), 100)),
+            signed(&alex, 101, 1, write("kept", Some(b"v"), 101)),
+            signed(&alex, 900, 2, RailAct::Seal),
+            signed(&alex, 901, 3, write("kept", Some(b"v"), 101)),
+            signed(&alex, 902, 4, mark(2)),
+        ]);
+        let p = project(&a);
+        assert_eq!(
+            live_set(&p, &alex).as_deref(),
+            Some(&["kept".to_string()][..]),
+            "the live set is what the snapshot re-appended, and nothing else"
+        );
+        assert!(
+            !p.rows.iter().any(|r| r.key == "gone"),
+            "an op below its author's floor is retired, whether or not this node \
+             has pruned it off disk yet"
+        );
+        // …and that is why the live set has to be reported separately: the fold
+        // no longer mentions `gone` at all, so nothing in `rows` would ever take
+        // the store row this node wrote before the seal.
+        assert_eq!(p.unreadable, 0, "the mark is this build's own vocabulary");
+    }
+
+    /// **A tombstone above the floor is not live either**, and this is the
+    /// case where the two answers must agree: the row says delete, the live
+    /// set says the author no longer asserts it.
+    #[test]
+    fn a_post_seal_tombstone_is_out_of_the_live_set() {
+        let alex = key(1);
+        let a = admitted(&[
+            signed(&alex, 900, 0, RailAct::Seal),
+            signed(&alex, 901, 1, write("k", Some(b"v"), 500)),
+            signed(&alex, 902, 2, mark(0)),
+            signed(&alex, 903, 3, write("k", None, 600)),
+        ]);
+        let p = project(&a);
+        assert_eq!(live_set(&p, &alex).as_deref(), Some(&[][..]));
+        assert_eq!(p.rows.len(), 1);
+        assert_eq!(p.rows[0].value, None, "the row is the tombstone");
+    }
+
+    /// **A half-arrived snapshot claims NOTHING — and the cheap gates would
+    /// both have claimed something.** The ring's pull is chunked, so this is
+    /// the state a node is really in between two chunks. Note the second
+    /// assertion: `is_complete()` is TRUE here, because the hole audit runs
+    /// from the floor and the seal IS the floor. A completeness gate would
+    /// have retired every row this actor owns (ARCH §18.2).
+    #[test]
+    fn a_snapshot_still_arriving_makes_no_claim_about_the_live_set() {
+        let alex = key(1);
+        let before = [
+            signed(&alex, 100, 0, write("a", Some(b"1"), 100)),
+            signed(&alex, 101, 1, write("b", Some(b"2"), 101)),
+        ];
+        // Chunk 1: the seal, and nothing above it yet.
+        let a = admitted(&[
+            before[0].clone(),
+            before[1].clone(),
+            signed(&alex, 900, 2, RailAct::Seal),
+        ]);
+        let p = project(&a);
+        assert_eq!(live_set(&p, &alex), None, "no mark, no claim");
+        assert!(
+            a.is_complete(),
+            "and `is_complete()` says yes — which is why it is not the gate"
+        );
+
+        // Chunk 2, still partial: one row of the snapshot, no mark.
+        let a = admitted(&[
+            before[0].clone(),
+            before[1].clone(),
+            signed(&alex, 900, 2, RailAct::Seal),
+            signed(&alex, 901, 3, write("a", Some(b"1"), 100)),
+        ]);
+        assert_eq!(
+            live_set(&project(&a), &alex),
+            None,
+            "one row above the floor is not a snapshot; the other row would              have been retired on the strength of it"
+        );
+
+        // The rest of it, and the claim is made.
+        let a = admitted(&[
+            before[0].clone(),
+            before[1].clone(),
+            signed(&alex, 900, 2, RailAct::Seal),
+            signed(&alex, 901, 3, write("a", Some(b"1"), 100)),
+            signed(&alex, 902, 4, write("b", Some(b"2"), 101)),
+            signed(&alex, 903, 5, mark(2)),
+        ]);
+        assert_eq!(
+            live_set(&project(&a), &alex),
+            Some(vec!["a".to_string(), "b".to_string()])
+        );
+    }
+
+    /// **A hole in the run below the mark withdraws the claim.** The mark
+    /// alone would be believed by a node that ingested it out of order, or
+    /// that could not parse one line of the snapshot — and the missing line is
+    /// exactly the row that would then be retired.
+    #[test]
+    fn a_hole_under_the_mark_withdraws_the_claim() {
+        let alex = key(1);
+        let held = [
+            signed(&alex, 900, 0, RailAct::Seal),
+            signed(&alex, 901, 1, write("a", Some(b"1"), 100)),
+            // seq 2 — the row for "b" — never arrived.
+            signed(&alex, 903, 3, mark(0)),
+        ];
+        let a = admitted(&held);
+        assert!(!a.is_complete(), "the hole is reported");
+        assert_eq!(live_set(&project(&a), &alex), None);
+    }
+
+    /// **A mark for an OLDER seal closes nothing.** A node that has not
+    /// compacted still holds the previous snapshot and its mark; reading that
+    /// one as current would claim a live set two seals out of date.
+    #[test]
+    fn a_mark_from_an_earlier_seal_does_not_close_the_current_one() {
+        let alex = key(1);
+        let a = admitted(&[
+            signed(&alex, 900, 0, RailAct::Seal),
+            signed(&alex, 901, 1, write("a", Some(b"1"), 100)),
+            signed(&alex, 902, 2, mark(0)),
+            // The second seal. Its snapshot has not arrived.
+            signed(&alex, 903, 3, RailAct::Seal),
+        ]);
+        assert_eq!(live_set(&project(&a), &alex), None);
+    }
+
+    /// **An actor that never sealed is ABSENT, not empty** (ARCH §18.3). The
+    /// two mean opposite things to a reconciliation: absent is "I know nothing
+    /// about their whole set", empty is "they assert nothing".
+    #[test]
+    fn an_actor_that_never_sealed_is_absent_rather_than_empty() {
+        let (alex, bo) = (key(1), key(2));
+        let a = admitted(&[
+            signed(&alex, 100, 0, write("a", Some(b"1"), 100)),
+            signed(&bo, 900, 0, RailAct::Seal),
+            signed(&bo, 901, 1, mark(0)),
+        ]);
+        let p = project(&a);
+        assert_eq!(live_set(&p, &alex), None, "alex has not sealed");
+        assert_eq!(
+            live_set(&p, &bo),
+            Some(vec![]),
+            "bo sealed with nothing live and says so — the K7 case, and the              one a `some op above the floor` gate cannot see"
+        );
+    }
+
+    /// **One actor's seal says nothing about another's rows.** The per-actor
+    /// fold is over that actor's OWN ops, so a key another node won is not in
+    /// this one's live set — and the store matches on origin, so it is not
+    /// this one's row either.
+    #[test]
+    fn a_sealed_actors_live_set_is_only_its_own_writes() {
+        let (alex, bo) = (key(1), key(2));
+        let a = admitted(&[
+            signed(&bo, 100, 0, write("shared", Some(b"bo"), 500)),
+            signed(&alex, 900, 0, RailAct::Seal),
+            signed(&alex, 901, 1, write("mine", Some(b"alex"), 100)),
+            signed(&alex, 902, 2, mark(0)),
+        ]);
+        let p = project(&a);
+        assert_eq!(
+            live_set(&p, &alex),
+            Some(vec!["mine".to_string()]),
+            "bo's key is not alex's to retire"
+        );
+        assert_eq!(value_of(&p, "shared").as_deref(), Some(&b"bo"[..]));
     }
 }

@@ -16,7 +16,9 @@
 //!   store.get(app_id, key)                  read
 //!   store.scan(app_id, prefix)              read a range
 //!   store.outbox_take(limit) / _ack(ids)    what this node wrote, for the rail
-//!   store.apply_projection(app_id, rows, ..) what the ring says we hold
+//!   store.apply_projection(app_id, &projection, ..)  what the ring says we
+//!                                           hold — including whose seal has
+//!                                           vouched for a WHOLE live set
 //!   store.merge_entry(entry)                take a peer's row, if newer
 //! ```
 //!

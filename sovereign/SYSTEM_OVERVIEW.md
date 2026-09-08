@@ -5377,12 +5377,20 @@ what it counts is this node's own ADMITTED ops at or above its authenticated
 floor. The cost of that count is a fold, so a cheap one-sided gate runs first:
 own RAW lines on disk (parsed, not verified) can never be fewer than
 own-admitted-above-floor, so a cheap count under the bar proves the expensive
-one is (§9.5). **The seal's honest cost, stated rather than hidden**: a
-snapshot carries LIVE rows, and a tombstone is not one — a delete this node
-published stops travelling once the seal that retired it lands, so a peer that
-never received the tombstone keeps its stale value. That is the KV shape of
-K7's "no history past the next seal", and it is why the threshold is thousands
-of ops rather than hundreds.
+one is (§9.5). **The seal's honest cost, and how it was ABSORBED rather than
+priced**: a snapshot carries LIVE rows and a tombstone is not one, so a delete
+this node published would stop travelling the moment the seal that retired it
+lands, and a peer that never received the tombstone would keep its stale value
+forever — the KV shape of K7's "no history past the next seal". ea4da7b68
+recorded that in the module docs and here; the rung that followed CLOSED it,
+because a seal followed by its whole snapshot IS that actor's live set, and a
+peer holding both may retire every other row of that actor's. `snapshot` now
+ends with `rail_kv::snapshot_mark(floor)` — one act naming the seal it closes,
+appended after the last row — so "I hold the whole snapshot" is a fact on the
+journal rather than a guess about timing. The rule and its two gates are under
+"the seal reconciliation" in the distributed-state section below. The threshold
+stays at thousands of ops: it is priced on journal BYTES, and the cost it was
+raised for is gone rather than smaller.
 
 **`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
@@ -5689,8 +5697,14 @@ directory per namespace — and this store is the fold of it:
   predicate, so an excluded namespace cannot enter the queue even by a
   caller who forgot (ARCH §7.1).
 - **Vocabulary + fold.** `commonwealth-state::rail_kv` — one act,
-  `{"k", "v" (base64, absent on a tombstone), "t", "d"}`, and
-  `project(&Admission) -> Projection { rows, unreadable }`. Per key the
+  `{"k", "v" (base64, absent on a tombstone), "t", "d"}`, plus the snapshot
+  MARK `{"snap": <the seal's seq>}` below, and
+  `project(&Admission) -> Projection { rows, unreadable, sealed_actors }`.
+  An op strictly below its own actor's `Admission::floors` entry is RETIRED
+  and does not fold at all — exactly the set `RingJournal::compact` deletes,
+  so the answer cannot depend on whether this node's prune has run yet, and a
+  key a snapshot declined to re-append cannot come back from the retired line
+  still on disk (§10.6). Per key the
   act with the greatest `(t, actor, id)` among admitted NON-VOIDED ops
   wins. `t` is the ORIGINAL write time, not the journal line's
   `ts_unix`: a snapshot re-append after a seal is a new LINE carrying an
@@ -5701,8 +5715,12 @@ directory per namespace — and this store is the fold of it:
   (ARCH §18.3). Tie-break on `(actor, id)` also closes the cross-node
   divergence `merge_entry_equal_timestamp_keeps_incumbent` pinned as a
   known limitation: on the rail there is no arrival order to depend on.
-- **In.** `MeshStore::apply_projection(app_id, rows, origin_of) ->
-  Applied { merged, deleted, unattributed }`. Values go through
+- **In.** `MeshStore::apply_projection(app_id, &Projection, origin_of,
+  self_id) -> Applied { merged, deleted, reconciled, unattributed }`. The
+  whole `Projection` goes in rather than its rows, because the live sets below
+  are the same fold's second answer and pairing fresh rows with a stale claim
+  would retire a key on the strength of a different journal (§10.6). Values go
+  through
   `merge_entry` (LWW at `t`); a tombstone deletes only what is not newer
   than it, in one statement so a concurrent `set` cannot be taken. An
   actor the roster cannot place is counted `unattributed` and skipped
@@ -5713,6 +5731,31 @@ directory per namespace — and this store is the fold of it:
   `a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`:
   a hostile peer's private namespace IS ingested by `/internal/ring/sync`
   (the rail is author-blind, by design) and reaches no store.
+- **The seal reconciliation — a tombstone keeps travelling past the seal that
+  retired it.** For every actor in `Projection::sealed_actors`, the rows this
+  store holds on that actor's behalf are reconciled to the set that actor
+  asserts: a row whose origin is that actor and whose key the actor does not
+  name is RETIRED (counted `reconciled`, apart from `deleted` — a tombstone is
+  an op that says "delete this", a reconciliation is the absence of one from a
+  set an actor has vouched is whole). **Two gates decide membership of that
+  map and both are necessary**: the actor's `snapshot_mark` for its CURRENT
+  floor is held, and no `RailGap::SequenceHole` names it — together, every seq
+  from the floor to the mark is on this node, which is every row of the
+  snapshot. The cheaper alternatives are both wrong and both are pinned as
+  such: `is_complete()` is TRUE on a node holding only the seal (the hole
+  audit runs `floor..=highest` and the seal is both), and "some op landed
+  above the floor" is true of a half-arrived snapshot and FALSE of an empty
+  one — which is the K7 case itself, an actor whose last live key was deleted
+  just before it sealed. An actor absent from the map makes no claim, and
+  absence is never read as an empty live set (§18.3). **`self_id` is
+  skipped**, and that is the direction of truth rather than a special case:
+  for a peer the journal is upstream of this store, for THIS node the store
+  leads the journal by an outbox drain, so reconciling self would read our own
+  lag as a retirement and delete a write still in the outbox. The pins are
+  `a_seal_carries_a_delete_the_peer_never_received` and
+  `a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark`
+  (`ring_sync`), and `apply_projection_never_reconciles_this_nodes_own_rows`
+  (`commonwealth-state`).
 - **A replicating `app_id` is a ring namespace verbatim**, and a
   namespace names a DIRECTORY (`<root>/rings/<ns>/`), so it must satisfy
   `commonwealth-rail`'s `valid_namespace` — `[a-z0-9_-]{1,64}`. The one

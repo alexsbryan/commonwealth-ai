@@ -1142,6 +1142,44 @@ mod tests {
         )
     }
 
+    /// The floor named by the snapshot mark on these ops, if one is there.
+    fn mark_of(ops: &[Op<SignedOp>]) -> Option<u64> {
+        ops.iter().find_map(|o| match &o.kind.act {
+            RailAct::Record { payload } => commonwealth_state::rail_kv::read_snapshot_mark(payload),
+            _ => None,
+        })
+    }
+
+    /// Whether these ops carry a store write for `key` — a tombstone included.
+    /// Used to assert that a delete really is OFF a disk, rather than trusting
+    /// a line count to have taken the right line.
+    fn carries_write_for(ops: &[Op<SignedOp>], key: &str) -> bool {
+        ops.iter().any(|o| match &o.kind.act {
+            RailAct::Record { payload } => {
+                commonwealth_state::rail_kv::from_payload(payload).is_some_and(|kv| kv.key == key)
+            }
+            _ => false,
+        })
+    }
+
+    /// The 2,000 superseded writes that trip `SEAL_AFTER_OWN_OPS`, signed by
+    /// `key` from `first_seq`. Old `t`s, so nothing here can win a key.
+    fn filler(k: &SigningKey, first_seq: u64, keys: &[&str]) -> Vec<Op<SignedOp>> {
+        let old = commonwealth_core::clock::unix_now_secs() - 10_000;
+        (0..crate::rail_kv_pump::SEAL_AFTER_OWN_OPS as u64)
+            .map(|i| {
+                kv_op(
+                    KV,
+                    k,
+                    first_seq + i,
+                    keys[i as usize % keys.len()],
+                    Some(format!("old-{i}").as_bytes()),
+                    old + i,
+                )
+            })
+            .collect()
+    }
+
     fn value_at(state: &AppState, app_id: &str, key: &str) -> Option<Vec<u8>> {
         state
             .inner
@@ -1349,19 +1387,7 @@ mod tests {
         assert_eq!(a_journal.read().unwrap().0.len(), 4);
 
         // ── 2,000 older writes of the same keys: history, already superseded.
-        let old = commonwealth_core::clock::unix_now_secs() - 10_000;
-        let filler: Vec<Op<SignedOp>> = (0..crate::rail_kv_pump::SEAL_AFTER_OWN_OPS as u64)
-            .map(|i| {
-                kv_op(
-                    KV,
-                    &ka,
-                    4 + i,
-                    KEYS[i as usize % KEYS.len()],
-                    Some(format!("old-{i}").as_bytes()),
-                    old + i,
-                )
-            })
-            .collect();
+        let filler = filler(&ka, 4, &KEYS);
         let total = 4 + filler.len();
         assert_eq!(a_journal.ingest_all(&filler).unwrap(), filler.len());
 
@@ -1396,18 +1422,25 @@ mod tests {
         let held = a_journal.read().unwrap().0;
         assert_eq!(
             held.len(),
-            1 + KEYS.len(),
-            "the writer's own disk is the seal plus the snapshot: {held:?}"
+            1 + KEYS.len() + 1,
+            "the writer's own disk is the seal, the snapshot, and the mark that \
+             closes it: {held:?}"
         );
         assert!(matches!(held[0].kind.act, RailAct::Seal));
+        assert_eq!(
+            mark_of(&held),
+            Some(held[0].kind.seq),
+            "the snapshot ends with the mark naming the seal it completes — \
+             without it no peer may retire anything of ours"
+        );
 
         // ── The peer meets the seal and retires the same prefix.
         let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
         assert!(out.stop.is_none(), "{:?}", out.stop);
         assert_eq!(
             b_journal.read().unwrap().0.len(),
-            1 + KEYS.len(),
-            "the peer's disk holds only the seal and the snapshot"
+            1 + KEYS.len() + 1,
+            "the peer's disk holds only the seal, the snapshot and its mark"
         );
         assert_eq!(
             a_journal.digest().unwrap(),
@@ -1428,6 +1461,202 @@ mod tests {
                 Some(format!("live-{k}").as_bytes()),
                 "{k} did not survive the seal"
             );
+        }
+    }
+
+    /// **(c2) A delete keeps travelling past the seal that retired it.**
+    ///
+    /// The cost ea4da7b68 recorded and priced rather than paid: a snapshot
+    /// carries LIVE rows, a tombstone is not one, so a peer that was away for
+    /// the delete used to keep the value forever — the KV shape of K7. Here B
+    /// holds all three keys, A deletes one while B is not listening, and the
+    /// seal that fires on the same tick takes the tombstone off A's disk before
+    /// any exchange could carry it. The middle assertion is the one that makes
+    /// this a real reproduction rather than a slow round: the delete is
+    /// provably UNREACHABLE, not merely late.
+    ///
+    /// What B has afterwards is the seal, the snapshot and its mark — and that
+    /// is a claim about A's WHOLE live set, which is what retires the row.
+    ///
+    /// Watched RED by dropping the reconciliation loop from
+    /// `MeshStore::apply_projection`: every assertion above the last passes and
+    /// B keeps `gone` at its stale value.
+    #[tokio::test]
+    async fn a_seal_carries_a_delete_the_peer_never_received() {
+        const KEYS: [&str; 3] = ["k0", "k1", "gone"];
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[15u8; 32]),
+            SigningKey::from_bytes(&[16u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(61), NodeId::from_u128(62));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        for k in KEYS {
+            assert!(a_state
+                .inner
+                .mesh_store
+                .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
+                .unwrap());
+        }
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!((pumped.appended, pumped.sealed), (3, 0), "{pumped:?}");
+
+        // B takes the whole live set, including the key that is about to go.
+        let a_url = serve(internal_router(a_state.clone())).await;
+        let client = reqwest::Client::new();
+        let a_journal = a_rail.journal(KV).unwrap();
+        let b_journal = b_rail.journal(KV).unwrap();
+        let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "gone").as_deref(),
+            Some(&b"live-gone"[..]),
+            "control: the peer held the key before it was deleted"
+        );
+
+        // ── A deletes it, and seals on the same tick. B is not listening.
+        assert_eq!(
+            a_journal.ingest_all(&filler(&ka, 3, &KEYS)).unwrap(),
+            crate::rail_kv_pump::SEAL_AFTER_OWN_OPS
+        );
+        assert!(a_state.inner.mesh_store.delete(KV, "gone").unwrap());
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!(pumped.appended, 1, "the tombstone was appended: {pumped:?}");
+        assert_eq!(pumped.sealed, 1, "{pumped:?}");
+        assert_eq!(pumped.snapshot_rows, 2, "two live rows, not three");
+
+        let held = a_journal.read().unwrap().0;
+        assert!(
+            !carries_write_for(&held, "gone"),
+            "THE REPRODUCTION: the tombstone is below the floor and off the \
+             disk, so no exchange can ever carry it to B: {held:?}"
+        );
+        assert_eq!(mark_of(&held), Some(held[0].kind.seq));
+
+        // ── The round that meets the seal.
+        let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+        assert!(out.stop.is_none(), "{:?}", out.stop);
+        assert!(
+            !carries_write_for(&b_journal.read().unwrap().0, "gone"),
+            "B never receives a delete for it — the seal is what says so"
+        );
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+
+        assert_eq!(
+            value_at(&b_state, KV, "gone"),
+            None,
+            "the key A stopped asserting is gone from the peer that never saw \
+             the tombstone"
+        );
+        for k in ["k0", "k1"] {
+            assert_eq!(
+                value_at(&b_state, KV, k).as_deref(),
+                Some(format!("live-{k}").as_bytes()),
+                "{k} was in the snapshot and must survive the same pass"
+            );
+        }
+    }
+
+    /// **(c3) A snapshot that arrives in two chunks retires nothing until the
+    /// mark lands.** The control for (c2), and the reason the mark exists.
+    ///
+    /// `exchange` pulls in chunks, so a seal can land in one and its snapshot
+    /// in the next — and a round can end in between (the chunk bound, a peer
+    /// that stops answering on call 2). At that instant the seal is on disk and
+    /// the live set folds EMPTY, so an unguarded reconciliation would retire
+    /// every row this node holds on that actor's behalf. `admit` reports the
+    /// journal COMPLETE there, because the hole audit runs from the floor and
+    /// the seal is the floor — which is why completeness cannot be the gate.
+    ///
+    /// The two chunks are fed by hand rather than over the wire: what is under
+    /// test is the fold's verdict on a partly-arrived journal, and driving the
+    /// split through HTTP would make the test's own chunking the thing being
+    /// asserted.
+    ///
+    /// Watched RED by dropping `marked` from the completeness test in
+    /// `rail_kv::project`: the first half retires all three of A's keys.
+    #[tokio::test]
+    async fn a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark() {
+        const KEYS: [&str; 3] = ["k0", "k1", "gone"];
+        let (ka, kb) = (
+            SigningKey::from_bytes(&[17u8; 32]),
+            SigningKey::from_bytes(&[18u8; 32]),
+        );
+        let (a_id, b_id) = (NodeId::from_u128(71), NodeId::from_u128(72));
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mesh = kv_mesh(&ka, &kb, a_id, b_id);
+        let (a_state, a_rail) = kv_node(da.path(), &ka, a_id, mesh.clone());
+        let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh);
+
+        for k in KEYS {
+            assert!(a_state
+                .inner
+                .mesh_store
+                .set(KV, k, bytes::Bytes::from(format!("live-{k}")), a_id)
+                .unwrap());
+        }
+        assert_eq!(crate::rail_kv_pump::pump_once(&a_state).await.appended, 3);
+        let a_journal = a_rail.journal(KV).unwrap();
+        let b_journal = b_rail.journal(KV).unwrap();
+
+        // B holds A's pre-seal history.
+        let pre = a_journal.read().unwrap().0;
+        assert_eq!(b_journal.ingest_all(&pre).unwrap(), 3);
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        for k in KEYS {
+            assert!(value_at(&b_state, KV, k).is_some(), "{k}");
+        }
+
+        // A deletes one key and seals.
+        a_journal.ingest_all(&filler(&ka, 3, &KEYS)).unwrap();
+        assert!(a_state.inner.mesh_store.delete(KV, "gone").unwrap());
+        let pumped = crate::rail_kv_pump::pump_once(&a_state).await;
+        assert_eq!((pumped.sealed, pumped.snapshot_rows), (1, 2), "{pumped:?}");
+        let after = a_journal.read().unwrap().0;
+
+        // ── Chunk one: the seal, and nothing above it.
+        let (seal, rest): (Vec<_>, Vec<_>) = after
+            .into_iter()
+            .partition(|o| matches!(o.kind.act, RailAct::Seal));
+        assert_eq!(seal.len(), 1);
+        assert_eq!(b_journal.ingest_all(&seal).unwrap(), 1);
+        let admitted = b_journal
+            .admit(
+                &crate::ring_roster::MeshRoster::from_app_state(&b_state)
+                    .await
+                    .roster()
+                    .clone(),
+                &Ed25519Verifier,
+            )
+            .unwrap();
+        assert!(
+            admitted.is_complete(),
+            "the journal reports COMPLETE at exactly the instant its live set \
+             is a lie: {:?}",
+            admitted.gaps
+        );
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        for k in KEYS {
+            assert!(
+                value_at(&b_state, KV, k).is_some(),
+                "{k} was retired on the strength of half a snapshot"
+            );
+        }
+
+        // ── Chunk two: the rows and the mark.
+        assert_eq!(b_journal.ingest_all(&rest).unwrap(), rest.len());
+        crate::rail_kv_pump::project_all_on_disk(&b_state).await;
+        assert_eq!(
+            value_at(&b_state, KV, "gone"),
+            None,
+            "now the claim is whole"
+        );
+        for k in ["k0", "k1"] {
+            assert!(value_at(&b_state, KV, k).is_some(), "{k}");
         }
     }
 

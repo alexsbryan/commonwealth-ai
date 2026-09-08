@@ -38,15 +38,27 @@
 //! drains a row for one (the outbox only carries `MeshStore` writes), and
 //! `POST /v1/rail/append` remains the only way one of them seals.
 //!
-//! # What a seal costs, stated rather than hidden
+//! # What a seal costs, and how the cost was absorbed
 //!
 //! A seal + snapshot re-appends the LIVE rows this node owns, from the store.
 //! A TOMBSTONE is not a live row and is not in the store, so a delete this node
-//! published stops travelling once the seal that retired it lands. A peer that
-//! already projected the tombstone is correct; a peer that never received it
-//! keeps its stale value. That is the KV shape of K7's adjudication — "no
-//! history past the next seal" — and the honest way to price it is a seal every
-//! [`SEAL_AFTER_OWN_OPS`] ops rather than every few hundred.
+//! published would stop travelling once the seal that retired it lands, and a
+//! peer that never received the tombstone would keep its stale value forever.
+//! ea4da7b68 recorded that as the KV shape of K7's "no history past the next
+//! seal" and priced it with the threshold; it is now CLOSED instead.
+//!
+//! **The seal itself carries the answer.** A seal followed by its whole
+//! snapshot IS the actor's live set, so a peer holding both may retire every
+//! other row of that actor's. [`snapshot`] therefore ends with
+//! `rail_kv::snapshot_mark(floor)` — one act naming the seal it closes,
+//! appended after the last row — and holding that mark with no sequence hole
+//! for its actor is holding the whole snapshot. `rail_kv::project` reports the
+//! live set per closed actor and `MeshStore::apply_projection` reconciles the
+//! store's rows to it in the same call. What a peer misses is now bounded by
+//! what it has HELD, not by what it happened to be online for.
+//!
+//! The threshold stays where it is: `SEAL_AFTER_OWN_OPS` is priced on journal
+//! bytes (~594 a line) and the cost it was raised for is gone, not smaller.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -404,7 +416,11 @@ async fn seal_if_due(
         Err(_) => {}
     }
 
-    out.snapshot_rows += snapshot(app_state, rail, journal, roster).await;
+    // The seal's own seq IS the new floor, and the mark that closes the
+    // snapshot names it — taken from the act that was written rather than
+    // re-read from a fresh admission, which would be a second answer to "what
+    // did we just seal at" (ARCH §10.6).
+    out.snapshot_rows += snapshot(app_state, rail, journal, roster, sealed.op.kind.seq).await;
 }
 
 /// Re-append this node's live rows above the floor its seal just set.
@@ -420,11 +436,26 @@ async fn seal_if_due(
 /// Only rows this node ORIGINATED. A peer's row is above that peer's floor, not
 /// ours; re-appending it would put a second author's name on it and make every
 /// node that snapshots last the author of the whole ring.
+///
+/// # It ends with a mark, and that is what makes the seal say "all of it"
+///
+/// The last act appended is `rail_kv::snapshot_mark(floor)`. A reader holding
+/// it, with no hole in this actor's run above the floor, holds every row of the
+/// snapshot — and may then retire every row of ours it holds that the snapshot
+/// does not name, which is how a tombstone we published keeps travelling past
+/// the seal that retired it (module docs). The mark is written LAST for exactly
+/// that reason, and a snapshot whose mark could not be appended claims nothing
+/// rather than claiming a truncated set: the failure direction is always "do
+/// not retire" (ARCH §18.3).
+///
+/// It is one act on the journal per seal — 2,000 ops apart — and it is NOT
+/// counted in `snapshot_rows`, which stays what it says: live rows re-appended.
 async fn snapshot(
     app_state: &AppState,
     rail: &RingRail,
     journal: &RingJournal,
     roster: &Roster,
+    floor: u64,
 ) -> usize {
     let namespace = journal.namespace();
 
@@ -479,12 +510,32 @@ async fn snapshot(
                             "rail kv pump: a live row could not be snapshotted and is now below the floor"),
         }
     }
-    info!(
-        namespace,
-        appended,
-        peers_rows_skipped = skipped,
-        "rail kv pump: snapshotted this node's live rows above the new floor"
-    );
+    match rail_kv::snapshot_mark(floor)
+        .map_err(|e| e.to_string())
+        .and_then(|payload| {
+            journal
+                .append(RailAct::Record { payload }, rail.signer(), roster)
+                .map_err(|e| e.to_string())
+        }) {
+        Ok(_) => info!(
+            namespace,
+            appended,
+            peers_rows_skipped = skipped,
+            floor,
+            "rail kv pump: snapshotted this node's live rows above the new floor, and closed it"
+        ),
+        // The rows are on the journal and every one of them still projects.
+        // What is lost is the CLAIM that they are all of them, so no peer
+        // retires anything of ours until the next seal marks one.
+        Err(e) => warn!(
+            namespace,
+            appended,
+            floor,
+            error = %e,
+            "rail kv pump: the snapshot could not be closed, so peers will keep \
+             whatever of ours they already hold"
+        ),
+    }
     appended
 }
 
@@ -514,7 +565,8 @@ pub fn is_kv_namespace(namespace: &str) -> bool {
 /// arrives with the origin the ROSTER places its signature at, never one the
 /// sender supplied (ARCH §18.1).
 ///
-/// Returns the number of rows the store took, or `None` when the namespace was
+/// Returns the number of store rows this fold moved — merged, tombstoned, or
+/// retired by a sealed actor's live set — or `None` when the namespace was
 /// not projected at all — a measurements ring, a journal that would not admit,
 /// or a namespace `apply_projection` refuses on privacy grounds. The two are
 /// different facts and a `0` for both would hide the second (ARCH §18.2).
@@ -557,19 +609,26 @@ pub async fn project_namespace(
     // roster above came from, so a key that admitted an op is a key that can
     // name its node (ARCH §10.6). An actor it cannot place is counted
     // `unattributed` by `apply_projection`, never given an invented origin.
+    //
+    // The whole `projection` goes in, not its rows: the sealed actors' live
+    // sets are the same fold's second answer, and the store's own node id is
+    // what keeps the reconciliation off rows this node has not put on the rail
+    // yet. This module does no second pass — one call, one decision.
     let mesh_roster = MeshRoster::from_app_state(app_state).await;
-    match app_state
-        .inner
-        .mesh_store
-        .apply_projection(&namespace, &projection.rows, |actor| {
-            mesh_roster.node_id_of(actor)
-        }) {
+    match app_state.inner.mesh_store.apply_projection(
+        &namespace,
+        &projection,
+        |actor| mesh_roster.node_id_of(actor),
+        app_state.self_node_id(),
+    ) {
         Ok(applied) => {
             debug!(
                 namespace = %namespace,
                 rows = projection.rows.len(),
+                sealed_actors = projection.sealed_actors.len(),
                 merged = applied.merged,
                 deleted = applied.deleted,
+                reconciled = applied.reconciled,
                 unattributed = applied.unattributed,
                 gaps = admission.gaps.len(),
                 "rail kv pump: projected a namespace into the store"
@@ -581,7 +640,7 @@ pub async fn project_namespace(
                     "rail kv pump: the roster and the journal disagree about who is in this ring"
                 );
             }
-            Some(applied.merged + applied.deleted)
+            Some(applied.merged + applied.deleted + applied.reconciled)
         }
         Err(e) => {
             // The receiver-side privacy guard firing is not a bug in this

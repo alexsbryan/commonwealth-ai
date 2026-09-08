@@ -61,6 +61,12 @@ pub struct Applied {
     /// the caller is the only one who can say whether that is a peer who just
     /// left or a bug.
     pub unattributed: usize,
+    /// Rows RETIRED by a sealed actor's live set: this node held them on that
+    /// actor's behalf and the actor's own closed snapshot does not name them.
+    /// Counted apart from `deleted` because the two are different acts — a
+    /// tombstone is an op that says "delete this", and a reconciliation is the
+    /// absence of an op in a set an actor has vouched is whole.
+    pub reconciled: usize,
 }
 
 /// The distributed KV store. Thread-safe; clone freely (backed by `Arc`).
@@ -266,12 +272,43 @@ impl MeshStore {
     ///   make it.
     /// - **A tombstone deletes only what is not newer than it.** A delete at
     ///   `t` must not take a `set` at `t+1` that arrived first.
+    ///
+    /// # The seal reconciliation
+    ///
+    /// A seal retires everything below it and the snapshot re-appends only the
+    /// LIVE rows, so a tombstone stops travelling the moment its seal lands —
+    /// and a peer that never received it would keep the stale value forever.
+    /// That is closed here rather than remembered (ARCH §7.1). For every actor
+    /// [`rail_kv::project`](crate::rail_kv::project) reports in
+    /// [`Projection::sealed_actors`](crate::rail_kv::Projection::sealed_actors)
+    /// — those whose seal AND whole snapshot this node holds — the rows this
+    /// store holds on that actor's behalf are reconciled to the set the actor
+    /// asserts: a row whose origin is that actor and whose key the actor does
+    /// not name is RETIRED. An actor with no entry is untouched, because it has
+    /// made no claim about its whole set.
+    ///
+    /// **The projection is taken whole, not as its rows.** The live sets and
+    /// the rows are two readings of one fold, and a caller that could pass a
+    /// fresh set of rows with a stale live set would be able to retire a key on
+    /// the strength of a claim made about a different journal (ARCH §10.6).
+    ///
+    /// **`self_id` is skipped, and that is the direction of truth rather than a
+    /// special case.** For every other actor the journal is upstream of this
+    /// store: what we hold on their behalf is a fold of what they signed. For
+    /// THIS node it is the other way round — `set` writes the row and queues
+    /// the act, so the store leads the journal by an outbox drain, and a write
+    /// still queued (or one the rail refused) is a row this node asserts and no
+    /// journal knows about yet. Reconciling self would read our own lag as a
+    /// retirement. Excluding the outbox instead would patch that lag with a
+    /// second source and still lose the refused row.
     pub fn apply_projection(
         &self,
         app_id: &str,
-        rows: &[crate::rail_kv::Projected],
+        projection: &crate::rail_kv::Projection,
         origin_of: impl Fn(&str) -> Option<NodeId>,
+        self_id: NodeId,
     ) -> Result<Applied> {
+        let rows = &projection.rows;
         if crate::peer_preferences::is_gossip_excluded(app_id) {
             tracing::debug!(app_id, "mesh_store.projection_refused_excluded");
             return Err(Error::Backend(format!(
@@ -326,11 +363,54 @@ impl MeshStore {
                 }
             }
         }
+        // ── What the seals say is no longer asserted.
+        //
+        // AFTER the rows, so a key a tombstone in this same projection already
+        // took is not counted twice, and so the origins matched below are the
+        // ones this projection just wrote.
+        for (actor, live) in &projection.sealed_actors {
+            let Some(origin) = origin_of(actor) else {
+                // Already counted `unattributed` above for any row this actor
+                // won; a live set for a node we cannot place matches no row's
+                // origin either, so there is nothing to reconcile against.
+                continue;
+            };
+            if origin == self_id {
+                tracing::debug!(
+                    app_id,
+                    actor = %actor,
+                    "mesh_store.projection_reconcile_skipped_self"
+                );
+                continue;
+            }
+            let held = self.backend.keys_with_origin(app_id, origin.as_bytes())?;
+            for key in held {
+                if live.contains(&key) {
+                    continue;
+                }
+                if self
+                    .backend
+                    .delete_of_origin(app_id, &key, origin.as_bytes())?
+                {
+                    applied.reconciled += 1;
+                    tracing::debug!(
+                        app_id,
+                        key = %key,
+                        actor = %actor,
+                        live_keys = live.len(),
+                        "mesh_store.projection_reconciled"
+                    );
+                }
+            }
+        }
+
         tracing::debug!(
             app_id,
             rows = rows.len(),
+            sealed_actors = projection.sealed_actors.len(),
             merged = applied.merged,
             deleted = applied.deleted,
+            reconciled = applied.reconciled,
             unattributed = applied.unattributed,
             "mesh_store.projection_applied"
         );
@@ -854,6 +934,37 @@ mod tests {
         }
     }
 
+    /// A projection of `rows` and NO claim about anyone's whole live set —
+    /// what the fold returns for a namespace nobody has sealed, which is every
+    /// namespace until one does.
+    fn unsealed(rows: Vec<crate::rail_kv::Projected>) -> crate::rail_kv::Projection {
+        crate::rail_kv::Projection {
+            rows,
+            ..Default::default()
+        }
+    }
+
+    /// The projection a sealed actor produces: its rows, and the live set it
+    /// vouches is whole.
+    fn sealed(
+        rows: Vec<crate::rail_kv::Projected>,
+        actor: &str,
+        live: &[&str],
+    ) -> crate::rail_kv::Projection {
+        let mut p = unsealed(rows);
+        p.sealed_actors.insert(
+            actor.to_string(),
+            live.iter().map(|k| k.to_string()).collect(),
+        );
+        p
+    }
+
+    /// This node, wherever a test needs one. Deliberately not any `node(n)` an
+    /// actor resolves to, so nothing is skipped as self by accident.
+    fn me() -> NodeId {
+        node(99)
+    }
+
     /// **THE RECEIVER-SIDE PRIVACY GUARD.** A peer that puts a private
     /// namespace on the ring gets it projected NOWHERE, and the refusal is an
     /// `Err` naming the namespace rather than a quiet `Ok(0 rows)` that reads
@@ -864,10 +975,10 @@ mod tests {
         use crate::GOSSIP_EXCLUDED_APP_IDS;
 
         let store = MeshStore::in_memory().unwrap();
-        let rows = [projected("k", Some(b"leaked"), 100, "aa")];
+        let rows = unsealed(vec![projected("k", Some(b"leaked"), 100, "aa")]);
         for app in GOSSIP_EXCLUDED_APP_IDS {
             let err = store
-                .apply_projection(app, &rows, |_| Some(node(1)))
+                .apply_projection(app, &rows, |_| Some(node(1)), me())
                 .expect_err("an excluded namespace must be refused, not applied");
             assert!(
                 err.to_string().contains(app),
@@ -877,7 +988,7 @@ mod tests {
         }
         // The control: a public namespace goes through the same call.
         let applied = store
-            .apply_projection("contributions", &rows, |_| Some(node(1)))
+            .apply_projection("contributions", &rows, |_| Some(node(1)), me())
             .unwrap();
         assert_eq!(applied.merged, 1);
     }
@@ -889,12 +1000,12 @@ mod tests {
     #[test]
     fn apply_projection_reports_an_unattributable_actor_rather_than_inventing_an_origin() {
         let store = MeshStore::in_memory().unwrap();
-        let rows = [
+        let rows = unsealed(vec![
             projected("known", Some(b"v"), 100, "aa"),
             projected("stranger", Some(b"v"), 100, "zz"),
-        ];
+        ]);
         let applied = store
-            .apply_projection("app", &rows, |actor| (actor == "aa").then(|| node(7)))
+            .apply_projection("app", &rows, |actor| (actor == "aa").then(|| node(7)), me())
             .unwrap();
         assert_eq!(applied.merged, 1);
         assert_eq!(applied.unattributed, 1);
@@ -930,15 +1041,16 @@ mod tests {
         let applied = store
             .apply_projection(
                 "app",
-                &[
+                &unsealed(vec![
                     projected("newer", None, 150, "aa"),
                     projected("older", None, 150, "aa"),
                     projected("equal", None, 150, "aa"),
                     // A tombstone for a key this node never held is not a
                     // failure; there is simply nothing to take.
                     projected("absent", None, 150, "aa"),
-                ],
+                ]),
                 |_| Some(node(1)),
+                me(),
             )
             .unwrap();
 
@@ -956,20 +1068,174 @@ mod tests {
 
     /// Applying a projection does NOT re-queue it. The whole point of the
     /// receive side going through `merge_entry` is that a row learned from a
-    /// peer cannot echo back onto the rail.
+    /// peer cannot echo back onto the rail — and the reconciliation is on the
+    /// same side of the wire, so its delete must not queue a tombstone either.
     #[test]
     fn applying_a_projection_queues_nothing() {
         let store = MeshStore::in_memory().unwrap();
         store
+            .merge_entry(StoreEntry {
+                app_id: "app".into(),
+                key: "retired".into(),
+                value: Bytes::from("v"),
+                timestamp: 50,
+                origin: node(1),
+            })
+            .unwrap();
+        let applied = store
             .apply_projection(
                 "app",
-                &[
-                    projected("a", Some(b"v"), 100, "aa"),
-                    projected("b", None, 100, "aa"),
-                ],
+                &sealed(
+                    vec![
+                        projected("a", Some(b"v"), 100, "aa"),
+                        projected("b", None, 100, "aa"),
+                    ],
+                    "aa",
+                    &["a"],
+                ),
                 |_| Some(node(1)),
+                me(),
             )
             .unwrap();
+        assert_eq!(applied.reconciled, 1, "the retired row went: {applied:?}");
         assert_eq!(store.outbox_len().unwrap(), 0);
+    }
+
+    /// **A closed snapshot retires what it does not name, and speaks only for
+    /// its own author.** `stale` is the tombstone case: this node never
+    /// received the delete, and the seal that retired it means it never will —
+    /// so the actor's own live set is the only thing left that can say the row
+    /// is gone (ARCH §7.1). The two controls in the same call are the whole
+    /// rule: `kept` is named and stays, and `bb` never sealed, so nothing of
+    /// `bb`'s is touched even though it is in the same namespace.
+    ///
+    /// Watched RED by dropping the reconciliation loop: `stale` survives.
+    #[test]
+    fn apply_projection_retires_a_sealed_actors_rows_and_only_that_actors() {
+        let store = MeshStore::in_memory().unwrap();
+        let plant = |key: &str, origin: NodeId| {
+            store
+                .merge_entry(StoreEntry {
+                    app_id: "app".into(),
+                    key: key.to_string(),
+                    value: Bytes::from("held"),
+                    timestamp: 100,
+                    origin,
+                })
+                .unwrap()
+        };
+        plant("kept", node(7));
+        plant("stale", node(7));
+        plant("bb-row", node(8));
+
+        let applied = store
+            .apply_projection(
+                "app",
+                &sealed(
+                    vec![projected("kept", Some(b"v"), 200, "aa")],
+                    "aa",
+                    &["kept"],
+                ),
+                |actor| match actor {
+                    "aa" => Some(node(7)),
+                    "bb" => Some(node(8)),
+                    _ => None,
+                },
+                me(),
+            )
+            .unwrap();
+
+        assert_eq!(applied.reconciled, 1, "{applied:?}");
+        assert_eq!(applied.deleted, 0, "no tombstone was in the projection");
+        assert!(
+            store.get("app", "stale").unwrap().is_none(),
+            "a row the actor's whole live set does not name is retired"
+        );
+        assert_eq!(
+            store.get("app", "kept").unwrap().unwrap().value.as_ref(),
+            b"v",
+            "a named key keeps the value the projection gave it"
+        );
+        assert!(
+            store.get("app", "bb-row").unwrap().is_some(),
+            "bb has not sealed, so bb's rows are nobody's to retire"
+        );
+
+        // The control on the claim itself: the same rows, no live set, and
+        // `stale` would have survived.
+        plant("stale", node(7));
+        let applied = store
+            .apply_projection(
+                "app",
+                &unsealed(vec![projected("kept", Some(b"v"), 200, "aa")]),
+                |_| Some(node(7)),
+                me(),
+            )
+            .unwrap();
+        assert_eq!(applied.reconciled, 0);
+        assert!(store.get("app", "stale").unwrap().is_some());
+    }
+
+    /// **This node's own rows are never reconciled, because for them the store
+    /// is upstream of the journal.** A local `set` writes the row and QUEUES
+    /// the act; until the pump drains it the journal has never heard of the
+    /// key, so our own snapshot — folded from the journal — cannot name it.
+    /// Reconciling self would read the outbox lag as a retirement and delete a
+    /// write this node just made.
+    ///
+    /// Watched RED by removing the `origin == self_id` skip: the second half
+    /// of this test is that run, and `local` goes.
+    #[test]
+    fn apply_projection_never_reconciles_this_nodes_own_rows() {
+        let store = MeshStore::in_memory().unwrap();
+        assert!(store
+            .set("app", "local", Bytes::from_static(b"just-written"), me())
+            .unwrap());
+        assert_eq!(
+            store.outbox_len().unwrap(),
+            1,
+            "still on its way to the rail"
+        );
+
+        // Our own actor, our own seal, folded before the write reached it.
+        let ours = sealed(vec![], "self", &[]);
+        let applied = store
+            .apply_projection("app", &ours, |_| Some(me()), me())
+            .unwrap();
+        assert_eq!(applied.reconciled, 0, "{applied:?}");
+        assert!(
+            store.get("app", "local").unwrap().is_some(),
+            "a write still in the outbox is not a retired row"
+        );
+
+        // The control: the identical claim about somebody ELSE's node id takes
+        // it, which is what the skip is holding back.
+        let applied = store
+            .apply_projection("app", &ours, |_| Some(me()), node(1))
+            .unwrap();
+        assert_eq!(applied.reconciled, 1, "{applied:?}");
+        assert!(store.get("app", "local").unwrap().is_none());
+    }
+
+    /// An actor the roster cannot place has no rows to match: its live set
+    /// names nothing this store holds under that name, and inventing an origin
+    /// to match against would retire another node's rows (ARCH §18.3).
+    #[test]
+    fn a_live_set_from_an_unplaceable_actor_retires_nothing() {
+        let store = MeshStore::in_memory().unwrap();
+        store
+            .merge_entry(StoreEntry {
+                app_id: "app".into(),
+                key: "k".into(),
+                value: Bytes::from("v"),
+                timestamp: 100,
+                origin: node(7),
+            })
+            .unwrap();
+        let applied = store
+            .apply_projection("app", &sealed(vec![], "zz", &[]), |_| None, me())
+            .unwrap();
+        assert_eq!(applied.reconciled, 0);
+        assert!(store.get("app", "k").unwrap().is_some());
     }
 }

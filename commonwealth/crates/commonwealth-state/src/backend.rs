@@ -171,6 +171,44 @@ impl SqliteBackend {
         Ok(n > 0)
     }
 
+    /// Every key in `app_id` this node holds on behalf of `origin`.
+    ///
+    /// The read half of the seal reconciliation — see
+    /// [`MeshStore::apply_projection`](crate::MeshStore::apply_projection).
+    /// Keys only: the reconciliation decides by NAME against a sealed actor's
+    /// live set, and pulling the values would read a whole namespace's blobs
+    /// to answer a question about its keys.
+    pub fn keys_with_origin(&self, app_id: &str, origin: &[u8]) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare_cached("SELECT key FROM store WHERE app_id = ?1 AND origin = ?2 ORDER BY key")
+            .map_err(|e| Error::Backend(format!("prepare failed: {e}")))?;
+        let keys = stmt
+            .query_map(params![app_id, origin], |row| row.get::<_, String>(0))
+            .map_err(|e| Error::Backend(format!("query failed: {e}")))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| Error::Backend(format!("row error: {e}")))?;
+        Ok(keys)
+    }
+
+    /// Delete a row only while it is still the row that `origin` wrote.
+    ///
+    /// One statement, for the reason [`SqliteBackend::delete_if_not_newer`] is
+    /// one: a check-then-delete would take a row another actor's projection had
+    /// just won in between, and the reconciliation is a claim about ONE actor's
+    /// rows. Enqueues nothing — this is the receive side, and a row that
+    /// re-entered the outbox would echo around the mesh forever.
+    pub fn delete_of_origin(&self, app_id: &str, key: &str, origin: &[u8]) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn
+            .execute(
+                "DELETE FROM store WHERE app_id = ?1 AND key = ?2 AND origin = ?3",
+                params![app_id, key, origin],
+            )
+            .map_err(|e| Error::Backend(format!("reconcile delete failed: {e}")))?;
+        Ok(n > 0)
+    }
+
     /// Take up to `limit` queued writes, oldest first. They stay queued until
     /// [`SqliteBackend::outbox_ack`] — the pump appends first and acks after,
     /// so a crash between the two re-sends rather than loses.
