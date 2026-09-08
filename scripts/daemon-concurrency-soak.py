@@ -882,12 +882,24 @@ def main() -> int:
             timeout=300,
             env=os.environ | {"SOVEREIGN_NO_STALE_WARN": "1"},
         )
+        # BOTH, and polled together. The first version broke out of the loop
+        # on the port alone and then read the pidfile once — which still
+        # named the corpse, because the replacement rewrites it after it
+        # starts serving. It reported `restored: false` about a daemon that
+        # was up and answering. That is this instrument's own headline
+        # finding biting the instrument: the pidfile outlives the process,
+        # so nothing may read it as a point-in-time truth.
         for _ in range(30):
-            if port_serving():
+            if port_serving() and alive(read_pid()):
                 break
             time.sleep(5)
-        restored = bool(port_serving()) and alive(read_pid())
-        print(f"[control] daemon restored: {restored}", flush=True)
+        port_ok, pid_ok = port_serving(), alive(read_pid())
+        restored = bool(port_ok) and pid_ok
+        print(
+            f"[control] daemon restored: {restored} "
+            f"(port_serving={port_ok}, pidfile_live={pid_ok})",
+            flush=True,
+        )
 
     log_class, evidence, corroboration = classify_daemon_death(
         lo, hi, self_stopped=bool(injected and injected.get("sent"))
