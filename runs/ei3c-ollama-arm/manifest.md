@@ -42,15 +42,27 @@ it is the same one every previous acceptance run used.
 
 ## Legs and their markers
 
-Everything lands in `out/`, which is created FIRST — before the preflight, so a
-unit that dies in its first second still leaves a readable record. Run 1 did
-not, and a watcher cannot tell that from a unit that never started.
+Everything lands in `out/`, which is RESET and recreated FIRST — before the
+preflight, so a unit that dies in its first second still leaves a readable
+record, and so what is in there is always THIS run's. Run 1 left no record at
+all; run 2 was reported DONE off a host-side preflight test's leftovers while
+the unit was still queued on the build lock. Both are structural now: the reset,
+and `--preflight-only`, which writes to a throwaway dir and never touches `out/`.
+
+    run.sh --preflight-only   the dependency table and nothing else, ~1 s
+
+Verified 2026-09-07 under the exact scope form the unit uses
+(`toolbox run -c sovereign-vulkan systemd-run --user --scope -p MemoryMax=14G`):
+all five checks PASS, exit 0, and `out/` stays absent.
 
     out/markers.txt   one line per leg, then `DONE rc=<n>`; `signal=TERM` if killed
     out/rc.<leg>      the same rcs one file each
     out/DONE          `DONE rc=<n> <timestamp>`
 
-    preflight  0 = every dependency present         (else exit 2)
+    preflight  0 = every dependency present         (else exit 2). EVERY check
+               writes its verdict to out/preflight.txt, passing ones included —
+               run 2's failing check reported only to stderr, which under the
+               scope reached neither the journal nor the out dir
     serve      0 = /v1/models answered              (else exit 3)
     pull       0 = both tags pulled                 (else exit 4)
     acceptance the acceptance script's own exit code — 1 FAIL (an assertion it

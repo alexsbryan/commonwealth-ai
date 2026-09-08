@@ -17,6 +17,9 @@
 #
 # Legs, each with its own rc marker; a DONE marker is written on every exit path
 # including SIGTERM, so a killed unit is distinguishable from a hung one.
+#
+#   run.sh                    the whole unit
+#   run.sh --preflight-only   the dependency table and nothing else, ~1 s
 set -uo pipefail
 RUN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd -- "$RUN_DIR/../.." && pwd)"
@@ -33,7 +36,19 @@ CHAT_TAG="qwen3:0.6b"
 # left no out dir and no markers.txt, which a watcher reads as a unit that never
 # started — the same trap ei-6 fixed on 2026-09-05. Every exit path from here on
 # writes `markers.txt` and `DONE`, SIGTERM included.
-OUT="$RUN_DIR/out"
+# A DRY run writes to a throwaway dir. Run 2 (2026-09-07) was reported DONE off
+# artifacts that were not its own — a host-side test of the preflight had left
+# `out/` populated, the unit was still queued on the build lock, and the seat
+# read `preflight rc=1 / DONE rc=2` from files nobody had told it were stale.
+# Two structural answers, both here: a dry run never touches `out/`, and a real
+# run RESETS `out/` before it writes, so what is in there is always this run's.
+if [[ "${1:-}" == "--preflight-only" ]]; then
+  OUT="$(mktemp -d)"
+  trap 'rm -rf "$OUT"' EXIT
+else
+  OUT="$RUN_DIR/out"
+  rm -rf "$OUT"
+fi
 mkdir -p "$OUT"
 : > "$OUT/markers.txt"
 mark() {
@@ -53,9 +68,11 @@ finish() {
   echo "DONE rc=$rc" >> "$OUT/markers.txt"
   echo "DONE rc=$rc $(date -Is)" > "$OUT/DONE"
 }
-trap finish EXIT
-trap 'echo "signal=TERM" >> "$OUT/markers.txt"; exit 143' TERM
-trap 'echo "signal=INT"  >> "$OUT/markers.txt"; exit 130' INT
+if [[ "${1:-}" != "--preflight-only" ]]; then
+  trap finish EXIT
+  trap 'echo "signal=TERM" >> "$OUT/markers.txt"; exit 143' TERM
+  trap 'echo "signal=INT"  >> "$OUT/markers.txt"; exit 130' INT
+fi
 
 {
   echo "started: $(date -Is)"
@@ -70,14 +87,48 @@ trap 'echo "signal=INT"  >> "$OUT/markers.txt"; exit 130' INT
 # rather than kept twice here (ARCH §10.6). It resolves the embed gguf against
 # the main checkout when this runs from a worktree — `models/` is gitignored, so
 # no worktree carries it, which is exactly how run 1 died.
+#
+# EVERY check writes its verdict to out/preflight.txt, passing ones included.
+# Run 2 (2026-09-07) exited 2 with a preflight.txt holding only the ONE check
+# that passed: the three others reported to stderr, and under `systemd-run
+# --scope` behind a wait loop that stderr reached neither the journal nor the
+# out dir. A refusal a runner cannot read from its own artifacts is not a
+# reported absence (ARCH §18.3) — it is a silent one, and it cost a whole
+# scheduling round to guess at.
 pf_fail=0
-[[ -f /run/.containerenv ]] || { echo "PREFLIGHT: must run INSIDE the sovereign-vulkan toolbox — llama-server needs Vulkan; ROCm x A3B SEGVs on the host" >&2; pf_fail=1; }
-"$REPO/corpus-mcp/acceptance.sh" --preflight >> "$OUT/preflight.txt" 2>&1 \
-  || { echo "PREFLIGHT: acceptance.sh refused — $(tail -1 "$OUT/preflight.txt")" >&2; pf_fail=1; }
+pf() {  # pf <name> <rc> <detail>
+  local st=PASS
+  (( $2 == 0 )) || { st=FAIL; pf_fail=1; }
+  printf '%-12s %-4s %s\n' "$1" "$st" "${3:-}" >> "$OUT/preflight.txt"
+  echo "PREFLIGHT $1 $st ${3:-}" >&2
+}
+{ echo "preflight $(date -Is)"; echo "HOME=$HOME PATH=$PATH"; } >> "$OUT/preflight.txt"
+
+[[ -f /run/.containerenv ]]
+pf toolbox $? "/run/.containerenv — must run INSIDE sovereign-vulkan; llama-server needs Vulkan, ROCm x A3B SEGVs on the host"
+# What the ACCEPTANCE needs is acceptance.sh's own list, asked for by name
+# rather than kept twice here (ARCH §10.6). It resolves the embed gguf against
+# the main checkout when this runs from a worktree — `models/` is gitignored, so
+# no worktree carries it, which is exactly how run 1 died.
+acc_pf="$("$REPO/corpus-mcp/acceptance.sh" --preflight 2>&1)"
+pf acceptance $? "$acc_pf"
 # What only THIS unit needs, beyond the acceptance's own list.
-command -v ollama  >/dev/null || { echo "PREFLIGHT: no ollama on PATH ($OLLAMA_HOME/bin)" >&2; pf_fail=1; }
-[[ -d "$HOME/.svrnmesh/indexes/sep" ]] || { echo "PREFLIGHT: sep corpus not installed (the arm's corpus_list target)" >&2; pf_fail=1; }
+ollama_bin="$(command -v ollama || true)"
+[[ -n "$ollama_bin" ]]
+pf ollama $? "${ollama_bin:-not on PATH; looked under $OLLAMA_HOME/bin}"
+[[ -x "${ollama_bin:-/nonexistent}" ]] && "$ollama_bin" --version >/dev/null 2>&1
+pf ollama-runs $? "the binary executes here (a tarball built for another libc would fail HERE, not at serve)"
+[[ -d "$HOME/.svrnmesh/indexes/sep" ]]
+pf sep-index $? "$HOME/.svrnmesh/indexes/sep — the arm's corpus_list target"
+
 mark preflight "$pf_fail"
+# A dry mode, so the preflight can be verified in one second without a lane
+# window and without starting `ollama serve`. `--preflight-only` is what the
+# re-request was checked with.
+if [[ "${1:-}" == "--preflight-only" ]]; then
+  cat "$OUT/preflight.txt"
+  exit "$pf_fail"
+fi
 (( pf_fail == 0 )) || exit 2
 
 # ── leg 1: ollama serve, CPU ────────────────────────────────────────────────
