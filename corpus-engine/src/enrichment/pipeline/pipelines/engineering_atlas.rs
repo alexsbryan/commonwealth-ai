@@ -79,9 +79,20 @@ impl super::genre::AtlasGenre for EngineeringGenre {
     }
     /// Phase 1 emits only claims that anchor in code, with no `claim_kind`
     /// subtype — so there is no type to declare. The map still records the
-    /// pipeline's terms and derivation flags.
+    /// pipeline's terms and derivation flags, and since map-conversion rung 2
+    /// its navigation rows: one row that fits a claims-only atlas (tension),
+    /// four switched off by name (`ontologies/engineering_atlas.toml`).
     fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
-        crate::enrichment::ontology::OntologyPolicies::default()
+        super::declaration::ENGINEERING.clone()
+    }
+
+    /// Claims only — the one Phase 1 in the registry that emits a different
+    /// shape, and the reason `Pipeline::emits` cannot assume the shared
+    /// schema. Failing input: return the default here and the engineering
+    /// map's thematic row would ratchet as covered while every installed
+    /// engineering atlas carries not one Entity (`drift-target-*`, 2026-09-08).
+    fn phase1_atom_kinds(&self) -> std::collections::BTreeSet<crate::enrichment::atlas::AtomType> {
+        std::collections::BTreeSet::from([crate::enrichment::atlas::AtomType::Claim])
     }
 
     fn name(&self) -> &'static str {

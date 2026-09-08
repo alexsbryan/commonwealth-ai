@@ -131,6 +131,7 @@ fn row_for(
 fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
     let mut union = AtlasInventory::default();
     let mut read = 0usize;
+    let mut unreadable = 0usize;
     // A wiki-class store (articles.lance + edges.lance, no atoms.json) has
     // no `_summary.json` to read, so its census comes from opening it through
     // the ONE provider opener the walk uses — seconds and a resident copy of
@@ -170,12 +171,21 @@ fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
     for dir in dirs {
         match read_or_compute_atlas_summary(&dir.join(ATLAS_DIRNAME)) {
             Ok(Some(s)) => {
+                if s.edge_counts.is_none() {
+                    unreadable += 1;
+                }
                 union.absorb(AtlasInventory::from_summary(&s));
                 read += 1;
             }
             Ok(None) => {}
             Err(e) => eprintln!("atlas kind: summary for {}: {e}", dir.display()),
         }
+    }
+    if unreadable > 0 {
+        eprintln!(
+            "atlas kind: {unreadable} of {read} atlas(es) have no readable v2 store (edges \
+             uncounted; the walk cannot open them either) — run `svrn atlas migrate-all`"
+        );
     }
     (union, read)
 }

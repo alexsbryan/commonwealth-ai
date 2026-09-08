@@ -305,6 +305,62 @@ pub trait Pipeline: Send + Sync + 'static {
         false
     }
 
+    /// The atom kinds this pipeline's Phase 1 can emit. Default: the shared
+    /// section-extraction schema (`SectionExtraction`) — entities, states,
+    /// relations, events, claims, questions. A pipeline whose Phase 1 emits
+    /// another SHAPE (engineering: claims only) says so here, and nowhere
+    /// else.
+    fn phase1_atom_kinds(&self) -> std::collections::BTreeSet<crate::enrichment::atlas::AtomType> {
+        crate::enrichment::atlas::inventory::section_extraction_kinds()
+    }
+
+    /// Every kind this pipeline's atlas build CAN emit — the set a declared
+    /// navigation row is ratcheted against (`KindSet::covers`), so a built-in
+    /// map cannot ship a row that seeds on or walks a kind its atlases never
+    /// carry. Derived from the pipeline's own deciders, never listed by hand:
+    /// Phase 1's kinds ([`Self::phase1_atom_kinds`]); `ArgumentReconstruction`
+    /// when the map's derivation says so; `Configuration` and the derived
+    /// `Configures` edge when Phase 8 runs; `Summary`, which the seed table
+    /// carries whenever the RAPTOR step ran and the row composes by
+    /// declaration; and an edge kind only where its endpoint kinds exist —
+    /// `Involves` needs an Entity, `Transition` a State, `Tension` a Claim.
+    /// The entity types are the declared ones. `Grounds` is deliberately
+    /// absent: the resolvers write it from an atom to a CHUNK, it has no seat
+    /// in the atom CSR, and a row walking it walks nothing (measured on every
+    /// installed atlas, 2026-09-08). `Causes`, `Position`, `Opposition` are
+    /// emitted by no built-in build and are absent for that reason.
+    fn emits(&self) -> crate::enrichment::atlas::inventory::KindSet {
+        use crate::enrichment::atlas::{AtomType, EdgeType};
+        let map = self.declared_ontology();
+        let mut atoms = self.phase1_atom_kinds();
+        atoms.insert(AtomType::Summary);
+        if map.derivation.arguments {
+            atoms.insert(AtomType::ArgumentReconstruction);
+        }
+        if self.runs_configuration_phase() {
+            atoms.insert(AtomType::Configuration);
+        }
+        let mut edges = std::collections::BTreeSet::new();
+        if atoms.contains(&AtomType::Entity) {
+            edges.insert(EdgeType::Involves);
+        }
+        if atoms.contains(&AtomType::State) {
+            edges.insert(EdgeType::Transition);
+        }
+        if atoms.contains(&AtomType::Claim) {
+            edges.insert(EdgeType::Tension);
+        }
+        if atoms.contains(&AtomType::Configuration) {
+            edges.insert(EdgeType::Configures);
+        }
+        crate::enrichment::atlas::inventory::KindSet {
+            entity_types: map.shape.types.iter().map(|t| t.name.clone()).collect(),
+            declares_types: map.has_declarations(),
+            atoms,
+            edges,
+        }
+    }
+
     /// Build the Phase 8 prompt. The runner hands in a compact
     /// `AtlasSummary` — the atoms the LLM will reason over — plus
     /// the top-K Phase 8 exemplars. Return `None` when the

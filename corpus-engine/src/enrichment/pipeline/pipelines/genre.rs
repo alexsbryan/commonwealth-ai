@@ -95,6 +95,13 @@ pub trait AtlasGenre: Send + Sync + std::fmt::Debug + 'static {
         true
     }
 
+    /// What this genre's Phase 1 emits — see `Pipeline::phase1_atom_kinds`.
+    /// Default: the shared section-extraction schema, which every genre but
+    /// engineering uses.
+    fn phase1_atom_kinds(&self) -> std::collections::BTreeSet<crate::enrichment::atlas::AtomType> {
+        crate::enrichment::atlas::inventory::section_extraction_kinds()
+    }
+
     /// How Phase-6 finds candidate tension pairs.
     fn tension_strategy(&self) -> TensionStrategy {
         TensionStrategy::Graph

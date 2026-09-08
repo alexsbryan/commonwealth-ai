@@ -49,6 +49,7 @@ builtin!(LITERARY, "literary_atlas");
 builtin!(PHILOSOPHY, "philosophy_atlas");
 builtin!(CONVERSATION, "conversation_atlas");
 builtin!(REFERENTIAL, "referential_atlas");
+builtin!(ENGINEERING, "engineering_atlas");
 
 #[cfg(test)]
 mod tests {
@@ -66,8 +67,15 @@ mod tests {
             ("philosophy_atlas", &*PHILOSOPHY),
             ("conversation_atlas", &*CONVERSATION),
             ("referential_atlas", &*REFERENTIAL),
+            ("engineering_atlas", &*ENGINEERING),
         ] {
-            assert!(p.has_declarations(), "{id} declares nothing");
+            // Engineering's Phase 1 emits claims with no subtype, so it has
+            // no type to declare; its file carries navigation rows only.
+            assert_eq!(
+                p.has_declarations(),
+                id != "engineering_atlas",
+                "{id}: declared types"
+            );
             assert!(
                 p.prose.guidance.is_empty(),
                 "{id}: guidance belongs to a recipe, not a built-in map (it is the custom-path hinge)"

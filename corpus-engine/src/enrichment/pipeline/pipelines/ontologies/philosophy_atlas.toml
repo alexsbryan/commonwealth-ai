@@ -31,3 +31,75 @@ description = "A genuinely important site; rare in philosophy."
 # Phase 1 emits `ArgumentReconstruction` atoms: a named argument as the
 # article reconstructs it — premises, conclusion, objections.
 arguments = true
+
+# ── Navigation (EPISTEMIC_INDEX.md §2.2; map-conversion rung 2, 2026-09-08) ──
+# The rows this genre walks under, written against what its build EMITS
+# (`Pipeline::emits`) and ratcheted by
+# `builtin_navigation_rows_name_only_kinds_the_pipeline_emits`. Kinds the
+# pre-registered table lists and no built-in build produces are absent on
+# purpose: `Position`/`Opposition` atoms, `Causes` and `OpposesIn` edges, and
+# `Grounds`, which the resolvers write from an atom to a CHUNK — it has no
+# seat in the atom CSR and a row walking it walks nothing. Exemplars describe
+# question SHAPES this genre's readers ask, never a bank's sentences.
+
+[navigation.thematic]
+seed = { kinds = ["Configuration", "Entity", "Summary"], entity_types = ["concept"], budgets = { Summary = 8 } }
+walk = ["Involves", "Tension", "Configures"]
+hops = 2
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "what is the position on this",
+  "summarize this account of the notion",
+  "what is the distinction between these two notions",
+  "what does the article say about this as a whole",
+]
+
+[navigation.tension]
+seed = { kinds = ["Claim", "ArgumentReconstruction"] }
+walk = ["Tension", "Involves"]
+hops = 2
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "reconstruct the argument and the main objection to it",
+  "what are the objections to this view",
+  "where do these two accounts disagree",
+  "which premise is contested",
+]
+
+[navigation.trajectory]
+seed = { kinds = ["Entity", "State"] }
+walk = ["Transition"]
+hops = 2
+budget = 12
+exemplars = [
+  "how did the debate develop",
+  "how did this view change over time",
+  "trace the history of this notion",
+  "what became of the position after the objection",
+]
+
+[navigation.enumeration]
+seed = { declared = true }
+walk = []
+hops = 0
+budget = 12
+exemplars = [
+  "which philosophers held this view",
+  "list the main positions on this",
+  "how many arguments does the article reconstruct",
+  "enumerate the schools",
+]
+
+[navigation.lookup]
+seed = { kinds = ["Entity"] }
+walk = ["Involves"]
+hops = 1
+budget = 12
+exemplars = [
+  "who was this philosopher",
+  "what does this term mean",
+  "tell me about this text",
+  "give me the entry for this notion",
+]

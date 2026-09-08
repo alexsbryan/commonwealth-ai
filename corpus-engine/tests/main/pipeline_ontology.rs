@@ -10,11 +10,13 @@ use std::path::Path;
 use corpus_engine::enrichment::atlas::{
     read_atlas_ontology, write_atlas_ontology, AtlasOntologyFile,
 };
+use corpus_engine::enrichment::atlas::{AtomType, EdgeType};
 use corpus_engine::enrichment::ontology::{NavigationPolicy, OntologyPolicies, TypeKind};
 use corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::CustomAtlasSpec;
 use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
 use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
 use corpus_engine::recipe::Recipe;
+use corpus_engine_vocab::ontology::{QuestionKind, SummarySource};
 use corpus_engine_vocab::taxonomy::EntityType;
 
 /// Build the atlas dir the way the resolve step does and read it back.
@@ -66,7 +68,121 @@ fn literary_atlas_describes_itself_naming_theme() {
         map.derivation.arguments,
         "the Phase-1 schema carries argument_reconstructions"
     );
-    assert_eq!(map.navigation, NavigationPolicy::default());
+    // Since map-conversion rung 2 the genre declares its own rows, written
+    // against what it emits — not the pre-registered table, which seeds the
+    // tension row on a `Position` no built-in build produces.
+    assert_ne!(map.navigation, NavigationPolicy::default());
+    assert!(!map
+        .navigation
+        .tension
+        .seed
+        .kinds
+        .contains(&AtomType::Position));
+}
+
+/// map-conversion rung 2 (2026-09-08): every ON row of every built-in map
+/// names only kinds its pipeline can emit (`KindSet::covers`, the universal
+/// rule) — and the ratchet BITES: the pre-registered table fails it on every
+/// built-in, because `Position`, `Causes`, `OpposesIn` and `Grounds` seat in
+/// no built-in atlas. Failing input: put `Grounds` back in any walk list, or
+/// `Position` in any seed list.
+#[test]
+fn builtin_navigation_rows_name_only_kinds_the_pipeline_emits() {
+    let registry = PipelineRegistry::builtin();
+    let mut checked = 0;
+    let mut rows_on = 0;
+    for id in registry.pipeline_ids() {
+        if !id.ends_with("_atlas") {
+            continue;
+        }
+        let p = registry.get(id).unwrap();
+        let emits = p.emits();
+        let map = p.declared_ontology();
+        for (kind, row) in map.navigation.rows() {
+            if row.exemplars.is_empty() {
+                continue; // switched off by name
+            }
+            rows_on += 1;
+            assert_eq!(
+                emits.covers(row),
+                None,
+                "{id}: the {} row names a kind this pipeline never emits",
+                kind.as_str()
+            );
+        }
+        let uncovered = NavigationPolicy::default()
+            .rows()
+            .filter(|(_, r)| emits.covers(r).is_some())
+            .count();
+        assert!(
+            uncovered > 0,
+            "{id}: the pre-registered table is fully covered, so this ratchet could not bite"
+        );
+        checked += 1;
+    }
+    assert!(checked >= 5, "checked {checked} atlas pipelines");
+    // Four genres × five rows on, plus engineering's one.
+    assert_eq!(rows_on, 21);
+}
+
+/// The rows say what the build emits, genre by genre: philosophy seeds
+/// tension on reconstructed arguments and composes summaries on it (the
+/// order's spec); referential, which skips Phase 8, seeds no Configuration;
+/// engineering, claims only, keeps one row on.
+#[test]
+fn builtin_navigation_rows_follow_each_genres_emit_set() {
+    let philosophy = builtin("philosophy_atlas").declared_ontology().navigation;
+    assert_eq!(
+        philosophy.tension.seed.kinds,
+        vec![AtomType::Claim, AtomType::ArgumentReconstruction]
+    );
+    assert_eq!(
+        philosophy.tension.summary_sources,
+        SummarySource::ALL.to_vec()
+    );
+    assert!(philosophy
+        .thematic
+        .seed
+        .kinds
+        .contains(&AtomType::Configuration));
+
+    let referential = builtin("referential_atlas").declared_ontology().navigation;
+    assert!(!referential
+        .thematic
+        .seed
+        .kinds
+        .contains(&AtomType::Configuration));
+    assert!(!referential.thematic.walk.contains(&EdgeType::Configures));
+
+    let engineering = builtin("engineering_atlas").declared_ontology().navigation;
+    let on: Vec<_> = engineering
+        .classifiable()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(on, vec![QuestionKind::Tension]);
+    assert_eq!(engineering.tension.seed.kinds, vec![AtomType::Claim]);
+    // Its emit set is the genre's deciders, not a hand list: claims from
+    // Phase 1, Summary from the seed table, and Configuration because the
+    // genre inherits the Phase-8 flag (`runs_configuration_phase` is `true`
+    // by genre default) — whether Phase 8 finds anything to configure over
+    // claims alone is the build's business (the two installed atlases carry
+    // none), and the ratchet asks what CAN be emitted.
+    let emits = builtin("engineering_atlas").emits();
+    assert_eq!(
+        emits.atoms,
+        [AtomType::Claim, AtomType::Configuration, AtomType::Summary]
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(
+        emits.edges,
+        [EdgeType::Tension, EdgeType::Configures]
+            .into_iter()
+            .collect()
+    );
+    assert!(emits.entity_types.is_empty());
+    assert!(!emits.declares_types);
 }
 
 /// Philosophy: the same five entity kinds under its own nouns, and the map

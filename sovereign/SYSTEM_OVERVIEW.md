@@ -1562,8 +1562,21 @@ means one thing.
   recorded on the derivation axis (`configurations`, `arguments`), not as
   types. `OntologyPolicies.navigation` (`ontology/navigation.rs`) is the
   map's third role — seed kinds, edge kinds, hops and budget per
-  `QuestionKind` — with the spec's §2.2 table as the default of every row;
-  nothing reads it before the walker (ei-4). **Retrieval reads that file back
+  `QuestionKind` — with the spec's §2.2 table as the default of every row.
+  **Since map-conversion rung 2 (2026-09-08) every built-in TOML declares
+  its own `[navigation]` rows** (`engineering_atlas.toml` joined the set for
+  this alone: no types, one row on), written against what the pipeline's
+  build EMITS — `Pipeline::emits()`, a `KindSet` derived from the pipeline's
+  deciders (`phase1_atom_kinds`, the shared six or engineering's claims-only
+  override on the genre; `ArgumentReconstruction` from the derivation axis;
+  `Configuration`/`Configures` from the Phase-8 flag; `Summary` from the seed
+  table; an edge kind only where its endpoint kinds exist; `Grounds` never,
+  because it seats atom→chunk and not in the CSR) — and ratcheted by
+  `tests/main/pipeline_ontology.rs::builtin_navigation_rows_name_only_kinds_the_pipeline_emits`
+  under `KindSet::covers`, the universal rule (every kind a row names must be
+  emittable), which the pre-registered table fails on every built-in
+  (`Position`, `Causes`, `OpposesIn`, `Grounds`). The walker's own rule is
+  the existential `KindSet::fit` (rung 1); the two share one vocabulary. **Retrieval reads that file back
   (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
   graph, dropping a set with no declared types to `None` — so `ontology()`
   being `Some` IS the "this corpus declared something" gate, checked once at
@@ -1638,8 +1651,10 @@ means one thing.
   (SCHEMA_VERSION 6) carries an `OntologySummary` read back from it, an
   `AnnSummary` with the seed table's row count (ei-3-index), and since
   2026-09-08 `edge_counts` — edges per kind as `edges.csr` holds them, keyed
-  on the CSR's mtime — the on-disk half of the row-admissibility census
-  (`atlas/inventory.rs`).
+  on the CSR's mtime; `None`, never `{}`, when there is no READABLE store
+  (absent, or a superseded CSR version the walk cannot open either — 662 of
+  1,770 SEP siblings were at v1 that day) — the on-disk half of the
+  row-admissibility census (`atlas/inventory.rs`).
   **WHICH atoms that seed table holds is the navigation map's decision, not
   the retrieval filter's, since ei-3c (2026-09-04)** (`EPISTEMIC_INDEX.md` §1
   Ideas row, §2.2). It used to seed through `AtlasContextFilter::default()` —

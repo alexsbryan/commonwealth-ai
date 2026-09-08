@@ -665,6 +665,10 @@ impl Pipeline for LiteraryAtlasPipeline {
         self.genre.runs_configuration_phase()
     }
 
+    fn phase1_atom_kinds(&self) -> std::collections::BTreeSet<crate::enrichment::atlas::AtomType> {
+        self.genre.phase1_atom_kinds()
+    }
+
     fn compose_phase8_configuration(
         &self,
         atlas_summary: &crate::enrichment::atlas::analysis::AtlasSummary,

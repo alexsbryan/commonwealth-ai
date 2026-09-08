@@ -130,6 +130,24 @@ names the inferred edges. What is missing is the third role.
    Under the pre-registered table wikipedia fits lookup and nothing else;
    an installed SEP article fits every row but enumeration.
 
+   **Every built-in pipeline declares its own rows** (rung 2, same day), in
+   `pipeline/pipelines/ontologies/<id>.toml` under `[navigation]`, written
+   against what that pipeline's build EMITS (`Pipeline::emits`, derived from
+   the pipeline's own deciders: Phase 1's kinds, the derivation flags, and an
+   edge kind only where its endpoint kinds exist) and ratcheted by
+   `builtin_navigation_rows_name_only_kinds_the_pipeline_emits` under the
+   universal rule (`KindSet::covers`): a row may not seed on, budget or walk
+   a kind its pipeline never produces. The table above is what an UNDECLARED
+   atlas walks under, and it fails that ratchet on every built-in — no
+   built-in build emits `Position` or `Opposition` atoms, `Causes` or
+   `OpposesIn` edges, and `Grounds` is written from an atom to a chunk and
+   never seats in the atom CSR. Philosophy's tension row seeds on `Claim` +
+   `ArgumentReconstruction`, walks `Tension` → `Involves` for two hops and
+   composes `[atoms, raptor]`; referential seeds no `Configuration` (it skips
+   Phase 8); engineering keeps one row on (tension, claims only) and switches
+   four off by name. Exemplars are the genre's question SHAPES, never a
+   bank's sentences (§7 step 5).
+
    **The seed QUOTA column and the `Configures` edge are ei-5c (2026-09-07),
    and both are repairs of the same shape as `Summary`'s row entry — the table
    saying a kind is reachable while nothing in the table can reach it.**

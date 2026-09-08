@@ -36,3 +36,76 @@ description = "A historical event the section treats as a thing in its own right
 # Phase 1 uses the shared section-extraction schema, which carries
 # `argument_reconstructions`.
 arguments = true
+
+# ── Navigation (EPISTEMIC_INDEX.md §2.2; map-conversion rung 2, 2026-09-08) ──
+# The rows this genre walks under, written against what its build EMITS
+# (`Pipeline::emits`) and ratcheted by
+# `builtin_navigation_rows_name_only_kinds_the_pipeline_emits`. Kinds the
+# pre-registered table lists and no built-in build produces are absent on
+# purpose: `Position`/`Opposition` atoms, `Causes` and `OpposesIn` edges, and
+# `Grounds`, which the resolvers write from an atom to a CHUNK — it has no
+# seat in the atom CSR and a row walking it walks nothing. Exemplars describe
+# question SHAPES this genre's readers ask, never a bank's sentences.
+# Referential skips Phase 8, so no Configuration seed and no Configures edge.
+
+[navigation.thematic]
+seed = { kinds = ["Entity", "Summary"], entity_types = ["concept"], budgets = { Summary = 8 } }
+walk = ["Involves", "Tension"]
+hops = 2
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "what is this topic about",
+  "give an overview of this subject",
+  "what are the main aspects of this",
+  "summarize the entry as a whole",
+]
+
+[navigation.tension]
+seed = { kinds = ["Claim", "ArgumentReconstruction"] }
+walk = ["Tension", "Involves"]
+hops = 1
+budget = 12
+summary_sources = []
+exemplars = [
+  "where do accounts of this disagree",
+  "what is disputed about this",
+  "which claims about it conflict",
+  "what are the competing explanations",
+]
+
+[navigation.trajectory]
+seed = { kinds = ["Entity", "State"] }
+walk = ["Transition"]
+hops = 2
+budget = 12
+exemplars = [
+  "how did this develop over time",
+  "what caused this to change",
+  "trace the history of this",
+  "what happened to it afterwards",
+]
+
+[navigation.enumeration]
+seed = { declared = true }
+walk = []
+hops = 0
+budget = 12
+exemplars = [
+  "which events are recorded",
+  "list the people involved",
+  "how many places does it name",
+  "enumerate the works cited",
+]
+
+[navigation.lookup]
+seed = { kinds = ["Entity"] }
+walk = ["Involves"]
+hops = 1
+budget = 12
+exemplars = [
+  "who was this person",
+  "what is this thing",
+  "tell me about this place",
+  "give me the entry for it",
+]

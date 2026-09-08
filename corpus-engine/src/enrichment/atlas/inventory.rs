@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What an atlas CARRIES — the census a navigation row is checked against
-//! before the walk runs it.
+//! before the walk runs it — and what a pipeline CAN EMIT, the set a
+//! declared row is ratcheted against before it ships.
 //!
 //! The navigation map (`EPISTEMIC_INDEX.md` §2.2) says what each row seeds on
 //! and which edges it follows. Nothing checked that the atlases in scope
@@ -10,10 +11,21 @@
 //! nothing, reported after the fact by the ledger and never refused before
 //! it. This module is the refusal.
 //!
-//! The rule, pre-registered in the order: a row is ADMISSIBLE for a set of
-//! graphs iff some graph carries at least one of its seed kinds AND (the row
-//! has no walk OR some graph carries at least one of its edge kinds). Two
-//! refinements the measurement forced, both named here so they cannot be
+//! Two questions, two rules, one vocabulary ([`KindSet`]):
+//!
+//! - **Can this row fire here?** ([`KindSet::fit`], existential.) A row is
+//!   ADMISSIBLE for a set of graphs iff some graph carries at least one of
+//!   its seed kinds AND (the row has no walk OR some graph carries at least
+//!   one of its edge kinds). Asked at walk time against the union census of
+//!   the graphs in scope ([`AtlasInventory`]).
+//! - **Is this row well-declared?** ([`KindSet::covers`], universal.) Every
+//!   kind a row names must be one its pipeline can emit. Asked at build time
+//!   against the pipeline's emit set (`Pipeline::emits`), so a built-in map
+//!   cannot ship a row written against a vocabulary its atlases will never
+//!   carry — which is exactly what the pre-registered table was, on every
+//!   built-in (`Position`, `Causes`, `Grounds` seat nowhere).
+//!
+//! Two refinements the measurement forced, both named here so they cannot be
 //! mistaken for tuning:
 //!
 //! - An `Entity` seed narrowed by `entity_types` counts as carried only when
@@ -33,7 +45,7 @@
 //! carries the same census on disk (`atom_counts` + `edge_counts`) for a
 //! reader that has no graph open — `svrn atlas kind` and the map-check verb.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use corpus_engine_vocab::ontology::WalkPolicy;
 
@@ -100,12 +112,15 @@ impl AtlasInventory {
     /// open. `entity_types` is read off `subtype_counts`, which keys every
     /// kind's subtype in one map; an entity type and a claim kind sharing a
     /// spelling would be conflated here, and no built-in vocabulary has such
-    /// a pair.
+    /// a pair. A summary with NO edge census (`edge_counts: None` — the store
+    /// is unbuilt or at a superseded format, and the walk cannot open it
+    /// either) reads as carrying no edges, which is what that atlas walks as
+    /// until `svrn atlas migrate-all` rebuilds it; the caller says so.
     pub fn from_summary(s: &AtlasSummary) -> Self {
         Self {
             atoms: s.atom_counts.clone(),
             entity_types: s.subtype_counts.clone(),
-            edges: s.edge_counts.clone(),
+            edges: s.edge_counts.clone().unwrap_or_default(),
             declares_types: s.ontology.is_some(),
         }
     }
@@ -141,8 +156,79 @@ impl AtlasInventory {
         self.atoms.values().all(|n| *n == 0) && !self.declares_types
     }
 
-    /// Can this row fire on these atlases? The pre-registered rule, in one
-    /// place (§10.6): the walk and the CLI verbs both ask here.
+    /// The census as presence — what the fit rule actually reads.
+    pub fn kinds(&self) -> KindSet {
+        KindSet {
+            atoms: self
+                .atoms
+                .iter()
+                .filter(|(_, n)| **n > 0)
+                .map(|(k, _)| *k)
+                .collect(),
+            entity_types: self
+                .entity_types
+                .iter()
+                .filter(|(_, n)| **n > 0)
+                .map(|(k, _)| k.clone())
+                .collect(),
+            edges: self
+                .edges
+                .iter()
+                .filter(|(_, n)| **n > 0)
+                .map(|(k, _)| *k)
+                .collect(),
+            declares_types: self.declares_types,
+        }
+    }
+
+    /// Can this row fire on these atlases? [`KindSet::fit`] over the census.
+    pub fn fit(&self, row: &WalkPolicy) -> RowFit {
+        self.kinds().fit(row)
+    }
+}
+
+/// The atom kinds the shared Phase-1 section-extraction schema emits
+/// (`SectionExtraction`: entities introduced and developed, relations,
+/// events, claims, questions). The default for `Pipeline::phase1_atom_kinds`.
+pub fn section_extraction_kinds() -> BTreeSet<AtomType> {
+    BTreeSet::from([
+        AtomType::Entity,
+        AtomType::State,
+        AtomType::Relation,
+        AtomType::Event,
+        AtomType::Claim,
+        AtomType::Question,
+    ])
+}
+
+/// A set of kinds — what an atlas carries, or what a pipeline can emit. The
+/// one vocabulary both rules below read (§10.6).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KindSet {
+    pub atoms: BTreeSet<AtomType>,
+    /// `entity_type` tags present (or emittable) on `Entity` atoms.
+    pub entity_types: BTreeSet<String>,
+    pub edges: BTreeSet<EdgeType>,
+    /// Types are declared (`shape.types` non-empty) — what the enumeration
+    /// row seeds on.
+    pub declares_types: bool,
+}
+
+impl KindSet {
+    /// Does an `Entity` seed narrowed to `types` find one of them here? An
+    /// empty narrowing means any entity.
+    fn entity_seed_carried(&self, types: &[corpus_engine_vocab::taxonomy::EntityType]) -> bool {
+        if !self.atoms.contains(&AtomType::Entity) {
+            return false;
+        }
+        types.is_empty()
+            || types
+                .iter()
+                .any(|t| self.entity_types.contains(t.as_str_repr()))
+    }
+
+    /// Can this row fire here? The pre-registered rule, existential: one
+    /// carried seed kind and (no walk or one carried edge kind).
     pub fn fit(&self, row: &WalkPolicy) -> RowFit {
         let seed = &row.seed;
         let mut inert = RowInert::default();
@@ -153,14 +239,10 @@ impl AtlasInventory {
         if filtered {
             let mut any = false;
             for k in &seed.kinds {
-                let carried = if *k == AtomType::Entity && !seed.entity_types.is_empty() {
-                    seed.entity_types.iter().any(|t| {
-                        self.entity_types
-                            .get(t.as_str_repr())
-                            .is_some_and(|n| *n > 0)
-                    })
+                let carried = if *k == AtomType::Entity {
+                    self.entity_seed_carried(&seed.entity_types)
                 } else {
-                    self.carries(*k)
+                    self.atoms.contains(k)
                 };
                 if carried {
                     any = true;
@@ -183,7 +265,7 @@ impl AtlasInventory {
 
         // Edges. No walk (enumeration, or the unfiltered row's "every kind")
         // is never inert on this axis.
-        if !row.walk.is_empty() && !row.walk.iter().any(|e| self.carries_edge(*e)) {
+        if !row.walk.is_empty() && !row.walk.iter().any(|e| self.edges.contains(e)) {
             inert.edges_missing = row.walk.clone();
         }
 
@@ -192,6 +274,39 @@ impl AtlasInventory {
         } else {
             RowFit::Inert(inert)
         }
+    }
+
+    /// Is every kind this row names one this set contains? The build-time
+    /// ratchet, universal: a declared row may not seed on, budget, or walk a
+    /// kind its pipeline never emits. `None` when the row is covered; the
+    /// missing kinds otherwise. An `Entity` seed narrowed by `entity_types`
+    /// needs every listed type; a `declared` seed needs declared types.
+    pub fn covers(&self, row: &WalkPolicy) -> Option<RowInert> {
+        let seed = &row.seed;
+        let mut missing = RowInert::default();
+        for k in seed.kinds.iter().chain(seed.budgets.keys()) {
+            let ok = if *k == AtomType::Entity {
+                self.atoms.contains(k)
+                    && seed
+                        .entity_types
+                        .iter()
+                        .all(|t| self.entity_types.contains(t.as_str_repr()))
+            } else {
+                self.atoms.contains(k)
+            };
+            if !ok && !missing.seeds_missing.contains(k) {
+                missing.seeds_missing.push(*k);
+            }
+        }
+        if seed.declared && !self.declares_types {
+            missing.declared_missing = true;
+        }
+        for e in &row.walk {
+            if !self.edges.contains(e) {
+                missing.edges_missing.push(*e);
+            }
+        }
+        (!missing.is_fit()).then_some(missing)
     }
 }
 
@@ -291,8 +406,9 @@ mod tests {
         }
     }
 
-    /// A SEP article as installed: Claims and Configurations, Involves /
-    /// Grounds / Tension edges, no Position, no Summary, nothing declared.
+    /// A SEP article as installed: Claims and Configurations, Involves and
+    /// Tension edges in the CSR (its Grounds edges point at chunks and seat
+    /// nowhere), no Position, no Summary, nothing declared.
     fn sep_article() -> AtlasInventory {
         AtlasInventory {
             atoms: BTreeMap::from([
@@ -303,11 +419,7 @@ mod tests {
                 (AtomType::ArgumentReconstruction, 6),
             ]),
             entity_types: BTreeMap::from([("concept".to_string(), 40), ("person".to_string(), 17)]),
-            edges: BTreeMap::from([
-                (EdgeType::Involves, 60),
-                (EdgeType::Grounds, 12),
-                (EdgeType::Tension, 5),
-            ]),
+            edges: BTreeMap::from([(EdgeType::Involves, 60), (EdgeType::Tension, 5)]),
             declares_types: false,
         }
     }
@@ -364,12 +476,8 @@ mod tests {
         // Declare a type and the enumeration row fits — the one bit flips
         // the verdict, so the bit is load-bearing.
         let mut declared = wikipedia();
-        declares(&mut declared);
+        declared.declares_types = true;
         assert!(declared.fit(map.walk(QuestionKind::Enumeration)).fits());
-    }
-
-    fn declares(inv: &mut AtlasInventory) {
-        inv.declares_types = true;
     }
 
     /// The pre-registered tension row fits a SEP article on `Claim` alone:
@@ -412,5 +520,37 @@ mod tests {
         assert_eq!(inv.atoms[&AtomType::Entity], 1_600_057);
         assert!(!inv.is_empty());
         assert!(AtlasInventory::default().is_empty());
+    }
+
+    /// `covers` is the universal rule and `fit` the existential one, and the
+    /// difference is the point: the SEP census FITS the pre-registered
+    /// tension row (it carries Claims) and does not COVER it (it never
+    /// carries a Position or an OpposesIn edge). A declared row that only
+    /// fits is a row half of which is dead on arrival.
+    #[test]
+    fn covers_is_stricter_than_fit() {
+        let kinds = sep_article().kinds();
+        let map = NavigationPolicy::default();
+        let tension = map.walk(QuestionKind::Tension);
+        assert!(kinds.fit(tension).fits());
+        let missing = kinds
+            .covers(tension)
+            .expect("Position and OpposesIn are not emitted");
+        assert_eq!(missing.seeds_missing, vec![AtomType::Position]);
+        assert_eq!(missing.edges_missing, vec![EdgeType::OpposesIn]);
+        // A row written against what is there is covered — every seed kind,
+        // every listed entity type, every edge kind, and every budgeted kind.
+        let mut row = WalkPolicy::tension();
+        row.seed.kinds = vec![AtomType::Claim, AtomType::ArgumentReconstruction];
+        row.walk = vec![EdgeType::Tension, EdgeType::Involves];
+        assert_eq!(kinds.covers(&row), None);
+        // The thematic row budgets `Summary`, which this census lacks; the
+        // budget key is a kind the row names, so it counts.
+        let thematic = kinds.covers(map.walk(QuestionKind::Thematic)).unwrap();
+        assert!(thematic.seeds_missing.contains(&AtomType::Summary));
+        assert_eq!(
+            thematic.edges_missing,
+            vec![EdgeType::Grounds, EdgeType::Configures]
+        );
     }
 }

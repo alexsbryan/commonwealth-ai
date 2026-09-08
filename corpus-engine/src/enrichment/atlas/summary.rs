@@ -137,11 +137,15 @@ pub struct AtlasSummary {
     pub ann_mtime_ms: u64,
     /// Edges per kind in `edges.csr` — the graph the walk follows, so an
     /// edge to a chunk reference (which has no seat in the CSR) is not
-    /// counted as walkable. Empty when there is no CSR, which
-    /// [`Self::csr_mtime_ms`]` == 0` distinguishes from a CSR with no edges.
+    /// counted as walkable. `None` when there is no READABLE store: no CSR,
+    /// or one at a superseded format version, which `CsrEdges::open` refuses
+    /// and the walk therefore cannot open either — 662 of 1,770 installed
+    /// SEP siblings on 2026-09-08, all at CSR v1. That is a different fact
+    /// from `Some({})`, a built store with no edges, and it is never
+    /// rendered as one (ARCH 18.3); `svrn atlas migrate-all` rebuilds it.
     /// Added in schema v6; read by [`super::inventory::AtlasInventory`].
-    #[serde(default)]
-    pub edge_counts: BTreeMap<EdgeType, u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge_counts: Option<BTreeMap<EdgeType, u64>>,
     /// `edges.csr` mtime (ms since epoch) when computed; `0` without one.
     /// The THIRD cache key, beside the atoms file's and the seed table's.
     #[serde(default)]
@@ -205,7 +209,7 @@ impl AtlasSummary {
             ontology: None,
             ann: None,
             ann_mtime_ms: 0,
-            edge_counts: BTreeMap::new(),
+            edge_counts: None,
             csr_mtime_ms: 0,
         }
     }
@@ -269,7 +273,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         ontology: read_ontology_summary(atlas_dir),
         ann: read_ann_summary(atlas_dir),
         ann_mtime_ms: ann_table_mtime_ms(atlas_dir),
-        edge_counts: csr_edge_counts(atlas_dir).unwrap_or_default(),
+        edge_counts: csr_edge_counts(atlas_dir),
         csr_mtime_ms: csr_mtime_ms(atlas_dir),
     })
 }
@@ -460,7 +464,7 @@ mod tests {
             &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted],
         );
         let before = read_or_compute_summary(tmp.path()).unwrap().unwrap();
-        assert!(before.edge_counts.is_empty());
+        assert_eq!(before.edge_counts, None, "no store is not an empty store");
         assert_eq!(before.csr_mtime_ms, 0);
         assert!(read_current_summary(tmp.path()).is_some());
 
@@ -483,7 +487,10 @@ mod tests {
             "a summary computed before the CSR must not stay current"
         );
         let after = read_or_compute_summary(tmp.path()).unwrap().unwrap();
-        assert_eq!(after.edge_counts, BTreeMap::from([(EdgeType::Involves, 1)]));
+        assert_eq!(
+            after.edge_counts,
+            Some(BTreeMap::from([(EdgeType::Involves, 1)]))
+        );
         assert!(after.csr_mtime_ms > 0);
         assert!(read_current_summary(tmp.path()).is_some());
     }
