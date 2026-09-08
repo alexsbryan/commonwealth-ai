@@ -7,6 +7,15 @@
 
 # Structural — the model must reach for the tool, ONCE, with a
 # focused query.
+
+# ── Which surface does this fixture measure? ─────────────────
+# The smoke subset drives the PRODUCTION path: the `ReasonWithTools`
+# step an emitted plan takes (`sovereign-core/src/executor.rs` ->
+# `execute_reason_with_tools`). Production builds the prompt, parses the
+# inline `<tool_call>`, dispatches through `ToolRegistry::call_cached`,
+# and writes the `search_log` the predicates below read as the ledger.
+production_path = "executor"
+
 should_call_knowledge_lookup = true
 expected_first_tool = "knowledge_lookup"
 max_lookup_calls = 1

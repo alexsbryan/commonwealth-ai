@@ -9,13 +9,32 @@
 //! return when the model emits a `knowledge_lookup` call), and a
 //! `pass.toml` (the predicates to evaluate against the transcript).
 //!
-//! The gym hits the running daemon at `/v1/chat/completions`,
-//! observes the model's `tool_calls`, fields the
-//! `knowledge_lookup` invocations with the fixture's mock
-//! evidence (no live tool execution), and scores the transcript
-//! against structural + semantic predicates.
+//! Each fixture DECLARES the production path it drives, in
+//! `pass.toml`'s `production_path` key — see [`ledger::ProductionPath`].
+//! The gym replays it through that path, fielding the
+//! `knowledge_lookup` invocations with the fixture's canned
+//! evidence (no live corpus), and scores the transcript against
+//! structural + semantic predicates read off ONE tool ledger.
+//!
+//! # The retarget (2026-09-07)
+//!
+//! Until this change every fixture drove `POST /v1/chat/completions`
+//! with an OpenAI `tools` array and the predicates read
+//! `choices[0].message.tool_calls`. Nothing a user does reaches
+//! that surface: `knowledge_query.rs` passes `tools: None` on both
+//! synthesis routes, and the two paths that DO offer
+//! `knowledge_lookup` render it as a prose line and parse an inline
+//! `<tool_call>` marker back out. So a green gym said the daemon's
+//! native function-calling adapter held a contract, and said
+//! nothing about the product. That surface is still reachable, as
+//! `--raw`, and is labelled `not-the-product` wherever it is
+//! reported.
 
+mod ledger;
+mod production;
 mod runner;
+
+pub use ledger::ProductionPath;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -26,6 +45,11 @@ const DEFAULT_BASE_URL: &str = "http://localhost:9741";
 const DEFAULT_FIXTURES_DIR: &str = "sovereign/bench/knowledge-gym/fixtures";
 const HTTP_TIMEOUT: Duration = Duration::from_secs(120);
 const DEFAULT_REPLAYS: u32 = 3;
+/// The chat model the executor path asks. Every fixture on disk names
+/// `"primary"` in its `input.json`, and the raw driver posts that string
+/// through to the daemon — so the production driver asks the same one and a
+/// before/after comparison is not confounded by the model.
+const DEFAULT_CHAT_MODEL: &str = "primary";
 
 pub async fn run_knowledge_gym(args: &[String]) -> i32 {
     let cmd = args.first().map(String::as_str).unwrap_or("run");
@@ -46,12 +70,26 @@ pub async fn run_knowledge_gym(args: &[String]) -> i32 {
 fn print_help() {
     println!(
         "svrn knowledge-gym — correctness harness for knowledge_lookup\n\n\
-         USAGE\n  sovereign knowledge-gym run [--fixture SLUG] [--replays N] \
-         [--base-url URL] [--fixtures-dir PATH] [--json]\n\n\
-         Each fixture dir holds input.json + mock_evidence.json + pass.toml.\n\
-         The gym replays the input against the running daemon, mocks the\n\
-         knowledge_lookup tool with the canned evidence, and scores the\n\
-         transcript."
+         USAGE\n  sovereign knowledge-gym run [--fixture SLUG] [--replays N]\n\
+         \x20                              [--base-url URL] [--fixtures-dir PATH]\n\
+         \x20                              [--raw] [--sabotage KIND] [--json]\n\n\
+         Each fixture dir holds input.json + mock_evidence.json + pass.toml,\n\
+         and pass.toml DECLARES `production_path` — executor | attached-doc |\n\
+         raw. The gym replays the fixture THROUGH that path, fields\n\
+         knowledge_lookup with the canned evidence, and scores the path's own\n\
+         tool ledger. A fixture declaring no path is refused, not defaulted.\n\n\
+         FLAGS\n\
+         \x20 --raw            force EVERY fixture onto POST /v1/chat/completions\n\
+         \x20                  with an OpenAI tools[] array. No product turn takes\n\
+         \x20                  that route, so every report line says\n\
+         \x20                  `not-the-product`. Measures the MODEL, never the\n\
+         \x20                  product. Cannot be combined with --sabotage.\n\
+         \x20 --sabotage KIND  deliberately break the production path, to watch\n\
+         \x20                  the lane go red (ARCH §18.1).\n\
+         \x20                  `no-tool-offered`: the ReasonWithTools step is\n\
+         \x20                  built with an EMPTY tool list, so the production\n\
+         \x20                  prompt never offers knowledge_lookup.\n\n\
+         See sovereign/bench/knowledge-gym/RUNBOOK.md."
     );
 }
 
@@ -61,6 +99,8 @@ async fn run_cmd(args: &[String]) -> i32 {
     let mut only_fixture: Vec<String> = Vec::new();
     let mut replays: u32 = DEFAULT_REPLAYS;
     let mut json_out = false;
+    let mut force_raw = false;
+    let mut sabotage: Option<production::Sabotage> = None;
 
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
@@ -96,6 +136,25 @@ async fn run_cmd(args: &[String]) -> i32 {
             "--json" => {
                 json_out = true;
             }
+            "--raw" => {
+                force_raw = true;
+            }
+            "--sabotage" => {
+                let v = iter.next().cloned().unwrap_or_else(|| {
+                    eprintln!("--sabotage requires a value");
+                    std::process::exit(2)
+                });
+                match production::Sabotage::parse(&v) {
+                    Some(sb) => sabotage = Some(sb),
+                    None => {
+                        eprintln!(
+                            "unknown --sabotage kind `{v}` (expected one of: {})",
+                            production::Sabotage::ALL.join(", ")
+                        );
+                        return 2;
+                    }
+                }
+            }
             _ => {
                 eprintln!("unknown flag: {a}");
                 return 2;
@@ -122,7 +181,50 @@ async fn run_cmd(args: &[String]) -> i32 {
         .timeout(HTTP_TIMEOUT)
         .build()
         .expect("build http client");
-    let cfg = runner::RunnerCfg { base_url, replays };
+    if force_raw && sabotage.is_some() {
+        // Both would "work" — --raw wins and the sabotage does nothing — and
+        // that is exactly the silent substitution to refuse: a run whose
+        // sabotage was ignored looks like a sabotage that failed to go red.
+        eprintln!(
+            "knowledge-gym: --raw and --sabotage are mutually exclusive. --raw \
+             forces the non-product endpoint, which the sabotage does not touch, \
+             so the run would report a green sabotage that never applied."
+        );
+        return 2;
+    }
+    if let Some(sb) = sabotage {
+        let reachable = fixtures
+            .iter()
+            .filter(|f| f.path == ProductionPath::Executor)
+            .count();
+        if reachable == 0 {
+            eprintln!(
+                "knowledge-gym: --sabotage {sb:?} selected, but none of the {} \
+                 fixture(s) declare production_path = \"executor\", so the break \
+                 would never apply. Refusing rather than reporting a green run.",
+                fixtures.len()
+            );
+            return 2;
+        }
+    }
+    if force_raw {
+        eprintln!(
+            "knowledge-gym: --raw — every fixture forced onto \
+             POST /v1/chat/completions. NOT-THE-PRODUCT: no product turn takes \
+             that route, so these numbers are about the model's \
+             function-calling adapter."
+        );
+    }
+    if let Some(sb) = sabotage {
+        eprintln!("knowledge-gym: --sabotage {sb:?} — the path is deliberately broken.");
+    }
+    let executor_host = production::ExecutorHost::connect(&base_url, DEFAULT_CHAT_MODEL, sabotage);
+    let cfg = runner::RunnerCfg {
+        base_url,
+        replays,
+        force_raw,
+        executor_host,
+    };
 
     // The human report is the primary payload and belongs on stdout so
     // `svrn ... > gym.txt` captures it. Under `--json` stdout is already
@@ -147,15 +249,20 @@ async fn run_cmd(args: &[String]) -> i32 {
     }
 
     let agg = runner::summarise(&all_runs);
+    // The summary — INCLUDING the four-verdict distribution — is emitted on
+    // both paths. It used to print only in human mode, so the one mode the
+    // quality lane actually runs (`--json`) never showed how many replays
+    // abstained. ARCH §18.2 as amended: a lane where most replays render
+    // could-not-judge has been silenced rather than measured, and that
+    // number is the only thing that tells the two apart.
+    emit("\n=== summary ===");
+    for line in agg.human_lines() {
+        emit(&format!("  {line}"));
+    }
     if json_out {
         match serde_json::to_string_pretty(&agg) {
             Ok(s) => println!("{s}"),
             Err(e) => eprintln!("knowledge-gym: cannot serialise summary: {e}"),
-        }
-    } else {
-        println!("\n=== summary ===");
-        for line in agg.human_lines() {
-            println!("  {line}");
         }
     }
 
@@ -183,7 +290,10 @@ pub(crate) struct TurnSpec {
 pub(crate) struct Fixture {
     pub slug: String,
     #[allow(dead_code)]
-    pub path: PathBuf,
+    pub dir: PathBuf,
+    /// The production path this fixture DECLARES it drives, read from
+    /// `pass.toml`'s `production_path`. Required — see [`load_fixtures`].
+    pub path: ProductionPath,
     pub turns: Vec<TurnSpec>,
     pub predicates: toml::Value,
 }
@@ -195,11 +305,11 @@ fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
     let entries = std::fs::read_dir(dir)?;
     let mut out = Vec::new();
     for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
+        let path_dir = entry.path();
+        if !path_dir.is_dir() {
             continue;
         }
-        let slug = path
+        let slug = path_dir
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("?")
@@ -207,13 +317,53 @@ fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
         if !only.is_empty() && !only.iter().any(|s| s == &slug) {
             continue;
         }
-        let pass_path = path.join("pass.toml");
+        let pass_path = path_dir.join("pass.toml");
         if !pass_path.exists() {
             continue;
         }
         let pass_raw = std::fs::read_to_string(&pass_path)?;
         let predicates: toml::Value = toml::from_str(&pass_raw)
             .map_err(|e| std::io::Error::other(format!("{slug}/pass.toml: {e}")))?;
+
+        // REQUIRED, never defaulted. A missing declaration used to be the
+        // silent state of the whole gym: every fixture drove the raw endpoint
+        // because nothing said otherwise, and a green run read as a statement
+        // about the product. Refusing here is what makes "which surface did
+        // this measure" impossible to forget (ARCH §7, §18.3).
+        let declared = predicates
+            .get("production_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                std::io::Error::other(format!(
+                    "{slug}/pass.toml declares no `production_path` — add one of: {}",
+                    ProductionPath::ALL.join(", ")
+                ))
+            })?;
+        let path = ProductionPath::parse(declared).ok_or_else(|| {
+            std::io::Error::other(format!(
+                "{slug}/pass.toml: production_path = \"{declared}\" is not a known path \
+                 (expected one of: {})",
+                ProductionPath::ALL.join(", ")
+            ))
+        })?;
+        // A path with no driver is refused HERE, loudly, and the run exits
+        // non-zero. It is deliberately NOT a per-replay could-not-judge:
+        // ARCH §18.2 as amended — an abstention nobody has watched be
+        // necessary is not rigor, and three fixtures reporting
+        // could-not-judge for a reason the loader already knew would read as
+        // a careful lane while measuring nothing. Give `attached-doc` a
+        // driver and delete this arm; until then a fixture cannot silently
+        // become nine unjudged replays.
+        if path == ProductionPath::AttachedDoc {
+            return Err(std::io::Error::other(format!(
+                "{slug}/pass.toml declares production_path = \"attached-doc\", which has \
+                 no headless driver. `handle_attached_doc_turn` needs a Ready \
+                 DocumentAsset plus a DocumentSession on the conversation \
+                 (bench_cmd::book_report::dispatch_question is the working recipe), \
+                 and the ingest that produces the asset does not fit this lane's \
+                 budget. Declare `executor` or `raw`."
+            )));
+        }
 
         // Detect single-turn (input.json) vs multi-turn
         // (input_turn_0.json, input_turn_1.json, ...). The
@@ -222,16 +372,34 @@ fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
         // input_turn_N.json files are ignored (so a fixture
         // author can leave a draft sequence on disk without
         // breaking the single-turn path).
-        let turns = if path.join("input.json").exists() {
-            vec![load_turn(&path, &slug, "input.json", "mock_evidence.json")?]
+        let turns = if path_dir.join("input.json").exists() {
+            vec![load_turn(
+                &path_dir,
+                &slug,
+                "input.json",
+                "mock_evidence.json",
+            )?]
         } else {
-            load_multi_turn(&path, &slug)?
+            load_multi_turn(&path_dir, &slug)?
         };
         if turns.is_empty() {
             continue;
         }
+        // Same rule as the arm above: the `ReasonWithTools` step is
+        // single-shot, and the loader can see the turn count. Refuse, rather
+        // than run and report N could-not-judge replays for a fact known
+        // before the daemon was touched (ARCH §18.2 as amended).
+        if path == ProductionPath::Executor && turns.len() != 1 {
+            return Err(std::io::Error::other(format!(
+                "{slug} declares production_path = \"executor\" with {} turns; the \
+                 ReasonWithTools step is single-shot and multi-turn replay through \
+                 it is not built. Declare `raw`, or split the fixture.",
+                turns.len()
+            )));
+        }
         out.push(Fixture {
             slug,
+            dir: path_dir,
             path,
             turns,
             predicates,
@@ -263,6 +431,24 @@ fn load_turn(
         .map_err(|e| std::io::Error::other(format!("{slug}/{input_name}: {e}")))?;
     let mock_evidence: Value = serde_json::from_str(&mock_raw)
         .map_err(|e| std::io::Error::other(format!("{slug}/{mock_name}: {e}")))?;
+    // The `evidence` array is REQUIRED, even when empty. Both drivers read it
+    // with `unwrap_or_default()`, so an envelope that misspells the key
+    // (`evidences`) would silently become a zero-row lookup and the fixture
+    // would score as a clean no-results case — an authoring typo rendered as
+    // a passing honesty test (ARCH §18.3). `EMPTY_MOCK_EVIDENCE` writes
+    // `"evidence": []` explicitly for exactly this reason; requiring it here
+    // is what makes the two drivers' defaults safe.
+    if mock_evidence
+        .get("evidence")
+        .and_then(|v| v.as_array())
+        .is_none()
+    {
+        return Err(std::io::Error::other(format!(
+            "{slug}/{mock_name} has no `evidence` array. Write `\"evidence\": []` \
+             for a deliberately empty envelope — an absent key is indistinguishable \
+             from a misspelled one, and both would score as a clean no-results run."
+        )));
+    }
     Ok(TurnSpec {
         input,
         mock_evidence,

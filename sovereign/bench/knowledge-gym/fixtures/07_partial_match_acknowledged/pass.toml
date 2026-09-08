@@ -20,6 +20,15 @@
 # phrases. The prompt nudges toward shape without specifying
 # language.
 
+# ── Which surface does this fixture measure? ─────────────────
+# NOT RETARGETED. This fixture still drives `POST /v1/chat/completions`
+# with an OpenAI `tools[]` array — a surface no product turn takes
+# (`knowledge_query.rs` passes `tools: None` on both synthesis routes).
+# Its numbers are about the model's function-calling adapter, and every
+# report line for it says `not-the-product`. Retarget it to `executor`
+# or `attached-doc` before reading it as a statement about the product.
+production_path = "raw"
+
 should_call_knowledge_lookup = true
 expected_first_tool = "knowledge_lookup"
 max_lookup_calls = 1

@@ -8,7 +8,39 @@ replay's transcript.
 
 This document lists every predicate the runner understands.
 
+## `production_path` — required, and not a predicate
+
+```toml
+production_path = "executor"   # | "attached-doc" | "raw"
+```
+
+The FIRST key every `pass.toml` must carry. It is not graded; it names
+the surface the replay is driven through, and a fixture that declares
+none is refused at load rather than defaulted. `RUNBOOK.md` §"Which
+surface a fixture measures" has the table and the reason.
+
+Three things are refused AT LOAD, loudly, exiting non-zero — never
+turned into per-replay could-not-judge verdicts: a missing
+`production_path`, an unknown spelling, and `attached-doc` (which has no
+driver). Same for a multi-turn fixture declaring `executor`. ARCH §18.2
+as amended: an abstention nobody has watched be necessary is not rigor,
+and a fact the loader already knows must not become nine unjudged
+replays that read as a careful lane. Every run prints
+`verdicts: passed N failed N could-not-judge N` so the abstention count
+is never something a reader has to derive.
+
+Read it before you read any number below: on `raw` the predicates grade
+the daemon's native function-calling adapter, which no product turn
+reaches, and every line of that fixture's report says
+`not-the-product`.
+
 ## Structural predicates (tool-dispatch shape)
+
+Every one of these reads the replay's `ToolLedger`
+(`knowledge_gym_cmd/ledger.rs`) — the one record each driver projects
+its own dispatch log into. They do NOT read a path's private shape, and
+in particular they no longer read the OpenAI `tool_calls` field
+(ARCH §10.6).
 
 - `should_call_knowledge_lookup: bool` — true requires the model
   to invoke `knowledge_lookup` at least once during the turn.

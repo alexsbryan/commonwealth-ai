@@ -9,7 +9,7 @@
     },
     {
       "role": "user",
-      "content": "What was the score of last night's Knicks game?"
+      "content": "What does the project's knowledge base say about the retry policy for mesh peer reconnects?"
     }
   ],
   "tools": [
@@ -26,7 +26,9 @@
               "description": "A short focused query (≤ 8 words)."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       }
     }

@@ -144,6 +144,31 @@ ids = [
 # These are the two the CI lane does NOT run — it samples
 # `08_escalation…`/`10_cache_hit…`/`11_multi_call…` — so this subset is not a
 # smaller copy of the nightly, it is a different question.
+#
+# RETARGETED 2026-09-07. All three now declare `production_path = "executor"`
+# and are replayed through `Executor::execute_reason_with_tools` — the
+# `ReasonWithTools` step a planner emits, and one of the only two code paths
+# that offer `knowledge_lookup` to a model at all. Before this they drove
+# `POST /v1/chat/completions` with an OpenAI `tools[]` array, which no product
+# turn takes, so a green subset was a fact about the daemon's function-calling
+# adapter and the lane read it as a fact about the product. The other eight
+# fixtures still declare `raw` and every line of their report says
+# `not-the-product` — which is why the nightly's sample and this subset are
+# not comparable numbers until those are retargeted too.
+#
+# `05_noresults_honesty`'s QUESTION also changed. It asked for last night's
+# Knicks score and had scored 0/3 since June, because the model correctly
+# declined to search a static local corpus for a live sports score and
+# `should_call_knowledge_lookup = true` graded that right answer as a failure.
+# It now asks a project knowledge-base question against an empty envelope, so
+# the honesty half is what is measured and the lookup is a reasonable move.
+#
+# MEASURED on the retarget (one binary, one daemon, n=3, model `primary`,
+# ZERO abstentions on every run): the subset scores 9/9 on `--raw` and 0/9
+# through the production path. That gap is the finding, not a regression —
+# the model's function-calling adapter holds every contract these fixtures
+# assert and the product holds none of them. `knowledge-gym/RUNBOOK.md`
+# carries the table and the two production-side mechanisms the ledger names.
 
 [[subset]]
 subset_id = "knowledge-gym-v1"

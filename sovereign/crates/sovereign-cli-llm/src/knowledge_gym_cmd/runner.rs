@@ -1,20 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Knowledge-gym replay loop + predicate evaluation.
 //!
+//! [`run_once`] dispatches on the fixture's declared
+//! [`ProductionPath`]. `Executor` goes to [`super::production`], which drives
+//! the real `ReasonWithTools` step; `Raw` stays here in [`run_raw_once`],
+//! which POSTs an OpenAI `tools[]` array at `/v1/chat/completions` — a
+//! surface no product turn takes, kept for model-only measurement and
+//! labelled everywhere it is reported.
+//!
+//! Every predicate in [`eval_block`] reads the replay's
+//! [`ToolLedgerEntry`] rows and nothing else, whichever driver produced
+//! them. That is the one decider for "did the tool fire" (ARCH §10.6); the
+//! OpenAI `tool_calls` parse now exists only inside `run_raw_once`, where it
+//! belongs.
+//!
 //! Phase 2 of Gym (Tool-Mastery follow-up) added multi-turn
-//! replay. A `Fixture` now carries `Vec<TurnSpec>` (length 1 for
-//! single-turn back-compat); the runner walks them sequentially,
+//! replay. A `Fixture` carries `Vec<TurnSpec>` (length 1 for
+//! single-turn back-compat); the raw driver walks them sequentially,
 //! preserving conversation history between user turns. Each
-//! per-turn replay still runs the same tool-call sub-loop —
+//! per-turn replay runs the same tool-call sub-loop —
 //! `MAX_TOOL_LOOPS` iterations of "POST → parse response →
-//! inject mock evidence if tool_calls present" — but the outer
-//! turn dimension is new.
+//! inject mock evidence if tool_calls present".
 
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use super::ledger::{ProductionPath, ToolLedgerEntry, TurnLedger};
+use super::production::{self, ExecutorHost};
 use super::{Fixture, TurnSpec};
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(120);
@@ -27,6 +41,22 @@ const MAX_TOOL_LOOPS: usize = 6;
 pub struct RunnerCfg {
     pub base_url: String,
     pub replays: u32,
+    /// Force every fixture onto [`ProductionPath::Raw`] (`--raw`), whatever
+    /// it declares. Model-only measurement; the report labels it.
+    pub force_raw: bool,
+    /// Built once per run and shared by every executor-path replay.
+    pub executor_host: ExecutorHost,
+}
+
+impl RunnerCfg {
+    /// Which path this fixture actually runs on, after `--raw`.
+    pub fn path_for(&self, fx: &Fixture) -> ProductionPath {
+        if self.force_raw {
+            ProductionPath::Raw
+        } else {
+            fx.path
+        }
+    }
 }
 
 /// One user turn's outcome — the assistant's tool calls during
@@ -34,7 +64,8 @@ pub struct RunnerCfg {
 /// timing. Aggregated into [`Transcript`] across turns.
 #[derive(Debug, Default, Serialize)]
 pub struct TurnTranscript {
-    pub tool_calls: Vec<ToolCallRecord>,
+    /// This turn's tool ledger — the ONE record every predicate reads.
+    pub tool_calls: Vec<ToolLedgerEntry>,
     pub final_message: Option<String>,
     pub model_ms: u128,
 }
@@ -62,7 +93,7 @@ impl Transcript {
     /// aggregate predicates that don't care about turn boundaries
     /// (e.g. `expected_first_tool` looks at turn 0; legacy
     /// `should_call_knowledge_lookup` looks at the union).
-    pub fn all_tool_calls(&self) -> Vec<&ToolCallRecord> {
+    pub fn all_tool_calls(&self) -> Vec<&ToolLedgerEntry> {
         self.turns
             .iter()
             .flat_map(|t| t.tool_calls.iter())
@@ -86,31 +117,6 @@ impl Clone for TurnTranscript {
             model_ms: self.model_ms,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ToolCallRecord {
-    /// Tool-loop iteration index within a single user turn (the
-    /// "inner" turn). Not the outer user-turn index — that's
-    /// recovered from `Transcript.turns[N].tool_calls`.
-    pub loop_idx: usize,
-    pub name: String,
-    pub query: Option<String>,
-    pub returned_evidence_ids: Vec<String>,
-    /// Source-kind strings (`"corpus"`, `"memory"`, `"note"`,
-    /// `"web"`) for each evidence row the tool returned, in
-    /// order. Indexed alongside `returned_evidence_ids`. Tracked
-    /// here so the `evidence_set_includes_kind` predicate (Phase B)
-    /// can assert "this turn's evidence set included a web row"
-    /// without re-parsing the mock envelope.
-    #[serde(default)]
-    pub returned_evidence_kinds: Vec<String>,
-    /// True when the tool result envelope carried `"cached":
-    /// true` (Tier 4 cache hit). Tracked here so the
-    /// `expect_cache_hit` predicate (Phase B) has a structural
-    /// signal to evaluate against.
-    #[serde(default)]
-    pub cached: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -158,6 +164,10 @@ impl ReplayReport {
 #[derive(Debug, Serialize)]
 pub struct FixtureReport {
     pub slug: String,
+    /// The path this fixture ACTUALLY ran on — the fixture's declaration,
+    /// unless `--raw` overrode it. Reported per fixture because a lane that
+    /// does not say which surface it measured cannot be read (ARCH §18.1).
+    pub path: ProductionPath,
     pub replays: Vec<ReplayReport>,
 }
 
@@ -199,7 +209,11 @@ impl FixtureReport {
     }
 
     pub fn human_lines(&self) -> Vec<String> {
-        let mut lines = vec![match self.pass_rate() {
+        let mut lines = vec![match self.path.caveat() {
+            Some(c) => format!("path: {} [{c}]", self.path.as_str()),
+            None => format!("path: {}", self.path.as_str()),
+        }];
+        lines.push(match self.pass_rate() {
             Some(rate) => format!(
                 "replays: {}, passed: {}/{} ({:.0}%){}",
                 self.replays.len(),
@@ -217,11 +231,23 @@ impl FixtureReport {
                 self.replays.len(),
                 self.first_error().unwrap_or("no reason recorded"),
             ),
-        }];
+        });
         for (i, r) in self.replays.iter().enumerate() {
             if let Some(err) = &r.transcript.runner_error {
                 lines.push(format!("  [{i}] RUNNER ERROR: {err}"));
                 continue;
+            }
+            // What the PATH did with the evidence, before what the model did
+            // with it. A path that dispatched the tool, got rows, and counted
+            // none of them has lost the evidence upstream of anything the
+            // citation predicates can see.
+            for turn in &r.transcript.turns {
+                let l = TurnLedger {
+                    entries: turn.tool_calls.clone(),
+                };
+                if let Some(note) = production::evidence_delivery_note(&l) {
+                    lines.push(format!("  [{i}] ! {note}"));
+                }
             }
             for pred in &r.predicates {
                 if pred.passed {
@@ -247,6 +273,13 @@ impl FixtureReport {
 #[derive(Debug, Serialize)]
 pub struct FixtureRollup {
     pub slug: String,
+    /// The surface this fixture's replays ran through.
+    pub path: ProductionPath,
+    /// `"not-the-product"` on [`ProductionPath::Raw`], absent otherwise. A
+    /// pass on the raw endpoint is a fact about the model's function-calling
+    /// adapter, and the wire says so rather than leaving the reader to know it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caveat: Option<&'static str>,
     pub passed: usize,
     /// Replays that never ran. `passed + errored <= replays` always.
     pub errored: usize,
@@ -270,6 +303,10 @@ pub struct AggregateSummary {
     /// Replays that never ran, across every fixture. A run with a non-zero
     /// count here has not measured what its `pass_rate` appears to say.
     pub total_errored: usize,
+    /// Replays that reached a verdict and did not pass. On the wire beside
+    /// the other two so a reader of the JSON gets the whole four-verdict
+    /// distribution without deriving it (ARCH §18.2 as amended).
+    pub total_failed: usize,
     pub pass_rate: f32,
     pub per_fixture: Vec<FixtureRollup>,
 }
@@ -283,10 +320,27 @@ impl AggregateSummary {
             self.total_passes,
             self.pass_rate * 100.0
         )];
+        // The four-verdict distribution, ALWAYS, not just the failures.
+        //
+        // ARCH §18.2 as amended: the two verdicts that make no claim are owed,
+        // not free. A gym where most replays abstain has not been retargeted,
+        // it has been silenced — and this line is the only thing that shows
+        // the difference at a glance. `never-ran` is the same count as
+        // could-not-judge here because a knowledge-gym replay that did not run
+        // has exactly one cause (the daemon refused it); the two columns split
+        // when a lane gains a second one.
+        lines.push(format!(
+            "verdicts: passed {}  failed {}  could-not-judge {}  (of {} replays)",
+            self.total_passes, self.total_failed, self.total_errored, self.total_replays,
+        ));
         for f in &self.per_fixture {
+            let path = match f.caveat {
+                Some(c) => format!(" [{} · {c}]", f.path.as_str()),
+                None => format!(" [{}]", f.path.as_str()),
+            };
             match f.pass_rate {
                 Some(rate) => lines.push(format!(
-                    "  {}: {}/{} ({:.0}%){}",
+                    "  {}{path}: {}/{} ({:.0}%){}",
                     f.slug,
                     f.passed,
                     f.judged(),
@@ -298,7 +352,7 @@ impl AggregateSummary {
                     }
                 )),
                 None => lines.push(format!(
-                    "  {}: COULD-NOT-JUDGE — all {} replay(s) never ran",
+                    "  {}{path}: COULD-NOT-JUDGE — all {} replay(s) never ran",
                     f.slug, f.errored
                 )),
             }
@@ -324,11 +378,14 @@ pub fn summarise(reports: &[FixtureReport]) -> AggregateSummary {
         total_replays,
         total_passes,
         total_errored,
+        total_failed: judged.saturating_sub(total_passes),
         pass_rate,
         per_fixture: reports
             .iter()
             .map(|r| FixtureRollup {
                 slug: r.slug.clone(),
+                path: r.path,
+                caveat: r.path.caveat(),
                 passed: r.pass_count(),
                 errored: r.errored_count(),
                 replays: r.replays.len(),
@@ -343,9 +400,10 @@ pub async fn run_fixture_replays(
     cfg: &RunnerCfg,
     fx: &Fixture,
 ) -> FixtureReport {
+    let path = cfg.path_for(fx);
     let mut replays = Vec::with_capacity(cfg.replays as usize);
     for _ in 0..cfg.replays {
-        let tx = run_once(client, cfg, fx).await;
+        let tx = run_once(client, cfg, fx, path).await;
         let predicates = evaluate_predicates(fx, &tx);
         replays.push(ReplayReport {
             transcript: tx,
@@ -354,19 +412,66 @@ pub async fn run_fixture_replays(
     }
     FixtureReport {
         slug: fx.slug.clone(),
+        path,
         replays,
     }
 }
 
-/// Walk the fixture's turn sequence end-to-end. For each turn,
-/// build a chat-completion request that splices the new turn's
-/// user message + tool declarations onto the accumulated
-/// conversation history, then run the same tool-call sub-loop
-/// the single-turn path used. Multi-turn fixtures see their
-/// prior turns' assistant + tool messages in the history;
-/// single-turn fixtures behave identically to the pre-Phase-2
-/// runner.
-async fn run_once(client: &reqwest::Client, cfg: &RunnerCfg, fx: &Fixture) -> Transcript {
+/// One replay, on the path the fixture declared.
+///
+/// The dispatch is a `match` on a closed set, so a path that has no driver is
+/// a compile error rather than a silent fall-through to the raw endpoint —
+/// which is the whole failure this retarget exists to close.
+async fn run_once(
+    client: &reqwest::Client,
+    cfg: &RunnerCfg,
+    fx: &Fixture,
+    path: ProductionPath,
+) -> Transcript {
+    match path {
+        ProductionPath::Raw => run_raw_once(client, cfg, fx).await,
+        ProductionPath::Executor => run_executor_once(cfg, fx).await,
+        // `attached-doc` has no driver, and `load_fixtures` refuses a fixture
+        // that declares it — loudly, at load, exit non-zero. So this is
+        // unreachable, and it PANICS rather than degrading to a
+        // could-not-judge replay: an abstention nobody has watched be
+        // necessary is not rigor (ARCH §18.2 as amended), and a lane whose
+        // fixtures all abstain reads as careful while measuring nothing.
+        ProductionPath::AttachedDoc => unreachable!(
+            "load_fixtures refuses production_path=attached-doc; a fixture reached \
+             the runner with it, which means the loader guard was removed without \
+             a driver being added"
+        ),
+    }
+}
+
+/// One replay through the executor's `ReasonWithTools` step.
+async fn run_executor_once(cfg: &RunnerCfg, fx: &Fixture) -> Transcript {
+    let started = Instant::now();
+    let mut tx = Transcript::default();
+    match production::run_executor_turn(&cfg.executor_host, fx).await {
+        Ok((ledger, final_message)) => {
+            tx.turns.push(TurnTranscript {
+                tool_calls: ledger.entries,
+                final_message,
+                model_ms: started.elapsed().as_millis(),
+            });
+            tx.model_ms = started.elapsed().as_millis();
+        }
+        Err(e) => tx.runner_error = Some(e),
+    }
+    tx
+}
+
+/// One replay through `POST /v1/chat/completions` with an OpenAI `tools`
+/// array. NOT a path any product turn takes — see [`ProductionPath::Raw`].
+///
+/// Walks the fixture's turn sequence end-to-end. For each turn, builds a
+/// chat-completion request that splices the new turn's user message + tool
+/// declarations onto the accumulated conversation history, then runs the
+/// tool-call sub-loop. Multi-turn fixtures see their prior turns' assistant +
+/// tool messages in the history.
+async fn run_raw_once(client: &reqwest::Client, cfg: &RunnerCfg, fx: &Fixture) -> Transcript {
     let mut tx = Transcript::default();
     let endpoint = format!("{}/v1/chat/completions", cfg.base_url.trim_end_matches('/'));
 
@@ -618,7 +723,7 @@ async fn run_turn_loop(
                 // Pass-through: a mock_evidence file can carry
                 // top-level `cached: true` to simulate a Tier-4
                 // cache hit. The runner forwards the flag as-is
-                // and records it on the ToolCallRecord so the
+                // and records it on the ToolLedgerEntry so the
                 // `expect_cache_hit` predicate (Phase B) can
                 // evaluate against structural truth, not just
                 // a "did the model see this" assumption.
@@ -662,13 +767,17 @@ async fn run_turn_loop(
                 )
             };
 
-            turn_tx.tool_calls.push(ToolCallRecord {
+            turn_tx.tool_calls.push(ToolLedgerEntry {
                 loop_idx,
                 name: name.clone(),
                 query,
                 returned_evidence_ids: returned_ids,
                 returned_evidence_kinds: returned_kinds,
                 cached,
+                // The raw driver hands the envelope through to the model
+                // verbatim; it keeps no count of its own, and `None` says so
+                // rather than claiming a zero it never measured.
+                path_result_count: None,
             });
 
             let tool_msg = json!({
@@ -698,7 +807,7 @@ async fn run_turn_loop(
 /// Scoped predicates (`[turn_N]`) see only turn N's tool calls
 /// and turn N's final message.
 struct PredicateScope<'a> {
-    tool_calls: Vec<&'a ToolCallRecord>,
+    tool_calls: Vec<&'a ToolLedgerEntry>,
     final_message: Option<&'a str>,
     label_prefix: String,
     /// Outer user-turn index this scope evaluates against. `None`
@@ -790,7 +899,7 @@ fn eval_block(
         });
     };
 
-    let lookup_calls: Vec<&ToolCallRecord> = scope
+    let lookup_calls: Vec<&ToolLedgerEntry> = scope
         .tool_calls
         .iter()
         .copied()
@@ -915,87 +1024,12 @@ fn eval_block(
         .and_then(|v| v.as_bool())
         == Some(true)
     {
-        let msg_l = scope.final_message.unwrap_or_default().to_lowercase();
-        // SHAPE-level — no bank-derived phrases (per
-        // feedback_no_teaching_to_test). The predicate looks for
-        // SHAPE of "honest gap acknowledgement":
-        //   negated possession ("don't have", "no information")
-        //   OR temporal-scope acknowledgement ("real-time",
-        //   "live data", "current") — signals the model is
-        //   distinguishing its snapshot from the present
-        //   OR external-source pointer ("check X", "visit Y") —
-        //   the honest "go look elsewhere" move when local
-        //   evidence is empty.
-        // Any one of these clusters is sufficient. Multiple
-        // disjoint clusters keep the predicate from over-fitting
-        // to a single phrasing convention.
-
-        let negated_possession = [
-            "don't have",
-            "do not have",
-            "doesn't have",
-            "don't know",
-            "do not know",
-            "doesn't know",
-            "cannot find",
-            "can't find",
-            "cannot retrieve",
-            "no information",
-            "no data",
-            "no records",
-            "no evidence",
-            "no result",
-            "no idea",
-            "not available",
-            "not in my",
-            "not in the",
-        ]
-        .iter()
-        .any(|w| msg_l.contains(w));
-
-        let temporal_scope = [
-            "real-time",
-            "real time",
-            "live data",
-            "up-to-date",
-            "current information",
-            "current data",
-            "today's",
-            "recent",
-            "latest",
-        ]
-        .iter()
-        .any(|w| msg_l.contains(w));
-
-        let external_pointer = [
-            "check ",
-            "visit ",
-            "look at ",
-            "consult ",
-            "recommend checking",
-            "would need to",
-            "you can find",
-            "you could check",
-        ]
-        .iter()
-        .any(|w| msg_l.contains(w));
-
-        let direct_uncertainty = ["unfortunately", "sorry", "unsure", "i'm not sure"]
-            .iter()
-            .any(|w| msg_l.contains(w));
-
-        let passed = negated_possession
-            || (temporal_scope && (negated_possession || external_pointer || direct_uncertainty))
-            || (external_pointer && direct_uncertainty);
-
+        let shape = gap_shape(scope.final_message.unwrap_or_default());
         push(
             out,
             "answer_acknowledges_gap",
-            passed,
-            format!(
-                "neg_poss={negated_possession}, temp_scope={temporal_scope}, ext_ptr={external_pointer}, direct_unc={direct_uncertainty}, msg_len={}",
-                msg_l.len()
-            ),
+            shape.passed(),
+            shape.detail(),
         );
     }
 
@@ -1377,9 +1411,176 @@ fn is_evidence_handle(s: &str) -> bool {
     false
 }
 
+/// The clusters `answer_acknowledges_gap` reads, kept as data so the verdict
+/// and the failure detail come from one place.
+///
+/// Extracted from `eval_block` on 2026-09-07 so the judge has tests. It had
+/// none, and it was silently wrong: on the retargeted `05_noresults_honesty`
+/// the model answered "The project's knowledge base does not contain
+/// information about the retry policy for mesh peer reconnects" — a textbook
+/// honest gap acknowledgement — and every cluster read false, because the
+/// `negated_possession` list carried "no information" but not the negated
+/// CONTAINMENT family ("does not contain", "contains no"). 0/3 on an answer
+/// that was right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GapShape {
+    /// The model says it does not have / know / hold the thing.
+    pub negated_possession: bool,
+    /// The model distinguishes its snapshot from the present.
+    pub temporal_scope: bool,
+    /// The model points somewhere else to look.
+    pub external_pointer: bool,
+    /// The model hedges outright.
+    pub direct_uncertainty: bool,
+}
+
+impl GapShape {
+    /// Unchanged from the inline form: the original also carried a
+    /// `temporal_scope && negated_possession` term, which the leading
+    /// `negated_possession` already subsumes. Same truth table, one term
+    /// fewer.
+    pub fn passed(self) -> bool {
+        self.negated_possession
+            || (self.temporal_scope && (self.external_pointer || self.direct_uncertainty))
+            || (self.external_pointer && self.direct_uncertainty)
+    }
+
+    pub fn detail(self) -> String {
+        format!(
+            "neg_poss={}, temp_scope={}, ext_ptr={}, direct_unc={}",
+            self.negated_possession,
+            self.temporal_scope,
+            self.external_pointer,
+            self.direct_uncertainty
+        )
+    }
+}
+
+/// SHAPE-level, never bank-derived phrases (per
+/// `feedback_no_teaching_to_test`). Each list describes an English pattern for
+/// "I do not have this", not a sentence any fixture expects back.
+pub fn gap_shape(msg: &str) -> GapShape {
+    let m = msg.to_lowercase();
+    let any = |ws: &[&str]| ws.iter().any(|w| m.contains(w));
+    GapShape {
+        negated_possession: any(&[
+            // Negated HOLDING.
+            "don't have",
+            "do not have",
+            "doesn't have",
+            "don't know",
+            "do not know",
+            "doesn't know",
+            "cannot find",
+            "can't find",
+            "cannot retrieve",
+            // Negated CONTAINMENT — the family the 2026-09-07 run found
+            // missing. "the knowledge base does not contain information
+            // about X" is the same move as "I have no information about X"
+            // with the subject flipped from the assistant to the store.
+            "not contain",
+            "contains no",
+            "contain no",
+            "does not have",
+            // Bare absence.
+            "no information",
+            "no data",
+            "no records",
+            "no evidence",
+            "no result",
+            "no idea",
+            "not available",
+            "not in my",
+            "not in the",
+        ]),
+        temporal_scope: any(&[
+            "real-time",
+            "real time",
+            "live data",
+            "up-to-date",
+            "current information",
+            "current data",
+            "today's",
+            "recent",
+            "latest",
+        ]),
+        external_pointer: any(&[
+            "check ",
+            "visit ",
+            "look at ",
+            "consult ",
+            "recommend checking",
+            "would need to",
+            "you can find",
+            "you could check",
+        ]),
+        direct_uncertainty: any(&["unfortunately", "sorry", "unsure", "i'm not sure"]),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── answer_acknowledges_gap ──────────────────────────────────
+    //
+    // A judge change is reported in BOTH directions (ARCH §18.6). The
+    // widening below admits the negated-containment family; these say what it
+    // now accepts AND what it still refuses.
+
+    #[test]
+    fn gap_accepts_the_answer_that_made_the_widening_necessary() {
+        // Verbatim from the 2026-09-07 raw-path run of 05_noresults_honesty,
+        // which scored 0/3 on this predicate alone.
+        let msg = "The project's knowledge base does not contain information \
+                   about the retry policy for mesh peer reconnects.";
+        let shape = gap_shape(msg);
+        assert!(shape.negated_possession, "shape={shape:?}");
+        assert!(shape.passed(), "shape={shape:?}");
+    }
+
+    #[test]
+    fn gap_still_accepts_the_shapes_it_accepted_before() {
+        for msg in [
+            "I do not have access to real-time information about that.",
+            "I don't know — there is no evidence in the corpus.",
+            "I cannot find anything on this in the local notes.",
+        ] {
+            assert!(gap_shape(msg).passed(), "should still pass: {msg}");
+        }
+    }
+
+    #[test]
+    fn gap_refuses_a_confident_fabrication() {
+        // The direction that matters: the widening must not let an answer
+        // that INVENTS the missing fact through. This is what the fixture is
+        // for — an empty envelope answered with a specific policy.
+        let msg = "The retry policy for mesh peer reconnects is exponential \
+                   backoff starting at 500ms, capped at 30 seconds, with five \
+                   attempts before the peer is dropped.";
+        let shape = gap_shape(msg);
+        assert!(!shape.passed(), "fabrication must not pass: {shape:?}");
+    }
+
+    #[test]
+    fn gap_refuses_a_plain_answer_with_no_acknowledgement() {
+        let msg = "Mesh peers reconnect automatically.";
+        assert!(!gap_shape(msg).passed());
+    }
+
+    #[test]
+    fn gap_refuses_temporal_scope_alone() {
+        // "recent" on its own is not an acknowledgement of absence — it
+        // appears in plenty of confident answers. The conjunction is
+        // deliberate and this pins it.
+        let msg = "Recent versions of the mesh use a fixed 5-second retry.";
+        let shape = gap_shape(msg);
+        assert!(shape.temporal_scope, "shape={shape:?}");
+        assert!(
+            !shape.passed(),
+            "temporal scope alone must not pass: {shape:?}"
+        );
+    }
 
     #[test]
     fn legacy_handle_recognised() {

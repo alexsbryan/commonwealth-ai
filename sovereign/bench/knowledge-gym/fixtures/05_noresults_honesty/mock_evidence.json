@@ -1,5 +1,9 @@
 {
-  "query": "knicks game score",
+  "query": "mesh reconnect retry policy",
   "evidence": [],
-  "by_kind_counts": { "corpus": 0, "memory": 0, "note": 0 }
+  "by_kind_counts": {
+    "corpus": 0,
+    "memory": 0,
+    "note": 0
+  }
 }
