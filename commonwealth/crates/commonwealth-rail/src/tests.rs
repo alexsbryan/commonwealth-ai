@@ -173,9 +173,69 @@ fn ingesting_a_peers_op_preserves_it_and_is_idempotent() {
 fn a_missing_roster_is_an_empty_ring_not_an_error() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
-    assert_eq!(journal.roster().unwrap(), Roster::default());
+    assert_eq!(journal.roster_file().unwrap(), Roster::default());
     journal.set_roster(&ring()).unwrap();
-    assert_eq!(journal.roster().unwrap(), ring());
+    assert_eq!(journal.roster_file().unwrap(), ring());
+}
+
+/// Drive a future that never actually waits. The sources under test answer
+/// immediately, so a no-op waker is exact rather than a shortcut — and it
+/// keeps a runtime out of this crate's closure.
+fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+    let mut fut = std::pin::pin!(fut);
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    loop {
+        if let std::task::Poll::Ready(v) = fut.as_mut().poll(&mut cx) {
+            return v;
+        }
+    }
+}
+
+struct Fixed(Roster);
+impl RosterSource for Fixed {
+    fn roster(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Roster, RailError>> + Send + '_>>
+    {
+        Box::pin(async move { Ok(self.0.clone()) })
+    }
+}
+
+/// **One reader.** A namespace with a source installed is answered by the
+/// source and its file is ignored even when one is there; every other
+/// namespace is answered by its file. The file being present on the derived
+/// namespace is the point of the test: before the door existed that file was
+/// a second, competing answer, and this pins that it no longer is.
+#[test]
+fn a_derived_roster_answers_for_its_namespace_and_the_file_for_every_other() {
+    let dir = tempfile::tempdir().unwrap();
+    let rail = RingRail::new(dir.path(), Arc::new(key(1)));
+    let derived = rail.journal("daemon-owned").unwrap();
+    let by_hand = rail.journal("house").unwrap();
+    // A stale file on the derived namespace, and the real file on the other.
+    derived.set_roster(&Roster::default()).unwrap();
+    by_hand.set_roster(&ring()).unwrap();
+
+    assert_eq!(rail.roster_origin("daemon-owned"), RosterOrigin::File);
+    rail.derive_roster("daemon-owned", Arc::new(Fixed(ring())))
+        .unwrap();
+    assert_eq!(rail.roster_origin("daemon-owned"), RosterOrigin::Derived);
+    assert_eq!(rail.roster_origin("house"), RosterOrigin::File);
+
+    assert_eq!(block_on(rail.roster(&derived)).unwrap(), ring());
+    assert_eq!(block_on(rail.roster(&by_hand)).unwrap(), ring());
+    assert_eq!(
+        derived.roster_file().unwrap(),
+        Roster::default(),
+        "the file is still there and still empty; the door just stopped reading it"
+    );
+    // Installed AFTER the journal was first touched, and it took effect —
+    // the lookup is at read time, so boot order cannot pin the wrong reader.
+    assert!(
+        rail.derive_roster("no/such", Arc::new(Fixed(ring())))
+            .is_err(),
+        "a name the rail would refuse to open is refused here too"
+    );
 }
 
 // ── the two-node drill ───────────────────────────────────────

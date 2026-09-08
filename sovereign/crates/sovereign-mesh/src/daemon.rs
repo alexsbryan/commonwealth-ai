@@ -2693,10 +2693,19 @@ impl EmbeddedDaemon {
             // (503) instead of answering an empty ledger, so leaving it out
             // on some paths would make "this daemon cannot keep a ledger"
             // and "your ring is empty" the same observation.
-            app_state.install_ring_rail(Arc::new(commonwealth_rail::RingRail::new(
+            let rail = Arc::new(commonwealth_rail::RingRail::new(
                 &self.data_dir,
                 Arc::new(identity_key.clone()),
-            )));
+            ));
+            // The daemon's own namespace has no hand-written roster: its
+            // membership IS the roster, and the rail's one reader has to know
+            // that or the append route refuses this node's own key there.
+            // Installed here, beside the rail, so there is no boot order in
+            // which the rail exists and the source does not.
+            if let Err(e) = crate::ring_roster::MeshRosterSource::install(&rail, &app_state) {
+                tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
+            }
+            app_state.install_ring_rail(rail);
         }
 
         // ── Order is load-bearing ─────────────────────────────────

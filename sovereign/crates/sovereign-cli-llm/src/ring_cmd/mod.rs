@@ -49,9 +49,11 @@
 //! daemon's own ring (cw-lift 2d), and its roster is the mesh's membership,
 //! re-derived from local state on every read. That is still not a route —
 //! nothing is accepted from a peer, and a key is in it only because a member
-//! row already carried it — but it does mean `roster add` and `ring log` have
-//! nothing useful to do there, and both refuse rather than write or read a
-//! file the daemon ignores. See [`refuse_derived_roster`].
+//! row already carried it — but it does mean `roster add` and `roster list`
+//! have nothing to do there, and both refuse rather than write or read a file
+//! the daemon ignores. See [`refuse_derived_roster`]. `ring log` and
+//! `ring seal` go over HTTP, and the daemon's rail has ONE roster reader that
+//! knows this namespace derives (cw-lift 4a follow-up), so both work on it.
 
 use std::collections::BTreeMap;
 
@@ -128,12 +130,13 @@ fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, Strin
 ///
 /// Every command in this module that touches `roster.json` therefore has to
 /// stop here. A file written by `roster add` would be a second answer to who
-/// is in that ring (ARCH §10.6): ignored by the daemon's own read path and
-/// believed by `ring log`, which is worse than either alone. And `ring log`
-/// itself reads the on-disk roster, so on this namespace it would report
-/// every line as an unplaceable signer and read as breakage.
+/// is in that ring (ARCH §10.6): the daemon's rail reads its ONE roster
+/// source for this namespace and ignores the file, so the file would be
+/// believed by nothing and mislead whoever found it.
 ///
-/// One predicate, so the two refusals cannot drift apart.
+/// Only the file's readers and writer stop here. `ring log` and `ring seal`
+/// ask the daemon, whose rail answers with the derived roster, and both work
+/// on this namespace.
 fn refuse_derived_roster(namespace: &str) -> Option<String> {
     if namespace != sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID {
         return None;
@@ -142,7 +145,7 @@ fn refuse_derived_roster(namespace: &str) -> Option<String> {
         "`{namespace}` is the daemon's own ring — its roster IS the mesh's membership, \
          derived fresh on every read and never written down.\n\
          Who is in it: svrn mesh status\n\
-         What is on it: svrn mesh plan (peers' runs, attributed) or svrn mesh bench --history"
+         What is on it: svrn ring log {namespace}, or svrn mesh plan (peers' runs, attributed)"
     ))
 }
 
@@ -317,8 +320,9 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
     // says so. The hand-rolled read this replaced defaulted on any read
     // failure at all, so a permission problem silently became "nobody is in
     // this ring" and the next write dropped every key already in it
-    // (ARCH §18.3).
-    let mut roster = match journal.roster() {
+    // (ARCH §18.3). The FILE, by name: this is its writer, and the one
+    // caller besides the rail's own door that may read it directly.
+    let mut roster = match journal.roster_file() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("ring roster add: {} is not readable: {e}", path.display());
@@ -432,10 +436,6 @@ async fn run_log(args: &[String]) -> i32 {
         eprintln!("ring log: which ring? `svrn ring log <namespace>`");
         return 2;
     };
-    if let Some(why) = refuse_derived_roster(namespace) {
-        eprintln!("ring log: {why}");
-        return 2;
-    }
     let v = match rail_log(namespace).await {
         Ok(v) => v,
         Err(e) => {
@@ -634,16 +634,18 @@ mod tests {
         assert_eq!(op_line(&explicit_null), line);
     }
 
-    /// The one namespace whose roster is derived is refused by BOTH commands
-    /// that would otherwise touch `roster.json`, and every other namespace is
-    /// untouched. The refusal names where to look instead — a "no" with no
-    /// next step is how an operator ends up hand-writing the file anyway.
+    /// The one namespace whose roster is derived is refused by the roster
+    /// commands — the only ones that touch `roster.json` — and every other
+    /// namespace is untouched. The refusal names where to look instead — a
+    /// "no" with no next step is how an operator ends up hand-writing the
+    /// file anyway — and what it names is `ring log`, which reads through the
+    /// daemon and works on this namespace.
     #[test]
     fn the_daemons_own_ring_refuses_a_hand_written_roster() {
         let why = refuse_derived_roster("mesh-measurements")
             .expect("the namespace whose roster is the mesh's membership");
         assert!(why.contains("svrn mesh status"), "{why}");
-        assert!(why.contains("svrn mesh plan"), "{why}");
+        assert!(why.contains("svrn ring log mesh-measurements"), "{why}");
         assert!(refuse_derived_roster("house-expenses").is_none());
         assert!(refuse_derived_roster("mesh-measurement").is_none());
         assert_eq!(
@@ -701,10 +703,6 @@ async fn run_seal(args: &[String]) -> i32 {
         eprintln!("ring seal: which ring? `svrn ring seal <namespace>`");
         return 2;
     };
-    if let Some(why) = refuse_derived_roster(namespace) {
-        eprintln!("ring seal: {why}");
-        return 2;
-    }
     let port = daemon_client_port();
     let url = format!("http://127.0.0.1:{port}/v1/rail/append?namespace={namespace}");
     let client = match http_client() {

@@ -4997,11 +4997,24 @@ content and the journal cannot grow one copy per start. It replaced
 `republish_local_measurements`, which had to re-upload the whole file on every
 restart because the KV buffer was in memory.
 
-`svrn ring roster add --ring mesh-measurements` and `svrn ring log
-mesh-measurements` both REFUSE: the first would write a `roster.json` the daemon
-ignores, and the second reads that file and would report every line as an
-unplaceable signer. One predicate, `ring_cmd::refuse_derived_roster`, and it
-names `svrn mesh status` / `svrn mesh plan` instead.
+**The rail has ONE roster reader, and this namespace is why** (2026-09-08,
+the fix 4a's live run demanded). `RingRail::roster(&journal)` answers every
+caller that holds a journal and a namespace — the append and log routes in
+`routes_rail.rs`, the sync-side prune in `ring_sync.rs` — from a
+`RosterSource` installed for the namespace when one is, and from `roster.json`
+otherwise; `RingJournal::roster_file` is now named as the file half and has two
+callers, that door and the CLI writer. `MeshRosterSource` (in `ring_roster.rs`)
+is the source for `mesh-measurements`, installed beside the rail itself in
+`daemon.rs` through `MeshRosterSource::install`, the one place the namespace
+and its derivation meet. Until then those three paths read the file — empty
+for this namespace — so the daemon refused its own key at the append door and
+a peer's seal retired nothing on the ring that most needs retention. The
+control half is kept in
+`a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived`.
+`svrn ring log mesh-measurements` and `svrn ring seal mesh-measurements` work;
+`svrn ring roster …` on it still REFUSES, since a `roster.json` there would be
+read by nothing. One predicate, `ring_cmd::refuse_derived_roster`, and it names
+`svrn mesh status` / `svrn ring log` instead.
 
 **Not** routed through `NodeCapabilities.benchmark`, which stays `None` — that
 field feeds the ranked-dispatch clamp and arms the §4.5 size-law;

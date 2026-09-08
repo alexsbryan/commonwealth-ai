@@ -180,7 +180,10 @@ pub async fn append(
         Ok(act) => act,
         Err(e) => return err(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
     };
-    let roster = match journal.roster() {
+    // Through the rail's ONE roster reader, not the file: the daemon's own
+    // namespace derives its roster from membership, and reading the file here
+    // refused this node's own key on that ring (ARCH §10.6).
+    let roster = match rail.roster(&journal).await {
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
@@ -225,11 +228,11 @@ pub async fn log(
     Query(q): Query<RailQuery>,
 ) -> Response {
     let guest = guest.as_ref().map(|e| &e.0);
-    let (_, journal) = match journal_for(&state, guest, q.namespace.as_deref()) {
+    let (rail, journal) = match journal_for(&state, guest, q.namespace.as_deref()) {
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
-    let roster = match journal.roster() {
+    let roster = match rail.roster(&journal).await {
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };

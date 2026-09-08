@@ -218,7 +218,7 @@ pub async fn run_one_round(app_state: &AppState) -> RoundOutcome {
             let mut refused = false;
             for ep in &endpoints {
                 let url = format!("{}/internal/ring/sync", ep.base_url);
-                let ex = exchange(http, &url, namespace, &journal).await;
+                let ex = exchange(http, &url, &rail, &journal).await;
                 // Counted BEFORE the verdict is read. `ingest_all` has already
                 // written these lines to disk, so they are progress whether or
                 // not a later call in the same exchange failed — the old shape
@@ -333,13 +333,19 @@ impl ExchangeOutcome {
 /// **Fails closed, everywhere it can fail.** The floor comes from
 /// `Admission::floors`, so a seal this node cannot authenticate against the
 /// roster it holds retires nothing — a stale or partial roster under-prunes
-/// rather than over-prunes, and `mesh-measurements`, whose roster is DERIVED
-/// and whose on-disk file is therefore empty, prunes nothing at all. A refusal
-/// is logged and the exchange carries on: the ops are ingested and durable, and
-/// a journal that stayed long is a worse outcome than a stalled round, not a
-/// reason to make one.
-fn prune_what_the_peer_retired(namespace: &str, journal: &commonwealth_rail::RingJournal) {
-    let roster = match journal.roster() {
+/// rather than over-prunes. The roster is the rail's one reader
+/// (`RingRail::roster`), so `mesh-measurements` — whose roster is derived from
+/// membership and whose file is empty — prunes exactly as a hand-rostered ring
+/// does; until it went through that door this path read the file and retired
+/// nothing on the daemon's own namespace. A refusal is logged and the exchange
+/// carries on: the ops are ingested and durable, and a journal that stayed
+/// long is a worse outcome than a stalled round, not a reason to make one.
+async fn prune_what_the_peer_retired(
+    rail: &commonwealth_rail::RingRail,
+    journal: &commonwealth_rail::RingJournal,
+) {
+    let namespace = journal.namespace();
+    let roster = match rail.roster(journal).await {
         Ok(r) => r,
         Err(e) => {
             warn!(namespace, error = %e, "ring sync: a seal arrived and the roster is unreadable, so nothing was pruned");
@@ -373,9 +379,10 @@ fn prune_what_the_peer_retired(namespace: &str, journal: &commonwealth_rail::Rin
 async fn exchange(
     http: &reqwest::Client,
     url: &str,
-    namespace: &str,
+    rail: &commonwealth_rail::RingRail,
     journal: &commonwealth_rail::RingJournal,
 ) -> ExchangeOutcome {
+    let namespace = journal.namespace();
     let mut out = ExchangeOutcome::default();
     let mut last_peer_digest: Option<commonwealth_rail::Digest> = None;
 
@@ -410,7 +417,7 @@ async fn exchange(
                 .iter()
                 .any(|o| matches!(o.kind.act, commonwealth_rail::RailAct::Seal))
         {
-            prune_what_the_peer_retired(namespace, journal);
+            prune_what_the_peer_retired(rail, journal).await;
         }
 
         // The peer's OWN report of what it holds — the one progress signal
@@ -580,16 +587,28 @@ mod tests {
     /// One op signed for its own `(namespace, ts, seq)`, so its `OpId` is
     /// distinct and a fixture of clones cannot make convergence look real.
     fn signed(key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
+        signed_in(NS, key, seq, act)
+    }
+
+    /// A signature binds the namespace, so an op signed for `NS` is a gap on
+    /// any other ring — a fixture reused across namespaces would make every
+    /// test on the second ring pass or fail for that reason alone.
+    fn signed_in(ns: &str, key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
         let ts = 1_700_000_000i64 + seq as i64;
-        let sig = sign_ring_op(key, NS, ts, seq, &body_json(&act));
+        let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act));
         Op::new(SignedOp { seq, sig, act }, ts, actor_of(key))
     }
 
     fn ops(key: &SigningKey, n: usize) -> Vec<Op<SignedOp>> {
+        ops_in(NS, key, n)
+    }
+
+    fn ops_in(ns: &str, key: &SigningKey, n: usize) -> Vec<Op<SignedOp>> {
         let payload = body_of_size(FIXTURE_BODY_BYTES);
         (0..n as u64)
             .map(|seq| {
-                signed(
+                signed_in(
+                    ns,
                     key,
                     seq,
                     RailAct::Record {
@@ -653,12 +672,12 @@ mod tests {
         const N: usize = 10_000;
         let key = SigningKey::from_bytes(&[1u8; 32]);
         let (sender_dir, peer_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-        let (_sender, journal, _r1) = node(sender_dir.path(), &key, N);
+        let (_sender, journal, rail) = node(sender_dir.path(), &key, N);
         let (peer_state, peer_journal, _r2) =
             node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
 
         let url = serve(internal_router(peer_state)).await;
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
 
         assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
         assert_eq!(out.pushed, N, "every op landed on the peer");
@@ -691,7 +710,7 @@ mod tests {
     async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
         let key = SigningKey::from_bytes(&[1u8; 32]);
         let (mine, theirs) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-        let (_me, journal, _r1) = node(mine.path(), &key, 3);
+        let (_me, journal, rail) = node(mine.path(), &key, 3);
         let (peer_state, peer_journal, _r2) = node(theirs.path(), &key, 3);
         // The peer has sealed; we have not heard about it yet.
         peer_journal
@@ -700,7 +719,7 @@ mod tests {
         assert_eq!(journal.read().unwrap().0.len(), 3, "control: we hold three");
 
         let url = serve(internal_router(peer_state)).await;
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
 
         assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
         assert_eq!(out.pulled, 1, "one op came over, and it was the seal");
@@ -718,6 +737,80 @@ mod tests {
         );
     }
 
+    /// **The daemon's own namespace prunes too.** `mesh-measurements` has no
+    /// `roster.json`; its roster is derived from membership. Before the rail
+    /// had one roster reader the prune read the file, found nobody, and a
+    /// peer's seal retired nothing on that ring — the control half of this
+    /// test, kept so the fix is watched to matter. With the membership source
+    /// installed beside the rail, the same exchange retires the prefix exactly
+    /// as it does on a hand-rostered ring.
+    #[tokio::test]
+    async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived() {
+        use crate::ring_roster::tests::{member, mesh_of, pubkey_of};
+        use crate::ring_roster::MeshRosterSource;
+        const OWN: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+        let key = SigningKey::from_bytes(&[1u8; 32]);
+        let me = NodeId::from_u128(1);
+
+        // A node on the daemon's namespace: no roster file, ever.
+        let node_on_own = |dir: &std::path::Path, with_source: bool| {
+            let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]));
+            let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+            let journal = rail.journal(OWN).unwrap();
+            assert_eq!(journal.ingest_all(&ops_in(OWN, &key, 3)).unwrap(), 3);
+            if with_source {
+                MeshRosterSource::install(&rail, &state).unwrap();
+            }
+            state.install_ring_rail(rail.clone());
+            (state, journal, rail)
+        };
+        let sealed_peer = |dir: &std::path::Path| {
+            let (state, journal, _r) = node_on_own(dir, false);
+            journal
+                .ingest(&signed_in(OWN, &key, 3, RailAct::Seal))
+                .unwrap();
+            state
+        };
+
+        // Control: the file is the reader, and the file is empty.
+        let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (_s, journal, rail) = node_on_own(a.path(), false);
+        let url = serve(internal_router(sealed_peer(b.path()))).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+        assert_eq!(out.pulled, 1, "{:?}", out.stop);
+        assert_eq!(
+            journal.read().unwrap().0.len(),
+            4,
+            "control: without the source the seal arrives and retires nothing"
+        );
+
+        // The fix: the membership answers, and the prefix goes.
+        let (c, d) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (_s, journal, rail) = node_on_own(c.path(), true);
+        // The door admits this node's own key on its own ring — the refusal
+        // `svrn ring seal mesh-measurements` used to hit. Asserted first so a
+        // failure below is about the prune and not about the roster.
+        let roster = rail.roster(&journal).await.unwrap();
+        assert!(
+            roster.person_for(&actor_of(&key)).is_some(),
+            "the derived roster does not claim our key: {roster:?}"
+        );
+        let url = serve(internal_router(sealed_peer(d.path()))).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+        assert_eq!(out.pulled, 1, "{:?}", out.stop);
+        let held = journal.read().unwrap().0;
+        assert_eq!(
+            held.len(),
+            1,
+            "the retired prefix stayed on disk ({} lines); a direct compaction says: {:?}",
+            held.len(),
+            journal
+                .compact(&roster, &Ed25519Verifier)
+                .map(|c| c.removed)
+        );
+        assert!(matches!(held[0].kind.act, RailAct::Seal));
+    }
+
     /// The control for the test above. The identical exchange with the seal
     /// replaced by an ordinary act pulls the same one op and deletes NOTHING —
     /// so the prune there is the seal's doing and not something the sync path
@@ -726,7 +819,7 @@ mod tests {
     async fn an_ordinary_op_arriving_prunes_nothing() {
         let key = SigningKey::from_bytes(&[1u8; 32]);
         let (mine, theirs) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-        let (_me, journal, _r1) = node(mine.path(), &key, 3);
+        let (_me, journal, rail) = node(mine.path(), &key, 3);
         let (peer_state, peer_journal, _r2) = node(theirs.path(), &key, 3);
         peer_journal
             .ingest(&signed(
@@ -739,7 +832,7 @@ mod tests {
             .unwrap();
 
         let url = serve(internal_router(peer_state)).await;
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
 
         assert_eq!(out.pulled, 1);
         assert_eq!(journal.read().unwrap().0.len(), 4, "nothing was retired");
@@ -752,7 +845,7 @@ mod tests {
     async fn ten_thousand_ops_do_not_fit_one_chunk() {
         let key = SigningKey::from_bytes(&[1u8; 32]);
         let dir = tempfile::tempdir().unwrap();
-        let (_state, journal, _r) = node(dir.path(), &key, 10_000);
+        let (_state, journal, rail) = node(dir.path(), &key, 10_000);
         let (chunk, more) = journal
             .ops_missing_from_within(
                 &commonwealth_rail::Digest::new(),
@@ -812,9 +905,9 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let key = SigningKey::from_bytes(&[1u8; 32]);
-        let (_state, journal, _r) = node(dir.path(), &key, 3);
+        let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
         assert!(
             matches!(out.stop, Some(ExchangeStop::Refused { .. })),
             "a 413 is a refusal, not an unreachable peer: {:?}",
@@ -843,9 +936,9 @@ mod tests {
         let url = serve(router).await;
         let dir = tempfile::tempdir().unwrap();
         let key = SigningKey::from_bytes(&[1u8; 32]);
-        let (_state, journal, _r) = node(dir.path(), &key, 3);
+        let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
         match out.stop {
             Some(ExchangeStop::Refused { sent_bytes }) => {
                 assert!(
@@ -862,7 +955,7 @@ mod tests {
         let out = exchange(
             &reqwest::Client::new(),
             "http://127.0.0.1:1/internal/ring/sync",
-            NS,
+            &rail,
             &journal,
         )
         .await;
@@ -901,9 +994,9 @@ mod tests {
         let url = serve(router).await;
         let dir = tempfile::tempdir().unwrap();
         let key = SigningKey::from_bytes(&[1u8; 32]);
-        let (_state, journal, _r) = node(dir.path(), &key, 3);
+        let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-        let out = exchange(&reqwest::Client::new(), &url, NS, &journal).await;
+        let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
         assert!(out.stop.is_none());
         assert_eq!(out.pulled, 0);
         assert_eq!(out.pushed, 0);

@@ -24,8 +24,10 @@
 pub use commonwealth_rail_core::*;
 
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // The one type the core does NOT re-export: it is the writer, and nothing
@@ -59,6 +61,35 @@ fn ring_dir(root: &Path, namespace: &str) -> PathBuf {
     rings_root(root).join(namespace)
 }
 
+// ── Where a roster comes from ────────────────────────────────
+
+/// A roster that is computed rather than read from `roster.json`.
+///
+/// Most rings are written by hand from the CLI and their roster is a file. A
+/// ring the *daemon* publishes to on its own has no hand to write one, and
+/// its roster is derived from state the node already holds — the mesh's
+/// membership, for `mesh-measurements`. That derivation lives in the
+/// application, so it reaches the rail through this trait rather than the
+/// rail knowing the application's nouns.
+///
+/// The read is a future because the state it derives from is behind an
+/// async lock in the daemon; a blocking read there would be wrong on a
+/// single-threaded runtime and only *usually* right elsewhere.
+pub trait RosterSource: Send + Sync {
+    fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>>;
+}
+
+/// Which reader answered [`RingRail::roster`], so the decision is visible at
+/// `tracing=debug` and a caller that needs to know (the CLI refusing to write
+/// a file nothing reads) can ask without re-deriving it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RosterOrigin {
+    /// `<ring>/roster.json`, written by `svrn ring roster add`.
+    File,
+    /// A [`RosterSource`] installed for this namespace; the file is ignored.
+    Derived,
+}
+
 // ── The rail's storage ───────────────────────────────────────
 
 /// Every ring namespace this node holds, and the one key it signs with.
@@ -69,21 +100,104 @@ fn ring_dir(root: &Path, namespace: &str) -> PathBuf {
 /// requests do.
 pub struct RingRail {
     root: PathBuf,
-    signer: std::sync::Arc<dyn RingSigner>,
-    open: Mutex<BTreeMap<String, std::sync::Arc<RingJournal>>>,
+    signer: Arc<dyn RingSigner>,
+    open: Mutex<BTreeMap<String, Arc<RingJournal>>>,
+    /// Namespaces whose roster is derived, and by what. Consulted at read
+    /// time and never at open time, so installing a source after a journal
+    /// was first touched still takes effect — boot order cannot leave a
+    /// namespace reading the wrong roster.
+    derived: Mutex<BTreeMap<String, Arc<dyn RosterSource>>>,
 }
 
 impl RingRail {
-    pub fn new(root: impl Into<PathBuf>, signer: std::sync::Arc<dyn RingSigner>) -> Self {
+    pub fn new(root: impl Into<PathBuf>, signer: Arc<dyn RingSigner>) -> Self {
         Self {
             root: root.into(),
             signer,
             open: Mutex::new(BTreeMap::new()),
+            derived: Mutex::new(BTreeMap::new()),
         }
     }
 
     pub fn signer(&self) -> &dyn RingSigner {
         self.signer.as_ref()
+    }
+
+    /// Declare that `namespace`'s roster is computed by `source`, not read
+    /// from its `roster.json`.
+    ///
+    /// Installing a second source for the same namespace replaces the first
+    /// rather than stacking: there is one answer to who is in a ring.
+    pub fn derive_roster(
+        &self,
+        namespace: &str,
+        source: Arc<dyn RosterSource>,
+    ) -> Result<(), RailError> {
+        if !valid_namespace(namespace) {
+            return Err(RailError::BadNamespace(namespace.to_string()));
+        }
+        self.derived
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(namespace.to_string(), source);
+        tracing::debug!(namespace, "ring rail: roster is derived for this namespace");
+        Ok(())
+    }
+
+    /// Where `namespace`'s roster comes from, without reading it.
+    pub fn roster_origin(&self, namespace: &str) -> RosterOrigin {
+        if self
+            .derived
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(namespace)
+        {
+            RosterOrigin::Derived
+        } else {
+            RosterOrigin::File
+        }
+    }
+
+    /// The roster `journal` is admitted against — THE door, and the only
+    /// reader a caller holding a journal should use (ARCH §10.6).
+    ///
+    /// Until this existed the append route, the log route and the sync-side
+    /// prune each read the file directly, while the daemon's own namespace
+    /// derived its roster somewhere else entirely. Two answers to who is in
+    /// `mesh-measurements`: the file's (empty, so the door refused this
+    /// node's own key and a peer's seal retired nothing) and the membership's
+    /// (what every read actually rendered). One reader, and the file is the
+    /// fallback rather than a competitor.
+    pub async fn roster(&self, journal: &RingJournal) -> Result<Roster, RailError> {
+        // Cloned out so the std lock is not held across the await.
+        let source = self
+            .derived
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(journal.namespace())
+            .cloned();
+        match source {
+            Some(source) => {
+                let roster = source.roster().await?;
+                tracing::debug!(
+                    namespace = journal.namespace(),
+                    origin = ?RosterOrigin::Derived,
+                    people = roster.members.len(),
+                    "ring rail: roster read"
+                );
+                Ok(roster)
+            }
+            None => {
+                let roster = journal.roster_file()?;
+                tracing::debug!(
+                    namespace = journal.namespace(),
+                    origin = ?RosterOrigin::File,
+                    people = roster.members.len(),
+                    "ring rail: roster read"
+                );
+                Ok(roster)
+            }
+        }
     }
 
     /// Every namespace this node holds a journal for, read from disk.
@@ -115,12 +229,12 @@ impl RingRail {
     }
 
     /// The journal for one namespace, opening it if this is the first touch.
-    pub fn journal(&self, namespace: &str) -> Result<std::sync::Arc<RingJournal>, RailError> {
+    pub fn journal(&self, namespace: &str) -> Result<Arc<RingJournal>, RailError> {
         let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(existing) = open.get(namespace) {
             return Ok(existing.clone());
         }
-        let journal = std::sync::Arc::new(RingJournal::open(&self.root, namespace)?);
+        let journal = Arc::new(RingJournal::open(&self.root, namespace)?);
         open.insert(namespace.to_string(), journal.clone());
         Ok(journal)
     }
@@ -586,10 +700,16 @@ impl RingJournal {
         })
     }
 
-    /// The roster on disk. A missing file is an empty ring, not an error —
-    /// and an empty ring admits nothing but gaps, which is the honest answer
+    /// The roster FILE. A missing file is an empty ring, not an error — and
+    /// an empty ring admits nothing but gaps, which is the honest answer
     /// before anyone has been added.
-    pub fn roster(&self) -> Result<Roster, RailError> {
+    ///
+    /// This is the storage half, and its name says so. A caller deciding
+    /// what a journal admits goes through [`RingRail::roster`], which knows
+    /// whether this namespace's roster is the file at all; the two callers
+    /// left on this are that door and the writer (`svrn ring roster add`),
+    /// which has to read the file it is about to rewrite.
+    pub fn roster_file(&self) -> Result<Roster, RailError> {
         let path = self.roster_path();
         match std::fs::read_to_string(&path) {
             Ok(raw) => serde_json::from_str(&raw)

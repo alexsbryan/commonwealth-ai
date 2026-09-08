@@ -56,12 +56,26 @@
 //!
 //! Writing this roster to `roster.json` would break exactly that, which is
 //! why [`MeshRoster`] has no writer.
+//!
+//! # How the rail reaches it
+//!
+//! The rail's namespace-generic paths — the append and log routes, the
+//! sync-side prune — hold a journal and a namespace and nothing of the mesh.
+//! They read the roster through `RingRail::roster`, the rail's ONE reader,
+//! and [`MeshRosterSource`] is what that reader calls for this namespace. It
+//! is installed once, beside the rail itself, by [`MeshRosterSource::install`];
+//! until it existed those paths read the file (empty, for this namespace) and
+//! the daemon's own ring refused its own key at the door.
 
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Weak};
 
+use commonwealth_api::state::{AppState, AppStateInner};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{Person, Roster};
+use commonwealth_rail::{Person, RailError, RingRail, Roster, RosterSource};
 
 /// A ring roster derived from mesh membership, plus the reverse lookup a
 /// caller needs to name a signer's node.
@@ -175,6 +189,11 @@ impl MeshRoster {
         &self.roster
     }
 
+    /// The roster alone, for a caller that does not need to name signers.
+    pub fn into_roster(self) -> Roster {
+        self.roster
+    }
+
     /// Which node signed with this key, if the roster claims it. Lets a
     /// caller name a publisher by node id without reading anything the
     /// publisher supplied.
@@ -202,6 +221,46 @@ impl MeshRoster {
 
     pub fn is_empty(&self) -> bool {
         self.node_ids.is_empty()
+    }
+}
+
+/// [`MeshRoster::from_app_state`] as the rail sees it.
+///
+/// Holds the daemon's state WEAKLY: the rail lives inside `AppState`, so a
+/// strong reference here would be a cycle that keeps a test's state alive
+/// after the test, and a source that outlives the state it derives from has
+/// nothing true to say anyway — it reports that, rather than an empty ring.
+pub struct MeshRosterSource {
+    inner: Weak<AppStateInner>,
+}
+
+impl MeshRosterSource {
+    /// Declare to `rail` that the daemon's own namespace derives its roster
+    /// from `state`'s membership.
+    ///
+    /// The ONE place the namespace and its source meet, so the daemon and the
+    /// tests that stand in for it cannot register different pairs.
+    pub fn install(rail: &RingRail, state: &AppState) -> Result<(), RailError> {
+        rail.derive_roster(
+            sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+            Arc::new(Self {
+                inner: Arc::downgrade(&state.inner),
+            }),
+        )
+    }
+}
+
+impl RosterSource for MeshRosterSource {
+    fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>> {
+        Box::pin(async move {
+            let Some(inner) = self.inner.upgrade() else {
+                return Err(RailError::Io(
+                    "the mesh state this roster derives from is gone".into(),
+                ));
+            };
+            let state = AppState { inner };
+            Ok(MeshRoster::from_app_state(&state).await.into_roster())
+        })
     }
 }
 
