@@ -236,9 +236,36 @@ pub enum Precondition {
     /// The ARGUMENT is not decoration. A latency bar measured on a contended
     /// box is could-not-judge, never failed, and the bound has to be per-lane:
     /// the same binary and bank produced 50.7 tok/s at load 3.7 and 17.8 at
-    /// load 32 on this host (note d596639c). Wire form and semantics are
-    /// `quality_check_cmd::Precondition::HostQuiet`'s — this schema follows
-    /// the runner rather than inventing a bare spelling beside it (ARCH §10.6).
+    /// load 32 on this host (note d596639c).
+    ///
+    /// **THIS ONE IS A MITIGATION AND IT IS ON ITS WAY OUT.** ARCH §18.2, as
+    /// amended: a precondition may assert that the SUBJECT of the measurement
+    /// exists; it may not assert that the WORLD is convenient. The four above
+    /// are the legitimate kind — they say the thing under test is not here.
+    /// This one says the machine is busy, and on the authoring host it is
+    /// unmet most of the time, so the five rows carrying `host-quiet:4` emit
+    /// could-not-judge instead of a verdict. Nobody derived the 4. The
+    /// replacement is to record load as a covariate on every row and make the
+    /// comparison a same-run ratio against a reference, so the number is
+    /// load-independent and no abstention is needed; that is the
+    /// `in-situ-baselines` order's work, and it needed this merged table to
+    /// exist first. Until then: carried through the merge VERBATIM on exactly
+    /// the rows that already had it, and added to nothing.
+    ///
+    /// WHAT IT DOES NOT CHECK, said here rather than discovered later. The
+    /// question it stands in for is "is another decode in flight on the
+    /// daemon", and this host serves no such field: `/status` carries
+    /// `inference.resident[]` and `process.rss_mb`, and there is no queue- or
+    /// slot-depth route on it (checked 2026-09-05 against the full route
+    /// list). Reading load alone is therefore a NAMED substitution, not a
+    /// silent one (ARCH §18.3) — a second decode driven by a peer session
+    /// raises this host's load average, so the instrument is correlated but
+    /// not equivalent, and a decode arriving from a mesh peer with no local
+    /// CPU cost would not be seen at all.
+    ///
+    /// Wire form and semantics are the runner's
+    /// (`quality_check_cmd::exec::check_precondition`); this schema follows it
+    /// rather than inventing a bare spelling beside it (ARCH §10.6).
     HostQuiet(f64),
 }
 
