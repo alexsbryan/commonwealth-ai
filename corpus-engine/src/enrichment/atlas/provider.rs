@@ -130,6 +130,22 @@ pub trait AtlasProvider: Send + Sync {
     // implementor cannot get them subtly different (ARCH §10.6).
 
     /// Whether a vector seed is possible at all.
+    /// Where this atlas's CHUNK corpus lives on disk, when the provider knows.
+    ///
+    /// Only the summary composition asks: the `Raptor` source reads
+    /// `raptor_summaries.lance`, which sits under the chunk corpus (`sep`) and
+    /// not under the per-article atlas (`sep-freewill`). The derivation is
+    /// [`Self::site`]'s — `EvidenceSite` already owns "given an atlas, which
+    /// corpus holds its chunks" — so a second path rule cannot creep in here.
+    ///
+    /// DEFAULTED to `None`, which is a real answer and not a stub: an
+    /// in-memory graph, a test fixture and a host that never opened a corpus
+    /// dir genuinely have no path, and a source that needs one simply
+    /// contributes nothing for them.
+    fn summary_corpus_dir(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
     fn has_ann_seed_table(&self) -> bool {
         self.ann_seed_table().is_some()
     }
@@ -200,6 +216,10 @@ impl AtlasProvider for AtlasGraph {
 
     fn ontology(&self) -> Option<&OntologyPolicies> {
         AtlasGraph::ontology(self)
+    }
+
+    fn summary_corpus_dir(&self) -> Option<std::path::PathBuf> {
+        AtlasGraph::summary_corpus_dir(self)
     }
 }
 

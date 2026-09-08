@@ -61,6 +61,7 @@ pub use super::resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, Resol
 
 mod report;
 mod select;
+mod summaries;
 
 // The split is a FILE split, not an API split: every name below was in
 // `ground.rs` before ei-5c and every `atlas::ground::…` path still resolves
@@ -70,6 +71,7 @@ pub use report::{
     Degradation, Grounding, MapNode, MapSection, PolicySource, SummaryNode, WalkLedger,
 };
 pub use select::{navigation_policy_for, select_walk, WalkSelection};
+pub use summaries::{SourceYield, SummaryQuery, SummaryStage};
 
 /// How many nodes of the traversed neighbourhood the map section carries.
 ///
@@ -584,8 +586,27 @@ pub async fn ground(
         .get(&AtomType::Summary)
         .copied()
         .unwrap_or(SUMMARY_SEED_BUDGET) as usize;
-    summaries.truncate(summary_cap);
+
+    // ── R3': the row's SOURCES, composed into that one budget ───────────
+    //
+    // The atoms the walk reached are one source among the row's list, not the
+    // whole supply. `compose` asks each listed source in the row's order for
+    // the room that is left, dedupes on the summary's own content-derived id,
+    // and stops at the budget — so however many sources a corpus composes
+    // there is one producer of record. That is the rule whose absence cost
+    // −7.5/66 when the walk and the retrieval-time injector both fed this
+    // position and neither knew about the other.
+    let (composed, served) = summaries::compose(
+        &walk.summary_sources,
+        summary_cap,
+        question_embedding,
+        graphs,
+        &summaries,
+    )
+    .await;
+    summaries = composed;
     ledger.summaries_appended = summaries.len();
+    ledger.summary_sources_served = served;
 
     // ── 5. The map section ──────────────────────────────────────────────
     let map = report::build_map(&neighborhood, &graph_by_id);
@@ -621,6 +642,7 @@ pub async fn ground(
         summary_seeds = ledger.summary_seeds,
         summary_expansions_suppressed = ledger.summary_expansions_suppressed,
         summaries_appended = ledger.summaries_appended,
+        summary_sources = %summaries::yield_label(&ledger.summary_sources_served),
         "ground: walk ledger"
     );
 

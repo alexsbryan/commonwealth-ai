@@ -152,6 +152,18 @@ pub struct WalkLedger {
     pub summary_expansions_suppressed: usize,
     /// Summary nodes carried out for late append — rule R3.
     pub summaries_appended: usize,
+    /// How many summaries each of the row's SOURCES actually served.
+    ///
+    /// Served, never configured. A row that lists two sources and takes
+    /// everything from the first reads differently from one that gets nothing
+    /// at all, and only this field can tell them apart — `[atoms:34,raptor:0]`
+    /// against `[atoms:0,raptor:0]`. It replaces the standalone "this corpus
+    /// has RAPTOR rows and no Summary atoms" line ei-5c briefly carried:
+    /// absence is now reported by the same mechanism that reports presence,
+    /// for every source at once, on the target a lane already enables
+    /// (`retrieval_audit`) rather than on an untargeted `info!` that the
+    /// filter leaves dark.
+    pub summary_sources_served: super::SourceYield,
     /// Candidates admitted BY KIND and then refused because a quota was full.
     ///
     /// Two quotas feed it, deliberately as one number, because they are one

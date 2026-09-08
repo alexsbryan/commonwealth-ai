@@ -24,7 +24,7 @@
 //! daemon boot and reuses across queries.
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
@@ -114,6 +114,10 @@ pub struct AtlasGraph {
     /// every declared-type code path. A caller never re-checks
     /// `has_declarations()`; the `Option` already answered.
     ontology: Option<Arc<OntologyPolicies>>,
+    /// The indexes dir this atlas was opened from; `None` for an in-memory
+    /// graph, which is a real answer rather than a gap. One consumer — see
+    /// [`Self::summary_corpus_dir`].
+    index_root: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -184,7 +188,25 @@ impl AtlasGraph {
             preload: Arc::new(preload),
             ann: None,
             ontology: None,
+            index_root: None,
         }
+    }
+
+    /// Set by the disk loader and nobody else: an in-memory caller has no root
+    /// and must not invent one.
+    pub fn with_index_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.index_root = Some(root.into());
+        self
+    }
+
+    /// The CHUNK corpus's dir, `<indexes>/<site.chunk_corpus()>` — where the
+    /// `raptor` summary source reads (`ground::summaries`). Through
+    /// [`EvidenceSite`] because the atlas id is NOT the corpus id for a
+    /// per-article atlas: `<indexes>/sep-freewill` holds no table.
+    pub fn summary_corpus_dir(&self) -> Option<PathBuf> {
+        self.index_root
+            .as_ref()
+            .map(|r| r.join(self.site.chunk_corpus().as_str()))
     }
 
     /// Open the v2 store under `atlas_dir` (`atoms.lance` + `edges.csr`) and
@@ -195,7 +217,15 @@ impl AtlasGraph {
         let preload = LancePreload::open_blocking(atlas_dir)
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
         let ontology = super::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
-        Ok(Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology))
+        // `<indexes>/<corpus>/atlas` -> `<indexes>`, derived from the path the
+        // caller already gave rather than added to the signature: no call site
+        // changes and none can pass a root that disagrees with what it opened.
+        let root = atlas_dir.parent().and_then(|p| p.parent());
+        let g = Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology);
+        Ok(match root {
+            Some(r) => g.with_index_root(r),
+            None => g,
+        })
     }
 
     /// The display label for this atlas's evidence site — the article for a

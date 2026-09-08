@@ -1874,8 +1874,27 @@ means one thing.
   which is roughly an hour for SEP's 1,770 and folds into the same pass as the
   re-embed rather than being a third one.
 
-  **`raptor_grounding.rs` IS retired, ei-5c (2026-09-07)** — the walk is the
-  ONE producer of whole-work summaries, and `apply_raptor_grounding`,
+  **RAPTOR is COMPOSED, not deleted (operator directive 25ae5815,
+  2026-09-08).** "One grounding implementation" means one INTERFACE a corpus
+  composes by declaration, not one fixed body: the walk's summary supply is a
+  list of SOURCES on the navigation row (`summary_sources`, priority order,
+  `[atoms, raptor]` by default), each asked through the same one-method stage
+  (`SummaryStage::supply`), each contributing to the SAME per-kind budget and
+  the SAME late append, deduped on the summary's own id. `AtlasSummaryAtoms`
+  reads the atlas; `RaptorSummaries` reads the corpus's own
+  `raptor_summaries.lance` through the primitives `index::raptor` already
+  exposes. Neither is a fallback and neither retires: a book may keep both
+  permanently, and the dedupe is free because
+  `AtomId::summary_content_hash(node_id, corpus_id)` is exactly what the
+  projection writes, so a RAPTOR row and the atom projected from it collide by
+  construction (§7.5). An ENUM rather than a trait registry, because the set is
+  closed and inside one crate — a source from outside corpus-engine is what
+  spec §3 and EI5 both forbid, and the day that changes it becomes a registry
+  (§4).
+
+  **The retrieval-time injector is retired, ei-5c (2026-09-07)** — what went is
+  the SECOND, uncoordinated producer in sovereign-core, not RAPTOR itself:
+  `apply_raptor_grounding`,
   `raptor_scored_chunk`, `raptor_late_inject_enabled`, the
   `raptor_grounding_early` pipeline step, the five `SOVEREIGN_RAPTOR_*` flags
   and the `raptor_off` ablation arm went with it. Deleted, not folded into a
@@ -1885,13 +1904,22 @@ means one thing.
   is the SEED QUOTA below; what it costs is stated in the next paragraph rather
   than left to be discovered.
 
-  The blocker ei-7a recorded was a measurement, and it was about seeds. Making
-  `Summary` reachable made it a COMPETITOR: seeds come from one score-ordered
-  pool capped at `max_seeds`, a rollup is written to be about a whole region so
-  it outscores any single leaf on a thematic question, and the SEP subset A/B
-  read OFF 47/66 twice against ON 40/66 and 39/66 — −7.5/66 on a HARD lane,
-  with Summary taking about 1.1% of slots against ~21k entity and argument
-  seeds. `SeedPolicy::budgets` is the field that was missing: a kind that
+  **The mechanism was two producers, not a seed race — corrected 2026-09-08
+  from ei-5c's own lane.** This entry said the −7.5/66 was seed-race
+  displacement and that the quota fixed it. It was not and it did not. Re-run
+  with the injector deleted, both arms n=2 bit-identical, the ledger reads
+  `summary_seeds 34, dropped_seed_budget 0`: not one Summary was refused by its
+  quota, and the same 34 summaries were worth **+3 facts at equal source
+  recall** (OFF 139/159 · 62/66, ON 142/159 · 62/66). What cost 7.5 sources was
+  the walk's 34 summaries and the injector's up to 8 per question arriving in
+  one pool with neither aware of the other. One producer over the same material
+  is a gain. `SeedPolicy::budgets` is a GUARD — a bound that had not yet bound
+  on any corpus measured, watched failing in both directions so it cannot rot
+  (twenty summaries take all twelve slots and the walk emits zero leaf
+  requests) — and it is not a lane result. The correction is recorded rather
+  than the claim quietly replaced, because the claim shipped in three files.
+
+  What the quota is: a kind that
   declares a quota draws from its OWN pool, every other kind shares `max_seeds`
   as before, and the pre-registered `thematic` row declares `{Summary: 8}`.
   Eight is not a new number — it is `SOVEREIGN_RAPTOR_TOP_M`'s shipped default
@@ -1904,9 +1932,18 @@ means one thing.
   twelve slots and the walk emits ZERO leaf requests) beside
   `a_quota_keeps_summaries_reachable_without_costing_a_leaf_seed`.
 
-  **What the deletion costs, today, on this box.** The walk can only reach
-  summaries an atlas actually CARRIES, and `svrn enrich summary-atoms
-  <corpus>` is what puts them there. It has been run on the ei-7a fixture and
+  **What it cost while RAPTOR was only an atom source, measured.** Between the
+  injector's retirement and the composition landing, the walk could reach only
+  summaries an atlas already CARRIED. ei-5c's lane measured that state on bare
+  `sep` at `--limit 30`, n=2 bit-identical: facts 147/159 against a floor of
+  151/159 and a same-stack 2026-09-05 reading of 153/159, sources 55/66 against
+  57/66, with `summary_seeds 0` — 11,181 RAPTOR rows the walk had no way to
+  read. That is the number that made the composition necessary rather than
+  optional, and it is why `RaptorSummaries` is a permanent source and not a
+  migration shim. `svrn enrich summary-atoms <corpus>` remains the projection —
+  it makes a corpus's summaries walkable as ATOMS, with their edges and
+  evidence anchors — but a corpus that has not run it still serves its
+  summaries, from the table it already has. It has been run on the ei-7a fixture and
   nowhere else, so `sep` — 11,181 `raptor_summaries.lance` rows, live until
   this commit — has NO whole-work summaries in retrieval, and neither does any
   other corpus. That is a real capability regression and it is NAMED rather
@@ -7554,9 +7591,22 @@ and they net to **+1 line**:
 The remaining +8,905 lines and all +9 files are upstream's, on the same reading
 §10.1n recorded for ei-5b.
 
-**`context.rs` is NOT this order's.** §10.1n's row for it stands unchanged:
-2,168 → 2,230 is ei-7a's `render_atom_entry` arm, already on `main` at this
-branch's base, and this order does not touch the file. The remaining arch-gate
+**`context.rs` — ei-7a's +62 stands, and ei-5c adds +30 which IS this
+order's.** The file reads 2,168 → 2,260 at this tip. Sixty-two of that is
+ei-7a's `render_atom_entry` arm, already on `main` at this branch's base and
+carrying §10.1n's row. The other thirty are mine and are ledgered here rather
+than split: one `index_root` field on `AtlasGraph`, the builder that sets it,
+and `summary_corpus_dir()`, which the `raptor` summary source needs because the
+RAPTOR table lives under the CHUNK corpus (`sep`) and not under the per-article
+atlas (`sep-freewill`).
+
+The split I considered and refused: those two methods have exactly one
+consumer, `ground/summaries.rs`, and Rust would let the inherent `impl` live
+there. It would move twenty lines and cost the next reader more than it saves —
+someone reading `AtlasGraph` to learn what it knows should find its accessors
+on it, not in the module that happens to call one. Splitting a type's inherent
+impl across files to dodge a size row is the tail wagging the dog, and ARCH
+§3.1's own remedy for that is this row. The remaining arch-gate
 findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
 `runner.rs`, `quality_lane_cmd/chat_ask.rs`, `quality_check_cmd.rs`,
 `grounding/tests.rs`, `chaos_monkey/score.rs`, `sovereign/crates/sovereign-mesh/src/daemon.rs`,

@@ -74,6 +74,55 @@ impl QuestionKind {
     }
 }
 
+/// WHERE a walk's whole-work summaries come from — the composable source list
+/// (operator directive 25ae5815, 2026-09-08).
+///
+/// "One grounding implementation" does not mean one fixed body; it means one
+/// INTERFACE that a corpus composes by declaration. Both variants supply the
+/// same [`SummaryNode`](../../../corpus_engine/enrichment/atlas/ground/index.html)
+/// shape through the same one-method stage, contribute to the SAME per-kind
+/// budget, and are appended by the same late path — so however many sources a
+/// row lists, there is one producer of record. That is the whole lesson of the
+/// rows: two UNCOORDINATED producers cost −7.5/66 on SEP, and one budget over
+/// the same material is +3 facts.
+///
+/// An ENUM and not a trait, deliberately (principle 9, ARCH §2/§4): this is a
+/// CLOSED set inside one crate. A summary source arriving from outside
+/// corpus-engine is exactly what spec §3's "no private kinds" and EI5's "one
+/// implementation, in corpus-engine" forbid, so there is no open set to
+/// register. The day that changes it becomes a registry, and it is a spec §3
+/// decision then rather than a guess now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SummarySource {
+    /// `Summary` atoms in the atlas itself, reached by the walk like any other
+    /// seed. What the walk has done since ei-7a.
+    Atoms,
+    /// The corpus's own `raptor_summaries.lance` rows, read through the
+    /// primitives `corpus_engine::index::raptor` already exposes. NOT a
+    /// migration shim: a corpus may compose this permanently beside `Atoms`,
+    /// and a rebuild retires nothing. Where both serve, the same summary
+    /// appears once — a RAPTOR node and the `Summary` atom projected from it
+    /// share an id by construction (`AtomId::summary_content_hash(node_id,
+    /// corpus_id)` is what the projection writes), so the dedupe is identity,
+    /// not a heuristic (ARCH §7.5).
+    Raptor,
+}
+
+impl SummarySource {
+    /// Every source, in the order the pre-registered table composes them.
+    pub const ALL: [SummarySource; 2] = [SummarySource::Atoms, SummarySource::Raptor];
+
+    /// The snake_case wire spelling, read back through serde so it can never
+    /// disagree with what the parser accepts.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SummarySource::Atoms => "atoms",
+            SummarySource::Raptor => "raptor",
+        }
+    }
+}
+
 /// Where a walk starts. `kinds` are on-disk `atom_type` tags (`Entity`,
 /// `State`, `Claim`, `Position`, `Configuration`, …); `entity_types` narrows
 /// an `Entity` seed to the listed `entity_type` values (`concept`, `person`,
@@ -100,16 +149,29 @@ pub struct SeedPolicy {
     /// the whole point, and the difference between this and simply listing
     /// fewer kinds.
     ///
-    /// Why the field exists, measured rather than reasoned. ei-7a added
-    /// `Summary` to the thematic row's [`Self::kinds`] and A/B'd it on a SEP
-    /// subset built for the purpose: OFF 47/66 twice, ON 40/66 and 39/66 —
-    /// −7.5/66 on a HARD lane. The mechanism was not scoring displacement
-    /// (`atlas::ground`'s R1/R2 already refuse that) but SEED-RACE
-    /// displacement: `Summary` won about 1.1% of the seed slots against
-    /// ~21k entity and argument seeds, and every slot it won was a leaf seed
-    /// that did not happen. One score-ordered pool cannot express "reachable
-    /// but never at a leaf's expense", so the walk could not be made sole and
-    /// the retrieval-time injector had to stay.
+    /// **This field is a GUARD, and it is not what fixed the −7.5.** I wrote
+    /// the opposite here first and the lane corrected it, so the correction
+    /// stands where the claim did.
+    ///
+    /// ei-7a added `Summary` to the thematic row's [`Self::kinds`] and A/B'd
+    /// it: OFF 47/66 twice, ON 40/66 and 39/66 — −7.5/66 on a HARD lane. I
+    /// called that a seed race. It was not. ei-5c re-ran the same two arms
+    /// with the retrieval-time injector deleted and the ledger settles it:
+    /// `summary_seeds 34, dropped_seed_budget 0` — not ONE Summary was refused
+    /// by this quota, and the same 34 summaries were then worth +3 facts at
+    /// equal source recall (OFF 139/159, ON 142/159, both n=2 bit-identical).
+    /// What cost 7.5 sources was TWO UNCOORDINATED PRODUCERS over one pool:
+    /// the walk's 34 plus the injector's up to 8 per question, neither knowing
+    /// about the other. One producer over the same material is a gain.
+    ///
+    /// So what this field is for: a score-ordered pool cannot otherwise
+    /// express "reachable but never at a leaf's expense", and a
+    /// summary-dense atlas genuinely can starve leaf seeds — twenty summaries
+    /// take all twelve slots and the walk emits zero leaf requests, which is
+    /// `without_a_quota_summaries_take_every_seed_slot`, run in both
+    /// directions. It is a bound that had not yet bound on the corpora
+    /// measured, watched failing so it cannot rot. It is not a lane result and
+    /// must not be cited as one.
     ///
     /// An EMPTY map is the pre-ei-5c behaviour exactly: no kind has a quota,
     /// so all of them share `max_seeds`. That is the failing input for the
@@ -153,6 +215,21 @@ pub struct WalkPolicy {
     /// all, and the walker says so rather than guessing a kind.
     #[serde(default)]
     pub exemplars: Vec<String>,
+    /// Which summary sources this row COMPOSES, in priority order.
+    ///
+    /// Listed the way [`SeedPolicy::kinds`] lists kinds, and for the same
+    /// reason: the composition is the corpus's declaration, not the walker's
+    /// code. Each listed source is asked for summaries through the one stage
+    /// signature, in this order, until the row's `Summary` budget is full;
+    /// duplicates across sources collapse on the summary's own id, so a corpus
+    /// that composes both keeps one entry per summary and an earlier source
+    /// wins the tie.
+    ///
+    /// EMPTY means this row supplies no summaries at all — which is right for
+    /// every row that does not seed `Summary`, and is why only `thematic`
+    /// carries a list.
+    #[serde(default)]
+    pub summary_sources: Vec<SummarySource>,
 }
 
 /// The evidence budget every default row carries.
@@ -260,6 +337,13 @@ impl WalkPolicy {
                 "what does this work say as a whole",
                 "summarise what this is concerned with",
             ]),
+            // Both, atoms first. A corpus that has been projected serves its
+            // summaries from its own atlas and the RAPTOR arm adds nothing it
+            // does not already have (same ids); a corpus that has not serves
+            // them from the table it already carries. Neither is a fallback
+            // for the other — this is the row that ASKS for whole-work
+            // summaries, and both are places a corpus keeps them.
+            summary_sources: SummarySource::ALL.to_vec(),
         }
     }
 
@@ -281,6 +365,7 @@ impl WalkPolicy {
                 "what happens to them over the course of it",
                 "trace the arc of this",
             ]),
+            summary_sources: Vec::new(),
         }
     }
 
@@ -305,6 +390,7 @@ impl WalkPolicy {
                 "which claims contradict each other",
                 "what are the objections to this position",
             ]),
+            summary_sources: Vec::new(),
         }
     }
 
@@ -326,6 +412,7 @@ impl WalkPolicy {
                 "how many of these does it record",
                 "enumerate the items",
             ]),
+            summary_sources: Vec::new(),
         }
     }
 
@@ -347,6 +434,7 @@ impl WalkPolicy {
                 "what is this thing",
                 "give me the entry for it",
             ]),
+            summary_sources: Vec::new(),
         }
     }
 
@@ -375,6 +463,13 @@ impl WalkPolicy {
             // Never classified onto, so it needs no exemplars — it is the
             // row you get when classification did not happen.
             exemplars: Vec::new(),
+            // The status quo ante includes the summaries the walk already
+            // reached in the atlas, and nothing more: an unfiltered walk is
+            // what `apply_atlas_grounding` did before it read a map, and that
+            // never consulted a RAPTOR table. Composing `Raptor` here would
+            // make an ABSTENTION widen the evidence, which is the opposite of
+            // what an abstention should do.
+            summary_sources: vec![SummarySource::Atoms],
         }
     }
 }
@@ -486,6 +581,13 @@ mod tests {
             t.seed.budgets,
             BTreeMap::from([(AtomType::Summary, SUMMARY_SEED_BUDGET)])
         );
+        // The thematic row COMPOSES both summary sources, atoms first. Failing
+        // input: drop `Raptor` and a corpus that keeps its summaries in
+        // `raptor_summaries.lance` and has not been projected supplies none.
+        assert_eq!(
+            t.summary_sources,
+            vec![SummarySource::Atoms, SummarySource::Raptor]
+        );
         assert_eq!((t.hops, t.budget), (2, DEFAULT_BUDGET));
 
         let t = n.walk(QuestionKind::Trajectory);
@@ -522,6 +624,60 @@ mod tests {
             );
         }
         assert!(WalkPolicy::unfiltered().seed.budgets.is_empty());
+
+        // Only the row that asks for whole-work summaries composes any source.
+        // The unfiltered row is the status quo ante and carries `Atoms` alone:
+        // an abstention must not widen the evidence.
+        for (kind, w) in n.rows() {
+            if kind == QuestionKind::Thematic {
+                continue;
+            }
+            assert!(
+                w.summary_sources.is_empty(),
+                "{kind:?} composes a summary source; only thematic should"
+            );
+        }
+        assert_eq!(
+            WalkPolicy::unfiltered().summary_sources,
+            vec![SummarySource::Atoms]
+        );
+    }
+
+    /// The composition is DATA: a corpus declares which sources it keeps its
+    /// summaries in, and in what order. Failing input: drop
+    /// `#[serde(default)]` from `summary_sources`, or rename a variant's wire
+    /// spelling away from the one an author writes.
+    #[test]
+    fn the_summary_sources_are_a_declared_ordered_list() {
+        let text = serde_json::to_string(&NavigationPolicy::default()).unwrap();
+        assert!(
+            text.contains(r#""summary_sources":["atoms","raptor"]"#),
+            "the composition must write its own wire spellings, in order: {text}"
+        );
+
+        // A corpus that keeps summaries ONLY in the RAPTOR table says so.
+        let declared = serde_json::json!({
+            "thematic": { "seed": { "kinds": ["Summary"] }, "walk": [], "hops": 1, "budget": 6,
+                          "summary_sources": ["raptor"] }
+        });
+        let n: NavigationPolicy = serde_json::from_value(declared).unwrap();
+        assert_eq!(n.thematic.summary_sources, vec![SummarySource::Raptor]);
+
+        // A row that omits the key composes NOTHING rather than defaulting to
+        // both — an omitted list is a list, and guessing here would give a
+        // corpus a source it never declared.
+        let silent = serde_json::json!({
+            "thematic": { "seed": { "kinds": ["Summary"] }, "walk": [], "hops": 1, "budget": 6 }
+        });
+        let n: NavigationPolicy = serde_json::from_value(silent).unwrap();
+        assert!(n.thematic.summary_sources.is_empty());
+
+        for src in SummarySource::ALL {
+            assert_eq!(
+                serde_json::to_string(&src).unwrap().trim_matches('"'),
+                src.as_str()
+            );
+        }
     }
 
     /// A quota is data, so it round-trips as data: a map may set its own
