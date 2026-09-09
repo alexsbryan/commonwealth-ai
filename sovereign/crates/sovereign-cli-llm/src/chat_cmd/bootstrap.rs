@@ -25,12 +25,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
-
 use sovereign_core::conv_tiered::ConvTieredReader;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin, InferenceProvider, StateStore};
+use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
 use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
@@ -310,7 +308,12 @@ async fn build_session_scoped(
             // Chat turns don't trigger confirmations in the normal path; a
             // yes-only stub keeps a stray approval request from deadlocking a
             // one-shot CLI.
-            approval: Arc::new(AutoApprove) as Arc<dyn ApprovalChannel>,
+            // Core's `AutoApprovalChannel`, not a local twin of it. The
+            // local one differed by exactly one line — `ask_user` returned
+            // `Ok("")`, an invented reply the executor cannot tell from a
+            // real one (ARCH §18.3). Core's refuses by name.
+            approval: Arc::new(sovereign_core::executor::AutoApprovalChannel)
+                as Arc<dyn ApprovalChannel>,
             inference_config,
             indexes_dir: indexes_dir.clone(),
             embed_model: embed_model.clone(),
@@ -623,27 +626,4 @@ fn chat_stem_from_config() -> Option<String> {
     sovereign_core::setup_config::SetupConfig::load()
         .ok()?
         .primary_model_stem()
-}
-
-/// Approval channel that silently yes-answers everything. Chat never
-/// hits the ask-user path in practice; this prevents a surprise
-/// deadlock in a one-shot CLI invocation.
-struct AutoApprove;
-
-#[async_trait]
-impl ApprovalChannel for AutoApprove {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
-        Ok(true)
-    }
-
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
-        Ok(String::new())
-    }
-
-    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
 }

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use crate::error::{Error, Result};
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
-use crate::traits::{ApprovalChannel, ApprovalOrigin, InferenceProvider, StateStore};
+use crate::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use crate::types::*;
 
 use crate::time::unix_now as now;
@@ -209,17 +209,6 @@ fn with_anomalies_channel(schema: &serde_json::Value) -> serde_json::Value {
 
 // ─── Public Types ──────────────────────────────────────────────
 
-/// The origin the executor supplies on every interactive channel call — the
-/// turn's own ids, so a channel with more than one live turn can route (the
-/// daemon's routing channel, sv-surface rung 6 C1). Single-tenant impls
-/// ignore it.
-pub fn approval_origin(task: &Task) -> ApprovalOrigin {
-    ApprovalOrigin {
-        conversation_id: task.conversation_id.clone(),
-        task_id: Some(task.id.clone()),
-    }
-}
-
 pub struct Executor {
     pub inference: Arc<dyn InferenceProvider>,
     pub tools: Arc<ToolRegistry>,
@@ -244,16 +233,11 @@ pub struct AutoApprovalChannel;
 
 #[async_trait]
 impl ApprovalChannel for AutoApprovalChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
 
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Err(Error::NotImplemented(
             "Interactive input not available".to_string(),
         ))
@@ -785,10 +769,7 @@ impl Executor {
                                 params: resolved_params.clone(),
                             };
 
-                            let approved = self
-                                .approval
-                                .request_approval(&approval_origin(task), step, &preview)
-                                .await?;
+                            let approved = self.approval.request_approval(step, &preview).await?;
 
                             if !approved {
                                 return Ok(StepOutput::Skipped);
@@ -971,10 +952,7 @@ impl Executor {
 
             StepKind::UserInput { question } => {
                 let resolved = resolve_inputs(question, &step.inputs, completed)?;
-                let answer = self
-                    .approval
-                    .ask_user(&approval_origin(task), &resolved)
-                    .await?;
+                let answer = self.approval.ask_user(&resolved).await?;
                 Ok(StepOutput::Text(answer))
             }
 

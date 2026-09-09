@@ -1416,15 +1416,10 @@ struct DenyApprovalChannel;
 
 #[async_trait]
 impl ApprovalChannel for DenyApprovalChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(false)
     }
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Ok("denied".to_string())
     }
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
@@ -1522,15 +1517,10 @@ struct AnsweringApprovalChannel;
 
 #[async_trait]
 impl ApprovalChannel for AnsweringApprovalChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Ok("42".to_string())
     }
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
@@ -1601,15 +1591,10 @@ struct InfoApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for InfoApprovalChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Ok(String::new())
     }
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
@@ -1702,15 +1687,10 @@ struct SpyInfoChannel {
 
 #[async_trait]
 impl ApprovalChannel for SpyInfoChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Ok(String::new())
     }
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
@@ -2002,15 +1982,10 @@ struct SpyLessonChannel {
 
 #[async_trait]
 impl ApprovalChannel for SpyLessonChannel {
-    async fn request_approval(
-        &self,
-        _origin: &ApprovalOrigin,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
-    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _question: &str) -> Result<String> {
         Ok(String::new())
     }
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
