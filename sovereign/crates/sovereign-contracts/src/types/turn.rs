@@ -44,6 +44,7 @@ use serde::{Deserialize, Serialize};
 use crate::types::epistemic::EpistemicState;
 use crate::types::narration::NarrationPhase;
 use crate::types::projection::{Citation, Provenance, TaskSummary, TurnMetadata};
+use crate::types::ui::ActionPreview;
 
 /// Host → client, for ONE turn, down the ONE connection that asked for it.
 ///
@@ -152,6 +153,39 @@ pub enum TurnFrame {
         /// slots.
         estimated_wait_ms: u64,
     },
+    /// The in-flight turn has stopped at a write-effectful step and needs
+    /// the user's consent before it runs.
+    ///
+    /// Emitted only to the socket that OWNS this conversation's approvals
+    /// (`?approvals=1` on the stream upgrade). A host with no such owner
+    /// grants the step itself and emits nothing — the shipped
+    /// non-interactive behaviour — so a client that never opts in cannot
+    /// receive a frame it would have to hang on.
+    ///
+    /// Answered with [`TurnRequest::Approve`] carrying the same
+    /// `task_id`/`step_id`.
+    ApprovalRequest {
+        /// The background task the step belongs to.
+        task_id: String,
+        /// The step awaiting the decision.
+        step_id: usize,
+        /// What the step will do, as the approval decider was given it.
+        /// The whole [`ActionPreview`] rather than a projection of it: the
+        /// executor, the desktop card and this frame render one consent
+        /// question and there is one value that states it (ARCH §10.6).
+        preview: ActionPreview,
+    },
+    /// The in-flight turn is putting a free-form question to the user
+    /// (`ApprovalChannel::ask_user` — a `UserInput` step).
+    ///
+    /// Same ownership rule as [`TurnFrame::ApprovalRequest`]. Answered with
+    /// [`TurnRequest::UserReply`] carrying the same `task_id`.
+    UserInputRequest {
+        /// The background task that asked.
+        task_id: String,
+        /// The question, in the turn's own words.
+        question: String,
+    },
 }
 
 /// How much of the Sovereign pipeline a turn runs through.
@@ -220,7 +254,13 @@ pub enum TurnRequest {
         #[serde(default, skip_serializing_if = "TurnMode::is_default")]
         mode: TurnMode,
     },
-    /// Answer a pending [`crate::types::ui::ActionPreview`] approval.
+    /// Answer a pending [`crate::types::ui::ActionPreview`] approval —
+    /// the reply to a [`TurnFrame::ApprovalRequest`].
+    ///
+    /// Resolved against the SENDING socket's own conversation: a host looks
+    /// the parked step up under `(this socket's conversation, task_id,
+    /// step_id)`, so one client cannot answer another client's consent
+    /// question by guessing its task id.
     Approve {
         /// Task the step belongs to.
         task_id: String,
@@ -229,7 +269,10 @@ pub enum TurnRequest {
         /// Whether the step may proceed.
         approved: bool,
     },
-    /// Answer a pending `ask_user` question.
+    /// Answer a pending `ask_user` question — the reply to a
+    /// [`TurnFrame::UserInputRequest`], resolved against the sending
+    /// socket's own conversation for the same reason [`TurnRequest::Approve`]
+    /// is.
     UserReply {
         /// Task that asked.
         task_id: String,

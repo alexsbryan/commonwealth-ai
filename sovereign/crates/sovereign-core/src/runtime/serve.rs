@@ -547,8 +547,13 @@ impl TurnSink for Collector {
                 *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(message);
             }
             // Progress signals have no meaning to a caller that is not
-            // rendering as it goes.
-            TurnFrame::Narration { .. } | TurnFrame::QueuePosition { .. } => {}
+            // rendering as it goes, and a caller collecting a finished turn has
+            // nobody to put a consent question to — the approval channel this
+            // `Runtime` was built with is what answers those.
+            TurnFrame::Narration { .. }
+            | TurnFrame::QueuePosition { .. }
+            | TurnFrame::ApprovalRequest { .. }
+            | TurnFrame::UserInputRequest { .. } => {}
         }
     }
 }

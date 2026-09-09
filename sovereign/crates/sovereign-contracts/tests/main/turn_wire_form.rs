@@ -22,6 +22,7 @@
 //! did not mean to fails here.
 
 use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
+use sovereign_contracts::types::ActionPreview;
 use sovereign_contracts::types::NarrationPhase;
 use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
 
@@ -179,6 +180,37 @@ fn queue_position_frame_wire_form() {
             estimated_wait_ms: 9000,
         },
         r#"{"type":"queue_position","data":{"position":3,"estimated_wait_ms":9000}}"#,
+    );
+}
+
+#[test]
+fn approval_request_frame_wire_form() {
+    // `preview` is the whole `ActionPreview` — the same object the desktop's
+    // approval card already renders in-process. Pinning it here is what makes
+    // "the attached client shows the same card" a byte fact rather than a
+    // hope.
+    pin_frame(
+        TurnFrame::ApprovalRequest {
+            task_id: "t1".into(),
+            step_id: 2,
+            preview: ActionPreview {
+                tool_id: "shell".into(),
+                description: "Run the migration".into(),
+                params: serde_json::json!({ "cmd": "migrate" }),
+            },
+        },
+        r#"{"type":"approval_request","data":{"task_id":"t1","step_id":2,"preview":{"tool_id":"shell","description":"Run the migration","params":{"cmd":"migrate"}}}}"#,
+    );
+}
+
+#[test]
+fn user_input_request_frame_wire_form() {
+    pin_frame(
+        TurnFrame::UserInputRequest {
+            task_id: "t1".into(),
+            question: "Which branch?".into(),
+        },
+        r#"{"type":"user_input_request","data":{"task_id":"t1","question":"Which branch?"}}"#,
     );
 }
 

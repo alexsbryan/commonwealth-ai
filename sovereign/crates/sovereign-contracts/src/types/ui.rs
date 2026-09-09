@@ -219,7 +219,7 @@ pub struct ThinFolder {
 
 /// What the user is asked to approve before a write-effectful tool step runs
 /// (see `ApprovalChannel::request_approval`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionPreview {
     /// Tool about to run.
     pub tool_id: ToolId,

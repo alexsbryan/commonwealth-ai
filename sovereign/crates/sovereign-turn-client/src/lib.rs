@@ -1105,6 +1105,27 @@ impl TurnStream {
                     outcome.metadata = metadata;
                     return Ok(outcome);
                 }
+                // A host only sends these to the socket that CLAIMED this
+                // conversation's approvals (`?approvals=1` on the upgrade),
+                // and this reader installs no handler for them. Erroring names
+                // the gap; ignoring it would park the host's turn on a
+                // decision nobody is going to make (ARCH §18.3).
+                TurnFrame::ApprovalRequest {
+                    task_id, step_id, ..
+                } => {
+                    return Err(Error::Inference(format!(
+                        "turn stream: the host asked to approve step {step_id} of task \
+                         {task_id}, but this client did not claim approvals for the \
+                         conversation"
+                    )));
+                }
+                TurnFrame::UserInputRequest { task_id, .. } => {
+                    return Err(Error::Inference(format!(
+                        "turn stream: the host put a question to the user for task \
+                         {task_id}, but this client did not claim approvals for the \
+                         conversation"
+                    )));
+                }
                 TurnFrame::StreamError {
                     message,
                     retry_after_secs,
