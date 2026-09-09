@@ -339,6 +339,72 @@ fn is_gossip_candidate(m: &MemberRecord, self_id: NodeId) -> bool {
     m.node_id != self_id && m.is_active()
 }
 
+/// Collapse live members that share ONE endpoint key down to one row each,
+/// so a round dials a physical machine once however many names it joined
+/// under (ARCH §7.5 — identity is the Ed25519 key; `node_id` is a second name
+/// for the same thing).
+///
+/// # Why this is a WINNER and not a refusal
+///
+/// `Mesh::merge_from`'s `alias_clash` already refuses to ADMIT a second active
+/// record on one key. This is the read-side companion for the roster that
+/// already contains one — and it deliberately makes the opposite choice about
+/// what to do when it finds one, because refusing is what produced the failure
+/// this exists to prevent:
+///
+/// `is_gossip_candidate` excluded a tombstoned row, one physical Mac held two
+/// roster rows, and the row that came back was the tombstoned one. Nobody
+/// dialed it, so no inbound merge could clear it, so nobody dialed it. A
+/// reachable member was unreachable for 11.8 days and the state could not
+/// decay. A resilient roster must never contain a partition that cannot heal,
+/// so when this finds an ambiguity it RESOLVES it rather than dropping every
+/// row involved.
+///
+/// # Why the collapse, and what it costs when it is wrong
+///
+/// `IrohTransport::bridge_for` caches on `(pubkey, alpn)`, so two rows on one
+/// key share ONE bridge and their differing dial info retargets it under every
+/// round — measured at ~14/min on this host both before the tombstone filter
+/// (note `1ca75415`, 181 in 12 min) and again the moment the second row came
+/// back to life (83 in 6 min). Retargeting repoints a live tunnel mid-flight,
+/// so in-flight gossip dies at exactly `PEER_TIMEOUT` and the peer decays
+/// while iroh reports a healthy path throughout.
+///
+/// Picking the wrong row costs nothing structural: both names resolve to the
+/// same endpoint key, so the dial reaches the same machine either way. What
+/// would cost something is picking a DIFFERENT row each round — that is the
+/// retarget storm with extra steps — so the choice has to be stable, not
+/// merely correct.
+///
+/// # The winner, and why it converges
+///
+/// Greatest [`MemberRecord::event_time`], `node_id` as a deterministic
+/// tiebreak. This is self-reinforcing in the right direction: the winner is
+/// dialed, answers, and its record advances on merge, while the loser is not
+/// dialed and its `event_time` stands still — so the gap widens and the choice
+/// stops moving. A row with NO pubkey cannot collide on a key it does not
+/// have and is always kept; `None` is not an identity.
+fn one_row_per_endpoint_key<'a>(members: Vec<&'a MemberRecord>) -> Vec<&'a MemberRecord> {
+    use std::collections::HashMap;
+    let mut best: HashMap<commonwealth_core::ids::NodePubkey, &'a MemberRecord> = HashMap::new();
+    let mut keyless: Vec<&'a MemberRecord> = Vec::new();
+    for m in members {
+        let Some(key) = m.node_pubkey else {
+            keyless.push(m);
+            continue;
+        };
+        match best.get(&key) {
+            Some(held) if (held.event_time(), held.node_id) >= (m.event_time(), m.node_id) => {}
+            _ => {
+                best.insert(key, m);
+            }
+        }
+    }
+    let mut out: Vec<&'a MemberRecord> = best.into_values().collect();
+    out.extend(keyless);
+    out
+}
+
 fn select_round_peers<T>(
     mut online: Vec<(T, u64)>,
     mut offline: Vec<(T, u64)>,
@@ -534,9 +600,28 @@ pub async fn run_one_round(
             // and flips status back to Online. The decay pass only moves
             // Online→Offline, so no online-transition log here.
         }
-        mesh.members
+        let live: Vec<&MemberRecord> = mesh
+            .members
             .values()
             .filter(|m| is_gossip_candidate(m, self_id))
+            .collect();
+        let before = live.len();
+        let deduped = one_row_per_endpoint_key(live);
+        if deduped.len() < before {
+            // SAY IT OUT LOUD (§9.1). This is a roster defect the operator has
+            // to repair — one machine holding two node_ids — and the whole
+            // reason it went unnoticed for 11.8 days is that nothing ever
+            // named it. `mesh_identity` makes the repair an operator act, so
+            // the least this round can do is report the condition.
+            debug!(
+                target: "mesh.peer_path",
+                collapsed = before - deduped.len(),
+                dialing = deduped.len(),
+                "gossip: members share an endpoint key — dialing one row per key"
+            );
+        }
+        deduped
+            .into_iter()
             // The transport sorts candidates IPv4-first on
             // resolution and promotes the last-working address,
             // so the contact carries the raw gossiped list.
@@ -996,7 +1081,7 @@ use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
 
 #[cfg(test)]
 mod gossip_candidate_tests {
-    use super::is_gossip_candidate;
+    use super::{is_gossip_candidate, one_row_per_endpoint_key};
     // The record builder already lives in `ring_roster::tests` and is
     // `pub(crate)` for exactly this (ARCH §19 — reuse before minting).
     use crate::ring_roster::tests::member;
@@ -1066,6 +1151,71 @@ mod gossip_candidate_tests {
             is_gossip_candidate(&live, me()),
             "the live row must still be dialed; dropping both would strand the peer"
         );
+    }
+
+    // ── one row per endpoint key ──────────────────────────────────────────
+
+    /// THE FAILING INPUT, and it is the state this host was left in an hour
+    /// ago. The test above holds only while ONE of the twins is a tombstone.
+    /// Resurrect the retired row — which is correct, it is a live machine —
+    /// and both are candidates again, both dial, and they share one
+    /// `(pubkey, alpn)` bridge: measured 83 retargets in six minutes, against
+    /// 181 in twelve before the tombstone filter (note `1ca75415`).
+    #[test]
+    fn two_live_rows_on_one_endpoint_key_are_dialed_once() {
+        let key = NodePubkey([0x86; 32]);
+        let mut older = member(NodeId::from_u128(2), "Alexs-MacBook-Pro-2", Some(key));
+        older.last_seen = 100;
+        let mut newer = member(NodeId::from_u128(3), "BeefyMac", Some(key));
+        newer.last_seen = 200;
+
+        let picked = one_row_per_endpoint_key(vec![&older, &newer]);
+        assert_eq!(picked.len(), 1, "one machine, one dial");
+        assert_eq!(
+            picked[0].node_id, newer.node_id,
+            "the freshest row wins, so the choice converges as it keeps answering"
+        );
+    }
+
+    /// THE CONTROL THAT MATTERS: this collapses an AMBIGUITY, never a mesh.
+    /// Without it the assertion above is satisfiable by a function that
+    /// returns one row full stop — which would quietly reduce every round to a
+    /// single peer while still looking like a working mesh.
+    #[test]
+    fn distinct_endpoint_keys_are_all_kept() {
+        let a = member(NodeId::from_u128(2), "a", Some(NodePubkey([1; 32])));
+        let b = member(NodeId::from_u128(3), "b", Some(NodePubkey([2; 32])));
+        let c = member(NodeId::from_u128(4), "c", Some(NodePubkey([3; 32])));
+        assert_eq!(one_row_per_endpoint_key(vec![&a, &b, &c]).len(), 3);
+    }
+
+    /// `None` is not an identity. Pre-identity builds gossip no pubkey, and
+    /// keying on the `Option` would collapse every one of them into a single
+    /// row — a mesh of older nodes silently reduced to one reachable peer,
+    /// which is the same un-healable partition this change exists to remove.
+    #[test]
+    fn members_without_a_pubkey_are_never_collapsed_together() {
+        let a = member(NodeId::from_u128(2), "old-a", None);
+        let b = member(NodeId::from_u128(3), "old-b", None);
+        assert_eq!(one_row_per_endpoint_key(vec![&a, &b]).len(), 2);
+    }
+
+    /// The choice must not move between rounds: alternating winners IS the
+    /// retarget storm, paced by the gossip interval instead of the bridge
+    /// cache. Both input orders are fed in because `HashMap` iteration order
+    /// must not be able to decide who gets dialed.
+    #[test]
+    fn the_winner_is_stable_across_repeated_selection() {
+        let key = NodePubkey([0x86; 32]);
+        let mut x = member(NodeId::from_u128(2), "x", Some(key));
+        let mut y = member(NodeId::from_u128(3), "y", Some(key));
+        x.last_seen = 200;
+        y.last_seen = 200; // a tie — the node_id tiebreak must settle it
+        let first = one_row_per_endpoint_key(vec![&x, &y])[0].node_id;
+        for _ in 0..20 {
+            assert_eq!(one_row_per_endpoint_key(vec![&x, &y])[0].node_id, first);
+            assert_eq!(one_row_per_endpoint_key(vec![&y, &x])[0].node_id, first);
+        }
     }
 }
 
