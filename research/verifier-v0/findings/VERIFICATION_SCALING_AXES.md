@@ -909,3 +909,85 @@ measure what share of the 8 comes back without the oracle.
 
 Reproduce: `scripts/oracle_query_probe.py` (bars in the header, written before
 the first query).
+
+## 14. Fan-out over formulations is dead; k is the lever, and the binding cost is context not time
+
+**2026-09-09.** §13 proved the hard core is REACHABLE by an oracle query and
+said plainly that reachability is not a strategy. This removes the oracle:
+sub-queries generated from the QUESTION ALONE by the resident 4B, three arms
+through one instrument (plain `corpus search`, bench matcher, truncated
+snippets — identically biased across arms, so deltas are conservative).
+
+### The pre-registered bar was mis-specified, and saying so is the result
+
+The bar read "fanout >= 4/8 of the hard core -> live". Fan-out returned **4/8**
+and the script duly printed LIVE. **The baseline in the same harness returned
+5/8.** An absolute bar with no paired control cannot distinguish "the strategy
+works" from "anything at this budget works", and the paired control beats the
+strategy. The verdict is therefore NEGATIVE, not positive, and the bar is
+recorded as the defect it was.
+
+| arm | hard core | all 158 facts | retrievals | context chars |
+|---|---|---|---|---|
+| baseline — 1 query @ 40 | **5/8** | 138 = 87.3% | 21 | 182,339 |
+| fan-out — 4 sub-queries @ 10 | 4/8 | 138 = 87.3% | 84 | 164,444 (0.90x) |
+
+At an equal hit budget, splitting it across four narrower queries returns **more
+redundancy, not more coverage** — same total facts, fewer unique characters,
+four times the retrievals. Decomposition is not free diversity; the sub-queries
+land on the same documents.
+
+### The lever is k, and it is nearly free in time
+
+One query, same harness, sweeping the hit count:
+
+| k | hard core | all facts | context chars | retrieval wall / question |
+|---|---|---|---|---|
+| 10 | 2/8 | 114/158 = 72.2% | 48,823 | 1.20 s |
+| 20 | 2/8 | 126/158 = 79.7% | 93,322 | 1.24 s |
+| 40 | 5/8 | 138/158 = 87.3% | 182,339 | 1.43 s |
+| 80 | **7/8** | **147/158 = 93.0%** | 360,195 | 1.55 s |
+
+**7 of 8 hard-core facts and 93.0% coverage from asking one query for more
+hits.** Against the rung-6 arms' 88.0-89.2% with an atlas walk and a reranker,
+and against fan-out's 4/8. The boring lever beats the clever one, which is the
+third time this arc has landed there (§8.1: the threshold beat the jury;
+§11: the bound beat the ladder).
+
+**And retrieval wall time is almost flat in k** — +29% for 8x the hits, because
+the query embedding dominates and the search itself is cheap. Measured against a
+58.8 s synthesis median, retrieval is **~2-3% of a turn**. This closes the debt
+§13 recorded: the premise "retrieval is the fast, load-bearing part" is now a
+number rather than a belief.
+
+### So the constraint is context, and that relocates the mesh mechanism
+
+Time is not what k costs. **Characters are: 7.4x from k=10 to k=80**, and that is
+on TRUNCATED snippets — real chunks are several times larger, so the context bill
+is materially worse than this table shows while the coverage figures stay
+conservative. You cannot feed a 93%-coverage candidate set to one synthesis.
+
+> **Retrieval is nearly free and selection is the scarce resource.** The mesh's
+> job is therefore not to retrieve more in parallel — one node can already
+> over-retrieve almost for nothing — but to REDUCE a large candidate set to a
+> small high-value window. That is judging N candidate chunks, which is
+> embarrassingly parallel, and unlike §8's jury the nodes judge DIFFERENT
+> chunks rather than voting on one claim, so lineage-nested error does not
+> apply the same way.
+
+That is the one shape this arc has not tested and the first the measured cost
+structure actually favours. It is a hypothesis, not a result.
+
+### Scope
+
+- One bank, one corpus, one decomposition prompt at K=4. A different prompt or a
+  larger K could differ; what is measured is that THIS realistic strategy loses
+  to a larger k at equal budget.
+- Snippet-truncated haystack: coverage is a lower bound, context cost an
+  understatement.
+- Coverage is retrieval-layer only. Whether a bigger window improves the ANSWER
+  is unmeasured and prior work says it is not monotone (prefill dominates;
+  K-cuts have hurt synthesis). ~21 x 59 s per arm to find out.
+
+Reproduce: `scripts/formulation_fanout.py` (bars in the header, mis-specification
+and all).
