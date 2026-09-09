@@ -218,7 +218,7 @@ impl crate::traits::InferenceProvider for GateMock {
             }
         } else if request
             .prompt
-            .contains("Reply with only the specific value the ANSWER gives")
+            .contains(super::value_presence::EXTRACTION_LEAD)
         {
             // The value extractor (`value_presence::extract_answer_value`).
             // The mock ECHOES the answer when the answer IS a short value,
@@ -250,12 +250,17 @@ impl crate::traits::InferenceProvider for GateMock {
         } else if request.prompt.contains("List the SPECIFIC factual claims") {
             // Longform per-claim extractor (gate_longform's audit).
             "The shop is located on Crescent Lane.\nThe shop sells loose-leaf tea.".to_string()
-        } else if request
-            .prompt
-            .contains("Compare the ANSWER against the EVIDENCE")
-        {
+        } else if request.prompt.contains("Compare the ANSWER against the") {
             // Specifics scan: nothing unsupported — keeps the
             // longform progress tests pinned to the claim loop.
+            //
+            // Matched on the SHARED prefix, like the three mocks below it.
+            // This branch read "…against the EVIDENCE" until 2026-09-09 and
+            // by then matched nothing: the only scan prompt in the tree
+            // (`judge::batched`) says "…against the passages above", so every
+            // scan routed to the fall-through and the guard read
+            // "unexpected synthesis call" as its list of unsupported
+            // statements. Same footgun as `EXTRACTION_LEAD` documents.
             "NONE".to_string()
         } else {
             "unexpected synthesis call".to_string()
@@ -2500,5 +2505,179 @@ async fn the_longform_pivot_changes_the_route_and_not_the_holding() {
         !short.answer.text().contains("The passages do not answer")
             && !long.answer.text().contains("The passages do not answer"),
         "neither route may manufacture an absence over evidence both were shown"
+    );
+}
+
+/// Scripted mock for the CITATION EXIT: the quote-then-answer stage returns a
+/// verbatim `quote` and an answer of `value`, the forced-choice support probe
+/// says supported, and the value extractor reports `value` back. Everything
+/// else delegates to [`GateMock`] rather than being re-derived beside it
+/// (ARCH §19) — these are the same judge registers it already scripts.
+///
+/// ONE `value` field feeds both the citation answer and the extraction reply
+/// on purpose: two fields could drift out of step and the test would then be
+/// measuring the mock instead of the gate.
+struct CitationExitMock {
+    quote: &'static str,
+    value: &'static str,
+}
+
+#[async_trait::async_trait]
+impl crate::traits::InferenceProvider for CitationExitMock {
+    async fn complete(
+        &self,
+        request: &crate::types::CompletionRequest,
+    ) -> Result<CompletionResponse> {
+        let forced = request
+            .structured_output
+            .as_ref()
+            .map(|s| s.to_string().contains("x_forced_choice"))
+            .unwrap_or(false);
+        let text = if !forced && request.prompt.contains("copy it word for word") {
+            // The multi-quote contract (`citation_multiquote_enabled`, ON by
+            // default) reads PART blocks, so this is one part.
+            format!(
+                "PART: the country\nQUOTE: {}\nANSWER: {}",
+                self.quote, self.value
+            )
+        } else if !forced
+            && request
+                .prompt
+                .contains(super::value_presence::EXTRACTION_LEAD)
+        {
+            self.value.to_string()
+        } else {
+            return GateMock {
+                support: Some(true),
+            }
+            .complete(request)
+            .await;
+        };
+        Ok(CompletionResponse {
+            text,
+            tokens_used: 0,
+            prompt_tokens: 0,
+            model_id: "citation-exit-mock".into(),
+            latency_ms: 0,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &crate::types::CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented(
+            "CitationExitMock: no streaming".into(),
+        ))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Ok(vec![])
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 4096,
+            supports_structured_output: true,
+            relative_speed: crate::types::Speed::Fast,
+            relative_reasoning: Depth::Moderate,
+        }
+    }
+}
+
+/// The one Conrad sentence these two tests are shown. "Embassy" and "Chesham
+/// Square" are in it; no country is.
+const EMBASSY_CHUNK: &str =
+    "He had gone to the Embassy in Chesham Square with a note in his pocket.";
+
+fn embassy_evidence() -> EvidenceContext {
+    EvidenceContext {
+        chunks: vec![EMBASSY_CHUNK.to_string()],
+        ..refinement_evidence()
+    }
+}
+
+/// The surface these two run on. `Refinement` is `retry: false`, so
+/// `short_specifics_guard` returns before its own model call and the citation
+/// exit is the only decider in the frame — which is what these tests are
+/// about. The exit itself is surface-independent.
+fn citation_surface() -> GroundingProfile {
+    GateSurface::Refinement.profile()
+}
+
+/// **A located quote is a fact about the QUOTE, never a licence for the value
+/// asserted beside it.**
+///
+/// Measured on the chaos bank's `absent-embassy-country`, five identical runs
+/// (2026-09-09): the gate released `citation_grounded` carrying a genuine
+/// verbatim CHAPTER II quote about the Embassy and the answer "Russian" — a
+/// country Conrad never names, and the canonical `AssertedValue::Ungrounded`
+/// example in that enum's own doc. `value_presence`'s doc says the veto "runs
+/// on EVERY gated turn"; it did not run on this one, because the citation
+/// stage is a SECOND release path that never asked it. The scorer's own
+/// post-hoc call logged `vetoed_absent value=Russian` while the gate's logged
+/// nothing — two registers of one question, disagreeing.
+///
+/// A veto may only REFUSE (§7.6), so this can lose no correct answer; the
+/// companion test below is the control that says so.
+#[tokio::test]
+async fn a_located_quote_does_not_license_a_value_the_evidence_lacks() {
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(CitationExitMock {
+        quote: EMBASSY_CHUNK,
+        value: "Russian",
+    });
+    let outcome = gate_answer(
+        &inference,
+        "Which specific country's embassy employs Mr Vladimir?",
+        "Russian.".to_string(),
+        &embassy_evidence(),
+        &CompletionRequest::default(),
+        &citation_surface(),
+    )
+    .await;
+    assert_ne!(
+        outcome.meta.get("action").and_then(|a| a.as_str()),
+        Some("citation_grounded"),
+        "the citation exit released a value absent from every chunk: {:?}",
+        outcome.answer.text()
+    );
+    assert!(
+        !outcome.answer.text().contains("Russian"),
+        "and the confabulated value must not reach the reader: {:?}",
+        outcome.answer.text()
+    );
+}
+
+/// The control: the SAME exit, the same mock, a value the quote actually
+/// carries — and it still releases. Without this the test above would pass
+/// against a veto that refuses everything, which is not a veto (§18.1).
+#[tokio::test]
+async fn the_citation_exit_still_releases_a_value_the_quote_carries() {
+    let inference: Arc<dyn crate::traits::InferenceProvider> = Arc::new(CitationExitMock {
+        quote: EMBASSY_CHUNK,
+        value: "Chesham Square",
+    });
+    let outcome = gate_answer(
+        &inference,
+        "Where is the Embassy?",
+        "Chesham Square.".to_string(),
+        &embassy_evidence(),
+        &CompletionRequest::default(),
+        &citation_surface(),
+    )
+    .await;
+    assert_eq!(
+        outcome.meta.get("action").and_then(|a| a.as_str()),
+        Some("citation_grounded"),
+        "a value the quote carries must still ship: {:?}",
+        outcome.answer.text()
+    );
+    assert!(
+        outcome.answer.text().contains("Chesham Square"),
+        "and it must reach the reader: {:?}",
+        outcome.answer.text()
     );
 }

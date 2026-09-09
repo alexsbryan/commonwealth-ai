@@ -253,6 +253,54 @@ pub(crate) async fn gate_answer_inner(
         // two registers apart, which is what it exists for.
         .calls(1)
         .record(citation_started.elapsed().as_millis() as u64);
+        // THE VETO APPLIES TO THIS EXIT TOO (2026-09-09).
+        //
+        // `value_presence`'s doc says the veto "runs on EVERY gated turn". It
+        // did not run on this one. The citation stage is a SECOND release
+        // path: it releases on "a verbatim supporting quote was located",
+        // which is a fact about the quote and says nothing about the value the
+        // answer asserts beside it.
+        //
+        // Measured on `absent-embassy-country`, five identical runs: released
+        // `citation_grounded` with the text "Russian (implied by ... but
+        // strictly from text: NONE)" plus a genuine verbatim CHAPTER II quote
+        // about "the Embassy". The quote is real, the citation is clickable,
+        // and Conrad never names the country — "Russian" is the canonical
+        // `AssertedValue::Ungrounded` example in that enum's own doc. The
+        // scorer's post-hoc call logged `vetoed_absent value=Russian` while
+        // `judge.rs`'s veto never ran, which is how the two log lines came
+        // apart: on the Berlin Wall probe both fire, here only the scorer's.
+        //
+        // A veto may only REFUSE (ARCH §7.6), so wiring it here can lose no
+        // correct answer — it can only turn a release into the honest
+        // abstention `Abstain` already means on this path. One decider, both
+        // exits (§10.6).
+        let citation_outcome = match &citation_outcome {
+            citation::CitationOutcome::Grounded { answer, .. } => {
+                match super::value_presence::value_presence_of(
+                    &**inference,
+                    question,
+                    answer,
+                    chunks,
+                    crate::slot_policy::posture_of(base_request),
+                )
+                .await
+                {
+                    super::value_presence::ValuePresence::Absent(value) => {
+                        tracing::info!(
+                            target: "grounding_gate",
+                            value = %value,
+                            decision = "citation_release_vetoed",
+                            "value-presence VETO on the citation exit: the answer's specific is \
+                             absent from the evidence, so a located quote does not license it"
+                        );
+                        citation::CitationOutcome::Abstain
+                    }
+                    _ => citation_outcome,
+                }
+            }
+            _ => citation_outcome,
+        };
         if let citation::CitationOutcome::Grounded {
             answer,
             quotes,

@@ -56,7 +56,7 @@ asserts = 5
 requirement = "GR-2"
 test = "sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 2329
+line = 2334
 asserts = 3
 
 [[claim]]
@@ -112,14 +112,14 @@ asserts = 6
 requirement = "GR-46"
 test = "sovereign-core::runtime::epistemic::tests::one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other"
 file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 868
+line = 910
 asserts = 9
 
 [[claim]]
 requirement = "GR-47"
 test = "sovereign-core::runtime::epistemic::tests::tool_derived_verdicts"
 file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 806
+line = 848
 asserts = 3
 
 [[claim]]
@@ -140,7 +140,7 @@ asserts = 2
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 1314
+line = 1319
 asserts = 8
 
 [[claim]]

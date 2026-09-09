@@ -454,7 +454,13 @@ pub async fn run(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference);
+    // The UN-INSTRUCTED surface, deliberately: the question-kind classifier
+    // supplies its own (speech-act) instruction to both the exemplars and the
+    // query through `kind_space_embedding`. Handing it the query-side adapter
+    // would prefix retrieval's instruction underneath and put the whole race
+    // in a fourth space — which is the defect this verb measured on
+    // 2026-09-08 (6/43 classified, 0 of them the right row).
+    let embed = sovereign_core::embed_fn::inference_to_embed_fn(inference);
     let classifier = match QuestionKindClassifier::build(&policy, &embed).await {
         Ok(Some(c)) => c,
         Ok(None) => {
@@ -489,7 +495,10 @@ pub async fn run(args: &[String]) -> i32 {
 
     let mut out: Vec<KindRow> = Vec::with_capacity(questions.len());
     for (id, q) in &questions {
-        let emb = match embed(q).await {
+        // One embedding of the question, in the classifier's own space — the
+        // same seam the centroids were built through, so the instrument
+        // cannot report a race the walker would not run.
+        let emb = match corpus_engine::atlas_traversal::kind_space_embedding(q, &embed).await {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("atlas kind: embed `{id}`: {e}");

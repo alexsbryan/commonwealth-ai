@@ -338,19 +338,59 @@ fn window_around(value: &str, chunk: &str, room: usize) -> String {
     chars[start..start + room].iter().collect()
 }
 
+/// The opening clause of the extraction prompt, named so the gate's test
+/// mocks route on the SAME literal the prompt is built from.
+///
+/// A mock keyed on a REMEMBERED copy of this sentence is a footgun that has
+/// already fired: the 2026-09-09 reword ("gives" → "puts in front of the
+/// reader") left `GateMock`'s branch matching nothing, and the extractor's
+/// reply silently became the mock's fall-through string — a value absent from
+/// every chunk, so the veto refused every gated answer in the suite for a
+/// reason no assertion named. Encoding the coupling removes the footgun
+/// rather than asking the next reader to remember it (ARCH §7, §10.6).
+pub(crate) const EXTRACTION_LEAD: &str =
+    "Reply with only the specific value the ANSWER puts in front of the reader";
+
 async fn extract_answer_value(
     inference: &dyn InferenceProvider,
     question: &str,
     answer: &str,
     posture: ShardingPrivacy,
 ) -> Option<String> {
+    // "PUTS IN FRONT OF THE READER", not "gives" — and the hedge clause is
+    // the whole reason (2026-09-09).
+    //
+    // The gate is about what the reader takes away. Measured on the chaos
+    // bank's `absent-embassy-country`, three identical runs: the model
+    // answered `Russian (implied by "State Councillor Wurmt" ... but strictly
+    // from text: NONE)`. Conrad never names the country — "Russian" is the
+    // canonical `Ungrounded` example in `AssertedValue`'s own doc — and the
+    // reader's takeaway is Russia. The extractor read the answer's SELF-
+    // ASSESSMENT rather than its content, returned `NONE`, and the veto never
+    // ran: a confabulation laundered past the gate by wearing a caveat.
+    //
+    // Both directions, same daemon and model, current prompt → this one
+    // (ARCH §18.6):
+    //
+    //   hedged "Russian (... but strictly from text: NONE)"  NONE → Russian
+    //   honest abstention ("I couldn't confirm an answer ...")  NONE → NONE
+    //   committed "Winnie kills ... with a carving knife"  value → value
+    //
+    // The negative control is the middle row: a real decline must still
+    // extract nothing, or every honest abstention would be sent to the
+    // presence check. It does.
+    //
+    // This is a PROMPT change and deliberately not a change to the decline
+    // chain below, which the comment there fences off as a §18.6 move of its
+    // own.
     let prompt = format!(
         "QUESTION: {q}\nANSWER: {a}\n\n\
-         Reply with only the specific value the ANSWER gives in reply to the \
-         QUESTION — the complete value with its qualifiers (e.g. a full name, or a \
-         place with its modifiers), but not the surrounding sentence. If the ANSWER \
-         gives no specific value (it declines or says the sources don't state it), \
-         reply with exactly NONE.",
+         {EXTRACTION_LEAD} in reply to the QUESTION — the complete value with its \
+         qualifiers (e.g. a full name, or a place with its modifiers), but not the \
+         surrounding sentence. A value the ANSWER names is still the value even \
+         when it is hedged, qualified, or accompanied by a disclaimer that the \
+         sources do not state it; report the named value, not the disclaimer. \
+         Reply with exactly NONE only when the ANSWER names no candidate at all.",
         q = question.chars().take(300).collect::<String>(),
         a = answer.chars().take(300).collect::<String>(),
     );

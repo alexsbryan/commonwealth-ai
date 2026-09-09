@@ -227,8 +227,19 @@ pub fn admit_winner(
 /// [`WalkSelection::named`] and skips the embedder, and so the classification
 /// decision has one home. `inventory` is [`AtlasInventory::of`] the same
 /// graphs the walk will run over.
+/// Takes the question's TEXT, not a vector, and this is load-bearing.
+///
+/// It took `question_embedding: &[f32]` until 2026-09-09, and every caller
+/// handed it the RETRIEVAL-space vector already computed for the ANN seed
+/// path. The centroids live in the question-kind space
+/// (`question_kind::kind_space_embedding`, which prefixes a speech-act
+/// instruction), so the race was run across two spaces: measured 6 of 43 bank
+/// questions classified and NOT ONE of the six onto the right row — worse than
+/// always answering `lookup`. A signature that accepts a bare vector cannot
+/// tell which space produced it, so the type is the fix: hand over the text
+/// and let the one seam embed it (ARCH §10.6, §7).
 pub async fn select_walk(
-    question_embedding: &[f32],
+    question: &str,
     policy: &NavigationPolicy,
     policy_source: PolicySource,
     inventory: &AtlasInventory,
@@ -247,13 +258,32 @@ pub async fn select_walk(
         };
         return WalkSelection::unfiltered(src, None, policy_source);
     };
-    let (kind, score) = match classifier.classify(question_embedding) {
+    // One embedding of the question, in the classifier's own space, shared by
+    // the verdict and the race — two calls would be two chances to disagree.
+    let kind_vec =
+        match crate::atlas_traversal::question_kind::kind_space_embedding(question, embed).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    target: "retrieval_audit",
+                    error = %e,
+                    "question-kind: the question could not be embedded in the classifier space; \
+                     the walk runs unfiltered"
+                );
+                return WalkSelection::unfiltered(
+                    KindSource::ClassifierUnavailable,
+                    None,
+                    policy_source,
+                );
+            }
+        };
+    let (kind, score) = match classifier.classify(&kind_vec) {
         (Some(kind), score) => (kind, score),
         (None, score) => {
             return WalkSelection::unfiltered(KindSource::Abstained, score, policy_source)
         }
     };
-    let race = classifier.race(question_embedding).unwrap_or_default();
+    let race = classifier.race(&kind_vec).unwrap_or_default();
     let (min_sim, _) = classifier.gates();
     match admit_winner(kind, &race, min_sim, policy, inventory) {
         Admission::Fits => WalkSelection {

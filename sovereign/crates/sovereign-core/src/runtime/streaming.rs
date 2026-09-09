@@ -2288,7 +2288,14 @@ impl Runtime {
                     if let Some(g) = gaps.first_mut() {
                         let ctx = crate::runtime::acquisition::RouteContext {
                             engine: engine_for_ledger.clone(),
-                            coverage: Some(g.coverage),
+                            // The PROBE's own verdict, not `g.coverage`
+                            // — that field is already
+                            // `probe.unwrap_or(ClaimUncovered)`, so
+                            // passing it would tell the resolver an
+                            // authority judgement was made on turns
+                            // where the probe never ran (see
+                            // `RouteContext::coverage`).
+                            coverage: probe,
                         };
                         // Resolve on the demand's RAW text (the
                         // question / entity), not the display

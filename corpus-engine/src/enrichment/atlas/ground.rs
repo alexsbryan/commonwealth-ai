@@ -483,9 +483,20 @@ pub async fn ground(
     // name under different parents cannot collide, and by the parsed
     // SELECTOR so the addressing scheme travels with the request instead of
     // being re-derived downstream.
+    // The 5th element is the atlas's EXACT `section_id -> chunk ids` join,
+    // captured here because this is the only place the graph that owns the
+    // manifest is in scope. Filled once per key; empty for a `RowId` selector
+    // and for a corpus whose join was never backfilled.
     let mut chunk_scores: HashMap<
         (EvidenceSite, ChunkSelector),
-        (f32, String, Vec<String>, Vec<String>),
+        (
+            f32,
+            String,
+            Vec<String>,
+            Vec<String>,
+            Vec<u64>,
+            Vec<(f32, String)>,
+        ),
     > = HashMap::new();
     let mut summaries: Vec<SummaryNode> = Vec::new();
     for ((atlas_id, atom_id), reach) in &neighborhood {
@@ -530,16 +541,33 @@ pub async fn ground(
                 continue;
             }
             let preview = ev.passage_preview().trim();
-            let key = (graph.site().clone(), ChunkSelector::parse(chunk_id));
+            let selector = ChunkSelector::parse(chunk_id);
+            let section_rows = match &selector {
+                ChunkSelector::Section(sec) => graph.section_chunk_ids(sec).to_vec(),
+                ChunkSelector::RowId(_) => Vec::new(),
+            };
+            let key = (graph.site().clone(), selector);
             let entry = chunk_scores.entry(key).or_insert((
                 0.0,
                 preview.to_string(),
                 Vec::new(),
                 Vec::new(),
+                section_rows,
+                Vec::new(),
             ));
             entry.0 += reach.weight;
             if preview.len() > entry.1.len() {
                 entry.1 = preview.to_string();
+            }
+            // Every citing atom's preview pins, not just the wordiest — see
+            // `ChunkRequest::passage_previews`. Carried WITH the citing atom's
+            // reach weight, because "which paragraph of this section did the
+            // walk actually care about" is the walk's own ranking and summing
+            // it away is what left the pin to whichever atom was wordiest.
+            // Capped so one heavily-cited section cannot make the pin scan
+            // unbounded.
+            if !preview.is_empty() && !entry.5.iter().any(|(_, p)| p == preview) {
+                entry.5.push((reach.weight, preview.to_string()));
             }
             entry.2.push(atom_id.clone());
             if let Some(line) = verbatim.as_ref() {
@@ -556,13 +584,23 @@ pub async fn ground(
     let mut requests: Vec<ChunkRequest> = chunk_scores
         .into_iter()
         .map(
-            |((site, selector), (score, preview, motivating, verbatim))| ChunkRequest {
-                site,
-                selector,
-                passage_preview: preview,
-                score,
-                motivating_atoms: motivating,
-                verbatim_excerpts: verbatim,
+            |(
+                (site, selector),
+                (score, preview, motivating, verbatim, section_rows, mut previews),
+            )| {
+                previews.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                previews.truncate(16);
+                let previews: Vec<String> = previews.into_iter().map(|(_, p)| p).collect();
+                ChunkRequest {
+                    site,
+                    selector,
+                    passage_preview: preview,
+                    passage_previews: previews,
+                    score,
+                    motivating_atoms: motivating,
+                    verbatim_excerpts: verbatim,
+                    section_rows,
+                }
             },
         )
         .collect();

@@ -149,9 +149,20 @@ fn the_registry_still_reports_the_gaps_it_was_minted_to_show() {
         "no instrument is unmeasured — either every cost was timed, or the field is being \
          filled in with numbers nobody measured"
     );
+    // The third gap this test was minted to show — instruments running in no
+    // venue — was CLOSED, honestly, by e4488491d ("four soak-family rows were
+    // wrong about themselves") and 7aba1bf8d (the concurrency lane). So the
+    // assertion inverts: every row declares a venue, and a new row that does
+    // not is the regression. Keeping the old `!nowhere().is_empty()` would
+    // have meant a test that fails BECAUSE the work got done, which is the
+    // opposite of a ratchet.
+    //
+    // Failing input: delete the `runs_in` line from any `[[instrument]]` in
+    // `quality/instruments.toml`.
     assert!(
-        !r.nowhere().is_empty(),
-        "nothing runs nowhere — the three off-map soaks were the reason this registry exists"
+        r.nowhere().is_empty(),
+        "these instruments declare no venue, so nothing ever runs them: {:?}",
+        r.nowhere().iter().map(|i| &i.id).collect::<Vec<_>>()
     );
 }
 

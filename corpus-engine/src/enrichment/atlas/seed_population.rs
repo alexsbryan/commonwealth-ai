@@ -59,8 +59,12 @@ use crate::enrichment::ontology::{NavigationPolicy, TypeKind};
 /// `Summary` joined the `thematic` row's seed kinds, which is exactly the
 /// "a kind added to a default row" case above — every table written under
 /// `1` derives a population its map no longer agrees with, so it is stale
-/// by definition and rebuilds on next read.
-pub const SEED_POPULATION_SCHEMA: u32 = 2;
+/// by definition and rebuilds on next read. `3` is the same case once more:
+/// `Event` and `Relation` joined the `lookup` row on 2026-09-09, closing the
+/// hole where a third of a section-extracted atlas carried no vector at all
+/// (`chaos-secret-agent`: `ann.embedded_atoms` 151 against 226 atoms, the
+/// missing 75 being Event 33 + Relation 20 + Question 22).
+pub const SEED_POPULATION_SCHEMA: u32 = 3;
 
 /// The marker file, beside `atoms_ann.lance` in the atlas dir. Small on
 /// purpose: `AtlasContextManager::init()` stats it once per installed atlas
@@ -301,6 +305,8 @@ mod tests {
             pop.kinds,
             BTreeSet::from([
                 AtomType::Entity,
+                AtomType::Event,
+                AtomType::Relation,
                 AtomType::ArgumentReconstruction,
                 AtomType::Configuration,
                 AtomType::Claim,
@@ -449,8 +455,13 @@ mod tests {
         );
 
         // The other direction: a map that asks for a kind the table was never
-        // seeded on (Event is in no pre-registered row) is stale.
-        let wider = narrower.replace(r#""kinds":["Claim"]"#, r#""kinds":["Claim","Event"]"#);
+        // seeded on is stale. `Question` is that kind — it is in no
+        // pre-registered row, deliberately, and the reachability ratchet
+        // `every_kind_a_pipeline_emits_is_reachable_by_some_row` names it in
+        // `UNREACHABLE_BY_DESIGN`. (This read `Event` until 2026-09-09, when
+        // `Event` and `Relation` joined the `lookup` row and stopped being
+        // absent from the union.)
+        let wider = narrower.replace(r#""kinds":["Claim"]"#, r#""kinds":["Claim","Question"]"#);
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(tmp.path().join(AtlasOntologyFile::FILE), wider).expect("write ontology");
         assert!(

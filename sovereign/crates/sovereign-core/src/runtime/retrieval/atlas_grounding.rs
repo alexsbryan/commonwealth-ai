@@ -285,7 +285,7 @@ impl Runtime {
         let embed = crate::embed_fn::inference_to_embed_query_fn(Arc::clone(&self.inference));
         let inventory = corpus_engine::enrichment::atlas::AtlasInventory::of(&graph_refs);
         let selection =
-            ground::select_walk(embedding, &policy, policy_source, &inventory, Some(&embed)).await;
+            ground::select_walk(query_text, &policy, policy_source, &inventory, Some(&embed)).await;
         tracing::debug!(
             target: "retrieval_audit",
             label,

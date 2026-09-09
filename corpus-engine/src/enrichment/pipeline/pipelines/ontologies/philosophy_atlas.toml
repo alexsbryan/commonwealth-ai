@@ -93,7 +93,14 @@ exemplars = [
 ]
 
 [navigation.lookup]
-seed = { kinds = ["Entity"] }
+# Event and Relation join Entity here (2026-09-09). A lookup is "give me the
+# entry for this thing", and in a section-extracted corpus the thing asked
+# about is as often something that HAPPENED or a way two entities STAND as it
+# is a named entity. They were emitted by every build and named by no row, so
+# `seed_population` derived a table without them and no walk could reach one:
+# on `chaos-secret-agent`, 75 of 226 atoms had no vector, and the atom that
+# answers the bench's killer-weapon probe was one of them.
+seed = { kinds = ["Entity", "Event", "Relation"] }
 walk = ["Involves"]
 hops = 1
 budget = 12

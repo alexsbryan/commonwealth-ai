@@ -125,6 +125,78 @@ fn builtin_navigation_rows_name_only_kinds_the_pipeline_emits() {
     assert_eq!(rows_on, 21);
 }
 
+/// The CONVERSE of the ratchet above, and the one that was missing: every atom
+/// kind a pipeline EMITS must be named as a seed by some ON row, or be listed
+/// here as deliberately unreachable.
+///
+/// The forward rule (rows ⊆ emits) stops a map promising a walk its atlases
+/// cannot serve. Nothing stopped the opposite, and the opposite is what
+/// happened: `section_extraction_kinds()` has emitted `Event`, `Relation` and
+/// `Question` since it existed, no built-in row named any of the three, and
+/// `seed_population` derives the ANN table from the union of the rows' seed
+/// kinds — so a third of every section-extracted atlas had no vector and no
+/// walk could reach it. Measured on `chaos-secret-agent` 2026-09-09:
+/// `atlas status --json` reports `ann.embedded_atoms` 151 against 226 atoms,
+/// the missing 75 being exactly Event 33 + Relation 20 + Question 22. The
+/// bench probe `present-killer-weapon` is answered by one of them (event-0033,
+/// "…with a carving knife"), which is why the lane read a false abstention on
+/// an answerable question.
+///
+/// Failing input: drop `Event` from any genre's `lookup` seed list.
+#[test]
+fn every_kind_a_pipeline_emits_is_reachable_by_some_row() {
+    // Deliberately unreachable, with the reason. A kind belongs here only when
+    // no measured question needs it — adding a kind to a seed list with no
+    // failing input is a widening nobody asked for (ARCH §18.1).
+    //
+    // `Question`: the work's OWN open questions ("Why did Stevie set off
+    // fireworks?"), raised by the text rather than asserted by it. No probe on
+    // any bank is answered by one, and seeding them would put the corpus's
+    // questions into a cosine race against the reader's.
+    const UNREACHABLE_BY_DESIGN: &[AtomType] = &[AtomType::Question];
+
+    let registry = PipelineRegistry::builtin();
+    let mut checked = 0;
+    let mut orphans: Vec<String> = Vec::new();
+    for id in registry.pipeline_ids() {
+        if !id.ends_with("_atlas") {
+            continue;
+        }
+        let p = registry.get(id).unwrap();
+        let emits = p.emits();
+        let map = p.declared_ontology();
+        for kind in &emits.atoms {
+            if UNREACHABLE_BY_DESIGN.contains(kind) {
+                continue;
+            }
+            let reachable = map.navigation.rows().any(|(_, row)| {
+                if row.exemplars.is_empty() {
+                    return false; // switched off by name
+                }
+                row.seed.kinds.contains(kind)
+                    // The enumeration row seeds the DECLARED types, which are
+                    // entity subtypes — so it reaches Entity and nothing else.
+                    || (row.seed.declared && *kind == AtomType::Entity)
+                    // A Summary reaches the reader by COMPOSITION as well as by
+                    // seeding: `summary_sources` is the late append, and a row
+                    // that lists one serves summaries whether or not it seeds
+                    // them (engineering's tension row is the case in point).
+                    || (*kind == AtomType::Summary && !row.summary_sources.is_empty())
+            });
+            if !reachable {
+                orphans.push(format!("{id}: {kind:?}"));
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked >= 5, "checked {checked} atlas pipelines");
+    assert!(
+        orphans.is_empty(),
+        "these kinds are built and then unreachable — every one is atoms written \
+         to disk that no walk can seed and no reader can ever see: {orphans:?}"
+    );
+}
+
 /// The rows say what the build emits, genre by genre: philosophy seeds
 /// tension on reconstructed arguments and composes summaries on it (the
 /// order's spec); referential, which skips Phase 8, seeds no Configuration;
@@ -163,24 +235,20 @@ fn builtin_navigation_rows_follow_each_genres_emit_set() {
     assert_eq!(on, vec![QuestionKind::Tension]);
     assert_eq!(engineering.tension.seed.kinds, vec![AtomType::Claim]);
     // Its emit set is the genre's deciders, not a hand list: claims from
-    // Phase 1, Summary from the seed table, and Configuration because the
-    // genre inherits the Phase-8 flag (`runs_configuration_phase` is `true`
-    // by genre default) — whether Phase 8 finds anything to configure over
-    // claims alone is the build's business (the two installed atlases carry
-    // none), and the ratchet asks what CAN be emitted.
+    // Phase 1 and Summary from the seed table. `Configuration` was here until
+    // 2026-09-09, on the genre-default Phase-8 flag, and the comment that sat
+    // in its place already recorded the tell — "the two installed atlases
+    // carry none". The reachability ratchet turned that observation into a
+    // failure: this genre switches off all four rows that could seed a
+    // Configuration, so the phase spent a model call per build on atoms no
+    // walk could reach. `EngineeringGenre::runs_configuration_phase` is now
+    // `false`, and `Configures` leaves the edge set with it.
     let emits = builtin("engineering_atlas").emits();
     assert_eq!(
         emits.atoms,
-        [AtomType::Claim, AtomType::Configuration, AtomType::Summary]
-            .into_iter()
-            .collect()
+        [AtomType::Claim, AtomType::Summary].into_iter().collect()
     );
-    assert_eq!(
-        emits.edges,
-        [EdgeType::Tension, EdgeType::Configures]
-            .into_iter()
-            .collect()
-    );
+    assert_eq!(emits.edges, [EdgeType::Tension].into_iter().collect());
     assert!(emits.entity_types.is_empty());
     assert!(!emits.declares_types);
 }

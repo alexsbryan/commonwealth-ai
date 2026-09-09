@@ -449,8 +449,9 @@ pub(crate) fn finish_demands(
             // `Retrieved` is WEAK evidence of topic coverage — top-k
             // retrieval returns something for any query, so an OOD
             // question over distractors still stamps Retrieved. When the
-            // probe ran, its calibrated nearest-sim verdict (0.55 floor,
-            // measured clean split 2026-07-19) outranks the affinity
+            // probe ran, its calibrated nearest-sim verdict (0.49 floor,
+            // measured clean split 2026-07-19, re-measured 2026-09-09 —
+            // see `coverage_near_sim`) outranks the affinity
             // stamp: an in-topic claim gap reads ~0.71 → ClaimUncovered,
             // an off-topic query reads 0.17-0.49 → TopicUncovered
             // (observed mis-route: ood-australia-capital gapped
@@ -521,13 +522,54 @@ pub(crate) fn coverage_probe_enabled() -> bool {
 
 /// Similarity floor separating "an installed corpus is near this
 /// topic" (ClaimUncovered) from "no corpus touches it"
-/// (TopicUncovered). Tunable via `SOVEREIGN_COVERAGE_NEAR_SIM`;
-/// default 0.55, to be calibrated against the chaos absent banks.
+/// (TopicUncovered). Tunable via `SOVEREIGN_COVERAGE_NEAR_SIM`.
+///
+/// **0.49 is the calibration this line asked for and had not had.** It read
+/// `0.55, to be calibrated against the chaos absent banks` from the day it was
+/// written. Run 2026-09-09 over the whole `secret_agent` bank — 43 questions,
+/// both classes, `qwen-embedding-0.6b`, nearest-chunk cosine, the same signal
+/// the probe reads:
+///
+/// ```text
+///   in-topic   (38 q)   0.5089 .. 0.7982
+///   off-topic  ( 5 q)   0.2015 .. 0.3323
+/// ```
+///
+/// **0.55 sat inside the in-topic band** — six in-topic questions scored under
+/// it, and one of them cost a wrong answer. Measured on the smoke subset the
+/// same day: `distract-bomb-maker` ("which member of the anarchist circle is
+/// the bomb-maker?", squarely in-corpus) probed 0.5475, was called
+/// `TopicUncovered`, and `gk_rescue` replaced a correct abstention with a
+/// parametric answer the judge scored wrong. A wrong answer reached the reader
+/// on a question the corpus can answer.
+///
+/// **The boundary rule, fixed before the effect was read: the top of the
+/// observed OFF-TOPIC band, not the midpoint of the gap.** The midpoint of the
+/// 2026-09-09 gap is 0.42, and 0.42 would have been wrong — the earlier
+/// calibration recorded in this module (2026-07-19, cited at the
+/// `Retrieved`-affinity comment above) observed off-topic queries reading as
+/// high as **0.49**, so a 0.42 floor would call a genuinely off-topic question
+/// covered and suppress the rescue that is right for it. Taking the top of the
+/// union of both observed off-topic ranges — 0.49 — is the only value
+/// consistent with BOTH runs: no observed off-topic question is called
+/// covered, and no observed in-topic question (min 0.5089) is called
+/// uncovered. The two classes separate in (0.49, 0.5089) and nowhere wider.
+///
+/// The asymmetry that decides ties: licensing the rescue when the topic IS
+/// covered puts a wrong answer in front of the reader (a red line); declining
+/// it when the topic is genuinely uncovered costs a caveated general-knowledge
+/// answer and keeps an honest abstention with acquisition routes (a TRACKED
+/// metric). When in doubt the floor goes DOWN.
+///
+/// Limits, stated: two corpora, one embedding model, and the gap between the
+/// classes is 0.019 wide. That is not a comfortable margin — the finding is
+/// the BAND, and a third corpus that lands inside it means this scalar cannot
+/// carry the decision alone and the rescue needs a second signal.
 fn coverage_near_sim() -> f32 {
     std::env::var("SOVEREIGN_COVERAGE_NEAR_SIM")
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(0.55)
+        .unwrap_or(0.49)
 }
 
 /// Bound on corpora probed per turn (worst-case latency guard).

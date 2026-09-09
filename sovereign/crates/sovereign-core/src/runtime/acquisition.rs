@@ -102,23 +102,62 @@ impl AcquisitionCatalog {
     }
 }
 
+/// Does the turn's coverage verdict place the authority for this gap
+/// INSIDE the corpora the user already consulted?
+///
+/// `ClaimUncovered` is not "we found nothing" — it is the probe's
+/// positive finding that an ENABLED corpus has a region within
+/// `epistemic::coverage_near_sim` of the question and the claim is
+/// still absent from it. The source the user chose is on-topic and
+/// does not say. Nothing the resolver can name is a better authority
+/// on that subject than the source already open, so the honest
+/// conjecture is none at all (ARCH §18.3: absence is reported, never
+/// defaulted).
+///
+/// **This is the same discriminator `gk_rescue::rescue_precondition_met`
+/// already uses, applied to the same question.** That guard asks "can a
+/// source outside the enabled corpus settle this?" of parametric
+/// memory, and answers no on `ClaimUncovered` — its own doc names the
+/// failure family this reproduces: "labelled-but-confident IN-WORLD
+/// fabrications ('Winnie's former lover was Eddie Henderson'). Those
+/// turns probe `ClaimUncovered` (in-topic, ~0.71 nearest-sim) and are
+/// structurally NEVER rescued here." An acquisition route is the same
+/// assertion in a different costume — "some source out there holds
+/// this" — and it was the one path still making it. One decider, two
+/// consumers (ARCH §10.6).
+///
+/// `None` is NOT this case. It means no probe verdict reached the
+/// resolver (probe disabled, no engine, or a legacy call site), so no
+/// authority judgement was made and none may be asserted: those turns
+/// keep the pre-existing behaviour rather than going silently mute.
+fn authority_already_installed(coverage: Option<GapCoverage>) -> bool {
+    matches!(coverage, Some(GapCoverage::ClaimUncovered))
+}
+
 /// Rank routes for one gap. `gap_embedding` is the gap statement's
 /// embedding; `entry_embeddings` parallel `catalog.entries`. Returns
 /// the top routes above a floor, biased by the coverage verdict:
 /// `TopicUncovered` prefers topic-acquiring routes (a recipe or
-/// connector could supply the whole topic); `ClaimUncovered` prefers
-/// web/document routes (the topic exists locally — the specific claim
-/// needs a deeper or fresher source). Web and provide-document are
+/// connector could supply the whole topic). A probe-confirmed
+/// `ClaimUncovered` returns NOTHING — see
+/// [`authority_already_installed`]. Web and provide-document are
 /// synthesized here (they need the gap text, not a catalog row).
+///
+/// `coverage` is `None` when no probe verdict reached this turn; the
+/// ranking then falls back to the `ClaimUncovered` bias as it always
+/// has, but the silence above is never asserted on a guess.
 pub(crate) fn resolve_routes(
     gap_statement: &str,
-    coverage: GapCoverage,
+    coverage: Option<GapCoverage>,
     catalog: &AcquisitionCatalog,
     gap_embedding: &[f32],
     entry_embeddings: &[Vec<f32>],
 ) -> Vec<AcquisitionRoute> {
     const ROUTE_FLOOR: f32 = 0.35;
     const MAX_ROUTES: usize = 2;
+    // The bias/reservation half still needs a concrete verdict; the
+    // less dramatic claim is the historical default for an absent one.
+    let bias = coverage.unwrap_or(GapCoverage::ClaimUncovered);
     let mut scored: Vec<(f32, &CatalogEntry)> = catalog
         .entries
         .iter()
@@ -131,7 +170,7 @@ pub(crate) fn resolve_routes(
     // Coverage bias: a multiplicative nudge, not a hard filter — a
     // very strong recipe match should survive a ClaimUncovered bias.
     for (sim, e) in scored.iter_mut() {
-        let aligned = match coverage {
+        let aligned = match bias {
             GapCoverage::TopicUncovered => e.acquires_topic,
             GapCoverage::ClaimUncovered => !e.acquires_topic,
         };
@@ -169,11 +208,28 @@ pub(crate) fn resolve_routes(
         slate = %slate.join(" | "),
         "acquisition ranking slate (post-bias)"
     );
-    // On ClaimUncovered the synthesized web-search conjecture is
-    // guaranteed a slot — the topic exists locally, so "check a
-    // fresher/deeper source" must never be squeezed out by two
-    // mediocre catalog matches (caught by the unit test 2026-07-18).
-    let catalog_cap = match coverage {
+    // The corpus the user consulted IS the authority and does not hold
+    // the claim: no route is honest. Decided AFTER the slate so the
+    // withheld candidates stay readable — this branch trades away real
+    // conjectures (a second broad source, a fresher web page) and that
+    // cost has to be visible at `info`, not inferred from an absence.
+    if authority_already_installed(coverage) {
+        tracing::info!(
+            target: "epistemic.ledger",
+            gap = %gap_statement.chars().take(60).collect::<String>(),
+            withheld = %slate.join(" | "),
+            "acquisition declined — an enabled corpus is the authority here and lacks the claim; no source would settle it"
+        );
+        return Vec::new();
+    }
+    // Under the ClaimUncovered BIAS the synthesized web-search
+    // conjecture is guaranteed a slot, so "check a fresher/deeper
+    // source" is never squeezed out by two mediocre catalog matches
+    // (caught by the unit test 2026-07-18). Since 2026-09-09 that bias
+    // is reachable only via `coverage: None` — a probe-CONFIRMED
+    // ClaimUncovered returned above — so this is the no-verdict path,
+    // where the resolver may not assert that nothing would help.
+    let catalog_cap = match bias {
         GapCoverage::ClaimUncovered => MAX_ROUTES - 1,
         GapCoverage::TopicUncovered => MAX_ROUTES,
     };
@@ -182,7 +238,7 @@ pub(crate) fn resolve_routes(
         .take(catalog_cap)
         .map(|(_, e)| e.route.clone())
         .collect();
-    if matches!(coverage, GapCoverage::ClaimUncovered)
+    if matches!(bias, GapCoverage::ClaimUncovered)
         && !routes
             .iter()
             .any(|r| matches!(r, AcquisitionRoute::WebSearch { .. }))
@@ -276,8 +332,13 @@ pub struct RouteContext {
     /// Engine handle for the recipe catalog + installed-corpus diff.
     /// `None` = connectors-only catalog (still useful).
     pub engine: Option<Arc<corpus_engine::CorpusEngine>>,
-    /// The turn's coverage-probe verdict, when one ran. `None`
-    /// defaults to `ClaimUncovered` — the less dramatic claim.
+    /// The turn's coverage-probe verdict, when one ran. **Pass the
+    /// probe's own `Option`, never a defaulted stand-in** — `Gap::
+    /// coverage` is already `probe.unwrap_or(ClaimUncovered)`, and
+    /// feeding that back in would report "no source can settle this"
+    /// (see [`authority_already_installed`]) on turns where the probe
+    /// never ran. `None` means exactly that: no verdict, so no
+    /// authority claim, so the pre-probe ranking behaviour.
     pub coverage: Option<GapCoverage>,
 }
 
@@ -320,7 +381,7 @@ pub async fn routes_for_gap(
             return Vec::new();
         }
     };
-    let coverage = ctx.coverage.unwrap_or(GapCoverage::ClaimUncovered);
+    let coverage = ctx.coverage;
     let routes = resolve_routes(
         gap_text,
         coverage,
@@ -457,7 +518,7 @@ mod tests {
         gap[0] = 1.0;
         let routes = resolve_routes(
             "philosophy of mind",
-            GapCoverage::TopicUncovered,
+            Some(GapCoverage::TopicUncovered),
             &c,
             &gap,
             &entry_embs,
@@ -501,7 +562,7 @@ mod tests {
             .collect();
         let routes = resolve_routes(
             "capital of Australia",
-            GapCoverage::TopicUncovered,
+            Some(GapCoverage::TopicUncovered),
             &c,
             &gap,
             &entry_embs,
@@ -527,7 +588,7 @@ mod tests {
             .collect();
         let routes = resolve_routes(
             "what did I tell you about my project",
-            GapCoverage::TopicUncovered,
+            Some(GapCoverage::TopicUncovered),
             &c,
             &gap,
             &entry_embs_low,
@@ -540,8 +601,16 @@ mod tests {
         );
     }
 
+    /// The reserved web-search slot survives EXACTLY where the
+    /// authority judgement was never made: no probe verdict reached the
+    /// resolver (`coverage: None` — the legacy `system_message` /
+    /// collaboration call sites, or a disabled probe). Was
+    /// `claim_uncovered_always_carries_web_search`; the reservation it
+    /// pins is unchanged, its precondition is now "no verdict" rather
+    /// than "ClaimUncovered", because a probe-confirmed ClaimUncovered
+    /// resolves nothing at all (see the test below).
     #[test]
-    fn claim_uncovered_always_carries_web_search() {
+    fn web_search_is_reserved_when_no_probe_verdict_reached_the_resolver() {
         let c = catalog();
         let dims = c.entries.len() + 1;
         // Entries live on axes 0..n; the gap on the extra axis —
@@ -552,30 +621,119 @@ mod tests {
             .collect();
         let mut gap = vec![0.0; dims];
         gap[dims - 1] = 1.0;
-        let routes = resolve_routes(
-            "what did the filing say",
-            GapCoverage::ClaimUncovered,
-            &c,
-            &gap,
-            &entry_embs,
-        );
+        let routes = resolve_routes("what did the filing say", None, &c, &gap, &entry_embs);
         assert!(routes
             .iter()
             .any(|r| matches!(r, AcquisitionRoute::WebSearch { .. })));
 
         // And even when catalog entries DO rank (gap aligned with one),
-        // ClaimUncovered still reserves the web-search slot.
+        // the no-verdict path still reserves the web-search slot.
         let mut aligned = vec![0.0; dims];
         aligned[0] = 1.0;
-        let routes = resolve_routes(
-            "what did the filing say",
-            GapCoverage::ClaimUncovered,
-            &c,
-            &aligned,
-            &entry_embs,
-        );
+        let routes = resolve_routes("what did the filing say", None, &c, &aligned, &entry_embs);
         assert!(routes
             .iter()
             .any(|r| matches!(r, AcquisitionRoute::WebSearch { .. })));
+    }
+
+    /// Entry embeddings giving each catalog entry an exact cosine
+    /// against a gap vector that is 1.0 on the last (shared) axis.
+    /// `sim_of(entry) -> f32` names the similarity per entry.
+    fn embeddings_with_sims(
+        c: &AcquisitionCatalog,
+        sim_of: impl Fn(&CatalogEntry) -> f32,
+    ) -> (Vec<f32>, Vec<Vec<f32>>) {
+        let dims = c.entries.len() + 1;
+        let mut gap = vec![0.0; dims];
+        gap[dims - 1] = 1.0;
+        let embs = c
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let sim = sim_of(e);
+                let mut v = vec![0.0; dims];
+                v[i] = (1.0 - sim * sim).sqrt();
+                v[dims - 1] = sim;
+                v
+            })
+            .collect();
+        (gap, embs)
+    }
+
+    /// RED-LINE 4, the unknowable half. The chaos smoke run on
+    /// 2026-09-09 resolved, for `absent-embassy-country`:
+    ///
+    /// ```text
+    /// acquisition routes resolved routes=[InstallRecipe { recipe_id:
+    ///   "federal-register-presidential", .. }, WebSearch { queries:
+    ///   ["Which specific country's embassy employs Mr Vladimir?"] }]
+    ///   coverage=ClaimUncovered
+    /// ```
+    ///
+    /// Conrad never names the country; no source holds it. The US
+    /// Federal Register cleared the 0.35 floor on mush-level similarity
+    /// (measured over the live catalog the same night: every labeled
+    /// probe's top-1 sits at 0.33-0.51 whatever its class, so the
+    /// catalog carries NO signal separating the two — the discriminator
+    /// is the coverage probe), and the web-search slot was reserved
+    /// unconditionally. Both halves are gone: a probe-confirmed
+    /// `ClaimUncovered` means the enabled corpus is the authority and
+    /// lacks the claim, so nothing is resolved.
+    #[test]
+    fn claim_uncovered_over_the_authority_resolves_no_routes() {
+        let c = catalog();
+        // The observed shape: one recipe clears the floor at mush level
+        // (0.47 raw, exactly where `federal-register-presidential`
+        // landed), connectors just under it.
+        let (gap, embs) = embeddings_with_sims(&c, |e| if e.content_bearing { 0.47 } else { 0.34 });
+
+        // Watched to fail before the fix: this returned
+        // [InstallRecipe { "sep" }, WebSearch { .. }].
+        let routes = resolve_routes(
+            "Which specific country's embassy employs Mr Vladimir?",
+            Some(GapCoverage::ClaimUncovered),
+            &c,
+            &gap,
+            &embs,
+        );
+        assert!(
+            routes.is_empty(),
+            "an enabled corpus is the authority and lacks the claim — no route is honest: {routes:?}"
+        );
+
+        // The scorer reads `gaps[0].routes[0]`; an empty set is what it
+        // scores as the `unknowable` match. Pin the property it reads,
+        // not just the length.
+        assert!(routes.first().is_none());
+    }
+
+    /// RED-LINE 4, the satisfiable half — the direction the fix must
+    /// NOT move. `ood-australia-capital` ("What is the capital of
+    /// Australia?", `acquisition_class = "install_recipe"`) probes
+    /// off-topic against the sealed Conrad corpus (0.2015..0.3323 over
+    /// the five OOD probes, `epistemic::coverage_near_sim`), so its
+    /// verdict is `TopicUncovered` and a floor-clearing recipe must
+    /// still be conjectured — at the same mush-level similarity that
+    /// the ClaimUncovered test above rejects. The coverage verdict is
+    /// the whole difference between the two.
+    #[test]
+    fn topic_uncovered_still_conjectures_the_recipe() {
+        let c = catalog();
+        let (gap, embs) = embeddings_with_sims(&c, |e| if e.content_bearing { 0.47 } else { 0.34 });
+        let routes = resolve_routes(
+            "What is the capital of Australia?",
+            Some(GapCoverage::TopicUncovered),
+            &c,
+            &gap,
+            &embs,
+        );
+        assert!(
+            matches!(
+                routes.first(),
+                Some(AcquisitionRoute::InstallRecipe { recipe_id, .. }) if recipe_id == "sep"
+            ),
+            "an uncovered topic must still name a source to install: {routes:?}"
+        );
     }
 }

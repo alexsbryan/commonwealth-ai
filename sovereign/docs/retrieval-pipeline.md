@@ -131,7 +131,7 @@ asserts every step-level gate appears here.
 | - | `SOVEREIGN_FORENSIC` | off | =1 enables audit_pipeline_stage composition snapshots between steps. |
 | - | `SOVEREIGN_EPISTEMIC_STATE` | on | Post-pipeline: assemble the per-turn epistemic ledger (EPISTEMIC_STATE.md) into message metadata. Pure collation, no model calls; =0 disables. |
 | - | `SOVEREIGN_COVERAGE_PROBE` | on | Post-pipeline, gap/abstain turns only: cross-corpus nearest-chunk-cosine probe classifying a gap as TopicUncovered vs ClaimUncovered. =0 disables. |
-| - | `SOVEREIGN_COVERAGE_NEAR_SIM` | 0.55 | Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrate against the chaos absent banks). |
+| - | `SOVEREIGN_COVERAGE_NEAR_SIM` | 0.49 | Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrated 2026-09-09 on the secret_agent bank; the boundary is the top of the observed off-topic band across both calibration runs). |
 
 ## Verdict buckets (2026-06-10 flag audit)
 

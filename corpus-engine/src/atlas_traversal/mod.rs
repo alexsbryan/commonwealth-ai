@@ -39,5 +39,5 @@ pub mod spans;
 pub use brief::{assemble_brief, depth_frame_records, Brief};
 pub use classifier::{classify_query, classify_query_with, QueryPlan, QueryTarget};
 pub use engine::{traverse, TraversalResult};
-pub use question_kind::{KindScore, KindSource, QuestionKindClassifier};
+pub use question_kind::{kind_space_embedding, KindScore, KindSource, QuestionKindClassifier};
 pub use spans::{detect_atom_spans, AtomSpan};

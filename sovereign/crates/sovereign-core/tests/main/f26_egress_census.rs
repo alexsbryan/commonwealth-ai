@@ -200,7 +200,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // reproduction of a tombstone stranded by the seal that retired it, over
     // the same loopback `internal_router`. The partial-pull control beside it
     // feeds the fold directly and builds no client.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 15),
+    // 15 -> 16 (aff5873f1, 2026-09-08, "retention is part of the fold"): the
+    // retention-on-projection regression drives the same two-node exchange
+    // over the same loopback `internal_router` as the fifteen before it. A
+    // `#[cfg(test)]` construction site in a src/ file, which the census
+    // counts; class unchanged, and nothing new leaves the machine.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 16),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests

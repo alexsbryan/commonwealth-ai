@@ -184,6 +184,19 @@ pub trait AtlasProvider: Send + Sync {
         None
     }
 
+    /// The chunk ids this atlas's `chapters.json` records for a section id —
+    /// the EXACT resolution of a [`ChunkSelector::Section`] evidence anchor.
+    ///
+    /// DEFAULTED to `&[]`, which is a real answer: a wiki-class store, an
+    /// in-memory graph and a corpus whose join was never filled by `svrn
+    /// enrich backfill-sections` all genuinely have no mapping, and the
+    /// resolver falls back to search and SAYS which path it took. What it must
+    /// never do is fall back silently — that is how the chunk an atom named
+    /// went missing for every literary corpus (ARCH §18.3).
+    fn section_chunk_ids(&self, _section_id: &str) -> &[u64] {
+        &[]
+    }
+
     fn has_ann_seed_table(&self) -> bool {
         self.ann_seed_table().is_some()
     }
@@ -266,6 +279,10 @@ impl AtlasProvider for AtlasGraph {
 
     fn summary_corpus_dir(&self) -> Option<std::path::PathBuf> {
         AtlasGraph::summary_corpus_dir(self)
+    }
+
+    fn section_chunk_ids(&self, section_id: &str) -> &[u64] {
+        AtlasGraph::section_rows(self, section_id)
     }
 }
 

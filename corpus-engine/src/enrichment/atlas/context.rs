@@ -33,11 +33,11 @@ use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::provider::NavigationSource;
 use crate::enrichment::atlas::store::LancePreload;
-use corpus_engine_vocab::ontology::NavigationPolicy;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
 use crate::ScoredChunk;
+use corpus_engine_vocab::ontology::NavigationPolicy;
 
 /// One pre-embedded atlas atom available to retrieval as a virtual
 /// chunk. Built by a loader, immutable after that.
@@ -121,6 +121,21 @@ pub struct AtlasGraph {
     /// graph, which is a real answer rather than a gap. One consumer — see
     /// [`Self::summary_corpus_dir`].
     index_root: Option<PathBuf>,
+    /// `section_id -> chunk ids`, read from this atlas's `chapters.json`
+    /// (`ChapterEntry::chunk_ids`) at load.
+    ///
+    /// This is the EXACT answer to "which chunks is `sec_0011`?", and it is
+    /// the answer [`ChunkRequest`]'s own doc has always promised — "resolved
+    /// by direct lookup in the article's chapters.json source, no FTS or
+    /// vector search needed". Until 2026-09-09 nothing read it, so the
+    /// resolver fell to searching the atom's passage preview and the chunk an
+    /// atom NAMED could lose to base retrieval and never reach the reader.
+    ///
+    /// Empty is a real answer, not a gap: an in-memory graph has no manifest,
+    /// and a corpus whose join was never filled by `svrn enrich
+    /// backfill-sections` genuinely has no mapping. The resolver reports which
+    /// path it took rather than defaulting silently (ARCH §18.3).
+    section_rows: Arc<HashMap<String, Vec<u64>>>,
     /// The navigation map this atlas walks under, kept APART from
     /// [`Self::ontology`] because [`Self::with_ontology`] drops a policy set
     /// that declares no types — right for every declared-type code path (I5),
@@ -211,6 +226,7 @@ impl AtlasGraph {
             ann: None,
             ontology: None,
             index_root: None,
+            section_rows: Arc::new(HashMap::new()),
             navigation: None,
         }
     }
@@ -257,6 +273,53 @@ impl AtlasGraph {
         self
     }
 
+    /// Attach the `section_id -> chunk ids` join this atlas's `chapters.json`
+    /// records. Read once at load; see [`Self::section_rows`].
+    pub fn with_section_rows(mut self, rows: HashMap<String, Vec<u64>>) -> Self {
+        self.section_rows = Arc::new(rows);
+        self
+    }
+
+    /// The chunk ids this atlas's manifest records for `section_id`, or `&[]`
+    /// when the corpus keeps no join. See the field doc for why empty is an
+    /// answer rather than a gap.
+    pub fn section_rows(&self, section_id: &str) -> &[u64] {
+        self.section_rows
+            .get(section_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Read `<atlas_dir>/../chapters.json` into the section join.
+    ///
+    /// The path is derived from the dir the caller already opened — same rule
+    /// as `index_root` above, so no call site can pass a manifest that
+    /// disagrees with the store it belongs to. A missing or unparseable
+    /// manifest yields an empty join, which the resolver reports.
+    fn read_section_rows(atlas_dir: &Path) -> HashMap<String, Vec<u64>> {
+        let Some(corpus_dir) = atlas_dir.parent() else {
+            return HashMap::new();
+        };
+        let path = corpus_dir.join("chapters.json");
+        match crate::enrichment::pipeline::chapter_manifest::ChapterManifest::load(&path) {
+            Ok(Some(m)) => m
+                .chapters
+                .into_iter()
+                .filter(|c| !c.chunk_ids.is_empty())
+                .map(|c| (c.id, c.chunk_ids))
+                .collect(),
+            Ok(None) => HashMap::new(),
+            Err(e) => {
+                tracing::warn!(
+                    manifest = %path.display(),
+                    error = %e,
+                    "atlas: chapters.json unreadable; section evidence falls back to search"
+                );
+                HashMap::new()
+            }
+        }
+    }
+
     /// The CHUNK corpus's dir, `<indexes>/<site.chunk_corpus()>` — where the
     /// `raptor` summary source reads (`ground::summaries`). Through
     /// [`EvidenceSite`] because the atlas id is NOT the corpus id for a
@@ -285,7 +348,8 @@ impl AtlasGraph {
         let root = atlas_dir.parent().and_then(|p| p.parent());
         let g = Self::from_lance_preload(atlas_corpus_id, preload)
             .with_ontology(ontology)
-            .with_declared_navigation(navigation);
+            .with_declared_navigation(navigation)
+            .with_section_rows(Self::read_section_rows(atlas_dir));
         Ok(match root {
             Some(r) => g.with_index_root(r),
             None => g,
@@ -990,6 +1054,29 @@ pub struct ChunkRequest {
     /// addresses the essay-judge's "wants direct primary text"
     /// finding from the 2026-05-06 calibration audit.
     pub verbatim_excerpts: Vec<String>,
+    /// EVERY distinct passage preview among the atoms that cited this section,
+    /// not just the longest one [`Self::passage_preview`] keeps.
+    ///
+    /// A section is cited by many atoms and each names a different paragraph.
+    /// `passage_preview` keeps the longest because the search fallback wants
+    /// one query string — but pinning the chunk INSIDE the section needs all
+    /// of them, or the pin lands on whichever atom happened to be wordiest.
+    /// Measured on `chaos-secret-agent`: `sec_0011` is Conrad's murder
+    /// chapter, 37 chunks, and the longest preview belongs to an atom about
+    /// the cold beef laid out for supper — so a single-preview pin returned
+    /// the carving knife on the supper table and not the one in Verloc's
+    /// breast, and the gate correctly refused a claim that passage does not
+    /// support.
+    pub passage_previews: Vec<String>,
+    /// EXACT chunk ids for a [`ChunkSelector::Section`] request, from the
+    /// atlas's `chapters.json` join — empty for a `RowId` request, and empty
+    /// for a corpus whose join was never filled.
+    ///
+    /// Filled at the PRODUCER, like `selector` itself, so the consumer never
+    /// re-derives a path rule. Non-empty means the resolver fetches the rows
+    /// the atom actually named instead of searching for its passage preview,
+    /// which is what this struct's own doc has always said it did.
+    pub section_rows: Vec<u64>,
 }
 
 /// Per-edge-type relevance weights for graph BFS. Tunable; a value
@@ -1579,6 +1666,44 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
                     text.push_str(o.name.trim());
                 }
             }
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        // Event and Relation render because the `lookup` row seeds on them,
+        // and the rule is the one the Position/State/Summary arms above were
+        // added to enforce: a kind a map can name as a seed and this function
+        // cannot render is a population the writer derives and then silently
+        // drops (ARCH §18.3).
+        //
+        // They were unrenderable — and therefore unseedable, and therefore
+        // unreachable by any walk — from the day the section-extraction schema
+        // began emitting them. Measured 2026-09-09 on `chaos-secret-agent`:
+        // `atlas status --json` reports `ann.embedded_atoms 151` against 226
+        // atoms, and the missing 75 are exactly Event 33 + Relation 20 +
+        // Question 22. The atom that answers the bench's `present-killer-weapon`
+        // ("With what kind of weapon does Winnie kill Adolf Verloc?") is
+        // event-0033, "Mrs Verloc stabs Mr Verloc in the breast with a carving
+        // knife" — it scores 0.5627 on that question against 0.3659 for the
+        // `Mr Verloc` Entity the seeder DID admit, so the corpus held the
+        // answer and no retrieval surface could carry it. The Relation twin is
+        // the bank's `present-stevie-relation`: relation-0001 scores 0.7521
+        // where the same entity scores 0.4302.
+        //
+        // Article-scoped like every other non-Entity kind: neither carries a
+        // name `score_sources` matches a source on.
+        AtomEnvelope::Event(e) => {
+            let mut text = format!("[Event: {}] {}", e.event_type.as_str_repr(), e.description);
+            text.push_str(&atom_attributes_suffix(&e.attributes));
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        AtomEnvelope::Relation(r) => {
+            let mut text = format!("[Relation: {}] {}", r.relation_type.as_str_repr(), r.label);
+            text.push_str(&atom_attributes_suffix(&r.attributes));
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }

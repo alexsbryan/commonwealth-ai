@@ -76,6 +76,17 @@ pub struct ResolveLedger {
     pub unresolvable: usize,
     /// Fetched, but no hit carried the article title the site asked for.
     pub title_mismatch: usize,
+    /// Section requests resolved EXACTLY, through the atlas's `chapters.json`
+    /// join. The path this resolver's doc always claimed.
+    pub section_exact: usize,
+    /// Of those, the ones where the atom's verbatim `passage_preview` pinned a
+    /// specific chunk inside the section rather than taking it in id order.
+    pub section_preview_pinned: usize,
+    /// Section requests that fell back to SEARCH because the corpus keeps no
+    /// join — `svrn enrich backfill-sections <corpus>` fills it. Counted, not
+    /// silent: a corpus resolving every anchor by search looks identical to one
+    /// resolving them exactly unless this number is on the ledger (ARCH §18.3).
+    pub section_searched: usize,
     /// Already emitted this turn.
     pub duplicate: usize,
 }
@@ -160,7 +171,69 @@ pub async fn resolve_evidence<F: EvidenceFetcher>(
                     continue;
                 }
             },
+            // EXACT FIRST. The atom names a section, `chapters.json` maps that
+            // section to chunk ids, and this struct's own doc has always said
+            // the request is "resolved by direct lookup in the article's
+            // chapters.json source — no FTS or vector search needed". It was
+            // not: every Section request went to `by_search`, so the chunk an
+            // atom NAMED competed with base retrieval on cosine and routinely
+            // lost. Measured on `chaos-secret-agent` 2026-09-09: the atom that
+            // answers the bench's killer-weapon probe cites `sec_0011`, and not
+            // one of the twelve chunks that reached the gate came from it.
+            //
+            // The section is the neighbourhood; the atom's `passage_preview` is
+            // a verbatim quote from the one chunk inside it, so containment
+            // pins the exact row and the rest of the section follows in id
+            // order for the round-robin below to draw on.
+            ChunkSelector::Section(_) if !req.section_rows.is_empty() => {
+                ledger.section_exact += 1;
+                let mut rows: Vec<u64> = req.section_rows.clone();
+                rows.sort_unstable();
+                let mut fetched: Vec<ScoredChunk> = Vec::new();
+                for row in rows {
+                    if let Some(chunk) = fetcher.by_row(corpus, row).await {
+                        fetched.push(chunk);
+                    }
+                }
+                if fetched.is_empty() {
+                    ledger.unresolvable += 1;
+                    continue;
+                }
+                // Pin on EVERY citing atom's preview, ranked by how many of
+                // them a chunk carries — one preview pins the wordiest atom's
+                // paragraph, which is not the same as the answering one.
+                let previews: Vec<&str> = req
+                    .passage_previews
+                    .iter()
+                    .map(|p| p.trim())
+                    .filter(|p| !p.is_empty())
+                    .chain(std::iter::once(req.passage_preview.trim()).filter(|p| !p.is_empty()))
+                    .collect();
+                // `passage_previews` arrives in DESCENDING citing-atom weight,
+                // so the first preview a chunk matches is its rank: the
+                // paragraph the walk cared about most comes first, and a chunk
+                // matching only a later (lighter) atom's preview cannot
+                // displace it. Unmatched chunks keep the section's id order
+                // behind them, for the round-robin's later laps.
+                let rank = |c: &ScoredChunk| {
+                    previews
+                        .iter()
+                        .position(|p| c.content.contains(*p))
+                        .unwrap_or(usize::MAX)
+                };
+                let mut scored: Vec<(usize, ScoredChunk)> =
+                    fetched.into_iter().map(|c| (rank(&c), c)).collect();
+                if scored.iter().any(|(r, _)| *r != usize::MAX) {
+                    ledger.section_preview_pinned += 1;
+                }
+                scored.sort_by_key(|(r, _)| *r);
+                let exact: Vec<ScoredChunk> = scored.into_iter().map(|(_, c)| c).collect();
+                for c in exact {
+                    realisable.push_back(c);
+                }
+            }
             ChunkSelector::Section(_) => {
+                ledger.section_searched += 1;
                 let query = format!("{} {}", req.site.label(), req.passage_preview);
                 let mut matched_any = false;
                 for hit in fetcher.by_search(corpus, &query, 30).await {
@@ -299,6 +372,9 @@ mod tests {
     /// `budget_exhausted`'s subtraction.
     #[test]
     fn the_resolve_ledger_accounts_for_every_request() {
+        // `section_*` are DIAGNOSTIC (which path a Section request took), not
+        // accounting terms — an exactly-resolved request is also counted in
+        // `added` — so they stay out of the sum below and are defaulted here.
         let l = ResolveLedger {
             considered: 24,
             added: 12,
@@ -306,6 +382,7 @@ mod tests {
             unresolvable: 2,
             title_mismatch: 1,
             duplicate: 1,
+            ..Default::default()
         };
         assert_eq!(l.budget_exhausted(), 5);
         assert_eq!(
@@ -378,6 +455,90 @@ mod tests {
         }
     }
 
+    /// A section-addressed request resolves through the atlas's `chapters.json`
+    /// join, and the atom's verbatim preview pins the exact chunk INSIDE the
+    /// section — no search, and the section's other chunks follow it.
+    ///
+    /// The defect this pins: every Section request went to `by_search`, so the
+    /// chunk an atom named was re-found by cosine and had to out-rank base
+    /// retrieval to survive the merge. Measured on `chaos-secret-agent`, it did
+    /// not: the atom answering `present-killer-weapon` cites `sec_0011` and not
+    /// one chunk from that section reached the gate.
+    ///
+    /// FAILING INPUT: clear `section_rows` on the request below (which is
+    /// exactly the state of every corpus whose join `svrn enrich
+    /// backfill-sections` has not filled) and the resolver falls to `Generous`,
+    /// whose search returns `passage N` bodies — so the assertion on
+    /// `carving knife` fails and `section_exact` stays 0.
+    #[tokio::test]
+    async fn a_section_anchor_resolves_through_the_chapter_join_and_the_preview_pins_the_chunk() {
+        /// Rows 225..228 are one section; only 227 carries the quoted line.
+        struct Sectioned;
+        impl EvidenceFetcher for Sectioned {
+            async fn by_row(&self, _: &CorpusId, row: u64) -> Option<ScoredChunk> {
+                let body = match row {
+                    227 => "The knife was already planted in his breast",
+                    // The decoy: same section, carries the wordiest atom's
+                    // preview, and does NOT support "Winnie killed him with it".
+                    226 => "cold beef on the table with carving knife and fork and half a loaf",
+                    _ => "some other paragraph of chapter eleven",
+                };
+                Some(mk_chunk(row, body))
+            }
+            async fn by_search(&self, _: &CorpusId, _: &str, _: usize) -> Vec<ScoredChunk> {
+                vec![mk_chunk(
+                    9001,
+                    "an early-novel passage the search preferred",
+                )]
+            }
+        }
+
+        let mut req = section_request("event-0033");
+        // The WORDIEST citing atom is the decoy: `passage_preview` keeps the
+        // longest, and on the real corpus that was an atom about the cold beef
+        // laid out for supper — whose paragraph also says "carving knife".
+        req.passage_preview =
+            "cold beef on the table with carving knife and fork and half a loaf".into();
+        // Weight-ordered, as `ground` emits them: the answering atom (a seed)
+        // outweighs the supper-beef atom (a hop-1 neighbour), so its preview is
+        // first even though the other one is longer.
+        req.passage_previews = vec![
+            "The knife was already planted in his breast".into(),
+            "cold beef on the table with carving knife and fork and half a loaf".into(),
+        ];
+        req.section_rows = vec![225, 226, 227, 228];
+
+        let (out, ledger) = resolve_evidence(&[req], 4, None, &Sectioned).await;
+
+        assert_eq!(ledger.section_exact, 1, "the join must be the path taken");
+        assert_eq!(ledger.section_searched, 0, "search must not have run");
+        assert_eq!(ledger.section_preview_pinned, 1);
+        assert_eq!(
+            out.first().and_then(|r| r.chunk.chunk_id),
+            Some(227),
+            "the answering chunk comes first — not the section's lowest id, and \
+             not the decoy that matched only the wordiest atom's preview"
+        );
+        assert!(out.iter().all(|r| r.chunk.chunk_id != Some(9001)));
+    }
+
+    /// The converse, and why the fallback stays: a corpus with no join is not
+    /// an error, it is a corpus nobody ran `backfill-sections` on. It resolves
+    /// by search exactly as before and the ledger SAYS so, so the two cases are
+    /// distinguishable from outside (ARCH §18.3).
+    #[tokio::test]
+    async fn a_section_anchor_with_no_join_falls_back_to_search_and_says_so() {
+        let req = section_request("event-0033"); // section_rows empty
+        let fetcher = Generous {
+            per_request: 3,
+            next: std::cell::Cell::new(0),
+        };
+        let (out, ledger) = resolve_evidence(&[req], 4, None, &fetcher).await;
+        assert_eq!(ledger.section_exact, 0);
+        assert_eq!(ledger.section_searched, 1);
+        assert!(!out.is_empty(), "the fallback still resolves");
+    }
+
     fn section_request(atom: &str) -> ChunkRequest {
         ChunkRequest {
             site: EvidenceSite::SelfHosted {
@@ -388,6 +549,8 @@ mod tests {
             score: 1.0,
             motivating_atoms: vec![atom.to_string()],
             verbatim_excerpts: Vec::new(),
+            passage_previews: Vec::new(),
+            section_rows: Vec::new(),
         }
     }
 

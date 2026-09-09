@@ -173,6 +173,13 @@ pub fn axis_space(axis: &str) -> Option<EmbedSpace> {
 
 /// The classifier stack's embedding instruction.
 ///
+/// Defined in `sovereign_contracts::embed_quirks` — beside the query and
+/// document instructions it is a sibling of — and re-exported here at its
+/// historical path so no call site or cache key changed. It moved on
+/// 2026-09-08 when `corpus-engine`'s atlas question-kind classifier became
+/// the second consumer; `corpus-engine` cannot depend on this crate, and two
+/// copies of a calibrated string in two crates is ARCH §10.6.
+///
 /// Changing this text invalidates every calibrated threshold on every
 /// axis that encodes under it, AND every entry in the `c:` space of the
 /// router-embed cache. The cache invalidation is structural — the key
@@ -181,15 +188,13 @@ pub fn axis_space(axis: &str) -> Option<EmbedSpace> {
 /// from the old space. The thresholds are NOT structural: re-run
 /// `sovereign router fit` and the `intent_instruction_probe` before
 /// trusting any number measured across a change to this string.
-pub const CLASSIFIER_INSTRUCTION: &str = "Instruct: Classify the speech act of the user's message — what the speaker is DOING with these words, not what they are about\nMessage: ";
+pub use sovereign_contracts::embed_quirks::CLASSIFIER_INSTRUCTION;
 
 /// The exact string handed to the embed model for `text`. One decider
 /// for the concatenation: the cache key, the freshness gate, the
 /// classifiers and the calibration harness all build their input here,
 /// so none of them can drift into a different vector space.
-pub fn classifier_input(text: &str) -> String {
-    format!("{CLASSIFIER_INSTRUCTION}{text}")
-}
+pub use sovereign_contracts::embed_quirks::classifier_input;
 
 /// Embed `text` in the classifier space. Every router classifier that
 /// encodes under [`CLASSIFIER_INSTRUCTION`] calls this — never

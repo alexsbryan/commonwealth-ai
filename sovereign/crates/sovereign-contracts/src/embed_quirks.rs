@@ -136,6 +136,52 @@ impl EmbedQuirks {
     }
 }
 
+/// The speech-act instruction every kind/intent classifier in this workspace
+/// encodes under — the THIRD embedding space, beside the query and document
+/// sides above.
+///
+/// # Why a classifier needs its own space
+///
+/// [`EmbedQuirks::query_instruction`] tells an instruction-following embedder
+/// to encode *what passages would answer this* — i.e. TOPIC. A classifier that
+/// scores a question against per-class centroids is asking a different
+/// question: what is the speaker DOING. Topic and speech act are near
+/// orthogonal, so a centroid race run on retrieval vectors ranks by subject
+/// matter and the class labels come out near-random.
+///
+/// The router measured this first (2026-08-04, `sovereign_core::
+/// router_instruction`): its intent axis could not classify its own
+/// hand-authored exemplars (leave-one-out 1-NN 60.6%), and moving to this
+/// instruction took cross-bank coverage from 0-9% to 41-49% at 88% precision.
+/// The atlas question-kind classifier hit the identical wall on 2026-09-08 —
+/// top-1 accuracy 6/39 on the Conrad bank in query space, 28/39 here.
+///
+/// # It lives here so there is one copy
+///
+/// Two consumers now encode under it and they are in different crates:
+/// `sovereign-core`'s router stack and `corpus-engine`'s
+/// `atlas_traversal::question_kind`. This crate is the one both already
+/// depend on, and it is already the ONE decider for how a text is prepared
+/// before an embedder sees it. `sovereign_core::router_instruction`
+/// re-exports it at its historical path, so no router call site changed and
+/// the router-embed cache key — which folds this text in — is byte-identical.
+///
+/// Changing this text invalidates every threshold calibrated under it, on
+/// both consumers. See §18.6.
+pub const CLASSIFIER_INSTRUCTION: &str = "Instruct: Classify the speech act of the user's message — what the speaker is DOING with these words, not what they are about\nMessage: ";
+
+/// The exact string handed to the embed model for `text` in the classifier
+/// space. One decider for the concatenation, for the same reason
+/// [`EmbedQuirks::prepare_query`] is: a caller that formats its own prefix
+/// silently lands in a fourth space.
+///
+/// Unlike the two `prepare_*` methods this takes no [`EmbedQuirks`] and
+/// appends no EOS — it is applied to the text BEFORE the un-instructed
+/// document surface, which appends the family's EOS itself.
+pub fn classifier_input(text: &str) -> String {
+    format!("{CLASSIFIER_INSTRUCTION}{text}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +240,25 @@ mod tests {
             assert_eq!(family, "Qwen3Embedding");
             assert_eq!(q, EmbedQuirks::qwen3_embedding());
         }
+    }
+    /// The classifier space is not the query space. If these two strings ever
+    /// converge, every classifier calibrated under one of them is scoring in
+    /// the other with no error anywhere (ARCH §18.3).
+    #[test]
+    fn the_classifier_instruction_is_a_third_space() {
+        let q = EmbedQuirks::qwen3_embedding();
+        assert_ne!(q.query_instruction, CLASSIFIER_INSTRUCTION);
+        assert_ne!(q.document_instruction, CLASSIFIER_INSTRUCTION);
+        assert!(CLASSIFIER_INSTRUCTION.starts_with("Instruct: "));
+        assert!(CLASSIFIER_INSTRUCTION.ends_with("Message: "));
+    }
+
+    /// The classifier prefix is applied as a prefix and nothing else — no EOS,
+    /// no trimming. `question_kind` and the router both rely on this being the
+    /// whole transformation.
+    #[test]
+    fn classifier_input_is_the_prefix_and_the_text() {
+        let s = classifier_input("who is this character");
+        assert_eq!(s, format!("{CLASSIFIER_INSTRUCTION}who is this character"));
     }
 }

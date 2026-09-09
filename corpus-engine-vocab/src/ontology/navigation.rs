@@ -416,11 +416,19 @@ impl WalkPolicy {
         }
     }
 
-    /// lookup: seed on Entity (by name); walk Involves; 1 hop.
+    /// lookup: seed on Entity, Event and Relation; walk Involves; 1 hop.
+    ///
+    /// Event and Relation joined Entity on 2026-09-09. A lookup is "give me
+    /// the entry for this thing", and in a section-extracted corpus the thing
+    /// asked about is as often something that HAPPENED, or a way two entities
+    /// STAND to each other, as it is a named entity. Both kinds are emitted by
+    /// every non-engineering build and were named by no row, so
+    /// `seed_population` derived a table without them and no walk — not even
+    /// the unfiltered one, which seeds from that same table — could reach one.
     pub fn lookup() -> Self {
         Self {
             seed: SeedPolicy {
-                kinds: vec![AtomType::Entity],
+                kinds: vec![AtomType::Entity, AtomType::Event, AtomType::Relation],
                 entity_types: Vec::new(),
                 declared: false,
                 budgets: BTreeMap::new(),
@@ -623,7 +631,15 @@ mod tests {
         assert_eq!(t.hops, 0);
 
         let t = n.walk(QuestionKind::Lookup);
-        assert_eq!(t.seed.kinds, vec![AtomType::Entity]);
+        // Event and Relation joined Entity 2026-09-09 — see `WalkPolicy::lookup`.
+        // A point fact in a section-extracted corpus lives in something that
+        // HAPPENED or a way two entities STAND as often as in a named entity,
+        // and until this row named them `seed_population` built a table
+        // without them and no walk could reach one.
+        assert_eq!(
+            t.seed.kinds,
+            vec![AtomType::Entity, AtomType::Event, AtomType::Relation]
+        );
         assert_eq!(t.walk, vec![EdgeType::Involves]);
         assert_eq!(t.hops, 1);
 

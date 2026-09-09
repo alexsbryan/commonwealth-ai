@@ -3349,6 +3349,48 @@ other. Off-topic controls (nginx, a capital, a unit conversion) score
 0.16–0.24 and are refused by the MARGIN gate, not the floor — the margin is
 the discriminator, as the constant's own comment says.
 
+**Superseded 2026-09-08: the two paragraphs above measured a real effect and
+named the wrong cause.** Every number in them — the 0.41–0.64 inter-centroid
+band, the 0.34 floor, the 0.16–0.24 off-topic controls — was taken in the
+RETRIEVAL QUERY space, and that was the defect. A question kind is a speech
+act, and the classifier was scoring speech acts on vectors the model had been
+instructed to fill with topic. The tell was already in the paragraph above and
+was read as a row problem: `tension` won 19 of 21 SEP questions. It also won
+or ran second on most of the Conrad bank. That is not a row whose composition
+needs widening, it is a race carrying almost no information.
+
+`question_kind` now embeds the map's exemplars AND the query under
+`sovereign_contracts::embed_quirks::CLASSIFIER_INSTRUCTION` — the speech-act
+instruction the router adopted on 2026-08-04 for the identical failure on its
+intent axis — through one function, `kind_space_embedding`, so the two sides
+cannot land in different spaces again. Measured on the Conrad bank
+(`svrn atlas kind --corpus chaos-secret-agent`, 43 questions): top-1 kind
+correct 6/39 → **28/39**; classified 6/43 → **22/43**; and of those classified,
+correct 0 → 16. The six the old gates admitted were all the wrong row, so the
+visible abstain rate was hiding a precision of zero. Winners now track the
+bank's shape — `lookup` 16 on Conrad, `tension` 4 / `thematic` 5 on SEP —
+where before both banks collapsed onto tension/trajectory regardless of what
+was asked.
+
+The gates moved because the space did, not to move a number: 0.34/0.05 were
+calibrated in a space that no longer exists here. `KIND_MIN_SIM` is now 0.50
+and has stopped pretending to be a proximity threshold — in the speech-act
+cone `"asdf qwerty zxcv"` scores 0.872 and `"ok"` 0.907 against real questions
+at 0.765–0.923, so no floor separates sense from noise. What 0.50 does catch
+is a query embedded in a different space from the centroids (0.135–0.463
+cross-space against 0.765–0.965 in-space), which is the defect above turned
+into a tripwire. `KIND_MIN_MARGIN` is 0.02, set from the map rather than any
+bank: the tightest built-in gloss clears 0.039 and the gate must admit the
+phrases a map declares as what a kind sounds like.
+
+Two alternatives were measured and rejected. Re-centring the centroids on
+their own mean moves top-1 by at most one question in either space. Centring
+on the corpus's own `Question` atoms lifts the retrieval space from 6/39 to
+22/39 — real corroboration of the diagnosis — but stays below the instruction
+fix, makes the classifier corpus-dependent, and on `chaos-secret-agent` all 22
+atoms carry one degenerate `question_type`. The paragraph below is kept as the
+record of what was concluded before the space was checked.
+
 **The floor stays at 0.34 anyway, and the reason is measured in the other
 direction (§18.6).** At `SOVEREIGN_QUESTION_KIND_MIN_SIM=0.28` the instrument
 admits 11 more questions across the banks (SEP 6→13, wikipedia 4→7, literary

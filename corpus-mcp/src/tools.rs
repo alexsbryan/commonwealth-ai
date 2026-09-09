@@ -440,7 +440,7 @@ impl Server {
         let (policy, policy_source) = ground::navigation_policy_for(&graphs);
         let inventory = AtlasInventory::of(&graphs);
         let selection = ground::select_walk(
-            &embedding,
+            question,
             &policy,
             policy_source,
             &inventory,
@@ -1010,13 +1010,32 @@ mod tests {
         // Configuration as a seed and no edge a Configuration has, so it was a
         // terminus by accident. Both literals are spelled out for the same
         // reason as `budget 12`.
+        //
+        // `Grounds` and `OpposesIn` LEFT these rows on 2026-09-08
+        // (map-conversion rung 2): the built-in maps are now written against
+        // what each pipeline can actually emit, and `Grounds` is written from
+        // an atom to a CHUNK — it has no seat in the atom CSR, so a row
+        // walking it walks nothing — while `OpposesIn` and `Position` are
+        // emitted by no built-in build. This test still asserted the
+        // pre-conversion strings and had been failing since; it is corrected
+        // to the declaration rather than the memory of one.
         assert!(
-            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Grounds → Configures | hops 2 | budget 12"),
+            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Configures | hops 2 | budget 12"),
             "{}",
             out.text
         );
         assert!(
-            out.text.contains("navigation.tension:") && out.text.contains("OpposesIn"),
+            out.text
+                .contains("navigation.tension: seed Claim, ArgumentReconstruction | walk Tension → Involves | hops 1 | budget 12"),
+            "{}",
+            out.text
+        );
+        // The lookup row carries the kinds added 2026-09-09 — Event and
+        // Relation beside Entity. Failing input: drop either from
+        // `ontologies/literary_atlas.toml`.
+        assert!(
+            out.text
+                .contains("navigation.lookup: seed Entity, Event, Relation | walk Involves | hops 1 | budget 12"),
             "{}",
             out.text
         );

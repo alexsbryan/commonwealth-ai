@@ -245,7 +245,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("-", EnvFlag { name: "SOVEREIGN_FORENSIC", default: "off", purpose: "=1 enables audit_pipeline_stage composition snapshots between steps." }),
         ("-", EnvFlag { name: "SOVEREIGN_EPISTEMIC_STATE", default: "on", purpose: "Post-pipeline: assemble the per-turn epistemic ledger (EPISTEMIC_STATE.md) into message metadata. Pure collation, no model calls; =0 disables." }),
         ("-", EnvFlag { name: "SOVEREIGN_COVERAGE_PROBE", default: "on", purpose: "Post-pipeline, gap/abstain turns only: cross-corpus nearest-chunk-cosine probe classifying a gap as TopicUncovered vs ClaimUncovered. =0 disables." }),
-        ("-", EnvFlag { name: "SOVEREIGN_COVERAGE_NEAR_SIM", default: "0.55", purpose: "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrate against the chaos absent banks)." }),
+        ("-", EnvFlag { name: "SOVEREIGN_COVERAGE_NEAR_SIM", default: "0.49", purpose: "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrated 2026-09-09 on the secret_agent bank; the boundary is the top of the observed off-topic band across both calibration runs)." }),
     ]
 }
 

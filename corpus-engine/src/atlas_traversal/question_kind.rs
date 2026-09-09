@@ -28,6 +28,51 @@
 //! margin over the runner-up. Failing either gate is an ABSTAIN, not a
 //! best-guess; the walk then runs [`WalkPolicy::unfiltered`] and says so.
 //!
+//! # Which vector space — the bug this file was born with (fixed 2026-09-08)
+//!
+//! A question kind is a SPEECH ACT: what the reader is doing (looking one
+//! fact up, enumerating, tracing an arc, probing a tension, asking what the
+//! whole thing is about). It is not a subject. So the centroids and the query
+//! must be embedded under
+//! [`sovereign_contracts::embed_quirks::CLASSIFIER_INSTRUCTION`], and
+//! [`kind_space_embedding`] is the ONE place that applies it — to the
+//! exemplars in [`QuestionKindClassifier::build`] and to the query in
+//! [`QuestionKindClassifier::classify_question`], so the two sides cannot
+//! drift into different spaces.
+//!
+//! Until 2026-09-08 both sides were embedded through the retrieval QUERY
+//! instruction ("given a search query, retrieve relevant passages that answer
+//! the query"), which asks the model to encode TOPIC. Measured on the Conrad
+//! bank (`sovereign/bench/chaos_monkey/secret_agent.toml`, 43 questions,
+//! `svrn atlas kind --corpus chaos-secret-agent`):
+//!
+//! | space | top-1 kind correct | classified | of those, correct |
+//! |---|---|---|---|
+//! | retrieval query (before) | 6/39 | 6/43 | **0** |
+//! | unprefixed | 16/39 | 12/43 | 8 |
+//! | speech-act (now) | **28/39** | 22/43 | 16 |
+//!
+//! The symptom was an abstain rate of 37/43 with winners at 0.19-0.43, and it
+//! looked like a threshold problem. It was not: every one of the six the old
+//! gates *did* admit was the wrong row. The exemplars scored fine against
+//! each other (0.50-0.84) because they are contentless phrases and the topic
+//! vector of one contentless phrase is near another's — a gate calibrated on
+//! its own training set (§18.1).
+//!
+//! Two other candidates were measured and rejected. Re-centring the centroids
+//! on their own mean, in either space, moves top-1 by at most one question
+//! (28 → 29) — the collinearity is real but it is not the signal. Centring on
+//! the corpus's own `Question` atoms lifts the RETRIEVAL space from 6/39 to
+//! 22/39, which confirms the diagnosis, but it is still below the instruction
+//! fix, it makes the classifier corpus-dependent (breaking the exemplar-keyed
+//! cache, principle 8), and on this corpus all 22 atoms carry one degenerate
+//! `question_type`. The instruction is the cause and the whole fix.
+//!
+//! The router hit the identical wall on its intent axis on 2026-08-04 and
+//! reached the same conclusion from an independent bank; `sovereign_core::
+//! router_instruction` carries that write-up and the 8-candidate probe that
+//! chose the instruction text. Do not re-select it on a proxy.
+//!
 //! # Where the exemplars come from
 //!
 //! The map, never this file: [`WalkPolicy::exemplars`], through
@@ -39,25 +84,58 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
+use sovereign_contracts::embed_quirks::classifier_input;
 
 use crate::extractors::column_aware::l2_normalize;
 use crate::types::EmbedFn;
 use crate::{Error, Result};
 
-/// Absolute similarity floor. Below it, no kind is close enough to be the
-/// question's kind and the walk stays unfiltered.
+/// Absolute similarity floor — a SAME-SPACE guard, not a "how close to a
+/// class" threshold.
 ///
-/// 0.34 is [`crate::extractors::column_aware`]'s `HEADER_MIN_SIM`, reused
-/// rather than re-derived: same embedding family, same normalised-cosine
-/// scale, same "is this near any class at all" question. It is a FLOOR on a
-/// five-way race, not a decision threshold — the margin below is the
-/// discriminator.
-const KIND_MIN_SIM: f32 = 0.34;
+/// It used to be 0.34, borrowed from [`crate::extractors::column_aware`]'s
+/// `HEADER_MIN_SIM` on the reasoning that both are normalised cosines from
+/// the same embedding family. That reasoning died with the space change: the
+/// numbers below are all measured in the speech-act space and none of them
+/// are comparable to the old ones.
+///
+/// **In this space no floor can answer "is this near any class at all", and
+/// the measurement says so plainly.** The classifier instruction pulls every
+/// input into one narrow cone — the five centroids sit at cosine 0.87-0.92
+/// from each other — so on the Conrad bank real questions score 0.765-0.923
+/// while `"asdf qwerty zxcv"` scores 0.872, `"ok"` scores 0.907 and
+/// `"<html><body><div class=x></div></body></html>"` scores 0.751. Gibberish
+/// outscores 30 of the 43 real questions. There is no value that admits
+/// questions and rejects noise; the margin does that job, and only the
+/// margin.
+///
+/// What a floor CAN catch here is the failure that produced this whole fix:
+/// a query embedded in a different space from the centroids. Scored against
+/// speech-act centroids, a retrieval-prefixed query wins at 0.135-0.324 and
+/// an unprefixed one at 0.151-0.463, against 0.765-0.965 for anything
+/// actually in the space. 0.50 sits in that gap with room on both sides, so
+/// [`QuestionKindClassifier::classify`] refuses a cross-space vector loudly
+/// instead of ranking it — see the warning it logs.
+const KIND_MIN_SIM: f32 = 0.50;
 
 /// Margin the winner must hold over the runner-up. A question that sits
 /// between two kinds ("what changed about the themes") has not chosen one,
 /// and forcing it into a row would walk the wrong edges silently.
-const KIND_MIN_MARGIN: f32 = 0.05;
+///
+/// This is the discriminator (see [`KIND_MIN_SIM`]), and it is set from the
+/// map rather than from any evaluation bank: **the gate must admit the map's
+/// own glosses.** A classifier that abstains on the phrases its map declares
+/// as what a kind sounds like is broken by construction. The five built-in
+/// glosses clear 0.039 at worst (`"which characters are there"`), so the gate
+/// sits at half that — leaving a corpus whose exemplars are tighter than the
+/// defaults room to still classify its own glosses.
+///
+/// Two independent checks on that value, neither used to pick it. Eighteen
+/// non-question probes (`"ok"`, `"banana"`, `"asdf qwerty zxcv"`, a SQL
+/// statement, an HTML fragment, a Rust fn) all score margins ≤ 0.022, so 0.02
+/// rejects seventeen of eighteen. On the Conrad bank it admits 22 of 43 at
+/// 76% precision, against 6 of 43 at 0% before.
+const KIND_MIN_MARGIN: f32 = 0.02;
 
 fn env_f32(key: &str, default: f32) -> f32 {
     std::env::var(key)
@@ -147,6 +225,16 @@ impl QuestionKindClassifier {
     /// declares no exemplars on any row; that is the map saying it has no
     /// classifier, which the caller reports as [`KindSource::NoClassifier`]
     /// rather than defaulting to a kind (principle 6).
+    ///
+    /// `embed` MUST be the UN-INSTRUCTED embed surface
+    /// (`sovereign_core::embed_fn::inference_to_embed_fn`, i.e.
+    /// `InferenceProvider::embed`), never the query-side adapter: this
+    /// function supplies the classifier instruction itself, through
+    /// [`kind_space_embedding`], and a query-side adapter would prefix a
+    /// second instruction on top and land the centroids in a fourth space.
+    /// The one embed family this workspace ships has an empty
+    /// `document_instruction`, which is what makes `embed` un-instructed —
+    /// pinned by `router_instruction::embed_is_the_uninstructed_surface`.
     pub async fn build(policy: &NavigationPolicy, embed: &EmbedFn) -> Result<Option<Self>> {
         let rows = policy.classifiable();
         if rows.is_empty() {
@@ -260,17 +348,57 @@ impl QuestionKindClassifier {
         })
     }
 
-    /// Classify, or abstain.
+    /// Classify a query vector, or abstain.
     ///
     /// Returns the kind only when the winner clears BOTH gates. An abstain is
     /// a real answer here: the caller runs the unfiltered row and names the
     /// abstain, rather than walking a row the question did not ask for.
+    ///
+    /// **The vector must be in the classifier space** — produced by
+    /// [`kind_space_embedding`], which is what
+    /// [`Self::classify_question`] does for you. A vector embedded any other
+    /// way is not merely low-scoring, it is ranking by the wrong quantity;
+    /// the [`KIND_MIN_SIM`] floor is positioned to catch exactly that, and
+    /// this logs the repair rather than abstaining mutely.
     pub fn classify(&self, query_embedding: &[f32]) -> (Option<QuestionKind>, Option<KindScore>) {
         let Some(score) = self.best(query_embedding) else {
             return (None, None);
         };
+        if score.sim < self.min_sim {
+            // The only thing that lands a query this far from every centroid
+            // in a cone this narrow is a different vector space. Say which
+            // repair, not just which gate — a silent abstain here reads as
+            // "hard question" and is actually "wrong embedder" (§18.3).
+            tracing::warn!(
+                target: "retrieval_audit",
+                sim = score.sim,
+                min_sim = self.min_sim,
+                winner = score.kind.as_str(),
+                "question-kind: the query vector scores far below the classifier band \
+                 (in-space queries win at 0.77-0.97); it was almost certainly embedded in \
+                 another space. Route the question TEXT through \
+                 `QuestionKindClassifier::classify_question` instead of pre-embedding it."
+            );
+        }
         let admitted = score.sim >= self.min_sim && score.margin >= self.min_margin;
         (admitted.then_some(score.kind), Some(score))
+    }
+
+    /// Classify a question from its TEXT — the entry point that cannot get
+    /// the space wrong.
+    ///
+    /// The centroids were built by embedding the map's exemplars through
+    /// [`kind_space_embedding`]; this embeds the query through the same
+    /// function with the same `embed`, so the two sides are in one space by
+    /// construction rather than by two call sites agreeing (principle 10).
+    /// `embed` is the un-instructed surface, as in [`Self::build`].
+    pub async fn classify_question(
+        &self,
+        question: &str,
+        embed: &EmbedFn,
+    ) -> Result<(Option<QuestionKind>, Option<KindScore>)> {
+        let v = kind_space_embedding(question, embed).await?;
+        Ok(self.classify(&v))
     }
 }
 
@@ -336,10 +464,25 @@ fn exemplar_key(policy: &NavigationPolicy) -> u64 {
     h.finish()
 }
 
+/// Embed `text` in the question-kind classifier space.
+///
+/// THE seam. Every vector this file ever compares — the map's exemplars in
+/// [`centroid`], the query in [`QuestionKindClassifier::classify_question`] —
+/// is produced here, so there is exactly one answer to "which space is this
+/// classifier in". Two call sites each formatting their own prefix is how the
+/// 2026-09-08 defect happened, one prefix apart from how the router's own
+/// 2026-08-04 defect happened.
+///
+/// Not normalised — callers normalise, matching [`centroid`]'s and
+/// [`QuestionKindClassifier::race`]'s existing contract.
+pub async fn kind_space_embedding(text: &str, embed: &EmbedFn) -> Result<Vec<f32>> {
+    (embed)(&classifier_input(text)).await
+}
+
 async fn centroid(phrases: &[String], embed: &EmbedFn) -> Result<Vec<f32>> {
     let mut sum: Option<Vec<f32>> = None;
     for p in phrases {
-        let mut e = (embed)(p).await?;
+        let mut e = kind_space_embedding(p, embed).await?;
         l2_normalize(&mut e);
         match sum.as_mut() {
             Some(s) if s.len() == e.len() => {
@@ -503,6 +646,169 @@ mod tests {
         let mut c = NavigationPolicy::default();
         c.thematic.exemplars.push("what is the gist".into());
         assert_ne!(exemplar_key(&a), exemplar_key(&c));
+    }
+
+    /// THE seam test. Build the centroids and classify a question through the
+    /// same embedder, then look at every string the embedder actually saw:
+    /// all of them must carry the classifier instruction. This is the one
+    /// invariant whose violation produced the defect — exemplars in one
+    /// space, query in another, both sides scoring happily.
+    ///
+    /// Failing input: embed the query as `(embed)(question)` instead of
+    /// through `kind_space_embedding`, and the last recorded string is the
+    /// bare question. That is exactly the shape the code had before
+    /// 2026-09-08, except that there the ASYMMETRY was hidden one level down
+    /// in which adapter the caller passed.
+    #[tokio::test]
+    async fn the_exemplars_and_the_query_are_embedded_in_one_space() {
+        use sovereign_contracts::embed_quirks::CLASSIFIER_INSTRUCTION;
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&seen);
+        let embed: EmbedFn = Arc::new(move |t: &str| {
+            if let Ok(mut g) = sink.lock() {
+                g.push(t.to_string());
+            }
+            Box::pin(async { Ok(vec![1.0_f32, 0.0, 0.0]) })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<f32>>> + Send>>
+        });
+        let policy = NavigationPolicy::default();
+        let c = QuestionKindClassifier::build(&policy, &embed)
+            .await
+            .expect("build")
+            .expect("the default map is classifiable");
+        c.classify_question("who is this character", &embed)
+            .await
+            .expect("classify");
+
+        let seen = seen.lock().expect("recorder");
+        assert!(
+            seen.len() > 1,
+            "expected exemplar embeds plus the query, got {}",
+            seen.len()
+        );
+        for text in seen.iter() {
+            assert!(
+                text.starts_with(CLASSIFIER_INSTRUCTION),
+                "every side of the comparison must be in the classifier space; \
+                 this one was not: {text:?}"
+            );
+        }
+        assert!(
+            seen.last()
+                .expect("query")
+                .ends_with("who is this character"),
+            "the query itself must be the last thing embedded"
+        );
+    }
+
+    /// A query vector from ANOTHER space is refused by the floor rather than
+    /// ranked. The measured band: scored against speech-act centroids, a
+    /// retrieval-prefixed query wins at 0.135-0.324 and an unprefixed one at
+    /// 0.151-0.463, while anything actually in the space wins at 0.765-0.965.
+    ///
+    /// Failing input: `[0.30, 0.02, 0.0]` — winner cosine 0.998/… ≈ 0.31 once
+    /// normalised against the first centroid, i.e. squarely in the
+    /// cross-space band, with a wide margin so ONLY the floor can reject it.
+    /// Delete the `min_sim` term and this classifies as `Thematic`, which is
+    /// what the pre-2026-09-08 code did on every production question.
+    #[test]
+    fn a_cross_space_query_vector_is_refused_not_ranked() {
+        let c = QuestionKindClassifier::from_centroids(vec![
+            (QuestionKind::Thematic, vec![1.0, 0.0, 0.0]),
+            (QuestionKind::Tension, vec![0.0, 1.0, 0.0]),
+        ]);
+        // sim = 0.30/sqrt(0.30^2+0.02^2+0.95^2) ≈ 0.30 — the cross-space band.
+        let (kind, score) = c.classify(&[0.30, 0.02, 0.95]);
+        let score = score.expect("a score is still reported, so the log can name it");
+        assert!(
+            score.sim < KIND_MIN_SIM,
+            "sim {} must land under the same-space floor",
+            score.sim
+        );
+        assert!(
+            score.margin >= KIND_MIN_MARGIN,
+            "margin {} must clear, so the floor is the only gate under test",
+            score.margin
+        );
+        assert_eq!(kind, None);
+    }
+
+    /// The floor is a same-space guard, NOT a "how close to a class" gate,
+    /// and this pins why raising it cannot fix a miss.
+    ///
+    /// The classifier instruction pulls everything into one narrow cone — the
+    /// five real centroids sit at cosine 0.87-0.92 from each other — so noise
+    /// and real questions interleave on `sim`. Measured: `"asdf qwerty zxcv"`
+    /// 0.872 and `"ok"` 0.907, against real bank questions at 0.765-0.923.
+    /// Modelled here with two near-collinear centroids: the noise query
+    /// OUTSCORES the real one on `sim`, so no floor admits one and rejects the
+    /// other, while the margin separates them cleanly.
+    ///
+    /// Failing input: raise `KIND_MIN_SIM` to reject `noise` and `real` goes
+    /// with it — assert below.
+    #[test]
+    fn the_floor_cannot_separate_noise_from_a_real_question_only_the_margin_can() {
+        let a = 0.9_f32.sqrt();
+        let b = (1.0_f32 - 0.9).sqrt();
+        let c = QuestionKindClassifier::from_centroids(vec![
+            (QuestionKind::Thematic, vec![a, b, 0.0]),
+            (QuestionKind::Lookup, vec![a, -b, 0.0]),
+        ]);
+        // Noise: dead on the shared axis — high sim, no margin.
+        let noise = c.best(&[1.0, 0.0, 0.0]).expect("scored");
+        // A real question: off the shared axis toward one class, and carrying
+        // content the centroids do not (the third component) — LOWER sim than
+        // the noise, but a real margin. sim 0.867 / margin 0.065.
+        let real = c.best(&[0.85, 0.10, 0.45]).expect("scored");
+
+        assert!(
+            noise.sim > real.sim,
+            "the measured interleaving must hold: noise {} vs real {}",
+            noise.sim,
+            real.sim
+        );
+        assert!(
+            noise.margin < real.margin,
+            "the margin is the discriminator: noise {} vs real {}",
+            noise.margin,
+            real.margin
+        );
+        // The consequence, stated as an assertion rather than a comment
+        // (§7.2): any floor that rejects the noise also rejects the question.
+        for floor in [0.60_f32, 0.80, 0.90, 0.95] {
+            assert!(
+                !(noise.sim < floor && real.sim >= floor),
+                "floor {floor} appeared to separate them; the geometry says it cannot"
+            );
+        }
+        // …and the margin gate does the job the floor cannot.
+        assert!(noise.margin < KIND_MIN_MARGIN && real.margin >= KIND_MIN_MARGIN);
+    }
+
+    /// The gates are the ones calibrated in the classifier space, not the
+    /// retrieval-space pair they replaced. A silent revert to 0.34/0.05 would
+    /// leave the floor unable to catch a cross-space vector (0.34 sits inside
+    /// the 0.135-0.463 cross-space band) and the margin refusing 17 of the 22
+    /// questions this now classifies.
+    #[test]
+    fn the_gates_are_the_classifier_space_pair() {
+        let c =
+            QuestionKindClassifier::from_centroids(vec![(QuestionKind::Thematic, vec![1.0, 0.0])]);
+        assert_eq!(c.gates(), (KIND_MIN_SIM, KIND_MIN_MARGIN));
+        assert_eq!(KIND_MIN_SIM, 0.50);
+        assert_eq!(KIND_MIN_MARGIN, 0.02);
+        assert!(
+            KIND_MIN_SIM > 0.463,
+            "the floor must sit above the measured cross-space band"
+        );
+        assert!(
+            KIND_MIN_SIM < 0.765,
+            "…and below the lowest in-space question"
+        );
+        assert!(
+            KIND_MIN_MARGIN < 0.039,
+            "the gate must admit the tightest built-in gloss"
+        );
     }
 
     /// Every degradation reads as one, and a real classification does not.

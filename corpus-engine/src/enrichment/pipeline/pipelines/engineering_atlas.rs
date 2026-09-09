@@ -95,6 +95,24 @@ impl super::genre::AtlasGenre for EngineeringGenre {
         std::collections::BTreeSet::from([crate::enrichment::atlas::AtomType::Claim])
     }
 
+    /// No Phase 8 here, unlike every other genre. A `Configuration` is
+    /// reachable only through a row that seeds it, and this genre's map
+    /// switches off all four rows that could — deliberately, because a
+    /// claims-only atlas cannot fire them (`ontologies/engineering_atlas.toml`).
+    /// Running the phase anyway spends a model call per build on atoms no walk
+    /// can ever seed and no reader can ever see, which is the substitution
+    /// ARCH §18.3 forbids wearing a build-cost hat.
+    ///
+    /// Evidence it was already dead rather than merely unreachable: both
+    /// engineering-built atlases on this box carry zero Configurations —
+    /// `commonwealth-ai-arch-principles` (Claim 197) and
+    /// `commonwealth-ai-system-overview` (Claim 317), `svrn atlas
+    /// list-corpora`, 2026-09-09. Turn this back on together with the row
+    /// that reaches it, not before.
+    fn runs_configuration_phase(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &'static str {
         "Engineering docs — claims with code anchors"
     }

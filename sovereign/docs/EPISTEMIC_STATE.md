@@ -163,9 +163,27 @@ pub enum TurnVerdict {
   disambiguated by the coverage verdict — `nearest_vector_distance`
   fan-out distinguishes *TopicUncovered* ("no corpus is near this
   topic → here's where it would live") from *ClaimUncovered* ("your
-  corpus covers the topic but not this claim → deeper source / web").
+  corpus covers the topic but not this claim → **no route at all**").
   A fast-slot pass may *phrase* the route into prose but can never
   invent one (structural: routes come only from the catalog).
+
+  *ClaimUncovered* read "→ deeper source / web" until 2026-09-09, and
+  that reservation was the resolver's one evidence-free route: the
+  catalog says nothing about the specific claim, so "search the web"
+  was asserted on no evidence and shipped on every in-topic gap. On a
+  probe-confirmed *ClaimUncovered* the enabled corpus IS the authority
+  and does not hold the claim, so the honest conjecture is none —
+  the same discriminator `gk_rescue::rescue_precondition_met` already
+  applies to parametric memory for the same reason (one decider, two
+  consumers). Measured on the `secret_agent` bank, per probe, the same
+  day: the six `unknowable`-labeled probes read 0.5964–0.7587
+  nearest-chunk cosine and the five `install_recipe` ones 0.2015–0.3323,
+  so the 0.49 floor separates the two classes cleanly while the catalog
+  carries no signal at all (every probe's top-1 catalog similarity sits
+  in 0.334–0.508 regardless of class). `RouteContext.coverage` is
+  therefore the PROBE's `Option`, never `Gap::coverage` — the latter is
+  already `probe.unwrap_or(ClaimUncovered)`, and feeding it back would
+  silence turns where no probe ran.
 - **D5 — fail-open stays fail-open, but visible.** The relational
   memory verifier's availability posture is untouched; its outcome is
   recorded on the holding (`Verification::FailOpen`) so honesty is by
@@ -273,6 +291,21 @@ click. This field is that output as data.
   chapter name; a synthetic chunk yields the reverse. Neither is a proxy
   for the other, and `SOVEREIGN_CITATION_LOCATOR` (the display control
   arm) does not govern openability.
+- **A located quote is not a licence for the value beside it**
+  (2026-09-09). The citation stage releases on *a verbatim supporting
+  quote was found*, which is a fact about the QUOTE. The value-presence
+  veto — whose own doc says it "runs on EVERY gated turn" — was asked
+  only on the audit exit, so this second release path never consulted
+  it. Measured on the chaos bank's `absent-embassy-country`, five
+  identical runs: `citation_grounded` shipped a genuine CHAPTER II quote
+  about the Embassy under the answer "Russian", a country Conrad never
+  names, while the bench's own post-hoc call logged `vetoed_absent
+  value=Russian`. Two registers of one question, disagreeing. The veto
+  now runs on both exits; a refusal there becomes the abstention the
+  path already has, and since a veto may only REFUSE (§7.6) no correct
+  answer can be lost. Same 4-probe subset after the fix: honesty-when-
+  absent 0.50 → 1.00, confab-leaked 1 → 0, competence and distractor
+  evasion unchanged at 1.00.
 
 ## 5. Consumers — everything becomes a view
 

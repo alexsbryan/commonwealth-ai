@@ -663,7 +663,7 @@ async fn an_empty_embedding_cannot_seed() {
 #[tokio::test]
 async fn no_embedder_means_the_unfiltered_row_named_as_such() {
     let sel = select_walk(
-        &[0.1, 0.2],
+        "who is this character",
         &NavigationPolicy::default(),
         PolicySource::PreRegistered,
         &AtlasInventory::default(),
@@ -698,7 +698,7 @@ async fn a_map_with_no_exemplars_is_distinguished_from_a_dead_embedder() {
             as std::pin::Pin<Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>>
     });
     let sel = select_walk(
-        &[1.0, 0.0],
+        "who is this character",
         &policy,
         PolicySource::PreRegistered,
         &AtlasInventory::default(),
@@ -736,12 +736,30 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
             e.push_str(" [inert-fallthrough]");
         }
     }
+    // The question this test asks, as text, and the vector the fake maps it
+    // to. Deliberately not one of the map's exemplars: it sits BETWEEN the
+    // tension and lookup bases, which is the whole point — a clear winner
+    // with a real runner-up to fall through to. `select_walk` takes the text
+    // (it owns the classifier space); `ground` still takes the retrieval
+    // vector, because that is what the ANN seed pool is in.
+    const QUESTION: &str = "where do these two claims collide with each other";
+    const QUESTION_VEC: [f32; 3] = [0.9, 0.7, 0.0];
     let tension: Vec<String> = policy.tension.exemplars.clone();
     let lookup: Vec<String> = policy.lookup.exemplars.clone();
+    // `contains`, not `==`: every vector this classifier compares now goes
+    // through `question_kind::kind_space_embedding`, which prefixes the text
+    // with the speech-act instruction before the embedder sees it (the
+    // 2026-09-09 space fix). A fake keyed on the bare exemplar string stopped
+    // matching, every centroid collapsed onto the same basis vector, and this
+    // test read `Thematic` — a fake that models the old call shape, not a
+    // regression in the thing under test. Matching on containment keeps this
+    // test about ROW FALL-THROUGH and agnostic to how the seam prepares text.
     let embed: EmbedFn = std::sync::Arc::new(move |text: &str| {
-        let v = if tension.iter().any(|e| e == text) {
+        let v = if text.contains(QUESTION) {
+            QUESTION_VEC.to_vec()
+        } else if tension.iter().any(|e| text.contains(e.as_str())) {
             vec![1.0_f32, 0.0, 0.0]
-        } else if lookup.iter().any(|e| e == text) {
+        } else if lookup.iter().any(|e| text.contains(e.as_str())) {
             vec![0.0, 1.0, 0.0]
         } else {
             vec![0.0, 0.0, 1.0]
@@ -749,8 +767,17 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
         Box::pin(async move { Ok(v) })
             as std::pin::Pin<Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>>
     });
-    // Tension ahead of lookup by a clear margin, both well above the floor.
-    let question = [0.9_f32, 0.5, 0.0];
+    // `select_walk` takes the question's TEXT since 2026-09-09 — it owns
+    // embedding it in the classifier's own space — so the mixed vector this
+    // test needs is produced by the fake above rather than written here.
+    // Was `[0.9, 0.5, 0.0]`, which put lookup at 0.485: fine under the old
+    // 0.34 floor and below the 0.50 the speech-act space needs. A runner-up
+    // that cannot clear the floor is not a runner-up, so the fall-through had
+    // nothing admissible to fall TO and this test stopped exercising its own
+    // subject. `[0.9, 0.7, 0.0]` restores it: tension 0.789, lookup 0.614,
+    // margin 0.175.
+    let question = QUESTION;
+    let question_vec = QUESTION_VEC;
 
     // A scope that carries the tension row: the same question walks it.
     let sep_like = AtlasInventory {
@@ -760,7 +787,7 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
         declares_types: false,
     };
     let sel = select_walk(
-        &question,
+        question,
         &policy,
         PolicySource::PreRegistered,
         &sep_like,
@@ -779,7 +806,7 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
         declares_types: false,
     };
     let sel = select_walk(
-        &question,
+        question,
         &policy,
         PolicySource::PreRegistered,
         &wiki,
@@ -806,7 +833,7 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
     assert!(sel.describe().contains("the walk ran the lookup row"));
 
     // …and the walk reports it as its own degradation, not as "unclassified".
-    let g = ground("where does it disagree", &question, &[], &[], &sel, 12).await;
+    let g = ground("where does it disagree", &question_vec, &[], &[], &sel, 12).await;
     assert!(g
         .degradations
         .iter()
@@ -818,7 +845,7 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
 
     // Nothing in scope at all: no row fits, the unfiltered row runs, named.
     let sel = select_walk(
-        &question,
+        question,
         &policy,
         PolicySource::PreRegistered,
         &AtlasInventory::default(),
