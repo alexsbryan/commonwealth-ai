@@ -44,6 +44,9 @@ mod f26_egress_census;
 mod fr6_decorrelation;
 #[path = "main/functional.rs"]
 mod functional;
+#[path = "main/gate_prompt_routing_census.rs"]
+mod gate_prompt_routing_census;
+
 #[path = "main/gate_release_census.rs"]
 mod gate_release_census;
 #[path = "main/golden_align.rs"]
