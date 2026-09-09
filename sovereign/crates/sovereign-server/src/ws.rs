@@ -249,6 +249,30 @@ async fn handle_ws(
                 let key = format!("{task_id}:input");
                 approval.submit_input(&key, content);
             }
+            // Session continuation is the local daemon's half of the protocol
+            // (sv-surface rung 6 C2-b). This host's `TenantRuntime` does hold
+            // a `SessionStore` and could in principle serve these, but a
+            // session id arrives UNSCOPED while every conversation here is
+            // `{tenant}:{conv}` — resolving one would be this file inventing a
+            // tenant for it, which is the substitution §18.3 forbids.
+            //
+            // NAMED wire-compat debt, not a property: phase 5c's "a client
+            // cannot tell which host it reached" is false for these two
+            // messages, and the refusal says which host refused rather than
+            // leaving a client to infer it from silence.
+            TurnRequest::Resume { .. } | TurnRequest::Redirect { .. } => {
+                tracing::warn!(
+                    conversation_id = %conversation_id,
+                    "ws: session continuation refused — tenant host serves no unscoped sessions"
+                );
+                let _ = out_tx.send(TurnFrame::StreamError {
+                    message: "this host does not serve session continuations — resume and \
+                              redirect are served by the local daemon, whose sessions are not \
+                              tenant-scoped"
+                        .to_string(),
+                    retry_after_secs: None,
+                });
+            }
         }
     }
 

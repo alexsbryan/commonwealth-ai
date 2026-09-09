@@ -86,8 +86,10 @@ use tokio::sync::mpsc;
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
 };
-use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
-use sovereign_core::runtime::{collect_turn, serve_turn};
+use sovereign_contracts::types::{ResumeSession, TurnFrame, TurnMode, TurnRequest};
+use sovereign_core::runtime::Runtime;
+use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
+use sovereign_core::traits::StateStore;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::enforce_localhost;
@@ -726,6 +728,18 @@ async fn handle_ws(
     let approvals = claim_approvals
         .then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone(), &conversation_id)));
 
+    // The turn's own approval capability, read once per turn and installed
+    // around the WHOLE call by each arm that starts one: the executor is built
+    // during the ACQUIRE, and a scope that began at the stream handle would
+    // leave the turn's steps reading the daemon's commissioned channel
+    // instead. `None` is a socket that claimed nothing, and it runs exactly as
+    // it did before any of this existed.
+    let claimed_channel = || {
+        approvals
+            .as_ref()
+            .map(|a| Arc::clone(a) as Arc<dyn sovereign_core::traits::ApprovalChannel>)
+    };
+
     // ONE in-flight turn per socket, held as a task rather than awaited inline.
     //
     // The obvious shape — `serve_turn(..).await` right here — is what
@@ -788,13 +802,7 @@ async fn handle_ws(
                 mode,
                 intent,
             } => {
-                if in_flight.is_some() {
-                    // Refused, not queued: a client that sent a second turn
-                    // and heard nothing cannot tell "queued" from "lost".
-                    let _ = out_tx.send(TurnFrame::StreamError {
-                        message: "a turn is already in flight on this socket".to_string(),
-                        retry_after_secs: None,
-                    });
+                if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
                 }
                 let (rt, st, cid, tx) = (
@@ -803,15 +811,7 @@ async fn handle_ws(
                     conversation_id.clone(),
                     out_tx.clone(),
                 );
-                // The turn's own approval capability, installed around the
-                // WHOLE call: the executor is built during the acquire, and a
-                // scope that ended at the stream handle would leave the turn's
-                // steps reading the daemon's commissioned channel instead.
-                // `None` here is a socket that claimed nothing, and it runs
-                // exactly as it did before this existed.
-                let turn_approval = approvals
-                    .as_ref()
-                    .map(|a| Arc::clone(a) as Arc<dyn sovereign_core::traits::ApprovalChannel>);
+                let turn_approval = claimed_channel();
                 in_flight = Some(tokio::spawn(async move {
                     sovereign_core::runtime::capabilities::scope(turn_approval, async {
                         serve_turn(
@@ -825,6 +825,148 @@ async fn handle_ws(
                             // broadcast yet, and a `None` here is that fact
                             // rather than a dropped channel.
                             None,
+                            &tx,
+                        )
+                        .await;
+                    })
+                    .await;
+                }));
+            }
+            // The two SESSION-CONTINUATION turns. Each differs from `Message`
+            // only in its ACQUIRE — a synthetic classification the runtime
+            // owns one implementation of, plus redirect's sampler cancel and
+            // routing-signal write — and is identical to it afterwards: same
+            // one-turn guard, same spawn (the receive loop must keep polling
+            // or the socket answers no pings), same approval scope, same ONE
+            // drain. `serve_turn` cannot serve them because its acquire is the
+            // router's; `drive_stream_handle` is its post-acquire half,
+            // factored for exactly these two callers (sv-surface rung 0).
+            //
+            // Until this existed the daemon could answer a question but not a
+            // CLARIFICATION of one, so an attached surface had to keep a
+            // `Runtime` behind its own cards — which is the construction rung
+            // 6 is deleting.
+            TurnRequest::Resume {
+                content,
+                session_id,
+                intent_hint,
+            } => {
+                if refuse_second_turn(&in_flight, &out_tx) {
+                    continue;
+                }
+                // A resume names its session for PROVENANCE — the resume
+                // acquire reads nothing out of it, only quotes the id in the
+                // synthetic classification's rationale — so an id the daemon
+                // no longer holds runs normally. That is deliberate and it is
+                // the in-process behaviour: a card sits in a transcript, the
+                // 30s GC fires, the daemon restarts, and the click must still
+                // answer or rung 6 has traded the divergence it is closing for
+                // a new one. A FOREIGN session is the different case: the
+                // claim "this continues session X" would be written into THIS
+                // conversation's routing metadata and be false.
+                if let NamedSession::Foreign =
+                    named_session(&runtime, &session_id, &conversation_id)
+                {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        conversation_id = %conversation_id,
+                        "turn_http: resume refused — session belongs to another conversation"
+                    );
+                    let _ = out_tx.send(TurnFrame::StreamError {
+                        message: not_this_sockets_session(&session_id, &conversation_id),
+                        retry_after_secs: None,
+                    });
+                    continue;
+                }
+                let (rt, st, cid, tx) = (
+                    Arc::clone(&runtime),
+                    Arc::clone(&store),
+                    conversation_id.clone(),
+                    out_tx.clone(),
+                );
+                let turn_approval = claimed_channel();
+                in_flight = Some(tokio::spawn(async move {
+                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
+                        let resume = ResumeSession {
+                            session_id,
+                            intent_hint,
+                        };
+                        drive_acquired(
+                            rt.resume_session_stream(&content, &cid, resume).await,
+                            st.as_ref(),
+                            &cid,
+                            &tx,
+                        )
+                        .await;
+                    })
+                    .await;
+                }));
+            }
+            TurnRequest::Redirect {
+                session_id,
+                intent_hint,
+            } => {
+                if refuse_second_turn(&in_flight, &out_tx) {
+                    continue;
+                }
+                // Redirect resolves the turn's MESSAGE and its CONVERSATION
+                // off the session, so here the id is a KEY and both ways of
+                // missing are refused by name. `Foreign` is the one that would
+                // otherwise run a turn in someone else's conversation and
+                // stream it down this socket — the same property C1 gave
+                // approvals, that a socket cannot reach past its own
+                // conversation, applied to the other half of the protocol.
+                match named_session(&runtime, &session_id, &conversation_id) {
+                    NamedSession::Ours => {}
+                    NamedSession::Foreign => {
+                        tracing::warn!(
+                            session_id = %session_id,
+                            conversation_id = %conversation_id,
+                            "turn_http: redirect refused — session belongs to another conversation"
+                        );
+                        let _ = out_tx.send(TurnFrame::StreamError {
+                            message: not_this_sockets_session(&session_id, &conversation_id),
+                            retry_after_secs: None,
+                        });
+                        continue;
+                    }
+                    NamedSession::Gone => {
+                        tracing::warn!(
+                            session_id = %session_id,
+                            conversation_id = %conversation_id,
+                            "turn_http: redirect refused — no live session by that id"
+                        );
+                        let _ = out_tx.send(TurnFrame::StreamError {
+                            // Refused rather than re-answered from anything
+                            // else this socket knows: a redirect with no
+                            // message to re-answer has nothing to substitute
+                            // that would not be invented (§18.3).
+                            message: format!(
+                                "no live session {session_id} on this daemon — a session is \
+                                 dropped ~30s after its turn ends, and a redirect re-answers \
+                                 the message it holds"
+                            ),
+                            retry_after_secs: None,
+                        });
+                        continue;
+                    }
+                }
+                let (rt, st, cid, tx) = (
+                    Arc::clone(&runtime),
+                    Arc::clone(&store),
+                    conversation_id.clone(),
+                    out_tx.clone(),
+                );
+                let turn_approval = claimed_channel();
+                in_flight = Some(tokio::spawn(async move {
+                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
+                        drive_acquired(
+                            rt.redirect_turn_stream(&session_id, &intent_hint).await,
+                            st.as_ref(),
+                            // The socket's conversation, which the guard above
+                            // proved is also the session's — so the terminal
+                            // metadata is read from the row the turn wrote.
+                            &cid,
                             &tx,
                         )
                         .await;
@@ -870,6 +1012,112 @@ async fn handle_ws(
         h.abort();
     }
     tx_handle.abort();
+}
+
+/// The one-turn-per-socket guard, shared by the three variants that START a
+/// turn. Returns whether the request was refused.
+///
+/// Refused, not queued: a client that sent a second turn and heard nothing
+/// cannot tell "queued" from "lost". The guard is what keeps that true without
+/// the receive loop having to block to enforce it — see the loop's own comment
+/// for why blocking is not available here.
+fn refuse_second_turn(
+    in_flight: &Option<tokio::task::JoinHandle<()>>,
+    out: &mpsc::UnboundedSender<TurnFrame>,
+) -> bool {
+    if in_flight.is_none() {
+        return false;
+    }
+    let _ = out.send(TurnFrame::StreamError {
+        message: "a turn is already in flight on this socket".to_string(),
+        retry_after_secs: None,
+    });
+    true
+}
+
+/// Where a `session_id` a client named sits relative to THIS socket.
+///
+/// The socket's conversation is pinned by its URL and a `QuerySession` carries
+/// its own, so "is this session mine to name?" is one lookup. It is the same
+/// property C1 gave approvals — a socket cannot reach past its own
+/// conversation — stated for the half of the protocol that names sessions.
+enum NamedSession {
+    /// Live, on this socket's own conversation.
+    Ours,
+    /// Live, on a different conversation. Never this socket's to drive.
+    Foreign,
+    /// No live session by that id: expired (`SESSION_RETENTION`, 30s past its
+    /// turn), dropped by a daemon restart, or never real. One state, because
+    /// nothing downstream would do anything different with the three.
+    Gone,
+}
+
+fn named_session(runtime: &Runtime, session_id: &str, conversation_id: &str) -> NamedSession {
+    match runtime.sessions.get(session_id) {
+        None => NamedSession::Gone,
+        Some(s) if s.conversation_id == conversation_id => NamedSession::Ours,
+        Some(_) => NamedSession::Foreign,
+    }
+}
+
+/// The refusal owed to a client that named a session belonging to someone
+/// else's conversation. Names the session and THIS socket's conversation; the
+/// owning conversation's id is not the client's to learn from a refusal.
+fn not_this_sockets_session(session_id: &str, conversation_id: &str) -> String {
+    format!(
+        "session {session_id} belongs to another conversation — this socket serves \
+         {conversation_id}, and a session is only nameable on the conversation that owns it"
+    )
+}
+
+/// Drive a turn whose handle was acquired through a richer path than
+/// `serve_turn`'s own — session resume and session redirect, whose acquires
+/// carry a synthetic classification (and, for redirect, a sampler cancel and a
+/// routing-signal write) the plain path has no place for.
+///
+/// What must never be re-derived is everything AFTER the acquire, so this hands
+/// the handle straight to `drive_stream_handle` — THE drain (ARCH §10.6). The
+/// recorded lesson is specific: the desktop's hand-rolled drains for these same
+/// two calls were missing `present_answer` envelope stripping and the graceful
+/// guards the plain path had learned, because a re-derived loop reproduces the
+/// gaps of the loop it re-derives (sv-surface rung 0).
+///
+/// A failed acquire is SAID in the host's own words rather than dropped
+/// (§18.3): a client that asked for a turn and received no frame cannot tell
+/// "refused" from "lost".
+///
+/// Takes the acquire's RESULT rather than the acquire itself, which is not a
+/// style choice: an `impl Future` parameter means the caller builds that future
+/// on its own stack and then moves it through this frame, the capability scope
+/// and the spawn — and a debug-built turn future is large enough that the moves
+/// alone overflowed the test thread (watched, both continuation turns, before
+/// this signature). Awaiting at the call site leaves the big future in one
+/// place and passes a `Result<StreamHandle>`.
+async fn drive_acquired(
+    acquired: sovereign_core::Result<StreamHandle>,
+    store: &dyn StateStore,
+    conversation_id: &str,
+    out: &mpsc::UnboundedSender<TurnFrame>,
+) {
+    match acquired {
+        Ok(handle) => {
+            // `None` narration, like the plain turn: the daemon owns no
+            // per-connection subscription yet, and this is that fact rather
+            // than a dropped channel (see the module docs' known gap).
+            drive_stream_handle(handle, store, conversation_id, None, out).await;
+        }
+        Err(e) => {
+            tracing::error!(
+                conversation_id = %conversation_id,
+                error = %e,
+                "turn_http: continuation turn failed to start"
+            );
+            let _ = out.send(TurnFrame::StreamError {
+                message: e.to_string(),
+                retry_after_secs: None,
+            });
+        }
+    }
 }
 
 /// The sentence owed to a client whose reply resolved nothing, or `None` when

@@ -1018,11 +1018,54 @@ impl TurnStream {
         mode: TurnMode,
         intent: Option<Intent>,
     ) -> Result<()> {
-        let req = TurnRequest::Message {
+        self.send(TurnRequest::Message {
             content: content.to_string(),
             mode,
             intent,
-        };
+        })
+        .await
+    }
+
+    /// Continue an earlier turn under a picked intent — the wire form of
+    /// `Runtime::resume_session_stream`, and what a clarification card's
+    /// option click becomes once the surface holds no `Runtime`.
+    ///
+    /// A `session_id` the host no longer holds is not an error: sessions are
+    /// dropped ~30s after their turn and the resume path reads nothing out of
+    /// one. A `session_id` on a DIFFERENT conversation is refused by the host
+    /// with a `TurnFrame::StreamError` naming it.
+    pub async fn send_resume(
+        &mut self,
+        content: &str,
+        session_id: &str,
+        intent_hint: &str,
+    ) -> Result<()> {
+        self.send(TurnRequest::Resume {
+            content: content.to_string(),
+            session_id: session_id.to_string(),
+            intent_hint: intent_hint.to_string(),
+        })
+        .await
+    }
+
+    /// Cancel the in-flight turn and re-answer the SAME message under a
+    /// different intent — the wire form of `Runtime::redirect_turn_stream`.
+    ///
+    /// No `content` parameter, deliberately: the host re-answers the message
+    /// the session already holds, so there is nothing here that could disagree
+    /// with what was asked. The session must be live and on this stream's own
+    /// conversation; both misses come back as a named `StreamError`.
+    pub async fn send_redirect(&mut self, session_id: &str, intent_hint: &str) -> Result<()> {
+        self.send(TurnRequest::Redirect {
+            session_id: session_id.to_string(),
+            intent_hint: intent_hint.to_string(),
+        })
+        .await
+    }
+
+    /// Serialize one request onto the socket. THE write (ARCH §10.6) — the
+    /// three `send_*` methods differ only in the value they build.
+    async fn send(&mut self, req: TurnRequest) -> Result<()> {
         let text = serde_json::to_string(&req)
             .map_err(|e| Error::Serialization(format!("serializing TurnRequest: {e}")))?;
         self.socket

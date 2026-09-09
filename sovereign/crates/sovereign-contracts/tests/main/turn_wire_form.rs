@@ -258,6 +258,30 @@ fn turn_request_wire_form() {
                 content: "yes".into(),
             },
         ),
+        (
+            // Session continuation — a ClarificationCard option click. FLAT,
+            // like every other variant: three strings, not a nested `resume`
+            // object. `ResumeSession` is the in-process shape and stays there;
+            // nesting it here would have made the client's bytes follow a Rust
+            // struct boundary.
+            r#"{"type":"resume","data":{"content":"the second one","session_id":"s1","intent_hint":"DeepQuery"}}"#,
+            TurnRequest::Resume {
+                content: "the second one".into(),
+                session_id: "s1".into(),
+                intent_hint: "DeepQuery".into(),
+            },
+        ),
+        (
+            // NO `content` key, and that absence is the contract: redirect
+            // re-answers the message the session already holds. A `content`
+            // added here later would let a client disagree with what was
+            // asked, which is the whole reason the field is missing.
+            r#"{"type":"redirect","data":{"session_id":"s1","intent_hint":"Comparison"}}"#,
+            TurnRequest::Redirect {
+                session_id: "s1".into(),
+                intent_hint: "Comparison".into(),
+            },
+        ),
     ];
     for (wire, expected) in cases {
         let parsed: TurnRequest = serde_json::from_str(wire).expect("client message parses");

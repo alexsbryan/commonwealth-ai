@@ -279,4 +279,50 @@ pub enum TurnRequest {
         /// The user's answer.
         content: String,
     },
+    /// Continue an earlier turn under the intent the user picked — the reply
+    /// to a ClarificationCard option or a NextStepOffer button.
+    ///
+    /// In-process this is `Runtime::resume_session_stream`, and like
+    /// [`TurnRequest::Message`]'s `intent` it was a turn PARAMETER with no
+    /// wire form. A surface that stopped assembling its own `Runtime` lost
+    /// the ability to answer its own clarification cards, so the card kept a
+    /// host behind it — which is what a pure-client attach cannot have
+    /// (sv-surface rung 6).
+    Resume {
+        /// The follow-up text, in the option's own words. [`TurnRequest::Redirect`]
+        /// is the variant that re-uses the original message instead.
+        content: String,
+        /// The `QuerySession` this continues, retained ~30s past its turn.
+        ///
+        /// A host refuses an id belonging to a DIFFERENT conversation: the
+        /// socket's conversation is pinned by its URL, so a session from
+        /// another one is not this client's to name. An id the host no
+        /// longer holds is NOT refused — the 30s GC and a daemon restart are
+        /// both ordinary, and here the id is provenance rather than a key
+        /// (the resume path reads nothing out of the session).
+        session_id: String,
+        /// Wire-form `Intent` to classify the continuation as, skipping the
+        /// router. An unparseable hint degrades to `SimpleQuery` rather than
+        /// failing the turn — `parse_intent_hint`'s shipped contract, so a
+        /// typo costs routing quality and not the answer.
+        intent_hint: String,
+    },
+    /// Cancel the in-flight turn and re-answer the SAME user message under a
+    /// different intent — the reply to a routing "did you mean?" card.
+    ///
+    /// Carries no `content` on purpose: `Runtime::redirect_turn_stream` reads
+    /// the original message off the session it names, so a client that
+    /// re-sent the text could disagree with what was actually asked. The
+    /// session holds the one copy.
+    Redirect {
+        /// The `QuerySession` to redirect. Required to be live AND this
+        /// socket's, both refused by name: the host resolves the turn's
+        /// message and its conversation FROM this session, so an id from
+        /// another conversation would run a turn there and stream it here,
+        /// and an id the host has dropped has no message to re-answer.
+        session_id: String,
+        /// Wire-form `Intent` to re-answer under, with the same degradation
+        /// `Resume`'s hint has.
+        intent_hint: String,
+    },
 }
