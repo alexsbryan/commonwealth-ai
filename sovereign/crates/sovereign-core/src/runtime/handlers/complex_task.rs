@@ -59,7 +59,7 @@ impl Runtime {
             Arc::clone(&self.inference),
             Arc::clone(&self.tools),
             Arc::clone(&self.store),
-            Arc::clone(&self.approval),
+            self.turn_approval(),
             Arc::clone(&self.skills),
         );
 

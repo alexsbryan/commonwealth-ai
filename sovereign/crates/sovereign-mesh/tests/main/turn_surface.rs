@@ -24,8 +24,10 @@
 //! The three narrower tests pin the edges the end-to-end one would pass
 //! through silently: that the conversation is really SEEDED (not merely
 //! assigned an id), that a `MeshAdmin` daemon refuses with a reason instead of
-//! panicking on a `None` runtime, and that mid-turn approvals are refused
-//! loudly rather than accepted and dropped (§18.3).
+//! panicking on a `None` runtime, and that a mid-turn reply which resolves
+//! nothing is SAID so rather than accepted and dropped (§18.3) — with the
+//! socket's claim (`?approvals=true`) and the unclaimed default named apart,
+//! because they are different facts a client can act on differently.
 
 use crate::common;
 use crate::common::{desktop_services_with_store, mesh_admin_services, spawn_router, TestProvider};
@@ -310,22 +312,17 @@ async fn a_mesh_admin_daemon_refuses_with_a_reason() {
     );
 }
 
-/// Approvals are on the wire and have no daemon-side owner yet. Accepting one
-/// and doing nothing is the failure this pins: a client that submitted an
-/// approval and received no frame cannot tell "granted" from "never arrived".
-#[tokio::test]
-async fn a_mid_turn_approval_is_refused_loudly() {
-    let (_tmp, daemon, _store) = serving_daemon(TestProvider::new());
-    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
-    let conv = create_conversation(&format!("http://{addr}")).await;
-
-    let (mut ws, _) =
-        tokio_tungstenite::connect_async(format!("ws://{addr}/v1/conversations/{conv}/stream"))
-            .await
-            .unwrap();
+/// Send an `Approve` and read the daemon's answer to it.
+async fn approve_and_read_refusal(addr: std::net::SocketAddr, conv: &str, claim: bool) -> String {
+    let query = if claim { "?approvals=true" } else { "" };
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{addr}/v1/conversations/{conv}/stream{query}"
+    ))
+    .await
+    .expect("the daemon accepts the upgrade");
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Approve {
-            task_id: "t".to_string(),
+            task_id: conv.to_string(),
             step_id: 0,
             approved: true,
         })
@@ -344,16 +341,51 @@ async fn a_mid_turn_approval_is_refused_loudly() {
         None
     })
     .await
-    .expect("a refusal arrives rather than silence")
-    .expect("the refusal is a well-formed TurnFrame");
+    .expect("an answer arrives rather than silence")
+    .expect("the answer is a well-formed TurnFrame");
 
     match frame {
-        TurnFrame::StreamError { message, .. } => assert!(
-            message.contains("approval"),
-            "the refusal says what it refused; got {message:?}"
-        ),
-        other => panic!("expected a StreamError refusal, got {other:?}"),
+        TurnFrame::StreamError { message, .. } => message,
+        other => panic!("expected a StreamError, got {other:?}"),
     }
+}
+
+/// A socket that claimed nothing is told SO, by name — not told "nothing is
+/// pending", which is a different fact, and not told nothing at all.
+///
+/// Accepting the reply and doing nothing is the failure this pins: a client
+/// that submitted an approval and received no frame cannot tell "granted" from
+/// "never arrived" (§18.3). Before rung 6 C1 every reply landed here; now this
+/// is the branch for a client that did not ask to answer.
+#[tokio::test]
+async fn an_unclaimed_socket_is_told_its_reply_resolved_nothing() {
+    let (_tmp, daemon, _store) = serving_daemon(TestProvider::new());
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let message = approve_and_read_refusal(addr, &conv, false).await;
+    assert!(
+        message.contains("did not claim") && message.contains("approvals=true"),
+        "the refusal names the claim the client is missing and how to make it; \
+         got {message:?}"
+    );
+}
+
+/// The claim is ACCEPTED and its resolve path runs: a claimed socket whose
+/// turn has nothing parked is told that, in different words from the socket
+/// that never claimed. Both branches exist, and neither is silence.
+#[tokio::test]
+async fn a_claimed_socket_is_told_when_nothing_is_pending() {
+    let (_tmp, daemon, _store) = serving_daemon(TestProvider::new());
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let message = approve_and_read_refusal(addr, &conv, true).await;
+    assert!(
+        message.contains("no approval is pending") && !message.contains("did not claim"),
+        "a claimed socket is answered about its QUESTIONS, not about its claim; \
+         got {message:?}"
+    );
 }
 
 /// **The receive loop keeps running while a turn does.**

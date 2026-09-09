@@ -270,8 +270,47 @@ status    = "active"
 #       around the spawned serve_turn (no trait ripple), turn_http's
 #       Approve refusal -> submit path, desktop cards from wire frames.
 #       Stop rule fired: >= a day alone, before C's conversion proper.
+#       C1 LANDED 2026-09-09 (b71566e14 + 0493a6f43 + this), RESHAPED BY
+#       THE SPEC: the row above planned "a conversation->socket channel +
+#       pending registry daemon-side", and a first pass built exactly that
+#       — a process-wide router, an owner registry, an RAII guard, a
+#       conversation in every key. TOPOLOGY 3.5 names `approval` under
+#       Capabilities, "a VALUE BUILT PER TURN and passed down", so all of
+#       that was machinery to work out what the turn already knew. The
+#       carrier existed: `runtime::admission` is a task_local installed for
+#       every turn shape in turn_lease.rs, and its `stamp()` is the answer
+#       to the objection that sank an earlier design (a spawned child does
+#       not inherit a scope, so the value is READ before the spawn — which
+#       is where all four Executor sites already cloned the field).
+#       `runtime::capabilities::scope` is that seam; `Runtime::turn_approval`
+#       is the ONE read; no signature in core changed and every non-daemon
+#       host is byte-identical. The daemon's channel is per SOCKET
+#       (SocketApprovalChannel, its own ApprovalDesk) so cross-socket
+#       answering is impossible by construction rather than refused.
+#       DELETED on the way: ApprovalOrigin + its parameter on 13 impls
+#       (added ac7ddd8ee for the router that is no longer the design), the
+#       dead CliApprovalChannel (86 lines rustc reported unconstructed), the
+#       AutoApprove twin of core's channel (its ask_user returned Ok("") —
+#       an invented reply, 18.3), and the park/resolve duplication: one
+#       `sovereign_core::approval_desk::ApprovalDesk<K>` now, with the
+#       server repointed onto it (116 lines -> 37) and the desktop's three
+#       maps queued for C2. `?approvals=true` is a CLAIM, not implied by
+#       connecting: a reader with no approval handler must keep running
+#       under the daemon's own channel, and claiming for it turns an
+#       auto-grant into a hang.
+#       LEDGER, honestly: C1 is +1120/-274, net +846, of which ~300 is test
+#       and ~430 the two new modules' code+docs. A down-payment, not a
+#       reduction. What turns it: C2 (the desktop's three approval maps and
+#       its local turn shapes) and E (the boot split, floor 14->0).
+#       OPEN VERIFICATION, named: no test drives a real turn that PAUSES on
+#       an approval — the stub provider never requests one. The scope
+#       mechanism is pinned (capabilities 3/3, including that a spawned
+#       child inherits nothing), the socket channel is pinned (4/4, 2
+#       sabotages watched red), the wire claim is pinned (turn_surface 8/8);
+#       the executor-to-scope reach rests on `turn_approval` being the only
+#       read, which is a compiler fact, not a run.
 #       REMAINS: A-remainder (atlas browse, notebook composite + LCM
-#       story, one-shot ingest-as-job), C, D-remainder, E (THE BOOT
+#       story, one-shot ingest-as-job), C2, D-remainder, E (THE BOOT
 #       SPLIT + assert_attach_purity + census retirement; floor 14->0
 #       via instrument replacement; needles 10+11 are call-site pins -
 #       composition 12 live + 2 pins), F. Hand-off note 1f377b65.

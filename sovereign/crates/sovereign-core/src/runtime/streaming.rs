@@ -1326,7 +1326,9 @@ impl Runtime {
         // Everything the spawned task needs — no borrows of `self`.
         let inference = Arc::clone(&self.inference);
         let store = Arc::clone(&self.store);
-        let approval = Arc::clone(&self.approval);
+        // THIS turn's channel, read here in the turn's own task — the spawn
+        // below does not inherit the task-local it comes from.
+        let approval = self.turn_approval();
         let inference_config = self.inference_config.clone();
         // Tool-Mastery Layer 3 — cloned so the nested
         // post-stream gap-check spawn can write a
@@ -3021,7 +3023,8 @@ impl Runtime {
         // 5. Spawn streaming task.
         let inference = Arc::clone(&self.inference);
         let store = Arc::clone(&self.store);
-        let approval = Arc::clone(&self.approval);
+        // THIS turn's channel — read before the spawn, as above.
+        let approval = self.turn_approval();
         let inference_config = self.inference_config.clone();
         // Engine handle for acquisition-route resolution on the
         // post-stream gap-check card (EPISTEMIC_STATE.md §4.3).

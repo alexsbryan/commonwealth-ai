@@ -112,6 +112,7 @@ pub mod throughput_tracking;
 /// survives.
 pub mod tier;
 pub mod tool_profile;
+pub mod turn_approval;
 pub mod turn_http;
 pub mod types;
 pub mod watched_folder_runtime;

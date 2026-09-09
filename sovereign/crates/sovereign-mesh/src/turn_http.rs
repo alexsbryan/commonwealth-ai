@@ -91,6 +91,8 @@ use sovereign_core::runtime::{collect_turn, serve_turn};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::enforce_localhost;
+use crate::turn_approval::SocketApprovalChannel;
+use sovereign_core::approval_desk::ResolveOutcome;
 
 /// Mount the turn surface. Built from `Arc<Self>` by `start_daemon`, like the
 /// mesh, admin and reading routers — so a serving daemon cannot come up
@@ -649,12 +651,30 @@ async fn record_tool_outcome(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// Query for `GET /v1/conversations/{id}/stream`.
+#[derive(Debug, Default, Deserialize)]
+pub struct StreamParams {
+    /// Claim this turn's approvals for the connecting socket
+    /// (`?approvals=true`), making it the client the host puts consent
+    /// questions to.
+    ///
+    /// Off by default, and the default is the load-bearing half: a reader
+    /// that streams tokens and installs no approval handler — `svrn chat`,
+    /// the bench harness, a `websocat` probe — must keep running under the
+    /// daemon's own non-interactive channel. Claim it for them and the first
+    /// write-effectful step turns an auto-approval into a hang. See
+    /// [`crate::turn_approval`].
+    #[serde(default)]
+    pub approvals: bool,
+}
+
 /// `GET /v1/conversations/{id}/stream` — WebSocket upgrade.
 async fn ws_handler(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     ws: WebSocketUpgrade,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
+    Query(params): Query<StreamParams>,
 ) -> Response {
     if let Err(r) = enforce_localhost(&peer) {
         return r;
@@ -662,10 +682,15 @@ async fn ws_handler(
     if daemon.runtime().is_none() {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     }
-    ws.on_upgrade(move |socket| handle_ws(socket, daemon, conversation_id))
+    ws.on_upgrade(move |socket| handle_ws(socket, daemon, conversation_id, params.approvals))
 }
 
-async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_id: String) {
+async fn handle_ws(
+    socket: WebSocket,
+    daemon: Arc<EmbeddedDaemon>,
+    conversation_id: String,
+    claim_approvals: bool,
+) {
     let (Some(runtime), Some(store)) = (daemon.runtime(), daemon.state_store()) else {
         // Re-checked after the upgrade because the borrow cannot cross it.
         // Unreachable in practice — `ws_handler` refused above.
@@ -692,6 +717,14 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
             }
         }
     });
+
+    // This socket's approval channel, when it claimed them. Per SOCKET and
+    // per turn — not a registry keyed by conversation — so another socket's
+    // reply has no map to reach these questions through, and a hangup drops
+    // the whole channel with the task rather than leaving entries to purge
+    // (`turn_approval`'s module docs).
+    let approvals = claim_approvals
+        .then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone(), &conversation_id)));
 
     // ONE in-flight turn per socket, held as a task rather than awaited inline.
     //
@@ -770,35 +803,63 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
                     conversation_id.clone(),
                     out_tx.clone(),
                 );
+                // The turn's own approval capability, installed around the
+                // WHOLE call: the executor is built during the acquire, and a
+                // scope that ended at the stream handle would leave the turn's
+                // steps reading the daemon's commissioned channel instead.
+                // `None` here is a socket that claimed nothing, and it runs
+                // exactly as it did before this existed.
+                let turn_approval = approvals
+                    .as_ref()
+                    .map(|a| Arc::clone(a) as Arc<dyn sovereign_core::traits::ApprovalChannel>);
                 in_flight = Some(tokio::spawn(async move {
-                    serve_turn(
-                        &rt,
-                        st.as_ref(),
-                        &cid,
-                        &content,
-                        mode,
-                        intent,
-                        // See the module docs — the daemon has no narration
-                        // broadcast yet, and a `None` here is that fact rather
-                        // than a dropped channel.
-                        None,
-                        &tx,
-                    )
+                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
+                        serve_turn(
+                            &rt,
+                            st.as_ref(),
+                            &cid,
+                            &content,
+                            mode,
+                            intent,
+                            // See the module docs — the daemon has no narration
+                            // broadcast yet, and a `None` here is that fact
+                            // rather than a dropped channel.
+                            None,
+                            &tx,
+                        )
+                        .await;
+                    })
                     .await;
                 }));
             }
-            // v1 has no daemon-side session owner to route an approval to
-            // (TOPOLOGY hazard 12, a phase 5 deliverable). Refusing loudly
-            // beats accepting and silently doing nothing: a client that sent
-            // an approval and got no frame cannot tell "granted" from "never
-            // arrived" (ARCH §18.3).
-            TurnRequest::Approve { .. } | TurnRequest::UserReply { .. } => {
-                let _ = out_tx.send(TurnFrame::StreamError {
-                    message: "this daemon does not accept mid-turn approvals or \
-                              user replies (no daemon-side session owner yet)"
-                        .to_string(),
-                    retry_after_secs: None,
-                });
+            // Rung 6 commit C1: the refusal became a resolve. What survives
+            // of it is the posture — every outcome that is not "the executor
+            // is running again" is SAID, because a client that sent an
+            // approval and got no frame cannot tell "granted" from "never
+            // arrived" (ARCH §18.3). `task_id` is not read: the socket is the
+            // address, and this one's questions are the only ones it can
+            // reach.
+            TurnRequest::Approve {
+                step_id, approved, ..
+            } => {
+                let outcome = approvals
+                    .as_ref()
+                    .map(|a| a.submit_approval(step_id, approved));
+                if let Some(message) = resolve_refusal(outcome, "approval") {
+                    let _ = out_tx.send(TurnFrame::StreamError {
+                        message,
+                        retry_after_secs: None,
+                    });
+                }
+            }
+            TurnRequest::UserReply { content, .. } => {
+                let outcome = approvals.as_ref().map(|a| a.submit_user_reply(content));
+                if let Some(message) = resolve_refusal(outcome, "user reply") {
+                    let _ = out_tx.send(TurnFrame::StreamError {
+                        message,
+                        retry_after_secs: None,
+                    });
+                }
             }
         }
     }
@@ -809,6 +870,29 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
         h.abort();
     }
     tx_handle.abort();
+}
+
+/// The sentence owed to a client whose reply resolved nothing, or `None` when
+/// it resolved a parked question and the turn is running again.
+///
+/// `outcome` is `None` when this socket claimed no approvals — a different
+/// failure from "nothing is parked", and the one the client can actually fix.
+fn resolve_refusal(outcome: Option<ResolveOutcome>, kind: &str) -> Option<String> {
+    match outcome {
+        Some(ResolveOutcome::Resolved) => None,
+        Some(ResolveOutcome::NoSuchPending) => Some(format!(
+            "no {kind} is pending on this socket — it was already answered, or \
+             the turn ended"
+        )),
+        Some(ResolveOutcome::WrongKind) => Some(format!(
+            "this turn is waiting on the other kind of answer, not a {kind}"
+        )),
+        None => Some(format!(
+            "this socket did not claim its turn's approvals — reconnect with \
+             `?approvals=true` to receive and answer them (a {kind} on an \
+             unclaimed socket resolves nothing)"
+        )),
+    }
 }
 
 fn bad_request(reason: &str) -> Response {

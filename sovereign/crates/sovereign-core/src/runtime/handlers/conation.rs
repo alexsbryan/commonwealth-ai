@@ -45,7 +45,7 @@ impl Runtime {
                 .latest_for_conversation(conversation_id)
                 .map(|s| s.id.clone());
             let inference = std::sync::Arc::clone(&self.inference);
-            let approval = std::sync::Arc::clone(&self.approval);
+            let approval = self.turn_approval();
             let routing_events = std::sync::Arc::clone(&self.routing_events);
             let cid = conversation_id.to_string();
             let msg = message.to_string();

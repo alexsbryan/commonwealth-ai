@@ -163,6 +163,7 @@ pub mod acquisition;
 /// "this host already accepted this turn", so the model-slot queue parks a
 /// continuation instead of shedding it. Nothing branches on it but that.
 mod admission;
+pub mod capabilities;
 mod code_trace;
 mod collaboration;
 pub mod epistemic;
