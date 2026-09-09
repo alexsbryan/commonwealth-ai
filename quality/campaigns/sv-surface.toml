@@ -197,10 +197,14 @@ status    = "active"
 #       QuerySession registry (query_session.rs) is in-process. Socket close
 #       aborts the turn today (turn_http.rs hangup abort), so the fallback is
 #       "drop the stream" — but cancel_preparing has no equivalent at all.
-#   G3  request_information          OPEN. Prompt-shaped, BLOCKING. Produced
-#       at collaboration.rs:268 (Refinement) and executor.rs:963 (StepBlock).
-#       A closed socket must resolve to None (SKIP), not Cancelled — that is
-#       the one semantic difference from request_approval.
+#   G3  request_information          DONE 2026-09-09 (R3).
+#       SocketApprovalChannel::request_information parks under
+#       "info:{step_id}" and prompts with the whole InformationRequest;
+#       closed socket resolves None (SKIP) — the one prompt kind whose
+#       hangup policy is not cancel, pinned by test. This row was also
+#       the GATEWAY to G4: the refinement path returns NotAttempted when
+#       request_information answers None, so G4 was unreachable until
+#       this landed.
 #   G3b submit_information_search    OPEN, and the tangled one (260 lines,
 #       commands/conversation.rs:374-638). SPLIT, measured: the web search
 #       stays CLIENT-side (it reads the desktop's own [search] config and
@@ -210,30 +214,40 @@ status    = "active"
 #       (POST /v1/notes/tool-outcome). The searched_sources registry write
 #       and the resolve are the daemon's — fold both into one Answer so a
 #       single user action is a single atomic effect.
-#   G4  message-refined              OPEN. One frame, no reply. CORRECTNESS-
-#       LOAD-BEARING: collaboration.rs:717 records that without this emit the
-#       UI sticks on "Refining your answer" forever.
-#   G5  lesson-proposed              OPEN. One frame, plus a /v1/lessons route
-#       family — the persistence side (commands/lessons.rs) reads notes.db
-#       directly, which is daemon-side in an always-client world.
-#   G6  step-done                    OPEN. No progress frame; the daemon
-#       TRACES AND DROPS it (turn_approval.rs emit_progress). Precedent to
-#       copy: sovereign-server's ExecutorEvent::StepDone carries the exact
-#       four fields the desktop payload needs. StepStatus::of is already the
-#       shared decider.
+#   G4  message-refined              DONE 2026-09-09 (R3):
+#       SocketApprovalChannel emits Notice::MessageRefined. The plumbing
+#       was measured before building: the emit fires in a DETACHED spawn
+#       after the turn task ends, carrying the channel Arc read in-task —
+#       sound, because the channel's frames sender is the socket writer's,
+#       which the connection loop keeps alive past the turn. NAMED GAP
+#       kept open: the NON-STREAMING path (system_message.rs:754/:804)
+#       hardcodes the commissioned channel (AutoApprovalChannel no-ops)
+#       instead of reading turn_approval() — document-attached daemon
+#       turns still emit nothing; the fix is a one-line read swap when a
+#       surface needs it, recorded here rather than silently half-done.
+#   G5  lesson-proposed              DONE 2026-09-09 (R3):
+#       Notice::LessonProposed from the same channel, same detached-spawn
+#       carriage (conation.rs:48 reads the capability in-task). The
+#       /v1/lessons persistence family this row first named is C2's
+#       client-side story, not a wire gap.
+#   G6  step-done                    DONE 2026-09-09 (R3):
+#       emit_progress sends Notice::StepDone, TYPED status (Jump(4) stays
+#       a number). task_id stamps from the conversation — a display
+#       label, not a correlation key; the same thing the server's
+#       set_task_id(&conversation) convention shows.
 #   G7  routing events               OPEN, and unlisted until 2026-09-09.
 #       The desktop's progress UI comes through a DIFFERENT DOOR:
 #       RoutingEventSink emits interpretation-proposed, clarification-request,
 #       turn-narration. TurnFrame::Narration exists but the daemon owns no
 #       per-connection narration subscription (stated in turn_http's module
 #       docs); the other two have no variant at all.
-#   G8  ResolveAck                   OPEN. submit_* returns bool ("did the key
-#       still exist"); the wire has no positive-acknowledgement channel. The
-#       desk's ResolveOutcome already carries the distinction.
-#       SHAPE LANDED R1 2026-09-09: Notice::ResolveAck { id, outcome } and
-#       ResolveOutcome crossed to contracts; the daemon-side EMIT (the
-#       socket answering its own resolve_refusal with a frame instead of
-#       only a StreamError) is R3.
+#   G8  ResolveAck                   DONE 2026-09-09 (R1 shape, R3 emit).
+#       turn_http's Answer arm now acknowledges a resolved answer with
+#       Notice::ResolveAck before anything else; the refusals stay
+#       StreamErrors because they name what the client can FIX. Was:
+#       submit_* returned bool ("did the key still exist") — a client
+#       that answered and heard nothing could not tell "accepted" from
+#       "never arrived".
 #   G9  Complete.metadata            OPEN, and a TRAP. In-process reads the
 #       RAW persisted blob and gates two behaviours on metadata["intent"] and
 #       metadata["provenance"]["finish_reason"]. The wire carries a
@@ -260,9 +274,13 @@ status    = "active"
 #       experience that bar forbids.
 #       PRE-REGISTERED R1 2026-09-09: the choice is the frame. Notice::
 #       TurnStarted { message_id } is on the wire, byte-pinned, before any
-#       conversion started — C2 discovers a frame, not a dilemma. The
-#       daemon-side emit (at stream-handle acquisition, beside
-#       drive_stream_handle) is R3.
+#       conversion started — C2 discovers a frame, not a dilemma.
+#       EMITTED R3 2026-09-09: drive_stream_handle emits it at handle
+#       acquisition (every streaming turn shape — Message, Resume,
+#       Redirect), and serve_non_streaming_turn emits it before its Token
+#       for ORDER's sake, late by nature (its own comment says so — the
+#       id does not exist until that path's turn is done). Pinned by the
+#       pausing-turn e2e test.
 #   G11 TurnStream cannot reply      DONE 2026-09-09 (R2). The socket
 #       splits at connect: writer task fed by mpsc, cloneable TurnSender
 #       answers mid-drain. Was: next_frame(&mut self) held the socket
@@ -500,6 +518,26 @@ status    = "active"
 #       in SocketApprovalChannel and its frontend payload reconstructed
 #       byte-identically (the four already-reconstructible events prove the
 #       shape: zero TypeScript moved).
+#       MOSTLY LANDED 2026-09-09 (one session, build-verified, one test
+#       pass at the end): G3, G4, G5, G6, G8, G10 producers all landed
+#       (rows above carry the specifics), G9's wire half closed by the
+#       routed_intent stamp at both recipe-author blob writes — a
+#       measured finding: `was_cancelled` was ALREADY wire-answerable
+#       (Complete.provenance.finish_reason is byte-identical to the blob
+#       read), the recipe-author gate was NOT (its blob carries no key
+#       the projection reads), and the stamp routes it through the
+#       EXISTING TurnMetadata.routed_intent with zero wire-schema motion.
+#       The C1 OPEN VERIFICATION is CLOSED: the e2e test drives a REAL
+#       turn (planner knob: one UserInput step, pinned ComplexTask,
+#       ?approvals=true) that pauses on Prompt over the wire, resumes on
+#       Answer, and completes; the stale-answer refusal follows. The
+#       pause beats every other frame on that path — ComplexTask is
+#       non-streamable, the whole turn runs inside handle_message, and
+#       the e2e pins that honestly instead of asserting a streaming-path
+#       order it cannot have. REMAINS: G7 (routing events — payload move
+#       first), G3b (the information-search split), G9's client-side
+#       consumption (C2). Also named-kept-open: the non-streaming
+#       emits' channel read (G4 row).
 #   R4  THE BLOCKERS. B1-B4. B1 is a design problem, not a code problem, and
 #       should be settled with the operator before it is built.
 #   R5  THE COLLAPSE. Delete the 15 forks and the desktop's in-process turn
