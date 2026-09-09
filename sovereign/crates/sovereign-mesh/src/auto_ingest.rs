@@ -1139,9 +1139,107 @@ async fn pull_loop(
         .remove(&handoff_id);
 }
 
+/// How many consecutive heartbeats may fail to land before the donor
+/// gives up on the coordinator. Same shape as `MAX_NEXT_UNIT_FAILURES`
+/// above and for the same reason: a coordinator that is simply gone
+/// never sends a 410, so silence is the only signal we get. Three at
+/// `HEARTBEAT_INTERVAL` (one third of the lease) is exactly `LEASE_MS`
+/// since the last beat that landed — the moment our lease is expired
+/// and the reaper is free to give the unit to someone else. Ingesting
+/// past that point writes into a lease we no longer hold.
+const MAX_HEARTBEAT_MISSES: u32 = 3;
+
+/// What one heartbeat POST came back as, owned and free of
+/// `reqwest::Response` so [`heartbeat_verdict`] is decidable in a unit
+/// test (ARCH §18.1 — a check with no failing input you can name is
+/// not a check).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeartbeatOutcome {
+    /// The coordinator answered with this status.
+    Answered(reqwest::StatusCode),
+    /// No answer at all — connection refused, timeout, DNS. From the
+    /// donor's side this is indistinguishable from a coordinator that
+    /// has gone silent, which is why it counts rather than aborts.
+    NoAnswer,
+}
+
+/// What the donor should do after one heartbeat. Mirrors
+/// `commonwealth_knowledge::work_queue::HeartbeatResult` in vocabulary
+/// (`Renewed`, and reclaimed-means-abort) WITHOUT depending on it:
+/// `commonwealth-knowledge` was deliberately dropped from this crate in
+/// cw-lift 1c (see Cargo.toml) and re-adding it to borrow two names
+/// would relink the knowledge layer into the mesh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeartbeatVerdict {
+    /// Lease renewed; the miss counter resets.
+    Renewed,
+    /// Nothing conclusive. Keep ingesting and try the next tick.
+    Miss,
+    /// Stop ingesting — the lease is not ours any more.
+    Abort(AbortCause),
+}
+
+impl HeartbeatVerdict {
+    /// What the miss counter becomes after this verdict. Lives here so
+    /// the spawner and its tests cannot drift apart on the reset —
+    /// one decider for one rule (ARCH §10.6). Aborting ends the task,
+    /// so the counter simply keeps its value for the warn line.
+    fn next_misses(self, consecutive_misses: u32) -> u32 {
+        match self {
+            HeartbeatVerdict::Renewed => 0,
+            HeartbeatVerdict::Miss => consecutive_misses + 1,
+            HeartbeatVerdict::Abort(_) => consecutive_misses,
+        }
+    }
+}
+
+/// Why the donor is aborting. Named in the warn line so a log reader
+/// can tell a reclaimed lease from a vanished coordinator (ARCH §9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AbortCause {
+    /// 410 — the reaper handed our lease to someone else, or the
+    /// handoff finished.
+    Gone,
+    /// 404 — the handoff itself is gone: a coordinator that restarted
+    /// with empty state, or a reaped handoff. `commonwealth-api`
+    /// answers `Reclaimed { reason: "handoff not found" }` at this
+    /// status (`routes_internal/corpus_queue.rs`), which is correct —
+    /// it was the donor that used to read it as "nothing happened".
+    NotFound,
+    /// `MAX_HEARTBEAT_MISSES` beats in a row failed to land.
+    Silence,
+}
+
+/// The heartbeat decision, pure so it can be exercised without a live
+/// coordinator. `consecutive_misses` is the count BEFORE this outcome,
+/// so the caller keeps one counter and this function owns the limit.
+fn heartbeat_verdict(outcome: HeartbeatOutcome, consecutive_misses: u32) -> HeartbeatVerdict {
+    match outcome {
+        HeartbeatOutcome::Answered(s) if s == reqwest::StatusCode::GONE => {
+            HeartbeatVerdict::Abort(AbortCause::Gone)
+        }
+        HeartbeatOutcome::Answered(s) if s == reqwest::StatusCode::NOT_FOUND => {
+            HeartbeatVerdict::Abort(AbortCause::NotFound)
+        }
+        HeartbeatOutcome::Answered(s) if s.is_success() => HeartbeatVerdict::Renewed,
+        // Every other status, and no answer at all, are the same thing
+        // to the donor: this beat did not land. The lease may still be
+        // ours, so one of them is not enough to throw the unit away —
+        // but a run of them means nobody is listening.
+        _ => {
+            if consecutive_misses + 1 >= MAX_HEARTBEAT_MISSES {
+                HeartbeatVerdict::Abort(AbortCause::Silence)
+            } else {
+                HeartbeatVerdict::Miss
+            }
+        }
+    }
+}
+
 /// Spawn a heartbeat task for the duration of a single unit's ingest.
 /// Fires `POST /internal/corpus/heartbeat` every `HEARTBEAT_INTERVAL`.
-/// On 410 Gone, sets the cancellation flag so the ingest loop aborts.
+/// A thin loop over [`heartbeat_verdict`]; on any `Abort` it sets the
+/// cancellation flag so the ingest loop stops.
 fn spawn_heartbeat(
     client: reqwest::Client,
     coordinator_url: String,
@@ -1156,6 +1254,7 @@ fn spawn_heartbeat(
         // Skip the immediate first tick — the lease starts fresh at
         // next_unit return, no need to heartbeat until ~100s in.
         ticker.tick().await;
+        let mut consecutive_misses = 0u32;
         loop {
             ticker.tick().await;
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1166,32 +1265,13 @@ fn spawn_heartbeat(
                 "peer_id": peer_id,
                 "unit_id": unit_id,
             });
-            match client
+            let outcome = match client
                 .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
                 .json(&body)
                 .send()
                 .await
             {
-                Ok(r) if r.status() == reqwest::StatusCode::GONE => {
-                    tracing::warn!(
-                        handoff = %handoff_id,
-                        unit_id,
-                        "heartbeat: 410 Gone — lease reclaimed, aborting unit"
-                    );
-                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-                    return;
-                }
-                Ok(r) if r.status().is_success() => {
-                    // Lease renewed; nothing to do.
-                }
-                Ok(r) => {
-                    tracing::debug!(
-                        handoff = %handoff_id,
-                        unit_id,
-                        status = %r.status(),
-                        "heartbeat: non-success response"
-                    );
-                }
+                Ok(r) => HeartbeatOutcome::Answered(r.status()),
                 Err(e) => {
                     tracing::debug!(
                         handoff = %handoff_id,
@@ -1199,10 +1279,141 @@ fn spawn_heartbeat(
                         error = %e,
                         "heartbeat: request failed"
                     );
+                    HeartbeatOutcome::NoAnswer
+                }
+            };
+            let verdict = heartbeat_verdict(outcome, consecutive_misses);
+            consecutive_misses = verdict.next_misses(consecutive_misses);
+            match verdict {
+                HeartbeatVerdict::Renewed => {}
+                HeartbeatVerdict::Miss => {
+                    tracing::debug!(
+                        handoff = %handoff_id,
+                        unit_id,
+                        ?outcome,
+                        consecutive_misses,
+                        "heartbeat: beat did not land"
+                    );
+                }
+                HeartbeatVerdict::Abort(cause) => {
+                    let reason = match cause {
+                        AbortCause::Gone => "410 Gone — lease reclaimed",
+                        AbortCause::NotFound => {
+                            "404 — handoff gone from the coordinator (restart or reap)"
+                        }
+                        AbortCause::Silence => "coordinator silent for the miss limit",
+                    };
+                    tracing::warn!(
+                        handoff = %handoff_id,
+                        unit_id,
+                        ?cause,
+                        consecutive_misses,
+                        "heartbeat: aborting unit — {}",
+                        reason
+                    );
+                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return;
                 }
             }
         }
     })
+}
+
+#[cfg(test)]
+mod heartbeat_verdict_tests {
+    use super::{
+        heartbeat_verdict, AbortCause, HeartbeatOutcome, HeartbeatVerdict, MAX_HEARTBEAT_MISSES,
+    };
+
+    /// The failing input this gate exists for. `commonwealth-api`'s
+    /// heartbeat route answers 404 when the handoff is not in the
+    /// coordinator's store at all — a coordinator that restarted with
+    /// empty state, or a reaped handoff. Before this, the donor dropped
+    /// that status into a `debug!` catch-all and kept ingesting into a
+    /// lease nobody held until the unit finished.
+    #[test]
+    fn heartbeat_404_aborts_with_not_found() {
+        assert_eq!(
+            heartbeat_verdict(
+                HeartbeatOutcome::Answered(reqwest::StatusCode::NOT_FOUND),
+                0
+            ),
+            HeartbeatVerdict::Abort(AbortCause::NotFound)
+        );
+    }
+
+    /// 410 is the arm that already worked; kept so the 404 fix cannot
+    /// be made by widening one match arm over both.
+    #[test]
+    fn heartbeat_410_aborts_with_gone() {
+        assert_eq!(
+            heartbeat_verdict(HeartbeatOutcome::Answered(reqwest::StatusCode::GONE), 0),
+            HeartbeatVerdict::Abort(AbortCause::Gone)
+        );
+    }
+
+    /// A coordinator that is simply unreachable never sends a 410, so
+    /// silence is the only signal. Driven through the same counter the
+    /// spawner keeps, so this proves the composed loop and not just the
+    /// arithmetic inside one call.
+    #[test]
+    fn heartbeat_three_misses_abort_with_silence() {
+        let mut misses = 0u32;
+        let mut verdicts = Vec::new();
+        for _ in 0..MAX_HEARTBEAT_MISSES {
+            let v = heartbeat_verdict(HeartbeatOutcome::NoAnswer, misses);
+            misses = v.next_misses(misses);
+            verdicts.push(v);
+        }
+        assert_eq!(
+            verdicts,
+            vec![
+                HeartbeatVerdict::Miss,
+                HeartbeatVerdict::Miss,
+                HeartbeatVerdict::Abort(AbortCause::Silence),
+            ],
+            "the third beat in a row that does not land is the abort"
+        );
+    }
+
+    /// What stops `heartbeat_three_misses_abort_with_silence` passing on
+    /// a counter that only ever increments: two misses, one renewal,
+    /// then two more misses must NOT abort — the run of three was
+    /// broken.
+    #[test]
+    fn heartbeat_success_resets_the_miss_counter() {
+        let mut misses = 0u32;
+        let mut step = |outcome| {
+            let v = heartbeat_verdict(outcome, misses);
+            misses = v.next_misses(misses);
+            v
+        };
+        assert_eq!(step(HeartbeatOutcome::NoAnswer), HeartbeatVerdict::Miss);
+        assert_eq!(step(HeartbeatOutcome::NoAnswer), HeartbeatVerdict::Miss);
+        assert_eq!(
+            step(HeartbeatOutcome::Answered(reqwest::StatusCode::OK)),
+            HeartbeatVerdict::Renewed
+        );
+        assert_eq!(step(HeartbeatOutcome::NoAnswer), HeartbeatVerdict::Miss);
+        assert_eq!(
+            step(HeartbeatOutcome::NoAnswer),
+            HeartbeatVerdict::Miss,
+            "the renewal broke the run — this is the fifth failed beat but only the second in a row"
+        );
+    }
+
+    /// A 5xx is the coordinator answering while broken. It is a miss,
+    /// not an abort: the lease may still be ours.
+    #[test]
+    fn heartbeat_500_is_a_miss_not_an_abort() {
+        assert_eq!(
+            heartbeat_verdict(
+                HeartbeatOutcome::Answered(reqwest::StatusCode::INTERNAL_SERVER_ERROR),
+                0
+            ),
+            HeartbeatVerdict::Miss
+        );
+    }
 }
 
 // ─── Phase 6 canonical-sync: peer-pull preference helper ────────

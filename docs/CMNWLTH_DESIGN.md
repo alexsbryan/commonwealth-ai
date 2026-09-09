@@ -1,5 +1,36 @@
 # cmnwlth — a general compute rail, extracted from the mesh
 
+> **SUPERSEDED as a design, 2026-09-09 (cw-lift 5a). Kept as the ontology.**
+>
+> The live design for the work plane is
+> [`sovereign/deploy/mesh/WORK_PLANE.md`](../sovereign/deploy/mesh/WORK_PLANE.md).
+> This document's ontology survives that rewrite — the nouns below map one-to-one
+> onto it — but its *mechanism* does not: `JobRail` here is a trait over an HTTP
+> submit/lease/heartbeat/complete cycle, and the work plane now rides the ring
+> journal, where those four verbs are signed acts in a `work` namespace and the
+> queue is a fold over admission. Nothing in this file was ever implemented; read
+> it for the vocabulary and the use cases, not for the seams.
+>
+> | Here | On the rail (`WORK_PLANE.md`) |
+> |---|---|
+> | `Job { unit_id, kind, payload, needs }` | `JobUnit { envelope, kind, unit_hash, payload, requirements, tenant }` — identity from the payload's content hash, never a counter (§7.5) |
+> | `Executor` (trait, `kinds()`/`tier()`/`run()`) | `JobExecutor` (trait, `descriptor()`/`validate()`/`execute()`) — `ExecTier` becomes the ordered `Isolation` enum |
+> | `Claim` (what a member advertises) | `WorkOffer { kinds, max_concurrent, yield_to_foreground, isolation, os, arch, repos, accept_from }`, published as an `Offer` act |
+> | `Lease` (returned by `JobRail::lease`) | the `Lease` act, admitted by the rail; a second lease on a held unit is a reported `lost_leases` row, never a silent overwrite |
+> | `Selector` (scored choice among claimants) | `may_take(&proj, self_key, &offer, unit, now) -> Result<(), WorkRefusal>` — a **refusal predicate, not a scorer**. v0 has no fair-share ordering, and that is the one place the ontology narrowed rather than mapped |
+> | `JobRail` (trait; submit/lease/heartbeat/complete) | the `work` namespace itself — the same four verbs as `Submit`/`Lease`/`Renew`/`Complete` acts, no trait and no new HTTP route |
+> | `Grant` (TTL'd allowlist) | no `Grant` noun: `Submit.allowed ∩ Offer.accept_from` **is** the grant |
+> | `Verifier` (submitter-supplied `fn(&Job,&Artifact)->Verdict`) | `kernel_types::Judgement` carried on `Complete`, one outcome vocabulary for the whole workspace (§10.6) |
+>
+> Two positions this document takes were reversed by the rewrite, and they are
+> the reason it is not the live design: the `Executor` tier list here opens at
+> WASI and jailed-native, and the rail's v0 ships **trusted-native only** on a
+> social-trust ring, said plainly in the descriptor; and "Sandboxing … executor
+> impls, shipped separately" describes machinery that does not exist anywhere in
+> this repository: `bwrap`, `firejail`, `nsjail` and `--network=none` return zero
+> hits workspace-wide, and the only `podman` in the tree builds release artifacts
+> and runs CI. Sandboxing is named as H2 on the rail, not assumed here.
+
 Status: DRAFT (exploration, 2026-08-16). Nothing here is implemented; this
 document exists to pressure-test an ontology before any code moves.
 

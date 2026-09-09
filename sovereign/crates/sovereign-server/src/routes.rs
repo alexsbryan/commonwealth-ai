@@ -191,7 +191,7 @@ fn tenant_runtime(
     store: &Arc<dyn StateStore>,
     tenant: &TenantId,
 ) -> TenantRuntime {
-    TenantRuntime::new(Arc::clone(runtime), Arc::clone(store), tenant.0.clone())
+    TenantRuntime::new(Arc::clone(runtime), Arc::clone(store), tenant.to_string())
 }
 
 // ─── Handlers ─────────────────────────────────────────────────
@@ -343,7 +343,7 @@ pub async fn get_conversation(
     Extension(tenant): Extension<TenantId>,
     Path(conversation_id): Path<String>,
 ) -> ApiResult<ConversationResponse> {
-    let scoped_id = format!("{}:{conversation_id}", tenant.0);
+    let scoped_id = format!("{tenant}:{conversation_id}");
 
     match store.get_conversation(&scoped_id).await {
         Ok(convo) => Ok(Json(ConversationResponse {
@@ -393,7 +393,7 @@ pub async fn list_conversations(
     // id made the client re-scope it on open — `GET /v1/conversations/
     // {tenant:id}` becomes `tenant:tenant:id`, which matches nothing, so
     // every existing conversation opened empty.
-    let prefix = format!("{}:", tenant.0);
+    let prefix = format!("{tenant}:");
     match store.list_conversations(limit, offset).await {
         Ok(convos) => Ok(Json(ConversationListResponse {
             conversations: convos
@@ -417,7 +417,7 @@ pub async fn delete_conversation(
     Extension(tenant): Extension<TenantId>,
     Path(conversation_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let scoped_id = format!("{}:{conversation_id}", tenant.0);
+    let scoped_id = format!("{tenant}:{conversation_id}");
 
     match store.delete_conversation(&scoped_id).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
@@ -466,7 +466,7 @@ pub async fn search(
     // `TenantRuntime::scoped_id`). Without this filter the search runs over
     // every tenant's messages — the cross-tenant leak that
     // `http_tests::search_does_not_leak_across_tenants` guards against.
-    let prefix = format!("{}:", tenant.0);
+    let prefix = format!("{tenant}:");
     match store.search_messages(&body.query).await {
         Ok(messages) => Ok(Json(SearchResponse {
             results: messages

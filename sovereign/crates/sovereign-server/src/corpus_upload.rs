@@ -261,7 +261,7 @@ async fn upload_private_corpus(
         engine,
         store.as_ref(),
         Path::new(&body.file_path),
-        &tenant.0,
+        tenant.as_str(),
         &body.name,
     )
     .await

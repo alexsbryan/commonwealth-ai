@@ -126,7 +126,7 @@ async fn list_assets(
         .list_document_assets()
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    assets.retain(|a| asset_visible_to(a, &tenant.0));
+    assets.retain(|a| asset_visible_to(a, tenant.as_str()));
     Ok(Json(assets))
 }
 
@@ -176,7 +176,7 @@ async fn upload_asset(
 
     // Stamp ownership so this document is private to the uploading tenant on
     // a multi-user hub (re-saves the asset row with `owner` set).
-    asset.owner = Some(tenant.0.clone());
+    asset.owner = Some(tenant.to_string());
     store
         .save_document_asset(&asset)
         .await
@@ -197,7 +197,7 @@ async fn get_asset(
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
 
-    if !asset_visible_to(&asset, &tenant.0) {
+    if !asset_visible_to(&asset, tenant.as_str()) {
         return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
     }
 
@@ -218,7 +218,7 @@ async fn delete_asset(
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
-    if !asset_visible_to(&asset, &tenant.0) {
+    if !asset_visible_to(&asset, tenant.as_str()) {
         return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
     }
 
@@ -245,7 +245,7 @@ async fn ask_asset(
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
 
-    if !asset_visible_to(&asset, &tenant.0) {
+    if !asset_visible_to(&asset, tenant.as_str()) {
         return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
     }
 
@@ -296,7 +296,7 @@ async fn get_asset_state(
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
 
-    if !asset_visible_to(&asset, &tenant.0) {
+    if !asset_visible_to(&asset, tenant.as_str()) {
         return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
     }
 

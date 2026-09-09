@@ -42,6 +42,7 @@ pub mod requirements;
 pub mod response;
 pub mod scoring;
 pub mod slot;
+pub mod tenant;
 pub mod tool;
 pub mod version;
 
@@ -53,6 +54,7 @@ pub use completion::{
 pub use error::{InferenceError, InferenceResult};
 pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
 pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
+pub use tenant::{InvalidTenantId, TenantId};
 pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 
 pub use capability::{

@@ -2,7 +2,7 @@
 
 Verified facts underpinning `PLAN.md` (same directory), checked against source on 2026-08-04
 (ARCH_PRINCIPLES §11.1 — cite, don't recall). Sections marked *(staff pass)* were verified via
-targeted source reads the same day. Items marked *(doc)* cite repository markdown whose underlying
+targeted source reads the same day, unless the heading carries its own later date. Items marked *(doc)* cite repository markdown whose underlying
 runs were not re-executed. When the plan or this file disagrees with the code, the code wins and
 both files owe a fix in the same commit (§1.1).
 
@@ -24,7 +24,7 @@ both files owe a fix in the same commit (§1.1).
 
 ## The ranker is where inference-placement policy belongs
 
-- `rank()` is pure — no I/O, no clock, no interior mutability — `scheduler_core.rs:317`.
+- `rank()` is pure — no I/O, no clock, no interior mutability — `scheduler_core.rs:323`.
 - Typed exclusion reasons: `Quarantined` `:431`, `ManifestUnavailable` `:439`, `NoForcedChoice` `:464`,
   `NoClaimMatch` `:474`; paired tests `:901`, `:924`, `:1020`.
 - `NodeCapabilities` rebuilt and gossiped every 10s — `capabilities.rs:64`.
@@ -113,7 +113,7 @@ both files owe a fix in the same commit (§1.1).
 
 - Retrieval fan-out selects peers by liveness + advertised corpora only, all candidates in parallel,
   3s per-peer timeout — `routes_knowledge.rs:127-163`, `:577-582`, `:284-303`, `:39`. It never calls
-  the scheduler and structurally cannot: `rank()` is `pub(crate)` (`scheduler_core.rs:317`) and
+  the scheduler and structurally cannot: `rank()` is `pub(crate)` (`scheduler_core.rs:323`) and
   `sovereign-mesh` depends on `commonwealth-api`, not the reverse.
 - The serving handler (`routes_internal/knowledge.rs:103`) checks: engine present, corpus installed,
   fan-out cap, unsealed-size cap, admission (a *resource* gate). It checks **no** sharing flag,
@@ -174,6 +174,63 @@ both files owe a fix in the same commit (§1.1).
   so it is queued in `rail_outbox`, signed onto the `corpus-engine` ring journal by the KV pump and
   carried by `/internal/ring/sync` — the ONE sender of replicated state. A rail payload's value is
   real base64 (`commonwealth-state::rail_kv`), so the stub is gone rather than relocated.
+
+## The work plane *(staff pass, 2026-09-09)*
+
+- **Nothing of it exists.** No `work` namespace, no `commonwealth-work` crate, no `WorkAct`,
+  no `JobUnit`, no executor registry, no second queue of any kind. The design is
+  `sovereign/deploy/mesh/WORK_PLANE.md`, re-cut onto the ring rail on 2026-09-09 and laddered
+  as cw-lift Phase 5 (`quality/campaigns/cw-lift.toml`, rungs 5a-5h). `docs/CMNWLTH_DESIGN.md`
+  is the same ontology under other names and now carries a superseded-by header pointing at it.
+- **The 2026-09-04 design rested on machinery that mostly does not exist**, and the sixteen-row
+  audit that says so is the first section of that file. What 5a landed is the audit, the
+  corrections below, and one code fix; it built no work-plane mechanism.
+- **The live bug the audit found**, fixed at 5a: a donor whose coordinator vanishes never
+  aborts. The server returns 404 with `Reclaimed { reason: "handoff not found" }`
+  (`corpus_queue.rs:378-381`) — a coordinator that restarted with empty state, or a reaped
+  handoff — and the peer heartbeat loop acted only on 410 (`auto_ingest.rs:1175`), dropping
+  everything else into two debug catch-alls (`:1187`, `:1195`). The donor kept ingesting into
+  a lease nobody held until the unit finished. There was no miss counter either, so a
+  coordinator that goes silent forever was never noticed at all.
+- **`TenantId` has no validator**, so PLAN.md F1 is a move *plus new code*: `auth.rs:35` reads
+  `/// Extract tenant_id from a valid API key.`, which claims extraction and not checking. The
+  29 refs sit in 7 files of one crate. §"The layer contract that decides where `TenantId`
+  lives" above is the standing decision and the move does not disturb it.
+- **The queue's refusal vocabulary is one variant wide.** `QueueError::EmbedModelMismatch` has
+  zero constructors (`work_queue.rs:73`); `PeerNotAllowed` is constructed once
+  (`work_queue.rs:241`) and enforced as 403 (`corpus_queue.rs:310-314`). §"The ingest queue, in
+  fact" records the embed gate as advisory; this is the same fact from the refusal side.
+- **No sandbox exists anywhere in this repository.** `bwrap`, `firejail`, `nsjail` and
+  `--network=none` return zero hits workspace-wide; the only `podman` builds release artifacts
+  and runs CI. `sovereign-tools/src/compute.rs:8` says "Sandboxed Python code execution tool"
+  over a `python3` spawn with a 30-second timeout and no isolation (`:30-59`). This is why the
+  pilot kind is trusted-native and says so, rather than claiming a floor.
+- **Four seams the design was going to reuse and cannot**, each because the citation did not
+  survive contact: `rank()` is `pub(crate)` (`scheduler_core.rs:323`) behind a closed
+  `ExclusionReason` (`decision_log.rs:479`); the "deficit ordering" is weight-then-FIFO plus a
+  per-origin equal-share cap, in a different crate (`serving-policy/src/fair_sched.rs:349-356`,
+  cap at `:163`), and the word "deficit" appears nowhere in it; `sovereign-compute`'s
+  supervisor has two dependents and its own HTTP-polled restart decider (`supervisor.rs:960`);
+  and `DistributionHandoff` is a same-host JSON file (`sovereign-compute/src/distribution.rs:35`,
+  written `manager.rs:885`, read `child_main.rs:363`), not a wire format.
+- **Three types named `WorkUnit`**, three lifecycles: `commonwealth-core/src/knowledge.rs:319`
+  (the closed ingest enum), `worker_http.rs:81` (the rented-pod envelope — its `kind: String`
+  is read only by the `echo` stub runner `worker_daemon.rs:88` and a test runner `:1142`, never
+  by the production `SubprocessRunner`), and `sovereign-pipeline/src/worklist.rs:47` (a sqlite
+  row). 5b renames them apart.
+- **`JobSpec` does not generalize additively.** Nine fields (`worker_controller.rs:99`), four of
+  them Vast knobs cloned only by `derive_pod_spec` (`multi_pod_coordinator.rs:418-421`); only
+  `image` is asserted by a test (`:497`), and both real providers take the spec as `_spec` and
+  never read it. There are two non-test `WorkerProvider` impls, both Vast
+  (`worker_pod_provider.rs:110`, `:218`); RunPod is four doc comments and no code.
+- **The ledger cannot credit a donor today.** `LedgerEventKind`
+  (`commonwealth-core/src/contributions.rs:59`) is a closed five-variant set with no compute
+  variant. The emitter (`commonwealth-state/src/contributions.rs:73`) is reusable as-is; 5h
+  adds the variant.
+- **The pull path is already the default**, gated the other way round: the legacy push is what
+  `SOVEREIGN_USE_LEGACY_PARTITION` turns on (`corpus_collaborate.rs:41`, `use_pull_queue()`
+  `:43-46`). `SOVEREIGN_USE_WORK_QUEUE` survives in two comments (`corpus_collaborate.rs:259`,
+  `server.rs:380`) and no code reads it.
 
 ## Identity dies at the server; the tensor port is open *(staff pass)*
 
