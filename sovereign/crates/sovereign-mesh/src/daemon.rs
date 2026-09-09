@@ -681,6 +681,29 @@ impl EmbeddedDaemon {
         self.services.serving().map(|s| &s.core.runtime)
     }
 
+    /// Borrow the `InsightService` the insight surface serves, when the
+    /// commissioning host built one (sv-surface rung 6). `None` on
+    /// [`DaemonServices::MeshAdmin`] and on a serving commission that
+    /// supplied no service — `insight_http` renders that as a named 503,
+    /// not as an unmounted route.
+    pub fn insight_service(&self) -> Option<&Arc<sovereign_core::insight::InsightService>> {
+        self.services
+            .serving()
+            .and_then(|s| s.core.insights.as_ref())
+    }
+
+    /// Borrow the `NoteStore` behind this daemon's mounted `/mcp` surface,
+    /// when one is mounted (sv-surface rung 6). `None` on `MeshAdmin` and on
+    /// a commission whose `notes.db` would not open — the tool-outcome route
+    /// renders that as a named 503, matching `McpSurface::Unavailable`'s own
+    /// refusal to conflate the two facts (ARCH §18.3).
+    pub fn notes_store(&self) -> Option<&Arc<corpus_engine_notes::NoteStore>> {
+        self.services
+            .serving()
+            .and_then(|s| s.capability.mcp.mount())
+            .map(|m| &m.notes)
+    }
+
     /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
     /// caller is `reload_from_setup_config`, which is itself reachable only
     /// on the variant that carries a `ProviderFactory`. A host cannot install
@@ -3146,8 +3169,14 @@ impl EmbeddedDaemon {
             // Phase 5c — the daemon answers. Built here from `Arc<Self>` like
             // the three above, not accepted from a host, so a serving daemon
             // cannot come up unable to serve a turn.
-            mounted.push(crate::turn_http::turn_router(self_arc));
+            mounted.push(crate::turn_http::turn_router(Arc::clone(&self_arc)));
             mount_names.push("turn_http");
+            // sv-surface rung 6 — the insight surface. Mounted
+            // unconditionally on serving daemons; a commission that built no
+            // `InsightService` answers 503 with that named reason on these
+            // paths, which `mount_names` below still reports as mounted.
+            mounted.push(crate::insight_http::insight_router(self_arc));
+            mount_names.push("insight_http");
             for (router, name) in self
                 .services
                 .host_routers()

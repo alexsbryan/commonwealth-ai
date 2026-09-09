@@ -1727,6 +1727,11 @@ pub async fn bootstrap_with_progress(
                         // commands and anything the daemon serves are the same
                         // assembly by construction rather than by review.
                         runtime: Arc::clone(&runtime_arc),
+                        // sv-surface rung 6: the insight surface over the SAME
+                        // connection `open_store` opened — the service the
+                        // in-process `/v1/insights/*` routes serve, and the twin
+                        // of what the daemon commissions for the attached case.
+                        insights: state.insight_service.read().await.as_ref().map(Arc::clone),
                     },
                     capability,
                     advertise_embed,

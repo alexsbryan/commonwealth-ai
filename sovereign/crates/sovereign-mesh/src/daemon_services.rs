@@ -193,6 +193,14 @@ pub struct ServingCore {
     /// and an `Option` here would put the crossing back that Phase 3 closed.
     /// Both serving variants carry one, so the lattice still nests.
     pub runtime: Arc<sovereign_core::runtime::Runtime>,
+    /// The insight clip/search service over the SAME `sovereign.db`
+    /// connection `state_store` holds (sv-surface rung 6). `None` on a
+    /// commission that never built one — a mesh-admin daemon answers 503
+    /// with that named reason on `/v1/insights/*`, which is a different
+    /// fact from "the route is not mounted" (ARCH §18.3). The service
+    /// itself is sovereign-core's, constructed by the host that owns the
+    /// concrete store handle; this field is the door, not a second decider.
+    pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the
@@ -707,6 +715,7 @@ pub(crate) mod fixtures {
                 inference_provider: Arc::new(NullProvider),
                 state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
                 runtime: runtime(),
+                insights: None,
             },
             capability: ServingCapability {
                 mcp: McpSurface::Unavailable {

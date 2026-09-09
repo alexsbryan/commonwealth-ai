@@ -191,6 +191,24 @@ async fn turn_http_rejects_non_loopback_via_conversation_create() {
 }
 
 #[tokio::test]
+async fn insight_http_rejects_non_loopback_via_insights_list() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/insights"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "insight_http loopback guard slipped — a clip is this user's reading \
+         of this host's corpora, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
 async fn reading_http_rejects_non_loopback_via_chunk_fetch() {
     let (_tmp, daemon) = fresh_daemon();
     let base = spawn_with_spoof(reading_router(daemon)).await;
@@ -331,6 +349,13 @@ async fn every_router_fails_closed_when_connect_info_absent() {
 
     let (_t5, d5) = fresh_daemon();
     assert_500_on_bare_serve(turn_router(d5), "/v1/conversations").await;
+
+    let (_t6, d6) = fresh_daemon();
+    assert_500_on_bare_serve(
+        sovereign_mesh::insight_http::insight_router(d6),
+        "/v1/insights",
+    )
+    .await;
 }
 
 // Silence unused-import lint when the test build slims something
@@ -811,4 +836,364 @@ async fn conversation_messages_route_serves_one_collect_turn() {
         .unwrap();
     let served: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(served["messages"].as_array().unwrap().len(), 4);
+}
+
+// ── sv-surface rung 6 commit A: search / memory / insight siblings ─────────
+//
+// The rung-3 parity discipline extended to the routes the attach boot needs
+// beside the CRUD surface: message search (the store's own search decider),
+// the memory tombstone/weaken pair (the halving formula moves HERE, off the
+// desktop command — one decider), and the insight surface (the same
+// `InsightService` the desktop builds, served on loopback). Parity means the
+// same thing it meant at rung 3: on the SAME fixture, the route's bytes
+// equal the canonical value's bytes — the route adds nothing, drops nothing,
+// re-derives nothing.
+
+/// The search route's bytes are the store's `search_messages` rows through
+/// the wire envelope — the SAME trait call the desktop's in-process command
+/// makes, so wire and local answers cannot drift.
+#[tokio::test]
+async fn conversation_search_route_serves_the_stores_rows() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/search?q=compatibilism"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        200,
+        "the search route must answer on loopback"
+    );
+    let served: serde_json::Value = resp.json().await.unwrap();
+
+    // PARITY: expected built in-test from the SAME store call the route
+    // makes, capped the way the route caps (50 — the desktop's own cap,
+    // moved into the route so it has one home).
+    let rows = store.search_messages("compatibilism").await.unwrap();
+    let expected = serde_json::json!({
+        "results": rows
+            .iter()
+            .take(50)
+            .map(|m| serde_json::json!({
+                "content": m.content,
+                "conversation_id": m.conversation_id,
+            }))
+            .collect::<Vec<_>>(),
+    });
+    assert_eq!(
+        served, expected,
+        "the search route must serve the store's rows verbatim"
+    );
+    // And the fixture must have matched at all — §18.4, the instrument
+    // validates itself before the equality above can mean anything.
+    assert!(
+        !served["results"].as_array().unwrap().is_empty(),
+        "fixture must match the query or this test proves nothing"
+    );
+
+    // A missing q is a 400 naming it, not an empty 200 — an empty result
+    // set would be indistinguishable from "nothing matched" (§18.3).
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/search"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+}
+
+/// Weaken halves the daemon's own row's confidence (the ONE decider for the
+/// formula — it lived in the desktop command until this route), delete
+/// tombstones, and a missing id is a 404 that names it.
+#[tokio::test]
+async fn memory_routes_weaken_tombstone_and_404() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    use sovereign_core::types::Memory;
+    let seed = |id: &str, confidence: f64| Memory {
+        id: id.to_string(),
+        content: format!("memory {id}"),
+        source: "conversation_extraction".to_string(),
+        confidence,
+        created_at: 100,
+        last_used: 100,
+        ..Memory::default()
+    };
+    let half = seed("mem-half", 0.8);
+    let gone = seed("mem-gone", 0.5);
+    futures::future::join_all([store.save_memory(&half), store.save_memory(&gone)]).await;
+
+    // Weaken: the response carries the new confidence AND the daemon's row
+    // carries it — the read-modify-write happened server-side, not on a
+    // client's snapshot.
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/memories/mem-half/weaken"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["confidence"], 0.4, "0.8 halved once");
+    let rows = store.get_all_memories().await.unwrap();
+    let row = rows.iter().find(|m| m.id == "mem-half").unwrap();
+    assert_eq!(row.confidence, 0.4, "the daemon's row was weakened");
+
+    // The floor: a confidence already at 0 stays 0 (max(0.0) is not a
+    // negative-zero surprise).
+    store.save_memory(&seed("mem-floor", 0.0)).await;
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/memories/mem-floor/weaken"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["confidence"], 0.0);
+
+    // Delete: 204 no body, and the row is gone from the daemon's reads.
+    let resp = reqwest::Client::new()
+        .delete(format!("{base}/v1/memories/mem-gone"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    let rows = store.get_all_memories().await.unwrap();
+    assert!(
+        rows.iter().all(|m| m.id != "mem-gone"),
+        "tombstoned memory must leave the recall set"
+    );
+
+    // A missing id is the route's own 404 naming the id — not the store's
+    // error string and not a silent 204 (§18.3).
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/memories/no-such-memory/weaken"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"].as_str().unwrap().contains("no-such-memory"),
+        "the 404 names the missing id: {body}"
+    );
+}
+
+/// The insight fixture: a serving daemon whose `ServingCore` carries a REAL
+/// `InsightService` — the same construction `daemon_cmd` performs over the
+/// daemon's `sovereign.db`, here over a tempdir sqlite the test also holds.
+async fn insight_fixture() -> (
+    tempfile::TempDir,
+    Arc<EmbeddedDaemon>,
+    Arc<sovereign_core::insight::InsightService>,
+) {
+    let tmp = tempfile::tempdir().unwrap();
+    let state_store =
+        sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap();
+    let insight_store: Arc<dyn sovereign_core::traits::InsightStore> = Arc::new(
+        sovereign_store::insight_store::SqliteInsightStore::new(state_store.connection()),
+    );
+    let service = Arc::new(sovereign_core::insight::InsightService::new(
+        insight_store,
+        Arc::new(sovereign_core::insight::InsightSinkRegistry::new()),
+        // embed is load-bearing here: `clip` embeds the passage before it
+        // persists, so the provider must answer embeddings — a bare
+        // TestProvider refuses with NotImplemented and the clip 500s.
+        Arc::new(TestProvider::new().with_embed_marker(|_| vec![0.5_f32; 4])),
+    ));
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        crate::common::desktop_services_with_insights(
+            engine,
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(TestProvider::new()),
+            Some(Arc::clone(&service)),
+        ),
+    );
+    (tmp, daemon, service)
+}
+
+/// Clip → list → search → delete round-trips through the ONE service, and
+/// the wire strips the embedding the way the projection promises.
+#[tokio::test]
+async fn insight_routes_clip_list_search_delete() {
+    let (_tmp, daemon, service) = insight_fixture().await;
+    let addr =
+        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let base = format!("http://{addr}");
+    let client = reqwest::Client::new();
+
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let resp = client
+        .post(format!("{base}/v1/insights/clip"))
+        .json(&serde_json::json!({
+            "clipped_text": "Compatibilism holds that free will is compatible with determinism.",
+            "message_id": message_id,
+            "paragraph_index": 3,
+            "source": {
+                "corpus_id": "sep",
+                "article_title": "Free Will",
+                "conversation_id": uuid::Uuid::new_v4().to_string(),
+            },
+            "position": {
+                "name": "Compatibilism",
+                "style": "Compatibilism",
+            },
+        }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 200, "clip must answer on loopback");
+    let raw = resp.text().await.unwrap();
+    let clipped: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let id = clipped["insight"]["id"].as_str().unwrap().to_string();
+    assert!(!id.is_empty());
+    assert_eq!(clipped["insight"]["source"]["corpus_id"], "sep");
+    // What the clip sent must survive the projection — a field silently
+    // dropped here is the wire lying about the row (§18.3).
+    assert_eq!(
+        clipped["insight"]["position"]["name"], "Compatibilism",
+        "the position badge must survive the clip"
+    );
+    // §18.4 — the projection's own promise: the embedding never crosses.
+    assert!(
+        !raw.contains("embedding"),
+        "the wire projection must strip the embedding: {raw}"
+    );
+
+    // A second, non-matching clip — the search assertion below is only
+    // discriminating if "everything" and "the query's rows" differ.
+    let resp = client
+        .post(format!("{base}/v1/insights/clip"))
+        .json(&serde_json::json!({
+            "clipped_text": "An unrelated note about resawing guitar frets.",
+            "message_id": uuid::Uuid::new_v4().to_string(),
+            "paragraph_index": 0,
+            "source": {
+                "corpus_id": null,
+                "article_title": null,
+                "conversation_id": uuid::Uuid::new_v4().to_string(),
+            },
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // LIST parity: the route's rows are the service's rows through the
+    // projection — same call, same envelope.
+    let resp = client
+        .get(format!("{base}/v1/insights"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let served: serde_json::Value = resp.json().await.unwrap();
+    let expected = serde_json::to_value(sovereign_mesh::insight_http::InsightListResponse {
+        insights: service
+            .store
+            .list(50)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(sovereign_mesh::insight_http::InsightEntry::from)
+            .collect(),
+    })
+    .unwrap();
+    assert_eq!(
+        served, expected,
+        "the list route must serve the service's rows through the projection"
+    );
+
+    // SEARCH finds the matching clip by text — and ONLY it: the non-matching
+    // second clip stays out, which is what separates "searched" from
+    // "listed everything".
+    let resp = client
+        .get(format!("{base}/v1/insights/search?q=compatibilism"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let served: serde_json::Value = resp.json().await.unwrap();
+    let hits = served["insights"].as_array().unwrap();
+    assert_eq!(hits.len(), 1, "one of two clips matches the query");
+    assert!(
+        hits[0]["clipped_text"]
+            .as_str()
+            .unwrap()
+            .contains("Compatibilism"),
+        "the hit is the matching clip, not just any row"
+    );
+
+    // DELETE is 204 and the row leaves the service's own reads — the second
+    // clip stays, which is what makes this a delete and not a wipe.
+    let resp = client
+        .delete(format!("{base}/v1/insights/{id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    let rows = service.store.list(50).await.unwrap();
+    assert_eq!(rows.len(), 1, "one writer, both reads agree");
+    assert!(
+        rows[0].clipped_text.contains("resawing"),
+        "the deleted row is the matching one"
+    );
+
+    // A malformed UUID is a 400 naming it, not a 500.
+    let resp = client
+        .delete(format!("{base}/v1/insights/not-a-uuid"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+}
+
+/// A daemon with NO insight service commissioned answers the named 503, not
+/// a 404-as-unmounted — "this host built no service" is a fact a client can
+/// read (§18.3).
+#[tokio::test]
+async fn insight_routes_without_a_service_answer_the_named_503() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        crate::common::desktop_services_with_insights(
+            engine,
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(TestProvider::new()),
+            None,
+        ),
+    );
+    let addr =
+        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/v1/insights"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 503);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("no insight service"),
+        "the 503 names the absence: {body}"
+    );
 }

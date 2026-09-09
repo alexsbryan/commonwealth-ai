@@ -99,11 +99,15 @@ pub fn turn_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/conversations", post(create_conversation))
         .route("/v1/conversations", get(list_conversations))
+        .route("/v1/conversations/search", get(search_conversations))
         .route("/v1/conversations/{id}", get(get_conversation))
         .route("/v1/conversations/{id}", delete(delete_conversation))
         .route("/v1/conversations/{id}/messages", post(send_message))
         .route("/v1/conversations/{id}/stream", get(ws_handler))
         .route("/v1/conversations/{id}/end", post(end_conversation))
+        .route("/v1/memories/{id}", delete(delete_memory))
+        .route("/v1/memories/{id}/weaken", post(weaken_memory))
+        .route("/v1/notes/tool-outcome", post(record_tool_outcome))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -470,6 +474,179 @@ async fn end_conversation(
         // difference (ARCH §18.3).
         Err(e) => service_unavailable(&format!("end conversation: {e}")),
     }
+}
+
+/// `GET /v1/conversations/search?q=...` — full-text message search across
+/// conversations (sv-surface rung 6, commit A).
+///
+/// The decider is `StateStore::search_messages` — the SAME trait call the
+/// desktop's in-process `search_messages` command makes — so the wire's
+/// answer and the local answer cannot drift. The route caps at 50 rows,
+/// the desktop's own cap, moved here so the cap has one home by the time
+/// the desktop repoints (rung 6 commit D).
+#[derive(Debug, Default, Deserialize)]
+pub struct SearchQuery {
+    pub q: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchResponse {
+    pub results: Vec<SearchEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchEntry {
+    pub content: String,
+    pub conversation_id: String,
+}
+
+async fn search_conversations(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Query(params): Query<SearchQuery>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    let Some(q) = params.q.filter(|q| !q.is_empty()) else {
+        return bad_request("the q parameter is required and must not be empty");
+    };
+    match store.search_messages(&q).await {
+        Ok(messages) => Json(SearchResponse {
+            results: messages
+                .into_iter()
+                .take(50)
+                .map(|m| SearchEntry {
+                    content: m.content,
+                    conversation_id: m.conversation_id,
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `DELETE /v1/memories/{id}` — tombstone a memory the user flagged as
+/// wrong (soft delete; the row is preserved for audit and excluded from
+/// recall). The desktop's `forget_memory` repoints here in rung 6 commit D.
+async fn delete_memory(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(memory_id): Path<String>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    match store.delete_memory(&memory_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `POST /v1/memories/{id}/weaken` — halve a memory's confidence with the
+/// standard decay floor (sv-surface rung 6).
+///
+/// THE one decider for the halving: the formula lived in the desktop's
+/// `weaken_memory` command until this route, and a second copy is exactly
+/// the §10.6 twin this campaign deletes. The read-modify-write is honest
+/// here rather than client-side because the confidence value the floor is
+/// applied to must be the daemon's row, not a snapshot a client read
+/// earlier. Answers the new confidence so a caller can render it.
+#[derive(Debug, Serialize)]
+pub struct WeakenResponse {
+    pub confidence: f64,
+}
+
+async fn weaken_memory(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(memory_id): Path<String>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    let all = match store.get_all_memories().await {
+        Ok(all) => all,
+        Err(e) => return internal_error(&e.to_string()),
+    };
+    let Some(current) = all.iter().find(|m| m.id == memory_id) else {
+        return not_found(&format!("memory {memory_id} not found"));
+    };
+    let new_confidence = (current.confidence * 0.5).max(0.0);
+    match store
+        .update_memory_confidence(&memory_id, new_confidence)
+        .await
+    {
+        Ok(()) => Json(WeakenResponse {
+            confidence: new_confidence,
+        })
+        .into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `POST /v1/notes/tool-outcome` — record a tool-decision outcome into the
+/// daemon's notes.db dossier (sv-surface rung 6, commit A).
+///
+/// The desktop's `submit_information_search` writes this BEFORE running
+/// the user's escape-hatch web search; in attach mode the NoteStore lives
+/// daemon-side, so the write crosses here. `record_tool_outcome` in
+/// sovereign-core is the one decider — the same function the in-process
+/// path calls. A daemon without a mounted notes surface answers 503 with
+/// the named reason; the in-process path's "missing NoteStore is silently
+/// skipped" posture is preserved by the CLIENT choosing to treat the 503
+/// as non-fatal, which is the desktop repoint's call to make, not this
+/// route's (the route must not swallow the fact — ARCH §18.3).
+#[derive(Debug, Deserialize)]
+pub struct ToolOutcomeRequest {
+    /// Per-conversation-turn opaque id — the approval `key` the desktop
+    /// minted, used as the session-id proxy so the audit trail traces back
+    /// to the originating INFORMATION REQUEST card.
+    pub session_id: String,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
+    pub tool_id: String,
+    pub outcome: sovereign_core::memory::ToolDecisionOutcome,
+    #[serde(default)]
+    pub reasoning: String,
+    #[serde(default)]
+    pub extras: sovereign_core::memory::ToolDecisionExtras,
+}
+
+async fn record_tool_outcome(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(body): Json<ToolOutcomeRequest>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(notes) = daemon.notes_store() else {
+        return service_unavailable(
+            "this daemon serves no notes surface (notes.db unavailable — /mcp not mounted)",
+        );
+    };
+    sovereign_core::dossier::record_tool_outcome(
+        Some(notes),
+        &body.session_id,
+        body.conversation_id.as_deref(),
+        &body.tool_id,
+        body.outcome,
+        &body.reasoning,
+        body.extras,
+    )
+    .await;
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// `GET /v1/conversations/{id}/stream` — WebSocket upgrade.

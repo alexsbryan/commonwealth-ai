@@ -45,6 +45,9 @@ pub mod guest_lender;
 pub mod guest_tunnel;
 pub mod http_response;
 pub mod inference_adapter;
+/// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
+/// over the `InsightService` the commissioning host built.
+pub mod insight_http;
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds
 /// the daemon's identity endpoint and routes by ALPN to the local
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.

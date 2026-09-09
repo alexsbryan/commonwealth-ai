@@ -1026,6 +1026,23 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         "daemon: Runtime commissioned — this process can serve a turn"
     );
 
+    // sv-surface rung 6: the insight surface. The SAME `InsightService`
+    // the desktop builds beside its state store, over THIS daemon's
+    // `sovereign.db` connection and routed provider — so an attached
+    // desktop's clip/list/search/delete answer from one service, not from
+    // a second store the client process would have had to open. No sinks
+    // yet on this host (the desktop's registry is empty too); the field
+    // exists so the shape does not change when one lands.
+    let insight_service = {
+        Arc::new(sovereign_core::insight::InsightService::new(
+            Arc::new(sovereign_store::insight_store::SqliteInsightStore::new(
+                state_store_concrete.connection(),
+            )),
+            Arc::new(sovereign_core::insight::InsightSinkRegistry::new()),
+            Arc::clone(&routed_provider),
+        ))
+    };
+
     // ── Commission, through THE assembler ─────────────────────────────
     //
     // This bootstrap no longer names its own variant. It hands its parts to
@@ -1050,6 +1067,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // Phase 5c: the thing that answers. Commissioned just
                     // above, from the one shared recipe.
                     runtime: Arc::clone(&runtime),
+                    insights: Some(insight_service),
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),

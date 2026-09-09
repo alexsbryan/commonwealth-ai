@@ -1612,7 +1612,7 @@ pub struct ToolDecisionPayload {
 /// while still admitting the Tier-1 cross-turn fields. Use
 /// `ToolDecisionExtras::none()` from sites that don't have the
 /// data — the dossier renders a degraded but well-formed entry.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolDecisionExtras {
     pub summary: Option<String>,
     pub evidence_ids: Vec<String>,

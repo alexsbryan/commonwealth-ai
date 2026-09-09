@@ -499,6 +499,7 @@ pub fn desktop_services_with_engine(
                     inference_provider: Arc::new(TestProvider::new()),
                     state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
                     runtime: stub_runtime(Arc::new(TestProvider::new()), None),
+                    insights: None,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {
@@ -579,6 +580,20 @@ pub fn desktop_services_with_store(
     store: Arc<dyn sovereign_core::traits::StateStore>,
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
 ) -> sovereign_mesh::DaemonServices {
+    desktop_services_with_insights(engine, store, provider, None)
+}
+
+/// [`desktop_services_with_store`] with an `InsightService` commissioned —
+/// the sv-surface rung 6 shape the insight-surface parity tests need: a
+/// serving daemon whose `/v1/insights/*` routes have a real service behind
+/// them, assembled through THE assembler like every production site.
+#[allow(clippy::too_many_arguments)]
+pub fn desktop_services_with_insights(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    store: Arc<dyn sovereign_core::traits::StateStore>,
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    insights: Option<Arc<sovereign_core::insight::InsightService>>,
+) -> sovereign_mesh::DaemonServices {
     let runtime = stub_runtime_with_engine(
         Arc::clone(&provider),
         Some(Arc::clone(&store)),
@@ -594,6 +609,7 @@ pub fn desktop_services_with_store(
                     inference_provider: provider,
                     state_store: store,
                     runtime,
+                    insights,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {
