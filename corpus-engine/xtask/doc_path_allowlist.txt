@@ -86,3 +86,12 @@ scripts/sec_facts.py
 # the liveness question OICP_RATIONALIZATION.md flagged it for, and to say
 # where supervision actually lives now. Same shape as scripts/sec_facts.py.
 commonwealth-inference/orchestrator/
+
+# SYSTEM_OVERVIEW's ring-rail section cites `commonwealth-knowledge/src/rail/`
+# HISTORICALLY — the passage's point is that the rail BECAME the
+# `commonwealth-rail-core` / `commonwealth-rail` pair out of that module
+# (cw-lift 1b, 2026-09-04), so the old path is supposed to be absent. Same
+# shape as discovery/tls.rs above. Found 2026-09-09 on sv-surface R1 pickup:
+# the gate had been RED at HEAD since the split landed, verified with the
+# work stashed.
+commonwealth-knowledge/src/rail/
