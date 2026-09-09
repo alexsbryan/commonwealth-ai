@@ -250,9 +250,108 @@ status    = "active"
 #   G13 drain_turn ends at Complete  OPEN. message-refined and lesson-proposed
 #       fire AFTER the terminal frame. The socket stays open host-side, so
 #       this is the CLIENT's drain contract, not a protocol limit.
-#   G14 attachment + context         OPEN, UNMEASURED. AttachedFile,
-#       FocusedChunkRef, document/asset attachment, deep research, inner-work
-#       are desktop-only and have not been surveyed for wire coverage.
+#   G14 THE WHOLE COMMAND SURFACE    MEASURED 2026-09-09. See the census
+#       immediately below — this row is no longer a guess.
+#
+# ── THE COMMAND CENSUS — measured 2026-09-09, and it resizes the project ────
+#
+# 263 `#[tauri::command]` in sovereign-desktop (authoritative list:
+# src/lib/commands.generated.ts, which command_surface.rs generates):
+#
+#     74  WIRE-BACKED           already call the daemon
+#     37  APP-LOCAL sanctioned  in the closed set declared above
+#    144  GAP                   in-process state, no daemon equivalent
+#      3  UNCLEAR               named below; operator calls
+#
+# ~3,570 lines of GAP command body. But the mass is CONCENTRATED, and this is
+# the finding that makes the work tractable:
+#
+#   *** SEVEN OBJECT MIGRATIONS ACCOUNT FOR 117 OF THE 144 GAPS. ***
+#
+#     LocalCorpusManager ............ 17 commands
+#     MeshApp corpus reads .......... 17 (all via state.corpus_engine)
+#     Atlas browse .................. 14 (corpus_engine + sqlite_store)
+#     state.store conv/doc CRUD ..... 16 + 8 document-asset
+#     Governance oplog .............. 9
+#     NoteStore + RecipeProjectStore  11 (7 recipe-author + 4 lessons)
+#     Deep-research run registry .... 7
+#     MCP client config ............. 6
+#
+# The 79 sub-20-line gaps are thin `require_manager!` / `require_store!` /
+# `notes_handle` wrappers — `lc_cancel` is 4 lines, `governance_seed` 5,
+# `submit_approval` 7. THEY RETIRE IN BULK WHEN THEIR OBJECT MOVES, not one
+# at a time. Plan by OBJECT, never by command; a 144-row task list is the
+# wrong unit and will read as impossible.
+#
+# TEN CHEAPEST — a route ALREADY EXISTS and the command simply is not wired
+# to it. Start here; each is a repoint, not a design:
+#   create_conversation -> POST /v1/conversations
+#   get_conversation -> GET /v1/conversations/{id}
+#   delete_conversation -> DELETE /v1/conversations/{id}
+#   finalize_inner_work_conversation -> POST /v1/conversations/{id}/end
+#   list_conversations -> GET /v1/conversations (needs surface scoping —
+#     the one hole rung 6's D-remainder already named)
+#   warmup_primary_slot -> POST /internal/inference/warmup
+#   get_corpus_progress -> GET /internal/corpus/status (the local map is
+#     already FED by that route — it is a cache of it)
+#   submit_approval / submit_input / submit_information_response -> the WS
+#     turn stream (STREAM-shaped, not REST: the answer must return on the
+#     socket that owns the turn — this is G11/R2)
+#
+# FOUR HEAVYWEIGHTS, all STREAM-shaped, which is why they are heavy:
+#   ask_document 297 · submit_information_search 266 · dr_start 204 ·
+#   lc_ingest 173. Size them as their own rungs.
+#
+# THE WIRE STYLE ALREADY IN USE, read off the 74 wired sites — follow it:
+# a per-call reqwest client with an explicit timeout; `format!("{base}/…")`;
+# `!status.is_success()` -> a named Err carrying route + status + body; and
+# response types IMPORTED from the serving crate, never mirrored (that is the
+# rung-4 lesson and the strongest precedent for new routes). The PORT SPLIT is
+# load-bearing: mutation/admin on internal_base_url (9742), corpus-read + watch
+# + workflow + reading on client_base_url (9741), because commonwealth-api
+# deliberately keeps expensive operator routes off the peer-reachable port.
+#
+# ── WHAT GENUINELY CANNOT CROSS — the only exceptions, and they are three ───
+#
+# Everything else on the 144 is crossable. These are not:
+#
+#   X1  `detect_bootstrap` — "is there a daemon, and on which ports?" cannot
+#       be answered BY the daemon; asking presupposes the answer. Already
+#       sanctioned.
+#   X2  TAURI WINDOW HANDLES, and this one is subtle enough to state fully.
+#       Every meshapp_* bridge command authorizes on `webview.label()`, which
+#       the host assigns at window creation and which is unspoofable from
+#       inside the sandbox. THE LABEL IS THE AUTH TOKEN AND IT EXISTS ONLY
+#       BECAUSE THE WINDOW IS IN THIS PROCESS. A daemon route serving the same
+#       data would have to invent a different caller identity. This is exactly
+#       why the split inside the meshapp family is right: the AUTHORIZATION
+#       half stays (8 sanctioned commands), the 17 DATA READS move. Also here:
+#       WebviewWindowBuilder, app.exit(0), app.restart().
+#   X3  LIVE CHILD-PROCESS HANDLES. The desktop is the PARENT of the
+#       mobile-host child and the supervised daemon; a daemon cannot signal a
+#       child it did not spawn, nor restart itself through its own route.
+#
+# Deliberately NOT exceptions, though they look like them: hardware detection
+# (the daemon links the same detector and runs on the same machine), watched
+# folders (no watcher is bound to the desktop process — that family is already
+# an HTTP proxy), GGUF/GliNER downloads (plain fetches to disk), and
+# user-picked paths. That last group is SAME-HOST-ASSUMING, not uncrossable —
+# if attach is ever allowed to reach a non-loopback daemon they break, which
+# is a scope decision to take deliberately rather than discover.
+#
+# THREE UNCLEAR, operator calls: `governance_export_write` and
+# `lc_validate_path` (pure save-dialog / path-validation against the USER's
+# filesystem — client-side by nature, or a defect?) and
+# `mesh_preview_join_link` (the daemon parses the same link on /v1/mesh/join,
+# so this may be a decider twin or a legitimate client-side preview).
+#
+# SILENT DEGRADATIONS FOUND — attach mode already lies in four places, and
+# these are §18.3 defects independent of the collapse:
+#   mesh_is_running returns Ok(true) BY ASSUMPTION without asking the daemon ·
+#   mesh_list_peer_preferences returns an empty Vec silently ·
+#   mesh_diagnostics returns an empty peer list + true ·
+#   insight get_sink_status has no attach branch beside its four wired
+#   siblings.
 #
 # ── STRUCTURAL BLOCKERS — close before any collapse SHIPS ───────────────────
 #
