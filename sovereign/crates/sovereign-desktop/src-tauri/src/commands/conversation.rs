@@ -285,7 +285,7 @@ pub async fn submit_approval(
     key: String,
     approved: bool,
 ) -> Result<bool, String> {
-    Ok(state.approval.submit_approval(&key, approved).await)
+    Ok(state.approval.submit_approval(&key, approved))
 }
 
 #[tauri::command]
@@ -294,7 +294,7 @@ pub async fn submit_input(
     key: String,
     response: String,
 ) -> Result<bool, String> {
-    Ok(state.approval.submit_input(&key, response).await)
+    Ok(state.approval.submit_input(&key, response))
 }
 
 /// Resolve a pending information-request the agent surfaced via an
@@ -308,10 +308,7 @@ pub async fn submit_information_response(
     key: String,
     content: Option<String>,
 ) -> Result<bool, String> {
-    Ok(state
-        .approval
-        .submit_information_response(&key, content)
-        .await)
+    Ok(state.approval.submit_information_response(&key, content))
 }
 
 /// Per-source provenance row returned to the desktop when the search
@@ -391,7 +388,7 @@ pub async fn submit_information_search(
         return Err("query must not be empty".to_string());
     }
 
-    if !state.approval.has_pending_information(&key).await {
+    if !state.approval.has_pending_information(&key) {
         // Stale submission — the request was already resolved
         // (paste / skip / timed out). Don't spend a search budget.
         return Err("no pending information request for this key".to_string());
@@ -633,8 +630,7 @@ pub async fn submit_information_search(
 
     let accepted = state
         .approval
-        .submit_information_response(&key, Some(formatted))
-        .await;
+        .submit_information_response(&key, Some(formatted));
     Ok(SearchAugmentation {
         query: query.to_string(),
         backend_id: out.backend_id,

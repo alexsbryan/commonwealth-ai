@@ -62,6 +62,9 @@ impl ResolveOutcome {
 enum Pending {
     Approval(oneshot::Sender<bool>),
     Input(oneshot::Sender<String>),
+    /// A structured information request. `None` is the user's SKIP — a real
+    /// answer, which is why this one is not `Input`.
+    Information(oneshot::Sender<Option<String>>),
 }
 
 impl Pending {
@@ -70,6 +73,7 @@ impl Pending {
         match self {
             Pending::Approval(_) => "approval",
             Pending::Input(_) => "user reply",
+            Pending::Information(_) => "information",
         }
     }
 }
@@ -81,6 +85,16 @@ impl Pending {
 #[must_use = "a parked question that is never awaited leaves the executor blocked"]
 pub struct Parked<T> {
     rx: oneshot::Receiver<T>,
+}
+
+impl Parked<Option<String>> {
+    /// [`Self::answered`] for the information request, whose contract is
+    /// `Option` already: a cancelled wait reads as the SKIP the user could
+    /// have pressed, and the executor falls through to corpus-only synthesis
+    /// either way.
+    pub async fn answered_or_skipped(self) -> Option<String> {
+        self.rx.await.unwrap_or(None)
+    }
 }
 
 impl<T> Parked<T> {
@@ -123,6 +137,13 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
     pub fn park_input(&self, key: K) -> Parked<String> {
         let (tx, rx) = oneshot::channel();
         self.insert(key, Pending::Input(tx));
+        Parked { rx }
+    }
+
+    /// Park a structured information request under `key`.
+    pub fn park_information(&self, key: K) -> Parked<Option<String>> {
+        let (tx, rx) = oneshot::channel();
+        self.insert(key, Pending::Information(tx));
         Parked { rx }
     }
 
@@ -186,6 +207,26 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
         }
     }
 
+    /// Answer a parked information request. `None` is the skip.
+    pub fn resolve_information(&self, key: &K, content: Option<String>) -> ResolveOutcome {
+        self.resolve(key, |pending| match pending {
+            Pending::Information(tx) => {
+                let _ = tx.send(content);
+                Ok(())
+            }
+            other => Err(other),
+        })
+    }
+
+    /// Whether a question is parked under `key` — the honest form of what a
+    /// UI asks before spending work on a submission that may be stale.
+    pub fn is_parked(&self, key: &K) -> bool {
+        self.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(key)
+    }
+
     /// How many questions are parked.
     ///
     /// Zero is the resting state — every entry is a turn blocked on a human.
@@ -207,10 +248,10 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
 
 /// What became of a step, for `ApprovalChannel::emit_progress`.
 ///
-/// One decider for a match that existed three times — core's
-/// `AutoApprovalChannel`, the server's channel and the desktop's — each
-/// re-deriving the same three outcomes, and the desktop's spelling the jump
-/// differently from the other two.
+/// One decider for a match that existed four times — core's
+/// `AutoApprovalChannel`, the server's channel, the daemon socket's and the
+/// desktop's — each re-deriving the same three outcomes, and the desktop's
+/// spelling the jump differently from the rest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepStatus {
     /// The step produced output.
