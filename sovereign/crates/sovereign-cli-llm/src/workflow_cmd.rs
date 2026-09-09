@@ -2,21 +2,21 @@
 //! `svrn workflow` — run a user-authored `Step · Artifact · Runner`
 //! workflow (model + MCP + tool + transform steps, authored as TOML).
 //!
-//! Assembles a *light* stack — daemon-routed inference (no per-process model
-//! load), a minimal tool registry, and the MCP servers from `~/.svrnmesh/
-//! config.toml` — then runs the workflow in-process over its source items.
+//! sv-surface rung 5 (2026-09-09): the daemon executes. `run` (and
+//! `corpus ingest`'s notebook path) submit a job to the daemon's
+//! `/internal/workflows/*` surface and print progress as it arrives — the
+//! same client the desktop's Run view is, in a terminal. The catalog
+//! (`list`/`copy`/`new`) stays a local read of the same `~/.svrnmesh/
+//! workflows` dir the daemon reads (a listing, not a decider).
 //! P0+P1 of `docs/specs/WORKFLOW_SUBSTRATE.md`; durable/distributed execution
 //! is P2 (the pipeline tool as an outer loop).
 
 use corpus_engine::RecipeRegistry;
-use sovereign_core::traits::Tool;
-use sovereign_workflow::Workflow;
-// The registry assembly, in-process runner, and workflow catalog now live in
-// `sovereign-workflow-host` (so the daemon can run workflows too); the CLI is a
+// The registry assembly, runner, and workflow catalog live in
+// `sovereign-workflow-host` (the daemon's workflow home); the CLI is a
 // thin presenter on top.
 use sovereign_workflow_host::{
-    first_comment_line, resolve_workflow_source, run_workflow_in_process, workflows_dir,
-    SHIPPED_WORKFLOWS,
+    first_comment_line, resolve_workflow_source, workflows_dir, SHIPPED_WORKFLOWS,
 };
 
 // Inc3 surface unification: `workflow run <recipe-id>` delegates to the *same*
@@ -373,26 +373,10 @@ async fn cmd_run(args: &[String]) -> i32 {
             if !origin.contains('/') {
                 eprintln!("workflow: {origin}");
             }
-            let wf = match Workflow::parse(&toml) {
-                Ok(w) => w,
-                Err(e) => {
-                    eprintln!("workflow: {e}");
-                    return 1;
-                }
-            };
-            // Default the corpus id to the folder's basename when --folder is given
-            // without --corpus, so the flagship one-liner needs only --folder. (A
-            // workflow-only convenience — a recipe install never sees this.)
-            if params.contains_key("folder") && !params.contains_key("corpus") {
-                if let Some(base) = std::path::Path::new(&params["folder"])
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .filter(|b| !b.is_empty())
-                {
-                    params.insert("corpus".to_string(), base.to_string());
-                }
-            }
-            run_assembled(&wf, &daemon, concurrency, no_cache, params).await
+            // The definition rides inline so a local path also works against a
+            // remote --daemon; the corpus-id default (folder basename) and the
+            // run itself are the daemon's (sv-surface rung 5).
+            run_assembled(&toml, &daemon, concurrency, no_cache, params).await
         }
         Ok(ResolvedArtifact::Recipe { id, name }) => {
             // A recipe id installs/updates a corpus via the daemon's install path —
@@ -549,89 +533,193 @@ fn write_user_workflow(name: &str, toml: &str) -> i32 {
     0
 }
 
-/// Assemble the light stack — daemon-routed inference (only when a `model:` or
-/// `embed:` step is present, via a `SplitInferenceProvider` so embed hits the
-/// embed slot and chat the chat slot), a tool registry, MCP servers, and the
-/// content cache — then run `wf` and print a per-item summary. Shared by
-/// `workflow run <file>` and `corpus ingest <folder>` so the assembly lives in
-/// one place.
+/// Submit the workflow to the daemon's job surface
+/// (`POST /internal/workflows/run`) and print progress as it arrives
+/// (sv-surface rung 5 — the daemon executes; the CLI is a client, the same
+/// one in a terminal the desktop is in a window). `toml` rides inline so a
+/// locally-resolved file also runs against a remote `--daemon`.
+///
+/// The corpus-id default (folder basename), the tool surface, and inference
+/// are the daemon's. DELTA, named: the CLI-local enrichment-authoring tools
+/// the old in-process run injected are gone from the run path — a
+/// user-authored workflow naming one of those tool ids now fails resolution
+/// daemon-side (no shipped workflow does; the host's
+/// shipped_recipes_parse_and_resolve_tools test pins that).
 pub(crate) async fn run_assembled(
-    wf: &Workflow,
+    toml: &str,
     daemon: &str,
     concurrency: usize,
     no_cache: bool,
     params: std::collections::BTreeMap<String, String>,
 ) -> i32 {
-    // Assembly + run live in `sovereign-workflow-host` (so the daemon can run
-    // workflows too). `standard_registry` now carries only the pure tools; the
-    // corpus/atlas tools moved out of the base bundle, so inject them here to
-    // preserve the pre-extraction surface, alongside the CLI's own
-    // enrichment-authoring tools.
-    // B:P9a: the embed-slot query-instruction prefix + chat context window are
-    // now sourced by the runner from the daemon's OICP capabilities manifest,
-    // so no `DEFAULT_MANIFEST` closure is threaded through here.
-    let mut extra = sovereign_tools::workflow_corpus_tools();
-    extra.extend(enrich_tools());
-    let report =
-        match run_workflow_in_process(wf, daemon, concurrency, no_cache, params.clone(), extra)
-            .await
-        {
-            Ok(r) => r,
+    let base = daemon.trim_end_matches('/').to_string();
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("http client: {e}");
+            return 1;
+        }
+    };
+    let run: sovereign_workflow_host::workflow_http::RunResponse = match client
+        .post(format!("{base}/internal/workflows/run"))
+        .json(&sovereign_workflow_host::workflow_http::RunRequest {
+            name_or_path: "cli".to_string(),
+            toml: Some(toml.to_string()),
+            params,
+            concurrency: Some(concurrency),
+            no_cache: Some(no_cache),
+        })
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(run) => run,
             Err(e) => {
-                eprintln!("{e}");
+                eprintln!("parse run ack: {e}");
                 return 1;
             }
-        };
-
-    eprintln!(
-        "\n— {} — {} ok, {} failed · {} steps ran, {} cached —",
-        report.workflow,
-        report.ok_count(),
-        report.failed_count(),
-        report.ran_total(),
-        report.cached_total()
-    );
-    for item in &report.items {
-        match &item.result {
-            Ok(text) => println!("\n## {}\n{}", item.item, text.trim()),
-            Err(e) => eprintln!("✗ {}: {e}", item.item),
+        },
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            eprintln!("daemon refused the workflow run ({status}): {body}");
+            if status == reqwest::StatusCode::NOT_FOUND {
+                eprintln!("the daemon may predate the workflow job surface — rebuild + restart it");
+            }
+            return 1;
         }
-    }
-    // Handoff: if this workflow built a corpus (a `tool:corpus_store` step) and at
-    // least one item succeeded, tell the user how to query it — the flagship's
-    // "now chat with it" payoff.
-    if report.ok_count() > 0 && wf.steps.iter().any(|s| s.uses == "tool:corpus_store") {
-        if let Some(corpus) = params.get("corpus").filter(|c| !c.is_empty()) {
-            eprintln!(
-                "\n✓ Notebook \"{corpus}\" is searchable — nothing left your machine.\n\n  \
-                 Ask it (cited, instant):\n    svrn chat inspect --corpus {corpus} \"your question\"\n  \
-                 Or chat with full answers:\n    svrn chat ask \"your question\"\n"
-            );
+        Err(e) => {
+            eprintln!("Daemon not reachable at {daemon} ({e}). Start it with `svrn daemon`.");
+            return 1;
         }
-    }
-    i32::from(report.failed_count() > 0)
+    };
+    poll_and_print(&client, &base, &run).await
 }
 
-/// The CLI-local enrichment-authoring tools the workflow runner needs in addition
-/// to the standard built-ins — the atlas/pipeline leaves the bespoke enrich
-/// pipeline composes (`crate::enrich_cmd::*`). Injected into the host runtime as
-/// `extra_tools`; the daemon trigger runtime passes none (a living-folder workflow
-/// uses only the standard set + MCP).
-fn enrich_tools() -> Vec<Box<dyn Tool>> {
-    vec![
-        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool.declared()),
-        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool.declared()),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool.declared()),
-    ]
+/// Poll the job, printing step/item progress as it arrives; on the terminal
+/// event print the summary block + per-item outputs, the same shape the
+/// in-process era printed from the RunReport.
+async fn poll_and_print(
+    client: &reqwest::Client,
+    base: &str,
+    run: &sovereign_workflow_host::workflow_http::RunResponse,
+) -> i32 {
+    let mut after = 0u64;
+    loop {
+        let resp = client
+            .get(format!(
+                "{base}/internal/workflows/jobs/{}?after={after}",
+                run.job_id
+            ))
+            .send()
+            .await;
+        let job = match resp {
+            Ok(r) if r.status().is_success() => match r
+                .json::<sovereign_workflow_host::workflow_http::JobResponse>()
+                .await
+            {
+                Ok(job) => job,
+                Err(e) => {
+                    eprintln!("parse job status: {e}");
+                    return 1;
+                }
+            },
+            Ok(r) => {
+                let status = r.status();
+                eprintln!("job status returned {status} — the job may still be running");
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("poll: {e}");
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                continue;
+            }
+        };
+        let terminal = job.status != sovereign_workflow_host::workflow_http::JobStatus::Running;
+        // Keep the last event for the terminal block; consume the rest for
+        // progress printing.
+        let mut last_event = job.events.last().cloned();
+        for event in job.events {
+            after = after.max(event.seq);
+            match event.event {
+                sovereign_workflow_host::workflow_http::WorkflowJobEvent::RunStarted {
+                    workflow,
+                    items,
+                    steps,
+                } => eprintln!("running {workflow} over {items} item(s), {steps} steps…"),
+                sovereign_workflow_host::workflow_http::WorkflowJobEvent::StepDone {
+                    item,
+                    step,
+                    cached,
+                    ..
+                } => {
+                    if cached {
+                        eprintln!("  · {item}: {step} (cached)");
+                    } else {
+                        eprintln!("  · {item}: {step}");
+                    }
+                }
+                sovereign_workflow_host::workflow_http::WorkflowJobEvent::ItemDone {
+                    item,
+                    ok,
+                    ..
+                } => {
+                    if ok {
+                        eprintln!("  ✓ {item}");
+                    } else {
+                        eprintln!("  ✗ {item}");
+                    }
+                }
+                _ => {}
+            }
+        }
+        if terminal {
+            // The terminal event carries the whole report summary.
+            if let Some(last) = last_event.take() {
+                match last.event {
+                    sovereign_workflow_host::workflow_http::WorkflowJobEvent::Complete {
+                        workflow,
+                        ok,
+                        failed,
+                        corpus,
+                        items,
+                    } => {
+                        let ran: usize = items.iter().map(|i| i.ran).sum();
+                        let cached: usize = items.iter().map(|i| i.cached).sum();
+                        eprintln!(
+                            "\n— {workflow} — {ok} ok, {failed} failed · {ran} steps ran, {cached} cached —"
+                        );
+                        for item in items {
+                            match (&item.output, &item.error) {
+                                (Some(text), _) => println!("\n## {}\n{}", item.item, text.trim()),
+                                (None, Some(e)) => eprintln!("✗ {}: {e}", item.item),
+                                _ => eprintln!("✗ {}: no output", item.item),
+                            }
+                        }
+                        if let Some(corpus) = corpus {
+                            eprintln!(
+                                "\n✓ Notebook \"{corpus}\" is searchable — nothing left your machine.\n\n  \
+                                 Ask it (cited, instant):\n    svrn chat inspect --corpus {corpus} \"your question\"\n  \
+                                 Or chat with full answers:\n    svrn chat ask \"your question\"\n"
+                            );
+                        }
+                        return i32::from(failed > 0);
+                    }
+                    sovereign_workflow_host::workflow_http::WorkflowJobEvent::Failed { error } => {
+                        eprintln!("{error}");
+                        return 1;
+                    }
+                    _ => {}
+                }
+            }
+            eprintln!("job ended without a terminal event");
+            return 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
 }
 
 #[cfg(test)]

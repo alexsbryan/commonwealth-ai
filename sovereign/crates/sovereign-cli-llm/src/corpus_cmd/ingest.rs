@@ -12,10 +12,15 @@
 //! `CorpusIndex::insert_batch`). Still bespoke-only: OCR, batched embedding, and
 //! enrichment — convergence on those is future work.
 
-use sovereign_workflow::Workflow;
 use sovereign_workflow_host::resolve_workflow_source;
 
-const DEFAULT_DAEMON: &str = "http://localhost:9741";
+/// The daemon base via the ONE decider — `sovereign_core::setup_config::
+/// client_daemon_base()` (env `SOVEREIGN_DAEMON_URL`, then `[daemon]
+/// client_port`, then the compiled default), the same resolution
+/// `workflow_cmd::default_daemon` applies.
+fn default_daemon_base() -> String {
+    sovereign_core::setup_config::client_daemon_base()
+}
 
 pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     let mut folder: Option<String> = None;
@@ -79,14 +84,6 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let wf = match Workflow::parse(&toml) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("ingest: parse notebook workflow: {e}");
-            return 1;
-        }
-    };
-
     let glob_param = glob.unwrap_or_default();
     let mut params = std::collections::BTreeMap::new();
     params.insert("folder".to_string(), folder.clone());
@@ -101,9 +98,14 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     eprintln!(
         "Ingesting `{folder}` ({glob_desc}) → corpus `{corpus}` via the workflow runner ({origin})…"
     );
+    // The daemon this CLI talks to, via the ONE decider (env, then config
+    // client_port, then the compiled default). Was a hardcoded
+    // `http://localhost:9741` — the same §10.6 defect rung 2 fixed in
+    // model_cmd: a CLI pointed at a second daemon silently ingested through
+    // the first.
+    let daemon = default_daemon_base();
     let code =
-        crate::workflow_cmd::run_assembled(&wf, DEFAULT_DAEMON, concurrency, no_cache, params)
-            .await;
+        crate::workflow_cmd::run_assembled(&toml, &daemon, concurrency, no_cache, params).await;
     if code == 0 {
         eprintln!("\nDone. Query it:  svrn corpus search {corpus} \"<your question>\"");
     }
@@ -124,7 +126,7 @@ mod tests {
             .iter()
             .find(|(name, _)| *name == "notebook")
             .expect("the `notebook` starter ships");
-        let wf = Workflow::parse(toml).unwrap();
+        let wf = sovereign_workflow::Workflow::parse(toml).unwrap();
         let order = wf.topo_order().unwrap();
         let ids: Vec<&str> = order.iter().map(|&i| wf.steps[i].id.as_str()).collect();
         assert_eq!(ids, vec!["extract", "chunk", "embed", "store"]);

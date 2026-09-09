@@ -339,6 +339,7 @@ mod tests {
         // The terminal keeps the corpus handoff and drops the CLI's per-item
         // print material.
         let ev = WorkflowRunEvent::from(WorkflowJobEvent::Complete {
+            workflow: "notebook".into(),
             ok: 2,
             failed: 0,
             corpus: Some("notes".into()),

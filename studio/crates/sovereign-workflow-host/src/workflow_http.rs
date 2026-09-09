@@ -321,6 +321,7 @@ pub enum WorkflowJobEvent {
     /// Terminal: the run produced a report. `corpus` is the built corpus
     /// when at least one item succeeded and the workflow stores one.
     Complete {
+        workflow: String,
         ok: usize,
         failed: usize,
         corpus: Option<String>,
@@ -536,6 +537,7 @@ impl WorkflowJobs {
                     // succeeded — an all-failed run produced nothing to
                     // chat with.
                     WorkflowJobEvent::Complete {
+                        workflow: report.workflow.clone(),
                         ok,
                         failed: report.failed_count(),
                         corpus: (ok > 0).then(|| expected_corpus.clone()).flatten(),
