@@ -1416,7 +1416,12 @@ struct DenyApprovalChannel;
 
 #[async_trait]
 impl ApprovalChannel for DenyApprovalChannel {
-    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(false)
     }
     async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
@@ -1517,7 +1522,12 @@ struct AnsweringApprovalChannel;
 
 #[async_trait]
 impl ApprovalChannel for AnsweringApprovalChannel {
-    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(true)
     }
     async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
@@ -1591,7 +1601,12 @@ struct InfoApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for InfoApprovalChannel {
-    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(true)
     }
     async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
@@ -1687,7 +1702,12 @@ struct SpyInfoChannel {
 
 #[async_trait]
 impl ApprovalChannel for SpyInfoChannel {
-    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(true)
     }
     async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
@@ -1982,7 +2002,12 @@ struct SpyLessonChannel {
 
 #[async_trait]
 impl ApprovalChannel for SpyLessonChannel {
-    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(true)
     }
     async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
