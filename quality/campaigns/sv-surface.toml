@@ -163,10 +163,23 @@ status    = "active"
 #       health.rs:123 is the whole-app roll-up of user-readable checks
 #       with fix_hints - a different question from
 #       sovereign_contracts::health's per-component typed HealthIssues;
-#       its own comment records the distinction. REMAINS: mesh status
-#       up-conversion at mesh_commands.rs:247 (attach path up-converts
-#       the flat /v1/mesh/status wire shape into a private
-#       MeshStateResponse).
+#       its own comment records the distinction. Mesh status LANDED
+#       2026-09-09, RESHAPED BY MEASUREMENT (1de14aeb9): the row's
+#       premise was wrong — mesh_commands.rs:247 was never a DTO
+#       mirror (MeshStateResponse embeds the canonical sovereign_mesh
+#       types; the wire StatusResponse comes from the shared crate).
+#       The real twin was the enum-string mapping PAIR: the daemon
+#       hand-stringifies MemberStatus, the desktop hand-re-enumified
+#       with a `_ => Offline` catch-all (a newer daemon's new variant
+#       silently rendered members OFFLINE, §18.3). The desktop half is
+#       deleted — MemberStatus::deserialize over the wire string; the
+#       enum's rename_all=lowercase derive is the one decider; unknown
+#       variants refuse loudly. CENSUS: tests/mesh_status_one_decider.rs,
+#       sabotage-verified. HAND-OFFS named, out of this rung's scope
+#       (cw-lift zone + cli-llm): the daemon-side hand stringify at
+#       mesh_http.rs:501 (byte-identical to the serde repr today,
+#       drift-prone tomorrow) and the CLI's raw JSON comparison at
+#       mesh_cmd.rs:685.
 #   5   workflows daemon-side (operator decision, 2026-09-08): the daemon
 #       executes; workflow_commands.rs becomes a job-submission client;
 #       desktop's sovereign-workflow/-host deps leave with the dep shrink.
@@ -254,11 +267,17 @@ status       = "open"
 #                      fix_hints, vs sovereign_contracts::health's
 #                      per-component typed HealthIssues. Different
 #                      questions, no shared decider.
-#   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO - the one remaining
+#   mesh status shape  RESHAPED + LANDED 2026-09-09 (rung 4): never a
+#                      DTO mirror — the real twin was the enum-string
+#                      mapping pair; the desktop half is deleted, the
+#                      enum's serde repr is the one decider (1de14aeb9).
+#                      Two adjacent spellings named on the rung row for
+#                      cw-lift/cli-llm hand-off: mesh_http.rs:501's hand
+#                      stringify, mesh_cmd.rs:685's raw "online" compare.
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
-floor        = 1.0
-floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs and STRUCK the health row as not-a-twin (measured): 1 remains"
+floor        = 0.0
+floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs, STRUCK the health row as not-a-twin (measured), and deleted the mesh-status enum-string twin (reshaped by measurement from the 'up-convert DTO' premise): 0 remain"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
@@ -291,7 +310,11 @@ status       = "open"
 #      the first draft's match_indices("struct ") counted prose and
 #      false-fired on the word "construct" (§18.4: validate the
 #      instrument; the first run of a needle is not a measurement).
-floor        = 3.0
+#   4. mesh member-status strings - LANDED 2026-09-09:
+#      tests/mesh_status_one_decider.rs (planted the retired hand
+#      match, watched red naming the rule, reverted, green). TARGET
+#      REACHED at 4: one control per real twin family.
+floor        = 4.0
 floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
 # 4.0 = one control per REAL twin family (corpus status, model residency,
 # reading DTOs, mesh status). Was 6.0 over the naive enumeration; the GGUF
