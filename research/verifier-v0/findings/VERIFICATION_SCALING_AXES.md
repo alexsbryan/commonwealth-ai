@@ -1463,3 +1463,76 @@ grep-verified). One held-out corpus. The negatives are cross-domain rather than
 ablated, so this tests the easier half of §18's design.
 
 Reproduce: `scripts/scatter_holdout.py`; frozen rule in the header.
+
+## 20. Correcting §19: selective prediction works where ranking failed — and the POSITIVE claim is what scales with N
+
+**2026-09-09. §19's "cheap gap detection remains unsolved" was wrong, and the
+error was the metric.** AUC scores a whole ranking; the decision only has to be
+right WHERE IT FIRES. Re-scoring both datasets as selective prediction —
+abstain on most queries, be confident on some — changes the answer.
+
+### The negative call: ≥90% precision, and it transfers
+
+| dataset | threshold | fires on | precision |
+|---|---|---|---|
+| A — SEP regimes (§18) | 0.464 | 38.7% of queries | **91.7%** |
+| B — held-out `commonwealth-ai` (§19) | 0.143 | 17.9% of queries | **90.0%** |
+
+And at **100% positive-recall** (never wrong about something we DO have), A
+fires on 21.0% of queries at 100% precision. B has no such point — some covered
+question scores below the lowest uncovered one — so soundness is not free.
+
+**The caveat that governs whether this is worth anything.** Base rates here are
+66% and 73% uncovered. In the regime that motivated the question — a corpus
+covering ~10% of what is asked — "we don't have it" is **90% precise by saying
+it always**, and a 90%-precision detector adds nothing. Precision must be read
+against base rate, and at realistic coverage this detector's lift is unmeasured.
+
+### So the scarce claim is the POSITIVE one, and it is much harder
+
+| dataset | ≥90% precision on "I DO have this" |
+|---|---|
+| A — SEP | **unreachable at any threshold** |
+| B — held out | reachable, but **6.7% recall** (fires on 1.8% of queries) |
+
+### And that is the shape that scales with N — the first one in this arc
+
+> **"Nobody has it" is a CONJUNCTION.** It is wrong whenever the single node
+> that HOLDS the answer misfires, so the mesh's error rate equals one node's
+> false-negative rate. **N does not help it at all.**
+>
+> **"Someone has it" is a DISJUNCTION.** A per-node detector that is PRECISE and
+> low-recall composes: the mesh answers if ANY node's confident-yes fires.
+> Precision is preserved and coverage grows with N.
+
+Taking B's 100%-precision operating point (6.7% per-node recall) and assuming
+independent node coverage:
+
+| N | 1 | 3 | 5 | 10 | 20 |
+|---|---|---|---|---|---|
+| mesh recall | 6.7% | 18.7% | 29.2% | 49.8% | **74.8%** |
+
+**This is the first mechanism in §8-§20 where N genuinely compounds**, and it
+compounds for the reason §8 said independence requires: the nodes are reading
+DIFFERENT CORPORA, not voting on the same evidence. A precise, low-recall
+detector is exactly the wrong tool for one node and exactly the right one for
+twenty.
+
+### What must be measured before believing the curve
+
+**Corpus overlap sets the effective N**, and the table assumes independence,
+which is certainly false — if every node installs the same wikipedia snapshot,
+N=20 is N=1. The binding unknown is no longer detection; it is **how much of a
+mesh's corpus coverage is disjoint**. That is directly measurable and is the
+next experiment.
+
+### Scope, and it is thin
+
+15 positives in B, 21 in A. The 100%-precision point in B rests on ONE unit and
+would move with a single relabelling. Base rates are not the production base
+rate. Independence is assumed, not measured. This corrects §19's conclusion but
+does not license a build; it says the question was mis-posed and names the
+quantity that decides it.
+
+Reproduce: the selective-prediction re-scoring runs off
+`uncovered_regime.json` + `scatter_holdout.json`.
