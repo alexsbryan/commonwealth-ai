@@ -327,22 +327,40 @@ pub(crate) async fn verify_grounding(
                     claim_evidence: Vec::new(),
                 });
             }
-            ValuePresence::Present(value) if entity_anchored => {
+            // THE PROBE RUNS ON EVERY `Present` VALUE; ONLY ITS *PASS* IS
+            // GATED. `entity_anchored` was guarding the whole match arm, so an
+            // unanchored question skipped the probe and therefore skipped its
+            // REFUSAL too — and a veto may only refuse, so gating a refusal
+            // behind a calibration flag is the one direction §7.6 forbids.
+            //
+            // The flag's stated purpose is the SHORT-CIRCUIT: `Some(true)`
+            // returns vp=0.0 and skips the confirmatory loop entirely, and
+            // THAT shortcut is what was calibrated for in-world questions.
+            // That half keeps the flag, unchanged.
+            //
+            // MEASURED, why this matters (2026-09-08, frozen transcripts,
+            // 37 paired bench files / 449 comparable rows): the gate and the
+            // bench's `assess_asserted_value` — which calls this same
+            // `value_is_supported` — disagree on 43 rows, and the direction
+            // is 100% one-way: the gate says grounded where the scorer says
+            // ungrounded, never the reverse. `distract-bomb-maker` is the
+            // live case: the question names no entity ("which member of the
+            // anarchist circle is the bomb-maker…"), so anchoring is false,
+            // the probe never ran, and the confirmatory loop cleared
+            // "Ossipon is the bomb-maker" — a distractor whose predicates are
+            // individually true of the evidence and whose SUBJECT is not.
+            // Mis-attribution is a property of what the ANSWER asserts, not
+            // of whether the QUESTION named someone.
+            ValuePresence::Present(value) => {
                 match value_is_supported(&**inference, question, &value, chunks, posture).await {
-                    Some(true) => {
-                        dbg(&format!("value-presence: {value:?} supported → vp=0.0"));
-                        return Some(GateVerdict {
-                            violation_prob: 0.0,
-                            outcome: ClaimCheckOutcome::Measured,
-                            claim: Some(claim),
-                            claim_evidence: Vec::new(),
-                        });
-                    }
+                    // REFUSAL: ungated. The evidence carries the token and
+                    // does not support it.
                     Some(false) => {
                         tracing::info!(
                             target: "grounding_gate",
                             value = %value,
                             claim = %claim.chars().take(90).collect::<String>(),
+                            entity_anchored,
                             "value-presence: the evidence carries the token and does not support it → vp=1.0"
                         );
                         return Some(GateVerdict {
@@ -352,16 +370,30 @@ pub(crate) async fn verify_grounding(
                             claim_evidence: Vec::new(),
                         });
                     }
+                    // PASS: still gated, because skipping the confirmatory
+                    // loop is the part that was calibrated.
+                    Some(true) if entity_anchored => {
+                        dbg(&format!("value-presence: {value:?} supported → vp=0.0"));
+                        return Some(GateVerdict {
+                            violation_prob: 0.0,
+                            outcome: ClaimCheckOutcome::Measured,
+                            claim: Some(claim),
+                            claim_evidence: Vec::new(),
+                        });
+                    }
+                    Some(true) => dbg(&format!(
+                        "value-presence: {value:?} supported but unanchored → confirmatory loop"
+                    )),
                     // The probe did not answer — could-not-judge, so the
                     // confirmatory loop below decides rather than this
                     // mechanism failing the turn on an instrument fault.
                     None => dbg("value-presence: probe gave no verdict → confirmatory fallback"),
                 }
             }
-            // Present with no short-circuit, or nothing checkable asserted:
-            // the confirmatory loop decides, exactly as before.
-            ValuePresence::Present(_) | ValuePresence::NoValue => {
-                dbg("value-presence: not refused → confirmatory loop");
+            // Nothing checkable asserted: the confirmatory loop decides,
+            // exactly as before.
+            ValuePresence::NoValue => {
+                dbg("value-presence: no checkable specific → confirmatory loop");
             }
         }
     }
