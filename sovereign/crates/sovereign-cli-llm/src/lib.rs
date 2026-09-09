@@ -173,6 +173,15 @@ async fn async_main() {
         "workflow" if std::env::var_os("RUST_LOG").is_some() => init_tracing(
             "sovereign_cli_llm=info,sovereign_workflow_host=info,sovereign_workflow=info",
         ),
+        // job: the fold's own refusals. `job status` prints an UNREADABLE
+        // COUNT, and the reason each line was refused is the whole answer to
+        // "why is my submission not in the fold" — it lives in
+        // `commonwealth_work`'s `unreadable`, at debug, and without a
+        // subscriber here the terminal could report the count and never the
+        // cause (ARCH §9.1). Quiet by default so `--json` stays parseable.
+        "job" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_cli_llm=info,commonwealth_work=debug")
+        }
         _ => {}
     }
 

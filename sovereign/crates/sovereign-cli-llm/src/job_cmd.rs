@@ -50,6 +50,7 @@ use std::collections::BTreeMap;
 use commonwealth_core::HandoffId;
 use commonwealth_rail::{Admission, AdmittedOp, Payload, RailAct, RailGap};
 use commonwealth_work::act::{Submission, WorkAct};
+use commonwealth_work::process::ProcessPayload;
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{seal, ActorKey, WORK_NAMESPACE};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
@@ -88,13 +89,17 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 const USAGE: &str = concat!(
     "usage:\n",
     "  svrn job submit --kind <id:vN> (--units <file.json> | -- <argv…>)",
-    " [--allow <actor-key>]… [--ttl <secs>]\n",
+    " [--allow <actor-key>]… [--ttl <secs>] [--timeout <secs>]\n",
     "  svrn job status [<handoff>] [--json]\n",
     "\n",
     "submit  put work on the `work` ring as one signed act. Which node runs it\n",
     "        is not yours to choose: every node folds the same journal.\n",
     "status  the fold — handoffs, their units, who holds what, and every line\n",
     "        this node could not account for.\n",
+    "\n",
+    "--ttl is how long the ring keeps OFFERING the work; --timeout is how long\n",
+    "one run of it may take, and applies to the `-- <argv…>` form only (a units\n",
+    "file states `timeout_secs` per unit). Submit prints the cap it used.\n",
     "\n",
     "A kind is spelled `id:vN` (`process:v1`). `ingest@1` is refused: one\n",
     "spelling, so two nodes cannot disagree about whether they offer the same\n",
@@ -123,7 +128,30 @@ async fn run_submit(args: &[String]) -> i32 {
         }
     };
 
-    let units = match resolve_units(&kind, flag(head, "--units"), argv) {
+    // The unit's own wall cap, which is NOT the submission's TTL: the TTL is
+    // how long the ring may keep offering this work, and this is how long one
+    // run of it may take. Only the argv form takes it — a units file states
+    // the whole payload, `timeout_secs` included, and a flag that silently
+    // overrode what the file said would be a second answer to the same
+    // question.
+    let timeout_secs = match flag(head, "--timeout").map(str::parse::<u64>) {
+        Some(Ok(t)) => Some(t),
+        Some(Err(_)) => {
+            eprintln!("job submit: --timeout takes whole seconds");
+            return 2;
+        }
+        None => None,
+    };
+    if timeout_secs.is_some() && flag(head, "--units").is_some() {
+        eprintln!(
+            "job submit: --timeout applies to the trailing `-- <argv>` form; a units file \
+             states `timeout_secs` per unit, and a flag that overrode it would be a second \
+             place the wall cap is decided"
+        );
+        return 2;
+    }
+
+    let units = match resolve_units(&kind, flag(head, "--units"), argv, timeout_secs) {
         Ok(u) => u,
         Err(e) => {
             eprintln!("job submit: {e}");
@@ -153,6 +181,10 @@ async fn run_submit(args: &[String]) -> i32 {
     };
 
     let handoff = HandoffId::generate();
+    // `Submission::new` takes the units by value and the report below reads
+    // the cap off them, so the clone is the price of reporting a FACT about
+    // what was signed rather than re-deriving it from the flag.
+    let submitted_units = units.clone();
     let submission = Submission::new(handoff, kind.clone(), units, allowed.clone(), ttl_secs);
     let unit_count = submission.units.len();
     let clamped_ttl = submission.ttl_secs;
@@ -196,6 +228,25 @@ async fn run_submit(args: &[String]) -> i32 {
         }
     }
     println!("  ttl     : {clamped_ttl}s");
+    // Printed for the argv form only, and printed rather than documented: a
+    // default nobody sees is a default nobody can correct. The units-file form
+    // states its own cap per unit and this line would have to pick one.
+    //
+    // Read OFF THE UNIT, not recomputed from the flag. `timeout_secs
+    // .unwrap_or(DEFAULT_TIMEOUT_SECS)` would be a second place the rule
+    // "absent means the default" is written, and the two would disagree the
+    // day the constructor picks the cap differently (ARCH §10.6). What the
+    // submitter needs to see is the cap that is ON THE ACT.
+    if argv.is_some() {
+        match wall_cap_of(&submitted_units) {
+            Some(secs) => println!("  wall cap: {secs}s per unit"),
+            // Unreachable for `process:v1` — `ProcessPayload` makes the field
+            // required — and said rather than defaulted to
+            // `DEFAULT_TIMEOUT_SECS`, which would print a cap the act does not
+            // carry (ARCH §18.3).
+            None => println!("  wall cap: not stated by this unit's payload"),
+        }
+    }
     println!();
     // The submitter is now irrelevant to the work: this process can exit, the
     // laptop can close, and the act stands on every node that holds the ring.
@@ -216,6 +267,7 @@ fn resolve_units(
     kind: &JobKind,
     units_file: Option<&str>,
     argv: Option<&[String]>,
+    timeout_secs: Option<u64>,
 ) -> Result<Vec<JobUnit>, String> {
     match (units_file, argv) {
         (Some(_), Some(_)) => Err("--units and a trailing `-- <argv>` say the same thing two \
@@ -239,17 +291,41 @@ fn resolve_units(
             if argv.is_empty() {
                 return Err("`--` with no command after it submits nothing".to_string());
             }
-            let payload = serde_json::json!({ "argv": argv });
-            let unit = seal::seal(kind.clone(), payload, JobRequirements::any(), None)
+            // `ProcessPayload`, not a JSON literal. Spelling it by hand here
+            // is what shipped `{"argv": […]}` with no `timeout_secs` and no
+            // `result`, which every donor refused as `payload-not-canonical`
+            // — silently, five seconds at a time, while `job status` went on
+            // reporting the unit `queued`. Building the executor's own type
+            // makes a missing field a compile error here instead (ARCH §10.6,
+            // §7).
+            let mut payload = ProcessPayload::command(argv.to_vec());
+            if let Some(secs) = timeout_secs {
+                payload.timeout_secs = secs;
+            }
+            let body = serde_json::to_value(&payload)
+                .map_err(|e| format!("the payload could not be encoded: {e}"))?;
+            let unit = seal::seal(kind.clone(), body, JobRequirements::any(), None)
                 .map_err(|e| e.to_string())?;
             Ok(vec![unit])
         }
     }
 }
 
-/// The one kind whose payload shape this CLI spells. Named once so the refusal
-/// above and the check below cannot drift.
-const PROCESS_V1: &str = "process:v1";
+/// The wall cap the submitted units actually carry, when they agree on one.
+///
+/// `None` when a unit's payload states none — which `process:v1` cannot, and
+/// which is reported rather than filled in.
+fn wall_cap_of(units: &[JobUnit]) -> Option<u64> {
+    let mut caps = units
+        .iter()
+        .map(|u| u.payload.get("timeout_secs").and_then(|v| v.as_u64()));
+    let first = caps.next().flatten()?;
+    caps.all(|c| c == Some(first)).then_some(first)
+}
+
+/// The one kind whose payload shape this CLI spells — the literal the crate
+/// that owns the executor exports, not a copy of it (ARCH §10.6).
+const PROCESS_V1: &str = commonwealth_work::process::PROCESS_KIND;
 
 fn units_from_file(kind: &JobKind, path: &str) -> Result<Vec<JobUnit>, String> {
     let raw = std::fs::read_to_string(path).map_err(|e| format!("read {path}: {e}"))?;
@@ -635,7 +711,7 @@ mod tests {
     fn a_trailing_command_is_refused_for_a_kind_this_cli_cannot_spell() {
         let kind = JobKind::parse("ingest:v1").expect("kind");
         let argv = s(&["uname"]);
-        let err = resolve_units(&kind, None, Some(&argv)).expect_err("refused");
+        let err = resolve_units(&kind, None, Some(&argv), None).expect_err("refused");
         assert!(err.contains("ingest:v1"), "{err}");
         assert!(err.contains("--units"), "{err}");
     }
@@ -646,7 +722,7 @@ mod tests {
     fn a_trailing_command_seals_one_process_unit() {
         let kind = JobKind::parse(PROCESS_V1).expect("kind");
         let argv = s(&["uname", "-a"]);
-        let units = resolve_units(&kind, None, Some(&argv)).expect("sealed");
+        let units = resolve_units(&kind, None, Some(&argv), None).expect("sealed");
         assert_eq!(units.len(), 1);
         assert_eq!(units[0].payload["argv"], serde_json::json!(["uname", "-a"]));
         seal::verify(&units[0]).expect("the seal covers the payload");
@@ -658,7 +734,7 @@ mod tests {
     fn units_file_and_trailing_command_together_are_refused() {
         let kind = JobKind::parse(PROCESS_V1).expect("kind");
         let argv = s(&["uname"]);
-        let err = resolve_units(&kind, Some("units.json"), Some(&argv)).expect_err("refused");
+        let err = resolve_units(&kind, Some("units.json"), Some(&argv), None).expect_err("refused");
         assert!(err.contains("--units"), "{err}");
     }
 
@@ -738,7 +814,50 @@ mod tests {
         }
     }
 
+    /// THE ONE THIS VERB SHIPPED WITHOUT. The argv form's payload has to be a
+    /// body the only executor registered for `process:v1` will run, and for
+    /// cw-lift 5d it was not: `{"argv": […]}` with no `timeout_secs` and no
+    /// `result`, which `ProcessExecutor::validate` refuses as
+    /// `payload-not-canonical`. The donor refused it every five seconds, on a
+    /// trace target nobody had turned on, while `job status` reported the unit
+    /// `queued` — a submitter with no way to find out.
+    ///
+    /// Failing input: the exact command from this verb's own `--help`. Spell
+    /// the payload by hand again and this goes red.
+    #[test]
+    fn the_argv_form_produces_a_body_the_only_executor_for_that_kind_accepts() {
+        use commonwealth_work::executor::JobExecutor;
+        use commonwealth_work::process::ProcessExecutor;
+
+        let kind = JobKind::parse(PROCESS_V1).expect("kind");
+        let units = resolve_units(&kind, None, Some(&s(&["uname", "-a"])), None).expect("sealed");
+        ProcessExecutor::new()
+            .validate(&units[0])
+            .expect("the one executor for this kind must accept what this verb submits");
+    }
+
+    /// `--timeout` reaches the payload, and its absence is the ONE named
+    /// default rather than a second number spelled here. Failing input: a cap
+    /// the flag set that the body does not carry.
+    #[test]
+    fn the_wall_cap_comes_from_the_flag_or_from_the_one_default() {
+        let kind = JobKind::parse(PROCESS_V1).expect("kind");
+        let argv = s(&["sleep", "1"]);
+
+        let dflt = resolve_units(&kind, None, Some(&argv), None).expect("sealed");
+        assert_eq!(
+            dflt[0].payload["timeout_secs"],
+            commonwealth_work::process::DEFAULT_TIMEOUT_SECS
+        );
+
+        let named = resolve_units(&kind, None, Some(&argv), Some(30)).expect("sealed");
+        assert_eq!(named[0].payload["timeout_secs"], 30);
+        // And the seal still covers the body it was given, cap included.
+        seal::verify(&named[0]).expect("the seal covers the payload");
+    }
+
     /// `--allow` is repeatable and each value is a real key. Failing input: a
+    /// display-shortened key, which is a prefix and not an identity.    /// `--allow` is repeatable and each value is a real key. Failing input: a
     /// display-shortened key, which is a prefix and not an identity.
     #[test]
     fn allow_collects_every_key_and_refuses_a_short_one() {

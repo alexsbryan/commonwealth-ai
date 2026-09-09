@@ -37,7 +37,7 @@
 //!
 //! [`read`] returns acts in **admission order and does not sort them**. That
 //! is not an oversight to fix later: `Admission::ops` is the total order
-//! `(ts_unix, actor, id)` that every node on the ring already agrees on, and a
+//! `(ts_unix, actor, seq, id)` that every node on the ring already agrees on, and a
 //! second ordering in this crate would be a second decider for who won a lease
 //! (ARCH §10.6). `measurements_rail::read` does sort — by the record's own
 //! `measured_at`, for display — and that is exactly the line not to copy.

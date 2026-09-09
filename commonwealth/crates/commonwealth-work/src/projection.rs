@@ -10,7 +10,7 @@
 //! # Order-independence, and what it does and does not mean
 //!
 //! The fold reads [`act::read`], which reads `Admission::applied()` — the
-//! total order `(ts_unix, actor, id)` every node already agrees on — and it
+//! total order `(ts_unix, actor, seq, id)` every node already agrees on — and it
 //! **adds no ordering of its own**. That is the whole property, and it has two
 //! halves that fail differently:
 //!

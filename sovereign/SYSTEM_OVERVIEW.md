@@ -5310,7 +5310,9 @@ reading different answers off the same journal. That is pinned exhaustively
 over all 720 orderings of a six-op fixture; asserting it at this layer rather
 than over balances made it both stronger and true for every app that will ever
 sit on the rail. It buys the property with: dedupe by re-derived `OpId`; a
-content-derived total order `(ts_unix, actor, id)`; a void set built from every
+content-derived total order `(ts_unix, actor, seq, id)` — the `seq` term added
+2026-09-09 after a work-plane burst inside one second folded a `Lease` ahead of
+the `Submit` that opened its handoff and a unit consequently ran twice; a void set built from every
 correction at once (so a correction arriving before its target pre-emptively
 voids it) that **never resurrects** — correcting a correction cancels its
 replacement and leaves the original void, which is what "compensating entry,

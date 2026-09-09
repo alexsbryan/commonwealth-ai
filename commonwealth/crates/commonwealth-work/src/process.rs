@@ -122,6 +122,17 @@ pub const LEASE_INTERVAL_MS: u64 = 15_000;
 /// a lost lease stops the work within a heartbeat, slow enough to be free.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
 
+/// The wall cap a submitter who did not name one gets.
+///
+/// Fifteen minutes: about four times the cold full-workspace run this
+/// repository's own test gate takes (~3m30s), so the pilot's shard cannot be
+/// cut by the default, and two orders under [`MAX_TTL_SECS`] so it is a
+/// convenience rather than a ceiling. It lives here, beside the field it
+/// fills, because a submitter that picked its own would be a second answer to
+/// "how long may a unit run" (ARCH §10.6) — and `svrn job submit` prints the
+/// value it used rather than leaving it to be remembered.
+pub const DEFAULT_TIMEOUT_SECS: u64 = 900;
+
 /// Exit codes this executor DECLARES mean could-not-judge rather than failed.
 ///
 /// Not a range and not a guess: **4** and **5** are the two
@@ -217,6 +228,31 @@ pub struct ProcessPayload {
 }
 
 impl ProcessPayload {
+    /// The payload for "run this argv", with every other field at the value a
+    /// submitter who said nothing means.
+    ///
+    /// This exists so that a caller holding only an argv does not spell the
+    /// payload as a JSON literal. `svrn job submit -- uname -a` did exactly
+    /// that and shipped `{"argv": […]}` — no `timeout_secs`, no `result` —
+    /// which every donor then refused as `payload-not-canonical`, five
+    /// seconds at a time, invisibly to the submitter. Two spellings of one
+    /// shape, and the second one could not be kept right by anything (ARCH
+    /// §10.6); this is the one, and adding a required field here is a compile
+    /// error at every caller rather than a refusal at every donor.
+    ///
+    /// [`ResultSource::Stdout`] because a shorthand unit is a command whose
+    /// answer is its exit code and whose output the submitter wants to read.
+    pub fn command(argv: Vec<String>) -> ProcessPayload {
+        ProcessPayload {
+            argv,
+            cwd: None,
+            stdin: None,
+            env: BTreeMap::new(),
+            timeout_secs: DEFAULT_TIMEOUT_SECS,
+            result: ResultSource::Stdout,
+        }
+    }
+
     /// Read a payload out of a unit, or say which rule it broke.
     ///
     /// The refusal text is what a submitter sees; the `Err` is a sentence, not

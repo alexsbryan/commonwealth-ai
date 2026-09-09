@@ -27,7 +27,7 @@
 //! is contradictory and is counted `unreadable` rather than guessed at.
 //!
 //! **`t` is the ORIGINAL write time, not the journal line's timestamp.** The
-//! rail orders ops by `(ts_unix, actor, id)` — when a line was written down —
+//! rail orders ops by `(ts_unix, actor, seq, id)` — when a line was written down —
 //! and that is the wrong order for last-write-wins the moment a node SNAPSHOTS
 //! (re-appends its live rows after a seal, so the floor can move without the
 //! live set evaporating). A snapshot line is new; the write it carries is
@@ -560,7 +560,7 @@ mod tests {
     }
 
     /// **LWW, and the control.** The rail's total order is
-    /// `(ts_unix, actor, id)` — when a line was written DOWN. That is not the
+    /// `(ts_unix, actor, seq, id)` — when a line was written DOWN. That is not the
     /// order last-write-wins needs, and the difference only shows when the two
     /// disagree: here the second act is later on the journal and older as a
     /// write.
