@@ -59,16 +59,71 @@ pub(super) async fn stop_daemon() -> i32 {
             "  {} is registered — stopping via the service manager",
             svc.name
         );
-        return match svc.stop() {
+        match svc.stop() {
             Ok(()) => {
-                eprintln!("✓ daemon stopped");
-                0
+                // THE MANAGER'S EXIT CODE DESCRIBES ITS UNIT, NOT THE DAEMON,
+                // and until 2026-09-09 this leg returned 0 on the strength of
+                // it (ARCH §18.3 — a success-shaped result that measured
+                // nothing).
+                //
+                // The topology that breaks the assumption is this host's:
+                // `sovereign.service` ExecStarts `toolbox run … sovereign-cli
+                // daemon run`, so the unit's cgroup holds the toolbox wrapper
+                // and its podman client while the daemon that actually binds
+                // the client port lives in the CONTAINER's cgroup
+                // (`libpod-<id>.scope/container`). `systemctl --user stop`
+                // reaps the cgroup it owns, the unit goes inactive, and the
+                // daemon keeps serving. Measured 2026-09-09: unit MainPID
+                // 2496484 under `app.slice/sovereign.service`, listener pid
+                // 2496571 under `libpod-c0142767….scope/container`.
+                //
+                // The cost of believing it is not an inconvenience: the
+                // operator starts what they think is a fresh daemon, the old
+                // one still holds the port, and every subsequent command talks
+                // to a STALE BINARY. It cost two debugging sessions on the
+                // peer-path work before anyone looked at a cgroup.
+                //
+                // So the claim is checked against its subject — is anything
+                // still serving the client port — and the check has a failing
+                // input this comment names. Note that the port fallback forty
+                // lines below was written for precisely this failure ("falls
+                // through to `systemctl stop` on an inactive unit … silently
+                // reports success while the actual daemon keeps serving"); the
+                // service-manager leg added 2026-07-29 returns above it, so
+                // that guard was unreachable in this topology.
+                match await_port_release(client_port()).await {
+                    None => {
+                        eprintln!("✓ daemon stopped");
+                        return 0;
+                    }
+                    Some(pid) => {
+                        // FALLING THROUGH IS SAFE, and it is the reason the
+                        // OWNERSHIP-FIRST note above does not apply any more:
+                        // that rule exists so we do not SIGTERM a manager's
+                        // child and race its restart policy. We have just
+                        // stopped the unit EXPLICITLY, and neither systemd's
+                        // `Restart=` nor launchd's `KeepAlive` re-spawns after
+                        // an operator stop — so there is no policy left to
+                        // race, and the surviving process is by definition not
+                        // one the manager is going to reap.
+                        eprintln!(
+                            "⚠ {} reports stopped, but pid {pid} is still listening on :{} \
+                             — the unit's cgroup did not contain the daemon (a container or \
+                             wrapper ExecStart does this). Continuing with the direct legs.",
+                            svc.name,
+                            client_port()
+                        );
+                    }
+                }
             }
             Err(e) => {
+                // Left as a hard failure deliberately: unlike the Ok arm this
+                // one asserts nothing false — the manager said it could not
+                // stop the unit, and that is what the operator is told.
                 eprintln!("✗ {e}");
-                1
+                return 1;
             }
-        };
+        }
     }
 
     // Prefer the PID file written by `daemon start` — that's the only
@@ -154,6 +209,49 @@ pub(super) async fn stop_daemon() -> i32 {
     }
 }
 
+/// How long a daemon that has been asked to stop gets to actually stop.
+///
+/// ONE window for both stop paths (ARCH §10.6): the SIGTERM grace in
+/// [`await_exit_or_sigkill`] and the port-release grace in
+/// [`await_port_release`] are the same question — "has the thing we asked to
+/// go away gone away yet" — and two constants would drift the first time one
+/// was tuned.
+#[cfg(unix)]
+const TERM_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Wait for `port` to stop being served, up to [`TERM_GRACE`].
+///
+/// `None` means it was released; `Some(pid)` means that pid was still
+/// listening when the window closed. A daemon draining in-flight requests
+/// legitimately holds the port for a moment after its manager reports
+/// stopped, which is why this polls rather than reading once.
+#[cfg(unix)]
+async fn await_port_release(port: u16) -> Option<i32> {
+    await_port_release_within(TERM_GRACE, || find_daemon_pid_by_port(port)).await
+}
+
+/// The decider behind [`await_port_release`], with the window and the probe
+/// as parameters so a test can name a failing input without waiting ten
+/// seconds or binding a real socket.
+#[cfg(unix)]
+async fn await_port_release_within<F>(grace: std::time::Duration, mut probe: F) -> Option<i32>
+where
+    F: FnMut() -> Option<i32>,
+{
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        match probe() {
+            None => return None,
+            Some(pid) => {
+                if std::time::Instant::now() >= deadline {
+                    return Some(pid);
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
 /// Poll for `pid` to exit within the SIGTERM grace window; past it,
 /// escalate to SIGKILL (DAEMON_RESILIENCE.md P0.5). The old behavior —
 /// "didn't exit after 10s; leaving it alone" — left a wedged daemon
@@ -163,7 +261,6 @@ pub(super) async fn stop_daemon() -> i32 {
 /// has already forfeited its graceful drain.
 #[cfg(unix)]
 async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
-    const TERM_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
     const KILL_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
     let deadline = std::time::Instant::now() + TERM_GRACE;
@@ -298,6 +395,57 @@ fn parse_ss_first_pid(text: &str) -> Option<i32> {
 #[cfg(all(test, unix))]
 mod stop_daemon_tests {
     use super::*;
+
+    // ── the manager's "stopped" is a claim about its unit ───────────────
+
+    /// THE FAILING INPUT, named: this host's `sovereign.service` ExecStarts
+    /// `toolbox run … daemon run`, so the unit's cgroup holds the wrapper and
+    /// the daemon that binds the port lives in the container's. `systemctl
+    /// stop` succeeds, the unit goes inactive, and the listener survives.
+    /// Before 2026-09-09 `stop_daemon` printed "✓ daemon stopped" and returned
+    /// 0 on exactly this, which is how an operator restarts onto a stale
+    /// binary without being told.
+    #[tokio::test]
+    async fn a_listener_that_outlives_its_unit_is_reported_not_believed() {
+        let held =
+            await_port_release_within(std::time::Duration::from_millis(0), || Some(2496571)).await;
+        assert_eq!(
+            held,
+            Some(2496571),
+            "a port still served when the grace closes must name its holder, \
+             so the caller can fall through to the direct legs"
+        );
+    }
+
+    /// The control. Without it the assertion above is satisfiable by an
+    /// `await_port_release_within` that never returns `None` at all — which
+    /// would turn every ordinary stop into a spurious warning and a pointless
+    /// SIGTERM.
+    #[tokio::test]
+    async fn a_released_port_is_the_stop_the_operator_was_promised() {
+        let held = await_port_release_within(std::time::Duration::from_millis(0), || None).await;
+        assert_eq!(held, None);
+    }
+
+    /// A daemon draining in-flight requests holds the port for a moment after
+    /// its manager reports stopped. That is a normal stop, not a survivor, so
+    /// the window has to be polled rather than read once — this fails against
+    /// a single-shot implementation.
+    #[tokio::test]
+    async fn a_port_released_during_the_drain_is_not_a_survivor() {
+        let mut polls = 0;
+        let held = await_port_release_within(std::time::Duration::from_secs(5), || {
+            polls += 1;
+            if polls < 3 {
+                Some(2496571)
+            } else {
+                None
+            }
+        })
+        .await;
+        assert_eq!(held, None, "released on the third poll is released");
+        assert_eq!(polls, 3, "it must keep asking until the window closes");
+    }
 
     #[test]
     fn parses_lsof_terse_single_pid() {
