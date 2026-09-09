@@ -173,10 +173,15 @@ struct PeerPathVerdict {
     known: usize,
     /// Peers with an ACTIVE path.
     active: usize,
-    /// Peers whose active path vanished this poll, each with the path it was
-    /// on when it died. THIS is the answer the capture could not give:
-    /// "was the dying path relayed or direct at the moment it died?"
-    lost: Vec<(String, PeerPath)>,
+    /// Peers whose active path vanished this poll: the path it was on when it
+    /// died, and what the endpoint holds for it NOW. THIS is the answer the
+    /// capture could not give — "was the dying path relayed or direct at the
+    /// moment it died?" — and the second half separates the two ways a path
+    /// ends, which need different explanations: `idle` is a record iroh still
+    /// holds with nothing active on it, `no-record` is the record itself
+    /// dropped. The 2026-09-09 capture ended in `no-record` for every peer and
+    /// could not say whether it passed through `idle` on the way.
+    lost: Vec<(String, PeerPath, &'static str)>,
     /// Peers that gained an active path this poll.
     gained: Vec<(String, PeerPath)>,
     /// Peers whose active path changed kind — `direct` → `relayed` is the
@@ -224,7 +229,7 @@ impl PeerPathHealth {
                 }
                 None => {
                     if let Some(prev) = self.last_active.remove(&o.node_id) {
-                        v.lost.push((o.name.clone(), prev));
+                        v.lost.push((o.name.clone(), prev, o.path_label()));
                     }
                 }
             }
@@ -518,10 +523,11 @@ async fn run(
         if let Some(observe) = peer_paths.as_ref() {
             let obs = observe(endpoint.clone()).await;
             peer_verdict = peer_path_health.observe(&obs, cfg.peer_path_bad_streak);
-            for (name, was) in &peer_verdict.lost {
+            for (name, was, now) in &peer_verdict.lost {
                 warn!(
                     peer = %name,
                     path_at_death = was.as_str(),
+                    now = now,
                     peers_active = peer_verdict.active,
                     peers_total = peer_verdict.total,
                     "iroh(mesh) watchdog: peer path LOST — the endpoint no longer holds an \
@@ -539,11 +545,19 @@ async fn run(
                     "iroh(mesh) watchdog: peer path migrated"
                 );
             }
-            // The per-poll census, at DEBUG: one line per peer with what the
-            // endpoint holds and what membership believes, so the two can be
-            // compared directly instead of inferred from a gap in the log.
+            // The per-poll census: one line per peer with what the endpoint
+            // holds and what membership believes, so the two can be compared
+            // directly instead of inferred from a gap in the log.
+            //
+            // Its OWN tracing target, because the transitions above are the
+            // alarm and this is the continuous record — the thing you want
+            // running all day during a decay capture, and the thing you do not
+            // want to pay for by turning every `sovereign_mesh` debug line on.
+            // Enable with `mesh.peer_path=debug` in RUST_LOG; dark otherwise,
+            // like every other custom target in this codebase.
             for o in &obs {
                 tracing::debug!(
+                    target: "mesh.peer_path",
                     peer = %o.name,
                     node = %o.node_id,
                     path = o.path_label(),
@@ -896,7 +910,11 @@ mod tests {
         assert!(v.wedged);
         assert_eq!(v.known, 1, "the record is still there…");
         assert_eq!(v.active, 0, "…but nothing is flowing on it");
-        assert_eq!(v.lost, vec![("mac".to_string(), PeerPath::Mixed)]);
+        assert_eq!(
+            v.lost,
+            vec![("mac".to_string(), PeerPath::Mixed, "idle")],
+            "the record is still held, so the loss must report `idle`, not `no-record`"
+        );
     }
 
     /// One reachable peer means the ENDPOINT is fine; the trouble is with the
@@ -970,7 +988,12 @@ mod tests {
             vec![("mac".to_string(), PeerPath::Direct, PeerPath::Relayed)]
         );
         let died = h.observe(&[obs("mac", true, None)], 1);
-        assert_eq!(died.lost, vec![("mac".to_string(), PeerPath::Relayed)]);
+        assert_eq!(
+            died.lost,
+            vec![("mac".to_string(), PeerPath::Relayed, "no-record")],
+            "the endpoint dropped the record outright — a different ending from `idle`, \
+             and the one the 2026-09-09 capture finished in"
+        );
     }
 
     /// End-to-end: relay-home and self-discovery both satisfied, and the

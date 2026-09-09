@@ -109,13 +109,22 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
 fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
     let lvl = if iroh_debug { "debug" } else { "warn" };
     let llama_lvl = if llama_debug { "debug" } else { "info" };
+    // `mesh.peer_path`: the watchdog's per-poll peer-path census — one line
+    // per peer per 20s saying what the endpoint holds and what membership
+    // believes. Its own literal target, and it rides `iroh_debug` because
+    // that knob's whole stated purpose is diagnosing a reachability wedge and
+    // this is the continuous record of one. At `info` the census (a `debug!`)
+    // stays quiet and only the TRANSITIONS reach the log — `peer path LOST`
+    // with `path_at_death`, `established`, `migrated` — which is the right
+    // default: the alarm is free, the tape costs an env var.
+    let peer_path_lvl = if iroh_debug { "debug" } else { "info" };
     // `transport=info`: the bridge/tunnel layer logs under the LITERAL target
     // "transport" (not the crate path), so without this token every bridge
     // dial failure is invisible — the 2026-07-19 mesh-heal investigation was
     // blind for exactly this reason. P0.5 observability requirement.
     format!(
         "{DAEMON_TRACING_FILTER},commonwealth_transport=info,transport=info,\
-         iroh={lvl},iroh_relay={lvl},llama_cpp={llama_lvl}"
+         mesh.peer_path={peer_path_lvl},iroh={lvl},iroh_relay={lvl},llama_cpp={llama_lvl}"
     )
 }
 
@@ -540,6 +549,90 @@ mod tests {
         assert!(off.contains("commonwealth_transport=info"));
         assert!(off.contains("iroh=warn") && off.contains("iroh_relay=warn"));
         assert!(on.contains("iroh=debug") && on.contains("iroh_relay=debug"));
+    }
+
+    /// The peer-path census rides a LITERAL target (`mesh.peer_path`), so the
+    /// allowlist-with-no-default-level trap this module has hit five times
+    /// applies to it in full: unlisted, the watchdog's continuous record of a
+    /// decaying transport is dropped by the subscriber and a capture returns
+    /// an empty log that reads like "nothing happened".
+    ///
+    /// It must be listed at BOTH postures — at `info` the transitions still
+    /// reach the log and only the per-poll census is quiet — and must reach
+    /// `debug` under `SOVEREIGN_IROH_LOG`, which is the knob whose stated
+    /// purpose is diagnosing a reachability wedge.
+    #[test]
+    fn daemon_filter_carries_the_peer_path_census() {
+        let quiet = super::daemon_tracing_filter(false, false);
+        let verbose = super::daemon_tracing_filter(true, false);
+        assert!(
+            quiet.contains("mesh.peer_path=info"),
+            "the target must be allowlisted even when quiet, or `peer path LOST` \
+             — the one line naming the path at the moment it died — is dropped: {quiet}"
+        );
+        assert!(
+            verbose.contains("mesh.peer_path=debug"),
+            "SOVEREIGN_IROH_LOG must lift the census to debug, or a decay capture \
+             records only transitions and not the ramp between them: {verbose}"
+        );
+        // Not spelling — ADMISSION. `contains` (and even a parse + `Display`
+        // round-trip, which is as far as the `llama_cpp` test above goes)
+        // asserts on a string this function itself produced; it cannot tell a
+        // directive that admits an event from one that merely survives
+        // parsing. So emit the real thing through a subscriber built from the
+        // real filter and count what comes out the other side. Failing input:
+        // drop `mesh.peer_path` from the allowlist and `quiet_out` loses the
+        // warn as well as the debug.
+        fn emitted(filter: &str) -> String {
+            let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+            let sink = buf.clone();
+            let sub = tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::builder()
+                        .parse(filter)
+                        .expect("daemon filter parses"),
+                )
+                .with_writer(move || CaptureWriter(sink.clone()))
+                .finish();
+            tracing::subscriber::with_default(sub, || {
+                tracing::debug!(target: "mesh.peer_path", "CENSUS-LINE");
+                tracing::warn!(target: "mesh.peer_path", "LOST-LINE");
+            });
+            let out = buf.lock().expect("not poisoned").clone();
+            String::from_utf8_lossy(&out).into_owned()
+        }
+
+        let quiet_out = emitted(&quiet);
+        assert!(
+            quiet_out.contains("LOST-LINE"),
+            "a WARN on the census target must reach the log at the DEFAULT posture — \
+             `peer path LOST` is the whole alarm: {quiet_out:?}"
+        );
+        assert!(
+            !quiet_out.contains("CENSUS-LINE"),
+            "the per-poll census must stay quiet by default, or every daemon pays \
+             7 lines per 20s for a capture nobody asked for: {quiet_out:?}"
+        );
+        let verbose_out = emitted(&verbose);
+        assert!(
+            verbose_out.contains("CENSUS-LINE") && verbose_out.contains("LOST-LINE"),
+            "SOVEREIGN_IROH_LOG must admit the census itself, not merely name it: \
+             {verbose_out:?}"
+        );
+    }
+
+    /// Collects formatted events into a shared buffer so a test can assert on
+    /// what a filter ADMITTED rather than on how it is spelled.
+    struct CaptureWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureWriter {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("not poisoned").extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 
     /// The `llama_cpp` target must be in the deployed daemon's filter at
