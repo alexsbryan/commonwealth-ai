@@ -415,10 +415,6 @@ pub fn partition_units(units: Vec<WorkUnit>, n: usize) -> Vec<Vec<WorkUnit>> {
 pub fn derive_pod_spec(base: &JobSpec, pod_index: usize, units: Vec<WorkUnit>) -> JobSpec {
     JobSpec {
         job_id: format!("{}-p{}", base.job_id, pod_index),
-        image: base.image.clone(),
-        disk_gb: base.disk_gb,
-        gpu_name: base.gpu_name.clone(),
-        max_price_per_hour: base.max_price_per_hour,
         label: format!("{}-p{}", base.label, pod_index),
         uploads: base.uploads.clone(),
         units,
@@ -477,10 +473,6 @@ mod tests {
     fn derive_pod_spec_uses_unique_job_id() {
         let base = JobSpec {
             job_id: "atom-enrich".to_string(),
-            image: "x".to_string(),
-            disk_gb: 80,
-            gpu_name: "L40S".to_string(),
-            max_price_per_hour: 1.0,
             label: "lbl".to_string(),
             uploads: BTreeMap::new(),
             units: vec![],
@@ -494,7 +486,6 @@ mod tests {
         // Uploads should be byte-identical — every pod needs the same
         // models.
         assert_eq!(d0.uploads.len(), d3.uploads.len());
-        assert_eq!(d0.image, base.image);
         assert_eq!(d0.units.len(), 2);
         assert_eq!(d3.units.len(), 1);
     }
@@ -544,10 +535,6 @@ mod tests {
     fn coordinator_partitions_and_derives_specs_per_pod() {
         let base = JobSpec {
             job_id: "test-job".to_string(),
-            image: "x".to_string(),
-            disk_gb: 0,
-            gpu_name: "Mock".to_string(),
-            max_price_per_hour: 0.0,
             label: "lbl".to_string(),
             uploads: BTreeMap::new(),
             units: make_units(7),
@@ -582,10 +569,6 @@ mod tests {
         );
         let base = JobSpec {
             job_id: "j".to_string(),
-            image: "x".to_string(),
-            disk_gb: 0,
-            gpu_name: "M".to_string(),
-            max_price_per_hour: 0.0,
             label: "l".to_string(),
             uploads,
             units: make_units(4),
@@ -616,10 +599,6 @@ mod tests {
         );
         let spec = JobSpec {
             job_id: "j".to_string(),
-            image: "x".to_string(),
-            disk_gb: 0,
-            gpu_name: "M".to_string(),
-            max_price_per_hour: 0.0,
             label: "l".to_string(),
             uploads: BTreeMap::new(),
             units: make_units(3),

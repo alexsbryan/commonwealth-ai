@@ -18,4 +18,4 @@ pub mod worklist;
 pub use driver::{run_recipe, DriverConfig, RunSummary, Shutdown};
 pub use recipe::{Recipe, RecipeError};
 pub use status::{report, StatusReport};
-pub use worklist::{State, Stats, WorkUnit, Worklist, WorklistError};
+pub use worklist::{State, Stats, Worklist, WorklistError, WorklistRow};

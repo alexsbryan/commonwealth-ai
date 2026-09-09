@@ -52,7 +52,7 @@ where
 /// fields; we deserialize only what we use. Unknown fields are
 /// silently ignored.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Offer {
+pub struct VastOffer {
     pub id: u64,
     #[serde(default, alias = "dph_total")]
     pub price_per_hour: f64,
@@ -112,7 +112,7 @@ pub struct CreatedInstance {
 
 /// Search the Vast marketplace and return offers ordered ascending by
 /// price. Empty `query` falls back to the default verified filter.
-pub fn search_offers(query: &str, limit: u32) -> Result<Vec<Offer>> {
+pub fn search_offers(query: &str, limit: u32) -> Result<Vec<VastOffer>> {
     let q = if query.is_empty() {
         "verified=true rentable=true".to_string()
     } else {
@@ -128,7 +128,7 @@ pub fn search_offers(query: &str, limit: u32) -> Result<Vec<Offer>> {
         .arg("--limit")
         .arg(limit.to_string());
     let out = run_vastai(cmd)?;
-    let offers: Vec<Offer> = serde_json::from_slice(&out.stdout)?;
+    let offers: Vec<VastOffer> = serde_json::from_slice(&out.stdout)?;
     if offers.is_empty() {
         return Err(PodError::NoOffers(q));
     }
@@ -157,7 +157,7 @@ pub struct CreateRequest<'a> {
 /// Create a Vast instance from a chosen offer. Returns the new
 /// contract id stringified, plus the gpu name + cost echoed back
 /// for the ledger entry.
-pub fn create_instance(req: &CreateRequest<'_>, offer: &Offer) -> Result<CreatedInstance> {
+pub fn create_instance(req: &CreateRequest<'_>, offer: &VastOffer) -> Result<CreatedInstance> {
     let mut cmd = Command::new("vastai");
     cmd.arg("create")
         .arg("instance")
@@ -236,8 +236,8 @@ fn run_vastai(mut cmd: Command) -> Result<Output> {
 /// often surfaces unverified or low-reliability hosts; this overlay
 /// keeps us off them by default. Override by passing `--raw` flag
 /// straight through if you know what you're doing.
-pub fn pick_offer(offers: &[Offer]) -> Option<&Offer> {
-    let mut ranked: Vec<&Offer> = offers.iter().collect();
+pub fn pick_offer(offers: &[VastOffer]) -> Option<&VastOffer> {
+    let mut ranked: Vec<&VastOffer> = offers.iter().collect();
     ranked.sort_by(|a, b| {
         b.verified
             .cmp(&a.verified)
@@ -259,8 +259,8 @@ pub fn pick_offer(offers: &[Offer]) -> Option<&Offer> {
 mod tests {
     use super::*;
 
-    fn offer(id: u64, price: f64, verified: bool, reliability: f64) -> Offer {
-        Offer {
+    fn offer(id: u64, price: f64, verified: bool, reliability: f64) -> VastOffer {
+        VastOffer {
             id,
             price_per_hour: price,
             gpu_name: "L40S".into(),
@@ -314,7 +314,7 @@ mod tests {
             "verification": "verified",
             "cuda_max_good": 13.0
         }"#;
-        let o: Offer = serde_json::from_str(raw).unwrap();
+        let o: VastOffer = serde_json::from_str(raw).unwrap();
         assert!(
             o.verified,
             "verification=\"verified\" must parse as verified=true"
@@ -327,14 +327,14 @@ mod tests {
     fn offer_treats_non_verified_strings_as_false() {
         for state in &["frozen", "deverified", "unverified", ""] {
             let raw = format!(r#"{{"id":1,"verification":"{state}"}}"#);
-            let o: Offer = serde_json::from_str(&raw).unwrap();
+            let o: VastOffer = serde_json::from_str(&raw).unwrap();
             assert!(!o.verified, "{state:?} must NOT parse as verified");
         }
     }
 
     #[test]
     fn offer_missing_verification_is_false() {
-        let o: Offer = serde_json::from_str(r#"{"id":1}"#).unwrap();
+        let o: VastOffer = serde_json::from_str(r#"{"id":1}"#).unwrap();
         assert!(!o.verified);
     }
 }

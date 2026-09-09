@@ -43,6 +43,7 @@
 //! | [`Locator`] | ...at which span inside its document |
 //! | [`Custody`] | where the content stands for sharing |
 //! | [`Attribution`] | which engine computed a piece of text |
+//! | [`ComputeAttribution`] | ...and under which rev, platform and toolchain a unit of work RAN |
 //!
 //! **Trust and freshness** — how much a result is worth, and how old it is
 //! (minted 2026-08-20, rung nc-10-judgement; see [`judgement`] for why it is
@@ -110,7 +111,7 @@ pub mod quality;
 pub mod wire;
 
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
-pub use attribution::Attribution;
+pub use attribution::{Attribution, ComputeAttribution};
 pub use conformance::{
     AcceptanceScenario, Enforceability, ReqLevel, Requirement, RequirementRegistry,
 };

@@ -16,6 +16,16 @@
 //! WHICH engine produced a piece of text, and they must all say it the same
 //! way or two numbers that are not comparable will be compared.
 //!
+//! # Two attributions, because a text and a computation fingerprint differently
+//!
+//! [`Attribution`] answers "which engine wrote this text": model, build,
+//! quantization. [`ComputeAttribution`] answers "which machine ran this unit of
+//! work": source rev, platform, toolchain. Zero field overlap, because zero
+//! shared question — a donor executing a build or a test does not have a model
+//! or a quantization, and the engine that answers a question does not have a
+//! repo rev. They are siblings here rather than one widened type so that
+//! neither can be compared against the other by accident.
+//!
 //! # This name was contested, and the other holder was renamed
 //!
 //! `corpus-engine` had an `Attribution` meaning the SPEAKER of a chat turn
@@ -60,6 +70,54 @@ impl Attribution {
         self.model == other.model
             && self.build == other.build
             && self.quantization == other.quantization
+    }
+}
+
+/// The conditions a unit of work was *computed* under — source rev, platform,
+/// toolchain, host.
+///
+/// Two `ComputeAttribution`s comparing equal is the licence to treat one
+/// machine's verdict as if it were your own. That is the whole job: a test that
+/// passed on a donor built from a different source rev, on a different OS, or
+/// under a different toolchain is not evidence about YOUR tree, and before this
+/// type nothing in the system could say so — "a verdict that is not yours" was
+/// a convention held in a reviewer's head, not a check.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ComputeAttribution {
+    /// The source revision the work was computed from — the resolved commit,
+    /// never a branch name. A branch is an alias and moves under you, which is
+    /// the same defect [`Attribution::model`] records for engines.
+    pub repo_rev: String,
+    /// The operating system it ran on, as the target triple's second-to-last
+    /// component spells it (`linux`, `macos`, `windows`).
+    pub os: String,
+    /// The CPU architecture it ran on (`x86_64`, `aarch64`).
+    pub arch: String,
+    /// The toolchain that built it — the compiler identity, not the profile.
+    /// A result produced by a different rustc is not a result about the same
+    /// program.
+    pub toolchain: String,
+    /// Which machine computed it. Reuses [`Server`] rather than minting a
+    /// second way to say local-or-peer.
+    pub host: Server,
+}
+
+impl ComputeAttribution {
+    /// Whether one machine's result may be read as evidence about the other's
+    /// tree. The host is deliberately NOT part of it, for the same reason it is
+    /// excluded from [`Attribution::comparable_to`]: accepting a donor's answer
+    /// as your own is the entire point of offloading work to the mesh, and a
+    /// rule that made `host` count would refuse every donor verdict and leave
+    /// the type with nothing to say.
+    ///
+    /// Everything a donor could plausibly differ on and still be trusted was
+    /// considered and none of it survived: the rev, the OS, the arch and the
+    /// toolchain each change what the program under test IS, so all four count.
+    pub fn comparable_to(&self, other: &ComputeAttribution) -> bool {
+        self.repo_rev == other.repo_rev
+            && self.os == other.os
+            && self.arch == other.arch
+            && self.toolchain == other.toolchain
     }
 }
 
@@ -112,5 +170,73 @@ mod tests {
         let a = attr("m", Some("Q4_K_M"));
         let j = serde_json::to_string(&a).unwrap();
         assert_eq!(serde_json::from_str::<Attribution>(&j).unwrap(), a);
+    }
+
+    fn compute(repo_rev: &str) -> ComputeAttribution {
+        ComputeAttribution {
+            repo_rev: repo_rev.into(),
+            os: "linux".into(),
+            arch: "x86_64".into(),
+            toolchain: "1.89.0".into(),
+            host: Server::Local,
+        }
+    }
+
+    #[test]
+    fn attribution_from_a_different_rev_is_not_comparable() {
+        // The defect this type exists to make impossible: a donor's verdict,
+        // produced from a different source tree, read as one of ours.
+        assert!(!compute("aaaa111").comparable_to(&compute("bbbb222")));
+    }
+
+    #[test]
+    fn a_differing_platform_or_toolchain_is_not_comparable() {
+        // Keeps the rev test from being the only reject case, so three of the
+        // four comparability fields cannot silently drop out of the rule.
+        let mine = compute("aaaa111");
+        for other in [
+            ComputeAttribution {
+                os: "macos".into(),
+                ..mine.clone()
+            },
+            ComputeAttribution {
+                arch: "aarch64".into(),
+                ..mine.clone()
+            },
+            ComputeAttribution {
+                toolchain: "1.90.0".into(),
+                ..mine.clone()
+            },
+        ] {
+            assert!(!mine.comparable_to(&other), "{other:?}");
+        }
+    }
+
+    #[test]
+    fn an_identical_attribution_is_comparable() {
+        assert!(compute("aaaa111").comparable_to(&compute("aaaa111")));
+    }
+
+    #[test]
+    fn the_host_is_deliberately_not_part_of_comparability() {
+        // The accept case the type exists FOR: a donor ran it, and the verdict
+        // is ours to read because everything that defines the program matched.
+        let mine = compute("aaaa111");
+        let donor = ComputeAttribution {
+            host: Server::Peer {
+                node: NodeId::from_u128(9),
+                name: "halo".into(),
+            },
+            ..mine.clone()
+        };
+        assert!(mine.comparable_to(&donor));
+        assert_ne!(mine, donor, "host still distinguishes the values");
+    }
+
+    #[test]
+    fn compute_attribution_round_trips_on_the_wire() {
+        let a = compute("aaaa111");
+        let j = serde_json::to_string(&a).unwrap();
+        assert_eq!(serde_json::from_str::<ComputeAttribution>(&j).unwrap(), a);
     }
 }

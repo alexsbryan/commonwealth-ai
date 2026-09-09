@@ -77,6 +77,15 @@ use crate::worker_pod::{
 /// from every poll response. The single-pod CLI and the multi-pod
 /// coordinator both honour this; if you build a manifest directly
 /// in tests or custom integrations, start at 1.
+///
+/// ## This is a wire envelope, not a job-plane type
+///
+/// Three unrelated types in this workspace are spelled `WorkUnit`. This
+/// one is the rented-pod HTTP protocol's unit — the owner↔pod contract
+/// carried over `/internal/worker/*`. It is NOT
+/// `commonwealth_core::knowledge::WorkUnit` (a closed ingest-partition
+/// enum on the knowledge plane). The third, `sovereign-pipeline`'s
+/// sqlite worklist row, was renamed `WorklistRow` to cut the count.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkUnit {
     pub unit_id: u64,
@@ -88,6 +97,9 @@ pub struct WorkUnit {
 /// receives this and is expected to emit a [`CompletedUnit`] for each
 /// input unit (or fail loudly — the owner's polling loop is what
 /// notices stuck pods, not the worker itself).
+///
+/// Part of the rented-pod wire envelope — see [`WorkUnit`]. Shape is
+/// fixed by the owner↔pod HTTP protocol, not by the job plane.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobManifest {
     pub job_id: String,
@@ -101,6 +113,9 @@ pub struct JobManifest {
 
 /// One emission from the runner. `unit_id` echoes the input; `payload`
 /// is whatever the runner produces (atom JSON, fragment metadata, …).
+///
+/// Part of the rented-pod wire envelope — see [`WorkUnit`]. Shape is
+/// fixed by the owner↔pod HTTP protocol, not by the job plane.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletedUnit {
     pub unit_id: u64,

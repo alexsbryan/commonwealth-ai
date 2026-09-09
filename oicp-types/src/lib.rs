@@ -33,6 +33,7 @@ pub mod error;
 // consumers outside the module that travels with it.
 mod glob;
 pub mod ingest;
+pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
@@ -52,6 +53,10 @@ pub use completion::{
     TurnAdmission,
 };
 pub use error::{InferenceError, InferenceResult};
+pub use job::{
+    InvalidJobKind, Isolation, JobExecutorDescriptor, JobKind, JobRequirements, JobUnit,
+    OfferedRepo, WorkOffer,
+};
 pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
 pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
 pub use tenant::{InvalidTenantId, TenantId};

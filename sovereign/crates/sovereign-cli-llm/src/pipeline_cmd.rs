@@ -984,10 +984,6 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // <manifest.json>` command will POST the units to the worker.
     let spec = sovereign_mesh::worker_controller::JobSpec {
         job_id: job_id.clone(),
-        image: image.clone(),
-        disk_gb,
-        gpu_name: pick.gpu_name.clone(),
-        max_price_per_hour: pick.price_per_hour,
         label: label_value.clone(),
         uploads: upload_specs,
         units: Vec::new(),
@@ -1625,10 +1621,6 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
 
     let spec = sovereign_mesh::worker_controller::JobSpec {
         job_id: job_id.clone(),
-        image: image.clone(),
-        disk_gb,
-        gpu_name: gpu_name.clone(),
-        max_price_per_hour: max_price,
         label: label_value.clone(),
         uploads: upload_specs,
         units,

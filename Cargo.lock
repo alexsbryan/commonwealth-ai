@@ -8960,6 +8960,7 @@ dependencies = [
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [
+ "kernel-types",
  "serde",
  "serde_json",
  "toml 0.8.2",

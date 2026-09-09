@@ -144,10 +144,6 @@ async fn full_lifecycle_against_real_tls_pod() {
 
     let spec = JobSpec {
         job_id: "e2e-1".into(),
-        image: "ignored".into(),
-        disk_gb: 0,
-        gpu_name: "Mock".into(),
-        max_price_per_hour: 0.0,
         label: "e2e".into(),
         uploads,
         units: vec![
@@ -397,10 +393,6 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
     );
     let spec = JobSpec {
         job_id: "url-job".into(),
-        image: "ignored".into(),
-        disk_gb: 0,
-        gpu_name: "Mock".into(),
-        max_price_per_hour: 0.0,
         label: "url".into(),
         uploads,
         units: vec![sovereign_mesh::worker_http::WorkUnit {
@@ -634,10 +626,6 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
     for (i, pod) in pods.iter().enumerate() {
         let spec_with_part = JobSpec {
             job_id: pod.handle.job_id().to_string(),
-            image: "ignored".into(),
-            disk_gb: 0,
-            gpu_name: "Mock".into(),
-            max_price_per_hour: 0.0,
             label: format!("partition-{i}"),
             uploads: BTreeMap::new(),
             units: partitions[i].clone(),

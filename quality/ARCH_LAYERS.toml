@@ -556,10 +556,22 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 
 [[package_leaf]]
 name = "oicp-types"
-# The wire vocabulary, a pure leaf. Empty is also enforced from above by
-# `[[forbid]] oicp-types -> sovereign-*`: a protocol crate that names the
-# runtime cannot be lifted, versioned, or implemented by a third party.
-allow = []
+# The wire vocabulary. `kernel-types` is its ONE internal dep, admitted
+# 2026-09-09 (cw-lift rung 5b) for `oicp_types::job`: `JobRequirements
+# .preconditions` is `kernel_types::quality::Precondition` and
+# `JobExecutorDescriptor.verdict` its `VerdictSource` — the instrument
+# registry's closed vocabulary, which already spells a toolbox as `Container`
+# and an executable as `Binary`. The alternative was a second precondition enum
+# in this crate, which is the ARCH §10.6 defect the budget exists to prevent,
+# so the edge buys a deletion rather than paying for one.
+#
+# Same justification as `corpus-engine-vocab` below (`:581-588`): kernel-types
+# is itself an empty leaf, so the closure is two crates and stays that way.
+# Still enforced from above by `[[forbid]] oicp-types -> sovereign-*` — a
+# protocol crate that names the RUNTIME cannot be lifted, versioned, or
+# implemented by a third party, and that is the edge this budget is really
+# guarding.
+allow = ["kernel-types"]
 
 [[package_leaf]]
 name = "kernel-types"
