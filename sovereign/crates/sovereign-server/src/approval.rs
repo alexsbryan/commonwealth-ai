@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use tokio::sync::{broadcast, oneshot, RwLock};
+use tokio::sync::{broadcast, RwLock};
 
-use sovereign_core::error::{Error, Result};
+use sovereign_core::approval_desk::{ApprovalDesk, StepStatus};
+use sovereign_core::error::Result;
 use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
@@ -51,32 +49,20 @@ pub struct StepSummary {
     pub description: String,
 }
 
-/// Pending approval request waiting for a response.
-struct PendingApproval {
-    sender: oneshot::Sender<bool>,
-}
-
-/// Pending user input request waiting for a response.
-struct PendingInput {
-    sender: oneshot::Sender<String>,
-}
-
-/// Server-side approval channel backed by tokio channels.
+/// Server-side approval channel: broadcast the question, park the executor,
+/// resolve on the answer.
 ///
-/// When the Executor calls `request_approval()`, this channel:
-/// 1. Broadcasts an `ApprovalReq` event (for WebSocket consumers)
-/// 2. Stores a oneshot sender keyed by `"{task_id}:{step_id}"`
-/// 3. Awaits the oneshot receiver (blocks the Executor step)
-///
-/// The REST handler `POST /v1/tasks/{id}/approve` or a WebSocket `approve`
-/// event calls `submit_approval()` to unblock the waiting task.
+/// The park-and-resolve half is [`ApprovalDesk`] — shared with every other
+/// host rather than a private pair of maps here. What stays server-local is
+/// the two things that are genuinely the server's: the FAN-OUT (an
+/// `ExecutorEvent` to every subscriber) and the KEY POLICY
+/// (`"{task_id}:{step_id}"` over a host-stamped task slot, which is what
+/// `POST /v1/tasks/{id}/approve` and the WebSocket `approve` event address).
 pub struct ServerApprovalChannel {
     /// Broadcast channel for progress/approval events.
     event_tx: broadcast::Sender<ExecutorEvent>,
-    /// Pending approval requests: key = "task_id:step_id".
-    pending_approvals: Arc<RwLock<HashMap<String, PendingApproval>>>,
-    /// Pending user input requests: key = "task_id:step_id".
-    pending_inputs: Arc<RwLock<HashMap<String, PendingInput>>>,
+    /// The parked questions, keyed by this host's slot format.
+    desk: ApprovalDesk<String>,
     /// Current task ID (set before execution).
     task_id: RwLock<String>,
 }
@@ -86,8 +72,7 @@ impl ServerApprovalChannel {
         let (event_tx, event_rx) = broadcast::channel(64);
         let channel = Self {
             event_tx,
-            pending_approvals: Arc::new(RwLock::new(HashMap::new())),
-            pending_inputs: Arc::new(RwLock::new(HashMap::new())),
+            desk: ApprovalDesk::new(),
             task_id: RwLock::new(String::new()),
         };
         (channel, event_rx)
@@ -100,23 +85,17 @@ impl ServerApprovalChannel {
 
     /// Submit an approval decision for a pending request.
     /// Called by REST handler or WebSocket handler.
-    pub async fn submit_approval(&self, key: &str, approved: bool) -> bool {
-        if let Some(pending) = self.pending_approvals.write().await.remove(key) {
-            let _ = pending.sender.send(approved);
-            true
-        } else {
-            false
-        }
+    pub fn submit_approval(&self, key: &str, approved: bool) -> bool {
+        self.desk
+            .resolve_approval(&key.to_string(), approved)
+            .reached_a_question()
     }
 
     /// Submit a user input response for a pending request.
-    pub async fn submit_input(&self, key: &str, response: String) -> bool {
-        if let Some(pending) = self.pending_inputs.write().await.remove(key) {
-            let _ = pending.sender.send(response);
-            true
-        } else {
-            false
-        }
+    pub fn submit_input(&self, key: &str, response: String) -> bool {
+        self.desk
+            .resolve_input(&key.to_string(), response)
+            .reached_a_question()
     }
 
     /// Subscribe to server events.
@@ -129,44 +108,31 @@ impl ServerApprovalChannel {
 impl ApprovalChannel for ServerApprovalChannel {
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
         let task_id = self.task_id.read().await.clone();
-        let key = format!("{task_id}:{}", step.id);
+        // Parked BEFORE the broadcast: a subscriber that answers faster than
+        // this task resumes must find the question already recorded.
+        let parked = self.desk.park_approval(format!("{task_id}:{}", step.id));
 
-        // Broadcast the approval request event.
         let _ = self.event_tx.send(ExecutorEvent::ApprovalReq {
-            task_id: task_id.clone(),
+            task_id,
             step_id: step.id,
             preview: preview.clone(),
         });
 
-        // Create a oneshot channel and wait for the response.
-        let (tx, rx) = oneshot::channel();
-        self.pending_approvals
-            .write()
-            .await
-            .insert(key, PendingApproval { sender: tx });
-
-        // Wait for the approval response (from REST or WebSocket).
-        rx.await.map_err(|_| Error::Cancelled)
+        parked.answered().await
     }
 
     async fn ask_user(&self, question: &str) -> Result<String> {
         let task_id = self.task_id.read().await.clone();
-        // Use a synthetic step_id for user input requests.
-        let key = format!("{task_id}:input");
+        // A synthetic slot for user input requests — one question per task.
+        let parked = self.desk.park_input(format!("{task_id}:input"));
 
         let _ = self.event_tx.send(ExecutorEvent::UserInput {
-            task_id: task_id.clone(),
+            task_id,
             step_id: 0,
             question: question.to_string(),
         });
 
-        let (tx, rx) = oneshot::channel();
-        self.pending_inputs
-            .write()
-            .await
-            .insert(key, PendingInput { sender: tx });
-
-        rx.await.map_err(|_| Error::Cancelled)
+        parked.answered().await
     }
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
@@ -177,31 +143,13 @@ impl ApprovalChannel for ServerApprovalChannel {
             .map(|t| t.clone())
             .unwrap_or_default();
 
-        let status = match output {
-            StepOutput::Text(_)
-            | StepOutput::Json(_)
-            | StepOutput::ReasonWithToolsResult { .. } => "done",
-            StepOutput::Jump(t) => {
-                let _ = self.event_tx.send(ExecutorEvent::StepDone {
-                    task_id,
-                    step: StepSummary {
-                        id: step.id,
-                        description: step.description.clone(),
-                    },
-                    status: format!("jump to {t}"),
-                });
-                return;
-            }
-            StepOutput::Skipped => "skipped",
-        };
-
         let _ = self.event_tx.send(ExecutorEvent::StepDone {
             task_id,
             step: StepSummary {
                 id: step.id,
                 description: step.description.clone(),
             },
-            status: status.to_string(),
+            status: StepStatus::of(output).to_string(),
         });
     }
 }

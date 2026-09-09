@@ -243,11 +243,11 @@ async fn handle_ws(
                 approved,
             } => {
                 let key = format!("{task_id}:{step_id}");
-                approval.submit_approval(&key, approved).await;
+                approval.submit_approval(&key, approved);
             }
             TurnRequest::UserReply { task_id, content } => {
                 let key = format!("{task_id}:input");
-                approval.submit_input(&key, content).await;
+                approval.submit_input(&key, content);
             }
         }
     }

@@ -244,25 +244,10 @@ impl ApprovalChannel for AutoApprovalChannel {
     }
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
-        let status = match output {
-            StepOutput::Text(_)
-            | StepOutput::Json(_)
-            | StepOutput::ReasonWithToolsResult { .. } => "done",
-            StepOutput::Jump(t) => {
-                tracing::info!(
-                    step_id = step.id,
-                    description = %step.description,
-                    jump_to = t,
-                    "executor: step jump"
-                );
-                return;
-            }
-            StepOutput::Skipped => "skipped",
-        };
         tracing::info!(
             step_id = step.id,
             description = %step.description,
-            status,
+            status = %crate::approval_desk::StepStatus::of(output),
             "executor: step progress"
         );
     }

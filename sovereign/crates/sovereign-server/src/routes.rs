@@ -432,7 +432,7 @@ pub async fn approve_task(
     Json(body): Json<ApproveRequest>,
 ) -> ApiResult<ApproveResponse> {
     let key = format!("{task_id}:{}", body.step_id);
-    let accepted = approval.submit_approval(&key, body.approved).await;
+    let accepted = approval.submit_approval(&key, body.approved);
 
     Ok(Json(ApproveResponse { task_id, accepted }))
 }

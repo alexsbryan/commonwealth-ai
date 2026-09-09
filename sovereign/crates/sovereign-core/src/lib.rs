@@ -3,6 +3,7 @@
 // sovereign — and moved there in noun-convergence rung 6. Re-exported at its
 // historical path so every `sovereign_core::atlas_context::*` import stands.
 pub use corpus_engine::enrichment::atlas::context as atlas_context;
+pub mod approval_desk;
 pub mod context;
 pub mod conv_briefing;
 pub mod conv_entity_graph;
