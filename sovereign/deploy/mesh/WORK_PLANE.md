@@ -298,6 +298,61 @@ Design gaps it exposes (added to the ledger, not yet scheduled):
 3. **The binary streaming plane** — sustained multi-Mbps over iroh is unmeasured; LAN
    fine, WAN gated on the same relay-floor unknown as Track A2's tensor tunnel bench.
 
+### Distance to the capstone, read at the end of Phase 5 (2026-09-09)
+
+The rails are closer than the product. Phase 5 paid for most of the substrate this
+customer needs and none of the customer.
+
+**What Phase 5 actually bought toward it.** The rail carries signed, converging state
+with one declared sender and real retention. 5c-5e proved the shape a federated plane
+would reuse verbatim: a plane is a fold over rail admission plus a pluggable executor
+registry, with zero new HTTP routes (`2a3437399`). 5f proved the DEPLOYMENT shape this
+section's adapter verdict asks for — a package-only third party holding a roster key and
+participating without serving HTTP, built and run outside this monorepo (`b03cbad01`).
+Grants exist and are per-run. iroh dial-by-key exists, and the peer-path decay that was
+killing established tunnels after ~3 minutes was root-caused and fixed the same day
+(`77a834f31`, notes `1ca75415` / `c903a9c1`) — which matters here because every number
+below would have been measured through a transport that was quietly dying.
+
+**THE RAIL IS NOT A BYTE PIPE, and this is the assumption most likely to be made
+silently.** A `Complete` act is a capped `Value` against a 64 KiB payload ceiling and
+file artifacts are H2 (see "What we will NOT do"). Media does not ride the rail. "Jellyfin
+on the rails" means iroh for reachability, grants for authorisation, the rail for catalog,
+identity and session state — and a DIRECT iroh stream for the bytes. That last leg is
+both unbuilt and unmeasured, and conflating it with the rail would make this customer
+look one rung away when it is not.
+
+**THE PRE-REGISTERED NO-GO, written before the data exists.** Gap 3 above is the only one
+that can kill the demo rather than cost time, so it gets a bar now rather than a reading
+later (ARCH §18.1):
+
+> A single iroh stream between two members on different networks sustains **>= 25 Mbit/s
+> for 10 minutes with no stall exceeding 2 s**, measured on the relayed path (the floor,
+> not the hole-punched best case) and reported as a distribution over >= 3 runs rather
+> than a peak (§18.5, and the bounds-over-point-measurements rule). Below that, direct
+> playback of a remote 1080p title is not honest and the demo is LAN-only — which is a
+> different product claim, and should be made as one.
+
+Run it BEFORE any shim code. It is hours, not weeks, and it is the cheapest question on
+this page. It shares its unknown with Track A2's tensor tunnel bench, so one measurement
+answers both.
+
+**Then, in order.** Provider-ID identity is a genuine architectural decision and not a
+port: cross-server item identity is TMDB/IMDB — external, mutable, third-party-controlled
+— against a system whose essence is content hashes (§7.5). It has consequences well past
+media and should be decided on its own, not inside a shim. The federated-query seam is the
+`JobKind` move on the data side, and cw-lift 5g is the structurally identical change to
+ingest, so the pattern gets proven adjacent before it is needed here. The Jellyfin API
+emulation is last because it is irreducible, large, and blocked on nothing — it is the
+only item that is purely work.
+
+**The honest estimate.** A minimum demo — two machines, a shim beside each, a client on A
+playing a title that lives on B, no VPN and no port-forward — is weeks rather than months
+IF the throughput bar clears, and a different conversation if it does not. Two caveats
+that belong with the number: nobody has yet priced the emulation layer against a real
+client, and the GPL-2 / AGPL split keeps the shim a separate distribution, which is a
+packaging constraint worth settling early rather than discovering at ship.
+
 ## What we will NOT do
 
 - **Invent sandboxing.** No seatbelt-profile authorship, no firewall DSL. v0 says
