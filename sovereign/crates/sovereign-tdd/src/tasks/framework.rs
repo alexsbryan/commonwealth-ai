@@ -73,13 +73,26 @@ pub fn is_counts_command(cmd: &str) -> bool {
 /// port — so Playwright trials sample fewer candidates, allow 300s
 /// per run, and run candidates serially (parallel candidates would
 /// collide on the port, or worse, silently share one server and
-/// test the wrong tree). Everything else keeps the validated
-/// defaults.
+/// test the wrong tree). A `counts:` checker is usually an
+/// INSTRUMENT — a bench lane, an enrichment re-run — against mutable
+/// state that lives OUTSIDE the candidate snapshot (the corpus
+/// store, a shared db), and instruments take minutes where unit
+/// tests take seconds (the v0 climb's one-essay re-enrich: ~150s;
+/// the 60s default killed it to an empty 0p/0f and mis-dispatched
+/// to the pin path — the quietest failure this loop knows). Same
+/// profile shape: fewer candidates, serial, bench-hardened 600s.
 pub fn trial_config_for_command(cmd: &str) -> TrialConfig {
     if is_playwright_command(cmd) {
         TrialConfig {
             candidates_per_round: 3,
             candidate_test_timeout: std::time::Duration::from_secs(300),
+            serial_candidates: true,
+            ..TrialConfig::default()
+        }
+    } else if is_counts_command(cmd) {
+        TrialConfig {
+            candidates_per_round: 3,
+            candidate_test_timeout: std::time::Duration::from_secs(600),
             serial_candidates: true,
             ..TrialConfig::default()
         }
