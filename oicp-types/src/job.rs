@@ -455,7 +455,13 @@ mod precondition_labels {
 /// with no consumer is inventory. Carrying inference requirements on a unit is
 /// an H2 concern; when something actually needs it, the field arrives with the
 /// consumer that demanded it and with a definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// `PartialEq` and not `Eq`: `payload` is a `serde_json::Value`, which carries
+// `f64` and therefore has no total equality. Derived because
+// `commonwealth-work`'s order-independence property compares PROJECTIONS —
+// two folds of the same journal — and a comparison through `serde_json::to_value`
+// would be asserting that the JSON renderings match, which is a weaker and
+// differently-shaped claim than that the states are equal.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobUnit {
     /// What kind of work this is, and which revision of its contract.
     pub kind: JobKind,
@@ -503,7 +509,10 @@ pub struct JobUnit {
 /// observed failure. A claim is not a promise and never a lease — the words
 /// stay apart here on purpose, because `sovereign/docs/WORK_ATLAS.md` already
 /// owns "claim" for agent coordination on the same rail.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// `PartialEq` for the same reason [`JobUnit`] carries it: a fold holding the
+// live offer per donor is compared as a whole by `commonwealth-work`'s
+// order-independence property.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkOffer {
     /// The kinds this donor runs, at the revisions it runs them.
     pub kinds: Vec<JobKind>,

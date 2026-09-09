@@ -286,6 +286,7 @@ crates/
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp, opaque Payload, Ed25519 authorship, admission into one total order, sync digest. Zero I/O, zero clock; deps are oplog + ed25519 + serde + hex
 ├── commonwealth-rail         # The ring rail's JOURNAL — one append-only JSONL log per namespace under <root>/rings/<ns>/, single-writer door + peer ingest; re-exports -rail-core wholesale
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
+├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec (Submit/Offer/Lease/Renew/Complete/Fail/Revoke), the unit seal, the fold, one lease predicate, the executor seam. Zero I/O + zero clock in the core (`process` feature adds tokio); package closure 58, no sovereign-*
 ├── commonwealth-state        # MeshStore — SQLite KV w/ TTL GC; since cw-lift 4 a local PROJECTION of the ring rail (rail_kv vocabulary + fold, rail_outbox table), not a gossip replica
 ├── commonwealth-test-harness # SimulatedMesh, SimulatedNode, MockLlamaServer
 └── oicp-conformance          # OICP protocol conformance suite

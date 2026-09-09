@@ -1,9 +1,11 @@
 # The commonwealth package boundary
 
-`commonwealth/crates/commonwealth-{core,transport,state,discovery}` holds the
-**mesh substrate** — the crate set a third party could lift out of this monorepo
-and build a peer against, with no sovereign runtime, no corpus engine and no
-model. 17,194 lines across 51 files. This document is the contract;
+`commonwealth/crates/commonwealth-{core,transport,state,discovery,rail-core,rail,work}`
+holds the **mesh substrate** — the crate set a third party could lift out of this
+monorepo and build a peer against, with no sovereign runtime, no corpus engine
+and no model. Seven crates, 22,159 lines across 54 files (16,651 across 41 in the
+four founding members; the rest is the rail and the work plane, admitted
+2026-09-04 and 2026-09-09). This document is the contract;
 `cargo run -p xtask -- boundary-gate` enforces it (blocking, one of the eight
 pre-push ratchets), and the declaration lives in `quality/ARCH_LAYERS.toml`.
 
@@ -34,6 +36,20 @@ is 28, and the crates oplog adds that no existing leaf already carries number
 exactly one — oplog itself. A widening that admits a crate and nothing else is
 the cheapest shape this list can take.
 
+**And its second, on 2026-09-09** (cw-lift 5c): `commonwealth-work` took the
+package from six crates to seven, `boundary-gate` reads
+`commonwealth 7/7 crates present` with no new `[[exception]]` row, and the
+zero-exception property held again. This one cost NO leaf admission — see the
+measurement below — and it is the first crate admitted here *before* it has a
+consumer, deliberately: cw-lift 5f lifts this closure out of the monorepo and
+builds a third-party peer against it, and every gate in the repo would be green
+on a `sovereign-*` edge acquired the day before that lift. The gate was watched
+red to prove it binds: a `sovereign-core` dependency added to the manifest
+makes `boundary-gate` report
+`commonwealth-work -> sovereign-core: a normal dependency leaves the package
+closure` and `layer-gate` report the `[[forbid]]` row by its reason text
+(ARCH §18.1).
+
 ## The two tiers
 
 **Package crates** (`commonwealth/crates/`):
@@ -46,6 +62,22 @@ the cheapest shape this list can take.
 | `commonwealth-discovery` | 3,228 | 82 | Founder/joiner, announce, the peer table. |
 | `commonwealth-rail-core` | 2,560 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest and its sealed floor. Zero I/O. |
 | `commonwealth-rail` | 740 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
+| `commonwealth-work` | 1,210 | **58 / 70** | The work plane: the `WorkAct` codec, the unit seal, the fold, the one lease predicate and the executor seam. TWO closures, like `commonwealth-transport`: 58 by default and 70 with the `process` feature, whose entire cost is tokio's twelve crates (`tokio`, `tokio-macros`, `mio`, `bytes`, `socket2`, `parking_lot` and friends, `signal-hook-registry`, `errno`, `scopeguard`, `smallvec`, `lock_api`). The core — codec, seal, fold, predicate — is zero I/O and zero clock, and that manifest split is how it is enforced rather than remembered. |
+
+`commonwealth-work` measured 2026-09-09 the same way (`cargo tree -e normal -p
+<crate> --prefix none`, unique package names, the crate itself excluded); that
+recipe reproduces the recorded 55 / 42 / 43 for `-core` / `-rail-core` /
+`-rail` exactly, which is why the new number is trustworthy and why `-state`
+and `-discovery` reading 78 and 79 today against the 76 and 82 recorded here is
+drift in THOSE rows rather than a different instrument. **The widening admits
+nothing at all**: `commonwealth-work`'s 58-crate default closure is exactly
+`commonwealth-core` ∪ `commonwealth-rail-core`, set-equal, so the one crate it
+adds to the package's own closure is itself. That is cheaper than the `oplog`
+admission the rail cost. Its line figure is `wc -l` over `src/**/*.rs` — the
+same shape as the rows above it, which have drifted since they were written
+(`-rail-core` reads 2,771 by that measure today against the 2,560 recorded).
+The ratcheted split, from `cargo xtask size-gate`, is 357 code lines and 316
+test lines with comments and blanks excluded.
 
 Closures measured 2026-09-03 with `cargo tree -e normal`, third-party included;
 the two rail crates re-measured at the sealed floor (2026-09-04) and both are
@@ -70,7 +102,7 @@ takes exactly three of them, and none is a concession:
 | Crate | Allowed internal deps | Why it may cross |
 |---|---|---|
 | `kernel-types` | *(none)* | Identity + provenance. `ContentHash` is wire-critical here — node and op ids are gossiped. |
-| `oicp-types` | *(none)* | The wire vocabulary. A protocol crate a peer already has to speak. |
+| `oicp-types` | `kernel-types` | The wire vocabulary. A protocol crate a peer already has to speak. Since cw-lift 5b it also carries the JOB vocabulary — `JobKind`, `JobUnit`, `JobRequirements`, `Isolation`, `WorkOffer`, `JobExecutorDescriptor` — which is what `commonwealth-work` is written against. Its one in-repo edge is `kernel-types`, itself an empty leaf, so the pair costs the package a two-crate closure. |
 | `oplog` | `kernel-types` | The append-only journal the rail folds over. Admitted 2026-09-04 so the rail could join the package at all — see the measurement above. It owns ordering and dedup, never identity, which is why `kernel-types` is its one internal dep. |
 
 ## The rules

@@ -2106,6 +2106,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "commonwealth-work"
+version = "0.6.0"
+dependencies = [
+ "commonwealth-core",
+ "commonwealth-rail-core",
+ "kernel-types",
+ "oicp-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

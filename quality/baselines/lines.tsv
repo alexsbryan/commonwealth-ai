@@ -25,6 +25,8 @@
 1010	commonwealth/crates/commonwealth-test-harness::tests
 1059	commonwealth/crates/commonwealth-transport
 1130	commonwealth/crates/commonwealth-transport::tests
+1806	commonwealth/crates/commonwealth-work
+1792	commonwealth/crates/commonwealth-work::tests
 942	commonwealth/crates/oicp-conformance
 221	commonwealth/crates/oicp-conformance::tests
 72206	corpus-engine
