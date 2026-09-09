@@ -30,7 +30,7 @@ use async_trait::async_trait;
 use sovereign_core::conv_tiered::ConvTieredReader;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
+use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
 use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
@@ -632,11 +632,16 @@ struct AutoApprove;
 
 #[async_trait]
 impl ApprovalChannel for AutoApprove {
-    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        _step: &Step,
+        _preview: &ActionPreview,
+    ) -> Result<bool> {
         Ok(true)
     }
 
-    async fn ask_user(&self, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
         Ok(String::new())
     }
 

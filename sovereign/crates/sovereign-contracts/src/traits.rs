@@ -1852,15 +1852,37 @@ pub trait StateStore:
 
 // ─── Approval Channel ─────────────────────────────────────────
 
+/// The turn a step belongs to — the context an [`ApprovalChannel`] needs to
+/// route a request back to the surface that asked for it.
+///
+/// Carried by the executor on every interactive call. The single-tenant
+/// implementations (desktop Tauri events, server SSE, CLI prompt) ignore it
+/// and keep their host-stamped current-turn slot; the daemon's routing
+/// channel (sv-surface rung 6 C1) keys on it — one Runtime serves N sockets,
+/// and without the origin a channel cannot tell which client to ask.
+#[derive(Debug, Clone)]
+pub struct ApprovalOrigin {
+    /// The conversation the turn runs in.
+    pub conversation_id: String,
+    /// The executor's per-turn task id, when the requesting path has one.
+    /// `None` for tool-direct approvals that name a conversation but no task.
+    pub task_id: Option<String>,
+}
+
 /// The executor's line to the user: approval prompts, questions, progress, and
 /// UI-refresh notifications. Implemented per surface (desktop Tauri events,
 /// server SSE, CLI prompt); dropped prompts surface as `Error::Cancelled`.
 #[async_trait]
 pub trait ApprovalChannel: Send + Sync {
     /// Ask the user to approve `step` before it runs, showing `preview`. `Ok(false)` = declined.
-    async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool>;
+    async fn request_approval(
+        &self,
+        origin: &ApprovalOrigin,
+        step: &Step,
+        preview: &ActionPreview,
+    ) -> Result<bool>;
     /// Put a `UserInput` step's question to the user and return their free-form reply.
-    async fn ask_user(&self, question: &str) -> Result<String>;
+    async fn ask_user(&self, origin: &ApprovalOrigin, question: &str) -> Result<String>;
     /// Fire-and-forget per-step progress notification. Sync — must not block the executor.
     fn emit_progress(&self, step: &Step, output: &StepOutput);
 

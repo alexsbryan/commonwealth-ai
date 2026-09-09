@@ -596,11 +596,11 @@ impl ScriptedApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for ScriptedApprovalChannel {
-    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(&self, _origin: &ApprovalOrigin, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
 
-    async fn ask_user(&self, _question: &str) -> Result<String> {
+    async fn ask_user(&self, _origin: &ApprovalOrigin, _question: &str) -> Result<String> {
         Ok(String::new())
     }
 

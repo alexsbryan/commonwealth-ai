@@ -39,7 +39,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::ApprovalChannel;
+use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin};
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
@@ -169,7 +169,14 @@ impl SuggestNoteTool {
 
         let approved = self
             .approval
-            .request_approval(&step, &preview)
+            .request_approval(
+                &ApprovalOrigin {
+                    conversation_id: ctx.conversation_id.clone(),
+                    task_id: ctx.task_id.clone(),
+                },
+                &step,
+                &preview,
+            )
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "suggest_note".into(),
@@ -251,7 +258,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use sovereign_core::error::Result as CoreResult;
-    use sovereign_core::traits::ApprovalChannel;
+    use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     /// Approval stub that records every call and returns a configured
@@ -276,6 +283,7 @@ mod tests {
     impl ApprovalChannel for StubApproval {
         async fn request_approval(
             &self,
+            _origin: &ApprovalOrigin,
             _step: &Step,
             preview: &ActionPreview,
         ) -> CoreResult<bool> {
@@ -283,7 +291,7 @@ mod tests {
             *self.last_description.lock().await = preview.description.clone();
             Ok(self.verdict)
         }
-        async fn ask_user(&self, _q: &str) -> CoreResult<String> {
+        async fn ask_user(&self, _origin: &ApprovalOrigin, _q: &str) -> CoreResult<String> {
             Ok(String::new())
         }
         fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
@@ -474,13 +482,18 @@ mod tests {
         struct FailingApproval;
         #[async_trait]
         impl ApprovalChannel for FailingApproval {
-            async fn request_approval(&self, _: &Step, _: &ActionPreview) -> CoreResult<bool> {
+            async fn request_approval(
+                &self,
+                _: &ApprovalOrigin,
+                _: &Step,
+                _: &ActionPreview,
+            ) -> CoreResult<bool> {
                 Err(Error::Tool {
                     tool_id: "approval".into(),
                     message: "stub failure".into(),
                 })
             }
-            async fn ask_user(&self, _: &str) -> CoreResult<String> {
+            async fn ask_user(&self, _: &ApprovalOrigin, _: &str) -> CoreResult<String> {
                 Ok(String::new())
             }
             fn emit_progress(&self, _: &Step, _: &StepOutput) {}

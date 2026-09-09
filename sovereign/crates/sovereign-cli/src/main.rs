@@ -103,7 +103,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{ApprovalChannel, StateStore};
+use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin, StateStore};
 use sovereign_core::types::*;
 
 // ─── CLI Approval Channel ──────────────────────────────────────
@@ -120,7 +120,12 @@ impl CliApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for CliApprovalChannel {
-    async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        step: &Step,
+        preview: &ActionPreview,
+    ) -> Result<bool> {
         eprintln!();
         eprintln!("  [APPROVAL REQUIRED]");
         eprintln!("  Step {}: {}", step.id, step.description);
@@ -156,7 +161,7 @@ impl ApprovalChannel for CliApprovalChannel {
         }
     }
 
-    async fn ask_user(&self, question: &str) -> Result<String> {
+    async fn ask_user(&self, _origin: &ApprovalOrigin, question: &str) -> Result<String> {
         eprintln!("\n  [INPUT NEEDED] {question}");
         eprint!("  > ");
         io::stderr().flush().unwrap_or(());

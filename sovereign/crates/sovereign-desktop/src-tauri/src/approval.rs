@@ -8,7 +8,7 @@ use tokio::sync::{oneshot, RwLock};
 use tauri::Emitter;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::ApprovalChannel;
+use sovereign_core::traits::{ApprovalChannel, ApprovalOrigin};
 use sovereign_core::types::*;
 
 // ─── Event Payloads ──────────────────────────────────────────
@@ -163,7 +163,12 @@ impl TauriApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for TauriApprovalChannel {
-    async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
+    async fn request_approval(
+        &self,
+        _origin: &ApprovalOrigin,
+        step: &Step,
+        preview: &ActionPreview,
+    ) -> Result<bool> {
         let task_id = self.task_id.read().await.clone();
         let key = format!("{task_id}:{}", step.id);
 
@@ -185,7 +190,7 @@ impl ApprovalChannel for TauriApprovalChannel {
         rx.await.map_err(|_| Error::Cancelled)
     }
 
-    async fn ask_user(&self, question: &str) -> Result<String> {
+    async fn ask_user(&self, _origin: &ApprovalOrigin, question: &str) -> Result<String> {
         let task_id = self.task_id.read().await.clone();
         let key = format!("{task_id}:input");
 
