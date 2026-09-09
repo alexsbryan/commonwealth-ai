@@ -121,7 +121,12 @@ reported as mechanism-evidence, never as a quality claim.
 
 ## Step 0 (before any climb)
 
-Confirm: (a) which pipeline/schema serves the obsidian axes
-(argumentative via `enrich eval` — verify the prompt dir name),
-(b) wessex-hoard's current truth score (ceiling check), (c) the
-Ostrom essay's source path + chunk count (v0 slice sizing).
+- (a) **Pipeline — CONFIRMED**: `philosophy_atlas` serves the obsidian
+  typed axes (argumentative shibboleth, philosophy_atlas.rs:656).
+  Climb surface: `philosophy_atlas_prompts/` (14 files) — not
+  peer-hot; `literary_atlas` untouched.
+- (b) wessex-hoard ceiling check — deferred to v2 scoping (does not
+  gate v0).
+- (c) **Slice — CONFIRMED**: `~/Documents/Obsidian Vault/Ostrom
+  Summary.md`, 6,340 bytes, local; carries the concept misses
+  "tragedy of the commons" and "common-pool resource".
