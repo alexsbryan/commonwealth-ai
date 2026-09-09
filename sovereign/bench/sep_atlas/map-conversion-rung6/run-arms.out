@@ -1,26 +1,19 @@
-warm: 35B resident 17:44:13
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=12GB need=12GB 17:44:13
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=11GB need=12GB 17:44:43
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=10GB need=12GB 17:45:13
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=10GB need=12GB 17:45:43
-guard: waiting — cargo/rustc/scip procs=3 MemAvailable=4GB need=12GB 17:46:13
-guard: waiting — cargo/rustc/scip procs=2 MemAvailable=12GB need=12GB 17:46:43
-guard: waiting — cargo/rustc/scip procs=4 MemAvailable=19GB need=12GB 17:47:13
-guard: waiting — cargo/rustc/scip procs=3 MemAvailable=18GB need=12GB 17:47:44
-guard: waiting — cargo/rustc/scip procs=3 MemAvailable=73GB need=12GB 17:48:14
-guard: waiting — cargo/rustc/scip procs=5 MemAvailable=57GB need=12GB 17:48:44
-guard: waiting — cargo/rustc/scip procs=5 MemAvailable=53GB need=12GB 17:49:14
-guard: waiting — cargo/rustc/scip procs=7 MemAvailable=49GB need=12GB 17:49:44
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=52GB need=12GB 17:50:14
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=48GB need=12GB 17:50:44
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=44GB need=12GB 17:51:14
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=42GB need=12GB 17:51:44
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=41GB need=12GB 17:52:14
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=40GB need=12GB 17:52:44
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=39GB need=12GB 17:53:14
-guard: waiting — cargo/rustc/scip procs=1 MemAvailable=38GB need=12GB 17:53:44
-guard: quiet at 17:54:14
-arm armB attempt 1 starting 17:54:14
-WALL armB: 384s rc=0 attempt=1
-ARM armB FAILED: rc=0 turns_errored=19
-guard: daemon down, waiting 18:00:38
+warm: 35B resident 18:15:52
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=17GB need=12GB 18:15:52
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=13GB need=12GB 18:16:22
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=13GB need=12GB 18:16:52
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=12GB need=12GB 18:17:22
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=11GB need=12GB 18:17:52
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=10GB need=12GB 18:18:22
+guard: quiet at 18:18:52
+arm armB attempt 1 starting 18:18:52
+WALL armB: 1707s rc=0 attempt=1
+ARM armB OK: rc=0 turns_errored=0
+armA: hidden 1770 maps
+warm: 35B resident 18:47:21
+guard: quiet at 18:47:21
+arm armA attempt 1 starting 18:47:21
+WALL armA: 1618s rc=0 attempt=1
+ARM armA OK: rc=0 turns_errored=0
+sovereign/bench/sep_atlas/map-conversion-rung6/run-arms.sh: line 74: syntax error near unexpected token `;;'
+sovereign/bench/sep_atlas/map-conversion-rung6/run-arms.sh: line 74: `m "$arm" target/debug/sovereign-cli-llm || exit 3 ;;'

@@ -66,11 +66,20 @@ run_arm() { # $1=arm $2=binary ; returns 0 on a clean arm
   return 1
 }
 
-run_arm armB target/debug/sovereign-cli-llm || exit 3
-
-for f in "$I"/sep-*/atlas/ontology.json; do mv "$f" "$f.armA-hidden"; done
-echo "armA: hidden $(ls "$I"/sep-*/atlas/ontology.json.armA-hidden | wc -l) maps"
-run_arm armA /home/alexbryan/dev/cw-armA-target/debug/sovereign-cli-llm; rc=$?
-restore
-echo "armA: restored $(ls "$I"/sep-*/atlas/ontology.json | wc -l) maps"
-exit $rc
+# Arms by name: armB* = current binary on the written maps; armA* = the
+# pre-rung-3 binary with the maps hidden. A suffix (armB2) is a repeat for n=2.
+# Default order: armB armA. `run-arms.sh armB2` runs one repeat.
+ARMS=${*:-armB armA}
+for arm in $ARMS; do
+  case $arm in
+    armB*) run_arm "$arm" target/debug/sovereign-cli-llm || exit 3 ;;
+    armA*)
+      for f in "$I"/sep-*/atlas/ontology.json; do mv "$f" "$f.armA-hidden"; done
+      echo "$arm: hidden $(ls "$I"/sep-*/atlas/ontology.json.armA-hidden | wc -l) maps"
+      run_arm "$arm" /home/alexbryan/dev/cw-armA-target/debug/sovereign-cli-llm; rc=$?
+      restore
+      echo "$arm: restored $(ls "$I"/sep-*/atlas/ontology.json | wc -l) maps"
+      [ $rc -eq 0 ] || exit 3 ;;
+    *) echo "unknown arm $arm"; exit 2 ;;
+  esac
+done

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """rung 6 verdict: per-question judge ratio for each arm vs the July baseline.
 
-usage: compare.py [armA.json] [armB.json]   (paths default to this dir; missing arms are skipped)
+usage: compare.py [arm ...]   (default: armA armB; e.g. `compare.py armA armB armB2`; missing arms are skipped)
 Columns: judge = synth.judge_fact_score.ratio (the headline); kw = fact_score.ratio
 (keyword facts in the answer); rows = the walk row that fired per question, read from
 <arm>.log in question order ("walking the map ... row=<kind> (<source>...)").
@@ -40,14 +40,16 @@ def ratio(r, *path):
         x = (x or {}).get(k) if isinstance(x, dict) else None
     return None if x is None else float(x)
 
+ARMS = sys.argv[1:] or ['armA', 'armB']
 arms = {'jul': load(BASE)}
-for name in ('armA', 'armB'):
+for name in ARMS:
     arms[name] = load(os.path.join(HERE, name + '.json'))
-rows = {name: rows_from_log(os.path.join(HERE, name + '.log')) for name in ('armA', 'armB')}
+rows = {name: rows_from_log(os.path.join(HERE, name + '.log')) for name in ARMS}
 present = [n for n, a in arms.items() if a]
 order = list(arms['jul'].keys())
 
-hdr = f"{'question':<52}" + ''.join(f"{n+'.judge':>10}{n+'.kw':>8}" for n in present) + f"{'A.row':>14}{'B.row':>14}"
+short = lambda n: n.replace('arm', '')
+hdr = f"{'question':<52}" + ''.join(f"{short(n)+'.judge':>10}{short(n)+'.kw':>8}" for n in present) + ''.join(f"{short(n)+'.row':>14}" for n in ARMS)
 print(hdr); print('-' * len(hdr))
 sums = {n: [0.0, 0.0, 0] for n in present}
 for i, q in enumerate(order):
@@ -58,7 +60,7 @@ for i, q in enumerate(order):
         line += f"{(f'{j:.2f}' if j is not None else '—'):>10}{(f'{k:.2f}' if k is not None else '—'):>8}"
         if j is not None:
             sums[n][0] += j; sums[n][1] += (k or 0); sums[n][2] += 1
-    for n in ('armA', 'armB'):
+    for n in ARMS:
         rw = rows[n][i] if i < len(rows[n]) else ('—', '')
         line += f"{(rw[0] + ('' if rw[1] in ('', '-') else '/' + rw[1][:4])):>14}"
     print(line)
@@ -68,7 +70,7 @@ for n in present:
     s = sums[n]
     line += f"{(s[0]/s[2] if s[2] else 0):>10.3f}{(s[1]/s[2] if s[2] else 0):>8.3f}" + ('' if s[2] == 21 else f" n={s[2]}")
 print(line)
-for n in ('armA', 'armB'):
+for n in ARMS:
     fired = sum(1 for r in rows[n] if r[0] not in ('-', 'unfiltered'))
     if rows[n]:
         print(f"{n}: rows fired on {fired}/{len(rows[n])} questions walked")
