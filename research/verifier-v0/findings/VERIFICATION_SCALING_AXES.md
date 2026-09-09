@@ -1072,3 +1072,99 @@ a BETTER answer than a 28-chunk one is unmeasured, and prior work says window
 size is not monotone for synthesis.
 
 Reproduce: `scripts/selection_headroom.py`.
+
+## 16. CRAG-style adaptive routing: the evaluator buys nothing, and the prize is small even with a perfect one
+
+**2026-09-09.** §15's architecture argument was the CRAG shape — grade the
+retrieved window with something cheap, escalate only when it is judged
+insufficient, synthesise once. That rests on one unmeasured assumption: that
+sufficiency is PREDICTABLE without the answer key. This measures that and
+nothing else.
+
+**Cheapest possible instrument, by construction.** ONE retrieval pass per
+question at k=80 — every window is a prefix, so the sweep costs zero extra
+retrievals. Ground truth is free (the bench's own matcher over the bank's
+expected facts). FREE predictors are tested BEFORE paying for a model. The
+evaluator is one constrained token on the resident 4B, binary and uncalibrated
+because the daemon returns no logprobs (recorded dead end). Ground truth:
+6/21 windows fully sufficient at k=28.
+
+### B1/B2 — sufficiency is barely predictable, and the model loses to counting
+
+| predictor | AUC |
+|---|---|
+| `f_max` (top similarity) | 0.511 |
+| `f_mean5` | 0.561 |
+| `f_gap` (top1 − top10) | 0.378 |
+| **`f_titles` (distinct documents)** | **0.661** |
+| `f_model` (4B evaluator) | 0.633 |
+
+The 4B sufficiency judge is **worse than counting how many distinct documents
+are in the window**, and the best signal available is itself weak. Model lift
+over the best free predictor: **−0.028**, against a bar of ≥+0.10 to earn its
+call and ≤+0.03 to skip it. Skip it.
+
+Similarity scores being near-useless (0.51) is the predicted result and worth
+keeping: a score says how well the top chunk matches the QUESTION, and §13/§14
+established the misses are terms the question never contains.
+
+### B3 — and the routing itself buys exactly nothing
+
+| policy | coverage | context |
+|---|---|---|
+| fixed k=28 | 126/158 = 79.7% | 121,540 |
+| **adaptive (escalate 11/21 on the evaluator)** | **139/158 = 88.0%** | **238,901** |
+| **fixed k=55 — iso-cost control** | **139/158 = 88.0%** | **238,444** |
+| fixed k=80 | 143/158 = 90.5% | 346,084 |
+
+**+0 facts.** A single dial, set once, matches the adaptive policy exactly at the
+same context budget — and needs no evaluator, no extra call, and no branch.
+
+### The ceiling: even a PERFECT evaluator wins at most +3.2 points
+
+Escalating the N questions with the largest TRUE gain (an oracle evaluator; the
+ceiling on any CRAG-style router here), against the best fixed k at each budget:
+
+| escalated | adaptive | iso-cost fixed k | delta |
+|---|---|---|---|
+| 3 | 84.2% | k=34 → 82.3% | **+3** |
+| 5 | 86.7% | k=39 → 83.5% | **+5** |
+| 8 | 88.6% | k=46 → 86.1% | +4 |
+| 11 | 90.5% | k=53 → 88.0% | +4 |
+| 15 | 90.5% | k=62 → 89.9% | +1 |
+
+> **The prize is +5 facts of 158 at its best point, and the cheapest evaluator
+> captures 0 of it.** So this is not "our evaluator was bad" — it is that
+> adaptive escalation has almost nothing to win on this bank no matter how good
+> the evaluator gets.
+
+### The law, and when it would NOT hold
+
+> **Adaptive escalation is worth the discriminative power of its evaluator times
+> the VARIANCE of per-query retrieval difficulty.** At AUC≈0.5 it degenerates
+> into a fixed-k policy with extra steps — escalating a near-random half is, in
+> expectation, raising k for everyone by half as much. And when per-query
+> difficulty is uniform, it degenerates into fixed-k *even with a perfect
+> evaluator*, which is what the oracle table shows.
+
+That names the condition under which the published pattern does work, and why
+this bank is the wrong place to see it: 21 questions on ONE encyclopedia, all
+answerable from it, is about as homogeneous as retrieval difficulty gets. CRAG's
+own setting is heterogeneous — some queries answerable from the corpus, some
+requiring the web — which is exactly where the variance term is large. **The
+mechanism to test is therefore acquisition routing on a MIXED corpus, not
+sufficiency routing on a single one.**
+
+### Scope
+
+- The cheapest evaluator (zero-shot, one token, general 4B), NOT CRAG's
+  fine-tuned retrieval evaluator. That limit does not touch the oracle bound,
+  which holds for any evaluator.
+- Binary and uncalibrated: no logprobs from the daemon, so no threshold sweep.
+- One bank, 21 questions, 6 positives — AUCs on that base are wide.
+- Retrieval-layer coverage only; no synthesis arm.
+- Fourth time in this arc the boring lever matched or beat the clever one
+  (§8.1 threshold > jury, §11 bound > ladder, §14 k > decomposition, this fixed-k
+  > adaptive routing). That is now a pattern worth treating as a prior.
+
+Reproduce: `scripts/crag_sufficiency_probe.py` (bars in the header).
