@@ -316,6 +316,162 @@ pub async fn judge_restored_snapshot(
     }
 }
 
+/// What the PUBLISHER writes into the manifest's `embed_quirks`, decided
+/// after probing its own vectors — never copied from the model family's
+/// declaration alone.
+///
+/// Until 2026-09-08 `corpus snapshot publish` stamped the family's config
+/// (`DEFAULT_MANIFEST.embed_quirks_for_model`) on whatever vectors the index
+/// held. `sep` was published that way that evening declaring `pooling=last`
+/// over chunks embedded mean-pooled in April — an assertion on a field the
+/// publisher never checked (ARCH §18.1), and one that turned every
+/// name-mismatch restorer's honest refusal ("older stack") into a misleading
+/// one ("a genuine surprise"). The publisher has the same instrument the
+/// restorer has, [`probe_embedding_space_at`], and the same threshold
+/// ([`PREBUILT_PROBE_THRESHOLD`], one decider — §10.6); it now runs it
+/// first, and a config is declared only when the vectors agree with it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PublishDeclaration {
+    /// The family's config, verified against the vectors: declare it.
+    Declare {
+        quirks: EmbedQuirks,
+        probe_cosine: f32,
+    },
+    /// Declare nothing, and say why in the manifest notes. A restorer then
+    /// has only the probe ([`EmbeddingCompat::ConfigUnknown`]), which is the
+    /// honest state for vectors whose space this publisher could not vouch
+    /// for.
+    Undeclared {
+        reason: String,
+        probe_cosine: Option<f32>,
+    },
+    /// The vectors contradict the family's config, or could not be probed,
+    /// and the publisher was not told to publish anyway.
+    Refuse {
+        reason: String,
+        probe_cosine: Option<f32>,
+    },
+}
+
+/// The one rule, pure so it is testable without an index:
+///
+/// - no family config for the model name → `Undeclared` (nothing to declare,
+///   nothing contradicted; the pre-existing behaviour for an unknown model);
+/// - family config and the probe clears the threshold → `Declare`;
+/// - family config and the probe fails, or cannot run → `Refuse`, unless
+///   `publish_unverified_space` is set, in which case `Undeclared` with the
+///   cause carried into the manifest. A probe that could not run is not a
+///   pass (§18.1): could-not-judge is owed the same override a failure is.
+pub fn decide_publish_declaration(
+    family: Option<EmbedQuirks>,
+    probe: std::result::Result<f32, String>,
+    publish_unverified_space: bool,
+) -> PublishDeclaration {
+    let decision = decide_publish_declaration_inner(family, probe, publish_unverified_space);
+    // Glassbox (§9.1): the verdict and its number, at info, whichever way it went.
+    match &decision {
+        PublishDeclaration::Declare {
+            quirks,
+            probe_cosine,
+        } => tracing::info!(
+            target: "snapshot",
+            probe_cosine,
+            pooling = ?quirks.pooling,
+            "publish: embedder config verified against the index's vectors; declaring it"
+        ),
+        PublishDeclaration::Undeclared {
+            reason,
+            probe_cosine,
+        } => tracing::warn!(
+            target: "snapshot",
+            ?probe_cosine,
+            reason,
+            "publish: no embedder config declared"
+        ),
+        PublishDeclaration::Refuse {
+            reason,
+            probe_cosine,
+        } => tracing::warn!(
+            target: "snapshot",
+            ?probe_cosine,
+            reason,
+            "publish: REFUSED — the vectors are not in the space the family config names"
+        ),
+    }
+    decision
+}
+
+fn decide_publish_declaration_inner(
+    family: Option<EmbedQuirks>,
+    probe: std::result::Result<f32, String>,
+    publish_unverified_space: bool,
+) -> PublishDeclaration {
+    let Some(quirks) = family else {
+        // Nothing to declare and nothing contradicted. The probe's outcome is
+        // still carried — an error here is reported, not dropped (§18.3).
+        let (probe_cosine, probe_note) = match probe {
+            Ok(c) => (Some(c), format!("probe cosine {c:.4}")),
+            Err(e) => (None, format!("the probe could not run: {e}")),
+        };
+        return PublishDeclaration::Undeclared {
+            reason: format!(
+                "no embedder config is known for this index's model name ({probe_note}); \
+                 restorers will judge the embedding space by probe"
+            ),
+            probe_cosine,
+        };
+    };
+    match probe {
+        Ok(c) if c >= PREBUILT_PROBE_THRESHOLD => PublishDeclaration::Declare {
+            quirks,
+            probe_cosine: c,
+        },
+        Ok(c) => {
+            let reason = format!(
+                "the index's own vectors score {c:.4} (< {PREBUILT_PROBE_THRESHOLD}) against this \
+                 host's embedder under the family config pooling={:?} normalize={:?}: they were \
+                 not produced in the space that config names (a different POOLING is the usual \
+                 cause — `sep` and `wikipedia` were embedded mean-pooled in 2026-04). Re-embed \
+                 the corpus on the current stack and publish again, or pass \
+                 --publish-unverified-space to publish with NO declared config so restorers \
+                 probe and refuse by name",
+                quirks.pooling, quirks.normalize
+            );
+            if publish_unverified_space {
+                PublishDeclaration::Undeclared {
+                    reason,
+                    probe_cosine: Some(c),
+                }
+            } else {
+                PublishDeclaration::Refuse {
+                    reason,
+                    probe_cosine: Some(c),
+                }
+            }
+        }
+        Err(e) => {
+            let reason = format!(
+                "the index's vectors could not be probed against this host's embedder ({e}), so \
+                 the family config pooling={:?} cannot be vouched for. Start the daemon and \
+                 publish again, or pass --publish-unverified-space to publish with NO declared \
+                 config",
+                quirks.pooling
+            );
+            if publish_unverified_space {
+                PublishDeclaration::Undeclared {
+                    reason,
+                    probe_cosine: None,
+                }
+            } else {
+                PublishDeclaration::Refuse {
+                    reason,
+                    probe_cosine: None,
+                }
+            }
+        }
+    }
+}
+
 /// Why a probe in the failing range is almost never a broken embedder.
 ///
 /// A bare cosine sends the reader hunting through their endpoint. It is
@@ -526,5 +682,64 @@ mod tests {
             ),
             EmbeddingCompat::Exact
         );
+    }
+
+    /// The publisher's declaration is earned by the probe, never copied.
+    /// Watched failing in every direction (§18.1): a passing probe declares;
+    /// a failing one refuses; the override turns a refusal into an honest
+    /// `Undeclared` carrying the cause; could-not-judge is a refusal too, not a
+    /// pass; an unknown family declares nothing and refuses nothing.
+    #[test]
+    fn the_publisher_declares_only_what_its_own_vectors_agree_with() {
+        let family = Some(EmbedQuirks::qwen3_embedding());
+        assert!(matches!(
+            decide_publish_declaration(family.clone(), Ok(0.9999), false),
+            PublishDeclaration::Declare { probe_cosine, .. } if probe_cosine > 0.99
+        ));
+        // sep's measured number on 2026-09-08: mean-pooled chunks under a last-pooled stack.
+        match decide_publish_declaration(family.clone(), Ok(0.6822), false) {
+            PublishDeclaration::Refuse {
+                reason,
+                probe_cosine,
+            } => {
+                assert_eq!(probe_cosine, Some(0.6822));
+                assert!(
+                    reason.contains("0.6822") && reason.contains("POOLING"),
+                    "{reason}"
+                );
+            }
+            other => panic!("a failing probe must refuse, got {other:?}"),
+        }
+        match decide_publish_declaration(family.clone(), Ok(0.6822), true) {
+            PublishDeclaration::Undeclared {
+                reason,
+                probe_cosine,
+            } => {
+                assert_eq!(probe_cosine, Some(0.6822));
+                assert!(reason.contains("0.6822"), "the cause travels: {reason}");
+            }
+            other => panic!("the override publishes UNDECLARED, never declared, got {other:?}"),
+        }
+        assert!(matches!(
+            decide_publish_declaration(family.clone(), Err("daemon unreachable".into()), false),
+            PublishDeclaration::Refuse {
+                probe_cosine: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            decide_publish_declaration(family, Err("daemon unreachable".into()), true),
+            PublishDeclaration::Undeclared {
+                probe_cosine: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            decide_publish_declaration(None, Ok(0.5), false),
+            PublishDeclaration::Undeclared {
+                probe_cosine: Some(_),
+                ..
+            }
+        ));
     }
 }

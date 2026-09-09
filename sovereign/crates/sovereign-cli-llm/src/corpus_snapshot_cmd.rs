@@ -81,6 +81,7 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
             ("--upload-only", "Skip the build entirely; require an existing archive at the output path"),
             ("--dry-run", "Print the upload command instead of running it"),
             ("--include-siblings <prefix>", "Bundle every installed corpus whose id starts with <prefix> (e.g. 'sep-') alongside the primary index. Used by per-article-corpus pipelines like SEP so one tarball carries the parent + all 1770 per-article atlases. Repeatable. Trailing '*' tolerated."),
+            ("--publish-unverified-space", "Publish with NO declared embedder config when the index's own vectors fail this host's probe (or the probe cannot run). Publishing REFUSES by default: the family config would be stamped on vectors that were not produced in that space (sep, 2026-09-08). The fix is to re-embed on the current stack; this flag ships the archive undeclared so restorers probe and refuse by name."),
             ("--allow-unjoined-sections", "Publish even when a bundled corpus declares sections but has no chunk→section join. Publishing REFUSES by default: chapters.json travels in the bundle but the source document does not, so a downloader cannot compute the join and the corpus can never name a section in a citation. Fix with `svrn enrich backfill-sections --all` instead of reaching for this."),
         ]),
         HelpSection::Notes(
@@ -155,6 +156,9 @@ struct PublishArgs {
     /// type: see [`audit_section_joins`] for why an unjoined corpus is a
     /// defect that only the PUBLISHER can fix.
     allow_unjoined_sections: bool,
+    /// Publish with no declared embedder config when the probe fails or
+    /// cannot run. Off by default: see `decide_publish_declaration`.
+    publish_unverified_space: bool,
 }
 
 fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, String> {
@@ -199,6 +203,7 @@ fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, Strin
             }
             "--dry-run" => out.dry_run = true,
             "--allow-unjoined-sections" => out.allow_unjoined_sections = true,
+            "--publish-unverified-space" => out.publish_unverified_space = true,
             "--rebuild" => out.rebuild = true,
             "--upload-only" => out.upload_only = true,
             "--include-siblings" => {
@@ -458,20 +463,69 @@ async fn cmd_publish(args: &[String]) -> i32 {
                     return 1;
                 }
             };
-        let embed_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+        let family_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
             .embed_quirks_for_model(&embedding_model_for_manifest);
-        match &embed_quirks {
-            Some(q) => println!(
-                "Embedder config: pooling {:?}, normalize {:?} — recorded in the manifest, so a \
-                 restorer can refuse a mismatched space without downloading the archive.",
-                q.pooling, q.normalize
-            ),
-            None => println!(
-                "Embedder config: UNKNOWN for `{embedding_model_for_manifest}` — publishing \
-                 without one. Restorers will have only the cosine probe to judge this \
-                 archive's embedding space by."
-            ),
-        }
+        // VERIFY BEFORE DECLARING (§18.4). The same probe the restorer runs,
+        // on this index's own vectors, against this host's embedder: a config
+        // is written into the manifest only when the vectors agree with it.
+        // The daemon's HTTP embedder is the one every restorer probes with.
+        let probe = {
+            let embed: corpus_engine::EmbedFn = corpus_engine::embed_http::http_embed_fn(
+                format!(
+                    "{}/embeddings",
+                    sovereign_cli_shared::urls::daemon_v1_base()
+                ),
+                embedding_model_for_manifest.clone(),
+            );
+            corpus_engine::probe_embedding_space_at(&index_dir, &embed, None)
+                .await
+                .map_err(|e| e.to_string())
+        };
+        let mut notes = parsed.notes.clone();
+        let embed_quirks = match corpus_engine::decide_publish_declaration(
+            family_quirks,
+            probe,
+            parsed.publish_unverified_space,
+        ) {
+            corpus_engine::PublishDeclaration::Declare {
+                quirks,
+                probe_cosine,
+            } => {
+                println!(
+                    "Embedder config: pooling {:?}, normalize {:?} — VERIFIED (probe cosine \
+                     {probe_cosine:.4} against this host) and recorded in the manifest, so a \
+                     restorer can refuse a mismatched space without downloading the archive.",
+                    quirks.pooling, quirks.normalize
+                );
+                Some(quirks)
+            }
+            corpus_engine::PublishDeclaration::Undeclared {
+                reason,
+                probe_cosine,
+            } => {
+                println!(
+                    "Embedder config: NOT DECLARED (probe cosine {}) — {reason}. Restorers will \
+                     have only the cosine probe to judge this archive's embedding space by.",
+                    probe_cosine.map_or("n/a".to_string(), |c| format!("{c:.4}"))
+                );
+                let line = format!("embedder config not declared by the publisher: {reason}");
+                notes = Some(match notes {
+                    Some(n) => format!("{n}\n{line}"),
+                    None => line,
+                });
+                None
+            }
+            corpus_engine::PublishDeclaration::Refuse {
+                reason,
+                probe_cosine,
+            } => {
+                eprintln!(
+                    "Publish REFUSED (probe cosine {}): {reason}",
+                    probe_cosine.map_or("n/a".to_string(), |c| format!("{c:.4}"))
+                );
+                return 1;
+            }
+        };
 
         let opts = PublishOptions {
             index_dir,
@@ -480,7 +534,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
             snapshot_id: snapshot_id.clone(),
             chunk_count,
             residual_gap_pct: parsed.residual_gap_pct,
-            notes: parsed.notes.clone(),
+            notes,
             source_recipe_sha256: None,
             producer_version: PRODUCER_VERSION.to_string(),
             zstd_level: parsed.zstd_level,
