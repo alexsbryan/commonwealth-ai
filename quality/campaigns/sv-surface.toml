@@ -236,6 +236,45 @@ status    = "active"
 #       externally-booted daemon. The C2 divergence dies here: today an
 #       attached desktop answers from its OWN assembled stack; after 6 it
 #       answers from the daemon it attached to.
+#       IN FLIGHT 2026-09-09 (A1+B+D-partial landed: 92de7368e +
+#       3cffb4382 + c2ed3903f). A1: the attach-boot route siblings -
+#       conversation search, memory delete/weaken (the halving formula's
+#       one home is now the route), insight_http (clip/list/search/
+#       delete; ServingCore.insights as a named-absence Option - 503
+#       posture, never silent), notes tool-outcome; loopback_parity
+#       14->19 tests. B: builtin skills ONE home (sovereign-contracts::
+#       skills) - MEASURED: the set is TWO (inner-work, recipe-author;
+#       the plan's three was wrong - workflow-author ships tools not a
+#       skill, witness rides voice-eval); daemon_cmd registers the set,
+#       opens features.db (a verified gap - the daemon never had it),
+#       pushes RecipeAuthoringTools; skills_one_home_census.rs. D-partial:
+#       desktop attach branches for search/forget/weaken/insights/
+#       tool-outcome over sovereign-turn-client (the desktop's first
+#       client-family dep); ToolDecisionOutcome/Extras moved to
+#       contracts (core re-exports at the old path); wire census widened
+#       to 4 route families + comment-skip calibration (a planted
+#       hand-rolled /v1/memories/ URL sailed GREEN through rung 3's
+#       needle - §18.1/§18.4: named the failing input, widened, re-
+#       sabotaged twice). 9/9 sabotages across the three commits.
+#       MEASURED CORRECTIONS: conversation.rs:383 is a dossier WRITE
+#       (route = POST /v1/notes/tool-outcome), not a read; surface-
+#       scoped listing (list_conversations_for_surface) has NO wire
+#       decider yet - desktop-only, blocks D-remainder.
+#       APPROVAL HAZARD VERDICT (the C gate): the server's
+#       ServerApprovalChannel is NOT a per-connection router (same
+#       single-slot shape; safe only single-tenant). The daemon has N
+#       sockets on ONE Runtime. C's session owner needs: TurnFrame
+#       approval-request variants (wire contract, additive - mobile
+#       adopts the grown contract in M-1), a conversation->socket
+#       channel + pending registry daemon-side, task-local context
+#       around the spawned serve_turn (no trait ripple), turn_http's
+#       Approve refusal -> submit path, desktop cards from wire frames.
+#       Stop rule fired: >= a day alone, before C's conversion proper.
+#       REMAINS: A-remainder (atlas browse, notebook composite + LCM
+#       story, one-shot ingest-as-job), C, D-remainder, E (THE BOOT
+#       SPLIT + assert_attach_purity + census retirement; floor 14->0
+#       via instrument replacement; needles 10+11 are call-site pins -
+#       composition 12 live + 2 pins), F. Hand-off note 1f377b65.
 #   M-1 mobile revive AGAINST the client family from its first green build.
 #       Drift measured 2026-09-08 (sovereign-mobile, written-never-compiled,
 #       detached workspace): remote/dto.rs:164 hand-mirrors
