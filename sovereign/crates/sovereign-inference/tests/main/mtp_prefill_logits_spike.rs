@@ -365,3 +365,147 @@ fn the_mtp_target_context_is_still_initialised_unmasked() {
          have different extraction rules and this spike's reasoning assumed both"
     );
 }
+
+/// This process's `RssAnon`, in GiB. `None` when unreadable — absence is
+/// reported, never defaulted to zero (ARCH §18.1). Anon is the right column:
+/// the fallback buffer is an unpinnable host allocation, and anon is what the
+/// OOM killer counts.
+fn rss_anon_gib() -> Option<f64> {
+    let s = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = s.lines().find(|l| l.starts_with("RssAnon:"))?;
+    let kb: f64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kb / 1_048_576.0)
+}
+
+/// **The byte-identity arm** — the evidence `DEFAULTS_LEDGER.md` names as the
+/// condition for flipping `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS` default-ON:
+/// *"a byte-identity arm on a real composed report reproduces the control's
+/// draft sha256 exactly, with the memory step measured on the same run."*
+///
+/// Both halves are settled HERE, in a test process, with **no daemon**. The
+/// memory half is in fact measured better this way: a clean process, its own
+/// `RssAnon` delta, no peer traffic and no other slots to confound it.
+///
+/// Reuses the spike's `ctx_params`, `prefill` and `generate_greedy` unchanged.
+/// The only differences from the spike above are the three the ledger asks
+/// for: a REAL composed prompt instead of `probe_text()`, a REAL draft length
+/// instead of 128 tokens, and the memory step.
+///
+/// Identity is compared on the TOKEN STREAM, and both arms' streams are dumped
+/// so the ledger's literal sha256 is one `sha256sum` away. Text is a
+/// deterministic function of the ids, so the id stream is the stronger check.
+///
+/// ```text
+/// SPIKE_GGUF=$PWD/sovereign/models/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf \
+/// DRAFT_PROMPT=/var/tmp/draft-prompt.txt DUMP_DIR=/var/tmp GEN=2000 \
+///   cargo test -p sovereign-inference --test main byte_identity_on_a_real \
+///   -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "byte-identity arm: needs SPIKE_GGUF + DRAFT_PROMPT (see synthesize.rs dump test)"]
+fn byte_identity_on_a_real_composed_draft() {
+    let (Ok(gguf), Ok(prompt_file)) = (std::env::var("SPIKE_GGUF"), std::env::var("DRAFT_PROMPT"))
+    else {
+        eprintln!("SPIKE_GGUF / DRAFT_PROMPT unset — skipping");
+        return;
+    };
+    let prompt = std::fs::read_to_string(&prompt_file).expect("read DRAFT_PROMPT");
+    let env_num = |k: &str, d: u32| -> u32 {
+        std::env::var(k)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(d)
+    };
+    let gen = env_num("GEN", 2000) as usize;
+    let n_ctx = env_num("ARM_N_CTX", 32768);
+
+    let backend = LlamaBackend::init().expect("backend");
+    let model_params = std::pin::pin!(LlamaModelParams::default()
+        .with_n_gpu_layers(1_000_000)
+        .with_load_mtp(true));
+    let model = LlamaModel::load_from_file(&backend, &gguf, &model_params).expect("model load");
+    assert!(
+        model.n_layer_nextn() > 0,
+        "SPIKE_GGUF has no MTP heads; this arm cannot judge the flag on it"
+    );
+
+    let tokens = model
+        .str_to_token(&prompt, AddBos::Always)
+        .expect("tokenize");
+    let n = tokens.len();
+    eprintln!("real composed draft prompt: {n} tokens, generating {gen}");
+
+    // THE ZERO-TEST GUARD, and the single most likely way this arm lies.
+    // Below the ~3,650-token knee `output_reserve` never exceeds the device's
+    // 4 GiB maxBufferSize, so BOTH arms allocate the same pinned buffer: the
+    // memory step is zero BY CONSTRUCTION and identity is trivially met. That
+    // would read as a green light while proving nothing (§18.1 — a check with
+    // no failing input it can name is not a check).
+    assert!(
+        n > 3_650,
+        "prompt is {n} tokens, below the ~3,650 buffer knee — this arm can \
+         judge NEITHER identity nor the memory step. Use a longer composed report."
+    );
+
+    // ONE ARM PER PROCESS, and that is forced by the defect itself. The
+    // fallback buffer is grow-only and "retained at high-water until the
+    // process exits" (DEFAULTS_LEDGER). So running both arms in one process
+    // makes the SECOND arm's RssAnon delta ~0 whichever arm it is — it simply
+    // inherits the first arm's allocation. Measuring the memory step at all
+    // requires a clean process per arm, so `ARM` selects one and identity is
+    // settled by comparing the two dumped token streams across runs. That is
+    // also exactly the ledger's phrasing: the flag arm must "reproduce the
+    // CONTROL's draft sha256".
+    let arm = std::env::var("ARM").unwrap_or_else(|_| "all".to_string());
+    let all_logits = match arm.as_str() {
+        "all" => true,   // control: production today
+        "tail" => false, // the flag
+        other => panic!("ARM must be `all` (control) or `tail` (the flag), got {other:?}"),
+    };
+
+    let mut ctx = model
+        .new_context(
+            &backend,
+            ctx_params()
+                .with_n_ctx(NonZeroU32::new(n_ctx))
+                .with_n_batch(n_ctx),
+        )
+        .expect("target context");
+    ctx.set_embeddings_pre_norm(true, /* masked */ false);
+
+    let before = rss_anon_gib();
+    ctx.clear_kv_cache();
+    assert!(prefill(&mut ctx, &tokens, all_logits), "arm {arm} prefill");
+    let after = rss_anon_gib();
+    let draft = generate_greedy(&mut ctx, n, gen);
+
+    match (before, after) {
+        (Some(b), Some(a)) => eprintln!(
+            "MEMORY STEP [arm={arm}]: prefill +{:.2} GiB anon. \
+             Predicted for the control = n_tokens * 993,280 B = {:.2} GiB; \
+             the flag arm should be ~0.",
+            a - b,
+            (n as f64 * 993_280.0) / 1_073_741_824.0
+        ),
+        _ => eprintln!("MEMORY STEP [arm={arm}]: COULD-NOT-JUDGE — RssAnon unreadable"),
+    }
+
+    // The draft, as the token stream. Text is a deterministic function of the
+    // ids, so the id stream is the stronger identity check, and the ledger's
+    // literal sha256 is one `sha256sum` away.
+    let dir =
+        std::env::var("DUMP_DIR").expect("DUMP_DIR must be set: this arm's verdict IS the dump");
+    let path = format!("{dir}/draft-arm-{arm}.tokens");
+    let ids = draft
+        .iter()
+        .map(|t| t.0.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&path, ids).expect("write token dump");
+    eprintln!(
+        "DRAFT [arm={arm}]: {} greedy tokens -> {path}\n\
+         Compare the two arms with:  sha256sum {dir}/draft-arm-all.tokens {dir}/draft-arm-tail.tokens\n\
+         Identical sums = the ledger's flip condition met; otherwise `diff` gives the divergence line.",
+        draft.len()
+    );
+}

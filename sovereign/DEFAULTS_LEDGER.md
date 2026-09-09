@@ -2898,6 +2898,41 @@ on any arm that costs RACE score beyond the band.
 and its result belongs here before the flip; until it lands, this row's claim
 is "the mechanism is clear", not "the change is safe".
 
+**BYTE-IDENTITY ARM: RUN, AND THE CONDITION IS MET ON THE 4B (2026-09-08).**
+Measured with NO DAEMON — two `#[ignore]` tests, one process per arm:
+`synthesize.rs::dump_real_compose_draft_prompt` extracts the real production
+draft prompt through the existing `RecordingPort` (the prompt is data; no
+inference), and `mtp_prefill_logits_spike.rs::byte_identity_on_a_real_composed_draft`
+runs one arm and dumps its greedy token stream.
+
+Input: `arms/bed-compose/compose-input.json` — a real composed report, 52-chunk
+evidence window, 20 sections, 264-char question. Prompt 100,302 chars / 26,226
+tokens, well past the ~3,650 knee (the test REFUSES below it: under the knee
+both arms allocate the same pinned buffer, so the memory step would be zero by
+construction and a pass would prove nothing, §18.1).
+
+| arm | prefill RssAnon step | draft sha256 (2,000 greedy tokens) |
+|---|---|---|
+| `all` — control, production today | **+21.20 GiB** | `30091c5fc4524f8da8c492df813fa449de1b5773c77c3f9d9287c71c819421d4` |
+| `tail` — the flag | **+0.01 GiB** | `30091c5fc4524f8da8c492df813fa449de1b5773c77c3f9d9287c71c819421d4` |
+
+**Identical. 21.19 GiB saved.** Predicted `n_tokens * 993,280` = 20.88 GiB
+against a measured 21.20 — the formula holds to 1.5%, so the mechanism is not
+merely clear, it is quantitatively confirmed on the real workload.
+
+ONE ARM PER PROCESS is forced by the defect: the buffer is grow-only and
+retained until process exit, so a second arm in the same process inherits the
+first's allocation and its delta reads ~0 whichever arm it is. Measuring the
+step at all requires a clean process per arm.
+
+**What this does NOT yet cover, and it is the reason the flip is not automatic:**
+the arm ran on `Qwen3.5-4B-UD-MTP-Q6_K_XL`. The daemon's PRIMARY is a 35B-A3B,
+and identity is a per-model property — the 1.46e-1 logit shift the spike found
+is this model's. The same test with `SPIKE_GGUF` pointed at the primary closes
+it; it was not run here because the 35B's 30 GB plus a 21 GB control buffer does
+not fit beside a peer's job on this box. RACE remains a revert guard, not a
+pre-flip requirement.
+
 ## `SOVEREIGN_DR_SECTION_CONTEXT` — the section knows it is part of a report
 
 **Landed 2026-08-27, DEFAULT OFF.** Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`.

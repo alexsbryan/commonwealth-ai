@@ -3086,4 +3086,59 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             );
         }
     }
+
+    /// Dump the REAL compose draft prompt to a fixture so the byte-identity
+    /// arm can run entirely in a test process — **no daemon**.
+    ///
+    /// The ledger's reversal condition for `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS`
+    /// wants "a byte-identity arm on a real composed report". The prompt is
+    /// DATA: `draft_round` builds it and hands it to the port, so a recording
+    /// port extracts the exact production prompt with no inference at all.
+    /// Reuses `RecordingPort` and `draft_round` unchanged — this adds a
+    /// fixture dump, not a second prompt builder (§10.6).
+    ///
+    /// ```text
+    /// COMPOSE_INPUT=research/deep-research/arms/bed-compose/compose-input.json \
+    /// DUMP_DRAFT_PROMPT=/var/tmp/draft-prompt.txt \
+    ///   cargo test -p sovereign-core --test main dump_real_compose_draft_prompt \
+    ///   -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore = "fixture dump: needs COMPOSE_INPUT + DUMP_DRAFT_PROMPT"]
+    async fn dump_real_compose_draft_prompt() {
+        let (Ok(inp), Ok(out)) = (
+            std::env::var("COMPOSE_INPUT"),
+            std::env::var("DUMP_DRAFT_PROMPT"),
+        ) else {
+            eprintln!("COMPOSE_INPUT / DUMP_DRAFT_PROMPT unset — skipping");
+            return;
+        };
+        let raw = std::fs::read_to_string(&inp).expect("read COMPOSE_INPUT");
+        let v: serde_json::Value = serde_json::from_str(&raw).expect("parse COMPOSE_INPUT");
+        let question = v["question"].as_str().expect("no `question`").to_string();
+        let window: EvidenceWindow =
+            serde_json::from_value(v["window"].clone()).expect("no deserializable `window`");
+        eprintln!(
+            "compose input: {} chunks, question {} chars",
+            window.chunks.len(),
+            question.len()
+        );
+        let port = RecordingPort::new();
+        draft_round(
+            &port,
+            "byte-identity",
+            "h",
+            1,
+            &question,
+            &window,
+            &[],
+            false,
+        )
+        .await
+        .expect("draft_round");
+        let prompt = port.last_prompt();
+        assert!(!prompt.is_empty(), "RecordingPort captured no prompt");
+        std::fs::write(&out, &prompt).expect("write DUMP_DRAFT_PROMPT");
+        eprintln!("wrote {} chars of draft prompt to {out}", prompt.len());
+    }
 }
