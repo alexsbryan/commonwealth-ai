@@ -355,6 +355,31 @@ status    = "active"
 #
 # ── STRUCTURAL BLOCKERS — close before any collapse SHIPS ───────────────────
 #
+#   B0  SCOPE + B1's ANSWER (operator, 2026-09-09): "Just align the cli +
+#       desktop; ensure initial user can get a snappy experience -- not too
+#       complicated of a decision."
+#
+#       TWO SURFACES, NOT THREE, for this pass. Mobile (M-1/M-2) rides the
+#       wire-compat it already gets and is not gated on this work; it stays on
+#       the ladder, off the critical path.
+#
+#       AND B1 IS NOT AN ARCHITECTURE FORK. Do not design an elaborate offline
+#       or no-daemon path. THE DESKTOP STARTS A DAEMON AT BOOT, the way
+#       `daemon_cmd.rs` already auto-creates a solo mesh for the CLI — that is
+#       the existing answer, in-tree, and it is the one to copy. `start_daemon`
+#       stops being gated on a mesh existing.
+#
+#       "SNAPPY" IS THE ACCEPTANCE TEST and it is a real bar, not a vibe: a
+#       first-run user must not sit behind the measured 5.9-7.7s bind. So the
+#       readiness signal becomes an honest probe of the port (the daemon's own
+#       GET /v1/models, the shape supervisor_setup already uses), `backend-ready`
+#       fires on the first successful probe rather than on bootstrap returning,
+#       and the client retries a connect into that window instead of erroring.
+#       The UI must never block on the bind, and a bind FAILURE must surface
+#       rather than warn-and-return (B3). Measure first-turn latency on a cold
+#       first run before and after — there is no existing in-process-vs-loopback
+#       measurement (see §6 of the investigation), so this pass mints it.
+#
 #   B1  A FRESH-INSTALL DESKTOP BINDS NO PORT. This is the largest item in the
 #       whole collapse and nobody had costed it. start_daemon is the only
 #       thing that binds, and it is reachable only via try_resume /
