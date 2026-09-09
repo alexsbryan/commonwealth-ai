@@ -1230,3 +1230,76 @@ cheapest-per-unit-of-decision. The pipeline's own ranking put HyDE first and
 sufficiency routing second; the instrument went where measurement was easy
 rather than where the claim was load-bearing. That is a real ordering error, and
 naming it is cheaper than repeating it.
+
+## 17. HyDE relocates coverage rather than adding it — the reformulation family is now exhausted
+
+**2026-09-09.** §16.1 ranked HyDE/query2doc first among untested mechanisms: the
+measured failure mode is terms the QUESTION never contains (§13, §14), and HyDE
+is the only member of the reformulation family that supplies the ANSWER's
+vocabulary from the question alone. One instrument, one matcher, one k=80 pool
+per arm; the generation prompt is the canonical shape ("write a passage that
+answers this question") with NO nudge toward names, since the answer key is
+proper nouns and nudging would be teaching to the test. 5.34 s/question to
+generate.
+
+| k | baseline | hyde | hyde_concat |
+|---|---|---|---|
+| 10 | 62.7% h1/8 | 50.6% h2/8 | 63.3% h2/8 |
+| 20 | 74.1% h3/8 | 69.0% h3/8 | 74.1% h4/8 |
+| **28** | **79.1% h3/8** | **76.6% h5/8** | 77.2% h4/8 |
+| 40 | 82.9% h4/8 | 79.7% h5/8 | 80.4% h4/8 |
+| 55 | 87.3% h6/8 | 86.1% h6/8 | 85.4% h5/8 |
+| 80 | 89.9% h7/8 | 88.0% h7/8 | 90.5% h5/8 |
+
+**B1 passed at exactly the bar and the bar was not enough.** HyDE recovers 5/8
+of the hard core at k=28 against the baseline's 3/8 — +2, the threshold. And the
+mechanism is real and visible: the hypothetical passage names `MacCallum` where
+the question cannot. But **HyDE is worse on total coverage at every single k**,
+and the +2 sits on a demonstrated ±1 run-to-run drift (this run's baseline reads
+125/158 at k=28 where §16's read 126/158, on a corpus rebuilt the same day).
+
+**B2 failed outright.** Baseline reaches 139/158 at k=80; so does HyDE. There is
+no context saving, which is the only currency §15 says matters.
+
+**And the iso-budget control settles it.** HyDE finding different facts is only
+worth something if combining beats spending the same budget on one query:
+
+| policy | coverage | hard | context |
+|---|---|---|---|
+| union(baseline@28, hyde@28) | 137/158 = 86.7% | 5/8 | 244,089 |
+| **baseline @ k=56 — iso-cost** | **140/158 = 88.6%** | **6/8** | 242,218 |
+
+**−3 facts and −1 hard-core.** HyDE is not additive. Its k=28 advantage vanishes
+entirely once the comparison is at equal context, exactly as §14's fan-out did.
+
+### The law this arc has now hit five times
+
+> **A mechanism that spends budget to CHOOSE BETTER loses to spending it to
+> RETRIEVE MORE, unless it reduces the context bill.** Query decomposition
+> (§14), sufficiency routing (§16) and HyDE (§17) all change WHICH chunks fill
+> the window. None of them makes the window smaller, and retrieval is ~2-3% of a
+> turn (§14), so the thing they compete against is nearly free.
+
+Five for five: threshold > jury (§8.1), bound > ladder (§11), k > decomposition
+(§14), fixed-k > adaptive routing (§16), k > HyDE (§17).
+
+**The reformulation family is exhausted.** Oracle-by-fact works and is
+unavailable (§13); decomposition loses (§14); HyDE loses at iso-cost (§17).
+
+### What is left standing
+
+Exactly one mechanism reduces the context bill rather than reshuffling it:
+**selection** (§15) — a perfect selector reaches 86.1% in FIVE chunks where rank
+order needs 40 for 83.5%. And §15's own open question is still the next
+measurement, unchanged and now the only one: **`coverage_factor` on/off, full
+chunks, one instrument** — because the shipped pipeline may already capture that
+gap (rung-6 arms 88.0-89.2% at 28 chunks vs the oracle's 88.6%).
+
+### Scope
+
+One bank, one corpus, one generation prompt at temperature 0.3, truncated-snippet
+haystack, retrieval-layer coverage only. A different HyDE prompt or multiple
+sampled hypotheticals could differ; what is measured is that THIS canonical form
+loses to a larger k at equal context.
+
+Reproduce: `scripts/hyde_probe.py` (bars in the header).
