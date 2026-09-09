@@ -41,6 +41,14 @@ pub async fn run_tests(
     if verify_cmd.trim().is_empty() {
         return TestRunResult::empty("verify_cmd is empty");
     }
+    // The COUNTS contract: `counts: <cmd>` — run <cmd>, parse its
+    // stdout as PASS/FAIL lines instead of a framework format. The
+    // one-`f` surface for instruments-as-checkers (bench lanes,
+    // campaign instruments). The prefix never reaches the shell.
+    let (verify_cmd, counts_mode) = match verify_cmd.trim().strip_prefix("counts:") {
+        Some(rest) => (rest.trim_start(), true),
+        None => (verify_cmd, false),
+    };
     let mut command = Command::new("sh");
     command
         .arg("-c")
@@ -111,7 +119,11 @@ pub async fn run_tests(
         combined.push_str("\n---stderr---\n");
         combined.push_str(&String::from_utf8_lossy(&output.stderr));
     }
-    let parsed = parse_test_output(language, &combined);
+    let parsed = if counts_mode {
+        crate::shared::parser::parse_counts_lines(&combined)
+    } else {
+        parse_test_output(language, &combined)
+    };
     let mut tail_text = tail(&combined, 1500);
     // Playwright (1.49+) writes an aria snapshot of the page next to
     // each failure — the give-the-model-eyes move, in text. Appended
@@ -202,4 +214,38 @@ fn tail(s: &str, max_bytes: usize) -> String {
         start += 1;
     }
     format!("... (truncated)\n{}", &s[start..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn counts_prefix_runs_command_and_parses_pass_fail_lines() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = run_tests(
+            tmp.path(),
+            "counts: sh -c 'echo PASS one; echo FAIL two missing; echo noise'",
+            Language::Python,
+            Duration::from_secs(10),
+        )
+        .await;
+        assert_eq!(r.parsed.passed, 1);
+        assert_eq!(r.parsed.failed, 1);
+        assert_eq!(r.parsed.failed_names, vec!["two missing"]);
+    }
+
+    #[tokio::test]
+    async fn counts_prefix_with_errored_command_folds_to_suite_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = run_tests(
+            tmp.path(),
+            "counts: sh -c 'echo error: instrument unreachable >&2; exit 1'",
+            Language::Python,
+            Duration::from_secs(10),
+        )
+        .await;
+        assert_eq!(r.parsed.failed, 1);
+        assert_eq!(r.parsed.failed_names, vec!["<suite error>"]);
+    }
 }

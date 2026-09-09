@@ -41,7 +41,7 @@ description = "With verb=split: the per-file line budget."
 
 [tool.parameters.properties.test_command]
 type = "string"
-description = "Override the auto-detected test command."
+description = "Override the auto-detected test command. Prefix with `counts:` to use any instrument as the checker: the command's stdout is read as PASS <name> / FAIL <name> lines (e.g. a bench lane or a validator script)."
 
 [tool.parameters.properties.model]
 type = "string"

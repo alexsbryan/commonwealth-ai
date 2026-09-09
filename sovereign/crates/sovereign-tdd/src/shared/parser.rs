@@ -51,6 +51,50 @@ pub fn parse_test_output(language: Language, stdout: &str) -> TestParseResult {
     }
 }
 
+/// Parse the COUNTS contract (`counts:` test commands — see
+/// [`crate::tasks::framework::is_counts_command`]): stdout is
+/// `PASS <name>` / `FAIL <name>` lines. The universal checker
+/// surface: any instrument that can print one line per checkable
+/// outcome is a solver checker, no framework needed.
+pub fn parse_counts_lines(stdout: &str) -> TestParseResult {
+    let mut passed: u32 = 0;
+    let mut failed: u32 = 0;
+    let mut failed_names: Vec<String> = Vec::new();
+    for line in stdout.lines() {
+        let t = line.trim();
+        if let Some(name) = t.strip_prefix("PASS ") {
+            if !name.trim().is_empty() {
+                passed = passed.saturating_add(1);
+            }
+        } else if let Some(name) = t.strip_prefix("FAIL ") {
+            let name = name.trim();
+            if !name.is_empty() {
+                failed = failed.saturating_add(1);
+                failed_names.push(name.to_string());
+            }
+        }
+    }
+    // Ran-and-broke fold, same discipline as the framework parsers:
+    // an instrument that RAN and errored without emitting any counts
+    // is one failing entry, not 0/0/0 — NoBaseline must keep meaning
+    // "there is nothing here to steer by".
+    if passed == 0 && failed == 0 {
+        let errored = stdout.lines().any(
+            |l| matches!(l.trim_start(), t if t.starts_with("error:") || t.starts_with("error[")),
+        );
+        if errored {
+            failed = 1;
+            failed_names.push("<suite error>".to_string());
+        }
+    }
+    TestParseResult {
+        passed,
+        failed,
+        total: passed.saturating_add(failed),
+        failed_names,
+    }
+}
+
 pub fn parse_cargo_libtest(stdout: &str) -> TestParseResult {
     let mut failed_names: Vec<String> = Vec::new();
     for line in stdout.lines() {
@@ -640,5 +684,30 @@ mod tests {
         let r = parse_go_test_json(out);
         assert_eq!(r.failed, 1);
         assert_eq!(r.failed_names, vec!["TestB"]);
+    }
+
+    #[test]
+    fn counts_lines_parse_pass_fail_and_names() {
+        let out = "PASS recall.cells_v1\nnoise on stdout is ignored\nFAIL routing.paraphrases q=comp_next_to\nPASS atoms.floor\n";
+        let r = parse_counts_lines(out);
+        assert_eq!(r.passed, 2);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 3);
+        assert_eq!(r.failed_names, vec!["routing.paraphrases q=comp_next_to"]);
+    }
+
+    #[test]
+    fn counts_zero_lines_with_error_folds_to_suite_error() {
+        let r = parse_counts_lines("error: lane runner could not reach the daemon\n");
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<suite error>"]);
+    }
+
+    #[test]
+    fn counts_zero_lines_without_error_stays_no_baseline() {
+        let r = parse_counts_lines("no output today\n");
+        assert_eq!(r.total, 0);
+        assert!(r.failed_names.is_empty());
     }
 }

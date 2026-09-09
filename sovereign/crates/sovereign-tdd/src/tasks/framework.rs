@@ -53,6 +53,21 @@ pub fn is_playwright_command(cmd: &str) -> bool {
     cmd.contains("playwright test")
 }
 
+/// True when a test command declares the COUNTS contract: a command
+/// prefixed `counts:` whose stdout is `PASS <name>` / `FAIL <name>`
+/// lines (one per checkable outcome; anything else on stdout is
+/// ignored). This is the one-`f` contract that lets ANY instrument —
+/// a bench lane, a campaign instrument, an ad-hoc validator — serve
+/// as the solver's checker without masquerading as pytest or growing
+/// a Framework variant: `counts: sovereign bench counts --filter
+/// routing/cells_v1`, `counts: ./check.sh`. Zero PASS/FAIL lines with
+/// an `error` line folds to one failing `<suite error>` entry (the
+/// ran-and-broke discipline); zero lines and no error stays 0/0/0 so
+/// `NoBaseline` keeps meaning "nothing to steer by".
+pub fn is_counts_command(cmd: &str) -> bool {
+    cmd.trim_start().starts_with("counts:")
+}
+
 /// Trial profile for a test command. Browser suites cost seconds to
 /// minutes per run and each run may start a webServer on a fixed
 /// port — so Playwright trials sample fewer candidates, allow 300s
