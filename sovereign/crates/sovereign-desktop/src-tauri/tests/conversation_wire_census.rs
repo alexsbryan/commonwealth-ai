@@ -120,32 +120,52 @@ fn the_desktop_holds_no_conversation_route_urls() {
     let mut files = Vec::new();
     rust_files(&manifest_src("src"), &mut files);
 
+    // The route families sovereign-turn-client speaks (rung 6 widened this
+    // from `/v1/conversations` alone: the memory/insight/notes repoints
+    // arrived, and a planted hand-rolled `/v1/memories/` URL sailed through
+    // the old needle GREEN — §18.1, the check now names the input that beat
+    // it). reading.rs's `/internal/corpus/*` daemon reads predate the client
+    // family and stay out of scope here; their own module is the recorded
+    // exception, not a silent one.
+    const NEEDLES: &[&str] = &[
+        "/v1/conversations",
+        "/v1/memories",
+        "/v1/insights",
+        "/v1/notes",
+    ];
+
     let mut offenders: Vec<String> = Vec::new();
     for path in files {
         let src = read(&path);
         for (lineno, line) in src.lines().enumerate() {
-            // The URL spelling, not the bare path: rung 2's census first
-            // drafted a `"/v1/…`-quoted needle and a planted
-            // `http://…:9741/v1/…` const sailed through GREEN — the
-            // substring, anywhere in the line, is the calibration that
-            // catches (§18.1).
-            if line.contains("/v1/conversations") {
-                offenders.push(format!(
-                    "{}:{}: {}",
-                    path.strip_prefix(manifest_src(""))
-                        .unwrap_or(&path)
-                        .display(),
-                    lineno + 1,
-                    line.trim()
-                ));
+            // Prose lines are skipped: a doc comment that MENTIONS the
+            // route is documentation, not a client. Everything else uses
+            // the substring-anywhere calibration — a `"/v1/…"`-quoted
+            // needle let a planted `http://…:9741/v1/…` const sail
+            // through GREEN at rung 2 (§18.1), and the substring form
+            // still fires on trailing comments after code.
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            for needle in NEEDLES {
+                if line.contains(needle) {
+                    offenders.push(format!(
+                        "{}:{}: {}",
+                        path.strip_prefix(manifest_src(""))
+                            .unwrap_or(&path)
+                            .display(),
+                        lineno + 1,
+                        line.trim()
+                    ));
+                }
             }
         }
     }
     assert!(
         offenders.is_empty(),
-        "sv-surface rung 3: the desktop carries hand-rolled conversation \
-         route URLs — {offenders:#?}. The wire surface is consumed through \
-         sovereign-turn-client (the family client) when rung 6 converts the \
-         desktop; a local URL is a private client minting itself."
+        "sv-surface: the desktop carries hand-rolled daemon route URLs — \
+         {offenders:#?}. The wire surface is consumed through \
+         sovereign-turn-client (the family client); a local URL is a private \
+         client minting itself."
     );
 }

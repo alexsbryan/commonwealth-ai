@@ -63,6 +63,31 @@ async fn get_insight_service(
     })
 }
 
+/// The attach-mode client for the daemon's insight surface (rung 6): the
+/// SAME `InsightService` the desktop builds, served on loopback. The wire
+/// projection (`sovereign_turn_client::InsightEntry`) maps 1:1 onto the
+/// DTO below — same fields, embedding already stripped — so the frontend
+/// contract is unchanged between boot modes.
+fn attach_insight_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+}
+
+impl From<sovereign_turn_client::InsightEntry> for InsightNodeDto {
+    fn from(e: sovereign_turn_client::InsightEntry) -> Self {
+        Self {
+            id: e.id,
+            clipped_text: e.clipped_text,
+            message_id: e.message_id,
+            paragraph_index: e.paragraph_index,
+            source: e.source,
+            position: e.position,
+            adjacent: e.adjacent,
+            created_at: e.created_at,
+            sink_state: e.sink_state,
+        }
+    }
+}
+
 use sovereign_core::time::unix_now as now;
 
 // ─── Commands ────────────────────────────────────────────────
@@ -76,13 +101,31 @@ pub async fn clip_insight(
     position_json: Option<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<InsightNodeDto, String> {
-    let service = get_insight_service(&state).await?;
     let source: InsightSource =
         serde_json::from_str(&source_json).map_err(|e| format!("Invalid source: {e}"))?;
     let position: Option<InsightPosition> = position_json
         .map(|j| serde_json::from_str(&j))
         .transpose()
         .map_err(|e| format!("Invalid position: {e}"))?;
+
+    // Attach: the clip crosses the wire — the daemon's service embeds and
+    // persists (one clip decider, the same `InsightService` this command
+    // drives in Local mode).
+    if state.is_attach_mode() {
+        let entry = attach_insight_client(&state)
+            .clip_insight(sovereign_turn_client::ClipInsight {
+                clipped_text: &clipped_text,
+                message_id: &message_id,
+                paragraph_index,
+                source,
+                position,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        return Ok(InsightNodeDto::from(entry));
+    }
+
+    let service = get_insight_service(&state).await?;
     let message_id =
         uuid::Uuid::parse_str(&message_id).map_err(|e| format!("Invalid message_id: {e}"))?;
 
@@ -99,6 +142,13 @@ pub async fn list_insights(
     limit: Option<usize>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
+    if state.is_attach_mode() {
+        let entries = attach_insight_client(&state)
+            .list_insights(limit)
+            .await
+            .map_err(|e| e.to_string())?;
+        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
+    }
     let service = get_insight_service(&state).await?;
     let nodes = service
         .store
@@ -113,6 +163,13 @@ pub async fn search_insights(
     query: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
+    if state.is_attach_mode() {
+        let entries = attach_insight_client(&state)
+            .search_insights(&query)
+            .await
+            .map_err(|e| e.to_string())?;
+        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
+    }
     let service = get_insight_service(&state).await?;
     let nodes = service
         .store
@@ -124,6 +181,12 @@ pub async fn search_insights(
 
 #[tauri::command]
 pub async fn delete_insight(id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    if state.is_attach_mode() {
+        return attach_insight_client(&state)
+            .delete_insight(&id)
+            .await
+            .map_err(|e| e.to_string());
+    }
     let service = get_insight_service(&state).await?;
     let id = uuid::Uuid::parse_str(&id).map_err(|e| format!("Invalid id: {e}"))?;
     service.store.delete(id).await.map_err(|e| e.to_string())

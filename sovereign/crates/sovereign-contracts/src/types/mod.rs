@@ -650,6 +650,75 @@ impl ExecutionStatus {
 
 // ─── Memory Types ──────────────────────────────────────────────
 
+/// Closed set of outcomes recorded when an agent's tool invocation
+/// resolves. Serialised via Serde's `kebab-case` rename so the
+/// on-disk JSON reads as `"useful"` / `"stale"` / `"wrong-tool"` /
+/// `"no-results"` — the same labels the dossier renders to the
+/// model. Closed-set discipline per ARCH §2.1 — no stringly-typed
+/// outcome elsewhere.
+///
+/// Lives in the CONTRACTS layer (moved from sovereign-core's memory
+/// module, sv-surface rung 6) because it is now a WIRE shape: the
+/// daemon's `POST /v1/notes/tool-outcome` and the turn client both
+/// serialize it, and the client crate's dependency rule is
+/// contracts-only. sovereign-core re-exports it at the old path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolDecisionOutcome {
+    /// Tool returned evidence the model used in its final answer.
+    Useful,
+    /// Tool returned evidence whose recency or coverage didn't fit
+    /// the question (e.g. corpus snapshot predates the asked-about
+    /// event). Drives the gap-check + INFORMATION REQUEST surface.
+    Stale,
+    /// Tool returned no usable evidence and the model picked the
+    /// wrong tool for the question shape. The dossier surfaces this
+    /// so the next turn's narrowed catalog can read past the
+    /// previous misfire.
+    WrongTool,
+    /// Tool returned an empty result set entirely. Distinct from
+    /// `Stale` — there's nothing in the index, not "the index is
+    /// behind the world."
+    NoResults,
+}
+
+impl ToolDecisionOutcome {
+    /// Canonical wire-form string. Stable across versions because the
+    /// dossier and any FTS lookups grep against these literal labels.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Useful => "useful",
+            Self::Stale => "stale",
+            Self::WrongTool => "wrong-tool",
+            Self::NoResults => "no-results",
+        }
+    }
+}
+
+/// Optional extras for `write_tool_decision` / `record_tool_outcome`.
+/// Bundled in a single struct so the named-args API stays readable
+/// while still admitting the Tier-1 cross-turn fields. Use
+/// `ToolDecisionExtras::none()` from sites that don't have the
+/// data — the dossier renders a degraded but well-formed entry.
+///
+/// Contracts-layer home for the same reason as
+/// [`ToolDecisionOutcome`]: it rides the tool-outcome wire now.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ToolDecisionExtras {
+    pub summary: Option<String>,
+    pub evidence_ids: Vec<String>,
+    pub turn_index: usize,
+}
+
+impl ToolDecisionExtras {
+    /// Empty extras — degraded-but-valid for call sites that
+    /// don't have summary/evidence/turn data (e.g. tests, legacy
+    /// non-knowledge_lookup tools).
+    pub fn none() -> Self {
+        Self::default()
+    }
+}
+
 /// What kind of memory a row is. The default (`Raw`) is what every
 /// memory written before the rolling-compaction work (2026-05-23) was
 /// implicitly. `Summary` rows are mechanically produced by the

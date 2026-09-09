@@ -141,6 +141,55 @@ pub struct ConversationMessage {
     pub epistemic_state: Option<EpistemicState>,
 }
 
+/// One hit of `GET /v1/conversations/search` — a matching message and the
+/// conversation it belongs to (sv-surface rung 6).
+#[derive(Debug, Clone)]
+pub struct SearchedMessage {
+    pub content: String,
+    pub conversation_id: String,
+}
+
+/// One clipped insight as `GET /v1/insights*` serves it — the wire
+/// projection: every renderable field, embedding stripped, `created_at`
+/// RFC 3339. Mirrors `sovereign_mesh::insight_http::InsightEntry` (the
+/// envelope lives behind the route; the client parses the same bytes).
+#[derive(Debug, Clone, Deserialize)]
+pub struct InsightEntry {
+    pub id: String,
+    pub clipped_text: String,
+    pub message_id: String,
+    pub paragraph_index: usize,
+    pub source: sovereign_contracts::types::InsightSource,
+    pub position: Option<sovereign_contracts::types::InsightPosition>,
+    pub adjacent: Vec<String>,
+    pub created_at: String,
+    pub sink_state: sovereign_contracts::types::InsightSinkState,
+}
+
+/// The clip payload for [`TurnClient::clip_insight`].
+pub struct ClipInsight<'a> {
+    pub clipped_text: &'a str,
+    pub message_id: &'a str,
+    pub paragraph_index: usize,
+    pub source: sovereign_contracts::types::InsightSource,
+    pub position: Option<sovereign_contracts::types::InsightPosition>,
+}
+
+/// The tool-outcome payload for [`TurnClient::notes_tool_outcome`] — the
+/// wire form of `sovereign_core::dossier::record_tool_outcome`'s args.
+pub struct ToolOutcome<'a> {
+    /// Per-conversation-turn opaque id — the approval `key` the surface
+    /// minted, used as the session-id proxy for the audit trail.
+    pub session_id: &'a str,
+    pub conversation_id: Option<&'a str>,
+    pub tool_id: &'a str,
+    pub outcome: sovereign_contracts::types::ToolDecisionOutcome,
+    pub reasoning: &'a str,
+    pub extras_summary: Option<String>,
+    pub evidence_ids: Vec<String>,
+    pub turn_index: usize,
+}
+
 /// `GET /v1/conversations/{id}`'s answer — the conversation with its full
 /// history.
 #[derive(Debug, Clone)]
@@ -384,6 +433,182 @@ impl TurnClient {
         })
     }
 
+    /// `GET /v1/conversations/search?q=` — full-text message search across
+    /// conversations (sv-surface rung 6). The host's `search_messages`
+    /// decider, capped at 50 the way the route caps — the cap has one home,
+    /// server-side.
+    pub async fn search_conversations(&self, query: &str) -> Result<Vec<SearchedMessage>> {
+        let url = format!("{}/v1/conversations/search", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("q", query)])
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: SearchResponseWire = parse(&body, &format!("GET {url}"))?;
+        Ok(wire
+            .results
+            .into_iter()
+            .map(|r| SearchedMessage {
+                content: r.content,
+                conversation_id: r.conversation_id,
+            })
+            .collect())
+    }
+
+    /// `DELETE /v1/memories/{id}` — tombstone a memory (soft delete; the
+    /// row is preserved for audit and excluded from recall). 204 on
+    /// success; a missing row surfaces as the host's error words.
+    pub async fn delete_memory(&self, memory_id: &str) -> Result<()> {
+        let url = format!("{}/v1/memories/{memory_id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        Ok(())
+    }
+
+    /// `POST /v1/memories/{id}/weaken` — halve a memory's confidence with
+    /// the standard decay floor. THE one decider for the halving lives in
+    /// the host; this returns the new confidence so a caller can render it.
+    pub async fn weaken_memory(&self, memory_id: &str) -> Result<f64> {
+        let url = format!("{}/v1/memories/{memory_id}/weaken", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        let wire: WeakenResponseWire = parse(&body, &format!("POST {url}"))?;
+        Ok(wire.confidence)
+    }
+
+    /// `GET /v1/insights?limit=` — the insight collection, newest first.
+    pub async fn list_insights(&self, limit: Option<usize>) -> Result<Vec<InsightEntry>> {
+        let url = format!("{}/v1/insights", self.base);
+        let mut req = self.http.get(&url);
+        if let Some(limit) = limit {
+            req = req.query(&[("limit", limit)]);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: InsightListWire = parse(&body, &format!("GET {url}"))?;
+        Ok(wire.insights)
+    }
+
+    /// `GET /v1/insights/search?q=` — full-text search over the collection.
+    pub async fn search_insights(&self, query: &str) -> Result<Vec<InsightEntry>> {
+        let url = format!("{}/v1/insights/search", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("q", query)])
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: InsightListWire = parse(&body, &format!("GET {url}"))?;
+        Ok(wire.insights)
+    }
+
+    /// `DELETE /v1/insights/{id}` — soft-delete a clip. 204 on success.
+    pub async fn delete_insight(&self, insight_id: &str) -> Result<()> {
+        let url = format!("{}/v1/insights/{insight_id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        Ok(())
+    }
+
+    /// `POST /v1/insights/clip` — clip a passage. The host embeds, finds
+    /// adjacent nodes, persists, and answers the created row (with the
+    /// embedding stripped — the wire projection).
+    pub async fn clip_insight(&self, clip: ClipInsight<'_>) -> Result<InsightEntry> {
+        let url = format!("{}/v1/insights/clip", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({
+                "clipped_text": clip.clipped_text,
+                "message_id": clip.message_id,
+                "paragraph_index": clip.paragraph_index,
+                "source": clip.source,
+                "position": clip.position,
+            }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        let wire: ClipResponseWire = parse(&body, &format!("POST {url}"))?;
+        Ok(wire.insight)
+    }
+
+    /// `POST /v1/notes/tool-outcome` — record a tool-decision outcome into
+    /// the host's notes dossier. Fire-and-soft-fail by DESIGN at the call
+    /// site (the in-process path skipped a missing NoteStore silently);
+    /// this method reports the host's answer so the caller decides what is
+    /// fatal, never the wire (§18.3).
+    pub async fn notes_tool_outcome(&self, outcome: ToolOutcome<'_>) -> Result<()> {
+        let url = format!("{}/v1/notes/tool-outcome", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({
+                "session_id": outcome.session_id,
+                "conversation_id": outcome.conversation_id,
+                "tool_id": outcome.tool_id,
+                "outcome": outcome.outcome,
+                "reasoning": outcome.reasoning,
+                "extras": {
+                    "summary": outcome.extras_summary,
+                    "evidence_ids": outcome.evidence_ids,
+                    "turn_index": outcome.turn_index,
+                },
+            }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        Ok(())
+    }
+
     /// The WebSocket URL for one conversation's turn stream.
     fn stream_url(&self, conversation_id: &str) -> String {
         let ws = if let Some(rest) = self.base.strip_prefix("https://") {
@@ -508,6 +733,34 @@ struct ConversationMessageWire {
 }
 
 #[derive(Debug, Deserialize)]
+struct SearchResponseWire {
+    #[serde(default)]
+    results: Vec<SearchedMessageWire>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchedMessageWire {
+    content: String,
+    conversation_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WeakenResponseWire {
+    confidence: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct InsightListWire {
+    #[serde(default)]
+    insights: Vec<InsightEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClipResponseWire {
+    insight: InsightEntry,
+}
+
+#[derive(Debug, Deserialize)]
 struct MessageResponseWire {
     message_id: String,
     #[serde(default)]
@@ -601,6 +854,70 @@ mod create_body_tests {
 /// The CRUD parse shapes, pinned against fixture bytes that carry every
 /// optional key a host may send — a drift in either host's envelope shows up
 /// here as a parse failure rather than a silently-missing field (§18.3).
+/// The rung-6 sibling envelopes, pinned against fixture bytes the daemon
+/// serves — a drift in either host's envelope shows up here as a parse
+/// failure rather than a silently-missing field (§18.3), the same bargain
+/// the CRUD shapes above make.
+#[cfg(test)]
+mod rung6_wire_tests {
+    use super::{
+        parse, ClipResponseWire, InsightEntry, InsightListWire, SearchResponseWire,
+        SearchedMessageWire, WeakenResponseWire,
+    };
+
+    #[test]
+    fn a_full_search_response_parses() {
+        let wire: SearchResponseWire = parse(
+            r#"{"results":[{"content":"a.","conversation_id":"c1"},{"content":"b.","conversation_id":"c2"}]}"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(wire.results.len(), 2);
+        assert_eq!(wire.results[0].conversation_id, "c1");
+        let _: Vec<SearchedMessageWire> = wire.results;
+    }
+
+    #[test]
+    fn an_empty_search_response_parses() {
+        let wire: SearchResponseWire = parse(r#"{"results":[]}"#, "test").unwrap();
+        assert!(wire.results.is_empty());
+    }
+
+    #[test]
+    fn a_weaken_response_carries_the_new_confidence() {
+        let wire: WeakenResponseWire = parse(r#"{"confidence":0.4}"#, "test").unwrap();
+        assert!((wire.confidence - 0.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_full_insight_entry_parses() {
+        let wire: InsightListWire = parse(
+            r#"{"insights":[{"id":"u1","clipped_text":"t","message_id":"m1","paragraph_index":2,
+                "source":{"corpus_id":"sep","article_title":"Free Will","conversation_id":"00000000-0000-0000-0000-0000000000f1"},
+                "position":{"name":"Compatibilism","style":"Compatibilism"},
+                "adjacent":["a"],"created_at":"2026-09-09T00:00:00Z","sink_state":"Local"}]}"#,
+            "test",
+        )
+        .unwrap();
+        let e: &InsightEntry = &wire.insights[0];
+        assert_eq!(e.source.corpus_id.as_deref(), Some("sep"));
+        assert_eq!(e.position.as_ref().unwrap().name, "Compatibilism");
+    }
+
+    #[test]
+    fn a_clip_response_unwraps_the_entry() {
+        let wire: ClipResponseWire = parse(
+            r#"{"insight":{"id":"u2","clipped_text":"x","message_id":"m2","paragraph_index":0,
+                "source":{"corpus_id":null,"article_title":null,"conversation_id":"00000000-0000-0000-0000-0000000000f2"},
+                "adjacent":[],"created_at":"2026-09-09T00:00:00Z","sink_state":"Local"}}"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(wire.insight.id, "u2");
+        assert!(wire.insight.position.is_none());
+    }
+}
+
 #[cfg(test)]
 mod crud_wire_tests {
     use super::{parse, ConversationListWire, ConversationWire, MessageResponseWire};

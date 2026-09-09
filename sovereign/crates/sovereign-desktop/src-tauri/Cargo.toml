@@ -7,6 +7,10 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+# The one client family for the daemon's wire (sv-one-client). Attach mode
+# routes conversation search / memory / insight surfaces through it rather
+# than re-deriving local deciders (sv-surface rung 6).
+sovereign-turn-client = { workspace = true }
 # The enrichment store the CLI and the daemon also read — `enrich_commands`
 # lists it rather than re-deriving the layout and the schema (rung
 # nc-16-shared-capability).

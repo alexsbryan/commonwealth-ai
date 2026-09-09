@@ -12461,6 +12461,7 @@ dependencies = [
  "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-turn-client",
  "sovereign-workflow",
  "sovereign-workflow-host",
  "syn 2.0.118",

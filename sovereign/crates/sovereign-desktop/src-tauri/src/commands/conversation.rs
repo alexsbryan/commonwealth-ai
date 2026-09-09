@@ -244,6 +244,24 @@ pub async fn search_messages(
     state: State<'_, Arc<AppState>>,
     query: String,
 ) -> Result<Vec<SearchResult>, String> {
+    // Attach: the daemon's store is the one writer — search crosses the
+    // wire (the rung-6 route serves the SAME `search_messages` trait call
+    // with the SAME 50-row cap, so the answer cannot drift from Local's).
+    if state.is_attach_mode() {
+        let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+        let messages = client
+            .search_conversations(&query)
+            .await
+            .map_err(|e| e.to_string())?;
+        return Ok(messages
+            .into_iter()
+            .map(|m| SearchResult {
+                content: m.content,
+                conversation_id: m.conversation_id,
+            })
+            .collect());
+    }
+
     let store = require_store!(state);
 
     let messages = store
@@ -386,7 +404,37 @@ pub async fn submit_information_search(
     // in-conversation lookup came up short and the user reached
     // for the external escape hatch." Soft-fail: missing NoteStore
     // is silently skipped. See `dossier::record_tool_outcome`.
-    {
+    if state.is_attach_mode() {
+        // Attach: the notes.db the dossier writes lives daemon-side
+        // (rung 6 route). Soft-fail preserved — the in-process path
+        // skips a missing NoteStore, and a daemon without a notes
+        // surface answers the named 503; either way the search below
+        // still runs.
+        let outcome = sovereign_turn_client::TurnClient::new(state.client_base_url())
+            .notes_tool_outcome(sovereign_turn_client::ToolOutcome {
+                session_id: &key,
+                conversation_id: conversation_id.as_deref(),
+                tool_id: "knowledge_lookup",
+                outcome: sovereign_core::memory::ToolDecisionOutcome::NoResults,
+                reasoning: "user clicked Search-the-web on the INFORMATION REQUEST card \
+                             — prior in-conversation lookup did not satisfy",
+                // Tier 1: no summary/evidence_ids/turn_index — this
+                // write fires from a USER click, not a tool-result
+                // post-stream hook. The originating turn's baseline
+                // write (from the runtime's KQ dispatch) already
+                // carries those fields; this is an audit overlay.
+                extras_summary: None,
+                evidence_ids: Vec::new(),
+                turn_index: 0,
+            })
+            .await;
+        if let Err(e) = outcome {
+            tracing::info!(
+                error = %e,
+                "submit_information_search: attach-mode tool-outcome write skipped (daemon-side notes unavailable)"
+            );
+        }
+    } else {
         let notes_guard = state.notes.read().await;
         let notes_ref: Option<&corpus_engine_notes::NoteStore> =
             notes_guard.as_ref().map(|arc| arc.as_ref());
@@ -639,6 +687,14 @@ pub async fn forget_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
+    // Attach: the tombstone crosses the wire — the daemon's row is the
+    // one recall reads (rung 6 route; same `delete_memory` decider).
+    if state.is_attach_mode() {
+        return sovereign_turn_client::TurnClient::new(state.client_base_url())
+            .delete_memory(&memory_id)
+            .await
+            .map_err(|e| e.to_string());
+    }
     let store = require_store!(state);
     store
         .delete_memory(&memory_id)
@@ -655,6 +711,17 @@ pub async fn weaken_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
+    // Attach: the halving decider is the DAEMON's route (rung 6 moved the
+    // formula off this command so it has one home). The new confidence is
+    // persisted server-side against the daemon's own row; the command
+    // keeps its `Ok(())` frontend contract.
+    if state.is_attach_mode() {
+        return sovereign_turn_client::TurnClient::new(state.client_base_url())
+            .weaken_memory(&memory_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
     let store = require_store!(state);
     let all = store.get_all_memories().await.map_err(|e| e.to_string())?;
     let current = all
