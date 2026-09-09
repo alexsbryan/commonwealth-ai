@@ -2844,6 +2844,14 @@ via the new `COMPOSE_SECTIONS`).
 byte-identity arm recorded below — the reversal condition this row itself
 pre-registered. Opt out with `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS=0`.
 
+**VERIFIED ON THE LIVE DAEMON, same day**, after a full workspace rebuild and a
+clean restart (`cargo check` is not `cargo build`; the daemon's exe read
+`(deleted)` until it was restarted). Warm daemon, fast slot, a 6,103-token
+prompt — above the ~3,650 knee: `RssAnon` **7.22 -> 7.23 GB, a +0.01 GB step**,
+where the old behaviour predicts `6,103 * 993,280` = **+5.64 GB**. That matches
+the isolated test process's +0.01 GiB exactly, so the flag behaves in
+production as it does on the bench.
+
 **What it is for.** The MTP prefill flags every position for logits, which
 makes `n_outputs_all` the whole prompt (`llama-context.cpp:1700`), so
 `output_reserve` sizes the logits buffer at `n_vocab * n_prompt_tokens * 4` —
