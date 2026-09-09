@@ -28,8 +28,8 @@
 //! `.layer(loopback_only)` because axum applies layers in reverse-
 //! addition order. So the spoofed `ConnectInfo` is in place by the
 //! time `loopback_only` reads it.
-use crate::common;
 use crate::common::mesh_admin_services;
+use crate::common::TestProvider;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -43,7 +43,10 @@ use axum::response::Response;
 use axum::Router;
 use corpus_engine_scip::ScipGraph;
 
+use sovereign_contracts::types::projection::{project_epistemic_state, project_message_metadata};
 use sovereign_core::setup_config::SetupConfig;
+use sovereign_core::traits::StateStore;
+use sovereign_core::types::{Message, Role};
 use sovereign_mesh::admin_http::admin_router;
 use sovereign_mesh::corpus_watch_http::corpus_watch_router;
 use sovereign_mesh::daemon::EmbeddedDaemon;
@@ -51,7 +54,10 @@ use sovereign_mesh::mesh_http::mesh_router;
 use sovereign_mesh::project_http::project_router;
 use sovereign_mesh::reading_http::reading_router;
 use sovereign_mesh::reindexer::Reindexer;
-use sovereign_mesh::turn_http::turn_router;
+use sovereign_mesh::turn_http::{
+    turn_router, ConversationListEntry, ConversationListResponse, ConversationResponse,
+    MessageEntry,
+};
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via
@@ -439,4 +445,370 @@ async fn corpus_status_route_serves_the_one_deciders_rows() {
     assert_eq!(ready["state_label"], "ready");
     let building = by_id(&served, "building-corpus");
     assert_eq!(building["state_label"], "building");
+}
+
+// ── sv-surface rung 3: the conversation CRUD routes serve the store's ────
+// ── rows through the canonical projections ───────────────────────────────
+//
+// The parity instrument for the conversation family. sovereign-server's
+// routes.rs is the CONTRACT (mobile already speaks it); these daemon routes
+// mirror its envelopes field-for-field and call the SAME projection deciders
+// the server calls (`sovereign_contracts::types::projection`). Parity here
+// means: on the SAME fixture rows, the route's bytes equal the wire schema's
+// serialization of those rows — the route adds nothing, drops nothing, and
+// re-derives nothing. The desktop's in-process reads answer from the same
+// `StateStore` rows through the same trait methods, so one-decider-on-the-row
+// is what this pins; the desktop's HTTP conversion is rung 6.
+
+/// A seeded conversation row: one user turn, one assistant turn whose metadata
+/// projects to provenance + citations + an epistemic ledger. The assistant
+/// metadata is the interesting half — it is what separates "serves the row"
+/// from "serves the row's projection faithfully".
+async fn seed_conversation(
+    store: &Arc<dyn StateStore>,
+    id: &str,
+    title: Option<&str>,
+    with_metadata: bool,
+) {
+    let m1 = Message {
+        id: format!("{id}-m1"),
+        conversation_id: id.to_string(),
+        role: Role::User,
+        content: "what is compatibilism?".to_string(),
+        created_at: 100,
+        metadata: None,
+        version: 0,
+    };
+    let m2 = Message {
+        id: format!("{id}-m2"),
+        conversation_id: id.to_string(),
+        role: Role::Assistant,
+        content: "Compatibilism holds that free will is compatible with determinism.".to_string(),
+        created_at: 101,
+        metadata: with_metadata.then(|| {
+            serde_json::json!({
+                "provenance": {
+                    "inference_backend": "test-provider",
+                    "coarse_intent": "DeepQuery",
+                    "total_latency_ms": 42,
+                    "sources": [{ "origin": "sep", "count": 2 }]
+                },
+                "retrieved_chunks": [{
+                    "corpus_id": "sep",
+                    "chunk_id": 7,
+                    "snippet": "Compatibilism holds that...",
+                    "score": 0.9,
+                    "title": "Free Will"
+                }],
+                "epistemic_state": {
+                    "version": 1,
+                    "demands": [],
+                    "holdings": [],
+                    "gaps": [],
+                    "verdict": "grounded",
+                    "citations": []
+                }
+            })
+        }),
+        version: 0,
+    };
+    store
+        .insert_empty_conversation(id, 100, None)
+        .await
+        .unwrap();
+    store.save_message(&m1).await.unwrap();
+    store.save_message(&m2).await.unwrap();
+    if let Some(t) = title {
+        store.update_conversation_title(id, t).await.unwrap();
+    }
+}
+
+/// The rung-3 fixture: a serving daemon over a store the test also holds —
+/// the same shape `turn_surface.rs` uses, so the CRUD routes are exercised
+/// against the exact wiring a turn already runs on.
+async fn conversation_fixture(
+    provider: TestProvider,
+) -> (tempfile::TempDir, Arc<EmbeddedDaemon>, Arc<dyn StateStore>) {
+    let tmp = tempfile::tempdir().unwrap();
+    let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let services =
+        crate::common::desktop_services_with_store(engine, Arc::clone(&store), Arc::new(provider));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        services,
+    );
+    seed_conversation(&store, "alpha", Some("Free will"), true).await;
+    seed_conversation(&store, "beta", None, false).await;
+    (tmp, daemon, store)
+}
+
+/// The list route's bytes are the wire schema's serialization of
+/// `store.list_conversations` — same query, same rows, same envelope.
+#[tokio::test]
+async fn conversation_list_route_serves_the_stores_rows() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 200, "the list route must answer on loopback");
+    let raw = resp.text().await.unwrap();
+
+    // PARITY: expected is built in-test from the SAME store call the route
+    // makes, through the wire type — anything the route re-derived or dropped
+    // shows up as a byte difference.
+    let rows = store.list_conversations(20, 0).await.unwrap();
+    let expected = serde_json::to_value(ConversationListResponse {
+        conversations: rows
+            .iter()
+            .map(|c| ConversationListEntry {
+                id: c.id.clone(),
+                title: c.title.clone(),
+                created_at: c.created_at,
+                updated_at: c.updated_at,
+            })
+            .collect(),
+    })
+    .unwrap();
+    let served: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        served, expected,
+        "the list route must serve the store's rows through the wire envelope"
+    );
+
+    // Membership + the two shapes that must never blur: a titled row carries
+    // its title, an untitled row OMITS the key (sovereign-server's
+    // skip_serializing_if — `"title": null` is the rung-4 drift, caught there
+    // only because a test like this one did not exist for reading).
+    let ids: Vec<&str> = served["conversations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["id"].as_str().unwrap())
+        .collect();
+    assert!(
+        ids.contains(&"alpha") && ids.contains(&"beta"),
+        "ids: {ids:?}"
+    );
+    assert!(
+        !raw.contains("\"title\":null") && !raw.contains("\"title\": null"),
+        "an untitled conversation must omit the title key, not null it — got {raw}"
+    );
+
+    // The server's pagination defaults are the route's: limit/offset reach
+    // the store call verbatim.
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations?limit=1&offset=0"))
+        .send()
+        .await
+        .unwrap();
+    let served: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(served["conversations"].as_array().unwrap().len(), 1);
+}
+
+/// The get route's bytes are the canonical projections of the store's row —
+/// the same deciders sovereign-server's `get_conversation` calls, so a
+/// resumed conversation renders identically from either host.
+#[tokio::test]
+async fn conversation_get_route_serves_the_canonical_projection() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/alpha"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 200);
+    let raw = resp.text().await.unwrap();
+
+    // PARITY: expected is built in-test by running the CONTRACTS-LAYER
+    // projections over the store's row — not by parsing what the route
+    // served.
+    let convo = store.get_conversation("alpha").await.unwrap();
+    let expected = serde_json::to_value(ConversationResponse {
+        id: "alpha".to_string(),
+        title: convo.title.clone(),
+        messages: convo
+            .messages
+            .iter()
+            .map(|m| {
+                let role = m.role_str().to_string();
+                let (provenance, citations) = project_message_metadata(&m.metadata);
+                MessageEntry {
+                    id: m.id.clone(),
+                    role,
+                    content: m.content.clone(),
+                    created_at: m.created_at,
+                    provenance,
+                    citations,
+                    epistemic_state: project_epistemic_state(&m.metadata),
+                }
+            })
+            .collect(),
+        created_at: convo.created_at,
+        updated_at: convo.updated_at,
+    })
+    .unwrap();
+
+    // §18.4 — validate the instrument before trusting the equality: the
+    // fixture's metadata MUST project to Some/Some/nonempty, else both sides
+    // are None and the test passes vacuously.
+    let assistant = &expected["messages"][1];
+    assert!(
+        assistant.get("provenance").is_some(),
+        "fixture must project provenance, else this test proves nothing"
+    );
+    assert!(
+        !assistant["citations"].as_array().unwrap().is_empty(),
+        "fixture must project citations"
+    );
+    assert!(
+        assistant.get("epistemic_state").is_some(),
+        "fixture must project an epistemic ledger"
+    );
+
+    let served: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        served, expected,
+        "the get route must serve the contracts-layer projection of the row"
+    );
+
+    // A bare row serves bare: beta has no metadata, so its wire form carries
+    // neither provenance nor citations keys at all (absent stays absent).
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/beta"))
+        .send()
+        .await
+        .unwrap();
+    let raw = resp.text().await.unwrap();
+    assert!(
+        !raw.contains("provenance") && !raw.contains("citations") && !raw.contains("title"),
+        "a bare row's wire form must omit every optional key — got {raw}"
+    );
+}
+
+/// A missing row answers the server's exact 404 sentence — not a generic
+/// daemon error, which would be a byte a client could tell hosts apart by.
+#[tokio::test]
+async fn conversation_get_missing_is_the_servers_404() {
+    let (_tmp, daemon, _store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/v1/conversations/nope"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({ "error": "Conversation not found" }),
+        "the 404 body is sovereign-server's spelling (routes.rs)"
+    );
+}
+
+/// Delete is the server's 204-no-body, and the row is really gone — the
+/// read routes answer 404 for it afterward, through the shared store.
+#[tokio::test]
+async fn conversation_delete_route_is_204_and_removes_the_row() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .delete(format!("{base}/v1/conversations/beta"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    assert!(
+        resp.text().await.unwrap().is_empty(),
+        "204 carries no body (the server's spelling)"
+    );
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/beta"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+
+    // And the list still serves parity against the store AFTER the delete —
+    // one writer, both reads agree.
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations"))
+        .send()
+        .await
+        .unwrap();
+    let served: serde_json::Value = resp.json().await.unwrap();
+    let rows = store.list_conversations(20, 0).await.unwrap();
+    let expected = serde_json::to_value(ConversationListResponse {
+        conversations: rows
+            .iter()
+            .map(|c| ConversationListEntry {
+                id: c.id.clone(),
+                title: c.title.clone(),
+                created_at: c.created_at,
+                updated_at: c.updated_at,
+            })
+            .collect(),
+    })
+    .unwrap();
+    assert_eq!(served, expected);
+}
+
+/// The one-shot messages route drives the SAME driver the WebSocket stream
+/// runs (`collect_turn` → `serve_turn`), and the turn it wrote is what the
+/// get route then serves — one writer, REST and WS and read all agreeing.
+#[tokio::test]
+async fn conversation_messages_route_serves_one_collect_turn() {
+    let provider =
+        TestProvider::new().with_stream_chunks(vec!["one ".to_string(), "two".to_string()]);
+    let (_tmp, daemon, store) = conversation_fixture(provider).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/conversations/alpha/messages"))
+        .json(&serde_json::json!({ "content": "hello" }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 200, "the one-shot turn route must answer");
+    let reply: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(reply["role"], "assistant", "the server's spelling");
+    assert_eq!(reply["content"], "one two");
+    let message_id = reply["message_id"].as_str().unwrap().to_string();
+    assert!(!message_id.is_empty());
+
+    // The reply IS the persisted row — the route did not fabricate an answer
+    // shape the store never saw.
+    let convo = store.get_conversation("alpha").await.unwrap();
+    let persisted = convo
+        .messages
+        .iter()
+        .find(|m| m.id == message_id)
+        .unwrap_or_else(|| panic!("message {message_id} not persisted"));
+    assert_eq!(persisted.content, "one two");
+
+    // And the get route serves it: 2 seeded + 1 user + 1 assistant.
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/alpha"))
+        .send()
+        .await
+        .unwrap();
+    let served: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(served["messages"].as_array().unwrap().len(), 4);
 }

@@ -53,7 +53,14 @@ pub async fn create_conversation(
         tracing::warn!("create_conversation: sqlite store unavailable, deferring insert");
     }
 
-    Ok(CreateConversationResponse { id, created_at })
+    Ok(CreateConversationResponse {
+        id,
+        created_at,
+        // The desktop's own create seeds no allow-list; the field exists on
+        // the wire type so a scoped create can echo one (the daemon's route
+        // does), and `None` is omitted from the serialized bytes.
+        enabled_corpora: None,
+    })
 }
 
 #[tauri::command]

@@ -24,14 +24,28 @@ pub struct TaskSummary {
     pub steps_completed: usize,
 }
 
-#[derive(Serialize)]
-pub struct ConversationEntry {
-    pub id: String,
-    pub title: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
+/// sv-surface rung 3 (the rung-4 reading pattern): the conversation LIST
+/// entry IS the daemon's wire type — one schema, served over HTTP in attach
+/// mode and serialized in-process here. The hand-kept local shape this
+/// replaced had already drifted from the wire's `skip_serializing_if` (it
+/// emitted `"title": null` where the wire omits the key), which is the
+/// exact byte-compat break importing the one type makes impossible.
+pub use sovereign_mesh::turn_http::ConversationListEntry as ConversationEntry;
 
+/// The CREATE response is likewise the wire type; the `enabled_corpora`
+/// echo is `None` on the desktop's own create (it seeds no allow-list) and
+/// therefore omitted from the serialized bytes.
+pub use sovereign_mesh::turn_http::CreateConversationResponse;
+
+// SANCTIONED UNTIL RUNG 6, named so the next reader doesn't "fix" them: the
+// two shapes below are the desktop's IN-PROCESS IPC contract, deliberately
+// richer than the wire's — the frontend renders `metadata` raw and reads
+// `enabled_corpora` here. The wire's `ConversationResponse`/`MessageEntry`
+// (sovereign_mesh::turn_http) project metadata into
+// provenance/citations/epistemic_state instead. When rung 6 converts the
+// desktop to a pure client, the frontend's renderer moves onto the
+// projections and these locals die — until then they are the frontend's
+// contract, not a twin of the wire.
 #[derive(Serialize)]
 pub struct ConversationDetail {
     pub id: String,
@@ -54,12 +68,6 @@ pub struct MessageEntry {
     pub created_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Serialize)]
-pub struct CreateConversationResponse {
-    pub id: String,
-    pub created_at: i64,
 }
 
 /// NOT `sovereign_tools_base::web::search::SearchResult` (a WEB result);

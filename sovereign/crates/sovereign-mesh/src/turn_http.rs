@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The daemon serves the turn — `POST /v1/conversations` and
-//! `GET /v1/conversations/{id}/stream`.
+//! The daemon serves the turn — `POST /v1/conversations`,
+//! `GET /v1/conversations/{id}/stream` — and, since sv-surface rung 3,
+//! the conversation CRUD surface around it: `GET /v1/conversations`
+//! (list), `GET /v1/conversations/{id}` (get with history),
+//! `DELETE /v1/conversations/{id}`, and the one-shot
+//! `POST /v1/conversations/{id}/messages`.
 //!
 //! # Why this exists
 //!
@@ -32,6 +36,20 @@
 //!   contention between strangers. Loopback callers are one user's own
 //!   surfaces.
 //!
+//! The rung-3 CRUD routes extend that sentence from "same turn frames" to
+//! "same conversation envelopes": every response struct below is
+//! `sovereign-server`'s `routes.rs` shape field-for-field (declaration order
+//! included, so the bytes equal on the same row), and the message projections
+//! are not re-implementations at all — `project_message_metadata` /
+//! `project_epistemic_state` / `TaskSummary` are imported from
+//! `sovereign_contracts::types::projection`, the same deciders the server's
+//! handlers call. The envelope structs themselves cannot be imported the same
+//! way (`sovereign-server` is a bin crate, and `sovereign-contracts` holds the
+//! projections rather than the envelopes), so they are mirrored here the way
+//! `reading_http` mirrors the server's reading shapes, and the parity test in
+//! `tests/main/loopback_parity.rs` pins the mirror: the route's bytes are the
+//! canonical projection's bytes on the same fixture rows.
+//!
 //! # Loopback only
 //!
 //! Both layers, mirroring `reading_http` and `admin_http`: the router-level
@@ -56,16 +74,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{ConnectInfo, Extension, Path, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, Extension, Path, Query, WebSocketUpgrade};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use sovereign_contracts::types::{TurnFrame, TurnRequest};
-use sovereign_core::runtime::serve_turn;
+use sovereign_contracts::types::projection::{
+    project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
+};
+use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
+use sovereign_core::runtime::{collect_turn, serve_turn};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::enforce_localhost;
@@ -76,6 +98,10 @@ use crate::loopback_guard::enforce_localhost;
 pub fn turn_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/conversations", post(create_conversation))
+        .route("/v1/conversations", get(list_conversations))
+        .route("/v1/conversations/{id}", get(get_conversation))
+        .route("/v1/conversations/{id}", delete(delete_conversation))
+        .route("/v1/conversations/{id}/messages", post(send_message))
         .route("/v1/conversations/{id}/stream", get(ws_handler))
         .route("/v1/conversations/{id}/end", post(end_conversation))
         .layer(axum::middleware::from_fn(
@@ -154,10 +180,15 @@ async fn create_conversation(
         // A bad allow-list is the CALLER's mistake and carries its own remedy
         // (the installed ids); a store failure is the daemon's. Different
         // status codes so a client can tell "fix your flag" from "the daemon
-        // is unwell" without parsing prose.
+        // is unwell" without parsing prose. 500 on the store failure is the
+        // SERVER's spelling (routes.rs maps every non-InvalidInput seed error
+        // to INTERNAL_SERVER_ERROR); until rung 3 this branch said 503, which
+        // was the one byte a client could use to tell which host it had
+        // reached — the exact opposite of the wire-compat this file exists
+        // to hold.
         return match e {
             sovereign_core::error::Error::InvalidInput(msg) => bad_request(&msg),
-            other => service_unavailable(&format!("seed conversation: {other}")),
+            other => internal_error(&format!("seed conversation: {other}")),
         };
     }
     Json(CreateConversationResponse {
@@ -166,6 +197,245 @@ async fn create_conversation(
         enabled_corpora: req.enabled_corpora,
     })
     .into_response()
+}
+
+// ─── Conversation CRUD wire types (sv-surface rung 3) ──────────────
+//
+// Every struct here mirrors `sovereign-server`'s `routes.rs` field-for-field,
+// including `skip_serializing_if` and field DECLARATION ORDER — serde emits
+// declaration order, so order equality is byte equality on the same row. The
+// projections inside them are not mirrors: they are the server's own deciders,
+// imported from `sovereign_contracts::types::projection`.
+
+/// `GET /v1/conversations?limit=&offset=` — the server's `ListQuery`, whose
+/// defaults (20 / 0) the handler applies identically.
+#[derive(Debug, Default, Deserialize)]
+pub struct ListQuery {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConversationListResponse {
+    pub conversations: Vec<ConversationListEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConversationListEntry {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConversationResponse {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub messages: Vec<MessageEntry>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageEntry {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<Citation>,
+    /// The typed epistemic ledger (EPISTEMIC_STATE.md); see the server's
+    /// twin field. `None` on old messages / kill switch off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epistemic_state: Option<sovereign_contracts::types::EpistemicState>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendMessageRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageResponse {
+    pub message_id: String,
+    pub role: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<TaskSummary>,
+    /// Host-side provenance (model + serving node, routing tier, latency).
+    /// `None` on turns whose handler doesn't persist provenance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
+    /// Corpus-grounded citations carrying the host's `(corpus_id, chunk_id)`
+    /// handle. Empty when the answer wasn't grounded in an installed corpus.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<Citation>,
+    /// The typed epistemic ledger, when the turn stamped one; see
+    /// [`MessageEntry::epistemic_state`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epistemic_state: Option<sovereign_contracts::types::EpistemicState>,
+}
+
+/// `GET /v1/conversations`
+///
+/// The server filters to the caller's tenant and strips the `tenant:` prefix;
+/// this daemon has one principal and stores bare ids, so the rows pass
+/// through verbatim — the same wire ANSWER the server's client would see for
+/// its own tenant, which is the compat that matters.
+async fn list_conversations(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Query(params): Query<ListQuery>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    let limit = params.limit.unwrap_or(20);
+    let offset = params.offset.unwrap_or(0);
+    match store.list_conversations(limit, offset).await {
+        Ok(convos) => Json(ConversationListResponse {
+            conversations: convos
+                .into_iter()
+                .map(|c| ConversationListEntry {
+                    id: c.id,
+                    title: c.title,
+                    created_at: c.created_at,
+                    updated_at: c.updated_at,
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `GET /v1/conversations/{id}`
+///
+/// Serves the row's history through the same projections the server's
+/// `get_conversation` runs — `role_str` for the role, the contracts-layer
+/// projection functions for provenance / citations / epistemic state — so a
+/// client rendering a resumed conversation cannot tell which host answered.
+/// A missing row is the server's exact 404 sentence, not a generic one.
+async fn get_conversation(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    match store.get_conversation(&conversation_id).await {
+        Ok(convo) => Json(ConversationResponse {
+            id: conversation_id,
+            title: convo.title,
+            messages: convo
+                .messages
+                .into_iter()
+                .map(|m| {
+                    let role = m.role_str().to_string();
+                    let (provenance, citations) = project_message_metadata(&m.metadata);
+                    MessageEntry {
+                        id: m.id,
+                        role,
+                        content: m.content,
+                        created_at: m.created_at,
+                        provenance,
+                        citations,
+                        epistemic_state: project_epistemic_state(&m.metadata),
+                    }
+                })
+                .collect(),
+            created_at: convo.created_at,
+            updated_at: convo.updated_at,
+        })
+        .into_response(),
+        Err(sovereign_core::error::Error::NotFound(_)) => not_found("Conversation not found"),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `DELETE /v1/conversations/{id}`
+///
+/// The server's contract: `204 No Content` on success, no body — deletion is
+/// idempotent from the client's point of view, and the row's absence
+/// afterward is observable via the 404 the get route now answers.
+async fn delete_conversation(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    match store.delete_conversation(&conversation_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `POST /v1/conversations/{id}/messages` — the one-shot REST turn.
+///
+/// The SAME driver the WebSocket route streams through (`collect_turn` wraps
+/// `serve_turn` with a collecting sink), which is also the driver the
+/// server's REST route calls. One client can therefore mix transports —
+/// stream a long turn, one-shot a short one — and the conversation reads
+/// identically either way, because there was only ever one writer.
+///
+/// The server wraps its call in the fair scheduler and stamps the approval
+/// channel's task id; this daemon has neither (see the module docs), and the
+/// approval refusal the WebSocket route enforces applies here implicitly: a
+/// turn that would pause for an approval cannot complete on this route, which
+/// is the same named gap, not a new one.
+async fn send_message(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+    Json(body): Json<SendMessageRequest>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let (Some(runtime), Some(store)) = (daemon.runtime(), daemon.state_store()) else {
+        return service_unavailable("this daemon serves no turns (mesh-admin)");
+    };
+    match collect_turn(
+        runtime,
+        store.as_ref(),
+        &conversation_id,
+        &body.content,
+        TurnMode::Grounded,
+        None,
+    )
+    .await
+    {
+        Ok(turn) => Json(MessageResponse {
+            message_id: turn.message_id,
+            // Always the assistant: this endpoint returns the reply to the
+            // message the caller just sent (the server's spelling).
+            role: "assistant".to_string(),
+            content: turn.text,
+            task: turn.task,
+            provenance: turn.provenance,
+            citations: turn.citations,
+            epistemic_state: turn.epistemic_state,
+        })
+        .into_response(),
+        Err(e) => internal_error(&e.to_string()),
+    }
 }
 
 /// `POST /v1/conversations/{id}/end`
@@ -367,6 +637,27 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
 fn bad_request(reason: &str) -> Response {
     (
         axum::http::StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({ "error": reason })),
+    )
+        .into_response()
+}
+
+/// The server's `ErrorResponse` shape on a 404 — same status, same
+/// `{"error": "..."}` body, same sentence the server's route writes.
+fn not_found(reason: &str) -> Response {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        Json(serde_json::json!({ "error": reason })),
+    )
+        .into_response()
+}
+
+/// 500 with the server's `ErrorResponse` body. The server maps store and
+/// turn failures to INTERNAL_SERVER_ERROR; a daemon replying 503 to the same
+/// failure would be a distinguishing byte (§5c).
+fn internal_error(reason: &str) -> Response {
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
         Json(serde_json::json!({ "error": reason })),
     )
         .into_response()

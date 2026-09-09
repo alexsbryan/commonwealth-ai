@@ -13,6 +13,9 @@ rust-version.workspace = true
 sovereign-contracts = { workspace = true }
 
 futures = { workspace = true }
+# Leaf, same tier as serde_json beside it: the CRUD envelopes below are
+# Deserialize-only parse shapes over the wire bytes serde_json already reads.
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.29"

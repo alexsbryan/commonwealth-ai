@@ -40,6 +40,7 @@
 //! serializes.
 
 use futures::{SinkExt, StreamExt};
+use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use sovereign_contracts::error::{Error, Result};
@@ -110,6 +111,45 @@ pub struct CreatedConversation {
     /// The corpus allow-list the host seeded, as it echoed it. `None` when
     /// none was requested.
     pub enabled_corpora: Option<Vec<String>>,
+}
+
+/// One row of the host's conversation list — `GET /v1/conversations`.
+#[derive(Debug, Clone)]
+pub struct ListedConversation {
+    /// The id the client created the conversation with (the host strips any
+    /// internal scoping before answering).
+    pub id: String,
+    /// Display title; `None` until the host sets one.
+    pub title: Option<String>,
+    /// Creation time (Unix seconds).
+    pub created_at: i64,
+    /// Last-append time (Unix seconds).
+    pub updated_at: i64,
+}
+
+/// One message of a conversation's history, as `GET /v1/conversations/{id}`
+/// serves it — content plus the projections the host persisted.
+#[derive(Debug, Clone)]
+pub struct ConversationMessage {
+    pub id: String,
+    /// Wire role string (`"user"` / `"assistant"` / `"system"`).
+    pub role: String,
+    pub content: String,
+    pub created_at: i64,
+    pub provenance: Option<Provenance>,
+    pub citations: Vec<Citation>,
+    pub epistemic_state: Option<EpistemicState>,
+}
+
+/// `GET /v1/conversations/{id}`'s answer — the conversation with its full
+/// history.
+#[derive(Debug, Clone)]
+pub struct ConversationHistory {
+    pub id: String,
+    pub title: Option<String>,
+    pub messages: Vec<ConversationMessage>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 impl TurnClient {
@@ -212,6 +252,138 @@ impl TurnClient {
         Ok(())
     }
 
+    /// `GET /v1/conversations` — the host's conversation list.
+    ///
+    /// `limit`/`offset` pass through as query parameters; `None` takes the
+    /// host's defaults (both sovereign-server and the daemon use 20 / 0).
+    /// Both hosts answer the same envelope, so this is the one spelling a
+    /// surface needs against either.
+    pub async fn list_conversations(
+        &self,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ListedConversation>> {
+        let url = format!("{}/v1/conversations", self.base);
+        let mut req = self.http.get(&url);
+        if let Some(limit) = limit {
+            req = req.query(&[("limit", limit)]);
+        }
+        if let Some(offset) = offset {
+            req = req.query(&[("offset", offset)]);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: ConversationListWire = parse(&body, &format!("GET {url}"))?;
+        Ok(wire
+            .conversations
+            .into_iter()
+            .map(|c| ListedConversation {
+                id: c.id,
+                title: c.title,
+                created_at: c.created_at,
+                updated_at: c.updated_at,
+            })
+            .collect())
+    }
+
+    /// `GET /v1/conversations/{id}` — one conversation with its full
+    /// message history, each message already carrying the projections the
+    /// host persisted (provenance, citations, epistemic ledger).
+    ///
+    /// A missing conversation surfaces as the host's error text (both hosts
+    /// say `Conversation not found`), not a generic 404 line.
+    pub async fn get_conversation(&self, conversation_id: &str) -> Result<ConversationHistory> {
+        let url = format!("{}/v1/conversations/{conversation_id}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: ConversationWire = parse(&body, &format!("GET {url}"))?;
+        Ok(ConversationHistory {
+            id: wire.id,
+            title: wire.title,
+            messages: wire
+                .messages
+                .into_iter()
+                .map(|m| ConversationMessage {
+                    id: m.id,
+                    role: m.role,
+                    content: m.content,
+                    created_at: m.created_at,
+                    provenance: m.provenance,
+                    citations: m.citations,
+                    epistemic_state: m.epistemic_state,
+                })
+                .collect(),
+            created_at: wire.created_at,
+            updated_at: wire.updated_at,
+        })
+    }
+
+    /// `DELETE /v1/conversations/{id}` — 204 on success, the host's error
+    /// words otherwise. Idempotent from the caller's point of view: the row's
+    /// absence afterward is observable via [`Self::get_conversation`]'s
+    /// "not found".
+    pub async fn delete_conversation(&self, conversation_id: &str) -> Result<()> {
+        let url = format!("{}/v1/conversations/{conversation_id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        Ok(())
+    }
+
+    /// `POST /v1/conversations/{id}/messages` — the one-shot REST turn.
+    ///
+    /// The same driver the stream runs, collected: the reply arrives whole
+    /// rather than as frames. Returns the same [`TurnOutcome`] value
+    /// [`Self::run_turn`] does — a caller can mix transports (stream the long
+    /// turns, one-shot the short ones) and hold one result type. The REST
+    /// envelope carries no `metadata` block, so `TurnOutcome::metadata` is
+    /// `None` here by construction, never "the turn had none".
+    pub async fn send_message(&self, conversation_id: &str, content: &str) -> Result<TurnOutcome> {
+        let url = format!("{}/v1/conversations/{conversation_id}/messages", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({ "content": content }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        let wire: MessageResponseWire = parse(&body, &format!("POST {url}"))?;
+        Ok(TurnOutcome {
+            message_id: wire.message_id,
+            text: wire.content,
+            provenance: wire.provenance,
+            citations: wire.citations,
+            epistemic_state: wire.epistemic_state,
+            task: wire.task,
+            metadata: None,
+        })
+    }
+
     /// The WebSocket URL for one conversation's turn stream.
     fn stream_url(&self, conversation_id: &str) -> String {
         let ws = if let Some(rest) = self.base.strip_prefix("https://") {
@@ -291,6 +463,94 @@ fn create_conversation_body(
     body
 }
 
+// ─── The CRUD wire envelopes, private parse shapes ─────────────────
+//
+// Both hosts (sovereign-server and the daemon's turn_http) answer these
+// envelopes field-for-field — that is sv-surface 5c's compat bar. They are
+// private and Deserialize-only: what a caller receives are the domain values
+// above, and the shapes are pinned by tests against fixture bytes rather
+// than trusted from either host.
+
+#[derive(Debug, Deserialize)]
+struct ConversationListWire {
+    conversations: Vec<ConversationListEntryWire>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConversationListEntryWire {
+    id: String,
+    title: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConversationWire {
+    id: String,
+    title: Option<String>,
+    messages: Vec<ConversationMessageWire>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConversationMessageWire {
+    id: String,
+    role: String,
+    content: String,
+    created_at: i64,
+    #[serde(default)]
+    provenance: Option<Provenance>,
+    #[serde(default)]
+    citations: Vec<Citation>,
+    #[serde(default)]
+    epistemic_state: Option<EpistemicState>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MessageResponseWire {
+    message_id: String,
+    #[serde(default)]
+    role: String,
+    content: String,
+    #[serde(default)]
+    task: Option<sovereign_contracts::types::projection::TaskSummary>,
+    #[serde(default)]
+    provenance: Option<Provenance>,
+    #[serde(default)]
+    citations: Vec<Citation>,
+    #[serde(default)]
+    epistemic_state: Option<EpistemicState>,
+}
+
+/// Read a response to `(status, body text)`. Shared by every CRUD method so
+/// the error shape is spelled once.
+async fn read_body(resp: reqwest::Response, url: &str) -> Result<(reqwest::StatusCode, String)> {
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| Error::Inference(format!("{url}: reading body: {e}")))?;
+    Ok((status, body))
+}
+
+/// A non-success answer becomes the HOST's words, not a generic status line
+/// — the same bargain `create_conversation` makes. Both hosts wrap errors as
+/// `{"error": "..."}`; unwrap that, falling back to the raw body.
+fn host_words(status: reqwest::StatusCode, body: &str, ctx: &str) -> Error {
+    let reason = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+        .unwrap_or_else(|| body.trim().to_string());
+    Error::Inference(format!("{ctx}: {status}: {reason}"))
+}
+
+/// Parse a success body as `T`, naming the request in the error.
+fn parse<T: serde::de::DeserializeOwned>(body: &str, ctx: &str) -> Result<T> {
+    serde_json::from_str(body)
+        .map_err(|e| Error::Inference(format!("{ctx}: malformed response: {e}")))
+}
+
 #[cfg(test)]
 mod create_body_tests {
     use super::{create_conversation_body, verify_allow_list_echo};
@@ -335,6 +595,89 @@ mod create_body_tests {
                 "enabled_corpora": ["sep", "gutenberg"],
             })
         );
+    }
+}
+
+/// The CRUD parse shapes, pinned against fixture bytes that carry every
+/// optional key a host may send — a drift in either host's envelope shows up
+/// here as a parse failure rather than a silently-missing field (§18.3).
+#[cfg(test)]
+mod crud_wire_tests {
+    use super::{parse, ConversationListWire, ConversationWire, MessageResponseWire};
+
+    #[test]
+    fn a_full_list_entry_parses() {
+        let wire: ConversationListWire = parse(
+            r#"{"conversations":[{"id":"alpha","title":"Free will","created_at":100,"updated_at":101}]}"#,
+            "test",
+        )
+        .unwrap();
+        let c = &wire.conversations[0];
+        assert_eq!(c.id, "alpha");
+        assert_eq!(c.title.as_deref(), Some("Free will"));
+    }
+
+    #[test]
+    fn an_untitled_entry_parses_with_title_absent() {
+        let wire: ConversationListWire = parse(
+            r#"{"conversations":[{"id":"beta","created_at":100,"updated_at":100}]}"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(wire.conversations[0].title, None);
+    }
+
+    #[test]
+    fn a_full_conversation_with_projected_history_parses() {
+        let wire: ConversationWire = parse(
+            r#"{
+                "id": "alpha",
+                "title": "Free will",
+                "created_at": 100,
+                "updated_at": 101,
+                "messages": [
+                    {"id":"m1","role":"user","content":"q?","created_at":100},
+                    {"id":"m2","role":"assistant","content":"a.","created_at":101,
+                     "provenance":{"inference_backend":"test-provider"},
+                     "citations":[{"corpus_id":"sep","chunk_id":"7","snippet":"s","score":0.9,"rank":0}],
+                     "epistemic_state":{"version":1,"demands":[],"holdings":[],"gaps":[],"verdict":"grounded","citations":[]}}
+                ]
+            }"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(wire.messages.len(), 2);
+        assert_eq!(wire.messages[0].provenance, None);
+        let m2 = &wire.messages[1];
+        assert_eq!(
+            m2.provenance.as_ref().unwrap().inference_backend,
+            "test-provider"
+        );
+        assert_eq!(m2.citations[0].corpus_id, "sep");
+        assert_eq!(m2.epistemic_state.as_ref().unwrap().version, 1);
+    }
+
+    #[test]
+    fn a_full_message_response_parses_into_the_turn_outcome_fields() {
+        let wire: MessageResponseWire = parse(
+            r#"{
+                "message_id": "m3",
+                "role": "assistant",
+                "content": "one two",
+                "task": {"id": "t1", "status": "Running", "steps_completed": 2},
+                "provenance": {"inference_backend": "test-provider"},
+                "citations": [],
+                "epistemic_state": null
+            }"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(wire.message_id, "m3");
+        assert_eq!(wire.content, "one two");
+        assert_eq!(wire.task.as_ref().unwrap().steps_completed, 2);
+        // `null` epistemic_state degrades to None, matching the hosts'
+        // projection contract.
+        assert_eq!(wire.epistemic_state, None);
     }
 }
 
