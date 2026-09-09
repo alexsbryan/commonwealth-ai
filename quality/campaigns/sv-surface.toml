@@ -188,7 +188,7 @@ status    = "active"
 # turns out not to be a real capability is STRUCK with the measurement that
 # struck it (the rung-2/4 precedent).
 #
-#   G1  resume + redirect            IN-FLIGHT 2026-09-09. No TurnRequest
+#   G1  resume + redirect            DONE 2026-09-09 (7902a4d65). No TurnRequest
 #       variant; runtime.resume_session_stream / redirect_turn_stream are
 #       in-process only. drive_stream_handle (serve.rs:355) is public, so the
 #       daemon dispatch is small. Cross-conversation refusal required: a
@@ -236,10 +236,24 @@ status    = "active"
 #       TurnMetadata PROJECTION whose field is routed_intent. Substituting one
 #       for the other mechanically is a bug, and TS types metadata as
 #       Record<string, unknown> so svelte-check cannot catch it.
-#   G10 on_turn_started              OPEN. The synchronous message-id
-#       handshake has no wire counterpart by design (serve.rs's own doc). The
-#       renderer's real_message_id-overrides-fallback logic already supports
-#       returning a pending id instead — confirm, do not rebuild.
+#   G10 on_turn_started              OPEN, AND IT IS THE SNAPPY BAR'S PROBLEM.
+#       Re-measured 2026-09-09 by the G1 worker, and it is worse than this row
+#       first said: ALL THREE turn commands return StreamStartedResponse
+#       { message_id } SYNCHRONOUSLY so the UI can put a placeholder on screen
+#       while retrieval runs. In-process, redirect/resume read it off
+#       handle.message_id before driving and send_message_stream gets it via
+#       TurnSink::on_turn_started through a oneshot. `on_turn_started` has NO
+#       wire form BY DESIGN — serve.rs's own doc says putting it in TurnFrame
+#       would widen the protocol to serve one in-process caller. Over the wire
+#       the id first appears on the first Token, which is EXACTLY the cold-turn
+#       retrieval wait the placeholder exists to cover.
+#       So C2 either accepts a visible first-paint regression, or TurnFrame
+#       grows `TurnStarted { message_id }` — additive, a Notice under the
+#       two-shape design, adopted by mobile at M-1. PRE-REGISTER THE CHOICE ON
+#       THIS ROW BEFORE CONVERTING, do not discover it mid-conversion. Against
+#       the operator's "snappy" bar (B0) the frame is the likely answer: a
+#       placeholder that appears only after retrieval is precisely the
+#       experience that bar forbids.
 #   G11 TurnStream cannot reply      OPEN, BLOCKS G3/G8 and approvals.
 #       next_frame(&mut self) holds the socket exclusively, so no Tauri
 #       command can answer while a reader runs. The daemon already does the
