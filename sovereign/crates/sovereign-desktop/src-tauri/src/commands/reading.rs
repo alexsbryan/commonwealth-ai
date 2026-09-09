@@ -21,87 +21,29 @@ use crate::state::{self, AppState, DesktopConfig};
 //
 // Backs the desktop's glass-box reading UI. Frontend calls
 // `read_get_chunk_neighbors(corpus, chunkId, radius)` after the user
-// clicks a citation; the response shape mirrors the HTTP routes in
-// `sovereign-mesh::reading_http` so the same UI works against either
-// the in-process daemon (this code path) or a remote daemon (HTTP).
-
-#[derive(Serialize)]
-pub struct ChunkRecordDto {
-    pub chunk_id: u64,
-    pub corpus_id: String,
-    pub content: String,
-    pub title: Option<String>,
-    pub url: Option<String>,
-    pub source_doc_id: Option<String>,
-    pub section_id: Option<String>,
-    /// Atom mentions located in `content` — byte offsets into the
-    /// chunk's text. Empty when the corpus has no atlas, when the
-    /// chunk wasn't produced by a sectioned chunker, or when no
-    /// atom is anchored at this section.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub atom_spans: Vec<AtomSpanDto>,
-    pub metadata: serde_json::Value,
-    /// Populated when `corpus_id == "conversation-history"`. The
-    /// reading surface uses presence of this field to pick the
-    /// conversation-shaped renderer over the default book renderer.
-    /// Mirrors `ConversationChunkMeta` in the HTTP layer.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub conversation: Option<ConversationChunkMetaDto>,
-}
-
-#[derive(Serialize)]
-pub struct ConversationChunkMetaDto {
-    pub conversation_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub segments: Vec<ConversationSegmentDto>,
-}
-
-#[derive(Serialize)]
-pub struct ConversationSegmentDto {
-    pub role: String,
-    pub content: String,
-}
-
-#[derive(Serialize)]
-pub struct AtomSpanDto {
-    pub atom_id: String,
-    pub atom_type: &'static str,
-    pub span_start: usize,
-    pub span_end: usize,
-    pub surface_form: String,
-}
-
-impl From<corpus_engine::atlas_traversal::AtomSpan> for AtomSpanDto {
-    fn from(s: corpus_engine::atlas_traversal::AtomSpan) -> Self {
-        Self {
-            atom_id: s.atom_id,
-            atom_type: s.atom_type,
-            span_start: s.span_start,
-            span_end: s.span_end,
-            surface_form: s.surface_form,
-        }
-    }
-}
-
-#[derive(Serialize)]
-pub struct NeighborWindowDto {
-    pub center: ChunkRecordDto,
-    pub prev: Vec<ChunkRecordDto>,
-    pub next: Vec<ChunkRecordDto>,
-    pub outbound_url: Option<String>,
-    pub ordering: &'static str,
-}
+// clicks a citation; the response shapes ARE the wire types imported
+// below from `sovereign_mesh::reading_http` (sv-surface rung 4), so the
+// same UI works against either the in-process daemon (this code path)
+// or a remote daemon (HTTP) with identical bytes by construction. The
+// hand-kept `*Dto` mirrors this file used to carry (44 refs,
+// "byte-compatible by comment") had already drifted: they lacked the
+// wire types' `skip_serializing_if` attributes, so an in-process chunk
+// emitted `"title": null` where the attach path's verbatim daemon JSON
+// omitted the key — the exact byte-compat break the mirrors existed to
+// prevent. One spelling now: construct and serialize the wire type;
+// both transports emit identical bytes by construction. The census
+// (tests/reading_wire_types_census.rs) keeps a second spelling out.
+use sovereign_mesh::reading_http::{
+    AtomCard, AtomElsewhere, AtomSpan, ChunkRecord, ConversationChunkMeta, ConversationSegment,
+    CrossCorpusLink, NeighborWindowResponse, RelatedAtom, SectionRef,
+};
 
 fn chunk_record_dto_from_row(
     corpus_id: &str,
     row: &corpus_engine::EnrichmentChunkRow,
     atoms: Option<&[corpus_engine::enrichment::atlas::AtomEnvelope]>,
-    conversation: Option<ConversationChunkMetaDto>,
-) -> ChunkRecordDto {
+    conversation: Option<ConversationChunkMeta>,
+) -> ChunkRecord {
     let metadata: serde_json::Value = row
         .metadata_raw
         .as_deref()
@@ -113,19 +55,19 @@ fn chunk_record_dto_from_row(
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let atom_spans: Vec<AtomSpanDto> = match (atoms, section_id.as_deref()) {
+    let atom_spans: Vec<AtomSpan> = match (atoms, section_id.as_deref()) {
         (Some(atoms), Some(_)) => corpus_engine::atlas_traversal::detect_atom_spans(
             &row.content,
             section_id.as_deref(),
             atoms,
         )
         .into_iter()
-        .map(AtomSpanDto::from)
+        .map(AtomSpan::from)
         .collect(),
         _ => Vec::new(),
     };
 
-    ChunkRecordDto {
+    ChunkRecord {
         chunk_id: row.id,
         corpus_id: corpus_id.to_string(),
         content: row.content.clone(),
@@ -145,11 +87,11 @@ const CONVERSATION_HISTORY_CORPUS_ID: &str = "conversation-history";
 /// duplicate (small, no shared crate available between mesh-http
 /// and src-tauri) to keep the in-process Tauri path independent of
 /// the HTTP path. Both shapes are wire-compatible.
-fn parse_conversation_segments_dto(content: &str) -> Vec<ConversationSegmentDto> {
+fn parse_conversation_segments_dto(content: &str) -> Vec<ConversationSegment> {
     if !content.starts_with('[') {
         return Vec::new();
     }
-    let mut segments: Vec<ConversationSegmentDto> = Vec::new();
+    let mut segments: Vec<ConversationSegment> = Vec::new();
     let mut idx = 0usize;
     while idx < content.len() {
         if !content[idx..].starts_with('[') {
@@ -171,7 +113,7 @@ fn parse_conversation_segments_dto(content: &str) -> Vec<ConversationSegmentDto>
         };
         let body = content[body_start..body_end].to_string();
         if !role.is_empty() {
-            segments.push(ConversationSegmentDto {
+            segments.push(ConversationSegment {
                 role,
                 content: body,
             });
@@ -193,7 +135,7 @@ async fn maybe_resolve_conversation_meta_for_commands(
     state: &State<'_, Arc<AppState>>,
     corpus_id: &str,
     row: &corpus_engine::EnrichmentChunkRow,
-) -> Option<ConversationChunkMetaDto> {
+) -> Option<ConversationChunkMeta> {
     if corpus_id != CONVERSATION_HISTORY_CORPUS_ID {
         return None;
     }
@@ -207,7 +149,7 @@ async fn maybe_resolve_conversation_meta_for_commands(
         },
         None => (None, None),
     };
-    Some(ConversationChunkMetaDto {
+    Some(ConversationChunkMeta {
         conversation_id,
         title,
         updated_at,
@@ -246,11 +188,11 @@ async fn load_atlas_atoms_for_commands(
 /// In Attach mode the desktop owns no local corpus indexes — the CLI daemon
 /// holds them. Route the reading surface to the daemon's loopback `reading_http`
 /// routes (`/internal/corpus/...`, merged into the client router on
-/// `client_port`). Those DTOs are byte-compatible with this module's `*Dto`
-/// shapes (see this file's header: "the same UI works against either the
-/// in-process daemon or a remote daemon (HTTP)"), so the daemon's JSON is
-/// returned verbatim. A 404 (chunk/atom/corpus absent, or an older daemon
-/// without the route) maps to `Ok(None)`, matching the in-process path.
+/// `client_port`). This module serializes THE SAME wire types the daemon
+/// serves (sv-surface rung 4), so the daemon's JSON is returned verbatim and
+/// both transports emit identical bytes by construction. A 404
+/// (chunk/atom/corpus absent, or an older daemon without the route) maps to
+/// `Ok(None)`, matching the in-process path.
 async fn daemon_reading_get(
     base_url: &str,
     path: &str,
@@ -364,18 +306,18 @@ pub async fn read_get_chunk_neighbors(
         maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &window.center).await;
     let center = chunk_record_dto_from_row(&corpus_id, &window.center, atoms_ref, center_conv);
     let outbound_url = center.url.clone();
-    let mut prev: Vec<ChunkRecordDto> = Vec::with_capacity(window.prev.len());
+    let mut prev: Vec<ChunkRecord> = Vec::with_capacity(window.prev.len());
     for r in &window.prev {
         let conv = maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
         prev.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
     }
-    let mut next: Vec<ChunkRecordDto> = Vec::with_capacity(window.next.len());
+    let mut next: Vec<ChunkRecord> = Vec::with_capacity(window.next.len());
     for r in &window.next {
         let conv = maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
         next.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
     }
 
-    let dto = NeighborWindowDto {
+    let dto = NeighborWindowResponse {
         center,
         prev,
         next,
@@ -397,55 +339,6 @@ pub async fn read_get_chunk_neighbors(
 // section→chunk projection happens here via
 // `index.resolve_sections_to_chunks` so the desktop receives ready-
 // to-click chunk_ids.
-
-#[derive(Serialize)]
-pub struct AtomCardDto {
-    pub atom_id: String,
-    pub atom_type: &'static str,
-    pub corpus_id: String,
-    pub canonical_name: String,
-    pub aliases: Vec<String>,
-    pub description: String,
-    pub salience: Option<f32>,
-    pub enrichment_depth: String,
-    pub related: Vec<RelatedAtomDto>,
-    pub cross_corpus: Vec<CrossCorpusLinkDto>,
-}
-
-#[derive(Serialize)]
-pub struct RelatedAtomDto {
-    pub atom_id: String,
-    pub atom_type: &'static str,
-    pub canonical_name: String,
-    pub edge_type: &'static str,
-    pub role: &'static str,
-    pub confidence: f32,
-}
-
-#[derive(Serialize)]
-pub struct CrossCorpusLinkDto {
-    pub peer_corpus_id: String,
-    pub peer_atom_id: String,
-    pub peer_canonical_name: String,
-    pub edge_type: &'static str,
-    pub signal: String,
-    pub confidence: f32,
-}
-
-#[derive(Serialize)]
-pub struct AtomElsewhereDto {
-    pub atom_id: String,
-    pub corpus_id: String,
-    pub same_corpus: Vec<SectionRefDto>,
-    pub cross_corpus: Vec<CrossCorpusLinkDto>,
-}
-
-#[derive(Serialize)]
-pub struct SectionRefDto {
-    pub section_id: String,
-    pub chunk_id: Option<u64>,
-    pub preview: Option<String>,
-}
 
 async fn atlas_dir_for_atom_commands(
     engine: &Arc<corpus_engine::CorpusEngine>,
@@ -549,13 +442,13 @@ pub async fn read_get_atom_elsewhere(
         .await
         .map_err(|e| format!("resolve_sections: {e}"))?;
 
-    let mut same_corpus: Vec<SectionRefDto> = Vec::new();
+    let mut same_corpus: Vec<SectionRef> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (section_id, preview) in &evidence {
         if !seen.insert(section_id.clone()) {
             continue;
         }
-        same_corpus.push(SectionRefDto {
+        same_corpus.push(SectionRef {
             section_id: section_id.clone(),
             chunk_id: section_to_chunk.get(section_id).copied(),
             preview: preview.clone(),
@@ -568,7 +461,7 @@ pub async fn read_get_atom_elsewhere(
         .unwrap_or_default();
     let cross_corpus = cross_corpus_links_dto(&target, &cross);
 
-    let dto = AtomElsewhereDto {
+    let dto = AtomElsewhere {
         atom_id: target.as_str().to_string(),
         corpus_id,
         same_corpus,
@@ -585,10 +478,10 @@ fn build_atom_card_dto(
     all_atoms: &[corpus_engine::enrichment::atlas::AtomEnvelope],
     edges: &[corpus_engine::enrichment::atlas::Edge],
     cross_edges: &[corpus_engine::enrichment::atlas::CrossCorpusEdge],
-) -> AtomCardDto {
+) -> AtomCard {
     let (atom_type, canonical_name, aliases, description, salience) = atom_surface_dto(atom);
     let target_id = atom.id();
-    let related: Vec<RelatedAtomDto> = edges
+    let related: Vec<RelatedAtom> = edges
         .iter()
         .filter(|e| e.source == *target_id || e.target == *target_id)
         .filter_map(|e| {
@@ -599,7 +492,7 @@ fn build_atom_card_dto(
             };
             let other = all_atoms.iter().find(|a| *a.id() == *other_id)?;
             let (other_type, other_name, _, _, _) = atom_surface_dto(other);
-            Some(RelatedAtomDto {
+            Some(RelatedAtom {
                 atom_id: other_id.as_str().to_string(),
                 atom_type: other_type,
                 canonical_name: other_name,
@@ -610,7 +503,7 @@ fn build_atom_card_dto(
         })
         .collect();
     let cross_corpus = cross_corpus_links_dto(target_id, cross_edges);
-    AtomCardDto {
+    AtomCard {
         atom_id: target_id.as_str().to_string(),
         atom_type,
         corpus_id: corpus_id.to_string(),
@@ -745,11 +638,11 @@ fn truncate_dto(s: &str, max_chars: usize) -> String {
 fn cross_corpus_links_dto(
     atom_id: &corpus_engine::enrichment::atlas::AtomId,
     edges: &[corpus_engine::enrichment::atlas::CrossCorpusEdge],
-) -> Vec<CrossCorpusLinkDto> {
+) -> Vec<CrossCorpusLink> {
     edges
         .iter()
         .filter(|e| e.edge.source == *atom_id || e.edge.target == *atom_id)
-        .map(|e| CrossCorpusLinkDto {
+        .map(|e| CrossCorpusLink {
             peer_corpus_id: e.peer.corpus_id.clone(),
             peer_atom_id: e.peer.atom_id.as_str().to_string(),
             peer_canonical_name: e.peer.canonical_name.clone(),
