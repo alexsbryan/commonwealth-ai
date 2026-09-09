@@ -35,6 +35,11 @@ iroh-test-utils = ["iroh", "iroh/test-utils"]
 
 [dev-dependencies]
 tokio = { workspace = true }
+# Examples only: without a subscriber, `RUST_LOG=iroh=debug` on a bench run is
+# silently a no-op — which is how a "no connections were established" reading
+# gets believed. media_bridge_bench counts QUIC connections from iroh's own
+# events, so the subscriber is load-bearing evidence, not decoration.
+tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 
@@ -43,6 +48,14 @@ tempfile = { workspace = true }
 # worker, `dial --tcp/--iroh` on the host.
 [[example]]
 name = "tunnel_bench"
+required-features = ["iroh"]
+
+# Media-plane bench for the federated-library capstone (WORK_PLANE.md
+# "Distance to the capstone"). Sibling to tunnel_bench: same tunnel, but the
+# questions HTTP asks — Range/206 byte-exactness across the splice, sustained
+# rate WITH a stall distribution, and N simultaneous viewers.
+[[example]]
+name = "media_bridge_bench"
 required-features = ["iroh"]
 
 [lints]

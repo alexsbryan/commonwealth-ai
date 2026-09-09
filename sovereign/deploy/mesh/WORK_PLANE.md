@@ -327,7 +327,8 @@ the expensive direction — it priced a demo as further away than it is.)
 
 Not yet checked, and it decides the multi-viewer case rather than the single-stream one:
 whether each bridge connection is a separate QUIC stream on one connection or a new
-connection each time.
+connection each time. (Answered 2026-09-09 in the reading below: a new connection each
+time. The question stands as written because it was asked before the answer existed.)
 
 **THE PRE-REGISTERED NO-GO, written before the data exists.** Gap 3 above is the only one
 that can kill the demo rather than cost time, so it gets a bar now rather than a reading
@@ -361,6 +362,188 @@ path it measured, not just the number. And the failure mode on wifi is STALLS, n
 slowness: airtime contention and bufferbloat produce jitter that ruins playback at an
 average bitrate that reads fine. That is why the bar above carries a stall ceiling beside
 the rate, and why a mean alone would pass a stream nobody can watch.
+
+**THE READING (2026-09-09), taken before any shim code as instructed.** Four verdicts are
+available and two are used: the MECHANISM is cleared, the BAR is could-not-judge. Nothing
+below is a restatement of the bar, and the bar above is unedited.
+
+*The multi-viewer question is answered, and the answer is "a new connection each time."*
+`HttpBridge::spawn`'s accept loop (`iroh.rs:454`) spawns a task per accepted TCP
+connection; that task calls `endpoint.connect(target, alpn)` at **`iroh.rs:505`** — which
+in iroh 1.0.2 runs `connect_with_opts` → `noq`'s `connect_with`, incrementing
+`outgoing_handshakes` on every call, so there is no pool — then opens exactly ONE
+bi-stream (`iroh.rs:523`) and pumps it (`:535`). The `Connection` is a local binding in
+that task, dropped when the pump ends. So N viewers are N QUIC connections, not N streams
+on one. Watched rather than inferred: under `RUST_LOG=iroh=debug`, four simultaneous
+viewers produced exactly four `Connection established.` events, and a fifth request
+produced a fifth.
+
+Three consequences, in the order they bite:
+
+- **No head-of-line blocking between viewers** — and for a stronger reason than
+  multiplexing would give. Separate connections share no congestion window, so loss on
+  one viewer's stream cannot stall another's. Four concurrent 100 MiB viewers each held
+  3.7-4.8 Gbit/s across two samples, aggregating 14.7 and 16.7 Gbit/s — no per-viewer
+  collapse, and the aggregate rises rather than falls with the viewer count.
+- **Every viewer pays a full QUIC handshake, and so does every SEEK**, because a Range
+  request on a fresh HTTP connection is a fresh TCP connection to the bridge. This is
+  already a MEASURED production cost on this mesh rather than a projection:
+  `sovereign-mesh/src/gossip.rs:66-91` records RuggedFox→BeefyMac on an idle LAN at
+  p50 189 ms / p90 1327 ms / 2 dial timeouts with a fresh connection per gossip round,
+  against 38.8 ms / 391 ms / 0 when the connection is reused — which is why that client
+  is now built once per process. On a relayed path the handshake is relay RTTs, not LAN
+  ones. **So the shim's HTTP client must pool connections and its origin must speak
+  keep-alive.** That is a requirement this measurement produced rather than a preference.
+- **The responder half of stream-multiplexing already exists.** `IrohAcceptor` accepts a
+  connection then loops `conn.accept_bi()` forever (`iroh.rs:991-1000`), spawning a pump
+  per stream. Only the DIALER is single-stream. If per-seek handshake cost ever has to be
+  removed at the transport rather than at the client, it is a change to `HttpBridge`
+  alone and the far end needs nothing.
+
+*Range survives the splice byte-exact — the correctness gate passes.* A minimal HTTP/1.1
+origin with real Range support sat behind an `IrohAcceptor`; `curl -r` went through the
+`HttpBridge` loopback port; `sha256sum` compared against `dd` on the source. `206 Partial
+Content` with a correct `Content-Range: bytes a-b/2147483648`, `200` for the full GET, and
+`416` with `Content-Range: bytes */2147483648` for an unsatisfiable range all crossed
+unaltered. Digests matched at every offset tried: 2000 B at offset 1000
+(`28b68ea0…`), 1 KiB straddling the 1 GiB mark (`ec351faa…`), the last 100 B
+(`b05016c7…`), a 100 MiB range (`22e1f375…`), a suffix range `bytes=-1048576`
+(`0d81e388…`), and the whole 2 GiB file (`0b4e5591…`, equal to `sha256sum` of the source).
+A separate 1 GiB pull verified every byte against its expected value in flight: no
+mismatch, and every check above was run twice, 40 minutes apart, with identical digests.
+THE CHECKER WAS ITSELF PROVEN ABLE TO FAIL (§18.1): re-reading the source one
+byte off the requested offset reported FAIL, and an earlier version of the comparator
+reported four spurious FAILs from a shell-expansion bug in its own arithmetic — found and
+fixed before any of the above was believed.
+
+*The throughput reading is a SCREENING TEST and it does not meet the bar.* The bar is two
+machines on different networks over the relayed path. What was measured is one machine,
+both iroh endpoints in one process, n0 contact severed entirely (`presets::Minimal`,
+relays disabled), `path=direct`. **A same-box number cannot meet that bar and is not
+offered as meeting it.** What it is good for is exactly one thing: if the splice could not
+sustain 25 Mbit/s with no network in the way, the plan would be dead for the price of an
+afternoon. It is not dead. Release build, 1 GiB per run, pooled over two independent samples taken 40 minutes
+apart (the second sample ran about 14% slower across the board, which is the run-to-run
+spread and the reason the whole set is quoted rather than the better half):
+
+| | Mbit/s | min | median |
+|---|---|---|---|
+| through `HttpBridge` (n=10) | 4583 4685 4816 4823 5081 5118 5214 5607 5771 6350 | **4583** | **5099** |
+| straight to the origin, no bridge (n=6) | 25259 25612 28081 28996 30188 31355 | 25259 | 28539 |
+
+So the splice costs about 5.6x against loopback TCP and still lands ~204x above the bar's
+rate — 183x at the slowest of the ten runs. Max inter-arrival gap on the bridge runs was
+27.8-29.2 ms; zero gaps over 500 ms in any of them. **The mechanism is cleared and the
+remaining unknown is purely the network.**
+
+*The soak says the splice does not add stalls to a paced stream.* The ceiling above answers
+"can it go fast"; a stream that nobody can watch fails on JITTER at an average that reads
+fine, which is why the bar carries a stall ceiling. So the origin was paced at exactly the
+bar's 25 Mbit/s and the stream held for the bar's ten minutes, three times:
+
+| run | secs | rate | max gap | >500 ms | >1 s | >2 s | worst whole second |
+|---|---|---|---|---|---|---|---|
+| 1 | 600.00 | 25.0 Mbit/s | 87.3 ms | 0 | 0 | 0 | 23.1 Mbit/s |
+| 2 | 600.00 | 25.0 Mbit/s | 88.9 ms | 0 | 0 | 0 | 23.1 Mbit/s |
+| 3 | 600.00 | 25.0 Mbit/s | 87.7 ms | 0 | 0 | 0 | 23.1 Mbit/s |
+
+Read the gap column with the instrument in mind: the origin paces in 256 KiB chunks, which
+at 25 Mbit/s is one chunk every 83.9 ms, so a p99 near 84 ms is the PACER's period and not
+the transport's. The transport's contribution is the few ms above it. Likewise the "worst
+whole second" sits a little under 25 Mbit/s because a one-second window holds 11 or 12
+whole chunks, not because a second went short.
+
+*How the instrument was proved able to see a bad path (§18.4).* A harness that reports the
+same figure whatever you do to the link is measuring itself, and four of the previous
+session's instruments were blind in a row. Two knobs were added to the origin and both were
+watched moving the reading before any number above was believed:
+
+- **Rate.** Pacing the origin at 5 Mbit/s made the harness report 5.0 Mbit/s against 5300
+  Mbit/s unthrottled through the same bridge — a factor of ~1000, so the number is not a
+  constant.
+- **Stall.** Injecting ONE deliberate 3000 ms pause after 8 MiB of a 25 Mbit/s stream made
+  the harness report `max=3002.0 ms, stalls>2s=1, >1s=1, >500ms=1` and drove the worst whole
+  second to zero — the stall detector fires on a known stall, reports its true magnitude,
+  and counts it exactly once.
+
+Both knobs live in `commonwealth-transport/examples/media_bridge_bench.rs`, a sibling to
+`tunnel_bench` in the same crate. `tunnel_bench` was checked first (ARCH §19) and its
+public surface reused unchanged — `build_relayed_endpoint` / `build_relay_only_endpoint`,
+`HttpBridge`, `IrohAcceptor`, the dial-string helpers, and the `path=` line read from
+`remote_info`. What it cannot answer is anything about HTTP: it speaks a private
+`[send_len][want_len]` framing and reports a rate without a stall distribution. Those two
+gaps are the whole of the new file.
+
+*The two-machine number: ABSTAINED, not substituted (§18.3).* Through the measurement
+window `svrn mesh status` reported 1/8 online — this node alone, every Mac offline, none
+answering on the LAN — and `svrn mesh transport` agreed at `watchdog: 0/7 peer paths
+active`. Two Macs (Alexs-MacBook, BeefyMac) came up at 15:42, after the runs, and both
+show `path=mixed relay=usw1-1 direct=1`; they still could not be measured, for a different
+and more useful reason. **The blocker is not peer availability but the absence of any way
+to START the harness on the peer**: there is no ssh to those hosts from here, and the mesh
+exposes no remote-exec surface — `mesh bench` measures decode speed, and `mesh
+fetch-model` moves bytes over the tailnet rather than the iroh bridge. So the next run
+needs a person (or a launchd job) to start `media_bridge_bench serve` on the far side; that
+is the whole of the remaining setup. The bridge-cache fix at `77a834f31` is in this tree
+and the daemon that was running carries it (built 14:25, after that commit's 13:59), so
+nothing about the transport is in the way. **No cross-machine number is reported, and the
+relayed floor stays unmeasured.**
+
+*The relay leg was attempted, and the attempt is CONTAMINATED — reported rather than
+buried (§18.3).* Both endpoints were built with `build_relay_only_endpoint`
+(`iroh.rs:266`) and seeded with the relay target only, which should have pinned the bytes
+to `use1-1.relay.n0.iroh.link` and back. It did not hold. The `path=` line said
+`mixed direct=[69.181.167.209:40262] relay=[…]` and the numbers say the same thing: run 1
+took 107.2 s for 100 MiB (7.8 Mbit/s, ttfb 660 ms, one 1296 ms stall), runs 2 and 3 took
+0.13 s (6328 and 6111 Mbit/s) — loopback speed. **Two of the three runs measured the
+direct path while claiming to measure the relay, and only the `path=` line caught it.**
+
+The cause is known and already written down. `RelayOnlySelector::select` returns an empty
+selection when no relay path is open, and an empty selection KEEPS THE CURRENT PATH — so a
+direct path that validates first survives the pin. `tunnel_bench`'s `dial` records exactly
+this, observed 2026-07-19. On one host the race is unwinnable: the two endpoints learn each
+other's public address through the relay and hairpin straight to it.
+
+What that leaves is one number with a caveat rather than a measurement: run 1 STARTED
+relayed, so 7.8 Mbit/s is an UPPER bound on the relay rate for that run, not an estimate
+of it — a migration to direct partway through can only have raised it. That upper bound
+sits BELOW the bar's 25 Mbit/s, and it is consistent with this page's own prior
+("single-digit to low-tens with no SLA is the honest prior"). It is not evidence against
+the bar; it is a reason to expect the bar to be the binding constraint, which is what the
+bar was written to find out.
+
+The operational lesson for the next run is concrete: **`--relay-only` is a request, not a
+guarantee — gate every relayed reading on the `path=` line and discard any run that does
+not read `relayed`.**
+
+*Verdict against the pre-registered bar.* **Could-not-judge on the bar; the mechanism is
+cleared.** The bar asks for two machines on different networks over the relayed path and
+that measurement was not available today. What IS settled is everything the bar was
+protecting against on THIS side of the wire: the splice is byte-exact under Range, it
+sustains ~204x the bar's rate with no network in the way, it adds no stalls to a paced
+ten-minute stream, and N viewers do not interfere. Gap 3 above ("sustained multi-Mbps over
+iroh is unmeasured") is now half-measured: the local half says go, the WAN half is
+untouched.
+
+*Recommendation, with the reasoning, leaving the bar as written.* The bar is set at the
+right THRESHOLD and is missing a term. 25 Mbit/s with no stall over 2 s is the correct
+floor for a 1080p H.264 remux and should not move. What the reading exposes is that the bar
+measures A SINGLE STREAM'S STEADY STATE, and this transport's characteristic cost is not
+steady-state — it is CONNECTION SETUP, paid per viewer AND per seek, already measured at
+p50 189 ms / p90 1327 ms on an idle LAN with a cold connection (`gossip.rs:66-91`). A
+relayed path multiplies that. A demo that clears 25 Mbit/s sustained and still takes over a
+second to answer a scrub is a demo nobody enjoys, and the bar as written would pass it. So:
+keep the bar, and add a companion acceptance on the same run — **time-to-first-byte for a
+Range request on a COLD connection over the relayed path, p90 under 1 s** — measured with
+and without HTTP keep-alive, since the difference between those two IS the shim's client
+requirement.
+
+*The single next measurement.* Get a shell on one Mac (the only missing piece), run
+`media_bridge_bench serve --origin …` on it and `bridge --iroh <dial> --relay-only` here
+(both sides need `--features iroh,iroh-relay-only`, since path selection is per-side), and
+take the bar's own reading: 25 Mbit/s, ten minutes, three runs, stalls reported, with the
+`path=` line stating `relayed` rather than the number implying it. Everything else on this
+page waits on that one number, and nothing else measured today can substitute for it.
 
 **THE DEGRADED CASE IS ALREADY EXPRESSIBLE, which is the elegant half.**
 `iroh_access::PeerTransportPath` reports `direct | relayed | mixed | idle` plus the
