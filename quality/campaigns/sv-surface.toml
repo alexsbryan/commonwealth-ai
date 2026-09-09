@@ -142,6 +142,33 @@ status    = "active"
 #       already speaks on sovereign-server (list/get/create/delete +
 #       messages). Daemon grows them; wire-compat holds (5c); mobile then
 #       runs against either backend.
+#       LANDED 2026-09-09 (6d037c7b4). Routes in turn_http beside
+#       create/stream/end: GET /v1/conversations (list, server's
+#       limit/offset defaults), GET /{id} (history), DELETE /{id} (204),
+#       POST /{id}/messages (one-shot REST turn through collect_turn -
+#       the same driver the stream route uses). Wire-compat three ways:
+#       envelopes mirror sovereign-server field-for-field INCLUDING
+#       declaration order (serde emits declaration order, so order
+#       equality is byte equality); projections IMPORT from
+#       sovereign_contracts::types::projection (the server's own
+#       deciders, not mirrors); a failed create's 503->500 closed the one
+#       byte a client could use to tell which host it reached.
+#       sovereign-turn-client grows list/get/delete/send_message (the
+#       shapes M-1's mobile revive adopts; serde added as a leaf beside
+#       serde_json). Desktop: ConversationEntry +
+#       CreateConversationResponse ARE the wire types (re-exported; the
+#       local shapes had already drifted - "title": null - the rung-4
+#       lesson again); ConversationDetail/MessageEntry stay local by
+#       NAME as the frontend's richer in-process IPC contract, marked
+#       SANCTIONED UNTIL RUNG 6. PARITY: loopback_parity pins route
+#       bytes vs canonical projection bytes on seeded rows (provenance +
+#       citations + epistemic ledger). CENSUS:
+#       conversation_wire_census.rs (no wire-envelope definitions in
+#       desktop command files, no hand-rolled /v1/conversations URLs in
+#       desktop src/), sabotage-verified by the orchestrator
+#       post-interruption: a planted shadow envelope + hardcoded URL
+#       watched BOTH needles red, reverted, green. Approval-refusal gap
+#       named in the module docs (same named gap as the stream route).
 #   4   mirror deletions: mesh status up-conversion (mesh_commands.rs),
 #       reading Dto mirrors (44 refs), health report adoption of
 #       sovereign_contracts::health (desktop health.rs carries its own
@@ -184,6 +211,26 @@ status    = "active"
 #       executes; workflow_commands.rs becomes a job-submission client;
 #       desktop's sovereign-workflow/-host deps leave with the dep shrink.
 #       Prerequisite for 6 (the host provider feed is a constructed decider).
+#       LANDED 2026-09-09 in three commits: 64dfedb33 the daemon's
+#       /internal/workflows job surface (list/capabilities/run + polled
+#       events, corpus_watch's pattern, in sovereign-workflow-host mounted
+#       via ServingCapability - mesh receives an opaque Router, no studio
+#       deps), e83bcd57f the desktop's Run surface (job submission +
+#       poll->Tauri-channel bridge, frontend unchanged), a3cd57617 the CLI
+#       (run + corpus ingest submit the definition inline; the light-stack
+#       assembly and its injected tools are deleted; daemon base via the
+#       ONE decider client_daemon_base - was a hardcoded :9741). DIVERGENCE
+#       from the row, named: the desktop's sovereign-workflow/-host deps
+#       STAY - the catalog (list/capabilities) is a local read of the same
+#       ~/.svrnmesh/workflows dir the daemon reads (a listing, not a
+#       decider; shipped TOMLs embed in the binary). The RUNTIME paths
+#       (run_workflow_with_provider feeding AppState.inference) are gone
+#       from both surfaces - the constructed provider feed rung 6 named as
+#       its prerequisite is dead. DELTA named: CLI-local
+#       enrichment-authoring tools no longer resolve on the run path (no
+#       shipped workflow names them; host test pins it). F26 registry
+#       updated in the same window (9c3a88ac6): five new client sites,
+#       all LocalDaemon/TestOnly.
 #   6   THE ATTACH BOOT - attach constructs zero deciders; turns via
 #       TurnClient; boot assertion + full surface suite green against an
 #       externally-booted daemon. The C2 divergence dies here: today an
