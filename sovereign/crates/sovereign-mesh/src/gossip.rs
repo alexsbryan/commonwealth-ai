@@ -541,16 +541,23 @@ pub async fn run_one_round(
             // resolution and promotes the last-working address,
             // so the contact carries the raw gossiped list.
             //
-            // Status AND local-contact staleness ride along, because the
-            // round's SELECTION depends on both — see `select_round_peers`.
-            // Read here, inside the same lock that just ran the offline-decay
-            // pass and via the same `peer_contact_or_init` it used, so the
-            // selection sees this round's numbers and not last round's.
+            // Status AND selection staleness ride along, because the round's
+            // SELECTION depends on both — see `select_round_peers`.
+            //
+            // THE STALENESS HERE IS THE ATTEMPT CLOCK, NOT THE CONTACT CLOCK,
+            // and the difference is the whole of the starvation fix. The decay
+            // pass above rightly measures `peer_contact_or_init` — liveness
+            // evidence, stamped only when a peer actually answers. Ordering
+            // SELECTION by that same number means a peer that never answers
+            // never advances and so is picked every round for ever, which is
+            // not a fairness wobble but a permanent exclusion of everyone else:
+            // 74 dials each to two dead peers and zero to the other five,
+            // measured 2026-09-09 with a live peer among the five.
             .map(|m| {
                 (
                     peer_contact(m),
                     m.status != NodeStatus::Offline,
-                    app_state.peer_contact_or_init(m.node_id, now),
+                    app_state.peer_attempt_or_init(m.node_id, now),
                 )
             })
             .collect()
@@ -587,6 +594,13 @@ pub async fn run_one_round(
     let transport = app_state.peer_transport();
     for contact in selection {
         let peer_id = contact.node_id;
+        // SPENDING THE SLOT IS THE EVENT THIS STAMPS, not the outcome. It goes
+        // here, before the dial, so a refusal and a `PEER_TIMEOUT` advance the
+        // selection order exactly as a success does — that is what stops two
+        // unreachable peers from holding both slots for ever. Liveness is
+        // stamped separately and only on a completed round-trip
+        // (`observe_peer_contact`, below).
+        app_state.note_peer_attempt(peer_id, now);
         // The transport resolves and orders candidates: the address
         // that worked last round goes first. The common case is
         // "Tailscale 100.x stable, LAN 192.168.x stale because the
@@ -1200,6 +1214,84 @@ mod select_round_peers_tests {
         assert_eq!(select_round_peers(vec![("a", 0)], Vec::new(), 2), vec!["a"]);
         assert!(select_round_peers(Vec::<(&str, u64)>::new(), Vec::new(), 2).is_empty());
         assert!(select_round_peers(vec![("a", 0)], vec![("b", 0)], 0).is_empty());
+    }
+
+    /// THE FAILING INPUT. Three unreachable peers, `FANOUT = 2`, and a
+    /// selection key that only advances when a dial SUCCEEDS. Measured on
+    /// RuggedFox 2026-09-09: 74 dials to each of two peers in twenty minutes
+    /// and zero to the other five, one of whose daemons was up throughout.
+    ///
+    /// The two rounds are driven through `select_round_peers` with the stamping
+    /// rule the round applies, so this fails against the pre-fix code path
+    /// (stamp only on success) and passes against the fixed one (stamp on every
+    /// dial). It is the rotation `select_round_peers`' own doc promises.
+    #[test]
+    fn a_failed_dial_gives_up_its_slot_to_the_next_peer() {
+        use std::collections::HashMap;
+        // The attempt clock: peer -> when a round last spent a slot on it.
+        let mut attempt: HashMap<&str, u64> = HashMap::new();
+        attempt.insert("dead-a", 100);
+        attempt.insert("dead-b", 200);
+        attempt.insert("live-c", 300);
+
+        let round = |attempt: &mut HashMap<&str, u64>, now: u64| -> Vec<&'static str> {
+            let mut offline: Vec<(&'static str, u64)> =
+                vec![("dead-a", 0), ("dead-b", 0), ("live-c", 0)]
+                    .into_iter()
+                    .map(|(p, _)| (p, attempt[p]))
+                    .collect();
+            offline.sort_by_key(|(p, _)| *p);
+            let picked = select_round_peers(Vec::new(), offline, 2);
+            // Every peer given a slot is stamped, whether or not it answered.
+            for p in &picked {
+                attempt.insert(p, now);
+            }
+            picked
+        };
+
+        let first = round(&mut attempt, 1_000);
+        assert_eq!(first, vec!["dead-a", "dead-b"], "most stale first");
+
+        let second = round(&mut attempt, 1_010);
+        assert!(
+            second.contains(&"live-c"),
+            "the peer nobody has dialed must get a slot in round two, got {second:?} \
+             — two unreachable peers holding both slots for ever is the starvation"
+        );
+    }
+
+    /// The control: stamping ONLY on success is the pre-fix rule, and under it
+    /// the third peer is never reached. Without this, the assertion above is
+    /// satisfiable by any selection that happens to rotate, and the reader
+    /// cannot see what was actually wrong.
+    #[test]
+    fn stamping_only_on_success_starves_every_other_peer() {
+        use std::collections::HashMap;
+        let mut clock: HashMap<&str, u64> = HashMap::new();
+        clock.insert("dead-a", 100);
+        clock.insert("dead-b", 200);
+        clock.insert("live-c", 300);
+
+        let mut ever_picked_c = false;
+        for _ in 0..50 {
+            let mut offline: Vec<(&'static str, u64)> =
+                vec![("dead-a", 0), ("dead-b", 0), ("live-c", 0)]
+                    .into_iter()
+                    .map(|(p, _)| (p, clock[p]))
+                    .collect();
+            offline.sort_by_key(|(p, _)| *p);
+            let picked = select_round_peers(Vec::new(), offline, 2);
+            // The pre-fix rule: dead-a and dead-b never answer, so nothing is
+            // stamped and their keys never move.
+            if picked.contains(&"live-c") {
+                ever_picked_c = true;
+            }
+        }
+        assert!(
+            !ever_picked_c,
+            "this test documents the BUG: under success-only stamping the third \
+             peer is starved for ever, which is why the attempt clock exists"
+        );
     }
 
     /// The ceiling is a real number the operator could act on, not a
