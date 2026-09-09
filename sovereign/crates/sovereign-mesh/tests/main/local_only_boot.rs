@@ -60,6 +60,7 @@ use std::path::PathBuf;
 
 use sovereign_core::setup_config::{
     DaemonSection, DataSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
+    WorkOfferSection,
 };
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::local_only::MeshService;
@@ -112,6 +113,80 @@ fn cfg(client_port: u16, internal_port: u16, local_only: bool) -> SetupConfig {
         },
         mcp_servers: Vec::new(),
     }
+}
+
+/// The same config with an ACTIVE `[compute.work_offer]`.
+///
+/// `accept = "nobody"` on purpose: the question is whether the donor LOOP is
+/// spawned, and a test that also opened this box to somebody else's argv
+/// would be answering a second question with a live process group.
+fn cfg_donating(client_port: u16, internal_port: u16, local_only: bool) -> SetupConfig {
+    let mut c = cfg(client_port, internal_port, local_only);
+    c.compute.work_offer = WorkOfferSection {
+        kinds: vec!["process:v1".to_string()],
+        max_concurrent: 1,
+        ..Default::default()
+    };
+    c
+}
+
+/// **THE DONOR GATE (cw-lift 5d).** A local-only daemon does not donate.
+///
+/// Written as a DIFFERENTIAL in one test because the absence half is
+/// worthless alone: `work_donor` is also absent from a daemon whose
+/// `[compute.work_offer]` is inert, which is every daemon shipped today. So
+/// the same config — same kinds, same concurrency, same ports-modulo-collision
+/// — is booted twice and only the profile moves.
+///
+/// Watched red by moving `spawn_work_donor` out of `start_daemon`'s
+/// local-only branch: the census then read `["work_donor"]` on the local-only
+/// boot and this assertion named the loop that came back.
+#[tokio::test]
+async fn a_local_only_daemon_does_not_donate() {
+    let quiet = tempfile::tempdir().unwrap();
+    let daemon = EmbeddedDaemon::new(
+        quiet.path().to_path_buf(),
+        cfg_donating(39651, 39652, true),
+        mesh_admin_services(),
+    );
+    daemon
+        .create_mesh("solo", "node")
+        .await
+        .expect("a local-only daemon with a work offer still boots");
+    let (profile, services) = daemon
+        .running_services()
+        .await
+        .expect("a started daemon reports its services census");
+    assert!(profile.is_local_only(), "the config asked for local-only");
+    assert!(
+        !services.contains(MeshService::WorkDonor),
+        "a local-only daemon donated — the census reads {:?}. Donating is a \
+         conversation with a peer and the profile says there is no other side",
+        services.names()
+    );
+    daemon.shutdown().await.expect("shutdown");
+
+    // The control, and the half that makes the assertion above mean anything:
+    // the SAME offer on a networked daemon does spawn the loop.
+    let loud = tempfile::tempdir().unwrap();
+    let donor = EmbeddedDaemon::new(
+        loud.path().to_path_buf(),
+        cfg_donating(39661, 39662, false),
+        mesh_admin_services(),
+    );
+    donor.create_mesh("solo", "node").await.expect("create");
+    let (profile, services) = donor
+        .running_services()
+        .await
+        .expect("a started daemon reports its services census");
+    assert!(!profile.is_local_only(), "the control must be networked");
+    assert!(
+        services.contains(MeshService::WorkDonor),
+        "a networked daemon offering `process:v1` must spawn the donor loop — \
+         the census reads {:?}",
+        services.names()
+    );
+    donor.shutdown().await.expect("shutdown");
 }
 
 /// THE assertion. A local-only daemon boots, serves, holds a one-member mesh,

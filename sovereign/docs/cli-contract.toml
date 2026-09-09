@@ -1228,6 +1228,36 @@ path = "ring"
 probe = "no-args"  # like `meshapp`: rejects `--help`, prints its own usage, exit 2.
 binary = "llm"
 visibility = "public"
+
+# `svrn job` — the work plane (cw-lift 5d). `ring` deploys an app to a trust
+# ring; `job` hands that ring a unit of COMPUTE. A submission is one signed act
+# on the `work` namespace and the queue is a fold over the order every node
+# already agrees on, so there is no queue server and no route of its own.
+#
+# hidden, on `workflow`'s precedent and for its reason: the verb dispatches and
+# is journeyed below, and CLI_REFERENCE.md does not document it yet. It
+# graduates to `visibility = "internal"` the day that section is written — the
+# row is here now so the reverse check (`__dump-commands`) tracks it rather than
+# reporting an untracked verb.
+[[command]]
+path = "job"
+binary = "llm"
+hidden = true
+[[command]]
+path = "job submit"
+binary = "llm"
+hidden = true
+flags = [
+  { name = "--kind", takes_value = true },
+  { name = "--units", takes_value = true },
+  { name = "--allow", takes_value = true },
+  { name = "--ttl", takes_value = true },
+]
+[[command]]
+path = "job status"
+binary = "llm"
+hidden = true
+flags = [{ name = "--json" }]
 [[command]]
 # Step·Artifact·Runner workflows (run / list / copy / new). The dispatcher
 # arm was missing until 2026-07-02 while the llm sibling implemented the
@@ -1453,6 +1483,16 @@ id = "ring-deploy"
 title = "Deploy an app to exactly your trust ring, and have its state converge"
 doc = "sovereign/docs/MESHAPP_AUTHORING.md"
 capabilities = ["ring new", "ring roster add", "ring log", "ring seal"]
+
+# The work plane (cw-lift 5d). Distinct from `ring-deploy` on purpose: that
+# promise is "my app's STATE converges across my ring", this one is "my ring's
+# MACHINES run my work". They share a rail and nothing else — a different verb,
+# a different namespace, and a fold that decides leases rather than balances.
+[[experience]]
+id = "work-plane"
+title = "Hand a unit of work to your ring, and read one fold of what happened"
+doc = "sovereign/deploy/mesh/WORK_PLANE.md"
+capabilities = ["job submit", "job status"]
 
 [[experience]]
 id = "publish-to-others"
@@ -1786,6 +1826,78 @@ deleted a retired prefix reported one gap per deleted op, forever."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "complete"
+[[journey.step]]
+run = "daemon stop"
+mutates = true
+note = "leaves the lane's HOME with no daemon running, as it found it"
+[journey.step.expect]
+exit = 0
+
+[[journey]]
+id = "work-plane-submit"
+title = "Put a unit of work on the ring, and read the same fold back"
+persona = "operator"
+experience = "work-plane"
+tier = 3
+visibility = "internal"
+doc = "sovereign/deploy/mesh/WORK_PLANE.md"
+[[journey.step]]
+run = "daemon start"
+mutates = true
+note = """exit code only, for `ring-journal`'s reason: `daemon start` narrates \
+on STDERR and stdout assertions read stdout alone. The proof is [2], which \
+cannot print anything unless a daemon is answering the rail routes."""
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "ring roster add jobbot --self --ring work"
+mutates = true
+note = """The work plane's consent is a roster entry and nothing else — an act \
+signed by a key the `work` roster does not carry is an `UnknownSigner` GAP, \
+not a submission. `the daemon has it.` prints only after reading the roster \
+back through the running daemon's own rail, so this fails if the CLI wrote to \
+a directory the daemon does not read, which is the one way step [2] could \
+look like it worked and put nothing on the ring (ARCH §18.1)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "the daemon has it."
+[[journey.step]]
+run = "job submit --kind process:v1 -- uname -a"
+mutates = true
+note = """The shortest true submission on this plane, and the count is the \
+load-bearing part: `submitted 1 unit(s)` prints only after `to_payload` \
+verified the unit's seal and the daemon assigned it a seq. The trailing `--` \
+is not decoration — everything after it is the unit's own command and is never \
+read as a flag of this verb."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "submitted 1 unit(s)"
+[[journey.step]]
+run = "job status"
+note = """The proof of [2], and the only assertion here that exercises the \
+FOLD. `process:v1` reaches this line only by a round trip no other step can \
+fake: the act was signed under the roster [1] wrote, admitted by the daemon \
+under that same roster, decoded by the act codec, and folded into a handoff. \
+A submission that never landed prints `nothing submitted yet.` and reddens \
+here — which is exactly what an append against a ring your key is not in \
+looks like, and it exits 0 (ARCH §18.1). Deliberately NOT asserting `queued`: \
+a node with a donor loop configured may legitimately have leased it by now, \
+and an assertion that a lane's own configuration can flip is a test of the \
+lane."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "process:v1"
+[[journey.step]]
+run = "job status ffffffffffffffffffffffffffffffff"
+note = """The negative control for [3], and the reason it is here: \
+`stdout_contains = \"process:v1\"` above is also satisfied by a `status` that \
+ignores its argument and prints the whole journal. This handoff id cannot \
+exist — `HandoffId::generate` is 128 random bits — so the filter has to say \
+so. A `status` that prints the ring's other handoffs for a name that is not \
+on it would be a confident answer to a question nobody asked."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "no handoff on this journal starts with"
 [[journey.step]]
 run = "daemon stop"
 mutates = true

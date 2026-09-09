@@ -38,6 +38,21 @@
 //! drains a row for one (the outbox only carries `MeshStore` writes), and
 //! `POST /v1/rail/append` remains the only way one of them seals.
 //!
+//! **`work` is the exception to the sentence above, and deliberately not to
+//! the list** (cw-lift 5d). The work plane's roster IS an app ring's — the
+//! operator's `rings/work/roster.json` — because joining
+//! `DAEMON_OWN_NAMESPACES` would flip it to `Derived` and orphan that file
+//! silently (`refuse_derived_roster` hardcodes measurements, so nothing would
+//! warn). But its journal is written on a cadence no person chose, by the
+//! donor loop renewing every lease it holds, so leaving the seal unmade has
+//! exactly the unbounded-growth consequence this section is about. It is
+//! sealed here, and it stays off that list: two different questions, and the
+//! list answers the other one.
+//!
+//! The three vocabularies are named by [`projector_for`], which is what the
+//! receive half and [`snapshot`] both read. What a `work` seal re-appends is
+//! [`live_work_acts`], and its bound is stated there.
+//!
 //! # What a seal costs, and how the cost was absorbed
 //!
 //! A seal + snapshot re-appends the LIVE rows this node owns, from the store.
@@ -89,6 +104,8 @@ use std::time::Duration;
 use commonwealth_api::state::AppState;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster};
 use commonwealth_state::{rail_kv, MeshStore, Outboxed};
+use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
+use commonwealth_work::{ActorKey, UnitRef, WorkAct, WorkActKind};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
@@ -340,6 +357,24 @@ pub async fn pump_once(app_state: &AppState) -> PumpOutcome {
         }
     }
 
+    // `work` never enters the outbox either, and for the same structural
+    // reason: its acts are not store rows. They are appended straight onto the
+    // journal by `POST /v1/rail/append` (which is what `svrn job submit` and
+    // the donor loop both reach), so nothing above drains it and the seal
+    // check has to be reached the same way measurements is. Same constant
+    // (ARCH §10.6).
+    //
+    // Both `Err`s are silent on purpose and neither is a failure: a daemon
+    // that has never hosted the work plane has no `work` directory, and one
+    // whose operator has not written `rings/work/roster.json` has no roster —
+    // and a namespace this node cannot append to is one it must not seal. The
+    // failure direction is always "do not retire" (ARCH §18.3).
+    if let Ok(journal) = rail.journal(WORK_NAMESPACE) {
+        if let Ok(roster) = rail.roster(&journal).await {
+            seal_if_due(app_state, &rail, &journal, &roster, &mut out).await;
+        }
+    }
+
     out
 }
 
@@ -353,6 +388,12 @@ fn ack(store: &MeshStore, ids: &[i64]) {
 }
 
 const MEASUREMENTS_NAMESPACE: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+
+/// The work plane's namespace, taken from the crate that owns the vocabulary
+/// rather than spelled again here (ARCH §10.6) — a second literal would be a
+/// second answer to what this data is called, and the symptom would be a
+/// silently empty fold rather than an error.
+const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 
 /// Seal and snapshot this namespace if this node's own history above its last
 /// seal has passed [`SEAL_AFTER_OWN_OPS`].
@@ -418,6 +459,27 @@ async fn seal_if_due(
         return;
     }
 
+    // The work plane's live set is a FOLD, and this journal is its only copy:
+    // the KV snapshot re-reads the store and the measurements one re-reads the
+    // local file, and `work` has neither. So it is captured HERE — from the
+    // admission the floor check already built, and BEFORE the prune below
+    // deletes the lines it is derived from. One admission, not a second
+    // (ARCH §10.6).
+    let live_work = match projector_for(namespace) {
+        Some(Projector::Work) => {
+            let projection = WorkProjection::fold(&admission);
+            debug!(
+                namespace,
+                handoffs = projection.handoffs.len(),
+                offers = projection.offers.len(),
+                unreadable = projection.unreadable,
+                "rail kv pump: captured the work plane's live set before the seal prunes it"
+            );
+            Some(projection)
+        }
+        _ => None,
+    };
+
     let sealed = match journal.seal(rail.signer(), roster, &Ed25519Verifier) {
         Ok(s) => s,
         Err(e) => {
@@ -445,7 +507,15 @@ async fn seal_if_due(
     // snapshot names it — taken from the act that was written rather than
     // re-read from a fresh admission, which would be a second answer to "what
     // did we just seal at" (ARCH §10.6).
-    out.snapshot_rows += snapshot(app_state, rail, journal, roster, sealed.op.kind.seq).await;
+    out.snapshot_rows += snapshot(
+        app_state,
+        rail,
+        journal,
+        roster,
+        sealed.op.kind.seq,
+        live_work.as_ref(),
+    )
+    .await;
 }
 
 /// Re-append this node's live rows above the floor its seal just set.
@@ -481,28 +551,36 @@ async fn snapshot(
     journal: &RingJournal,
     roster: &Roster,
     floor: u64,
+    live_work: Option<&WorkProjection>,
 ) -> usize {
     let namespace = journal.namespace();
 
-    if namespace == MEASUREMENTS_NAMESPACE {
-        // Not KV-shaped, and its live set is not in the store — it is the
-        // local file, which is the authoritative copy. `republish` is already
-        // idempotent by content, so it re-appends exactly what the seal
-        // retired and nothing else. This is the fix for the seal/republish
-        // interaction found 2026-09-08: republish AT the seal, not at the next
-        // boot, or the window between them is a ring with no measurements in
-        // it.
-        let file = sovereign_core::mesh_measurements::load();
-        let done =
-            crate::measurements_rail::republish(journal, rail.signer(), roster, file.records());
-        info!(
-            namespace,
-            appended = done.appended,
-            already_held = done.already_held,
-            withheld = done.withheld,
-            "rail kv pump: snapshotted the local measurement history above the new floor"
-        );
-        return done.appended;
+    // ONE decider for which vocabulary this namespace speaks (ARCH §10.6) —
+    // the same selector the receive half reads, rather than a second set of
+    // name comparisons that could drift from it.
+    match projector_for(namespace) {
+        None => {
+            // Measurements. Not KV-shaped, and its live set is not in the
+            // store — it is the local file, which is the authoritative copy.
+            // `republish` is already idempotent by content, so it re-appends
+            // exactly what the seal retired and nothing else. This is the fix
+            // for the seal/republish interaction found 2026-09-08: republish
+            // AT the seal, not at the next boot, or the window between them is
+            // a ring with no measurements in it.
+            let file = sovereign_core::mesh_measurements::load();
+            let done =
+                crate::measurements_rail::republish(journal, rail.signer(), roster, file.records());
+            info!(
+                namespace,
+                appended = done.appended,
+                already_held = done.already_held,
+                withheld = done.withheld,
+                "rail kv pump: snapshotted the local measurement history above the new floor"
+            );
+            return done.appended;
+        }
+        Some(Projector::Work) => return snapshot_work(rail, journal, roster, floor, live_work),
+        Some(Projector::Kv) => {}
     }
 
     let self_id = app_state.self_node_id();
@@ -564,23 +642,236 @@ async fn snapshot(
     appended
 }
 
+/// Re-append this node's live work acts above the floor its seal just set.
+///
+/// **The work plane's answer to "without this a seal is a delete".** The unit
+/// this node is running right now is a `Lease` on the journal and nowhere
+/// else; retire it and every node — including this one — reads the unit as
+/// queued again and hands it to somebody else while it is still running. The
+/// offer goes back for the same reason: an offer is the latest admitted
+/// `Offer` per actor, so a seal that retires ours takes this node out of the
+/// cohort until it happens to publish another.
+///
+/// `live_work` is the fold [`seal_if_due`] captured BEFORE the prune. It is a
+/// parameter rather than a re-fold here because by the time this runs the
+/// lines it would be folded from are gone — the difference from the KV and
+/// measurements arms, which both re-read a copy that lives somewhere else.
+///
+/// # What it carries, and what it deliberately does not
+///
+/// Only acts this node AUTHORED and still holds, which is the KV snapshot's
+/// rule verbatim: a seal retires only the sealer's own lines below its own
+/// floor, so a peer's `Submit` is untouched and re-appending one would put our
+/// name on another actor's work.
+///
+/// A lapsed lease is left lapsed. `status_at` is the one place expiry is
+/// decided, and a snapshot that re-appended a lease the fold had already given
+/// back to the queue would be this module inventing a second answer to it.
+///
+/// **There is no snapshot mark.** `rail_kv::snapshot_mark` closes a KV
+/// snapshot so a peer may retire every other row of that actor's, and the
+/// reconciliation it authorises is `MeshStore::apply_projection`'s — a store
+/// the work plane never touches. Appending one here would be a KV act on a
+/// work journal: one more `unreadable` on every node, claiming nothing.
+///
+/// **What a seal past this point still costs**, named rather than left to be
+/// discovered: this node's own `Submit`s and its own `Complete`/`Fail` reports
+/// are below the floor too, and neither is re-appended. A handoff we submitted
+/// ourselves loses its units, and a unit we completed reads as queued again.
+/// Neither is reachable until this node writes [`SEAL_AFTER_OWN_OPS`] work acts
+/// of its own, and both want the live set widened rather than this rule bent —
+/// the rung that adds a donor's completion history is the rung to do it in.
+fn snapshot_work(
+    rail: &RingRail,
+    journal: &RingJournal,
+    roster: &Roster,
+    floor: u64,
+    live_work: Option<&WorkProjection>,
+) -> usize {
+    let namespace = journal.namespace();
+    let Some(projection) = live_work else {
+        // Unreachable by construction — `seal_if_due` folds exactly when
+        // `projector_for` says `Work` — and loud rather than a silent zero,
+        // because the silent zero is a queue that forgot what it was running
+        // (ARCH §18.3).
+        warn!(
+            namespace,
+            "rail kv pump: no pre-seal fold was captured, so the seal retired this node's live \
+             leases and nothing replaced them"
+        );
+        return 0;
+    };
+    let mine = match ActorKey::parse(rail.signer().actor()) {
+        Ok(a) => a,
+        Err(e) => {
+            warn!(namespace, error = %e,
+                  "rail kv pump: this node's own actor key is not one the work plane can read, so \
+                   its live leases were not snapshotted");
+            return 0;
+        }
+    };
+    let now_ms = commonwealth_core::clock::unix_now_millis();
+
+    let acts = live_work_acts(projection, &mine, now_ms);
+    // Counted from the acts rather than from where the offer was pushed: a
+    // count that depends on a position in a vector is a count that a later
+    // reorder makes wrong without failing.
+    let offers = acts
+        .iter()
+        .filter(|a| a.kind() == WorkActKind::Offer)
+        .count();
+
+    let appended = acts
+        .iter()
+        .filter(|act| append_work_act(rail, journal, roster, act))
+        .count();
+    info!(
+        namespace,
+        appended,
+        offers,
+        leases = acts.len() - offers,
+        floor,
+        "rail kv pump: snapshotted this node's live leases and its offer above the new floor"
+    );
+    appended
+}
+
+/// Sign one work act onto the journal, reporting whether it landed.
+///
+/// A refusal is a `warn` naming the sentence and the loop keeps going, which
+/// is the same failure direction the KV snapshot takes on a row it cannot
+/// re-append: one act that will not travel must not cost the rest of the live
+/// set the floor it was about to be lifted above (ARCH §18.3).
+fn append_work_act(rail: &RingRail, journal: &RingJournal, roster: &Roster, act: &WorkAct) -> bool {
+    match commonwealth_work::to_payload(act).and_then(|payload| {
+        journal
+            .append(RailAct::Record { payload }, rail.signer(), roster)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(_) => true,
+        Err(e) => {
+            warn!(namespace = journal.namespace(), act = %act.kind(), error = %e,
+                  "rail kv pump: a live work act could not be snapshotted and is now below the \
+                   floor");
+            false
+        }
+    }
+}
+
+/// The work acts this node still holds at `now_ms` — the live set a seal must
+/// put back above its floor.
+///
+/// Two rules, and both are borrowed rather than invented:
+///
+/// - **Only what this node AUTHORED.** The KV snapshot's rule verbatim. A
+///   seal retires only the sealer's own lines below its own floor, so a peer's
+///   `Submit` is untouched — and re-appending one would put our name on
+///   another actor's work.
+/// - **A lapsed lease is left lapsed.** `ProjectedUnit::status_at` is the ONE
+///   place expiry is decided (`commonwealth_work::projection`), so this reads
+///   it rather than comparing a deadline again; a snapshot that re-appended a
+///   lease the fold had already handed back to the queue would be a second
+///   answer to the same question (ARCH §10.6).
+///
+/// The offer comes first only for the reader's sake — the fold is a function
+/// of admission's total order, not of the order these are appended in.
+fn live_work_acts(projection: &WorkProjection, mine: &ActorKey, now_ms: u64) -> Vec<WorkAct> {
+    let mut acts: Vec<WorkAct> = Vec::new();
+    if let Some(offer) = projection.offers.get(mine) {
+        acts.push(WorkAct::Offer(offer.clone()));
+    }
+    for (handoff, held) in &projection.handoffs {
+        for (unit_hash, unit) in &held.units {
+            let WorkUnitStatus::Leased { lessee, .. } = unit.status_at(now_ms) else {
+                continue;
+            };
+            if &lessee == mine {
+                acts.push(WorkAct::Lease(UnitRef {
+                    handoff: *handoff,
+                    unit_hash: unit_hash.clone(),
+                }));
+            }
+        }
+    }
+    acts
+}
+
 // ── The receive half: journal → store ────────────────────────
 
-/// Whether a namespace's acts are store writes.
+/// Which vocabulary a namespace's acts are written in.
 ///
-/// The structural predicate, and it is a NAME check on purpose. The KV fold's
-/// own parse failure would work as a predicate — a measurement is `unreadable`
-/// to it — but "unreadable" means "this build could not read a line", which is
-/// a thing worth reporting, and `mesh-measurements` would report twenty-eight
-/// of them a round for a namespace that is behaving perfectly. A count that
-/// fires when nothing is wrong stops being read. So the one namespace on this
-/// rail with a different vocabulary is named, and what the fold counts stays a
-/// real fact (ARCH §18.3).
+/// Two variants and an absence, because there are three answers and not two:
+/// [`Kv`](Projector::Kv) is `commonwealth_state::rail_kv`, whose acts are
+/// store writes; [`Work`](Projector::Work) is `commonwealth_work`, whose acts
+/// are a queue and reach no store at all; and `None` is a namespace this
+/// module folds nowhere — `mesh-measurements`, which `measurements_rail`
+/// reads straight off its journal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Projector {
+    /// `rail_kv`'s vocabulary: every act is a row in [`MeshStore`].
+    Kv,
+    /// `commonwealth_work`'s vocabulary: every act is a move in the work
+    /// plane's queue, folded by `WorkProjection::fold` and never stored.
+    Work,
+}
+
+/// Which fold a namespace's acts belong to, or `None` for one this module
+/// does not fold.
 ///
-/// It is also the honest direction of the dependency: this module knows both
-/// vocabularies, and `rail_kv` knows only its own.
-pub fn is_kv_namespace(namespace: &str) -> bool {
-    namespace != MEASUREMENTS_NAMESPACE
+/// **A NAME check, and that is the whole design** — this is
+/// `is_kv_namespace`'s reasoning, unchanged, now that the rail carries three
+/// vocabularies instead of two. Each fold's own parse failure would work as a
+/// predicate — a measurement is `unreadable` to `rail_kv`, and so is a lease —
+/// but "unreadable" means "this build could not read a line", which is a thing
+/// worth reporting, and a namespace with a different vocabulary would report
+/// every line of a ring that is behaving perfectly. `mesh-measurements` would
+/// contribute twenty-eight a round; `work` is worse, because a donor renews
+/// every live lease on a timer, so the count would rise with how well the work
+/// plane is working. A count that fires when nothing is wrong stops being read.
+/// So the namespaces with a different vocabulary are NAMED, and what each fold
+/// counts stays a real fact (ARCH §18.3).
+///
+/// It is also the honest direction of the dependency: this module knows all
+/// three vocabularies, and each of `rail_kv`, `commonwealth_work` and
+/// `measurements_rail` knows only its own.
+///
+/// **Not keyed on
+/// [`DAEMON_OWN_NAMESPACES`](crate::ring_roster::DAEMON_OWN_NAMESPACES).**
+/// That list answers a different question — whose roster the daemon derives,
+/// and which journals it seals on its own cadence — and an app ring is on
+/// neither side of it. Keying the projector on membership of that list would
+/// hand every app ring in the mesh a different projection than it has today,
+/// which is not a rung's worth of blast radius. `work` is on this selector and
+/// deliberately NOT on that list: joining it would flip the namespace's roster
+/// to `Derived` and orphan the operator-written `roster.json`, with
+/// `refuse_derived_roster` hardcoding measurements so nothing would warn
+/// (`commonwealth_work`'s own `WORK_NAMESPACE` doc records the same).
+pub fn projector_for(namespace: &str) -> Option<Projector> {
+    match namespace {
+        MEASUREMENTS_NAMESPACE => {
+            debug!(
+                namespace,
+                "rail kv pump: a measurements namespace, folded by measurements_rail — skipped \
+                 here rather than counted unreadable"
+            );
+            None
+        }
+        WORK_NAMESPACE => {
+            debug!(
+                namespace,
+                "rail kv pump: the work plane's namespace, folded by commonwealth_work — skipped \
+                 here rather than counted unreadable"
+            );
+            Some(Projector::Work)
+        }
+        _ => {
+            debug!(
+                namespace,
+                "rail kv pump: a store namespace, folded by rail_kv"
+            );
+            Some(Projector::Kv)
+        }
+    }
 }
 
 /// Fold one namespace's journal and apply it to the store.
@@ -602,11 +893,9 @@ pub async fn project_namespace(
     journal: &RingJournal,
 ) -> Option<usize> {
     let namespace = journal.namespace().to_string();
-    if !is_kv_namespace(&namespace) {
-        debug!(
-            namespace = %namespace,
-            "rail kv pump: not a store namespace, skipped rather than counted unreadable"
-        );
+    // `projector_for` says which branch this is and traces it; the skip needs
+    // no second sentence here (ARCH §10.6).
+    if projector_for(&namespace) != Some(Projector::Kv) {
         return None;
     }
     let roster = match rail.roster(journal).await {
@@ -719,116 +1008,4 @@ pub async fn project_all_on_disk(app_state: &AppState) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-    //! The pump's own decisions. The two-node path — a write reaching a peer's
-    //! store, a delete, a seal, an excluded namespace — is driven end to end
-    //! against the real router in `crate::ring_sync::tests`.
-
-    use super::*;
-    use crate::ring_roster::tests::{member, mesh_of, pubkey_of};
-    use crate::ring_roster::DAEMON_OWN_NAMESPACES;
-    use commonwealth_core::ids::NodeId;
-    use commonwealth_rail::SigningKey;
-
-    /// **The declaration is checkable, and this is the check.**
-    ///
-    /// Two properties, both of which have already failed once in this
-    /// workspace. The charset one is `wikipedia-newsworthy:tracked`: a colon is
-    /// legal in an `app_id` and not in a ring namespace, and the mismatch was
-    /// silent until something tried to open the directory. The exclusion one is
-    /// the split between the six namespaces that reach the ring through the
-    /// OUTBOX and the one that does not — `mesh-measurements` is
-    /// gossip-excluded, publishes straight onto its journal from
-    /// `POST /v1/mesh/measurements`, and would be refused by both the outbox
-    /// and `apply_projection` if anything tried to route it through the store.
-    #[tokio::test]
-    async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
-        let key = SigningKey::from_bytes(&[1u8; 32]);
-        let me = NodeId::from_u128(1);
-        let dir = tempfile::tempdir().unwrap();
-        let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]));
-        let rail = RingRail::new(dir.path(), Arc::new(key));
-
-        // The charset check lives in `derive_roster`, so a namespace the rail
-        // would refuse to open cannot be installed either.
-        crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-
-        let mut seen = std::collections::BTreeSet::new();
-        for ns in DAEMON_OWN_NAMESPACES {
-            assert!(seen.insert(*ns), "{ns} is declared twice");
-            assert_eq!(
-                rail.roster_origin(ns),
-                commonwealth_rail::RosterOrigin::Derived,
-                "{ns} still reads a roster file"
-            );
-            assert_eq!(
-                commonwealth_state::is_gossip_excluded(ns),
-                ns == &MEASUREMENTS_NAMESPACE,
-                "{ns}: a namespace on this list either rides the outbox or is \
-                 the one that publishes straight onto its journal, and which \
-                 one it is decides whether the store will carry it at all"
-            );
-            assert_eq!(
-                is_kv_namespace(ns),
-                ns != &MEASUREMENTS_NAMESPACE,
-                "{ns}: the KV fold and the measurement vocabulary are the two \
-                 shapes on this rail"
-            );
-        }
-    }
-
-    /// **A node in no mesh queues its writes; it does not lose them.**
-    ///
-    /// `NotInRoster` is the one refusal that is not a refusal — a solo daemon
-    /// is a normal daemon, and its writes travel the moment it joins. Dropping
-    /// them would make a legitimate condition permanent, and retrying an
-    /// append the rail will never accept would be the other failure. The
-    /// second half is the control: the same row, the same pump, one member
-    /// added.
-    #[tokio::test]
-    async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
-        const KV: &str = commonwealth_inference::INFERENCE_APP_ID;
-        let key = SigningKey::from_bytes(&[2u8; 32]);
-        let me = NodeId::from_u128(7);
-        let dir = tempfile::tempdir().unwrap();
-        // A mesh with nobody in it: this node cannot place its own key.
-        let state = AppState::new(me, mesh_of(vec![]));
-        let rail = Arc::new(RingRail::new(dir.path(), Arc::new(key.clone())));
-        crate::ring_roster::MeshRosterSource::install(&rail, &state).unwrap();
-        state.install_ring_rail(rail.clone());
-
-        assert!(state
-            .inner
-            .mesh_store
-            .set(KV, "plan", bytes::Bytes::from_static(b"v1"), me)
-            .unwrap());
-
-        let out = pump_once(&state).await;
-        assert_eq!(
-            (out.appended, out.deferred, out.refused),
-            (0, 1, 0),
-            "{out:?}"
-        );
-        assert_eq!(
-            state.inner.mesh_store.outbox_len().unwrap(),
-            1,
-            "a deferred write stays queued"
-        );
-
-        // Membership arrives, and the same row goes out.
-        state
-            .inner
-            .mesh
-            .write()
-            .await
-            .members
-            .insert(me, member(me, "me", Some(pubkey_of(&key))));
-        let out = pump_once(&state).await;
-        assert_eq!(
-            (out.appended, out.deferred, out.refused),
-            (1, 0, 0),
-            "{out:?}"
-        );
-        assert_eq!(state.inner.mesh_store.outbox_len().unwrap(), 0);
-    }
-}
+mod tests;

@@ -59,6 +59,21 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 # rail sites were its only references — so the mesh no longer links the
 # knowledge layer to install a journal.
 commonwealth-rail = { workspace = true }
+# The work plane's vocabulary and its fold (cw-lift 5c). The pump seals the
+# `work` namespace and re-appends its live set, and the live set of a queue is
+# `WorkProjection::fold` — a DIRECT dep on the crate that owns the fold, for
+# the same reason the rail line above is direct (ARCH §8.3). The edge is
+# one-way by design: `quality/ARCH_LAYERS.toml` forbids
+# `commonwealth-work -> sovereign-*` so cw-lift 5f can still lift the crate
+# out of this monorepo.
+# `features = ["process"]` because the donor loop (`work_donor.rs`) registers
+# `ProcessExecutor` — the pilot's only executor. It is a feature on that crate
+# so a third party lifting the FOLD never links tokio; this crate already
+# links tokio, so turning it on here costs zero crates in the closure and the
+# alternative (a `sovereign-mesh` feature nobody sets) would ship a daemon
+# whose registry is empty and which therefore refuses every `[compute
+# .work_offer]` a person writes.
+commonwealth-work = { workspace = true, features = ["process"] }
 commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
 # DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
 # deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.
@@ -231,6 +246,10 @@ iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 
 [dev-dependencies]
 tempfile = "3"
+# `JobKind` / `JobRequirements` for the sealed `JobUnit`s the work-plane seal
+# test submits. TEST-ONLY: the pump's production path names no oicp type — it
+# moves `WorkAct`s, whose bodies it never opens.
+oicp-types = { workspace = true }
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch
 # a synthetic axum Request through the router without spinning up a
 # TcpListener. Same pattern as commonwealth's HTTP unit tests.

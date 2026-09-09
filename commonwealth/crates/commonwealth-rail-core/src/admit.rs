@@ -188,7 +188,13 @@ impl std::fmt::Display for RailGap {
 /// from content, the signature verified, the signer looked up in the roster,
 /// and the position in `Admission::ops` is the total order every node agrees
 /// on. What is left — what the payload *means* — is the app's.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+/// `Deserialize` as well as `Serialize` since cw-lift 5d, and the pair is the
+/// point: `GET /v1/rail/log` ships `Admission::ops` verbatim, and a client that
+/// wants to FOLD that answer — `svrn job status` is the first — has to be able
+/// to read back exactly what this type wrote. The alternative was a second
+/// struct in the CLI mirroring these fields, which is one wire shape with two
+/// spellings and drifts the day a field is added here (ARCH §10.6).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AdmittedOp {
     /// Content-derived id. This is what a correction names, and what an app
     /// hands back to [`RailAct::Correct`](crate::RailAct::Correct).
@@ -205,7 +211,7 @@ pub struct AdmittedOp {
     /// What this op voids, when it is a correction. The void is **already
     /// applied** — carried so an app can say *what changed*, never so it can
     /// re-derive the void set.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corrects: Option<OpId>,
     /// `true` when a correction voided this op. It stays in the list so an
     /// app can render history, and the SDK's `fold` skips it. An app that
@@ -214,7 +220,7 @@ pub struct AdmittedOp {
     pub voided: bool,
     /// The app's act. `None` is a correction that only voids, and states no
     /// replacement.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Payload>,
 }
 

@@ -103,6 +103,13 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no
 # type, one link — and `ring dev` mints its grant over HTTP.
 commonwealth-rail = { workspace = true }
+# `svrn job` is a client of the work plane, not a second implementation of it:
+# the act codec, the unit seal and `WorkProjection::fold` all come from here, so
+# the terminal, the daemon's donor loop and a lifted third-party peer are three
+# readers of ONE fold and cannot disagree about who holds a lease (ARCH §10.6).
+# Default features — the `process` executor is the donor's half and this crate
+# never runs a unit, so no tokio::process edge is taken.
+commonwealth-work = { workspace = true }
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }

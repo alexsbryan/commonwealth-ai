@@ -16,7 +16,10 @@ use axum::{
     Router,
 };
 
-use super::{daemon_client_port, flag, http_client, mint_rail_grant, rail_log};
+use super::{
+    daemon_client_port, flag, http_client, mint_rail_grant, rail_log, RAIL_APPEND_PATH,
+    RAIL_LOG_PATH,
+};
 
 struct RingCtx {
     bundle_dir: PathBuf,
@@ -117,6 +120,18 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
 /// had grown a third route, and that is where the decision belongs. The app
 /// decides what an op MEANS; this proxy only carries it, with the credential
 /// attached (which is the one thing the browser must not hold).
+///
+/// **Why these two arms are not [`rail_log`] and
+/// [`rail_append`](super::rail_append).** Those are the OPERATOR clients: they
+/// hit `:9741`, which admits a loopback caller before it reads a bearer, and
+/// they take a typed act and hand back parsed JSON. This is a reverse proxy on
+/// the RAIL listener, whose whole guarantee is that the grant is the only way
+/// in — so calling them here would drop the token, move the request to the
+/// operator surface, and make the namespace scoping decorative. It would also
+/// have to re-parse and re-serialise the browser's body to fit their
+/// signatures, when the contract is to pass those bytes through unread and
+/// return the daemon's status and text verbatim. What IS shared is the pair of
+/// route constants (ARCH §10.6): one spelling of each path, three callers.
 async fn op_handler(
     AxPath(op): AxPath<String>,
     State(ctx): State<Arc<RingCtx>>,
@@ -125,14 +140,14 @@ async fn op_handler(
     let result = match op.as_str() {
         "log" => {
             ctx.http
-                .get(format!("{}/v1/rail/log", ctx.base))
+                .get(format!("{}{RAIL_LOG_PATH}", ctx.base))
                 .bearer_auth(&ctx.token)
                 .send()
                 .await
         }
         "append" => {
             ctx.http
-                .post(format!("{}/v1/rail/append", ctx.base))
+                .post(format!("{}{RAIL_APPEND_PATH}", ctx.base))
                 .bearer_auth(&ctx.token)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(body)

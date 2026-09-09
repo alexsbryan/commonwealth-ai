@@ -66,6 +66,12 @@ mod govern_cmd;
 mod guest_link;
 mod gym_judge;
 mod inner_chaos;
+// `svrn job` — the work plane's operator surface. Sits beside `ring_cmd`
+// rather than inside it because they are two verbs on one rail: `ring`
+// deploys an app to a trust ring, `job` hands that ring a unit of compute.
+// It reaches `ring_cmd::rail_append`, which is the ONE append client
+// (ARCH §10.6).
+mod job_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;
@@ -188,6 +194,7 @@ async fn async_main() {
         "meta-atlas" => meta_atlas_cmd::run_meta_atlas(rest).await,
         "meshapp" => meshapp_cmd::run(rest).await,
         "ring" => ring_cmd::run(rest).await,
+        "job" => job_cmd::run(rest).await,
         "enrich" => enrich_cmd::run_enrich(rest).await,
         "newsworthy" => newsworthy_cmd::run(rest).await,
         "recipe" => recipe_cmd::run_recipe(rest).await,

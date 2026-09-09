@@ -114,6 +114,7 @@ pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
+pub mod work_donor;
 pub mod worker_eligibility;
 // Short-lived memory of peers that refused with `yielded_to_local`, so
 // the next turn does not re-dial into the same refusal.

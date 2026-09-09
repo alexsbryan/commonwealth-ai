@@ -325,6 +325,11 @@ enum DaemonState {
         /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
         /// its `tokio::spawn` in a stray diff and stay silent about it.
         _rail_kv_pump_handle: Option<crate::rail_kv_pump::RailKvPumpHandle>,
+        /// Aborts the work-plane donor loop on Drop — the loop that leases,
+        /// runs and reports other people's units (cw-lift 5d). `None` on a
+        /// local-only daemon AND on a node whose `[compute.work_offer]` names
+        /// no kind; `running_services` is what tells those two apart.
+        _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -2696,6 +2701,29 @@ impl EmbeddedDaemon {
                 crate::local_only::ENV_VAR,
             )));
         }
+        // ── The work offer: resolved ONCE, here, and refused loudly rather
+        // than half-honoured (ARCH §18.3). A daemon that offers a kind it has
+        // no executor for is a donor that leases units and then fails every
+        // one of them, and the submitter reads that as a verdict about their
+        // tree. Resolved BEFORE the profile branch on purpose: a config that
+        // contradicts this build is wrong whether or not this boot would have
+        // donated, and a local-only run must not be the reason nobody found
+        // out.
+        let work_registry = std::sync::Arc::new(crate::work_donor::donor_registry());
+        let work_offer = {
+            let c = self.setup_config.read().await;
+            crate::work_donor::resolve_offer(
+                &c.compute.work_offer,
+                &work_registry,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .map_err(|e| MeshError::Config(e.to_string()))?
+        };
+        // Assigned inside the networked branch below. A `mut` binding rather
+        // than a fifth tuple element so the gate stays the SAME `if` the four
+        // loops already sit in without re-indenting sixty lines of it.
+        let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -3483,6 +3511,23 @@ impl EmbeddedDaemon {
                 );
                 running_services.record(crate::local_only::MeshService::RailKvPump);
 
+                // The work-plane donor. Gated by the SAME branch the four
+                // loops above are — the profile's whole point is that "is
+                // this daemon local-only" is answered once (ARCH §10.6) — and
+                // then by the offer: a node whose `[compute.work_offer]` names
+                // no kind spawns nothing, which is the shipped posture.
+                work_donor_handle = work_offer.map(|offer| {
+                    let handle = crate::work_donor::spawn_work_donor(
+                        app_state.clone(),
+                        offer,
+                        std::sync::Arc::clone(&work_registry),
+                        self.data_dir.join(crate::work_donor::DONOR_DIR),
+                        crate::work_donor::DONOR_POLL_INTERVAL,
+                    );
+                    running_services.record(crate::local_only::MeshService::WorkDonor);
+                    handle
+                });
+
                 (
                     Some(gossip_handle),
                     Some(collaborate_handle),
@@ -3970,6 +4015,7 @@ impl EmbeddedDaemon {
             _collaborate_handle: collaborate_handle,
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
+            _work_donor_handle: work_donor_handle,
             local_only,
             running_services,
             _shutdown_tx: shutdown_tx,
