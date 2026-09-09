@@ -210,7 +210,8 @@ pub async fn run_trial_observed(
             }
         }
 
-        let file_listing = render_source_files(&base_workdir, &world_files);
+        let artifact_set = classify_artifact_files(&base_workdir, &pristine_baseline, &world_files);
+        let file_listing = render_source_files(&base_workdir, &world_files, &artifact_set);
         let history_block = history
             .iter()
             .rev()
@@ -223,7 +224,7 @@ pub async fn run_trial_observed(
         // The model sees the pristine-baseline file listing on the
         // restart candidate, so the message it generates is grounded
         // in the original code, not the partial-fit winner.
-        let pristine_listing = render_source_files(&pristine_baseline, &world_files);
+        let pristine_listing = render_source_files(&pristine_baseline, &world_files, &artifact_set);
         let feedback_block = last_round_feedback.render_with_ties(config.candidates_per_round);
         let regular_messages = vec![
             system_message(),
@@ -883,17 +884,61 @@ async fn try_candidate(
     }
 }
 
-/// Render every discovered source file, path-labeled and
-/// line-numbered, under a shared character budget. Files past the
-/// budget are listed by name so the model knows they exist (silent
+/// Files the trial itself has modified — they differ from the pristine
+/// baseline, or did not exist there. These are the model's own
+/// accumulating output: under budget pressure they truncate FIRST, so
+/// untouched ground truth (corpus, spec, inputs) is never evicted by
+/// the artifact growing against it. Receipts (atlas-rung probe
+/// 2026-09-08): source.md fell out of the prompt once the extracted
+/// atoms grew past the shared budget, and the model then CONFABULATED
+/// quote continuations for a text it could no longer see.
+fn classify_artifact_files(
+    base: &std::path::Path,
+    pristine: &std::path::Path,
+    files: &[String],
+) -> std::collections::HashSet<String> {
+    files
+        .iter()
+        .filter(|f| {
+            let cur = std::fs::read_to_string(base.join(f.as_str()));
+            let orig = std::fs::read_to_string(pristine.join(f.as_str()));
+            match (cur, orig) {
+                (Ok(c), Ok(o)) => c != o,
+                (Ok(_), Err(_)) => true,
+                _ => false,
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+/// Render every discovered file, path-labeled and line-numbered, under
+/// a shared character budget. Ground-truth files render FIRST; the
+/// model's own artifact files truncate first. Files past the budget
+/// are listed by name so the model knows they exist (silent
 /// truncation would read as "covered everything").
-fn render_source_files(root: &std::path::Path, files: &[String]) -> String {
-    const BUDGET_CHARS: usize = 14_000;
+fn render_source_files(
+    root: &std::path::Path,
+    files: &[String],
+    artifacts: &std::collections::HashSet<String>,
+) -> String {
+    render_source_files_with_budget(root, files, artifacts, 14_000)
+}
+
+fn render_source_files_with_budget(
+    root: &std::path::Path,
+    files: &[String],
+    artifacts: &std::collections::HashSet<String>,
+    budget_chars: usize,
+) -> String {
+    let mut ordered: Vec<&String> = files.iter().collect();
+    // false sorts before true: ground truth first, stable within class.
+    ordered.sort_by_key(|f| artifacts.contains(f.as_str()));
     let mut out = String::new();
     let mut omitted: Vec<&str> = Vec::new();
-    for f in files {
+    for f in ordered {
         let rendered = render_with_line_numbers(&root.join(f));
-        if out.len() + rendered.len() > BUDGET_CHARS && !out.is_empty() {
+        if out.len() + rendered.len() > budget_chars && !out.is_empty() {
             omitted.push(f);
             continue;
         }
@@ -1487,9 +1532,53 @@ mod multi_file_target_tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("a.py"), "x = 1\n").unwrap();
         std::fs::write(tmp.path().join("b.py"), "y = 2\n").unwrap();
-        let out = render_source_files(tmp.path(), &["a.py".into(), "b.py".into()]);
+        let out = render_source_files(
+            tmp.path(),
+            &["a.py".into(), "b.py".into()],
+            &Default::default(),
+        );
         assert!(out.contains("### `a.py`"));
         assert!(out.contains("### `b.py`"));
         assert!(!out.contains("additional files not shown"));
+    }
+
+    #[test]
+    fn ground_truth_renders_despite_grown_artifact() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Lexicographic order would render atoms.json first; the budget
+        // only fits one, and it must be the input, not the artifact.
+        std::fs::write(tmp.path().join("atoms.json"), "x".repeat(400) + "\n").unwrap();
+        std::fs::write(tmp.path().join("source.md"), "corpus text\n").unwrap();
+        let artifacts: std::collections::HashSet<String> =
+            ["atoms.json".to_string()].into_iter().collect();
+        let out = render_source_files_with_budget(
+            tmp.path(),
+            &["atoms.json".into(), "source.md".into()],
+            &artifacts,
+            200,
+        );
+        assert!(out.contains("### `source.md`"));
+        assert!(!out.contains("### `atoms.json`"));
+        assert!(out.contains("additional files not shown"));
+        assert!(out.contains("atoms.json"));
+    }
+
+    #[test]
+    fn classify_artifact_files_marks_modified_and_created() {
+        let base = tempfile::tempdir().unwrap();
+        let pristine = tempfile::tempdir().unwrap();
+        std::fs::write(base.path().join("same.py"), "x = 1\n").unwrap();
+        std::fs::write(pristine.path().join("same.py"), "x = 1\n").unwrap();
+        std::fs::write(base.path().join("grown.json"), "[1, 2, 3]\n").unwrap();
+        std::fs::write(pristine.path().join("grown.json"), "[]\n").unwrap();
+        std::fs::write(base.path().join("new.json"), "{}\n").unwrap();
+        let artifacts = classify_artifact_files(
+            base.path(),
+            pristine.path(),
+            &["same.py".into(), "grown.json".into(), "new.json".into()],
+        );
+        assert!(!artifacts.contains("same.py"));
+        assert!(artifacts.contains("grown.json"));
+        assert!(artifacts.contains("new.json"));
     }
 }
