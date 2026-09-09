@@ -16,7 +16,7 @@
 use crate::setup_config::SetupConfig;
 use std::path::{Path, PathBuf};
 
-const DAEMON_STATUS_URL: &str = "http://127.0.0.1:9741/status";
+const DAEMON_MODELS_URL: &str = "http://127.0.0.1:9741/v1/models";
 
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(|s| s.as_str()).unwrap_or("") {
@@ -412,40 +412,42 @@ async fn daemon_reachable() -> bool {
 
 /// Query `/status` for the set of currently-resident model paths/ids. Returns
 /// `None` when the daemon isn't reachable (so callers can degrade gracefully).
+/// Which models the daemon is serving, from THE wire decider —
+/// `GET /v1/models`, the OpenAI-compatible listing every client of this
+/// daemon routes by (sv-surface rung 2). Until 2026-09-08 this scraped
+/// `/status`'s `inference.resident` with a permissive key scavenger
+/// (`path`/`model`/`id`/`file`, any nesting) — a private second parser
+/// beside the desktop's `/v1/models` parse, and the two could disagree
+/// about the same daemon. `None` when the daemon isn't reachable.
 async fn fetch_resident() -> Option<Vec<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
         .ok()?;
-    let resp = client.get(DAEMON_STATUS_URL).send().await.ok()?;
+    let resp = client.get(DAEMON_MODELS_URL).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }
     let body: serde_json::Value = resp.json().await.ok()?;
-    // Be permissive about shape: collect any strings under inference.resident,
-    // falling back to an empty list (daemon up, nothing parsed) so `daemon:
-    // running` still reports correctly.
-    let mut out = Vec::new();
-    if let Some(res) = body.pointer("/inference/resident") {
-        collect_strings(res, &mut out);
-    }
-    Some(out)
+    Some(parse_model_ids(&body))
 }
 
-fn collect_strings(v: &serde_json::Value, out: &mut Vec<String>) {
-    match v {
-        serde_json::Value::String(s) => out.push(s.clone()),
-        serde_json::Value::Array(a) => a.iter().for_each(|e| collect_strings(e, out)),
-        serde_json::Value::Object(o) => {
-            // Common shapes: {"path": "..."} / {"model": "..."} / {"id": "..."}.
-            for k in ["path", "model", "id", "file"] {
-                if let Some(serde_json::Value::String(s)) = o.get(k) {
-                    out.push(s.clone());
-                }
-            }
-        }
-        _ => {}
-    }
+/// The one parse of the `/v1/models` body shape: `{"data": [{"id": ...}]}`
+/// (OpenAI-compatible — the same shape `sovereign-desktop`'s
+/// `list_daemon_models` reads). Strict on purpose: a body that does not
+/// speak the listing shape yields an empty set — reported as "daemon up,
+/// nothing parsed" — rather than scavenging plausible keys out of an
+/// unknown schema.
+fn parse_model_ids(body: &serde_json::Value) -> Vec<String> {
+    body.get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(|i| i.as_str()))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// True when `resident` (a path or model id) refers to the same model as the
@@ -475,13 +477,37 @@ mod tests {
     }
 
     #[test]
-    fn collect_strings_handles_common_shapes() {
-        let mut out = Vec::new();
-        collect_strings(
-            &serde_json::json!([{"path": "/m/a.gguf"}, {"id": "b"}, "c"]),
-            &mut out,
+    fn parse_model_ids_reads_the_openai_listing_shape() {
+        // THE wire decider's shape (sv-surface rung 2): the same
+        // `{"data":[{"id": ...}]}` the desktop's list_daemon_models reads.
+        let body = serde_json::json!({
+            "object": "list",
+            "data": [
+                {"id": "qwen3-1.7b", "object": "model"},
+                {"id": "qwen3-embedding-0.6b", "object": "model"},
+            ]
+        });
+        assert_eq!(
+            parse_model_ids(&body),
+            vec!["qwen3-1.7b", "qwen3-embedding-0.6b"]
         );
-        assert_eq!(out, vec!["/m/a.gguf", "b", "c"]);
+    }
+
+    #[test]
+    fn parse_model_ids_is_strict_about_unknown_shapes() {
+        // The retired scavenger accepted this body (it would have found
+        // "path" under any nesting); the one parser of the listing shape
+        // does not — an unknown schema reads as "daemon up, nothing
+        // parsed" instead of a guess (§18.3).
+        let body = serde_json::json!({
+            "inference": {"resident": [{"path": "/m/a.gguf"}]}
+        });
+        assert!(parse_model_ids(&body).is_empty());
+        // Missing `data`, non-array `data`, non-string `id`: all empty,
+        // never a panic, never a partial guess.
+        assert!(parse_model_ids(&serde_json::json!({})).is_empty());
+        assert!(parse_model_ids(&serde_json::json!({"data": 7})).is_empty());
+        assert!(parse_model_ids(&serde_json::json!({"data": [{"id": 3}]})).is_empty());
     }
 
     #[test]

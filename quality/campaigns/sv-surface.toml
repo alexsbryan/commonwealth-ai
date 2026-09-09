@@ -116,6 +116,27 @@ status    = "active"
 #   2   models: residency via GET /v1/models (CLI model_cmd's /status scrape
 #       repointed); one GGUF-scanner home (desktop models.rs
 #       scan_directory_flat vs the daemon-side scan).
+#       LANDED 2026-09-08, RESHAPED BY MEASUREMENT: the GGUF row is STRUCK
+#       as not-a-twin — model_fetch's scanner serves PEER FILE DISTRIBUTION
+#       (sizes+shas over the mesh), a different question from the desktop's
+#       local-dir discovery for the settings UI, and the CLI has no
+#       discovery scan at all (one-path resolution). The real twin was
+#       model RESIDENCY: the CLI scraped /status's inference.resident with
+#       a permissive key scavenger (path/model/id/file under any nesting)
+#       while the desktop parsed /v1/models. fetch_resident now reads
+#       GET /v1/models through one strict parse_model_ids
+#       ({"data":[{"id":..}]}, the OpenAI shape every client routes by);
+#       the scavenger is deleted; [loaded] semantics = "the daemon serves
+#       this model id". SEMANTIC DELTA named: the listing is the live
+#       inference store (fresher mid-reload than /status's resident row).
+#       CENSUS: tests/model_residency_one_decider.rs forbids three
+#       spellings of the retreat — and its own sabotage TAUGHT the third:
+#       the first draft (const + bare path) sailed a planted
+#       http://…:9741/status const through GREEN (§18.1 — a check needs
+#       the failing input it names); widened, watched red, reverted.
+#       models.rs:615 test-chat drain: re-measured, it is a PROVIDER smoke
+#       against a chosen file (not a conversation turn, not a twin) —
+#       named here, out of every rung's scope.
 #   3   conversation wire surface - ONE rung, TWO consumers: the CRUD routes
 #       the desktop needs for pure-client attach are the routes mobile
 #       already speaks on sovereign-server (list/get/create/delete +
@@ -190,20 +211,24 @@ id           = "sv-capability-twins"
 one_line     = "CLAIM: no capability the surfaces share is implemented twice"
 derives_from = "the duplication table verified 2026-09-08, file:line in the ladder rows"
 status       = "open"
-# Six twin families, measured 2026-09-08. FIVE remain after rung 1 (the
-# corpus-status twin deleted: the CLI's private walk, see the ladder row):
+# Six twin families, measured 2026-09-08. FOUR remain after rungs 1-2:
 #   corpus status      DELETED 2026-09-08 (rung 1) - one decider at
 #                      corpus_engine::engine::status, served at
 #                      /internal/corpus/status
-#   model residency    model_cmd.rs:19+/status scrape  vs  GET /v1/models + commands/models.rs:168 scan_directory_flat
-#   GGUF discovery     desktop scan_directory_flat  vs  the daemon-side scanner (one home decided at rung 2)
+#   model residency    DELETED 2026-09-08 (rung 2) - the wire decider
+#                      GET /v1/models, one strict parse in model_cmd.rs
+#                      matching the desktop's existing parse
+#   GGUF discovery     STRUCK 2026-09-08 (rung 2, measured): NOT a twin —
+#                      model_fetch is peer file distribution, the desktop's
+#                      scan is local UI discovery, the CLI resolves one
+#                      path. Different questions, no shared decider.
 #   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO
 #   reading DTOs       commands/reading.rs - 44 Dto refs mirroring daemon DTOs (byte-compat by comment)
 #   health report      health.rs:123 - its own HealthReport, NOT sovereign_contracts::health, by its own comment
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
-floor        = 5.0
-floor_basis  = "twin enumeration rung -1 (6 families), rung 1 deleted the corpus-status twin 2026-09-08: 5 remain, the list above with file:line"
+floor        = 4.0
+floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured): 4 remain"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
@@ -223,8 +248,14 @@ status       = "open"
 #      (planted `fn corpus_readiness(` stub, watched red naming the rule,
 #      reverted) + the route parity test's own sabotage (label lie, red,
 #      revert).
-floor        = 1.0
-floor_basis  = "rung 1 landed the corpus-status control, 2026-09-08; 0 before"
+#   2. model residency - LANDED 2026-09-08:
+#      tests/model_residency_one_decider.rs. The control's own sabotage
+#      EARNED its third needle: the first draft (retired const + bare path)
+#      sailed a planted http://…:9741/status const through GREEN; widened
+#      to the URL spelling, watched red, reverted (§18.1 — the check now
+#      names the failing input that beat it).
+floor        = 2.0
+floor_basis  = "rungs 1-2 landed their controls, 2026-09-08; 0 before"
 target       = 6.0
 direction    = "higher_is_better"
 instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"
