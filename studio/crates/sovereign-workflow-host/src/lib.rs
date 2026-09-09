@@ -50,6 +50,9 @@ pub use author_schema::workflow_json_schema;
 pub mod installer;
 pub use installer::HttpCorpusInstaller;
 
+pub mod workflow_http;
+pub use workflow_http::{workflow_http_router, WorkflowToolFeed};
+
 // ── Catalog ─────────────────────────────────────────────────────────────
 // Shipped starters + the user's own (`~/.svrnmesh/workflows/`). Shared by the
 // CLI (`workflow list/copy/new/run <name>`) and the daemon trigger runtime, which
@@ -256,6 +259,11 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
 /// cache, then runs over the workflow's source items. Headless: progress goes to
 /// `tracing`, and the `RunReport` is returned for the caller to present (the CLI
 /// prints a summary; the daemon trigger logs it). Errors are human-readable strings.
+///
+/// `observer`, when `Some`, receives a [`WorkflowProgress`] event at each
+/// lifecycle point — the job surface (`workflow_http`) threads one so a
+/// polling client can watch the run go.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_workflow_in_process(
     wf: &Workflow,
     daemon: &str,
@@ -263,6 +271,7 @@ pub async fn run_workflow_in_process(
     no_cache: bool,
     params: BTreeMap<String, String>,
     extra_tools: Vec<Box<dyn Tool>>,
+    observer: Option<StepObserver>,
 ) -> std::result::Result<RunReport, String> {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
 
@@ -370,7 +379,7 @@ pub async fn run_workflow_in_process(
         no_cache,
         params,
         extra_tools,
-        None,
+        observer,
     )
     .await
 }

@@ -1055,6 +1055,15 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
                     project_http,
                     corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                    // sv-surface rung 5: workflow execution is a daemon job
+                    // surface (`/internal/workflows/*`). The runtime routes
+                    // `model:`/`embed:` steps back through this daemon's own
+                    // loopback, and injects the corpus/atlas tools the base
+                    // registry omits.
+                    workflow_http: sovereign_workflow_host::workflow_http_router(
+                        format!("http://127.0.0.1:{}", config.daemon.client_port),
+                        std::sync::Arc::new(sovereign_tools::workflow_corpus_tools),
+                    ),
                 },
                 advertise_embed,
             },

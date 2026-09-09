@@ -1157,6 +1157,15 @@ pub async fn bootstrap_with_progress(
             tracing::info!("desktop daemon: /internal/corpus/watch/* router + scheduler wired");
         }
 
+        // sv-surface rung 5: the embedded desktop daemon serves the same
+        // workflow job routes as the standalone one, so the Run view's job
+        // submission works unchanged in both modes. The runtime routes
+        // `model:`/`embed:` steps back through this daemon's loopback and
+        // injects the corpus/atlas tools.
+        let workflow_http = sovereign_workflow_host::workflow_http_router(
+            format!("http://127.0.0.1:{}", cli_cfg.daemon.client_port),
+            Arc::new(sovereign_tools::workflow_corpus_tools),
+        );
         daemon_services = Some((
             daemon_handle,
             cli_cfg,
@@ -1164,6 +1173,7 @@ pub async fn bootstrap_with_progress(
                 mcp: mcp_surface,
                 project_http,
                 corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                workflow_http,
             },
         ));
     }

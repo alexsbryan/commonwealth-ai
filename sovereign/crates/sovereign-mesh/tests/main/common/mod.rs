@@ -506,6 +506,7 @@ pub fn desktop_services_with_engine(
                     },
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
                 },
                 advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
                     reason: "test fixture: no embed probe".into(),
@@ -600,6 +601,7 @@ pub fn desktop_services_with_store(
                     },
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
                 },
                 advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
                     reason: "test fixture: no embed probe".into(),

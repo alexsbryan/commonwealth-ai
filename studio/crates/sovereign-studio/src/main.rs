@@ -263,7 +263,7 @@ async fn workflow_run(args: &[String]) -> std::result::Result<ExitCode, String> 
     };
 
     let report =
-        run_workflow_in_process(&wf, &daemon, concurrency, no_cache, params, extra).await?;
+        run_workflow_in_process(&wf, &daemon, concurrency, no_cache, params, extra, None).await?;
 
     eprintln!(
         "\n— {} — {} ok, {} failed · {} steps ran, {} cached —",

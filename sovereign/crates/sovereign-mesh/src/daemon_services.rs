@@ -29,6 +29,7 @@
 //!   mesh/admin/reading routers   Y           Y               .
 //!   project_http_router          Y           Y               .
 //!   corpus_watch_http_router     Y*          Y*              .
+//!   workflow_http_router         Y           Y               .
 //!   provider_factory             Y           .               .
 //!   mesh_store                   Y           .               .
 //!   convergence_recorder         Y           .               .
@@ -68,7 +69,7 @@
 //! |---|---|---|
 //! | CORE | cannot serve at all | `corpus_engine`, `inference_provider` |
 //! | POLICY | serves *wrongly* | `SetupConfig` (bind, token, peer-inflight ceiling), `advertise_embed` |
-//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `+knowledge_view_http`, `+solve_http` |
+//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `workflow_http`, `+knowledge_view_http`, `+solve_http` |
 //! | RAILS | a surface reports something untrue | `provider_factory`, `mesh_store`, `convergence_recorder` |
 //!
 //! `SetupConfig` sits on the daemon rather than in a variant because all three
@@ -209,10 +210,18 @@ pub struct ServingCore {
 /// never installed its handlers answer 503 with a named reason, which is why
 /// mounting it unconditionally is strictly better than the 404 an unmounted
 /// router produced (ARCH §18.3).
+///
+/// `workflow_http` is the same shape: a host-built router
+/// (`sovereign-workflow-host::workflow_http::workflow_http_router`) this
+/// crate treats as opaque — sovereign-mesh must not depend on the workflow
+/// crates, so the capability crosses as an `axum::Router` and the job
+/// runtime lives behind it in the crate both hosts already link (sv-surface
+/// rung 5, 2026-09-09).
 pub struct ServingCapability {
     pub mcp: McpSurface,
     pub project_http: axum::Router,
     pub corpus_watch_http: axum::Router,
+    pub workflow_http: axum::Router,
 }
 
 /// Rings 1–3 as every serving daemon has them, whichever host runs it. The
@@ -417,10 +426,11 @@ impl DaemonServices {
     pub fn host_router_names(&self) -> Vec<&'static str> {
         match self {
             Self::MeshAdmin(_) => Vec::new(),
-            Self::Desktop(_) => vec!["project_http", "corpus_watch_http"],
+            Self::Desktop(_) => vec!["project_http", "corpus_watch_http", "workflow_http"],
             Self::Headless(_) => vec![
                 "project_http",
                 "corpus_watch_http",
+                "workflow_http",
                 "knowledge_view_http",
                 "solve_http",
             ],
@@ -434,10 +444,12 @@ impl DaemonServices {
             Self::Desktop(serving) => vec![
                 serving.capability.project_http.clone(),
                 serving.capability.corpus_watch_http.clone(),
+                serving.capability.workflow_http.clone(),
             ],
             Self::Headless(h) => vec![
                 h.serving.capability.project_http.clone(),
                 h.serving.capability.corpus_watch_http.clone(),
+                h.serving.capability.workflow_http.clone(),
                 h.knowledge_view_http.clone(),
                 h.solve_http.clone(),
             ],
@@ -702,6 +714,7 @@ pub(crate) mod fixtures {
                 },
                 project_http: axum::Router::new(),
                 corpus_watch_http: axum::Router::new(),
+                workflow_http: axum::Router::new(),
             },
             advertise_embed: EmbedAdvertisement::Unavailable {
                 reason: "fixture".into(),
@@ -920,8 +933,8 @@ mod tests {
         // disagree with its neighbour (the defect retired above).
         let expected: &[(&str, bool, bool, usize)] = &[
             ("mesh-admin", false, false, 0),
-            ("desktop", true, false, 2),
-            ("headless", true, true, 4),
+            ("desktop", true, false, 3),
+            ("headless", true, true, 5),
         ];
         let variants = fixtures::every_variant();
         assert_eq!(

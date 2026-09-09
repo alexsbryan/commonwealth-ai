@@ -164,7 +164,7 @@ async fn run_trigger(
     // now sourced by the runner from the daemon's own OICP manifest (loopback,
     // same box), so no `DEFAULT_MANIFEST` closure is threaded through here.
     let extra = sovereign_tools::workflow_corpus_tools();
-    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra).await {
+    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra, None).await {
         Ok(report) => tracing::info!(
             corpus,
             workflow = %origin,

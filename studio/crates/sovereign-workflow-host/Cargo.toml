@@ -11,17 +11,16 @@ sovereign-contracts = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-tools-base = { workspace = true }
 oicp-client = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { workspace = true }
+axum = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-# A fake `/v1` for `daemon_models`' probe tests — the embed resolver's
-# verdict is a real HTTP round-trip, so the test serves one.
-axum = { workspace = true }
 
 [lints]
 workspace = true

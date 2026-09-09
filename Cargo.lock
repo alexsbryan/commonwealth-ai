@@ -12919,6 +12919,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
  "sovereign-contracts",
  "tokio",
@@ -12975,6 +12976,7 @@ dependencies = [
  "axum",
  "oicp-client",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
  "sovereign-contracts",
  "sovereign-tools-base",
