@@ -550,6 +550,49 @@ fn genuine_rejoin_resurrects_a_tombstone() {
     assert_eq!(merged.last_seen, 100);
 }
 
+/// THE FAILING INPUT, with the roster's real numbers. BeefyMac was tombstoned
+/// and then seen 11.8 days later, and nothing read the contradiction its own
+/// record carried: `is_gossip_candidate` is `is_active`, so RuggedFox would
+/// not dial it, and with nobody dialling it no inbound merge could ever clear
+/// the tombstone. Measured 2026-09-09: 148 gossip dials in twenty minutes,
+/// none to this peer, whose daemon was up the whole time.
+#[test]
+fn a_member_seen_after_its_own_tombstone_is_active_again() {
+    let mut m = member(NodeId::from_u128(200), "BeefyMac", 1_788_985_799);
+    m.removed_at = Some(1_787_962_251);
+    assert!(
+        m.is_active(),
+        "last_seen post-dates removed_at, which `event_time` already calls a \
+         rejoin — a read path must not disagree with it"
+    );
+    assert_eq!(
+        m.event_time(),
+        1_788_985_799,
+        "and the two must agree on WHICH event was last"
+    );
+}
+
+/// The control, and it is the one that matters: without it the assertion above
+/// is satisfiable by an `is_active` that ignores `removed_at` altogether,
+/// which would resurrect every departed member in the mesh. These are
+/// `vast-49188146`'s real numbers from the same roster — a graceful `leave`
+/// stamps the tombstone at the moment of the last heartbeat, so the two
+/// timestamps are equal and the member is gone.
+#[test]
+fn a_departure_that_really_happened_stays_inactive() {
+    let mut m = member(NodeId::from_u128(201), "vast-49188146", 1_788_044_629);
+    m.removed_at = Some(1_788_044_629);
+    assert!(
+        !m.is_active(),
+        "removed_at == last_seen is a departure, not a rejoin"
+    );
+
+    // And the ordinary case: revoked well after it was last heard from.
+    let mut revoked = member(NodeId::from_u128(202), "revoked", 10);
+    revoked.removed_at = Some(50);
+    assert!(!revoked.is_active());
+}
+
 /// covers: FE-6
 #[test]
 fn merge_preserves_pubkey_when_old_peer_relays_record_without_it() {

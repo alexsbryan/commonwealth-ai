@@ -265,12 +265,42 @@ fn is_zero_u64(v: &u64) -> bool {
 }
 
 impl MemberRecord {
-    /// Whether this member is active (not tombstoned). Read paths
-    /// (online counts, gossip targets, knowledge fan-out roster) filter on
-    /// this so a departed node is invisible to scheduling while its tombstone
-    /// still circulates for convergence.
+    /// Whether this member is active — whether the LATEST lifecycle event
+    /// about it is something other than its own removal. Read paths (online
+    /// counts, gossip targets, knowledge fan-out roster) filter on this so a
+    /// departed node is invisible to scheduling while its tombstone still
+    /// circulates for convergence.
+    ///
+    /// **`removed_at.is_some()` is not that question, and reading it as that
+    /// question stranded a live peer.** [`Self::event_time`] has always stated
+    /// the rule — "a rejoin whose `last_seen` post-dates the removal
+    /// out-competes the tombstone" — and [`Mesh::merge_from`] implements it, so
+    /// a rejoin arriving THROUGH A MERGE clears the field and the old
+    /// predicate was right by accident. What it got wrong is the record that
+    /// never gets that merge.
+    ///
+    /// MEASURED, RuggedFox 2026-09-09. BeefyMac held `removed_at =
+    /// 1787962251` beside `last_seen = 1788985799` — seen 1,023,548 seconds
+    /// AFTER its own tombstone. `gossip::is_gossip_candidate` is this
+    /// predicate, so the node would not dial it; and with nobody dialling it
+    /// there was no inbound merge to clear the field. A self-sealing
+    /// exclusion, and it does not decay: 148 gossip dials in twenty minutes,
+    /// not one of them to a peer whose daemon was up throughout. Compare
+    /// `vast-49188146` in the same roster, carrying `removed_at == last_seen`
+    /// exactly — that is the shape of a departure that really happened, and it
+    /// stays excluded here.
+    ///
+    /// So this asks `event_time`'s question over `event_time`'s own two
+    /// fields, and the two now agree by construction rather than by review
+    /// (ARCH §10.6). It does not weaken revocation beyond what the merge
+    /// already permits: under the rule quoted above, a revoked node that keeps
+    /// gossiping already out-competes its own tombstone on the LWW.
     pub fn is_active(&self) -> bool {
-        self.removed_at.is_none()
+        match self.removed_at {
+            None => true,
+            // Seen after it was removed: it came back.
+            Some(removed_at) => self.last_seen > removed_at,
+        }
     }
 
     /// Whether this member has ANY path we could dial — an IP address
