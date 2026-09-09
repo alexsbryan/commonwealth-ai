@@ -891,11 +891,107 @@ impl Default for SkillRegistry {
 // (inner-work, recipe-author) are now consumed by
 // `intent_policy::policy_for` instead.
 
+// ─── Built-in skills — the one compiled-in set every host loads ──────────
+//
+// sv-surface rung 6, commit B. Until now exactly one host shipped these:
+// the desktop embedded them beside its bootstrap and every other commission
+// — including the daemon's, the host an attached desktop asks its turns
+// from — passed an EMPTY registry. A conversation tagged
+// `skill_id = "recipe-author"` therefore routed into its agent loop from
+// the desktop and ran as plain chat from the daemon: the C2 divergence,
+// silently, on the skill axis.
+//
+// The set is what the desktop shipped on 2026-09-09, measured: inner-work
+// and recipe-author. `sovereign/modes/workflow-author` exists in the tree
+// but ships in NO binary's registry (its TOOLS ship, via
+// `WorkflowAuthoringTools`); the witness/relational skills ride the
+// voice-eval harness only. Both hosts load exactly this list — adding a
+// mode here is a both-hosts decision, never a per-host registry fork.
+
+/// The raw `skill.toml` contents compiled into every binary that links
+/// this crate. Embedding at compile time keeps the surviving modes
+/// available on fresh installs regardless of filesystem layout, and
+/// survives bundle repackaging without resource plumbing.
+const BUILTIN_SKILL_TOMLS: &[&str] = &[
+    include_str!("../../../modes/inner-work/skill.toml"),
+    include_str!("../../../modes/recipe-author/skill.toml"),
+];
+
+/// The compiled-in skill TOMLs, in registration order. Exposed for hosts
+/// that compose their own registry pass (e.g. a dev overlay) and for tests
+/// pinning the set.
+pub fn builtin_skill_tomls() -> &'static [&'static str] {
+    BUILTIN_SKILL_TOMLS
+}
+
+/// Register the built-in skills into `skills`. Malformed entries are
+/// warned-and-skipped — the registry keeps whatever parsed, matching the
+/// desktop's behaviour when this lived there.
+pub fn register_builtin_skills(skills: &mut SkillRegistry) {
+    for (idx, toml) in BUILTIN_SKILL_TOMLS.iter().enumerate() {
+        match parse_skill_toml(toml) {
+            Some(skill) => skills.register(skill),
+            None => {
+                eprintln!("[skills] built-in skill #{idx}: failed to parse skill.toml — skipping")
+            }
+        }
+    }
+}
+
 // ─── Tests ────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builtin_skills_all_parse() {
+        // Every compiled-in skill.toml must parse — a malformed one is
+        // warned-and-skipped at runtime, which would silently shorten the
+        // Skills list on EVERY host. A previous build had 7/8 TOMLs using
+        // PascalCase privacy variants that serde rejected while a `>= 1`
+        // assertion let it ship; keep this strict.
+        let mut reg = SkillRegistry::new();
+        register_builtin_skills(&mut reg);
+        assert_eq!(
+            reg.list().len(),
+            builtin_skill_tomls().len(),
+            "every built-in skill.toml must parse successfully; \
+             registered {} of {} — check stderr for the malformed entries",
+            reg.list().len(),
+            builtin_skill_tomls().len(),
+        );
+    }
+
+    #[test]
+    fn builtin_set_is_exactly_inner_work_and_recipe_author() {
+        // The BOTH-HOSTS set, pinned by id. The desktop shipped exactly
+        // these two on 2026-09-09 (measured; workflow-author's TOML is in
+        // the tree but ships in no registry, witness rides the voice-eval
+        // harness). Adding or removing an id here changes what every
+        // commission routes — a both-hosts decision this pin makes visible.
+        let mut reg = SkillRegistry::new();
+        register_builtin_skills(&mut reg);
+        let mut ids: Vec<&str> = reg.list().iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        assert_eq!(ids, vec!["inner-work", "recipe-author"]);
+    }
+
+    #[test]
+    fn registering_builtins_twice_does_not_duplicate() {
+        // A host that loads the shared set and then a dev overlay pointing
+        // at the same TOMLs must not double-register: duplicate ids crash
+        // keyed rendering downstream (the desktop's each_key_duplicate
+        // freeze, preserved here at the shared home).
+        let mut reg = SkillRegistry::new();
+        register_builtin_skills(&mut reg);
+        register_builtin_skills(&mut reg);
+        assert_eq!(
+            reg.list().len(),
+            builtin_skill_tomls().len(),
+            "registering the same built-ins twice must not double the count"
+        );
+    }
 
     #[test]
     fn parse_valid_skill_toml() {

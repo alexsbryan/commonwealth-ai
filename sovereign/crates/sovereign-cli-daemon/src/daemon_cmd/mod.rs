@@ -915,6 +915,52 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     )
     .await;
 
+    // ── The skills + authoring layer the desktop carries (rung 6 B) ──────
+    //
+    // The daemon's Runtime used to commission with an EMPTY skill registry
+    // and no recipe-authoring tools, while the desktop shipped both. A
+    // conversation tagged `skill_id = "recipe-author"` therefore routed
+    // into its agent loop from the desktop and ran as plain chat from the
+    // daemon — the C2 divergence on the skill axis, silently. Both loads
+    // now come from the same homes the desktop uses: the compiled-in
+    // builtin set (sovereign_contracts::skills) and the notes+features
+    // backed RecipeAuthoringTools bundle.
+    //
+    // NAMED DELTA, not silent: the desktop additionally overlays USER
+    // skills from its `DesktopConfig.skills_dir` (an app-support path a
+    // daemon must not read). A user-authored custom skill therefore routes
+    // its agent loop in Local mode only until the daemon grows a skills
+    // dir of its own — recorded on the rung 6 row, and visible in attach
+    // as an untagged-shaped answer, not a crash.
+    let mut skills = sovereign_core::SkillRegistry::new();
+    sovereign_contracts::skills::register_builtin_skills(&mut skills);
+    tracing::info!(
+        skills = skills.list().len(),
+        "daemon: builtin skills registered (the desktop's shared set)"
+    );
+    let skills = Arc::new(skills);
+
+    // features.db — the recipe-author project layer. Warn-and-skip on
+    // failure, the same graceful-degrade posture the desktop's bootstrap
+    // takes: the daemon still serves turns without it, and the authoring
+    // tools report their own named degradation.
+    let features_store: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>> =
+        match sovereign_store::recipe_project_store::RecipeProjectStore::open(
+            &data_dir.join("features.db"),
+        ) {
+            Ok(s) => {
+                tracing::info!("daemon: recipe-author features.db opened");
+                Some(Arc::new(s))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "daemon: features.db unavailable — recipe-author tooling will degrade"
+                );
+                None
+            }
+        };
+
     // ── The daemon commissions the ONE Runtime ────────────────────────────
     //
     // `quality/TOPOLOGY.md` §3.5: "DAEMON — the only process that assembles a
@@ -945,11 +991,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
             corpus_engine: Arc::clone(&engine),
             note_store: Some(Arc::clone(&notes_store)),
-            // No workspace skills on the daemon: skill activation is a surface
-            // concern (a conversation is tagged by the surface that created
-            // it) and the daemon serves every surface. Empty is the same
-            // registry `svrn chat` passes.
-            skills: Arc::new(sovereign_core::SkillRegistry::new()),
+            // The same compiled-in skill set the desktop ships (rung 6
+            // commit B) — built just above from the ONE shared home, so a
+            // tagged conversation routes the same agent loop whichever
+            // host answers. User-skill overlays are a named delta on the
+            // rung row.
+            skills,
             // Approvals are out of scope for v1 of the turn protocol — the
             // same posture `sovereign-server` ships. `TurnRequest::Approve`
             // exists on the wire; routing it to a daemon-side session owner is
@@ -987,6 +1034,25 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
                     Arc::clone(&engine),
                 )));
+                // Recipe-authoring, the desktop's twin (rung 6 commit B): the
+                // same bundle the desktop's bootstrap pushes, wired with the
+                // SAME notes adapter + features store — so a conversation
+                // tagged `recipe-author` has its tool set whichever host
+                // answers. Absent stores are a DEGRADATION the bundle's
+                // report names, matching the desktop's posture.
+                b.push(Box::new({
+                    let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new();
+                    if let Some(fs) = features_store.as_ref() {
+                        ra = ra.with_notes(Arc::new(
+                            sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(
+                                Arc::clone(&notes_store),
+                            ),
+                        )
+                            as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
+                        ra = ra.with_features(Arc::clone(fs));
+                    }
+                    ra
+                }));
                 b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                     "shell",
                     "no shell in a long-lived daemon running as a different user \
