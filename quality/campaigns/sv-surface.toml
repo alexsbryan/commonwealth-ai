@@ -39,6 +39,289 @@ status    = "active"
 #   3. TWIN CENSUSES - per family, a planted second implementation turns the
 #      family census red.
 #
+# ── THE REALIGNMENT — 2026-09-09, three operator directives ─────────────────
+#
+# Recorded verbatim, because each one changed the work and none is derivable
+# from the code:
+#
+#   1. "the goal is to make the desktop, cli, and mobile all equally thin
+#      clients to the same backend"
+#   2. "We will accept absolutely no feature loss. We must figure out how to
+#      move all existing functionality to the wire."
+#   3. "This whole initiative MUST reduce code by the end"
+#
+# WHAT (1) CHANGES. The `is_attach_mode()` fork is not a design choice to
+# weigh — it is the obstacle. There are 15 fork sites today
+# (insight_commands.rs:114,145,166,184 · state.rs:295,825,1605 ·
+# commands/reading.rs:226,272,363,404 · commands/conversation.rs:250,404,688,
+# 714) and every rung so far ADDED to them. A branch beside a retained local
+# path is additive by construction: nothing is deleted, only forked around.
+# STOP ADDING FORKS. The end state is ONE path in both boot modes, where
+# "Local" means the daemon happens to be in-process.
+#
+# MEASURED, and it reframes rung 6: `send_message_stream`
+# (commands/chat.rs:100) opens with `require_runtime!` and has NO attach fork
+# at all. Chat is served by the desktop's own `Runtime` in BOTH modes; attach
+# differs only in that the inference provider is remote
+# (state/builders/inference.rs:368). So C2 is not unwinding a fork — it is the
+# FIRST conversion of the turn, and the 15 forks are all periphery.
+#
+# WHAT (2) CHANGES — THE ORDER. Wire coverage comes FIRST, fork removal
+# SECOND. No in-process path is deleted until the capability it serves has a
+# wire form. The GAP LEDGER below is that list, and it is the gate: a fork
+# may come out only when its row reads DONE. The rule is structural, not
+# remembered — see the `sv-no-feature-loss` bar.
+#
+# WHAT (3) COSTS, honestly. Directives 2 and 3 pull against each other and the
+# tension is NOT yet resolved. Measured 2026-09-09 over the commits this file
+# cites: +5,391 / -1,168 = NET +4,223 Rust. Only two of thirteen are negative.
+# The three largest adds are all daemon-side wire being BUILT — conversation
+# CRUD (+1,172), workflows (+986), the attach-boot routes (+902) — whose
+# payback is entirely in the collapse that has not happened. Wire growth is
+# bounded by the gap ledger; deletion is bounded by ~3,006 lines of desktop
+# construction spine (state.rs + state/builders/) plus whatever the 10,764
+# lines of commands shed once they stop branching. Which side wins is not
+# knowable until the ledger is closed, and a session that reports a number
+# before then is guessing.
+#
+# ── THE PROTOCOL SHAPE — two shapes, not nine ───────────────────────────────
+#
+# The reflex when adding nine capabilities to a wire is nine frame/reply
+# pairs. Measured, they are TWO shapes. `ApprovalChannel`
+# (sovereign-contracts/src/traits.rs) has six methods and `RoutingEventSink`
+# (sovereign-desktop/src-tauri/src/routing_events.rs:50) has three:
+#
+#   PROMPT  — show a thing, PARK the executor, resolve by key:
+#             request_approval -> bool · ask_user -> String ·
+#             request_information -> Option<String> · clarification-request
+#   NOTICE  — show a thing, return nothing:
+#             emit_progress · emit_message_refined · emit_lesson_proposed ·
+#             turn-narration · interpretation-proposed
+#
+# So the wire wants two outbound variants and one inbound, not nine pairs:
+#
+#   TurnFrame::Prompt  { id, prompt: Prompt }   host asks; MUST be answered
+#   TurnFrame::Notice  { notice: Notice }       host tells; no answer
+#   TurnRequest::Answer { id, answer: Answer }  client answers a Prompt
+#
+# `Prompt`/`Answer`/`Notice` are CLOSED enums over payload types that already
+# exist and already derive serde (ActionPreview, InformationRequest,
+# MessageRefinedPayload, LessonProposedPayload) — never a `serde_json::Value`
+# with a string discriminator, which is ARCH §2's smell.
+#
+# THE ABSTRACTION IS NOT BEING INVENTED — it is being let out of the crate it
+# already lives in. `ApprovalDesk`'s private `Pending` enum IS the Prompt/Answer
+# pairing, one to one:
+#     Pending::Approval(Sender<bool>)           <-> Prompt::Approval    / Answer::Approved
+#     Pending::Input(Sender<String>)            <-> Prompt::UserInput   / Answer::Text
+#     Pending::Information(Sender<Option<..>>)  <-> Prompt::Information / Answer::Information
+# and its `resolve()` is ALREADY the single closure-owning decider — the three
+# `resolve_approval`/`resolve_input`/`resolve_information` wrappers are thin
+# adapters over it, and collapse to `resolve(key, Answer)`. All four hosts sit
+# on the desk as of d82eaba96. The Prompt half needs NO new machinery.
+#
+# Verified fits, six for six, every payload already in sovereign-contracts and
+# already deriving serde: ActionPreview, InformationRequest (incl.
+# AcquisitionRoute), MessageRefinedPayload, LessonProposedPayload. ZERO DTO
+# work. `emit_progress`'s SYNC constraint is satisfied by construction —
+# `UnboundedSender::send` is sync and never blocks.
+#
+# TWO ADDITIONS the sketch needed:
+#   * `Notice::ResolveAck { id, outcome }` — `submit_*` returns a bool today and
+#     `Answer` is one-way. `ResolveOutcome` already exists as a closed enum with
+#     the exact three cases and its doc already says why the bool was wrong
+#     ("cannot tell 'accepted' from 'never arrived'", §18.3). It needs
+#     Serialize+Deserialize. That is the whole change. It also replaces
+#     `has_pending_information` with an honest after-the-fact answer.
+#   * `WrongKind` SURVIVES a typed Answer — a client can still aim
+#     `Answer::Approved` at a parked Information. `resolve()`'s
+#     restore-on-mismatch stays exactly as it is.
+#
+# THREE NAMED EXCEPTIONS — ship these rather than forcing a uniform mould:
+#   E1  `Notice` IS NOT INTRA-TURN. StepDone fires during the turn;
+#       MessageRefined and LessonProposed fire AFTER the terminal Complete
+#       (post-stream refinement; a detached capture spawn). Document Notice as
+#       "on this socket, until it closes" — NOT "during the turn". Load-bearing:
+#       a missing message-refined leaves the UI stuck on "Refining your answer"
+#       forever (collaboration.rs records the repro). See G13.
+#   E2  THE HANGUP POLICY IS PER-PROMPT-KIND. A closed socket CANCELS an
+#       Approval (granting on a vanished user's behalf is the substitution C1
+#       removed) but must read as SKIP for Information. `Pending::Information`'s
+#       own doc already encodes this — the abstraction knows, it just has to
+#       travel. Prompt needs a per-variant hangup policy, not a global one.
+#   E3  LEAVE `TurnFrame::Narration` WHERE IT IS. It is the one variant with
+#       real readers today (TurnObserver::on_narration, drain_turn, and
+#       mobile's mirror). Folding it into Notice is a wire break for no gain.
+#       Put the desktop's OTHER two routing events in as Notice variants.
+#       Asymmetric, and non-breaking.
+#
+# WHAT THE COLLAPSE DELETES, counted: ~200 of the 264 lines in the desktop's
+# approval.rs (five payload mirrors, three submit_* + has_pending_information,
+# the whole impl ApprovalChannel), +30 in conversation.rs, plus ~64 lines of
+# TypeScript. Concepts: three key formats -> one host-minted id; three Tauri
+# submit commands -> one; SIX Tauri event names -> TWO; three resolve_* -> one;
+# and the `task_id` slot itself, which exists only to stamp keys.
+# sovereign-server's ExecutorEvent is a fourth mirror of the same three
+# questions and converges on the payload types too.
+#
+# WHAT IT COLLAPSES on the desktop: three Tauri submit commands
+# (submit_approval / submit_input / submit_information_response), three
+# payload structs each carrying its own `key`, and three key formats become
+# one id and one answer. That is the best candidate found for making
+# directive (3) true.
+#
+# TIME-SENSITIVE, and the consumer census is COMPLETE: `TurnFrame::
+# {ApprovalRequest, UserInputRequest}` (f8fcf4775) FOLD INTO `Prompt`. Every
+# consumer: an ignore arm in core's serve.rs, an ignore arm in the desktop's
+# chat.rs, a deliberate error in the turn client, and the byte-pin test (which
+# moves with the change). NOTHING RENDERS THEM. sovereign-mobile is safe by
+# construction — its mirror carries only Token/Complete/StreamError/Narration
+# plus `#[serde(other)] Ignored`, so it has neither variant AND its catch-all
+# makes any reshape forward-compatible. Changing them is free NOW and stops
+# being free the moment C2 wires them.
+#
+# ── THE GAP LEDGER — what must reach the wire before any fork comes out ─────
+#
+# Every row is a capability the in-process path has and the wire does not.
+# Status: OPEN · IN-FLIGHT · DONE. A fork may be deleted only when the rows it
+# depends on read DONE. Rows are added, never silently dropped; a row that
+# turns out not to be a real capability is STRUCK with the measurement that
+# struck it (the rung-2/4 precedent).
+#
+#   G1  resume + redirect            IN-FLIGHT 2026-09-09. No TurnRequest
+#       variant; runtime.resume_session_stream / redirect_turn_stream are
+#       in-process only. drive_stream_handle (serve.rs:355) is public, so the
+#       daemon dispatch is small. Cross-conversation refusal required: a
+#       client must not resume/redirect another conversation's session.
+#   G2  cancel                       OPEN. No TurnRequest::Cancel; the
+#       QuerySession registry (query_session.rs) is in-process. Socket close
+#       aborts the turn today (turn_http.rs hangup abort), so the fallback is
+#       "drop the stream" — but cancel_preparing has no equivalent at all.
+#   G3  request_information          OPEN. Prompt-shaped, BLOCKING. Produced
+#       at collaboration.rs:268 (Refinement) and executor.rs:963 (StepBlock).
+#       A closed socket must resolve to None (SKIP), not Cancelled — that is
+#       the one semantic difference from request_approval.
+#   G3b submit_information_search    OPEN, and the tangled one (260 lines,
+#       commands/conversation.rs:374-638). SPLIT, measured: the web search
+#       stays CLIENT-side (it reads the desktop's own [search] config and
+#       crosses the desktop's egress boundary with user_formed:true — moving
+#       it changes which config is authoritative, a behaviour change not a
+#       refactor). The dossier write is ALREADY on the wire
+#       (POST /v1/notes/tool-outcome). The searched_sources registry write
+#       and the resolve are the daemon's — fold both into one Answer so a
+#       single user action is a single atomic effect.
+#   G4  message-refined              OPEN. One frame, no reply. CORRECTNESS-
+#       LOAD-BEARING: collaboration.rs:717 records that without this emit the
+#       UI sticks on "Refining your answer" forever.
+#   G5  lesson-proposed              OPEN. One frame, plus a /v1/lessons route
+#       family — the persistence side (commands/lessons.rs) reads notes.db
+#       directly, which is daemon-side in an always-client world.
+#   G6  step-done                    OPEN. No progress frame; the daemon
+#       TRACES AND DROPS it (turn_approval.rs emit_progress). Precedent to
+#       copy: sovereign-server's ExecutorEvent::StepDone carries the exact
+#       four fields the desktop payload needs. StepStatus::of is already the
+#       shared decider.
+#   G7  routing events               OPEN, and unlisted until 2026-09-09.
+#       The desktop's progress UI comes through a DIFFERENT DOOR:
+#       RoutingEventSink emits interpretation-proposed, clarification-request,
+#       turn-narration. TurnFrame::Narration exists but the daemon owns no
+#       per-connection narration subscription (stated in turn_http's module
+#       docs); the other two have no variant at all.
+#   G8  ResolveAck                   OPEN. submit_* returns bool ("did the key
+#       still exist"); the wire has no positive-acknowledgement channel. The
+#       desk's ResolveOutcome already carries the distinction.
+#   G9  Complete.metadata            OPEN, and a TRAP. In-process reads the
+#       RAW persisted blob and gates two behaviours on metadata["intent"] and
+#       metadata["provenance"]["finish_reason"]. The wire carries a
+#       TurnMetadata PROJECTION whose field is routed_intent. Substituting one
+#       for the other mechanically is a bug, and TS types metadata as
+#       Record<string, unknown> so svelte-check cannot catch it.
+#   G10 on_turn_started              OPEN. The synchronous message-id
+#       handshake has no wire counterpart by design (serve.rs's own doc). The
+#       renderer's real_message_id-overrides-fallback logic already supports
+#       returning a pending id instead — confirm, do not rebuild.
+#   G11 TurnStream cannot reply      OPEN, BLOCKS G3/G8 and approvals.
+#       next_frame(&mut self) holds the socket exclusively, so no Tauri
+#       command can answer while a reader runs. The daemon already does the
+#       right thing (turn_http.rs:702 splits sink/stream, writer fed by mpsc).
+#       Fix once in sovereign-turn-client and all three surfaces gain it.
+#   G12 ?approvals=true              OPEN. TurnClient::stream_url takes no
+#       query params, so the client family cannot claim approvals at all.
+#   G13 drain_turn ends at Complete  OPEN. message-refined and lesson-proposed
+#       fire AFTER the terminal frame. The socket stays open host-side, so
+#       this is the CLIENT's drain contract, not a protocol limit.
+#   G14 attachment + context         OPEN, UNMEASURED. AttachedFile,
+#       FocusedChunkRef, document/asset attachment, deep research, inner-work
+#       are desktop-only and have not been surveyed for wire coverage.
+#
+# ── STRUCTURAL BLOCKERS — close before any collapse SHIPS ───────────────────
+#
+#   B1  A FRESH-INSTALL DESKTOP BINDS NO PORT. This is the largest item in the
+#       whole collapse and nobody had costed it. start_daemon is the only
+#       thing that binds, and it is reachable only via try_resume /
+#       create_mesh / join_mesh. try_resume returns Ok(false) without binding
+#       when there is no mesh.json on disk. A user who has never created or
+#       joined a mesh therefore has NO LISTENER — and chats fine today,
+#       because chat is in-process. Making the desktop a client turns that
+#       into a total outage on every first run. The turn surface must be
+#       decoupled from mesh resumption; the CLI daemon already auto-creates a
+#       solo mesh at boot and the desktop has no equivalent.
+#   B2  COLD START. Measured 5.9-7.7s between spawn and bind (supervisor_setup
+#       records it from a boot-loop incident, two 0.6B slots, CPU-only). The
+#       readiness gate is `state.runtime.is_some()`, a Runtime check, NOT a
+#       port probe, and nothing probes 127.0.0.1:9741 before enabling chat.
+#       Needs: readiness becomes the daemon's own /v1/models probe;
+#       backend-ready fires on first successful probe; client-side retry so a
+#       turn issued into the window queues rather than errors.
+#   B3  BIND FAILURE IS BEST-EFFORT. daemon.rs logs a warn! and returns from
+#       the serve task. Harmless today (chat is in-process); a silent total
+#       outage in an always-client world. Must become surfaced and fatal.
+#   B4  RUN-LOCK REFUSAL commissions NO daemon, deliberately, and state.rs
+#       says so: "Every desktop surface that does not need the mesh keeps
+#       working." Chat is one of those surfaces today. It will not be.
+#
+# ── DEFECTS FOUND ON THE WAY (verified 2026-09-09, independent of this work) ─
+#
+#   D1  ATTACH SPAWNS A SECOND COMPACTION WORKER. state.rs:966 comments
+#       "attach-mode leaves the worker None (the daemon at the other end runs
+#       its own)". Only the CONFIG falls back (unwrap_or_default); the
+#       CompactionWorker::spawn at state.rs:1569 and `compaction: Some(..)` at
+#       state.rs:1647 are UNCONDITIONAL. Attach mode runs a second compaction
+#       pass over the same sovereign.db the attached daemon compacts.
+#   D2  THE ATTACH FLOOR IS 13, NOT 14. WatchedSubsystem::install
+#       (state.rs:1144) sits inside `if let Some((daemon_handle, cli_cfg)) =
+#       local_daemon_wiring` (state.rs:980) — Local-only. The census FLOOR and
+#       this file's floor_basis have both been counting a needle that cannot
+#       fire in attach. Correct the census and the bar in ONE commit.
+#
+# ── CLOSEOUT LADDER (revised 2026-09-09; supersedes rung 6's C2/E sketch) ────
+#
+#   R1  THE PROTOCOL. Land Prompt/Notice/Answer as the two-shape contract,
+#       folding ApprovalRequest/UserInputRequest into it. Byte pins per
+#       variant. Do this FIRST — it is nearly free now and expensive later.
+#   R2  THE CLIENT. sovereign-turn-client: split the socket (G11), the
+#       approvals claim (G12), drain past Complete (G13), Resume/Redirect
+#       senders. One crate, all three surfaces gain it.
+#   R3  THE WIRE COVERAGE. G1-G10 to DONE, each with its daemon-side producer
+#       in SocketApprovalChannel and its frontend payload reconstructed
+#       byte-identically (the four already-reconstructible events prove the
+#       shape: zero TypeScript moved).
+#   R4  THE BLOCKERS. B1-B4. B1 is a design problem, not a code problem, and
+#       should be settled with the operator before it is built.
+#   R5  THE COLLAPSE. Delete the 15 forks and the desktop's in-process turn
+#       path. `sv-attach-pure-client` floor 13 -> 0. THIS is where the ledger
+#       turns; nothing before it deletes much.
+#   R6  MOBILE (M-1/M-2). By construction once it consumes the client family.
+#
+# ── WHERE TO PICK THIS UP ───────────────────────────────────────────────────
+#
+# Read, in this order: this file's REALIGNMENT + GAP LEDGER (above), then
+# `sovereign notes --query "sv-surface"` for the session decision notes, then
+# quality/TOPOLOGY.md §3.5 (the destination shape) — NOT the whole file.
+# An earlier session wrote ~1000 lines of the wrong shape by working from a
+# hand-off summary instead of the spec, and deleted all of it. The spec
+# outranks the hand-off.
+#
 # ── THE CLOSED APP-LOCAL SET (named up front; anything else that stays ──────
 # ── in-process at attach is a defect, not a holdout) ─────────────────────────
 #   tray - crash report/bundle - updater - friendly names - command bridge
