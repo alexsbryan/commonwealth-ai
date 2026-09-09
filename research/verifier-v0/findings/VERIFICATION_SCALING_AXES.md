@@ -1303,3 +1303,94 @@ sampled hypotheticals could differ; what is measured is that THIS canonical form
 loses to a larger k at equal context.
 
 Reproduce: `scripts/hyde_probe.py` (bars in the header).
+
+## 18. The uncovered regime — retrieval SCATTER detects "I don't have this", and the model doesn't
+
+**2026-09-09. This section repairs a scope defect running through §11-§17.**
+Every one of those ran on the SEP bank, and §13 proved that corpus HOLDS every
+hard-core fact. So all of it measured the COVERED case. A mesh RAG system
+covering ~10% of what could be asked lives in the other 90%, where no k reaches
+anything and the only decisions are ACQUIRE or ABSTAIN. §16's sufficiency AUC of
+0.633 was computed on a distribution with **no true negatives of the kind that
+matter**. The correction is owed and this is it.
+
+Three regimes, from banks already on disk: **covered** (21 SEP questions on
+SEP), **ablated** (the same 21 with each question's own `expected_sources`
+articles removed from the pool — topically adjacent, specifically missing, and
+PAIRED with covered), **foreign** (20 wikipedia-bank questions — Yalta, Einstein's
+1905 papers — against a philosophy corpus). 41 genuine negatives.
+
+### B2 — k still helps where the source was removed, and my prediction was wrong
+
+| regime | k=10 | k=28 | k=80 |
+|---|---|---|---|
+| covered | 62.9% | 79.2% | 89.9% |
+| ablated | 56.6% | 71.1% | **78.6%** |
+| foreign | 16.2% | 23.1% | 39.2% |
+
+I predicted k would be flat once the fact was absent. It is not: ablation
+removed 33 hits/question and cost only 11 points at k=80. **An encyclopedia is
+cross-referential** — deleting the three home articles does not delete the fact,
+because other entries discuss it. So the ablation is a WEAKER manipulation than
+intended, and §14/§17's "k wins" survives into it rather than being scoped away.
+
+### B1 — the load-bearing result, and it inverts
+
+Detection of "the corpus has this", covered as positive:
+
+| predictor | all negatives | ablated only | foreign only |
+|---|---|---|---|
+| **fewer distinct titles** | **0.803** | **0.811** | 0.794 |
+| **top-3 title share** | 0.797 | **0.821** | 0.773 |
+| top-1 title share | 0.729 | 0.764 | 0.693 |
+| window chars | 0.312 | 0.500 | 0.114 |
+| **4B evaluator** | **0.626** | **0.595** | 0.658 |
+
+Mean behaviour at k=28 shows the mechanism directly:
+
+| regime | distinct titles | top-title share | model says YES |
+|---|---|---|---|
+| covered | 10.2 | 0.37 | 67% |
+| ablated | 15.1 | 0.24 | 48% |
+| foreign | 16.2 | 0.28 | 35% |
+
+> **When the corpus holds the answer, retrieval CONCENTRATES. When it does not,
+> retrieval SCATTERS.** Counting distinct documents in the window detects the
+> difference at AUC ~0.80 — free, model-free, no extra call — and it holds on the
+> HARD ablated case (0.811) as well as the easy foreign one.
+
+**The 4B evaluator is blocked at 0.626.** It still answers "yes, these passages
+contain what is needed" on **35% of questions about Yalta put to a philosophy
+encyclopedia**. It moves in the right direction and far too weakly to route on.
+Sixth time in this arc the boring lever beat the clever one — and the first time
+the boring lever produced a POSITIVE result rather than a null.
+
+### The caveat that must travel with this
+
+**The sign flip is post-hoc.** §16 measured `f_titles` at 0.661 in the
+*positive* direction on an all-covered distribution; here it is 0.197, i.e.
+0.803 inverted. Both are explicable — within covered questions more documents
+means more evidence, while across regimes scatter means no home — but that
+two-regime story was written AFTER seeing the data. It needs confirmation on a
+held-out bank before anything routes on it. Also: `foreign` coverage of 39.2% at
+k=80 is implausibly high and is keyword-matcher leakage (a fact like "special
+relativity" matches any SEP text using both words), so the foreign column
+overstates coverage and understates the detector's job.
+
+### What this licenses
+
+The trigger for acquisition and abstention — the two decisions that matter in
+the 90% — appears to be **free and model-free**. That is a much better result
+than a working evaluator would have been: no slot, no TTFT cost, no lineage, and
+it is computable from the retrieval the system already did. It also answers the
+mesh question differently than every prior section: if detection is free, the
+mesh's job is not to detect, it is to ACT on the detection — which is
+acquisition, and which is `deep-research-t6f`.
+
+### Scope
+
+n=21/21/20, one corpus, one embedder. The ablation is partial (cross-reference
+leakage). The detector is one post-hoc sign flip on one feature family and is
+NOT confirmed. No synthesis arm.
+
+Reproduce: `scripts/uncovered_regime.py`.
