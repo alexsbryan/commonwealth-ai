@@ -63,6 +63,28 @@ pub enum Error {
     #[error("No shards found for corpus: {0}")]
     NoShardsFound(String),
 
+    /// A merge was asked to cover `expected` partitions and could only
+    /// resolve `covered` of them. Refused rather than merged: a subset
+    /// merge produces a canonical that *looks* complete, gets
+    /// re-advertised on gossip, and every peer then holds a different
+    /// "complete" canonical. See `auto_ingest`'s 17/38 note for the
+    /// wild instance.
+    ///
+    /// Sibling concept, deliberately NOT the same type:
+    /// `commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage`
+    /// names the identical decision on the stranded-partition recovery
+    /// path. It stays a separate type only because `commonwealth-api`
+    /// depends on `commonwealth-knowledge` (and on this crate) and not
+    /// the reverse — that enum is simply unreachable from here.
+    /// Collapsing the two would invert the dependency, so do not
+    /// "helpfully" merge them; keep the two spellings in step instead.
+    #[error("merge for corpus {corpus} would cover only {covered} of {expected} partitions")]
+    IncompleteCoverage {
+        corpus: String,
+        covered: usize,
+        expected: usize,
+    },
+
     #[error("Already installed: {0}")]
     AlreadyInstalled(String),
 

@@ -30,6 +30,39 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Merge coverage bar — `MergePlan::expected_partitions`, shipped UNSET (2026-09-09)
+
+**What ships.** `ShardManager::merge_participants` refuses a merge —
+`corpus_engine::Error::IncompleteCoverage`, no canonical written — when the
+resolved shard dirs number fewer than `expected_partitions`. Watched RED:
+without the guard the same fixture merges 2 of 3 partitions and returns a
+`chunk_count: 2` canonical
+(`commonwealth-knowledge/tests/main/merge_participants_coverage.rs`).
+
+**Why UNSET.** The only caller today is `coordinate_merge`, and nothing
+upstream of it knows the expected partition count — handoff state carries who
+participated, not how many were meant to. It passes `None`, which is the
+legacy "merge whatever is present" behaviour, so this commit changes nothing
+observable. The bar is cw-lift 5g part 2's B7 and is armed by the fold-side
+collector in `sovereign-mesh`, which does know the count.
+
+**Why it needs to exist at all.** `auto_recover`'s existing coverage guard
+arms only when a partition meta stamps `total_shards`, and
+`corpus-engine/src/engine/ingest.rs:718` stamps that for
+`ExtractorConfig::WikipediaJsonl` alone ("the only multi-shard extractor
+today"). With the guard dark, linux-peer merged a 17/38 canonical and
+re-advertised it: "every peer ends up with a different 'complete' canonical
+and they fight forever" (`sovereign-mesh/src/auto_ingest.rs:263-276`).
+
+**Flip condition (falsifiable).** Graduates when the fold-side collector
+passes `Some(n)` and a run exercises the refusal — not when a default
+changes; there is no default to change. Refuted if part 2 lands without a
+partition count to state, in which case the parameter and its error variant
+come out rather than sit unreachable.
+
+**Review by 2026-10-15.** If part 2 has not armed it by then, the guard is
+unreachable code: arm it, or delete it.
+
 ### Local-only daemon profile — OFF, `[daemon] local_only` / `SOVEREIGN_LOCAL_ONLY` (2026-09-08)
 
 **What ships.** One decider, `sovereign_mesh::LocalOnlyProfile`, resolved once

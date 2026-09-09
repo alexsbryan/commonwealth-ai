@@ -5719,6 +5719,16 @@ absent and the guards fail closed for *every* caller.
 
 - `MeshCorpusManager` / `ShardManager` — install / list / remove /
   shard prepare / install received / consolidate.
+- `ShardManager::merge_participants(MergePlan)` — the ONE merge
+  implementation (ARCH §10.6). `coordinate_merge` resolves who
+  participated from handoff/queue state and then calls it;
+  sovereign-mesh's fold-side collector resolves participation
+  completely differently and calls the same function. A `MergePlan`
+  carrying `expected_partitions: Some(n)` REFUSES
+  (`corpus_engine::Error::IncompleteCoverage`) rather than produce a
+  subset canonical that would advertise itself as complete on gossip;
+  `None` keeps the legacy "merge whatever is present" behaviour, which
+  is what `coordinate_merge` passes.
 - `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` so a node
   without a local embed model still ingests via the engine.
 - `grounding.rs` — `GroundingConfig` + `search_for_grounding` +
