@@ -668,3 +668,115 @@ one.**
   needs a labeller this session did not have.
 - 122 of 193 revisions were witness-checkable; the other 71 assert no
   extractable value.
+
+## 11. Depth terminates at two passes — the floor is a mutual fixed point, and the loop announces it
+
+**2026-09-08, the judge phase §10 left NEVER-RAN.** §9 and §10 established that
+sequential refinement is *safe* (p_damage 1.64%, and the reviser is itself a
+second gate). §10 closed by naming the cost side as the open question: 41.5% of
+revisions were still flagged after one pass, so "buy passes, get quality" — the
+one mesh shape §8/§8.1 left standing — rested on an unmeasured extrapolation
+from a single pass. The two hypotheses and their bars were written into
+`termination_sweep.py`'s header before pass 2 was run.
+
+Generation walked all 193 claims through 5 passes on the daemon's 4B (965 rows,
+zero errors). Judging is one run against one rung-1000 server, tau derived
+in-run from 150 fresh grounded non-multi_hop claims: **tau = +14.317**.
+
+### The result — the stuck-floor hypothesis fired
+
+| pass | in | cleared | rate | still flagged | cumulative damage |
+|---|---|---|---|---|---|
+| 1 | 193 | 142 | 73.6% | 51 | 2/123 = 1.6% |
+| 2 | 51 | 13 | **25.5%** | 38 | 0/31 |
+| 3 | 38 | 1 | 2.6% | 37 | 0/19 |
+| 4 | 37 | 2 | 5.4% | 35 | 0/18 |
+| 5 | 35 | 0 | 0.0% | 35 | 0/18 |
+
+**Primary bar: MISSED, decisively.** Pass-2 clearance 13/51 = 25.5%, Wilson 95%
+CI [15.5%, 38.9%] — the optimistic end of the interval is still below the 40%
+floor bar. Clearance does not decay geometrically, it collapses: 73.6 → 25.5 →
+2.6 → 5.4 → 0.0. Passes 3-5 together clear **three items**.
+
+**Secondary bar: PASSED.** Cumulative damage against the ORIGINAL claim is
+0/18 at pass 5 and never exceeds §10's per-pass 1.64%. Depth is safe. It is
+simply bounded.
+
+### The floor is a hard core, not a threshold artifact
+
+Re-running the whole loop at other thresholds on the same judged margins:
+
+| tau | p1 | p2 | p3 | p4 | p5 | floor |
+|---|---|---|---|---|---|---|
+| +12.00 | 81.9% | 22.9% | 0.0% | 0.0% | 0.0% | 27/193 = 14.0% |
+| +14.32 | 73.6% | 25.5% | 2.6% | 5.4% | 0.0% | 35/193 = 18.1% *(this run)* |
+| +15.63 | 59.1% | 13.9% | 5.9% | 1.6% | 1.6% | 62/193 = 32.1% *(§10's tau)* |
+| +16.50 | 43.5% | 11.9% | 4.2% | 2.2% | 0.0% | 90/193 = 46.6% |
+
+Every operating point shows the same shape, and **at §10's own tau the pass-2
+rate is 13.9% — worse.** This run drew the charitable threshold (§18.6: the
+change is reported in the direction that hurts the finding as well as the one
+that helps it). The floors are strictly NESTED — all 35 items stuck at +14.32
+are among the 62 stuck at +15.63, 100% overlap — so the residual is a hard core
+that tau resizes rather than a population tau invents.
+
+### Why it is stuck: both sides stopped working
+
+The 35 sit a median **+4.70** against tau **+14.32** — about nine points below
+on a ±18 scale, not at the boundary (one item is 0.13 away; the rest are not).
+And they do not move: median margin shift from pass 1 to pass 5 is **+0.04**,
+mean −0.62, with 18/35 drifting toward tau and 17 away — a coin flip.
+
+The reason is visible in the text: **34 of 35 have a pass-5 revision byte-identical
+to pass 4.** The reviser is returning them unchanged. §10 found that the reviser
+is a second gate that declines to damage claims it judges grounded; this is that
+same mechanism at its limit. The verifier says unsupported, the reviser says
+there is nothing to fix, and both are confident. The loop is not *spinning* on
+this population — it is **idling**, and §10's phrase "its cost is unbounded" is
+wrong in a way that is good news.
+
+> **A refinement loop's residual is a disagreement between two confident
+> components, and neither compute nor iteration is the currency that settles
+> it.** Composition, over the whole population: `verbatim` claims are stuck at
+> 24.4% (19/78) against `reframe` at 13.9% (16/115).
+
+### Termination is free, and it is not the gate clearing
+
+The loop signals its own fixed point one pass before the gate would: a revision
+identical to its predecessor. Over all 193 claims that no-op rate runs 68.4% →
+91.2% → 94.3% → 96.4% across passes 2-5. **Stop on the no-op, not on the
+verdict** — it converts §10's open cost question into a fixed budget of about
+two working passes plus one detection pass, with no quality cost, because a
+pass that changes nothing cannot clear anything.
+
+### What this does to the mesh argument
+
+§8 killed parallel breadth (same-lineage judges nest their errors; the whole
+jury is worth +1.1pt against a threshold move worth +13.6pt). Sequential depth
+was the survivor. It now has a measured ceiling: **80.3% of the false-alarm
+population clears in two passes, and everything after is 1.6%.** So the
+compute→groundedness conversion is bounded on BOTH axes — breadth dead, depth
+worth roughly 2x rather than Nx.
+
+The operating point dominates again, exactly as in §8.1: the floor moves from
+14.0% to 46.6% across the tau range while five passes of compute move it by
+1.6pt. **Of the two mechanisms the frame carried forward — depth and coverage —
+depth is now measured and capped, which leaves coverage as the only untested
+route from mesh capacity to groundedness.** That is a retrieval question, not a
+verification one, and nothing in §8-§11 speaks to it.
+
+### Scope
+
+- One bank, one reviser (the daemon's 4B, not a 35B primary), one judge lineage.
+  The floor being a *disagreement* makes the shared-lineage caveat sharper here
+  than elsewhere: a reviser of a different lineage than the verifier is the one
+  intervention this experiment cannot rule out, and §8's lineage finding is the
+  reason to expect it might matter.
+- The damage witness is the §10 witness and inherits its bound — value-anchored
+  damage only, so cumulative damage is a LOWER bound.
+- Clearance rates are one run at one tau; the sensitivity table above is
+  re-thresholding the same margins, not a second measurement (§18.5).
+
+Reproduce: `scripts/termination_pipeline.sh` (serve + judge),
+`scripts/termination_sweep.py --phase judge --passes 5`.
+Data: `runs/delta/termination.jsonl`, `runs/delta/termination_summary.json`.
