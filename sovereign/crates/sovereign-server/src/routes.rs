@@ -18,7 +18,7 @@ use crate::tenant::TenantRuntime;
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance,
 };
-use sovereign_contracts::types::TurnMode;
+use sovereign_contracts::types::{TurnAnswer, TurnMode};
 
 // ─── Request/Response Types ───────────────────────────────────
 
@@ -432,7 +432,9 @@ pub async fn approve_task(
     Json(body): Json<ApproveRequest>,
 ) -> ApiResult<ApproveResponse> {
     let key = format!("{task_id}:{}", body.step_id);
-    let accepted = approval.submit_approval(&key, body.approved);
+    let accepted = approval
+        .submit(&key, &TurnAnswer::Approved(body.approved))
+        .reached_a_question();
 
     Ok(Json(ApproveResponse { task_id, accepted }))
 }

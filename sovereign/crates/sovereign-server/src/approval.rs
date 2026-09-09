@@ -2,7 +2,8 @@
 use async_trait::async_trait;
 use tokio::sync::{broadcast, RwLock};
 
-use sovereign_core::approval_desk::{ApprovalDesk, StepStatus};
+use sovereign_contracts::types::{TurnAnswer, TurnPrompt};
+use sovereign_core::approval_desk::{ApprovalDesk, ResolveOutcome, StepStatus};
 use sovereign_core::error::Result;
 use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
@@ -12,16 +13,21 @@ use sovereign_core::types::*;
 ///
 /// Deliberately NOT the turn protocol. `sovereign_contracts::types::
 /// TurnFrame` carries one tenant's in-flight turn down the one socket
-/// that asked for it; these three are genuinely broadcast. Until
+/// that asked for it; these are genuinely broadcast. Until
 /// 2026-08-25 both sets were one `ServerEvent` enum kept apart by a doc
 /// comment, which meant `event_tx.send(ServerEvent::Token { .. })`
 /// compiled — a tenant's answer delivered to every other connected
 /// client. Two types is what makes that a type error instead of a thing
 /// to remember (TOPOLOGY.md §10 phase 5b, ARCH §7).
 ///
-/// Variants are added when a corresponding emit site exists. Don't add
-/// speculative variants — they break exhaustiveness for downstream
-/// consumers without ever firing.
+/// The two ASK variants converged on the turn protocol's shape in
+/// sv-surface R1 (2026-09-09): `Prompt { id, prompt }` carries the same
+/// closed [`TurnPrompt`] enum and the same host-minted id
+/// [`TurnRequest::Answer`] echoes, so a client renders one consent
+/// question and answers it the same way whichever host it reached —
+/// this host's `{task}:{step}` slot format is simply what it mints the
+/// id FROM. `StepDone` stays this host's spelling until its wire
+/// producer lands (sv-surface G6).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
@@ -31,15 +37,12 @@ pub enum ExecutorEvent {
         step: StepSummary,
         status: String,
     },
-    ApprovalReq {
-        task_id: String,
-        step_id: usize,
-        preview: ActionPreview,
-    },
-    UserInput {
-        task_id: String,
-        step_id: usize,
-        question: String,
+    Prompt {
+        /// The desk key this question is parked under — echo it in
+        /// [`sovereign_contracts::types::TurnRequest::Answer`].
+        id: String,
+        /// The question, in the protocol's closed shape.
+        prompt: TurnPrompt,
     },
 }
 
@@ -83,19 +86,11 @@ impl ServerApprovalChannel {
         *self.task_id.write().await = task_id.to_string();
     }
 
-    /// Submit an approval decision for a pending request.
-    /// Called by REST handler or WebSocket handler.
-    pub fn submit_approval(&self, key: &str, approved: bool) -> bool {
-        self.desk
-            .resolve_approval(&key.to_string(), approved)
-            .reached_a_question()
-    }
-
-    /// Submit a user input response for a pending request.
-    pub fn submit_input(&self, key: &str, response: String) -> bool {
-        self.desk
-            .resolve_input(&key.to_string(), response)
-            .reached_a_question()
+    /// Submit an answer for a pending question — REST handler or WebSocket
+    /// handler. The `id` is the one the Prompt carried; the ONE mapping from
+    /// the wire's answer shape to the parked kind lives on the desk.
+    pub fn submit(&self, id: &str, answer: &TurnAnswer) -> ResolveOutcome {
+        self.desk.resolve_answer(&id.to_string(), answer)
     }
 
     /// Subscribe to server events.
@@ -108,14 +103,16 @@ impl ServerApprovalChannel {
 impl ApprovalChannel for ServerApprovalChannel {
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
         let task_id = self.task_id.read().await.clone();
+        let id = format!("{task_id}:{}", step.id);
         // Parked BEFORE the broadcast: a subscriber that answers faster than
         // this task resumes must find the question already recorded.
-        let parked = self.desk.park_approval(format!("{task_id}:{}", step.id));
+        let parked = self.desk.park_approval(id.clone());
 
-        let _ = self.event_tx.send(ExecutorEvent::ApprovalReq {
-            task_id,
-            step_id: step.id,
-            preview: preview.clone(),
+        let _ = self.event_tx.send(ExecutorEvent::Prompt {
+            id,
+            prompt: TurnPrompt::Approval {
+                preview: preview.clone(),
+            },
         });
 
         parked.answered().await
@@ -124,12 +121,14 @@ impl ApprovalChannel for ServerApprovalChannel {
     async fn ask_user(&self, question: &str) -> Result<String> {
         let task_id = self.task_id.read().await.clone();
         // A synthetic slot for user input requests — one question per task.
-        let parked = self.desk.park_input(format!("{task_id}:input"));
+        let id = format!("{task_id}:input");
+        let parked = self.desk.park_input(id.clone());
 
-        let _ = self.event_tx.send(ExecutorEvent::UserInput {
-            task_id,
-            step_id: 0,
-            question: question.to_string(),
+        let _ = self.event_tx.send(ExecutorEvent::Prompt {
+            id,
+            prompt: TurnPrompt::UserInput {
+                question: question.to_string(),
+            },
         });
 
         parked.answered().await

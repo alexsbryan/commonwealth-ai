@@ -998,7 +998,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // rung row.
             skills,
             // Approvals are out of scope for v1 of the turn protocol — the
-            // same posture `sovereign-server` ships. `TurnRequest::Approve`
+            // same posture `sovereign-server` ships. `TurnRequest::Answer`
             // exists on the wire; routing it to a daemon-side session owner is
             // Phase 5's remaining work (hazard 12).
             approval: Arc::new(sovereign_core::executor::AutoApprovalChannel),

@@ -230,6 +230,10 @@ status    = "active"
 #   G8  ResolveAck                   OPEN. submit_* returns bool ("did the key
 #       still exist"); the wire has no positive-acknowledgement channel. The
 #       desk's ResolveOutcome already carries the distinction.
+#       SHAPE LANDED R1 2026-09-09: Notice::ResolveAck { id, outcome } and
+#       ResolveOutcome crossed to contracts; the daemon-side EMIT (the
+#       socket answering its own resolve_refusal with a frame instead of
+#       only a StreamError) is R3.
 #   G9  Complete.metadata            OPEN, and a TRAP. In-process reads the
 #       RAW persisted blob and gates two behaviours on metadata["intent"] and
 #       metadata["provenance"]["finish_reason"]. The wire carries a
@@ -254,6 +258,11 @@ status    = "active"
 #       the operator's "snappy" bar (B0) the frame is the likely answer: a
 #       placeholder that appears only after retrieval is precisely the
 #       experience that bar forbids.
+#       PRE-REGISTERED R1 2026-09-09: the choice is the frame. Notice::
+#       TurnStarted { message_id } is on the wire, byte-pinned, before any
+#       conversion started — C2 discovers a frame, not a dilemma. The
+#       daemon-side emit (at stream-handle acquisition, beside
+#       drive_stream_handle) is R3.
 #   G11 TurnStream cannot reply      OPEN, BLOCKS G3/G8 and approvals.
 #       next_frame(&mut self) holds the socket exclusively, so no Tauri
 #       command can answer while a reader runs. The daemon already does the
@@ -437,6 +446,32 @@ status    = "active"
 #   R1  THE PROTOCOL. Land Prompt/Notice/Answer as the two-shape contract,
 #       folding ApprovalRequest/UserInputRequest into it. Byte pins per
 #       variant. Do this FIRST — it is nearly free now and expensive later.
+#       LANDED 2026-09-09. The enums are TurnPrompt/TurnNotice/TurnAnswer
+#       (Turn*-qualified, not the sketch's bare names: `Prompt` lives in
+#       commonwealth-api and `Answer` in kernel-types, both workspace
+#       members, and concept-gate holds the line — wire tags are still
+#       "prompt"/"notice"/"answer"). ResolveOutcome + StepStatus MOVED to
+#       sovereign_contracts::types::approval (core re-exports; the wire
+#       carries the type, never a mirror) and StepStatus crosses TYPED —
+#       the hosts' `status: String` spellings ran Display first, which
+#       renders Jump(4) as the prose "jump to 4". ApprovalDesk gained the
+#       ONE resolve_answer mapping (wire answer shape -> parked kind);
+#       the kind-specific wrappers stay until C2 folds the desktop's
+#       three-key channel. The daemon's socket channel keys its desk by
+#       the id it minted ("step:N"/"input") — the Question enum and the
+#       conversation_id stamp died with the task_id slot. The server's
+#       ExecutorEvent::{ApprovalReq,UserInput} converged onto
+#       Prompt { id, prompt } (id = its "{task}:{step}"/"{task}:input"
+#       slot), so both hosts' consent questions render and answer
+#       identically — refusing Answer there instead would have deleted a
+#       live server capability, which directive (2) forbids. TurnNotice
+#       carries G7's two routing events NOT — they land with their
+#       payloads' move (recorded on the G7 row). INSTRUMENT NOTE: the
+#       answer byte pins failed their FIRST run on a real serde shape
+#       (struct variants externally tag as {"approved":{"approved":..}},
+#       so TurnAnswer is newtype variants — {"approved":true}); the pin
+#       caught it before any consumer could, which is the §18.1 property
+#       working, not a rework.
 #   R2  THE CLIENT. sovereign-turn-client: split the socket (G11), the
 #       approvals claim (G12), drain past Complete (G13), Resume/Redirect
 #       senders. One crate, all three surfaces gain it.

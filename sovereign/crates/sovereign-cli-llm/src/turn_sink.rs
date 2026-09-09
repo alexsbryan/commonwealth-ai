@@ -69,15 +69,16 @@ impl TurnSink for StdoutTurnSink {
                 *self.error.lock().unwrap_or_else(|e| e.into_inner()) = Some(message);
             }
             // These tools print a sources footer of their own; the terminal
-            // frame's projected metadata is not what they render. The two
-            // request frames cannot reach a sink at all — a host emits them to
-            // the socket that claimed the conversation's approvals, and these
-            // tools claim none, so they run under the unowned auto-grant.
+            // frame's projected metadata is not what they render. A Prompt
+            // cannot reach a sink at all — a host emits it to the socket
+            // that claimed the conversation's approvals, and these tools
+            // claim none, so they run under the unowned auto-grant. A
+            // Notice is owed nothing.
             TurnFrame::Complete { .. }
             | TurnFrame::Narration { .. }
             | TurnFrame::QueuePosition { .. }
-            | TurnFrame::ApprovalRequest { .. }
-            | TurnFrame::UserInputRequest { .. } => {}
+            | TurnFrame::Prompt { .. }
+            | TurnFrame::Notice { .. } => {}
         }
     }
 }

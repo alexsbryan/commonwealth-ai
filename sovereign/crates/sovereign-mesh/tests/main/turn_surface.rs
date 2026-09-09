@@ -43,7 +43,7 @@ use crate::common::{desktop_services_with_store, mesh_admin_services, spawn_rout
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
-use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
+use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnMode, TurnRequest};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
 use sovereign_mesh::{turn_http::turn_router, EmbeddedDaemon};
@@ -320,7 +320,7 @@ async fn a_mesh_admin_daemon_refuses_with_a_reason() {
     );
 }
 
-/// Send an `Approve` and read the daemon's answer to it.
+/// Send an `Answer` and read the daemon's reply to it.
 async fn approve_and_read_refusal(addr: std::net::SocketAddr, conv: &str, claim: bool) -> String {
     let query = if claim { "?approvals=true" } else { "" };
     let (mut ws, _) = tokio_tungstenite::connect_async(format!(
@@ -329,10 +329,9 @@ async fn approve_and_read_refusal(addr: std::net::SocketAddr, conv: &str, claim:
     .await
     .expect("the daemon accepts the upgrade");
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
-        serde_json::to_string(&TurnRequest::Approve {
-            task_id: conv.to_string(),
-            step_id: 0,
-            approved: true,
+        serde_json::to_string(&TurnRequest::Answer {
+            id: "step:0".to_string(),
+            answer: TurnAnswer::Approved(true),
         })
         .unwrap()
         .into(),

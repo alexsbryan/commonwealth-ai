@@ -86,7 +86,7 @@ use tokio::sync::mpsc;
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
 };
-use sovereign_contracts::types::{ResumeSession, TurnFrame, TurnMode, TurnRequest};
+use sovereign_contracts::types::{ResumeSession, TurnAnswer, TurnFrame, TurnMode, TurnRequest};
 use sovereign_core::runtime::Runtime;
 use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
 use sovereign_core::traits::StateStore;
@@ -725,8 +725,7 @@ async fn handle_ws(
     // reply has no map to reach these questions through, and a hangup drops
     // the whole channel with the task rather than leaving entries to purge
     // (`turn_approval`'s module docs).
-    let approvals = claim_approvals
-        .then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone(), &conversation_id)));
+    let approvals = claim_approvals.then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone())));
 
     // The turn's own approval capability, read once per turn and installed
     // around the WHOLE call by each arm that starts one: the executor is built
@@ -974,29 +973,17 @@ async fn handle_ws(
                     .await;
                 }));
             }
-            // Rung 6 commit C1: the refusal became a resolve. What survives
-            // of it is the posture — every outcome that is not "the executor
-            // is running again" is SAID, because a client that sent an
-            // approval and got no frame cannot tell "granted" from "never
-            // arrived" (ARCH §18.3). `task_id` is not read: the socket is the
+            // Rung 6 commit C1 made the refusal a resolve; R1 folded the
+            // two reply variants into `Answer { id, answer }` — the id the
+            // Prompt arrived under, which is the desk key. Every outcome
+            // that is not "the executor is running again" is SAID, because
+            // a client that sent an approval and got no frame cannot tell
+            // "granted" from "never arrived" (ARCH §18.3). A socket is the
             // address, and this one's questions are the only ones it can
             // reach.
-            TurnRequest::Approve {
-                step_id, approved, ..
-            } => {
-                let outcome = approvals
-                    .as_ref()
-                    .map(|a| a.submit_approval(step_id, approved));
-                if let Some(message) = resolve_refusal(outcome, "approval") {
-                    let _ = out_tx.send(TurnFrame::StreamError {
-                        message,
-                        retry_after_secs: None,
-                    });
-                }
-            }
-            TurnRequest::UserReply { content, .. } => {
-                let outcome = approvals.as_ref().map(|a| a.submit_user_reply(content));
-                if let Some(message) = resolve_refusal(outcome, "user reply") {
+            TurnRequest::Answer { id, answer } => {
+                let outcome = approvals.as_ref().map(|a| a.submit(&id, &answer));
+                if let Some(message) = resolve_refusal(outcome, answer_kind(&answer)) {
                     let _ = out_tx.send(TurnFrame::StreamError {
                         message,
                         retry_after_secs: None,
@@ -1140,6 +1127,16 @@ fn resolve_refusal(outcome: Option<ResolveOutcome>, kind: &str) -> Option<String
              `?approvals=true` to receive and answer them (a {kind} on an \
              unclaimed socket resolves nothing)"
         )),
+    }
+}
+
+/// How to name the answer in a refusal — the one place the wire's answer
+/// kinds map to the words a client reads.
+fn answer_kind(answer: &TurnAnswer) -> &'static str {
+    match answer {
+        TurnAnswer::Approved(_) => "approval",
+        TurnAnswer::Text(_) => "user reply",
+        TurnAnswer::Information(_) => "information response",
     }
 }
 

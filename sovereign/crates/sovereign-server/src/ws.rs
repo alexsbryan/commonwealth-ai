@@ -10,6 +10,7 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 
 use sovereign_contracts::types::{TurnFrame, TurnRequest};
+use sovereign_core::approval_desk::ResolveOutcome;
 use sovereign_core::runtime::{serve_turn, Runtime};
 use sovereign_core::traits::StateStore;
 use sovereign_core::types::TurnNarration;
@@ -237,17 +238,21 @@ async fn handle_ws(
                     .await;
                 }));
             }
-            TurnRequest::Approve {
-                task_id,
-                step_id,
-                approved,
-            } => {
-                let key = format!("{task_id}:{step_id}");
-                approval.submit_approval(&key, approved);
-            }
-            TurnRequest::UserReply { task_id, content } => {
-                let key = format!("{task_id}:input");
-                approval.submit_input(&key, content);
+            // sv-surface R1: the two reply variants folded into
+            // `Answer { id, answer }` — the id the Prompt arrived under.
+            // The outcome is traced rather than streamed back as an error
+            // (this host's clients historically heard nothing, and G8's
+            // ResolveAck is the proper wire answer, landing with R3).
+            TurnRequest::Answer { id, answer } => {
+                let outcome = approval.submit(&id, &answer);
+                if outcome != ResolveOutcome::Resolved {
+                    tracing::debug!(
+                        conversation_id = %conversation_id,
+                        id = %id,
+                        ?outcome,
+                        "ws: answer resolved nothing"
+                    );
+                }
             }
             // Session continuation is the local daemon's half of the protocol
             // (sv-surface rung 6 C2-b). This host's `TenantRuntime` does hold

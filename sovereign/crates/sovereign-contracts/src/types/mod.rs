@@ -181,7 +181,14 @@ pub mod projection;
 // 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary
 // crate is one no other process can speak.
 mod turn;
-pub use turn::{TurnFrame, TurnMode, TurnRequest};
+pub use turn::{TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest};
+
+/// Desk-domain outcome types that cross the wire. A submodule since
+/// sv-surface R1 (2026-09-09), when `TurnNotice` started carrying them:
+/// the definition lives here beside the protocol that speaks it, and
+/// `sovereign_core::approval_desk` re-exports at the historical path.
+pub mod approval;
+pub use approval::{ResolveOutcome, StepStatus};
 
 // ─── Plan Types ────────────────────────────────────────────────
 
@@ -385,7 +392,7 @@ pub enum InformationRequestKind {
 /// (detection is the gate's abstention signal — I4-C retired the LLM
 /// gap judge; see bench/gap_check/DECISION.md) and by
 /// `StepKind::AwaitUserInfo` for planned task steps.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InformationRequest {
     /// What the agent currently believes, with appropriate uncertainty.
     pub current_understanding: String,
@@ -429,7 +436,7 @@ pub struct InformationRequest {
 /// re-synthesised with user-supplied content (see
 /// `Runtime::maybe_collaborate`). The UI uses `message_id` to find
 /// the existing bubble and replace its content in place.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MessageRefinedPayload {
     /// Conversation containing the message being replaced.
     pub conversation_id: String,
@@ -446,7 +453,7 @@ pub struct MessageRefinedPayload {
 /// the desktop either passes this payload (possibly with an edited
 /// `display`) to the lesson-save command later, or does nothing —
 /// dismissal stores nothing and resolves no channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LessonProposedPayload {
     /// Draft uuid — journal correlation key. NOT the eventual note id
     /// (that is minted by the save command).

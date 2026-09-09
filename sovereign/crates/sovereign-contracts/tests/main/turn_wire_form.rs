@@ -22,9 +22,11 @@
 //! did not mean to fails here.
 
 use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
-use sovereign_contracts::types::ActionPreview;
-use sovereign_contracts::types::NarrationPhase;
-use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
+use sovereign_contracts::types::{
+    ActionPreview, InformationRequest, LessonProposedPayload, MessageRefinedPayload,
+    NarrationPhase, StepStatus, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt,
+    TurnRequest,
+};
 
 /// Serialise, compare against the bytes a client actually reads, then parse
 /// back and confirm the value survived. A frame that serialises correctly
@@ -183,34 +185,168 @@ fn queue_position_frame_wire_form() {
     );
 }
 
+/// The PROMPT half of the two-shape protocol (sv-surface R1). These
+/// bytes are NEW — the fold replaced `approval_request` /
+/// `user_input_request` while nothing rendered them (three ignore arms,
+/// a deliberate error, and this file were the entire consumer census),
+/// so there is no back-compat case to pin: only the shape going
+/// forward, one case per closed-enum variant.
 #[test]
-fn approval_request_frame_wire_form() {
-    // `preview` is the whole `ActionPreview` — the same object the desktop's
-    // approval card already renders in-process. Pinning it here is what makes
-    // "the attached client shows the same card" a byte fact rather than a
-    // hope.
+fn prompt_frame_wire_form() {
+    // `preview` is the whole `ActionPreview` — the same object the
+    // desktop's approval card renders in-process, and the same one the
+    // server's converged `ExecutorEvent::Prompt` broadcasts. Pinning it
+    // here is what makes "the attached client shows the same card" a
+    // byte fact rather than a hope.
     pin_frame(
-        TurnFrame::ApprovalRequest {
-            task_id: "t1".into(),
-            step_id: 2,
-            preview: ActionPreview {
-                tool_id: "shell".into(),
-                description: "Run the migration".into(),
-                params: serde_json::json!({ "cmd": "migrate" }),
+        TurnFrame::Prompt {
+            id: "step:2".into(),
+            prompt: TurnPrompt::Approval {
+                preview: ActionPreview {
+                    tool_id: "shell".into(),
+                    description: "Run the migration".into(),
+                    params: serde_json::json!({ "cmd": "migrate" }),
+                },
             },
         },
-        r#"{"type":"approval_request","data":{"task_id":"t1","step_id":2,"preview":{"tool_id":"shell","description":"Run the migration","params":{"cmd":"migrate"}}}}"#,
+        concat!(
+            r#"{"type":"prompt","data":{"id":"step:2","#,
+            r#""prompt":{"approval":{"preview":{"tool_id":"shell","#,
+            r#""description":"Run the migration","params":{"cmd":"migrate"}}}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Prompt {
+            id: "input".into(),
+            prompt: TurnPrompt::UserInput {
+                question: "Which branch?".into(),
+            },
+        },
+        r#"{"type":"prompt","data":{"id":"input","prompt":{"user_input":{"question":"Which branch?"}}}}"#,
+    );
+    // The one prompt kind whose hangup policy is SKIP, not cancel — and
+    // the one whose payload is a full struct with `#[serde(default)]`
+    // fields. Those defaults SERIALIZE (default is a read-side
+    // concession), which is what this case pins: the empty-vecs and
+    // empty strings are on the wire, not omitted.
+    pin_frame(
+        TurnFrame::Prompt {
+            id: "t1:info:3".into(),
+            prompt: TurnPrompt::Information {
+                request: InformationRequest {
+                    current_understanding: "You asked about adoption rates".into(),
+                    gap: "The 2024 figure for region Y".into(),
+                    relevance: "It decides whether the trend reversed".into(),
+                    satisfying_source: "A statistics agency press release".into(),
+                    search_hints: Vec::new(),
+                    task_id: "t1".into(),
+                    step_id: 3,
+                    kind: Default::default(),
+                    task_title: String::new(),
+                    routes: Vec::new(),
+                },
+            },
+        },
+        concat!(
+            r#"{"type":"prompt","data":{"id":"t1:info:3","prompt":{"information":{"request":"#,
+            r#"{"current_understanding":"You asked about adoption rates","#,
+            r#""gap":"The 2024 figure for region Y","#,
+            r#""relevance":"It decides whether the trend reversed","#,
+            r#""satisfying_source":"A statistics agency press release","#,
+            r#""search_hints":[],"task_id":"t1","step_id":3,"kind":"refinement","#,
+            r#""task_title":"","routes":[]}}}}}"#,
+        ),
     );
 }
 
+/// The NOTICE half — owed nothing by construction, valid after the
+/// terminal `Complete` for two of its variants. One case per variant,
+/// including the two whose daemon-side producers do not exist yet (they
+/// are gap-ledger rows, not speculation; see the module docs on
+/// sovereign-contracts::types::turn).
 #[test]
-fn user_input_request_frame_wire_form() {
+fn notice_frame_wire_form() {
     pin_frame(
-        TurnFrame::UserInputRequest {
-            task_id: "t1".into(),
-            question: "Which branch?".into(),
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnStarted {
+                message_id: "m1".into(),
+            },
         },
-        r#"{"type":"user_input_request","data":{"task_id":"t1","question":"Which branch?"}}"#,
+        r#"{"type":"notice","data":{"notice":{"turn_started":{"message_id":"m1"}}}}"#,
+    );
+    // `status` is TYPED on the wire — the hosts' `status: String`
+    // spellings ran Display first, which turns Jump(4) into the prose
+    // "jump to 4". Both shapes pinned: the unit variant and the
+    // carrying one.
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::StepDone {
+                task_id: "t1".into(),
+                step_id: 2,
+                description: "Run the migration".into(),
+                status: StepStatus::Done,
+            },
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"step_done":{"task_id":"t1","#,
+            r#""step_id":2,"description":"Run the migration","status":"done"}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::StepDone {
+                task_id: "t1".into(),
+                step_id: 4,
+                description: "Pick a branch".into(),
+                status: StepStatus::Jump(7),
+            },
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"step_done":{"task_id":"t1","#,
+            r#""step_id":4,"description":"Pick a branch","status":{"jump":7}}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::MessageRefined(MessageRefinedPayload {
+                conversation_id: "c1".into(),
+                message_id: "m2".into(),
+                new_content: "The revised answer.".into(),
+            }),
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"message_refined":"#,
+            r#"{"conversation_id":"c1","message_id":"m2","new_content":"The revised answer."}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::LessonProposed(LessonProposedPayload {
+                id: "l1".into(),
+                conversation_id: "c1".into(),
+                message_id: "m3".into(),
+                display: "Prefer terse answers".into(),
+                prompt_form: "answer tersely".into(),
+                enforcement: "prompt".into(),
+                params: serde_json::json!({}),
+                taught_from: "\"too long\"".into(),
+            }),
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"lesson_proposed":"#,
+            r#"{"id":"l1","conversation_id":"c1","message_id":"m3","display":"Prefer terse answers","#,
+            r#""prompt_form":"answer tersely","enforcement":"prompt","params":{},"#,
+            r#""taught_from":"\"too long\""}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck {
+                id: "step:7".into(),
+                outcome: sovereign_contracts::types::ResolveOutcome::Resolved,
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"resolved"}}}}"#,
     );
 }
 
@@ -244,18 +380,31 @@ fn turn_request_wire_form() {
             },
         ),
         (
-            r#"{"type":"approve","data":{"task_id":"t1","step_id":2,"approved":true}}"#,
-            TurnRequest::Approve {
-                task_id: "t1".into(),
-                step_id: 2,
-                approved: true,
+            // The ANSWER half of the two-shape protocol — one case per
+            // kind, replacing the folded `approve` / `user_reply`. The
+            // ids echo whatever the Prompt minted (here, the daemon
+            // socket's and the server's spellings).
+            r#"{"type":"answer","data":{"id":"step:2","answer":{"approved":true}}}"#,
+            TurnRequest::Answer {
+                id: "step:2".into(),
+                answer: TurnAnswer::Approved(true),
             },
         ),
         (
-            r#"{"type":"user_reply","data":{"task_id":"t1","content":"yes"}}"#,
-            TurnRequest::UserReply {
-                task_id: "t1".into(),
-                content: "yes".into(),
+            r#"{"type":"answer","data":{"id":"input","answer":{"text":"yes"}}}"#,
+            TurnRequest::Answer {
+                id: "input".into(),
+                answer: TurnAnswer::Text("yes".into()),
+            },
+        ),
+        (
+            // The skip: `information: null` IS the answer, not an absent
+            // one — the executor resumes corpus-only, same as a pressed
+            // skip.
+            r#"{"type":"answer","data":{"id":"t1:info:3","answer":{"information":null}}}"#,
+            TurnRequest::Answer {
+                id: "t1:info:3".into(),
+                answer: TurnAnswer::Information(None),
             },
         ),
         (

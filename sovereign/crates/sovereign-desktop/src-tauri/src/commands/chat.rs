@@ -361,14 +361,15 @@ async fn render_turn_frames(
                 return;
             }
             // No narration channel is installed, and queue position is a
-            // shared-hub concern. The two request frames belong to the ATTACH
-            // path — in-process, this host's own `TauriApprovalChannel` raises
-            // the card and no frame is ever produced (rung 6 commit C2 wires
-            // the attached side).
+            // shared-hub concern. A Prompt belongs to the ATTACH path —
+            // in-process, this host's own `TauriApprovalChannel` raises
+            // the card and no frame is ever produced (rung 6 commit C2
+            // wires the attached side). Notices render when their
+            // daemon-side producers exist (sv-surface R3).
             TurnFrame::Narration { .. }
             | TurnFrame::QueuePosition { .. }
-            | TurnFrame::ApprovalRequest { .. }
-            | TurnFrame::UserInputRequest { .. } => {}
+            | TurnFrame::Prompt { .. }
+            | TurnFrame::Notice { .. } => {}
         }
     }
 }

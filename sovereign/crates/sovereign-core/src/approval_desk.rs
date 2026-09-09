@@ -33,30 +33,12 @@ use tokio::sync::oneshot;
 use crate::error::{Error, Result};
 use crate::types::StepOutput;
 
-/// What a resolve attempt did. Named rather than collapsed into a bool: an
-/// answerer that heard nothing back cannot tell "accepted" from "never
-/// arrived" (ARCH §18.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResolveOutcome {
-    /// The question was found and the executor is running again.
-    Resolved,
-    /// Nothing is parked under that key — already answered, the turn ended,
-    /// or the key names something this answerer does not own.
-    NoSuchPending,
-    /// A question IS parked there, of the other kind. The entry is left
-    /// alone: a wrong-kind answer must not consume the question the right one
-    /// is still coming for.
-    WrongKind,
-}
-
-impl ResolveOutcome {
-    /// The `bool` the pre-desk `submit_*` methods returned — "did this reach
-    /// something". Kept so a host's own wire contract need not change to sit
-    /// on the desk.
-    pub fn reached_a_question(self) -> bool {
-        self == ResolveOutcome::Resolved
-    }
-}
+// Owned by sovereign-contracts since sv-surface R1 (2026-09-09):
+// `TurnNotice::{StepDone,ResolveAck}` carries these across the wire, and
+// a wire type may not mirror a core type (ARCH §10.6). Re-exported here
+// so every historical `sovereign_core::approval_desk::` importer is
+// unaffected.
+pub use sovereign_contracts::types::approval::{ResolveOutcome, StepStatus};
 
 /// A question the executor is blocked on, and the channel that unblocks it.
 enum Pending {
@@ -218,6 +200,33 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
         })
     }
 
+    /// Answer a parked question with the WIRE's answer shape — the one
+    /// mapping from [`TurnAnswer`] to the parked kind (sv-surface R1).
+    ///
+    /// Every host that faces `TurnRequest::Answer` sits on this rather
+    /// than re-deriving the match: two channels writing it twice would
+    /// be the second spelling of one dispatch (ARCH §10.6). The
+    /// kind-specific `resolve_*` wrappers stay for the hosts whose own
+    /// surfaces still speak their local shapes — the desktop's Tauri
+    /// channel folds in C2.
+    pub fn resolve_answer(
+        &self,
+        key: &K,
+        answer: &sovereign_contracts::types::TurnAnswer,
+    ) -> ResolveOutcome {
+        match answer {
+            sovereign_contracts::types::TurnAnswer::Approved(approved) => {
+                self.resolve_approval(key, *approved)
+            }
+            sovereign_contracts::types::TurnAnswer::Text(content) => {
+                self.resolve_input(key, content.clone())
+            }
+            sovereign_contracts::types::TurnAnswer::Information(content) => {
+                self.resolve_information(key, content.clone())
+            }
+        }
+    }
+
     /// Whether a question is parked under `key` — the honest form of what a
     /// UI asks before spending work on a submission that may be stale.
     pub fn is_parked(&self, key: &K) -> bool {
@@ -246,43 +255,9 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
     }
 }
 
-/// What became of a step, for `ApprovalChannel::emit_progress`.
-///
-/// One decider for a match that existed four times — core's
-/// `AutoApprovalChannel`, the server's channel, the daemon socket's and the
-/// desktop's — each re-deriving the same three outcomes, and the desktop's
-/// spelling the jump differently from the rest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StepStatus {
-    /// The step produced output.
-    Done,
-    /// The step never ran (an untaken branch arm).
-    Skipped,
-    /// A `Branch` resolved to a jump; the payload is the step jumped to.
-    Jump(usize),
-}
-
-impl StepStatus {
-    pub fn of(output: &StepOutput) -> Self {
-        match output {
-            StepOutput::Text(_)
-            | StepOutput::Json(_)
-            | StepOutput::ReasonWithToolsResult { .. } => StepStatus::Done,
-            StepOutput::Jump(target) => StepStatus::Jump(*target),
-            StepOutput::Skipped => StepStatus::Skipped,
-        }
-    }
-}
-
-impl std::fmt::Display for StepStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StepStatus::Done => f.write_str("done"),
-            StepStatus::Skipped => f.write_str("skipped"),
-            StepStatus::Jump(target) => write!(f, "jump to {target}"),
-        }
-    }
-}
+// `StepStatus` (incl. `of` and `Display`) moved to
+// sovereign-contracts::types::approval with `ResolveOutcome` — see the
+// re-export above.
 
 #[cfg(test)]
 mod tests {

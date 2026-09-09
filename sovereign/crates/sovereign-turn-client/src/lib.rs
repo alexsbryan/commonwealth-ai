@@ -1148,27 +1148,31 @@ impl TurnStream {
                     outcome.metadata = metadata;
                     return Ok(outcome);
                 }
-                // A host only sends these to the socket that CLAIMED this
-                // conversation's approvals (`?approvals=1` on the upgrade),
-                // and this reader installs no handler for them. Erroring names
-                // the gap; ignoring it would park the host's turn on a
-                // decision nobody is going to make (ARCH §18.3).
-                TurnFrame::ApprovalRequest {
-                    task_id, step_id, ..
-                } => {
+                // A host only sends a Prompt to the socket that CLAIMED
+                // this conversation's approvals (`?approvals=1` on the
+                // upgrade), and this reader installs no handler for them.
+                // Erroring names the gap; ignoring it would park the
+                // host's turn on a decision nobody is going to make
+                // (ARCH §18.3).
+                TurnFrame::Prompt { id, prompt } => {
+                    use sovereign_contracts::types::TurnPrompt;
+                    let kind = match prompt {
+                        TurnPrompt::Approval { .. } => "approve a step",
+                        TurnPrompt::UserInput { .. } => "answer a question",
+                        TurnPrompt::Information { .. } => "fill an information request",
+                    };
                     return Err(Error::Inference(format!(
-                        "turn stream: the host asked to approve step {step_id} of task \
-                         {task_id}, but this client did not claim approvals for the \
+                        "turn stream: the host asked this client to {kind} (prompt id \
+                         {id}), but this client did not claim approvals for the \
                          conversation"
                     )));
                 }
-                TurnFrame::UserInputRequest { task_id, .. } => {
-                    return Err(Error::Inference(format!(
-                        "turn stream: the host put a question to the user for task \
-                         {task_id}, but this client did not claim approvals for the \
-                         conversation"
-                    )));
-                }
+                // Owed nothing by construction, so skipping one is not a
+                // dropped obligation. Rendered when the client family grows
+                // its observer surface (sv-surface R2/G13 — which also
+                // extends the drain past `Complete` for the two notices
+                // that fire after it).
+                TurnFrame::Notice { .. } => {}
                 TurnFrame::StreamError {
                     message,
                     retry_after_secs,

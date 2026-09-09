@@ -38,13 +38,48 @@
 //! emitted, because the mobile client already speaks it. `tests/
 //! turn_wire_form.rs` pins each variant's bytes; changing them is a
 //! client-visible protocol change, not a refactor.
+//!
+//! # The two shapes (sv-surface R1, 2026-09-09)
+//!
+//! Nine host→client capabilities were on their way to becoming nine
+//! frame/reply pairs. Measured, they are TWO: everything the executor
+//! parks on a human either MUST be answered — show a thing, park,
+//! resolve by id — or is owed nothing. So the asking half is one frame
+//! carrying the closed [`TurnPrompt`] enum, the telling half is one
+//! frame carrying the closed [`TurnNotice`] enum, and the reply is one
+//! request carrying the closed [`TurnAnswer`] enum (quality/campaigns/
+//! sv-surface.toml, "THE PROTOCOL SHAPE"). The names are `Turn*`-
+//! qualified rather than the campaign sketch's bare `Prompt`/`Notice`/
+//! `Answer` because `Prompt` and `Answer` are already type nouns in
+//! other workspace crates (commonwealth-api, kernel-types) and
+//! concept-gate holds that line.
+//!
+//! The old `ApprovalRequest`/`UserInputRequest` frames folded into
+//! [`TurnFrame::Prompt`], and `Approve`/`UserReply` into
+//! [`TurnRequest::Answer`], while nothing rendered them — the census
+//! was three ignore arms, a deliberate error, and these byte pins. That
+//! window closes the moment a surface wires the Prompt path, which is
+//! why the fold landed first.
+//!
+//! Some [`TurnNotice`] variants have no producer on the daemon yet.
+//! They are not speculative: each is a row of the campaign's gap ledger
+//! (G4-G8, G10) whose daemon-side producer is scheduled work, and
+//! landing them with the shape is what stops each producer from
+//! becoming its own protocol edit. The "variants are added when a
+//! corresponding emit site exists" rule below is superseded FOR THESE
+//! NAMED ROWS by that ledger — an unlisted variant still needs an emit
+//! site. Forward compatibility holds: a client that cannot render a
+//! variant still parses the frame (sovereign-mobile's mirror carries
+//! `#[serde(other)]` for exactly this).
 
 use serde::{Deserialize, Serialize};
 
+use crate::types::approval::{ResolveOutcome, StepStatus};
 use crate::types::epistemic::EpistemicState;
 use crate::types::narration::NarrationPhase;
 use crate::types::projection::{Citation, Provenance, TaskSummary, TurnMetadata};
 use crate::types::ui::ActionPreview;
+use crate::types::{InformationRequest, LessonProposedPayload, MessageRefinedPayload};
 
 /// Host → client, for ONE turn, down the ONE connection that asked for it.
 ///
@@ -153,38 +188,165 @@ pub enum TurnFrame {
         /// slots.
         estimated_wait_ms: u64,
     },
-    /// The in-flight turn has stopped at a write-effectful step and needs
-    /// the user's consent before it runs.
+    /// The turn has stopped on a question only this client can answer:
+    /// the host shows [`TurnPrompt`], parks the executor, and resumes it
+    /// when [`TurnRequest::Answer`] arrives carrying the same `id`.
     ///
     /// Emitted only to the socket that OWNS this conversation's approvals
-    /// (`?approvals=1` on the stream upgrade). A host with no such owner
-    /// grants the step itself and emits nothing — the shipped
+    /// (`?approvals=true` on the stream upgrade). A host with no such
+    /// owner answers the question itself and emits nothing — the shipped
     /// non-interactive behaviour — so a client that never opts in cannot
     /// receive a frame it would have to hang on.
     ///
-    /// Answered with [`TurnRequest::Approve`] carrying the same
-    /// `task_id`/`step_id`.
-    ApprovalRequest {
-        /// The background task the step belongs to.
-        task_id: String,
-        /// The step awaiting the decision.
-        step_id: usize,
+    /// `id` is the host-minted address of the parked question and the
+    /// ONLY correlation key. Three hosts once stamped three key formats
+    /// (`{task}:{step}`, `:input`, `:info:{step}`) and the wire carried
+    /// all three; one id opaque to the client replaces them. A closed
+    /// socket CANCELS an approval (granting on a vanished user's behalf
+    /// is the §18.3 substitution) but reads as SKIP for an information
+    /// request — the hangup policy is per prompt kind, and
+    /// [`TurnPrompt`]'s variant docs say which is which.
+    Prompt {
+        /// The parked question's id — echo it in [`TurnRequest::Answer`].
+        id: String,
+        /// What is being asked.
+        prompt: TurnPrompt,
+    },
+    /// The host tells the client something no answer is owed: step
+    /// progress, a re-synthesised answer, a proposed lesson, the
+    /// acknowledgement of an answer that resolved something, the message
+    /// id a turn just acquired.
+    ///
+    /// NOT bounded by the turn: `MessageRefined` and `LessonProposed`
+    /// fire AFTER the terminal `Complete` (post-stream refinement, a
+    /// detached capture spawn), so the contract is "on this socket,
+    /// until it closes" — never "during the turn". A drain that stops
+    /// at `Complete` will not see those two (sv-surface G13 names that
+    /// gap for the client family).
+    Notice {
+        /// What the host is saying.
+        notice: TurnNotice,
+    },
+}
+
+/// What a parked executor is waiting to be told — the PROMPT half of the
+/// two-shape protocol. Closed on purpose (ARCH §2): a new KIND of
+/// question is a protocol change, never a string discriminator.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnPrompt {
+    /// A write-effectful step needs the user's consent before it runs.
+    /// A socket that closes mid-question CANCELS it — nobody was there
+    /// to consent, and an invented yes is the §18.3 substitution.
+    Approval {
         /// What the step will do, as the approval decider was given it.
-        /// The whole [`ActionPreview`] rather than a projection of it: the
-        /// executor, the desktop card and this frame render one consent
-        /// question and there is one value that states it (ARCH §10.6).
+        /// The whole [`ActionPreview`] rather than a projection of it:
+        /// the executor, the desktop card and this frame render one
+        /// consent question and there is one value that states it
+        /// (ARCH §10.6).
         preview: ActionPreview,
     },
-    /// The in-flight turn is putting a free-form question to the user
-    /// (`ApprovalChannel::ask_user` — a `UserInput` step).
-    ///
-    /// Same ownership rule as [`TurnFrame::ApprovalRequest`]. Answered with
-    /// [`TurnRequest::UserReply`] carrying the same `task_id`.
-    UserInputRequest {
-        /// The background task that asked.
-        task_id: String,
+    /// A free-form question to the user (`ApprovalChannel::ask_user` —
+    /// a `UserInput` step). A closed socket cancels it, same as
+    /// [`TurnPrompt::Approval`]: an invented reply is not an answer.
+    UserInput {
         /// The question, in the turn's own words.
         question: String,
+    },
+    /// A structured information request (`ApprovalChannel::
+    /// request_information`). The one prompt kind whose closed-socket
+    /// policy is SKIP, not cancel: `None` is a real answer — the user's
+    /// skip — and the executor falls through to corpus-only synthesis
+    /// either way, so a vanished card and a pressed skip lead to the
+    /// same place (sv-surface G3's one semantic difference).
+    Information {
+        /// The gap, spelled out.
+        request: InformationRequest,
+    },
+}
+
+/// The client's reply to a [`TurnFrame::Prompt`] — the ANSWER half of
+/// the two-shape protocol.
+///
+/// A wrong-kind answer (an `Approved` aimed at a parked `Information`)
+/// is refused and the question SURVIVES for the right one: the desk's
+/// restore-on-mismatch behaviour, which a typed enum does not remove —
+/// a client can still aim any answer at any id.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnAnswer {
+    /// Reply to [`TurnPrompt::Approval`]: whether the step may proceed.
+    Approved(bool),
+    /// Reply to [`TurnPrompt::UserInput`]: the user's words.
+    Text(String),
+    /// Reply to [`TurnPrompt::Information`]. `None` IS the skip — a
+    /// real answer, not an absence: the executor resumes with
+    /// corpus-only synthesis rather than waiting on a card nobody is
+    /// looking at.
+    Information(Option<String>),
+}
+
+/// What the host says that no answer is owed — the NOTICE half of the
+/// two-shape protocol. See [`TurnFrame::Notice`] for the lifetime
+/// contract ("on this socket, until it closes").
+///
+/// [`TurnFrame::Narration`] deliberately stays a frame of its own
+/// (sv-surface E3): it is the one variant with real readers today, and
+/// folding it would be a wire break for no gain. The desktop's other
+/// two routing events (interpretation-proposed, clarification-request)
+/// join this enum when their payloads move to contracts — sv-surface
+/// G7, scheduled with its producer rather than speculated here.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnNotice {
+    /// The turn acquired its assistant message id — emitted at stream
+    /// handle acquisition, before the first token (sv-surface G10).
+    ///
+    /// This is the placeholder signal. All three turn commands return
+    /// the message id SYNCHRONOUSLY in-process so the UI can paint a
+    /// placeholder over the cold-turn retrieval wait; over the wire the
+    /// id otherwise first arrives on the first `Token`, which is most of
+    /// that wait later. Landing the variant pre-registers the choice
+    /// the G10 row demanded BEFORE any surface converts, so the
+    /// conversion discovers a frame, not a dilemma.
+    TurnStarted {
+        /// The assistant message this turn is about to stream.
+        message_id: String,
+    },
+    /// A step of the in-flight task finished (sv-surface G6). The
+    /// daemon TRACES AND DROPS this today; the desktop renders it as a
+    /// `step-done` Tauri event and the server as an `ExecutorEvent`.
+    /// One frame replaces all three spellings.
+    StepDone {
+        /// The background task the step belongs to.
+        task_id: String,
+        /// The step that finished.
+        step_id: usize,
+        /// What the step was, in its own words.
+        description: String,
+        /// How it ended — typed, not pre-rendered prose.
+        status: StepStatus,
+    },
+    /// An already-streamed assistant message was re-synthesised with
+    /// user-supplied content (sv-surface G4). CORRECTNESS-LOAD-BEARING:
+    /// without this emit the UI sticks on "Refining your answer"
+    /// forever (collaboration.rs records the repro). Fires AFTER the
+    /// terminal `Complete`.
+    MessageRefined(MessageRefinedPayload),
+    /// A draft lesson was proposed from a coaching turn (sv-surface
+    /// G5). Fire-and-forget: the surface either passes the payload to
+    /// its lesson-save command later or does nothing. Fires AFTER the
+    /// terminal `Complete`.
+    LessonProposed(LessonProposedPayload),
+    /// Whether an answer resolved anything (sv-surface G8). `submit_*`
+    /// returned a bool that could not tell "accepted" from "never
+    /// arrived"; [`ResolveOutcome`] already carried the distinction and
+    /// now crosses the wire instead of the bool.
+    ResolveAck {
+        /// The id the answer was aimed at.
+        id: String,
+        /// What the answer found there.
+        outcome: ResolveOutcome,
     },
 }
 
@@ -254,30 +416,20 @@ pub enum TurnRequest {
         #[serde(default, skip_serializing_if = "TurnMode::is_default")]
         mode: TurnMode,
     },
-    /// Answer a pending [`crate::types::ui::ActionPreview`] approval —
-    /// the reply to a [`TurnFrame::ApprovalRequest`].
+    /// Answer a parked [`TurnFrame::Prompt`] — the reply carrying the
+    /// same `id` the question arrived with.
     ///
-    /// Resolved against the SENDING socket's own conversation: a host looks
-    /// the parked step up under `(this socket's conversation, task_id,
-    /// step_id)`, so one client cannot answer another client's consent
-    /// question by guessing its task id.
-    Approve {
-        /// Task the step belongs to.
-        task_id: String,
-        /// Step awaiting the decision.
-        step_id: usize,
-        /// Whether the step may proceed.
-        approved: bool,
-    },
-    /// Answer a pending `ask_user` question — the reply to a
-    /// [`TurnFrame::UserInputRequest`], resolved against the sending
-    /// socket's own conversation for the same reason [`TurnRequest::Approve`]
-    /// is.
-    UserReply {
-        /// Task that asked.
-        task_id: String,
-        /// The user's answer.
-        content: String,
+    /// Resolved against the SENDING socket's own conversation: the host
+    /// looks the id up in the desk that socket's questions live on, so
+    /// one client cannot answer another client's question by guessing
+    /// an id — there is no map it could reach through. A wrong-KIND
+    /// answer is refused by name and the question survives; so is an
+    /// id nothing is parked under (already answered, turn ended).
+    Answer {
+        /// The id from the [`TurnFrame::Prompt`] being answered.
+        id: String,
+        /// The answer, in the shape the question's kind expects.
+        answer: TurnAnswer,
     },
     /// Continue an earlier turn under the intent the user picked — the reply
     /// to a ClarificationCard option or a NextStepOffer button.

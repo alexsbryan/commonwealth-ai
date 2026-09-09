@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! One socket's approval channel — the daemon-side end of `TurnFrame::
-//! ApprovalRequest` (sv-surface rung 6 commit C1, TOPOLOGY hazard 12).
+//! Prompt` (sv-surface rung 6 commit C1, TOPOLOGY hazard 12; R1 gave it
+//! the two-shape protocol).
 //!
 //! # The hazard
 //!
@@ -40,61 +41,44 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sovereign_contracts::types::TurnFrame;
+use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnPrompt};
 use sovereign_core::approval_desk::{ApprovalDesk, ResolveOutcome, StepStatus};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::{ActionPreview, Step, StepOutput};
 use tokio::sync::mpsc;
 
-/// Which question is waiting. No conversation and no socket in the key: the
-/// desk belongs to ONE socket running ONE turn, so the step addresses it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Question {
-    /// A step's `request_approval`, addressed by the step's own id.
-    Step(usize),
-    /// The turn's `ask_user`. One at a time — the executor is sequential
-    /// within a task.
-    Input,
-}
-
 /// The approval channel of ONE turn socket: show the question as a frame,
 /// park the executor, resolve when the reply comes back up the same socket.
+///
+/// The desk is keyed by the SAME id the [`TurnFrame::Prompt`] carries —
+/// one host-minted id, which is the whole correlation story. There is no
+/// conversation and no socket in the key because the desk belongs to ONE
+/// socket running ONE turn, so the id is already unambiguous.
 pub struct SocketApprovalChannel {
     /// The socket's per-turn frame channel — the same one the turn's tokens
     /// go down, so a consent question arrives in order with the answer it
     /// interrupts.
     frames: mpsc::UnboundedSender<TurnFrame>,
-    /// What goes out as the frame's `task_id`, and what a client echoes back.
-    ///
-    /// The conversation, because that is what `task_id` already means on this
-    /// seam: `sovereign-server`'s handler stamps its channel with
-    /// `set_task_id(&conversation_id)` and keys on it. Same field, same
-    /// meaning, both hosts. It is not what ADDRESSES the question here — the
-    /// socket does that — so a reply naming a different one still resolves,
-    /// and it cannot reach another socket's desk to begin with.
-    conversation_id: String,
-    desk: ApprovalDesk<Question>,
+    desk: ApprovalDesk<String>,
 }
 
 impl SocketApprovalChannel {
-    pub fn new(frames: mpsc::UnboundedSender<TurnFrame>, conversation_id: &str) -> Self {
+    pub fn new(frames: mpsc::UnboundedSender<TurnFrame>) -> Self {
         Self {
             frames,
-            conversation_id: conversation_id.to_string(),
             desk: ApprovalDesk::new(),
         }
     }
 
-    /// Answer a parked step approval.
-    pub fn submit_approval(&self, step_id: usize, approved: bool) -> ResolveOutcome {
-        self.desk
-            .resolve_approval(&Question::Step(step_id), approved)
-    }
-
-    /// Answer a parked `ask_user` question.
-    pub fn submit_user_reply(&self, content: String) -> ResolveOutcome {
-        self.desk.resolve_input(&Question::Input, content)
+    /// Answer a parked question by the id it was asked under.
+    ///
+    /// The ONE mapping from the wire's answer shape to the parked kind
+    /// lives on the desk (`resolve_answer`); an id nothing is parked
+    /// under is `NoSuchPending`, a wrong-kind answer is `WrongKind` and
+    /// the question survives.
+    pub fn submit(&self, id: &str, answer: &TurnAnswer) -> ResolveOutcome {
+        self.desk.resolve_answer(&id.to_string(), answer)
     }
 
     /// How many of this socket's questions are still waiting. Zero at rest;
@@ -109,14 +93,20 @@ impl SocketApprovalChannel {
     /// is about to do to the turn.
     async fn ask<T>(
         &self,
-        question: Question,
+        id: String,
         parked: sovereign_core::approval_desk::Parked<T>,
-        frame: TurnFrame,
+        prompt: TurnPrompt,
     ) -> Result<T> {
+        // The id travels in the frame; a clone stays behind for the
+        // cancel path, which only runs when nobody took the frame.
+        let frame = TurnFrame::Prompt {
+            id: id.clone(),
+            prompt,
+        };
         if self.frames.send(frame).is_err() {
-            self.desk.cancel(&question);
+            self.desk.cancel(&id);
             tracing::warn!(
-                ?question,
+                id = %id,
                 "turn_approval: cancelled — the socket closed before the question reached it"
             );
             return Err(Error::Cancelled);
@@ -128,14 +118,12 @@ impl SocketApprovalChannel {
 #[async_trait]
 impl ApprovalChannel for SocketApprovalChannel {
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
-        let question = Question::Step(step.id);
-        let parked = self.desk.park_approval(question.clone());
+        let id = format!("step:{}", step.id);
+        let parked = self.desk.park_approval(id.clone());
         self.ask(
-            question,
+            id,
             parked,
-            TurnFrame::ApprovalRequest {
-                task_id: self.conversation_id.clone(),
-                step_id: step.id,
+            TurnPrompt::Approval {
                 preview: preview.clone(),
             },
         )
@@ -143,13 +131,13 @@ impl ApprovalChannel for SocketApprovalChannel {
     }
 
     async fn ask_user(&self, question_text: &str) -> Result<String> {
-        let question = Question::Input;
-        let parked = self.desk.park_input(question.clone());
+        // One at a time — the executor is sequential within a task.
+        let id = "input".to_string();
+        let parked = self.desk.park_input(id.clone());
         self.ask(
-            question,
+            id,
             parked,
-            TurnFrame::UserInputRequest {
-                task_id: self.conversation_id.clone(),
+            TurnPrompt::UserInput {
                 question: question_text.to_string(),
             },
         )
@@ -159,8 +147,9 @@ impl ApprovalChannel for SocketApprovalChannel {
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         // No progress frame in the turn protocol yet — `TurnFrame` carries
         // narration, and the daemon installs no narration broadcast (see
-        // `turn_http`'s module docs). Traced rather than dropped, so a
-        // daemon run's step ledger is readable at `info`.
+        // `turn_http`'s module docs). `TurnNotice::StepDone` is the
+        // sv-surface G6 row, landing with its producer. Traced rather than
+        // dropped, so a daemon run's step ledger is readable at `info`.
         tracing::info!(
             step_id = step.id,
             description = %step.description,
@@ -198,14 +187,12 @@ mod tests {
         }
     }
 
-    fn channel(
-        conv: &str,
-    ) -> (
+    fn channel() -> (
         Arc<SocketApprovalChannel>,
         mpsc::UnboundedReceiver<TurnFrame>,
     ) {
         let (tx, rx) = mpsc::unbounded_channel();
-        (Arc::new(SocketApprovalChannel::new(tx, conv)), rx)
+        (Arc::new(SocketApprovalChannel::new(tx)), rx)
     }
 
     /// The whole point: the socket is ASKED, and its answer runs the step.
@@ -213,7 +200,7 @@ mod tests {
     /// `AutoApprovalChannel` behaviour C1 replaces) and no frame arrives.
     #[tokio::test]
     async fn the_socket_is_asked_and_its_answer_resolves_the_step() {
-        let (chan, mut rx) = channel("conv-a");
+        let (chan, mut rx) = channel();
         let asking = {
             let chan = Arc::clone(&chan);
             tokio::spawn(async move { chan.request_approval(&step(7), &preview()).await })
@@ -222,17 +209,19 @@ mod tests {
         let frame = rx.recv().await.expect("the socket is asked");
         assert_eq!(
             frame,
-            TurnFrame::ApprovalRequest {
-                task_id: "conv-a".into(),
-                step_id: 7,
-                preview: preview(),
+            TurnFrame::Prompt {
+                id: "step:7".into(),
+                prompt: TurnPrompt::Approval { preview: preview() },
             },
             "the question reaches the socket as the wire frame, preview intact"
         );
 
         // Still waiting — a channel that answered itself would have finished.
         assert_eq!(chan.parked(), 1);
-        assert_eq!(chan.submit_approval(7, true), ResolveOutcome::Resolved);
+        assert_eq!(
+            chan.submit("step:7", &TurnAnswer::Approved(true)),
+            ResolveOutcome::Resolved
+        );
         assert!(
             asking.await.unwrap().unwrap(),
             "the user's yes is the answer"
@@ -245,8 +234,8 @@ mod tests {
     /// but because B's desk does not contain it and B can reach no other.
     #[tokio::test]
     async fn a_second_socket_cannot_answer_the_first_sockets_question() {
-        let (a, mut a_rx) = channel("conv-a");
-        let (b, mut b_rx) = channel("conv-b");
+        let (a, mut a_rx) = channel();
+        let (b, mut b_rx) = channel();
 
         let asking = {
             let a = Arc::clone(&a);
@@ -262,13 +251,16 @@ mod tests {
             "the question went to A's socket only"
         );
         assert_eq!(
-            b.submit_approval(3, true),
+            b.submit("step:3", &TurnAnswer::Approved(true)),
             ResolveOutcome::NoSuchPending,
             "B answering A's step reaches nothing"
         );
         assert_eq!(a.parked(), 1, "A's question is still waiting after B tried");
 
-        assert_eq!(a.submit_approval(3, false), ResolveOutcome::Resolved);
+        assert_eq!(
+            a.submit("step:3", &TurnAnswer::Approved(false)),
+            ResolveOutcome::Resolved
+        );
         assert!(
             !asking.await.unwrap().unwrap(),
             "A's own answer is the one that lands, and it was a NO"
@@ -279,7 +271,7 @@ mod tests {
     /// on a vanished user's behalf, and leaves nothing parked (ARCH §18.3).
     #[tokio::test]
     async fn a_closed_socket_cancels_the_question_rather_than_granting_it() {
-        let (chan, rx) = channel("conv-a");
+        let (chan, rx) = channel();
         drop(rx);
 
         let outcome = chan.request_approval(&step(1), &preview()).await;
@@ -294,37 +286,37 @@ mod tests {
         );
     }
 
-    /// `ask_user` rides the same seam, and an approval aimed at a pending
-    /// question resolves nothing and leaves it waiting.
-    ///
-    /// It reads as `NoSuchPending` rather than `WrongKind` because
-    /// [`Question`] carries the kind in the key, so the two cannot collide
-    /// here at all — the desk's own restore-on-mismatch is a guard for key
-    /// policies that do not, not a branch this host reaches.
+    /// `ask_user` rides the same seam, and a wrong-KIND answer aimed at a
+    /// pending question is refused and does not consume it — the flat id
+    /// namespace the R1 fold bought: before it, the kind lived in the desk
+    /// KEY, so a mismatched reply could not even find the entry. Now it can,
+    /// and the desk's restore-on-mismatch is the guard that fires.
     #[tokio::test]
     async fn a_user_reply_answers_a_question_and_an_approval_does_not() {
-        let (chan, mut rx) = channel("conv-a");
+        let (chan, mut rx) = channel();
         let asking = {
             let chan = Arc::clone(&chan);
             tokio::spawn(async move { chan.ask_user("Which branch?").await })
         };
         assert_eq!(
             rx.recv().await.expect("the socket is asked"),
-            TurnFrame::UserInputRequest {
-                task_id: "conv-a".into(),
-                question: "Which branch?".into(),
+            TurnFrame::Prompt {
+                id: "input".into(),
+                prompt: TurnPrompt::UserInput {
+                    question: "Which branch?".into(),
+                },
             }
         );
 
         assert_eq!(
-            chan.submit_approval(0, true),
-            ResolveOutcome::NoSuchPending,
-            "an approval aimed at a question reaches nothing"
+            chan.submit("input", &TurnAnswer::Approved(true)),
+            ResolveOutcome::WrongKind,
+            "an approval aimed at a question is refused by name"
         );
         assert_eq!(chan.parked(), 1, "the question survived the wrong answer");
 
         assert_eq!(
-            chan.submit_user_reply("main".into()),
+            chan.submit("input", &TurnAnswer::Text("main".into())),
             ResolveOutcome::Resolved
         );
         assert_eq!(asking.await.unwrap().unwrap(), "main");
