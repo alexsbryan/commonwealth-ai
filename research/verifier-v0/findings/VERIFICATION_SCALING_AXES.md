@@ -1168,3 +1168,65 @@ sufficiency routing on a single one.**
   > adaptive routing). That is now a pattern worth treating as a prior.
 
 Reproduce: `scripts/crag_sufficiency_probe.py` (bars in the header).
+
+### 16.1 Scope correction — what §16 tests, and what it does not
+
+**Added 2026-09-09, same day, in response to the right question: how does this
+test CRAG?** It does not. §16's own commit title is correctly scoped ("buys +0
+over a FIXED K"), but the surrounding framing drifted into "the CRAG pipeline is
+killed", and that is not what was measured. The record is corrected here rather
+than quietly reworded.
+
+**§16 tests exactly one edge:** can a cheap sufficiency verdict route between
+k=28 and k=80 OF THE SAME CORPUS. Four ways that differs from the published
+mechanism:
+
+1. **The corrective action is wrong.** CRAG's INCORRECT branch DISCARDS the
+   retrieved set and goes to a different knowledge source (web search). §16
+   escalates to more of the same corpus. Those have different payoff ceilings,
+   and the +5/158 oracle bound applies ONLY to the k-escalation action.
+2. **Knowledge refinement is untested.** CRAG's decompose-into-strips, filter,
+   recompose step — its action on the CORRECT branch, and plausibly the larger
+   contributor — was not implemented or measured at all.
+3. **The evaluator is not comparable.** CRAG uses a fine-tuned scorer judging
+   document RELEVANCE; §16 uses a zero-shot prompt to a general 4B judging
+   answer SUFFICIENCY, which is a harder target. AUC 0.633 prices the cheapest
+   thing, not the published thing.
+4. **The setting has no instances of the target condition.** This is the deepest
+   one. §13 measured that this corpus HOLDS every hard-core fact (8/8
+   reachable). CRAG exists to handle "the corpus does not have this, go
+   elsewhere" — and on a 21-question bank over one encyclopedia that answers all
+   21, that branch has essentially nothing to fire on. **§16 ran the experiment
+   on a bank where CRAG's corrective action has nothing to correct.**
+
+**What §16 does establish, and it stands:**
+
+- A cheap zero-shot sufficiency signal does not discriminate here (0.633 AUC,
+  beaten by counting distinct documents at 0.661). Any router needing such a
+  signal from a general small model, on long-form questions, should price that.
+- Escalating k on a per-query basis is worth at most +5/158 over one fixed k,
+  at ANY evaluator quality. That is a real bound on one specific action.
+- The law in §16 — value = evaluator discrimination x variance of per-query
+  difficulty — is unaffected, and it PREDICTS this outcome rather than being
+  contradicted by it.
+
+**What would actually test the pipeline**, in the order this arc ranked it
+before running anything:
+
+1. **HyDE / query2doc reformulation** — ranked FIRST in the prior analysis and
+   still untested. §13 showed the oracle (fact-as-query) recovers 8/8 and §14
+   showed question-decomposition recovers none of it; HyDE is the untested
+   member that supplies the ANSWER's vocabulary, which is the measured failure
+   mode. §16 tested neither.
+2. **Acquisition routing on a MIXED corpus** — the setting where the variance
+   term is large and where CRAG's corrective branch has instances. Needs a bank
+   whose questions are NOT all answerable from the local corpus.
+3. **Knowledge refinement (strip filtering)** — CRAG's other half, and the one
+   that speaks to §15's context-scarcity finding.
+
+**Methodological note worth keeping.** The instrument was built to be the
+cheapest possible, and it was — but cheapest-to-run is not the same as
+cheapest-per-unit-of-decision. The pipeline's own ranking put HyDE first and
+sufficiency routing second; the instrument went where measurement was easy
+rather than where the claim was load-bearing. That is a real ordering error, and
+naming it is cheaper than repeating it.
