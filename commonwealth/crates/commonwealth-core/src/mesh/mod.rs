@@ -265,42 +265,40 @@ fn is_zero_u64(v: &u64) -> bool {
 }
 
 impl MemberRecord {
-    /// Whether this member is active — whether the LATEST lifecycle event
-    /// about it is something other than its own removal. Read paths (online
+    /// Whether this member is active (not tombstoned). Read paths (online
     /// counts, gossip targets, knowledge fan-out roster) filter on this so a
     /// departed node is invisible to scheduling while its tombstone still
     /// circulates for convergence.
     ///
-    /// **`removed_at.is_some()` is not that question, and reading it as that
-    /// question stranded a live peer.** [`Self::event_time`] has always stated
-    /// the rule — "a rejoin whose `last_seen` post-dates the removal
-    /// out-competes the tombstone" — and [`Mesh::merge_from`] implements it, so
-    /// a rejoin arriving THROUGH A MERGE clears the field and the old
-    /// predicate was right by accident. What it got wrong is the record that
-    /// never gets that merge.
+    /// # This was widened on 2026-09-09 and the widening was REVERTED the same
+    /// day. Do not re-derive it.
     ///
-    /// MEASURED, RuggedFox 2026-09-09. BeefyMac held `removed_at =
-    /// 1787962251` beside `last_seen = 1788985799` — seen 1,023,548 seconds
-    /// AFTER its own tombstone. `gossip::is_gossip_candidate` is this
-    /// predicate, so the node would not dial it; and with nobody dialling it
-    /// there was no inbound merge to clear the field. A self-sealing
-    /// exclusion, and it does not decay: 148 gossip dials in twenty minutes,
-    /// not one of them to a peer whose daemon was up throughout. Compare
-    /// `vast-49188146` in the same roster, carrying `removed_at == last_seen`
-    /// exactly — that is the shape of a departure that really happened, and it
-    /// stays excluded here.
+    /// The widening read `last_seen > removed_at` as "the member came back",
+    /// citing [`Self::event_time`]'s own documented rule. The motivating bug is
+    /// real: this host held a `BeefyMac` record with `removed_at = 1787962251`
+    /// and `last_seen = 1788985799`, 11.8 days later, and because
+    /// `gossip::is_gossip_candidate` is this predicate, nobody dialed it — so
+    /// no inbound merge could clear it, so nobody dialed it. A reachable peer
+    /// was unreachable and the state could not decay.
     ///
-    /// So this asks `event_time`'s question over `event_time`'s own two
-    /// fields, and the two now agree by construction rather than by review
-    /// (ARCH §10.6). It does not weaken revocation beyond what the merge
-    /// already permits: under the rule quoted above, a revoked node that keeps
-    /// gossiping already out-competes its own tombstone on the LWW.
+    /// WHY IT CANNOT BE FIXED HERE: `removed_at` is stamped by BOTH a graceful
+    /// `leave` and `membership::revoke_member`, and the two must answer this
+    /// question differently. A node that left may overturn its own tombstone by
+    /// coming back; a node that was REVOKED may not. Revocation targets a
+    /// member that is live, so `removed_at` is stamped at ~`last_seen`, and
+    /// that member's very next heartbeat advances `last_seen` past it — the
+    /// subject re-admitting itself with a field the subject supplies, which is
+    /// ARCH §18.1's exact shape. Caught by
+    /// `commonwealth-discovery`'s `revoke_member_tombstones_instead_of_deleting`
+    /// on the full-workspace run, after the scoped runs were green.
+    ///
+    /// THE FIX THIS NEEDS is a `RemovalKind` (`Left` | `Revoked`) on the record
+    /// — additive and wire-compatible via serde default — so resurrection is
+    /// permitted for the first and refused for the second. Until that lands,
+    /// this stays narrow and the BeefyMac case is repaired the way
+    /// `mesh_identity` already says it must be: as an operator act.
     pub fn is_active(&self) -> bool {
-        match self.removed_at {
-            None => true,
-            // Seen after it was removed: it came back.
-            Some(removed_at) => self.last_seen > removed_at,
-        }
+        self.removed_at.is_none()
     }
 
     /// Whether this member has ANY path we could dial — an IP address
