@@ -50,6 +50,31 @@ makes `boundary-gate` report
 closure` and `layer-gate` report the `[[forbid]]` row by its reason text
 (ARCH §18.1).
 
+**THAT RED WATCH PROVED LESS THAN IT READ AS, and the correction is worth more
+than the claim.** `sovereign-core` is the one sovereign crate that is not a
+declared `[[package_leaf]]`, so it was caught by MEMBERSHIP — the rule the gate
+already had. Re-run on 2026-09-09 with `sovereign-contracts`, which *is* a
+leaf: `layer-gate` exit 1 (the `[[forbid]] commonwealth-work -> sovereign-*`
+row, plus `fan-in of sovereign-contracts grew 26 -> 27`), and `boundary-gate`
+exit **0**, printing `commonwealth 7/7 crates present` and `✓ every declared
+package reaches only itself + the shared leaves`. Leaves are GLOBAL — admitting
+one widens every package at once — so `sovereign-contracts` being liftable with
+`studio` made it liftable with `commonwealth` too, whose entire declared
+property is that it names no `sovereign-*`. The per-package refinement lives in
+the `[[forbid]]` table, and the package pass never read it.
+
+Fixed 2026-09-09: `arch_layers::forbidden_by` is now the one decider both
+passes call, and a `[[forbid]]` row outranks package membership and the
+shared-leaf allowance alike. Watched red with the `sovereign-contracts` edge
+before it was trusted, and pinned by
+`a_forbid_row_outranks_package_membership_and_the_shared_leaf_allowance`
+(`quality/arch-layers/src/packages.rs`), whose case 0 is a negative control
+asserting the leaf allowance really does admit the edge — without it the suite
+would pass against the old code. **The general lesson: watch a gate red with an
+input drawn from the class it must catch, not the first member of that class
+that comes to hand.** Every `sovereign-*` crate looked equivalent for this
+purpose and two of them were not.
+
 ## The two tiers
 
 **Package crates** (`commonwealth/crates/`):

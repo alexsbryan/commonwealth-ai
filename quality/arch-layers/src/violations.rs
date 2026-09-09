@@ -29,9 +29,19 @@ pub enum Violation {
         kind: DepKind,
     },
     /// A dependency matching a `[[forbid]]` rule.
+    ///
+    /// ONE variant for the one rule, whichever pass found it (ARCH §10.6).
+    /// `package` says WHICH pass, because that decides which exception ledger
+    /// grandfathers it: `None` is the layer pass (a bare `[[exception]]`),
+    /// `Some(scope)` the package pass (an `[[exception]]` carrying
+    /// `package = "<scope>"`). The two ledgers are deliberately separate — see
+    /// [`crate::evaluate`] — so a message that named the wrong one would send
+    /// the reader to write a row that suppresses nothing.
     ForbiddenEdge {
+        package: Option<String>,
         from: String,
         to: String,
+        kind: DepKind,
         reason: String,
     },
     /// An `[[exception]]` no live edge needed — delete it, it's already won.
@@ -92,10 +102,42 @@ impl Violation {
                     DepKind::Dev => "a dev",
                 }
             ),
-            Violation::ForbiddenEdge { from, to, reason } => format!(
-                "{from} → {to}: forbidden by a [[forbid]] rule ({reason}) — \
-                 remove the edge or grandfather it with a [[exception]] entry"
-            ),
+            Violation::ForbiddenEdge {
+                package,
+                from,
+                to,
+                kind,
+                reason,
+            } => {
+                let dep = match kind {
+                    DepKind::Normal => "a normal",
+                    DepKind::Build => "a build",
+                    DepKind::Dev => "a dev",
+                };
+                match package {
+                    None => format!(
+                        "{from} → {to}: {dep} dependency forbidden by a [[forbid]] \
+                         rule ({reason}) — remove the edge or grandfather it with \
+                         a [[exception]] entry"
+                    ),
+                    // Deliberately NOT prefixed `[{scope}]`: boundary-gate keys
+                    // its per-package closure print on that prefix, and the
+                    // closure is the wrong thing to show here. The offending
+                    // target is usually a declared shared leaf, so the closure
+                    // listing would name it as permitted — the reader would go
+                    // diff a budget that is not the rule they broke.
+                    Some(scope) => format!(
+                        "{from} → {to}: {dep} dependency forbidden by a [[forbid]] \
+                         rule ({reason}). A [[forbid]] row outranks package \
+                         membership AND the shared-leaf allowance, so an edge to a \
+                         declared [[package_leaf]] still fails the `{scope}` \
+                         package pass. Remove the edge, or grandfather it with an \
+                         [[exception]] carrying `package = \"{scope}\"` — a bare \
+                         [[exception]] answers to layer-gate and will NOT suppress \
+                         this one."
+                    ),
+                }
+            }
             Violation::StaleException { from, to } => format!(
                 "[[exception]] {from} → {to} no longer matches any edge — \
                  the violation is fixed; delete the entry from \

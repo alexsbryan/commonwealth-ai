@@ -19,6 +19,16 @@
 //! — no `build.rs`, no crate-escaping `include_str!`, and no RUNTIME reach-out
 //! past the crate root.
 //!
+//! The `[[forbid]]` table is the one thing the two passes SHARE, through
+//! `arch_layers::forbidden_by`, and it was not shared until 2026-09-09. The
+//! allowlist this gate pins is per-package plus the GLOBAL shared leaves, so
+//! it cannot say "this package, unlike the others, may not reach that leaf" —
+//! and `commonwealth-work -> sovereign-contracts` (a declared leaf) was
+//! admitted here on membership while layer-gate failed on the forbid row for
+//! the same edge. Two gates, one policy file, opposite verdicts, and the one
+//! that names itself for lift closure said yes. A forbid row now outranks
+//! membership and the leaf allowance alike (ARCH §18.1, §10.6).
+//!
 //! The third one is younger than the other two and exists because they were
 //! not enough. Both are COMPILE-TIME rules, and a test that resolves the repo
 //! root from `CARGO_MANIFEST_DIR` at runtime — or shells `git` wherever the
