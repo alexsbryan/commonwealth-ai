@@ -26,7 +26,7 @@ fn section(kinds: &[&str]) -> WorkOfferSection {
 /// needed.
 #[test]
 fn startup_refuses_offer_of_unregistered_kind() {
-    let registry = donor_registry();
+    let registry = donor_registry(None);
     let err = resolve_offer(&section(&["ingest:v1"]), &registry, "linux", "x86_64")
         .expect_err("a kind with no executor must refuse the boot");
     let msg = err.to_string();
@@ -45,7 +45,7 @@ fn startup_refuses_offer_of_unregistered_kind() {
 /// trivially true of a daemon that offers nothing.
 #[test]
 fn the_control_a_registered_kind_resolves_to_an_offer() {
-    let registry = donor_registry();
+    let registry = donor_registry(None);
     let offer = resolve_offer(&section(&["process:v1"]), &registry, "linux", "x86_64")
         .expect("process:v1 is registered")
         .expect("kinds are set, so there is an offer");
@@ -58,7 +58,7 @@ fn the_control_a_registered_kind_resolves_to_an_offer() {
 /// posture, and what makes the section safe to write into every config.
 #[test]
 fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
-    let registry = donor_registry();
+    let registry = donor_registry(None);
     assert_eq!(
         resolve_offer(&WorkOfferSection::default(), &registry, "linux", "x86_64")
             .expect("inert is not an error"),
@@ -71,7 +71,7 @@ fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
 /// at boot instead.
 #[test]
 fn an_accept_key_that_is_not_a_key_refuses_the_boot_naming_it() {
-    let registry = donor_registry();
+    let registry = donor_registry(None);
     let mut s = section(&["process:v1"]);
     s.accept = sovereign_contracts::setup_config::WorkAcceptFrom::Listed;
     s.accept_from = vec!["BEEFYMAC".to_string()];
@@ -420,4 +420,45 @@ fn an_act_that_is_not_a_report_credits_nothing() {
     };
     assert!(credit_for(&WorkAct::Lease(r.clone()), &unit, &me, 9.0).is_none());
     assert!(credit_for(&WorkAct::Renew(r), &unit, &me, 9.0).is_none());
+}
+
+// ── cw-lift 5g: the ingest executor's half of the boot invariant ──────────
+
+fn an_engine() -> (tempfile::TempDir, Arc<corpus_engine::CorpusEngine>) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recipes = dir.path().join("recipes");
+    let indexes = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes).expect("recipes dir");
+    std::fs::create_dir_all(&indexes).expect("indexes dir");
+    let embed: corpus_engine::EmbedFn =
+        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
+    (
+        dir,
+        Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed)),
+    )
+}
+
+/// The control for `startup_refuses_offer_of_unregistered_kind`, which passes
+/// `None` and therefore now asserts something sharper than it used to: a node
+/// with NO corpus engine refuses a config offering `ingest:v1`, naming it.
+///
+/// Without this control that gate is trivially satisfiable by a
+/// `donor_registry` that registers nothing at all. The failing input here is a
+/// registration that forgets the engine arm — the daemon would boot, refuse
+/// the operator's `ingest:v1` line, and the refusal would be indistinguishable
+/// from a genuine misconfiguration.
+#[test]
+fn a_node_with_a_corpus_engine_registers_the_ingest_kind_and_can_offer_it() {
+    let (_dir, engine) = an_engine();
+    let registry = donor_registry(Some(engine));
+    let kinds: Vec<String> = registry.kinds().iter().map(|k| k.to_string()).collect();
+    assert!(
+        kinds.iter().any(|k| k == crate::ingest_executor::INGEST_KIND),
+        "a node with an engine must register `ingest:v1`, got {kinds:?}"
+    );
+    let offer = resolve_offer(&section(&["ingest:v1"]), &registry, "linux", "x86_64")
+        .expect("ingest:v1 is registered on a node with an engine")
+        .expect("kinds are set, so there is an offer");
+    assert_eq!(offer.kinds.len(), 1);
+    assert_eq!(offer.isolation, DONOR_ISOLATION);
 }

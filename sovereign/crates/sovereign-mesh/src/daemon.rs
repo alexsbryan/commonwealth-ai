@@ -2709,7 +2709,18 @@ impl EmbeddedDaemon {
         // contradicts this build is wrong whether or not this boot would have
         // donated, and a local-only run must not be the reason nobody found
         // out.
-        let work_registry = std::sync::Arc::new(crate::work_donor::donor_registry());
+        // Resolved here, above the registry, because `donor_registry` needs it:
+        // a node with no corpus engine registers no `ingest:v1` executor, and
+        // `resolve_offer` then REFUSES a config that offers that kind, naming it
+        // (cw-lift 5g). Moved up from the `AppState` construction below, which
+        // still takes the same clone.
+        let corpus_engine = self
+            .services
+            .serving()
+            .map(|s| Arc::clone(&s.core.corpus_engine));
+        let work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
+            corpus_engine.clone(),
+        ));
         let work_offer = {
             let c = self.setup_config.read().await;
             crate::work_donor::resolve_offer(
@@ -2745,10 +2756,6 @@ impl EmbeddedDaemon {
         // the same store gossip publishes from) inject one via
         // `set_mesh_store` before this point. Long-term persistence
         // for the legacy mesh state still flows through `mesh.json`.
-        let corpus_engine = self
-            .services
-            .serving()
-            .map(|s| Arc::clone(&s.core.corpus_engine));
         let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
             Some(provided) => provided.inner(),
             // Only the headless daemon carries a shared store; the desktop and

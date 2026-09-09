@@ -176,15 +176,40 @@ fn registered_list(kinds: &[JobKind]) -> String {
 /// (ARCH §10.6). `process:v1` is registered only when this crate is built
 /// with `commonwealth-work/process`; a build without it offers nothing and
 /// [`resolve_offer`] refuses a config that says otherwise, naming the kind.
-pub fn donor_registry() -> JobExecutorRegistry {
+///
+/// **`corpus_engine` is why this takes an argument (cw-lift 5g).**
+/// [`crate::ingest_executor::IngestExecutor`] runs a corpus slice through this
+/// node's own engine, so a node that has none cannot run `ingest:v1` — and the
+/// honest way to say that is to register nothing, which makes
+/// [`resolve_offer`] refuse a config offering it and NAME the kind. The
+/// alternative, registering an executor that fails at run time, is a donor
+/// that leases units and burns the submitter's attempts, which is the exact
+/// failure the boot check exists to prevent (ARCH §18.3).
+pub fn donor_registry(
+    corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+) -> JobExecutorRegistry {
     let mut registry = JobExecutorRegistry::new();
-    // The only executor in v0. `register` refuses a duplicate kind rather than
-    // overwriting, and there is exactly one call here, so the `Result` cannot
-    // be an error — it is still surfaced rather than unwrapped, because a
-    // future second registration must not be able to vanish (ARCH §18.3).
+    // `register` refuses a duplicate kind rather than overwriting, and each
+    // kind is registered once here, so neither `Result` can be an error — both
+    // are still surfaced rather than unwrapped, because a future second
+    // registration must not be able to vanish (ARCH §18.3).
     if let Err(e) = registry.register(Arc::new(commonwealth_work::process::ProcessExecutor::new()))
     {
         warn!(target: TRACE_TARGET, error = %e, "work donor: an executor could not be registered");
+    }
+    match corpus_engine {
+        Some(engine) => {
+            if let Err(e) = registry.register(Arc::new(
+                crate::ingest_executor::IngestExecutor::new(engine),
+            )) {
+                warn!(target: TRACE_TARGET, error = %e, "work donor: an executor could not be registered");
+            }
+        }
+        None => debug!(
+            target: TRACE_TARGET,
+            kind = crate::ingest_executor::INGEST_KIND,
+            "work donor: this node has no corpus engine, so it registers no ingest executor"
+        ),
     }
     registry
 }

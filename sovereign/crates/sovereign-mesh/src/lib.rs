@@ -45,6 +45,7 @@ pub mod guest_lender;
 pub mod guest_tunnel;
 pub mod http_response;
 pub mod inference_adapter;
+pub mod ingest_executor;
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds
 /// the daemon's identity endpoint and routes by ALPN to the local
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.
