@@ -1010,13 +1010,21 @@ mod tests {
         // Configuration as a seed and no edge a Configuration has, so it was a
         // terminus by accident. Both literals are spelled out for the same
         // reason as `budget 12`.
+        // `Grounds` left the thematic walk, and `OpposesIn` left the tension
+        // row, in ff0c81eeb — deliberately, and the ontology says why in its
+        // own comment: the resolvers write `Grounds` from an atom to a CHUNK,
+        // so it has no seat in the atom CSR and a row walking it walks
+        // nothing; `OpposesIn` is a kind no built-in build produces. This
+        // assertion kept naming both for a day afterwards, which is a test
+        // pinning a table the data had already stopped declaring. It asserts
+        // the DECLARED table — that is the whole point of rendering it.
         assert!(
-            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Grounds → Configures | hops 2 | budget 12"),
+            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Configures | hops 2 | budget 12"),
             "{}",
             out.text
         );
         assert!(
-            out.text.contains("navigation.tension:") && out.text.contains("OpposesIn"),
+            out.text.contains("navigation.tension: seed Claim, ArgumentReconstruction | walk Tension → Involves | hops 1 | budget 12"),
             "{}",
             out.text
         );

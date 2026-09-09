@@ -5239,14 +5239,16 @@ variant plus its `paths()` arm and touches neither auth nor the wire.
 **The ring rail is the second scope, and the first deployment target**
 (`commonwealth-api/src/routes_rail.rs` + the `commonwealth-rail-core` /
 `commonwealth-rail` pair, ring-deploy S1–S6, 2026-08-30). **It became two
-crates on 2026-09-04** (cw-lift 1b), out of `commonwealth-knowledge/src/rail/`:
+crates on 2026-09-04** (cw-lift 1b), carved out of what was then
+`commonwealth-knowledge`'s own rail module:
 `-rail-core` is the FOLD — the vocabulary, Ed25519 authorship, admission into
 one total order, and the per-actor sync digest, with no filesystem, no clock
 and no socket — and `-rail` is the JSONL journal that calls it. The split is
 what the campaign's second lift needs: a second application composes on the
 fold without inheriting a file layout, and the fold's whole in-repo dependency
-surface is `oplog`. `commonwealth-knowledge::rail` is a re-export for one more
-commit (order 1c drops it), so no consumer moved in the same diff. The three
+surface is `oplog`. `commonwealth-knowledge::rail` survived as a re-export for
+one commit so no consumer moved in the same diff; order 1c dropped it, and
+`commonwealth-knowledge/src/` carries no rail module today. The three
 `[[forbid]] from = "commonwealth-rail*"` blocks in `quality/ARCH_LAYERS.toml`
 are what hold it — to `corpus-engine*` (the edge order 1a paid for), to
 `sovereign-*`, and back to `commonwealth-knowledge`, which layer ordering

@@ -20,6 +20,24 @@
 //!      n0 DNS; a stale/missing record means the discovery-side wedge (the
 //!      pkarr-death candidate), which relay-home cannot see. Only run when n0
 //!      discovery is actually configured.
+//!   3. **Peer paths** — do we still hold a live path to ANYONE? Added
+//!      2026-09-09 after a live capture (note `a3f3fbff`) showed the first two
+//!      signals are structurally blind to the failure that actually bit: both
+//!      are INBOUND questions — "is a relay connected to me", "can I resolve
+//!      my own id" — and neither moves when an ESTABLISHED outbound path to a
+//!      peer degrades and dies. On RuggedFox, `reach_ms` to the Mac climbed
+//!      131 → 1106 over three minutes, went silent, and the peer was marked
+//!      Offline 60s later; ten minutes on, `svrn mesh transport` read "no
+//!      endpoint record yet" for EVERY peer while `self_reachability` read
+//!      `relay_homed: true, discovery_ok: true, degraded: false, rebuilds: 0`.
+//!      A green light over a dead transport is the shape this term removes.
+//!
+//!      It is gated on HAVING HAD a path and lost it, never on "no path right
+//!      now" — a node whose peers are all legitimately asleep has no path
+//!      either, and rebuilding for that is the same trap `relays_expected`
+//!      exists for one layer up. The gate is also ONE-SHOT: a rebuild re-arms
+//!      it (`PeerPathHealth::rearm`), so a loss event can drive the ladder at
+//!      most once until a real path is observed again.
 //!
 //! Escalation (each step only after a grace window LONGER than iroh's own 15s
 //! reconnect, so we never fight iroh): `network_change()` nudge → relay bounce
@@ -36,7 +54,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_transport::iroh::{Endpoint, RelayStatus, Watcher};
+use commonwealth_transport::iroh::{Endpoint, PeerPath, RelayStatus, Watcher};
 use futures::StreamExt;
 use tokio::sync::RwLock;
 use tokio::time::Instant;
@@ -61,6 +79,18 @@ pub struct ReachabilityStatus {
     pub last_recovery: Option<RecoveryEvent>,
     /// Total endpoint rebuilds this watchdog has performed.
     pub rebuilds: u32,
+    /// Peers the peer-path term looked at on its last poll.
+    #[serde(default)]
+    pub peer_paths_total: usize,
+    /// How many of those carry an ACTIVE path (direct / relayed / mixed).
+    /// `0 of N` is not by itself a fault — see `peer_paths_wedged`.
+    #[serde(default)]
+    pub peer_paths_active: usize,
+    /// The third health term: this endpoint HELD a live path and now holds
+    /// none, sustained past `peer_path_bad_streak` polls. The signal both
+    /// inbound terms are blind to.
+    #[serde(default)]
+    pub peer_paths_wedged: bool,
     /// True while unhealthy / mid-recovery (drives the UI "Reconnecting" state).
     pub degraded: bool,
 }
@@ -83,6 +113,153 @@ pub type RebuildFn = Arc<
         + Sync,
 >;
 
+/// One peer's live path as the daemon sees it, injected once per poll via
+/// [`PeerPathsFn`]. The watchdog stays transport-mechanism-only: it does not
+/// know what a mesh member is, only that something out there was reachable and
+/// now is not.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PeerPathObservation {
+    /// Short node id — for the log line, and the key the term folds on.
+    pub node_id: String,
+    /// Display name, for the same log line.
+    pub name: String,
+    /// What membership currently believes about this peer. Recorded, NOT
+    /// gated on: the 2026-09-09 capture shows membership marks a peer Offline
+    /// ~60s after the path dies, so a term gated on "believed online" would
+    /// go blind exactly when the wedge becomes permanent.
+    pub believed_online: bool,
+    /// The endpoint's classification, or `None` when it holds NO `remote_info`
+    /// record for this peer at all — a different fact from
+    /// [`PeerPath::Idle`], and the one the capture ended in.
+    pub path: Option<PeerPath>,
+}
+
+impl PeerPathObservation {
+    fn active_path(&self) -> Option<PeerPath> {
+        self.path.filter(|p| p.is_active())
+    }
+
+    /// What the log line prints for a path, including the no-record case.
+    fn path_label(&self) -> &'static str {
+        match self.path {
+            Some(p) => p.as_str(),
+            None => "no-record",
+        }
+    }
+}
+
+/// Observe every peer's live path on the CURRENT endpoint. Takes the endpoint
+/// because the watchdog swaps its own handle on rebuild and the health term
+/// must judge the endpoint it is actually holding. Supplied by the daemon (it
+/// owns the membership list), same injection shape as [`RebuildFn`]. `None` at
+/// spawn disables the term entirely — no observations, never wedged.
+pub type PeerPathsFn = Arc<
+    dyn Fn(Endpoint) -> Pin<Box<dyn std::future::Future<Output = Vec<PeerPathObservation>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// What one poll of the peer-path term concluded. Returned rather than logged
+/// in place, so the fold below is a pure function with failing inputs a test
+/// can name (ARCH §18.1) and all the tracing stays in [`run`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct PeerPathVerdict {
+    /// The health term: we HELD an active path, hold none now, and have held
+    /// none for `peer_path_bad_streak` consecutive polls.
+    wedged: bool,
+    /// Peers observed this poll.
+    total: usize,
+    /// Peers the endpoint holds any record for.
+    known: usize,
+    /// Peers with an ACTIVE path.
+    active: usize,
+    /// Peers whose active path vanished this poll, each with the path it was
+    /// on when it died. THIS is the answer the capture could not give:
+    /// "was the dying path relayed or direct at the moment it died?"
+    lost: Vec<(String, PeerPath)>,
+    /// Peers that gained an active path this poll.
+    gained: Vec<(String, PeerPath)>,
+    /// Peers whose active path changed kind — `direct` → `relayed` is the
+    /// documented precursor to the `reach_ms` ramp, so it is worth a line of
+    /// its own rather than being folded into "still active".
+    migrated: Vec<(String, PeerPath, PeerPath)>,
+}
+
+/// The peer-path health term's state across polls.
+///
+/// The whole difficulty is that "no path to anyone" is BOTH the wedge and the
+/// normal state of a node whose peers are asleep. What separates them is
+/// history: a wedge is a path we HELD and lost. So the term is armed only by
+/// observing a real active path, and a rebuild disarms it again — which makes
+/// it one-shot per loss event and structurally unable to rebuild-loop.
+#[derive(Debug, Default)]
+struct PeerPathHealth {
+    /// Last ACTIVE path per peer, so a loss can report what died.
+    last_active: std::collections::HashMap<String, PeerPath>,
+    /// An active path has been observed since the term was last armed.
+    seen_active: bool,
+    /// Consecutive polls with peers present and not one active path.
+    bad_run: u32,
+}
+
+impl PeerPathHealth {
+    /// Fold one poll's observations into the term.
+    fn observe(&mut self, obs: &[PeerPathObservation], streak: u32) -> PeerPathVerdict {
+        let mut v = PeerPathVerdict {
+            total: obs.len(),
+            ..Default::default()
+        };
+        for o in obs {
+            if o.path.is_some() {
+                v.known += 1;
+            }
+            match o.active_path() {
+                Some(now) => {
+                    v.active += 1;
+                    match self.last_active.insert(o.node_id.clone(), now) {
+                        None => v.gained.push((o.name.clone(), now)),
+                        Some(prev) if prev != now => v.migrated.push((o.name.clone(), prev, now)),
+                        Some(_) => {}
+                    }
+                }
+                None => {
+                    if let Some(prev) = self.last_active.remove(&o.node_id) {
+                        v.lost.push((o.name.clone(), prev));
+                    }
+                }
+            }
+        }
+        if v.active > 0 {
+            self.seen_active = true;
+            self.bad_run = 0;
+        } else if !obs.is_empty() && self.seen_active {
+            self.bad_run = self.bad_run.saturating_add(1);
+            v.wedged = self.bad_run >= streak.max(1);
+        }
+        // Two deliberate non-cases, both fail-open:
+        //   * `obs` empty — a solo mesh, or nobody carrying a pubkey. Nothing
+        //     to be reachable TO, so no verdict and the run counter is left
+        //     alone rather than reset.
+        //   * `!seen_active` — we never had a path to lose. That is a DIAL
+        //     problem (bad contact info, peer never up), and an endpoint
+        //     rebuild is not its fix.
+        v
+    }
+
+    /// Re-arm after an endpoint rebuild.
+    ///
+    /// The fresh endpoint holds no `remote_info` for anyone, so without this
+    /// the term would keep reading "had a path, has none" and drive the ladder
+    /// straight into the next rebuild. Clearing `seen_active` makes the term
+    /// one-shot per loss event: it cannot fire again until a real active path
+    /// is observed again.
+    fn rearm(&mut self) {
+        self.last_active.clear();
+        self.seen_active = false;
+        self.bad_run = 0;
+    }
+}
+
 /// Tunables. Defaults chosen so escalation never races iroh's own recovery.
 #[derive(Clone, Debug)]
 pub struct WatchdogConfig {
@@ -100,6 +277,11 @@ pub struct WatchdogConfig {
     /// Consecutive `false` probes before discovery counts as wedged (avoids a
     /// single flaky resolve triggering a rebuild).
     pub discovery_bad_streak: u32,
+    /// Consecutive polls holding zero active peer paths — having held one —
+    /// before the peer-path term counts as wedged. `× health_poll` is the
+    /// detection window: 3 × 20s = 60s by default, deliberately the same order
+    /// as gossip's own offline threshold, so one slow round is never enough.
+    pub peer_path_bad_streak: u32,
     /// Whether the self-discovery probe runs (only when n0 DNS is configured).
     pub self_probe: bool,
     /// Whether this node is EXPECTED to be relay-homed. False for relay-less
@@ -124,6 +306,7 @@ impl Default for WatchdogConfig {
             rebuild_cooldown: Duration::from_secs(600),
             max_consecutive_rebuilds: 3,
             discovery_bad_streak: 2,
+            peer_path_bad_streak: 3,
             self_probe: true,
             relays_expected: true,
             chaos_drop_interval: None,
@@ -182,10 +365,17 @@ impl WatchdogHandle {
 }
 
 /// Spawn the watchdog against `endpoint`, using `rebuild` for the last-resort
-/// endpoint rebuild. Call once per daemon start (only when iroh is enabled).
-pub fn spawn(endpoint: Endpoint, rebuild: RebuildFn, cfg: WatchdogConfig) -> WatchdogHandle {
+/// endpoint rebuild and `peer_paths` for the peer-path health term. Call once
+/// per daemon start (only when iroh is enabled). `peer_paths: None` runs the
+/// two inbound terms only — the pre-2026-09-09 behaviour.
+pub fn spawn(
+    endpoint: Endpoint,
+    rebuild: RebuildFn,
+    peer_paths: Option<PeerPathsFn>,
+    cfg: WatchdogConfig,
+) -> WatchdogHandle {
     let status = Arc::new(RwLock::new(ReachabilityStatus::default()));
-    let task = tokio::spawn(run(endpoint, rebuild, cfg, status.clone()));
+    let task = tokio::spawn(run(endpoint, rebuild, peer_paths, cfg, status.clone()));
     WatchdogHandle {
         _task: task,
         status,
@@ -243,6 +433,7 @@ async fn bounce_relays(endpoint: &Endpoint, relays: &[RelayStatus]) {
 async fn run(
     mut endpoint: Endpoint,
     rebuild: RebuildFn,
+    peer_paths: Option<PeerPathsFn>,
     cfg: WatchdogConfig,
     status: Arc<RwLock<ReachabilityStatus>>,
 ) {
@@ -251,6 +442,8 @@ async fn run(
         probe_interval_secs = cfg.probe_interval.as_secs(),
         unhealthy_grace_secs = cfg.unhealthy_grace.as_secs(),
         self_probe = cfg.self_probe,
+        peer_path_term = peer_paths.is_some(),
+        peer_path_bad_streak = cfg.peer_path_bad_streak,
         "iroh(mesh) watchdog: started — founder reachability self-heal armed"
     );
 
@@ -264,6 +457,7 @@ async fn run(
     let mut next_probe = Instant::now() + cfg.health_poll; // first probe shortly after start
     let mut cached_discovery_ok: Option<bool> = None;
     let mut next_chaos = cfg.chaos_drop_interval.map(|d| Instant::now() + d);
+    let mut peer_path_health = PeerPathHealth::default();
     // CHAOS/soak only: a simulated discovery-side wedge (see below).
     let mut chaos_unhealthy = false;
 
@@ -315,6 +509,50 @@ async fn run(
                 );
             }
         }
+        // ── 2b. peer paths (every poll — `remote_info` is local state) ──
+        // The OUTBOUND term. Logged whether or not it fires: a transport that
+        // decays over minutes leaves no trace in a signal sampled only when
+        // something is already wrong, and the 2026-09-09 capture had to be
+        // reconstructed from gossip timings for exactly that reason.
+        let mut peer_verdict = PeerPathVerdict::default();
+        if let Some(observe) = peer_paths.as_ref() {
+            let obs = observe(endpoint.clone()).await;
+            peer_verdict = peer_path_health.observe(&obs, cfg.peer_path_bad_streak);
+            for (name, was) in &peer_verdict.lost {
+                warn!(
+                    peer = %name,
+                    path_at_death = was.as_str(),
+                    peers_active = peer_verdict.active,
+                    peers_total = peer_verdict.total,
+                    "iroh(mesh) watchdog: peer path LOST — the endpoint no longer holds an \
+                     active path to this peer"
+                );
+            }
+            for (name, now) in &peer_verdict.gained {
+                info!(peer = %name, path = now.as_str(), "iroh(mesh) watchdog: peer path established");
+            }
+            for (name, from, to) in &peer_verdict.migrated {
+                info!(
+                    peer = %name,
+                    from = from.as_str(),
+                    to = to.as_str(),
+                    "iroh(mesh) watchdog: peer path migrated"
+                );
+            }
+            // The per-poll census, at DEBUG: one line per peer with what the
+            // endpoint holds and what membership believes, so the two can be
+            // compared directly instead of inferred from a gap in the log.
+            for o in &obs {
+                tracing::debug!(
+                    peer = %o.name,
+                    node = %o.node_id,
+                    path = o.path_label(),
+                    record = o.path.is_some(),
+                    believed_online = o.believed_online,
+                    "iroh(mesh) watchdog: peer path census"
+                );
+            }
+        }
         // Discovery counts as wedged only after a sustained streak.
         let discovery_wedged = discovery_bad_run >= cfg.discovery_bad_streak;
         // Relay-home is only a health requirement when relays are expected; a
@@ -322,7 +560,12 @@ async fn run(
         let relay_ok = !cfg.relays_expected || relay_homed;
         // `chaos_unhealthy` (soak/demo) simulates the discovery-side wedge that
         // relay-home can't see; cleared only by a rebuild (below).
-        let healthy = relay_ok && !discovery_wedged && !chaos_unhealthy;
+        //
+        // The third term is the OUTBOUND one. Both terms above ask whether the
+        // world can reach us; `peer_verdict.wedged` asks whether we can still
+        // reach anyone, which is the failure that produced this term (note
+        // `a3f3fbff`) and the one they cannot see.
+        let healthy = relay_ok && !discovery_wedged && !chaos_unhealthy && !peer_verdict.wedged;
 
         // ── 3. publish snapshot for the status API ─────────────────
         {
@@ -332,13 +575,21 @@ async fn run(
             s.discovery_ok = cached_discovery_ok;
             s.last_error = last_error;
             s.rebuilds = total_rebuilds;
+            s.peer_paths_total = peer_verdict.total;
+            s.peer_paths_active = peer_verdict.active;
+            s.peer_paths_wedged = peer_verdict.wedged;
             s.degraded = !healthy;
         }
 
         // ── 4. decision ────────────────────────────────────────────
         if healthy {
             if unhealthy_since.is_some() {
-                info!("iroh(mesh) watchdog: reachability RECOVERED (relay-homed, discovery ok)");
+                info!(
+                    peers_active = peer_verdict.active,
+                    peers_total = peer_verdict.total,
+                    "iroh(mesh) watchdog: reachability RECOVERED (relay-homed, discovery ok, \
+                     peer paths ok)"
+                );
             }
             unhealthy_since = None;
             escalation = 0;
@@ -351,6 +602,9 @@ async fn run(
             warn!(
                 relay_homed,
                 discovery_wedged,
+                peer_paths_wedged = peer_verdict.wedged,
+                peers_active = peer_verdict.active,
+                peers_total = peer_verdict.total,
                 grace_secs = cfg.unhealthy_grace.as_secs(),
                 "iroh(mesh) watchdog: unhealthy — within grace, waiting for iroh self-recovery"
             );
@@ -405,6 +659,12 @@ async fn run(
                         consecutive_rebuilds += 1;
                         total_rebuilds += 1;
                         chaos_unhealthy = false; // the rebuild resolves the simulated wedge
+                                                 // A fresh endpoint holds no peer records, so the term
+                                                 // must be re-armed or it would read "had a path, has
+                                                 // none" forever and drive the next rebuild, and the
+                                                 // next. This is what makes the term one-shot per loss
+                                                 // event (see `PeerPathHealth::rearm`).
+                        peer_path_health.rearm();
                         record_recovery(&status, "endpoint_rebuild", true).await;
                         info!(
                             total_rebuilds,
@@ -511,7 +771,7 @@ mod tests {
             // relay-homed) reads unhealthy and must escalate to a rebuild.
             ..Default::default()
         };
-        let handle = spawn(endpoint, rebuild, cfg);
+        let handle = spawn(endpoint, rebuild, None, cfg);
         // Poll for the outcome instead of sleeping a fixed window: the
         // escalation is ~360ms of timer ticks, so a fixed sleep is only ever
         // a bet on how loaded the machine is. Waiting for the CONDITION with
@@ -544,5 +804,254 @@ mod tests {
             "watchdog should have escalated through nudge + bounce to at least one rebuild"
         );
         assert!(snap.rebuilds >= 1, "status should record the rebuild(s)");
+    }
+
+    // ── the peer-path term ────────────────────────────────────────────
+    //
+    // Every case below is a state the 2026-09-09 capture or its trap made
+    // real. A gate whose failing input nobody can name is not a gate
+    // (ARCH §18.1), so each test names one.
+
+    fn obs(node: &str, believed_online: bool, path: Option<PeerPath>) -> PeerPathObservation {
+        PeerPathObservation {
+            node_id: node.to_string(),
+            name: node.to_string(),
+            believed_online,
+            path,
+        }
+    }
+
+    /// THE trap. A node whose peers have simply never been up has no path
+    /// either — and an endpoint rebuild is not the fix for bad contact info.
+    /// The term must stay silent forever, however long that runs.
+    #[test]
+    fn a_path_never_held_is_never_a_wedge() {
+        let mut h = PeerPathHealth::default();
+        for _ in 0..50 {
+            let v = h.observe(&[obs("mac", true, None), obs("pi", false, None)], 3);
+            assert!(!v.wedged, "no path was ever held — nothing decayed");
+        }
+    }
+
+    /// The captured failure: an established path, then no record at all.
+    /// Wedged only after the streak, never on the first poll.
+    #[test]
+    fn a_held_path_that_dies_is_wedged_after_the_streak() {
+        let mut h = PeerPathHealth::default();
+        let live = [obs("mac", true, Some(PeerPath::Relayed))];
+        let dead = [obs("mac", true, None)];
+        assert!(!h.observe(&live, 3).wedged);
+        assert!(
+            !h.observe(&dead, 3).wedged,
+            "one poll is a blip, not a wedge"
+        );
+        assert!(!h.observe(&dead, 3).wedged);
+        assert!(
+            h.observe(&dead, 3).wedged,
+            "three consecutive polls: wedged"
+        );
+    }
+
+    /// The capture's own timeline: membership marks the peer Offline ~60s
+    /// after the path dies. A term gated on `believed_online` would go blind
+    /// exactly when the wedge became permanent, so the field is recorded and
+    /// NOT gated on — this asserts that.
+    #[test]
+    fn membership_going_offline_does_not_blind_the_term() {
+        let mut h = PeerPathHealth::default();
+        assert!(
+            !h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 2)
+                .wedged
+        );
+        // gossip gives up on the peer while the endpoint stays green
+        assert!(!h.observe(&[obs("mac", false, None)], 2).wedged);
+        assert!(h.observe(&[obs("mac", false, None)], 2).wedged);
+    }
+
+    /// A solo mesh, or one where no member carries a pubkey. Nothing to be
+    /// reachable to, so there is no verdict to make — and the run counter is
+    /// left alone rather than reset, so a peer list that flickers empty
+    /// cannot launder a real wedge into health.
+    #[test]
+    fn no_peers_is_never_a_wedge() {
+        let mut h = PeerPathHealth::default();
+        h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 2);
+        h.observe(&[obs("mac", true, None)], 2);
+        let empty = h.observe(&[], 2);
+        assert!(!empty.wedged);
+        assert_eq!(empty.total, 0);
+        // The one bad poll before the empty one still counts.
+        assert!(h.observe(&[obs("mac", true, None)], 2).wedged);
+    }
+
+    /// `idle` is a record with nothing active — what a decayed path looks
+    /// like before the record itself is dropped. Reading "a record exists" as
+    /// "reachable" is precisely the conflation that let a dead transport show
+    /// a green light.
+    #[test]
+    fn an_idle_record_is_not_an_active_path() {
+        let mut h = PeerPathHealth::default();
+        h.observe(&[obs("mac", true, Some(PeerPath::Mixed))], 1);
+        let v = h.observe(&[obs("mac", true, Some(PeerPath::Idle))], 1);
+        assert!(v.wedged);
+        assert_eq!(v.known, 1, "the record is still there…");
+        assert_eq!(v.active, 0, "…but nothing is flowing on it");
+        assert_eq!(v.lost, vec![("mac".to_string(), PeerPath::Mixed)]);
+    }
+
+    /// One reachable peer means the ENDPOINT is fine; the trouble is with the
+    /// other peer. An endpoint rebuild is an endpoint-wide hammer, so the term
+    /// fires only on the endpoint-wide symptom.
+    #[test]
+    fn one_live_peer_keeps_the_endpoint_healthy() {
+        let mut h = PeerPathHealth::default();
+        for _ in 0..10 {
+            let v = h.observe(
+                &[
+                    obs("mac", true, Some(PeerPath::Direct)),
+                    obs("pi", true, None),
+                ],
+                1,
+            );
+            assert!(!v.wedged);
+            assert_eq!(v.active, 1);
+        }
+    }
+
+    /// Recovery clears the run — a path that comes back on its own must not
+    /// leave the term primed to fire on the next single blip.
+    #[test]
+    fn a_recovered_path_resets_the_run() {
+        let mut h = PeerPathHealth::default();
+        h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 3);
+        h.observe(&[obs("mac", true, None)], 3);
+        h.observe(&[obs("mac", true, None)], 3);
+        let back = h.observe(&[obs("mac", true, Some(PeerPath::Relayed))], 3);
+        assert!(!back.wedged);
+        assert_eq!(back.gained, vec![("mac".to_string(), PeerPath::Relayed)]);
+        assert!(
+            !h.observe(&[obs("mac", true, None)], 3).wedged,
+            "run restarted at 1"
+        );
+    }
+
+    /// The anti-loop guarantee, stated as a test rather than as a comment:
+    /// after a rebuild the fresh endpoint holds no records, so the term must
+    /// be unable to fire again until a REAL path is observed again. Without
+    /// `rearm` this is an endless rebuild ladder on a node whose peers went
+    /// home for the night.
+    #[test]
+    fn a_rebuild_disarms_the_term_until_a_path_returns() {
+        let mut h = PeerPathHealth::default();
+        h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 1);
+        assert!(h.observe(&[obs("mac", true, None)], 1).wedged);
+        h.rearm(); // what the ladder does after an endpoint rebuild
+        for _ in 0..20 {
+            assert!(
+                !h.observe(&[obs("mac", true, None)], 1).wedged,
+                "a disarmed term must not re-fire on the same dead peers"
+            );
+        }
+        // A real path returning re-arms it, and only then can it fire again.
+        h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 1);
+        assert!(h.observe(&[obs("mac", true, None)], 1).wedged);
+    }
+
+    /// The question the capture could not answer, now answered by the
+    /// verdict: what was the path carrying when it died, and did it migrate
+    /// first? `direct → relayed → gone` is the shape to look for.
+    #[test]
+    fn the_verdict_reports_the_path_at_the_moment_of_death() {
+        let mut h = PeerPathHealth::default();
+        h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 1);
+        let migrated = h.observe(&[obs("mac", true, Some(PeerPath::Relayed))], 1);
+        assert_eq!(
+            migrated.migrated,
+            vec![("mac".to_string(), PeerPath::Direct, PeerPath::Relayed)]
+        );
+        let died = h.observe(&[obs("mac", true, None)], 1);
+        assert_eq!(died.lost, vec![("mac".to_string(), PeerPath::Relayed)]);
+    }
+
+    /// End-to-end: relay-home and self-discovery both satisfied, and the
+    /// watchdog STILL escalates to a rebuild — driven by the peer-path term
+    /// alone. This is the regression that would have caught the live bug:
+    /// before this term the same inputs read healthy forever.
+    #[tokio::test]
+    async fn peer_path_loss_alone_escalates_to_a_rebuild() {
+        use commonwealth_transport::iroh::{build_relayed_endpoint, RelayConfig, SecretKey};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        async fn relayless_endpoint(seed: u8) -> Endpoint {
+            let cfg = RelayConfig::from_parts(vec![], Some("none"));
+            let secret = SecretKey::from_bytes(&[seed; 32]);
+            build_relayed_endpoint(secret, vec![b"cwth/http/0".to_vec()], &cfg)
+                .await
+                .expect("minimal endpoint binds offline")
+        }
+
+        let rebuilds = Arc::new(AtomicUsize::new(0));
+        let rebuilds_c = rebuilds.clone();
+        let rebuild: RebuildFn = Arc::new(move || {
+            let rebuilds_c = rebuilds_c.clone();
+            Box::pin(async move {
+                rebuilds_c.fetch_add(1, Ordering::SeqCst);
+                Ok(relayless_endpoint(4).await)
+            })
+                as Pin<Box<dyn std::future::Future<Output = Result<Endpoint, String>> + Send>>
+        });
+
+        // A peer that is reachable for the first two polls and then gone —
+        // the captured shape, compressed.
+        let polls = Arc::new(AtomicUsize::new(0));
+        let polls_c = polls.clone();
+        let peer_paths: PeerPathsFn = Arc::new(move |_ep| {
+            let n = polls_c.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                let path = if n < 2 { Some(PeerPath::Relayed) } else { None };
+                vec![PeerPathObservation {
+                    node_id: "mac".into(),
+                    name: "mac".into(),
+                    believed_online: n < 4,
+                    path,
+                }]
+            })
+                as Pin<Box<dyn std::future::Future<Output = Vec<PeerPathObservation>> + Send>>
+        });
+
+        let cfg = WatchdogConfig {
+            health_poll: Duration::from_millis(40),
+            unhealthy_grace: Duration::from_millis(80),
+            rebuild_cooldown: Duration::from_millis(80),
+            max_consecutive_rebuilds: 5,
+            peer_path_bad_streak: 2,
+            self_probe: false,
+            // Both INBOUND terms are satisfied, so any escalation here is the
+            // peer-path term's doing and nothing else's.
+            relays_expected: false,
+            ..Default::default()
+        };
+        let handle = spawn(relayless_endpoint(3).await, rebuild, Some(peer_paths), cfg);
+
+        let status = handle.status_arc();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let snap = status.read().await.clone();
+            if snap.rebuilds >= 1 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "peer-path loss never escalated to a rebuild \
+                 (degraded={}, wedged={}, active={}/{}, polls={})",
+                snap.degraded,
+                snap.peer_paths_wedged,
+                snap.peer_paths_active,
+                snap.peer_paths_total,
+                polls.load(Ordering::SeqCst)
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(rebuilds.load(Ordering::SeqCst) >= 1);
     }
 }

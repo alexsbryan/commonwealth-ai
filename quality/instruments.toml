@@ -1261,8 +1261,11 @@ doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
 #
 # `cargo xtask instrument-gate`'s FIRST run named all four among 24
 # unregistered keys, which is the only reason this section can be trusted to
-# be complete (ARCH §18.1). Three of them still run nowhere, and `runs_in = []`
-# is how the registry says so instead of leaving them invisible.
+# be complete (ARCH §18.1). Three of them ran nowhere when this section was
+# written; as of 2026-09-08 (e4488491d, 7aba1bf8d) each names a venue that
+# actually fires or an honest `by-hand`. `runs_in = []` stays legal and is
+# still how the registry says "nothing runs this" rather than leaving it
+# invisible — it is simply not true of these four any more.
 
 [[instrument]]
 id = "wizard-verify"

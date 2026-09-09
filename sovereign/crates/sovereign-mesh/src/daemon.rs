@@ -3913,6 +3913,26 @@ impl EmbeddedDaemon {
                         >,
                     >
             });
+            // The peer-path term's eye: every member the endpoint COULD hold a
+            // path to, what membership believes about it, and what the
+            // endpoint actually holds. Lives here because membership is
+            // daemon state; the watchdog stays transport-mechanism-only.
+            // Takes the endpoint as an argument because the watchdog swaps its
+            // handle on rebuild and must judge the one it is holding.
+            let paths_state = app_state.clone();
+            let peer_paths: crate::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
+                let app_state = paths_state.clone();
+                Box::pin(
+                    async move { crate::iroh_access::observe_peer_paths(&app_state, &ep).await },
+                )
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<
+                                    Output = Vec<crate::iroh_watchdog::PeerPathObservation>,
+                                > + Send,
+                        >,
+                    >
+            });
             let mut cfg = crate::iroh_watchdog::WatchdogConfig::from_env();
             cfg.self_probe = iroh_relay_cfg.n0_services;
             // Relay-home is a health signal only when this node actually uses a
@@ -3920,7 +3940,7 @@ impl EmbeddedDaemon {
             // (netns soak) is reachable by direct addrs — don't rebuild-loop it.
             cfg.relays_expected =
                 iroh_relay_cfg.n0_services || !iroh_relay_cfg.relay_urls.is_empty();
-            crate::iroh_watchdog::spawn(endpoint, rebuild, cfg)
+            crate::iroh_watchdog::spawn(endpoint, rebuild, Some(peer_paths), cfg)
         });
         if reachability_watchdog.is_some() {
             running_services.record(crate::local_only::MeshService::IrohWatchdog);

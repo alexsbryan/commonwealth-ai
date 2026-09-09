@@ -564,9 +564,27 @@ pub async fn run_one_round(
         // the next success rewrites it.
         let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
         if endpoints.is_empty() {
-            debug!(peer = %peer_id, "gossip: no addresses on record, skipping");
+            // INFO, not debug. At debug this round leaves NO trace, and the
+            // operator reads a log that goes `reach ok … reach ok … [nothing]
+            // … peer marked Offline` — from which "we stopped trying" and "we
+            // tried and failed" are indistinguishable. Both were live
+            // candidates in the 2026-09-09 capture (note `a3f3fbff`) and
+            // neither could be ruled out from the record. One line per peer
+            // per round, the same volume the success path already emits.
+            info!(
+                peer = %peer_id,
+                transport = transport.name(),
+                outcome = "no-addresses",
+                "gossip: round skipped — the transport resolved no dialable address for this peer"
+            );
             continue;
         }
+        // Whether ANY address worked this round. The per-address lines stay at
+        // debug (a multi-homed peer failing one address is routine); this is
+        // the per-peer verdict, and it is emitted on every path out of the
+        // loop below so a round is never silent about a peer it selected.
+        let mut reached = false;
+        let attempts = endpoints.len();
         for ep in &endpoints {
             // Per-address timing so we can diagnose the Online↔Offline
             // flap (see todo `f152dfe7` #4). Each line is one address
@@ -592,6 +610,7 @@ pub async fn run_one_round(
                         reach_ms,
                         "gossip: reach ok"
                     );
+                    reached = true;
                     // Pin this endpoint as the preferred starting
                     // point for the next round's resolution.
                     transport.note_success(peer_id, TrafficClass::Gossip, ep);
@@ -718,6 +737,21 @@ pub async fn run_one_round(
                     continue;
                 }
             }
+        }
+        if !reached {
+            // The other half of the four-verdict rule (ARCH §18.2): a round
+            // that reached nobody must SAY so, at the same level the success
+            // says it. Until 2026-09-09 this case was invisible above debug,
+            // which is why a peer decaying to Offline looked like the gossip
+            // loop had stopped running rather than like every dial failing.
+            warn!(
+                peer = %peer_id,
+                transport = transport.name(),
+                attempts,
+                outcome = "unreachable",
+                "gossip: round FAILED — every address for this peer refused or timed out \
+                 (run with RUST_LOG=debug for the per-address errors)"
+            );
         }
     }
 

@@ -200,7 +200,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // reproduction of a tombstone stranded by the seal that retired it, over
     // the same loopback `internal_router`. The partial-pull control beside it
     // feeds the fold directly and builds no client.
-    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 15),
+    // 15 -> 16 (2026-09-08, aff5873f1): retention became part of the fold, and
+    // `a_retention_sweep_is_not_undone_by_the_next_projection` drives the
+    // two-node reproduction — a sweep on A, then B's next projection round —
+    // over the same loopback `internal_router`. One more `exchange` client in
+    // this file's test module; class unchanged.
+    ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 16),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests

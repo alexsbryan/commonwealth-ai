@@ -131,10 +131,21 @@ fn every_doc_pointer_that_names_a_file_names_one_that_exists() {
 }
 
 /// The closure trigger has to keep pointing at something. If every instrument
-/// were measured, controlled and scheduled, these would be zero and the line
-/// posture prints would be noise — but the registry was minted with 50
-/// unmeasured and 9 running nowhere, so a zero here means the fields stopped
-/// being filled in honestly, not that the work got done.
+/// were measured and controlled, these would be zero and the line posture
+/// prints would be noise — but the registry was minted with 50 unmeasured, so
+/// a zero here means the fields stopped being filled in honestly.
+///
+/// It also asserted `!nowhere().is_empty()` — "the three off-map soaks were
+/// the reason this registry exists" — until 2026-09-09. That clause assumed
+/// the only way to reach zero was dishonesty, and it was wrong: `e4488491d`
+/// found four soak-family rows wrong ABOUT THEMSELVES (one scheduled, one not
+/// an instrument, one unmeasurable, one absent) and `7aba1bf8d` put the
+/// concurrency lane in a venue that fires. The gap closed by the work getting
+/// done, which is the outcome the guard was written not to expect, so it went
+/// red on the good news. Retired rather than inverted: "some instrument must
+/// still run nowhere" is not an invariant anyone wants to hold — `runs_in =
+/// []` staying LEGAL and reportable is, and `Registry::nowhere` plus the
+/// venue-naming test below are what hold that.
 #[test]
 fn the_registry_still_reports_the_gaps_it_was_minted_to_show() {
     let r = registry();
@@ -148,10 +159,6 @@ fn the_registry_still_reports_the_gaps_it_was_minted_to_show() {
         r.instruments.iter().any(|i| i.cost == Cost::Unmeasured),
         "no instrument is unmeasured — either every cost was timed, or the field is being \
          filled in with numbers nobody measured"
-    );
-    assert!(
-        !r.nowhere().is_empty(),
-        "nothing runs nowhere — the three off-map soaks were the reason this registry exists"
     );
 }
 
