@@ -286,7 +286,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // External queries and its construction moved into the boundary;
     // the row is gone with the site.)
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 8),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 7),
+    // 7 -> 8 (2026-09-09, sv-surface rung 5): the workflow surfaces became
+    // job-submission clients of the daemon's /internal/workflows/* — this
+    // file's site is the Local Knowledge panel's watch-route client, one
+    // more construction for the same loopback surface. Class unchanged.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 8),
+    // NEW (2026-09-09, sv-surface rung 5): workflow_commands.rs's http_client()
+    // — the Run-a-workflow surface now POSTs the job to the daemon and polls
+    // its events (the in-process runner is deleted; the daemon executes).
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs", Class::LocalDaemon, 7),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/budget.rs", Class::LocalDaemon, 6),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs", Class::LocalDaemon, 2),
@@ -356,7 +364,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
+    // ingest`'s notebook path became job-submission clients of the daemon's
+    // /internal/workflows/* — run_assembled's poll client joins the
+    // capabilities-fetch client that was already here. Loopback daemon
+    // traffic, class unchanged.
+    ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/solve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs", Class::LocalDaemon, 1),
@@ -575,6 +588,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // asks the LOCAL daemon to embed a short fixed string, so nothing
     // leaves the machine and no estate content is in the payload.
     ("studio/crates/sovereign-workflow-host/src/daemon_models.rs", Class::LocalDaemon, 2),
+    // NEW (2026-09-09, sv-surface rung 5): the daemon's /internal/workflows/*
+    // job surface lives here, and its router tests are the only client
+    // constructions — the end-to-end job test and the loopback-guard
+    // fails-closed test, both inline `#[cfg(test)]` against a spawned
+    // loopback listener. Production traffic is the DAEMON's own in-process
+    // provider; no client, no egress.
+    ("studio/crates/sovereign-workflow-host/src/workflow_http.rs", Class::TestOnly, 2),
 
     // ---- studio/sovereign-recipe-author ----
     ("studio/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),
