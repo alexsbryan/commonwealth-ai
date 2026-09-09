@@ -542,7 +542,16 @@ mod tests {
                 .clone()
         };
 
-        assert!(budget("oicp-types").is_empty());
+        // `oicp-types` WAS empty by contract and is no longer, as of
+        // 2026-09-09 (cw-lift 5b, operator decision). `JobRequirements`
+        // carries `kernel_types::quality::Precondition`, and the
+        // alternatives were a second spelling of `Precondition` in this
+        // leaf (§10.6) or one noun with halves in two crates. The widening
+        // is on `corpus-engine-vocab`'s precedent below and costs the
+        // closure ZERO third-party crates: `kernel-types` is itself an
+        // empty leaf, and `toml` — the only dep its `quality-registry`
+        // feature adds — was already an `oicp-types` dependency.
+        assert_eq!(budget("oicp-types"), ["kernel-types"]);
         assert!(budget("kernel-types").is_empty());
         assert!(budget("corpus-engine-sections").is_empty());
         assert!(budget("sovereign-time").is_empty());
