@@ -1,0 +1,26 @@
+warm: 35B resident 17:44:13
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=12GB need=12GB 17:44:13
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=11GB need=12GB 17:44:43
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=10GB need=12GB 17:45:13
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=10GB need=12GB 17:45:43
+guard: waiting — cargo/rustc/scip procs=3 MemAvailable=4GB need=12GB 17:46:13
+guard: waiting — cargo/rustc/scip procs=2 MemAvailable=12GB need=12GB 17:46:43
+guard: waiting — cargo/rustc/scip procs=4 MemAvailable=19GB need=12GB 17:47:13
+guard: waiting — cargo/rustc/scip procs=3 MemAvailable=18GB need=12GB 17:47:44
+guard: waiting — cargo/rustc/scip procs=3 MemAvailable=73GB need=12GB 17:48:14
+guard: waiting — cargo/rustc/scip procs=5 MemAvailable=57GB need=12GB 17:48:44
+guard: waiting — cargo/rustc/scip procs=5 MemAvailable=53GB need=12GB 17:49:14
+guard: waiting — cargo/rustc/scip procs=7 MemAvailable=49GB need=12GB 17:49:44
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=52GB need=12GB 17:50:14
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=48GB need=12GB 17:50:44
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=44GB need=12GB 17:51:14
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=42GB need=12GB 17:51:44
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=41GB need=12GB 17:52:14
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=40GB need=12GB 17:52:44
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=39GB need=12GB 17:53:14
+guard: waiting — cargo/rustc/scip procs=1 MemAvailable=38GB need=12GB 17:53:44
+guard: quiet at 17:54:14
+arm armB attempt 1 starting 17:54:14
+WALL armB: 384s rc=0 attempt=1
+ARM armB FAILED: rc=0 turns_errored=19
+guard: daemon down, waiting 18:00:38
