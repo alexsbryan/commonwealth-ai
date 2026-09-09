@@ -108,4 +108,3 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
     }
     0
 }
-
