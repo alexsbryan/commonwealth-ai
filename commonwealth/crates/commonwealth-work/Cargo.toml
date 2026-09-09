@@ -57,3 +57,22 @@ process = ["dep:tokio"]
 
 [lints]
 workspace = true
+
+# The package-only work peer (cw-lift 5f). DEV-ONLY, and both entries are
+# package crates, so the boundary's "dev- and build-dependencies count too"
+# rule is satisfied by construction rather than by an [[exception]] row.
+#
+# `commonwealth-rail` is the JOURNAL — the one thing this crate deliberately
+# does not take as a normal dependency (everything above reads the acts it is
+# given). A PEER has to open a log, so it names the I/O half here, where a
+# consumer of the fold never links it.
+[dev-dependencies]
+commonwealth-rail = { workspace = true }
+
+[[example]]
+name = "work_peer"
+# It registers `ProcessExecutor`, which is the feature's entire content. Named
+# rather than assumed: without this, `cargo build --examples` on a default
+# build fails on a missing module instead of skipping an example that cannot
+# apply.
+required-features = ["process"]

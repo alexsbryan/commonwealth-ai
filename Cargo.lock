@@ -2110,6 +2110,7 @@ name = "commonwealth-work"
 version = "0.6.0"
 dependencies = [
  "commonwealth-core",
+ "commonwealth-rail",
  "commonwealth-rail-core",
  "kernel-types",
  "oicp-types",
@@ -12143,6 +12144,9 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "commonwealth-core",
+ "commonwealth-rail",
+ "commonwealth-work",
  "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
@@ -12154,6 +12158,7 @@ dependencies = [
  "kernel-types",
  "libc",
  "oicp-client",
+ "oicp-types",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",

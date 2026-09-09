@@ -70,9 +70,22 @@ recipe reproduces the recorded 55 / 42 / 43 for `-core` / `-rail-core` /
 `-rail` exactly, which is why the new number is trustworthy and why `-state`
 and `-discovery` reading 78 and 79 today against the 76 and 82 recorded here is
 drift in THOSE rows rather than a different instrument. **The widening admits
-nothing at all**: `commonwealth-work`'s 58-crate default closure is exactly
-`commonwealth-core` ∪ `commonwealth-rail-core`, set-equal, so the one crate it
-adds to the package's own closure is itself. That is cheaper than the `oplog`
+nothing at all**: `commonwealth-work`'s 58-crate default closure is
+`commonwealth-core` ∪ `commonwealth-rail-core` plus those two crates
+themselves, and nothing else — 58 = 56 + 2, verified by set difference in both
+directions on 2026-09-09 rather than by comparing counts. The phrasing matters
+because the recipe above EXCLUDES the crate itself, so "set-equal" read
+literally is off by exactly the two package crates every time and a later
+reader re-measuring would think the number had drifted. The one crate
+`commonwealth-work` adds to the package's own closure is itself.
+
+The **dev** closure is 59 / 71 (`-e normal,dev`), and the one crate above the
+normal figure is `commonwealth-rail` — a dev-dependency since cw-lift 5f,
+because the package-only peer at
+`commonwealth-work/examples/work_peer.rs` has to OPEN a journal and the fold
+never does. It is a package crate, so the rule that dev-dependencies count is
+satisfied without an `[[exception]]` row and without a leaf admission, the same
+way 5c's own widening was. That is cheaper than the `oplog`
 admission the rail cost. Its line figure is `wc -l` over `src/**/*.rs` — the
 same shape as the rows above it, which have drifted since they were written
 (`-rail-core` reads 2,771 by that measure today against the 2,560 recorded).
@@ -141,6 +154,55 @@ clean dependency closure is not a clean lift. Studio's gate was green while
 sandbox had to preserve the monorepo's directory shape to compile. The
 commonwealth package has no such embed today; the way to know it still does not
 is to lift it, not to read the gate.
+
+**So it is lifted on demand now, and not by hand.**
+`scripts/cw-work-lift.sh --sandbox` is the standing instrument for the
+`cw-work-package-lift` bar, and it does what the 1f' lift did once in a
+terminal: it walks the workspace-local closure from `commonwealth-work`
+through `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]`,
+copies those crates to a scratch directory OUTSIDE this repository, synthesises
+a root workspace there, and builds, tests and RUNS them. Three things about it
+are deliberate:
+
+- **The copy is FLAT** — `crates/<name>`, not the monorepo's directory shape.
+  Preserving the shape is what studio's sandbox had to do, and it proves the
+  crates compile where they already are, which is not the question. Flattening
+  is also what makes a hand-spelled `path = "../../../oicp-types"` fail
+  instead of passing, which is the 1f' finding the gate is blind to; the script
+  refuses that spelling by name before it copies anything.
+- **The sandbox is outside the repo, and that is load-bearing.** `cargo`
+  inherits `.cargo/config.toml` from ANY ancestor directory, so a sandbox under
+  the repo would silently take this workspace's linker and rustflags. Neither
+  `.cargo/config.toml`, `clippy.toml` nor `rust-toolchain.toml` travels: a
+  third party has their own.
+- **A missing instrument does not score 0.** A resolution that cannot be done
+  (no `cargo`, no network, an unresolvable version) exits 3 and makes no claim;
+  a closure that genuinely will not build exits 0 with the value 0. The two
+  readings are not the same fact (ARCH §18.2, §18.3), and each arm has been
+  watched fire.
+
+**Measured 2026-09-09, on Linux/x86_64.** Seven in-repo crates leave together —
+`commonwealth-core`, `-rail`, `-rail-core`, `-work`, `kernel-types`,
+`oicp-types`, `oplog` — and the whole workspace builds cold in **8.6-12.5s**
+(n=4 cold runs, `RUSTC_WRAPPER` cleared) with **zero source edits**. A range
+and not a number, because one run is not a measurement (ARCH §18.5) and the
+spread here is the host's page cache, not the closure. `cargo test --workspace` passes **558** tests in
+isolation. The peer then completes **three heterogeneous `process:v1` units** —
+a `sh -c` one-liner, a Python Monte-Carlo simulation that judges its own error
+bound, and a test shard running the lifted package's own `cargo test` — leaving
+nine acts on a `work` rail it created itself: a `Submit`, an `Offer`, three
+`Lease`/`Complete` pairs and one `Renew` that the 27-second shard earned.
+
+**The `kernel-types` hazard is closed, and the lift is how we know.** The 1f'
+lift failed `490 passed, 2 failed` on two leaf-side tests that read the repo
+root — `requirements_registry.rs:94` through `CARGO_MANIFEST_DIR.parent()` and
+`conformance_tags.rs:80` shelling `git ls-files`. Both generators moved to
+`corpus-engine/xtask/tests/` on 2026-09-04, and the 5f sandbox scan finds no
+`CARGO_MANIFEST_DIR` read, no `git ls-files` and no `include_str!` escaping a
+crate root anywhere in the lifted closure. `oicp-types`' embed of
+`default_aliases.toml` is crate-local, which is what rule 4 asks for. The
+campaign's own bar text still names that hazard as open; it is not, and this is
+the run that says so.
 
 Two further blind spots, both known:
 
