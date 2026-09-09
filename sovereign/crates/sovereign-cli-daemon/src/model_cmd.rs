@@ -16,8 +16,6 @@
 use crate::setup_config::SetupConfig;
 use std::path::{Path, PathBuf};
 
-const DAEMON_MODELS_URL: &str = "http://127.0.0.1:9741/v1/models";
-
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(|s| s.as_str()).unwrap_or("") {
         "" | "list" | "show" | "status" => cmd_list().await,
@@ -230,10 +228,10 @@ async fn cmd_list() -> i32 {
         Ok(m) => m,
         Err(rc) => return rc,
     };
-    let resident = fetch_resident().await; // None when the daemon isn't reachable
-                                           // Only annotate load state when we actually parsed a resident set; an
-                                           // empty/unknown set (daemon up but schema not matched) stays unlabeled
-                                           // rather than falsely claiming every slot is "not loaded".
+    let resident = fetch_resident(cfg.daemon.client_port).await; // None when the daemon isn't reachable
+                                                                 // Only annotate load state when we actually parsed a resident set; an
+                                                                 // empty/unknown set (daemon up but schema not matched) stays unlabeled
+                                                                 // rather than falsely claiming every slot is "not loaded".
     let mark = |p: &Path| -> &'static str {
         match &resident {
             Some(set) if !set.is_empty() => {
@@ -384,7 +382,7 @@ async fn apply(cfg: SetupConfig, field: &str, human: &str) -> i32 {
             return 1;
         }
     }
-    if daemon_reachable().await {
+    if daemon_reachable(cfg.daemon.client_port).await {
         println!("applying to the running daemon…");
         // Reuse the daemon reload path (POST /v1/admin/reload). It compares the
         // running config to what we just wrote, hot-swaps changed model slots,
@@ -406,25 +404,39 @@ async fn apply(cfg: SetupConfig, field: &str, human: &str) -> i32 {
 
 // ── daemon status probes (best-effort; no hard dep on it being up) ────────────
 
-async fn daemon_reachable() -> bool {
-    fetch_resident().await.is_some()
+async fn daemon_reachable(port: u16) -> bool {
+    fetch_resident(port).await.is_some()
 }
 
-/// Query `/status` for the set of currently-resident model paths/ids. Returns
-/// `None` when the daemon isn't reachable (so callers can degrade gracefully).
-/// Which models the daemon is serving, from THE wire decider —
-/// `GET /v1/models`, the OpenAI-compatible listing every client of this
-/// daemon routes by (sv-surface rung 2). Until 2026-09-08 this scraped
-/// `/status`'s `inference.resident` with a permissive key scavenger
+/// The set of currently-resident model paths/ids, or `None` when the daemon
+/// isn't reachable (so callers can degrade gracefully). Which models the
+/// daemon is serving, from THE wire decider — `GET /v1/models`, the
+/// OpenAI-compatible listing every client of this daemon routes by
+/// (sv-surface rung 2). Until 2026-09-08 this scraped `/status`'s
+/// `inference.resident` with a permissive key scavenger
 /// (`path`/`model`/`id`/`file`, any nesting) — a private second parser
 /// beside the desktop's `/v1/models` parse, and the two could disagree
-/// about the same daemon. `None` when the daemon isn't reachable.
-async fn fetch_resident() -> Option<Vec<String>> {
+/// about the same daemon.
+///
+/// The port comes from the config the caller already loaded — deliberately
+/// NOT the env-honouring `client_daemon_base()`: this probe gates
+/// `daemon_cmd reload`, which targets the daemon that READS this config
+/// file. Honouring `SOVEREIGN_DAEMON_URL` here would probe a rented pod,
+/// find it reachable, print "applying to the running daemon…", and then
+/// reload the LOCAL daemon — the mixed-target success-shaped wrong result
+/// `daemon_cmd::lifecycle` refuses for the same reason (§18.3). Until
+/// 2026-09-09 the URL was a hardcoded `127.0.0.1:9741` const, which missed
+/// every custom-port daemon (`SetupConfig daemon.client_port`).
+async fn fetch_resident(port: u16) -> Option<Vec<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
         .ok()?;
-    let resp = client.get(DAEMON_MODELS_URL).send().await.ok()?;
+    let url = format!(
+        "{}/v1/models",
+        crate::setup_config::client_daemon_base_for(port)
+    );
+    let resp = client.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }
