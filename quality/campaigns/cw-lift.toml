@@ -341,11 +341,33 @@ status    = "active"
 #       into BOUNDARY.md. Core is zero I/O and zero clock — the clock is a
 #       parameter. Gate watched failing: the order-independence property
 #       test with void handling removed.
-#   5d  the daemon projects `work`, seals it, runs a donor loop    OPEN
+#   5d  the daemon projects `work`, seals it, runs a donor loop
+#                                   3338f43e4 a69c674c8 DONE +3604
 #       A third projector arm beside rail_kv and measurements, a third seal
-#       arm, and a donor loop under supervise_with_backoff. Must stay under
-#       every_sender_of_replicated_state_is_declared — it appends through
-#       the door that already exists, and that test is the proof.
+#       arm, and a donor loop under supervise_with_backoff. Stayed under
+#       every_sender_of_replicated_state_is_declared — it appends through the
+#       door that already exists, and that census is unchanged at 1. Plus
+#       `svrn job submit|status`, so the plane has an operator surface.
+#       THE SECOND SHA IS THE RUNG'S REAL LESSON. 5d shipped green on every
+#       gate and its own demo did not work: a unit sat `queued` and nothing
+#       in 12,448 tests said so. Running it found TWO defects, one in this
+#       phase and one under it.
+#         (1) `svrn job submit -- <argv>` spelled the `process:v1` payload as
+#             a JSON literal — no `timeout_secs`, no `result` — which every
+#             donor refused, five seconds at a time, at a debug target nobody
+#             had turned on. Two spellings of one shape, four lines below the
+#             comment saying a second speller must not go here.
+#             `ProcessPayload::command` is the one constructor now.
+#         (2) `admit`'s total order was `(ts_unix, actor, id)`, and `ts_unix`
+#             is SECONDS — so one actor's Submit, Lease and Complete inside
+#             one second were ordered by CONTENT HASH. The submit folded
+#             third, its own lease and completion were discarded as
+#             unreadable, and the unit RAN TWICE. Now `(ts_unix, actor, seq,
+#             id)`: the rail already holds and fork-checks that seq.
+#       Both watched red. The instrument was the blocker both times — the
+#       donor traces to `commonwealth_work`, not to `sovereign_mesh::
+#       work_donor`, and `job status` printed an unreadable COUNT with the
+#       reasons unreachable from the terminal until `job` got a subscriber.
 #   5e  CI ON YOUR METAL — the pilot, gated on 5d                  OPEN
 #       Not a new runner: `svrn quality check --trigger ci:<job>` gains
 #       --distribute. PLAN.md rung 5 lands here. Four pre-registered bars,
