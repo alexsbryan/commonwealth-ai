@@ -7012,6 +7012,22 @@ daemon is re-announced on that node's next round, which is why the repair
 cannot evict a live member. `GET /v1/mesh/status` carries `node_pubkey` and
 `active` per member as of the same date — before that no read surface exposed
 the field, so the collision was undiagnosable from outside the process.
+
+The rule deliberately never refuses a TOMBSTONE sharing a key with a live row:
+that is the legitimate rejoin shape. A fourth site had to learn the same thing
+on 2026-09-09 — the gossip round's candidate list, which filtered only `self`
+and so dialed departed members forever. Harmless on its own; destructive
+against the permitted shape, because `IrohTransport` keys its bridge cache on
+`(pubkey, alpn)`, so the retired and live rows resolve to ONE bridge and their
+differing dial info retargets the live peer's tunnel every round. Measured on
+`Meshsonics`: 181 retargets in 12 minutes on one endpoint, gossip to the live
+Mac timing out at exactly `PEER_TIMEOUT`, and that peer decaying to Offline
+while iroh reported an ACTIVE path throughout — which is why the reachability
+watchdog's relay-home, self-discovery AND peer-path terms all read green
+through it. `gossip::is_gossip_candidate` is now the one predicate for "is this
+member worth dialing", and it reads `removed_at`, not liveness;
+`announce_presence_change` had filtered `is_active()` on its own push targets
+since it was written.
 `switch` answers `202` and detaches, like `leave` — it is served by the
 listener it drops.
 

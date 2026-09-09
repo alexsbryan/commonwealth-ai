@@ -306,6 +306,39 @@ pub async fn initial_sync(
 /// returning peer runs this same loop and dials US, and the receive-side
 /// merge stamps `observe_peer_contact` — already the documented
 /// offline→online path, not a new assumption.
+/// Whether this member is worth dialing at all — asked once, before
+/// [`select_round_peers`] decides which of the candidates get this round's
+/// slots (ARCH §10.6: one decider for "who do we talk to").
+///
+/// Two exclusions, and the second is not an optimisation.
+///
+/// - **Ourselves.** We are authoritative for our own record.
+/// - **A tombstone** (`!is_active()`, i.e. `removed_at` is set). The member
+///   departed and said so. Dialing it cannot converge anything: the tombstone
+///   travels in the snapshot we push to LIVE peers, and a genuine rejoin dials
+///   US — the receive-side merge is the documented offline→online path, which
+///   [`select_round_peers`] already relies on for resurrection.
+///
+/// The harm is concrete, not theoretical. A departed row sharing an endpoint
+/// key with a live one is the LEGITIMATE rejoin shape that
+/// `commonwealth_core::mesh_identity`'s alias rule deliberately permits — a
+/// tombstone is explicitly never refused. But `IrohTransport` keys its bridge
+/// cache on `(pubkey, alpn)`, so both rows resolve to ONE bridge, and their
+/// gossiped dial info differs. Dialing the dead row retargets the LIVE peer's
+/// tunnel to a stale address, and the next round retargets it back.
+///
+/// Measured on RuggedFox 2026-09-09 (note `1ca75415`): 181 retargets in 12
+/// minutes on one endpoint, gossip to the live Mac failing at exactly
+/// `PEER_TIMEOUT`, and that peer decaying to Offline — while iroh reported an
+/// ACTIVE path throughout, which is why relay-home, self-discovery and the
+/// peer-path health term all read green through it.
+///
+/// `announce_presence_change` has filtered `is_active()` on its own push
+/// targets all along; the ordinary round simply never got the same predicate.
+fn is_gossip_candidate(m: &MemberRecord, self_id: NodeId) -> bool {
+    m.node_id != self_id && m.is_active()
+}
+
 fn select_round_peers<T>(
     mut online: Vec<(T, u64)>,
     mut offline: Vec<(T, u64)>,
@@ -503,7 +536,7 @@ pub async fn run_one_round(
         }
         mesh.members
             .values()
-            .filter(|m| m.node_id != self_id)
+            .filter(|m| is_gossip_candidate(m, self_id))
             // The transport sorts candidates IPv4-first on
             // resolution and promotes the last-working address,
             // so the contact carries the raw gossiped list.
@@ -946,6 +979,81 @@ use commonwealth_api::routes_internal::{
 // where this shape failed twice: a zero-filled `mesh_secret` on 2026-08-26 and
 // an `invite_version` that pinned every peer's invite at 0, both green.
 use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
+
+#[cfg(test)]
+mod gossip_candidate_tests {
+    use super::is_gossip_candidate;
+    // The record builder already lives in `ring_roster::tests` and is
+    // `pub(crate)` for exactly this (ARCH §19 — reuse before minting).
+    use crate::ring_roster::tests::member;
+    use commonwealth_core::ids::{NodeId, NodePubkey};
+    use commonwealth_core::mesh::NodeStatus;
+
+    const SELF: u128 = 1;
+
+    fn me() -> NodeId {
+        NodeId::from_u128(SELF)
+    }
+
+    #[test]
+    fn a_live_peer_is_a_candidate() {
+        assert!(is_gossip_candidate(
+            &member(NodeId::from_u128(2), "live", None),
+            me()
+        ));
+    }
+
+    #[test]
+    fn we_never_dial_ourselves() {
+        assert!(!is_gossip_candidate(&member(me(), "me", None), me()));
+    }
+
+    /// A departed member is not dialed. Until 2026-09-09 it was: the round
+    /// filtered only `self`, so every tombstone in the roster drew a dial
+    /// attempt forever.
+    #[test]
+    fn a_tombstoned_member_is_not_dialed() {
+        let mut gone = member(NodeId::from_u128(2), "departed", None);
+        gone.removed_at = Some(200);
+        assert!(!is_gossip_candidate(&gone, me()));
+    }
+
+    /// A tombstone can still read Online — the decay pass demotes on
+    /// staleness, not on departure — so a filter keyed on `status` would have
+    /// gone on dialing it. The predicate reads `removed_at`, not liveness.
+    #[test]
+    fn a_tombstone_is_excluded_even_while_it_still_reads_online() {
+        let mut gone = member(NodeId::from_u128(2), "departed-but-fresh", None);
+        gone.removed_at = Some(200);
+        gone.status = NodeStatus::Online;
+        assert!(!is_gossip_candidate(&gone, me()));
+    }
+
+    /// THE REGRESSION, as the live roster actually held it (note `1ca75415`).
+    ///
+    /// One machine, two rows, one endpoint key: `BeefyMac` retired,
+    /// `Alexs-MacBook-Pro-2` live. The alias rule deliberately PERMITS this —
+    /// a tombstone sharing a key with a rejoined node is a legitimate rejoin
+    /// and is never refused — so the roster is correct and the round must
+    /// still dial only the live row. Dial both and they resolve to one
+    /// `(pubkey, alpn)` bridge and retarget it against each other.
+    #[test]
+    fn a_retired_twin_sharing_an_endpoint_key_is_dropped_and_the_live_row_kept() {
+        let key = NodePubkey([0x86; 32]);
+        let mut retired = member(NodeId::from_u128(2), "BeefyMac", Some(key));
+        retired.removed_at = Some(200);
+        let live = member(NodeId::from_u128(3), "Alexs-MacBook-Pro-2", Some(key));
+
+        assert!(
+            !is_gossip_candidate(&retired, me()),
+            "the retired twin must not be dialed — it shares the live row's bridge"
+        );
+        assert!(
+            is_gossip_candidate(&live, me()),
+            "the live row must still be dialed; dropping both would strand the peer"
+        );
+    }
+}
 
 #[cfg(test)]
 mod select_round_peers_tests {
