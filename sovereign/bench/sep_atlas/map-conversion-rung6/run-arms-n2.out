@@ -1,0 +1,12 @@
+warm: 35B resident 19:15:03
+guard: quiet at 19:15:03
+arm armB2 attempt 1 starting 19:15:03
+WALL armB2: 1601s rc=0 attempt=1
+ARM armB2 OK: rc=0 turns_errored=0
+armA2: hidden 1770 maps
+warm: 35B resident 19:41:46
+guard: quiet at 19:41:47
+arm armA2 attempt 1 starting 19:41:47
+WALL armA2: 1657s rc=0 attempt=1
+ARM armA2 OK: rc=0 turns_errored=0
+armA2: restored 1770 maps

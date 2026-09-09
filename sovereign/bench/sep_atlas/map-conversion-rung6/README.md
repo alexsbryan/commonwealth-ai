@@ -61,3 +61,26 @@ retries up to 3 times. It still cannot finish while ~26 GB of rust-analyzer
 is resident. To resume: free that memory (close the IDE's rust-analyzers, or
 pause the peer session), then `setsid nohup $D/run-arms.sh > $D/run-arms.out
 2>&1 &` and `python3 $D/compare.py` when both WALL lines land.
+
+## Verdict (2026-09-08, n=2, fixed daemon 19eed063b, converted stores)
+
+| arm | run 1 | run 2 | mean of 2 | rows fired |
+|---|---|---|---|---|
+| A — pre-registered rows | 0.923 | 0.909 | 0.916 | 21/21 |
+| B — converted philosophy rows | 0.897 | 0.907 | 0.902 | 21/21 |
+| July baseline (un-isolated, pre-v2) | 0.916 | | | |
+
+Judge ratio, mean over 21. Run-to-run |Δ| per question averages 0.06 for
+both arms; the two A runs differ by 0.014 between themselves, the same size
+as the A–B gap. Over 21 questions B is better on 4, worse on 6, equal on 11.
+Six named: B < A on consequence (0.86/0.79), kripke (0.86/0.79), principlism
+(0.94/0.78); equal on gettier, berlin, hylomorphism. Bars: B ≥ 0.916 NOT MET
+(0.902); B ≥ A on the six NOT MET (3 of 6). Reading: the converted rows are
+not worse than the fallback beyond noise on the mean, and are worse on the
+tension-classified questions, whose lost facts are breadth facts. Both arms
+sit at July's level, so there is no platform regression; the July→now
+gains (modality, locke_reid, virtue_ethics) come from all 1,770 stores
+being readable after rung 3. Operator accepted the result (2026-09-08) and
+the converted snapshot was published: svrnmesh/sep-index
+sep-qwen-embedding-0.6b-2026-09-09.tar.zst. Row quality on SEP is a
+philosophy_atlas.toml question now, not a conversion one.
