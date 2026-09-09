@@ -991,3 +991,84 @@ structure actually favours. It is a hypothesis, not a result.
 
 Reproduce: `scripts/formulation_fanout.py` (bars in the header, mis-specification
 and all).
+
+## 15. Selection is a context-efficiency multiplier, not a ceiling raise — and production may already have it
+
+**2026-09-09.** §14 relocated the mesh mechanism to selection: retrieval is
+nearly free in time, context is scarce, so reduce a large candidate set to a
+small high-value window. This bounds what ANY selector could win, before pricing
+one.
+
+**Inventory first (§19), and it changes the question.** Two things already
+exist. `corpus-engine/src/index/search.rs:659` composes the final set by greedy
+**facility-location** over the pool instead of top-k truncation, behind a
+`coverage_factor` flag with a no-lose fallback. And the cross-encoder reranker
+was REJECTED 2026-08-04 on cost, not quality — `quality/env-flags.toml:1152`
+records "+2.8s TTFT + 4th resident slot + 60x memory fragility", with the
+re-open condition stated as **"a NEW integration shape (off-TTFT-path margins,
+no in-turn slot)"**. That sentence describes a mesh peer, which is the first
+time this arc has found the mesh answering a question the repo had already
+written down.
+
+### The curve
+
+One retrieval per question at k=80 (1.55 s/question), then two policies over the
+same candidates: `rank` = first N hits (top-k truncation, the paired control),
+`oracle` = greedily pick the N hits maximising fact coverage (reads the answer
+key; an unreachable ceiling, like §13's oracle query).
+
+| N | rank | oracle | headroom | chars @ rank |
+|---|---|---|---|---|
+| 5 | 50.6% | **86.1%** | **+35.4%** | 21,751 |
+| 10 | 63.3% | 86.1% | +22.8% | 43,498 |
+| 20 | 75.3% | 88.0% | +12.7% | 86,961 |
+| 28 | 79.7% | 88.6% | +8.9% | 121,540 |
+| 40 | 83.5% | 89.2% | +5.7% | 173,350 |
+| 80 | 90.5% | 90.5% | +0.0% | 346,084 |
+
+**Selection does not raise the ceiling — it collapses the window.** Both
+policies land on 90.5% once N=80 (they are the same set). What changes is the
+price: the oracle reaches **86.1% coverage in FIVE chunks / 21.7k chars**, where
+rank order needs 40 chunks / 173k chars to reach a *lower* 83.5%. That is ~8x
+less context for more coverage, and it is the "small high-value window" argument
+stated as a ratio rather than a hope.
+
+The secondary bar as written ("smallest N where the oracle reaches the ceiling")
+was **uninformative by construction** — defining the ceiling as the oracle's own
+maximum puts it trivially at N=80. Second bar-specification defect in two
+sections; the corrected comparison is the one above, computed from the same data.
+
+### The caveat that cuts hardest, and it is not in the bars
+
+`rank` here is NAIVE top-k truncation. **Production is not naive.** The rung-6
+arms score 88.0-89.2% at 28 chunks with their atlas walk and `dedup_by_source`,
+against this oracle's 88.6% at N=28. On the face of it the shipped pipeline is
+already at oracle parity at that window — so **+8.9% is headroom over naive
+truncation, NOT over what we ship**, and the honest statement of the remaining
+headroom is that it is unmeasured and may be near zero.
+
+The comparison is confounded and cannot be resolved from here: the arms use full
+chunks, this harness uses ~190-char truncated snippets, which biases these
+coverage numbers DOWN and the context figures down as well. Settling it needs
+one instrument — full chunks through the eval pipeline with `coverage_factor`
+on and off.
+
+### What this licenses
+
+- **The small-window claim is real and quantified** (86.1% in 5 chunks), and it
+  is the right shape for a context-scarce turn.
+- **A new selector is NOT licensed** on this evidence, because the incumbent may
+  already capture the gap. The next measurement is not a better selector, it is
+  `coverage_factor` on/off, full chunks, one instrument.
+- The reranker's re-open condition is a live thread and belongs to whoever
+  measures the above first — its quality already passed; only its integration
+  cost failed, and that is exactly the cost a peer absorbs.
+
+### Scope
+
+One bank, one corpus, k=80 pool, truncated snippets, greedy set-cover on the
+answer key. Retrieval-layer coverage only: whether a 5-chunk window synthesises
+a BETTER answer than a 28-chunk one is unmeasured, and prior work says window
+size is not monotone for synthesis.
+
+Reproduce: `scripts/selection_headroom.py`.
