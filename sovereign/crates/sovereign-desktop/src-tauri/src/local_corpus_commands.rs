@@ -29,11 +29,8 @@ use sovereign_tools::local_corpus::{
 };
 use std::path::PathBuf as StdPathBuf;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_workflow::Workflow;
-use sovereign_workflow_host::{
-    resolve_workflow_source, run_workflow_with_provider, HttpCorpusInstaller, StepObserver,
-    WorkflowProgress,
+use sovereign_workflow_host::workflow_http::{
+    JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
 };
 
 use crate::state::AppState;
@@ -600,21 +597,20 @@ pub async fn lc_ingest(
     // `SOVEREIGN_RUNNER_INGEST` is set and the corpus needs no OCR (`tool:extract`
     // has none). Bespoke stays the default and still owns OCR + enrichment.
     if std::env::var("SOVEREIGN_RUNNER_INGEST").is_ok() && with_ocr != Some(true) {
-        let inference = state.inference.read().await.as_ref().map(Arc::clone);
         let cfg = manager.list().await.into_iter().find(|c| c.id == corpus_id);
-        match (inference, cfg) {
-            // A daemon-routed (or in-process) provider + a non-OCR corpus → Runner.
-            (Some(inference), Some(cfg)) if !cfg.ocr_pdfs => {
+        match cfg {
+            // A non-OCR corpus -> the daemon's notebook job.
+            Some(cfg) if !cfg.ocr_pdfs => {
                 let progress = progress.clone();
-                tokio::spawn(run_ingest_via_runner(inference, cfg, corpus_id, progress));
+                tokio::spawn(run_ingest_via_runner(daemon_url, cfg, corpus_id, progress));
                 return Ok(job_id);
             }
-            // Missing provider, unknown corpus, or OCR wanted → fall through to bespoke.
+            // Unknown corpus, or OCR wanted -> fall through to bespoke.
             _ => {
                 tracing::info!(
                     %corpus_id,
                     "SOVEREIGN_RUNNER_INGEST set but Runner ingest unavailable \
-                     (no provider / unknown corpus / OCR) — using bespoke ingest"
+                     (unknown corpus / OCR) — using bespoke ingest"
                 );
             }
         }
@@ -825,31 +821,19 @@ pub async fn lc_reenrich_note(
     Ok(())
 }
 
-/// Ingest a folder corpus by running the shipped `notebook` workflow on the
-/// Runner (the substrate adoption path), translating the Runner's
-/// `WorkflowProgress` into the `LocalCorpusProgress` phases the desktop UI already
-/// renders — so the progress panel needs no change. Emits the terminal
-/// `Complete { Ingest(stats) }` / `Error` itself (the headless run is silent).
+/// Ingest a folder corpus by submitting the shipped `notebook` workflow to
+/// the daemon's job surface (sv-surface rung 5 — the daemon executes), then
+/// bridging the job's events onto the `LocalCorpusProgress` phases the
+/// desktop UI already renders — so the progress panel needs no change.
+/// Emits the terminal `Complete { Ingest(stats) }` / `Error` itself from the
+/// job's terminal event.
 async fn run_ingest_via_runner(
-    inference: Arc<dyn InferenceProvider>,
+    daemon_url: String,
     cfg: LocalCorpusConfig,
     corpus_id: String,
     progress: ProgressCallback,
 ) {
     let started = std::time::Instant::now();
-
-    let wf = match resolve_workflow_source("notebook")
-        .and_then(|(toml, _)| Workflow::parse(&toml).map_err(|e| e.to_string()))
-    {
-        Ok(w) => w,
-        Err(e) => {
-            progress(LocalCorpusProgress::Error {
-                message: format!("notebook workflow: {e}"),
-                recoverable: false,
-            });
-            return;
-        }
-    };
 
     // Params from the corpus config: the source folder + a comma-glob of its
     // configured extensions (empty = every file, which `notebook` extracts by type).
@@ -867,63 +851,152 @@ async fn run_ingest_via_runner(
     params.insert("corpus".to_string(), corpus_id.clone());
     params.insert("glob".to_string(), glob);
 
-    // Observer: map each Runner event onto a `LocalCorpusProgress::Ingesting` phase.
-    let acc = Arc::new(Mutex::new(IngestAccumulator::default()));
-    let observer: StepObserver = {
-        let progress = progress.clone();
-        let acc = Arc::clone(&acc);
-        Arc::new(move |ev: WorkflowProgress| {
-            if let Some(local) = workflow_progress_to_local(ev, &mut acc.lock().unwrap()) {
-                progress(local);
-            }
+    // Submit the job; resolution + execution are the daemon's.
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            progress(LocalCorpusProgress::Error {
+                message: format!("build daemon client: {e}"),
+                recoverable: false,
+            });
+            return;
+        }
+    };
+    let run: RunResponse = match client
+        .post(format!("{daemon_url}/internal/workflows/run"))
+        .json(&RunRequest {
+            name_or_path: "notebook".to_string(),
+            params,
+            toml: None,
+            concurrency: None,
+            no_cache: None,
         })
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(run) => run,
+            Err(e) => {
+                progress(LocalCorpusProgress::Error {
+                    message: format!("parse notebook run ack: {e}"),
+                    recoverable: false,
+                });
+                return;
+            }
+        },
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            progress(LocalCorpusProgress::Error {
+                message: format!("daemon notebook run returned {status}: {body}"),
+                recoverable: false,
+            });
+            return;
+        }
+        Err(e) => {
+            progress(LocalCorpusProgress::Error {
+                message: format!("could not reach daemon for notebook run: {e}"),
+                recoverable: false,
+            });
+            return;
+        }
     };
 
-    let installer = Arc::new(HttpCorpusInstaller::new());
-    match run_workflow_with_provider(
-        &wf,
-        Some(inference),
-        Some(installer),
-        4,
-        false,
-        params,
-        // Preserve the full tool surface: the corpus/atlas tools moved out of the
-        // host's base registry, so inject them here (the desktop links
-        // sovereign-tools).
-        sovereign_tools::workflow_corpus_tools(),
-        Some(observer),
-    )
-    .await
-    {
-        Ok(report) => {
-            // `chunks_written` parsed from each item's `tool:corpus_store` output
-            // ("stored N chunks into corpus …"); best-effort, contributes 0 if the
-            // shape ever changes. Excerpts + per-file failure detail are deferred
-            // with the full cutover (the field's documented M1 default is empty).
-            let chunks_written: u64 = report
-                .items
-                .iter()
-                .filter_map(|it| it.result.as_ref().ok())
-                .filter_map(|txt| txt.strip_prefix("stored "))
-                .filter_map(|rest| rest.split_whitespace().next())
-                .filter_map(|n| n.parse::<u64>().ok())
-                .sum();
-            let stats = IngestStats {
-                corpus_id: corpus_id.clone(),
-                files_indexed: report.ok_count(),
-                chunks_written,
-                runtime_failures: Vec::new(),
-                excerpt_chunks: Vec::new(),
-                duration_secs: started.elapsed().as_secs(),
-            };
-            progress(LocalCorpusProgress::Complete {
-                result: CompletionResult::Ingest(stats),
-            });
+    // Poll bridge: job events -> LocalCorpusProgress phases.
+    let acc = Arc::new(Mutex::new(IngestAccumulator::default()));
+    let mut after = 0u64;
+    loop {
+        let resp = client
+            .get(format!(
+                "{daemon_url}/internal/workflows/jobs/{}?after={after}",
+                run.job_id
+            ))
+            .send()
+            .await;
+        let job = match resp {
+            Ok(r) if r.status().is_success() => match r.json::<JobResponse>().await {
+                Ok(job) => job,
+                Err(e) => {
+                    progress(LocalCorpusProgress::Error {
+                        message: format!("parse notebook job status: {e}"),
+                        recoverable: false,
+                    });
+                    return;
+                }
+            },
+            Ok(r) => {
+                let status = r.status();
+                progress(LocalCorpusProgress::Error {
+                    message: format!(
+                        "notebook job status returned {status} — run may still be in flight"
+                    ),
+                    recoverable: false,
+                });
+                return;
+            }
+            Err(e) => {
+                tracing::warn!(job = %run.job_id, error = %e, "notebook poll: retrying");
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                continue;
+            }
+        };
+
+        let terminal = job.status != sovereign_workflow_host::workflow_http::JobStatus::Running;
+        for event in job.events {
+            after = after.max(event.seq);
+            match event.event {
+                WorkflowJobEvent::Complete { ok, items, .. } => {
+                    // `chunks_written` parsed from each item's `tool:corpus_store`
+                    // output ("stored N chunks into corpus ..."); best-effort,
+                    // contributes 0 if the shape ever changes.
+                    let chunks_written: u64 = items
+                        .iter()
+                        .filter_map(|it| it.output.as_deref())
+                        .filter_map(|txt| txt.strip_prefix("stored "))
+                        .filter_map(|rest| rest.split_whitespace().next())
+                        .filter_map(|n| n.parse::<u64>().ok())
+                        .sum();
+                    let stats = IngestStats {
+                        corpus_id: corpus_id.clone(),
+                        files_indexed: ok,
+                        chunks_written,
+                        runtime_failures: Vec::new(),
+                        excerpt_chunks: Vec::new(),
+                        duration_secs: started.elapsed().as_secs(),
+                    };
+                    progress(LocalCorpusProgress::Complete {
+                        result: CompletionResult::Ingest(stats),
+                    });
+                    return;
+                }
+                WorkflowJobEvent::Failed { error } => {
+                    progress(LocalCorpusProgress::Error {
+                        message: error,
+                        recoverable: false,
+                    });
+                    return;
+                }
+                ev => {
+                    if let Some(local) = workflow_progress_to_local(ev, &mut acc.lock().unwrap()) {
+                        progress(local);
+                    }
+                }
+            }
         }
-        Err(e) => progress(LocalCorpusProgress::Error {
-            message: e,
-            recoverable: false,
-        }),
+        if terminal {
+            // Terminal status without a terminal event in this window (e.g. a
+            // daemon restart lost the job) — surface it rather than polling
+            // forever.
+            progress(LocalCorpusProgress::Error {
+                message: "notebook job ended without a terminal event".to_string(),
+                recoverable: false,
+            });
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
     }
 }
 
@@ -950,16 +1023,16 @@ fn friendly_phase(uses: &str) -> &'static str {
     }
 }
 
-/// Map a Runner [`WorkflowProgress`] event onto the desktop's
+/// Map a workflow job event (the daemon's wire enum) onto the desktop's
 /// [`LocalCorpusProgress`] phase model. Returns `None` for events that don't move
 /// the UI bar (`RunFinished` — the caller emits the terminal `Complete` after
 /// computing stats; `ElementSkipped` — a per-element warning).
 fn workflow_progress_to_local(
-    ev: WorkflowProgress,
+    ev: WorkflowJobEvent,
     acc: &mut IngestAccumulator,
 ) -> Option<LocalCorpusProgress> {
     match ev {
-        WorkflowProgress::RunStarted { items, .. } => {
+        WorkflowJobEvent::RunStarted { items, .. } => {
             acc.total = items as u64;
             acc.done = 0;
             Some(LocalCorpusProgress::Ingesting {
@@ -969,13 +1042,13 @@ fn workflow_progress_to_local(
                 current_file: None,
             })
         }
-        WorkflowProgress::StepDone { item, uses, .. } => Some(LocalCorpusProgress::Ingesting {
+        WorkflowJobEvent::StepDone { item, uses, .. } => Some(LocalCorpusProgress::Ingesting {
             done: acc.done,
             total: acc.total,
             phase_label: friendly_phase(&uses).to_string(),
             current_file: (item != "·").then_some(item),
         }),
-        WorkflowProgress::ItemDone { .. } => {
+        WorkflowJobEvent::ItemDone { .. } => {
             acc.done = (acc.done + 1).min(acc.total.max(1));
             Some(LocalCorpusProgress::Ingesting {
                 done: acc.done,
@@ -984,7 +1057,9 @@ fn workflow_progress_to_local(
                 current_file: None,
             })
         }
-        WorkflowProgress::RunFinished { .. } | WorkflowProgress::ElementSkipped { .. } => None,
+        WorkflowJobEvent::RunFinished { .. } | WorkflowJobEvent::ElementSkipped { .. } => None,
+        // Terminal events are handled by the poll bridge itself.
+        WorkflowJobEvent::Complete { .. } | WorkflowJobEvent::Failed { .. } => None,
     }
 }
 
@@ -1215,7 +1290,7 @@ mod tests {
         let mut acc = IngestAccumulator::default();
 
         let start = workflow_progress_to_local(
-            WorkflowProgress::RunStarted {
+            WorkflowJobEvent::RunStarted {
                 workflow: "notebook".into(),
                 items: 2,
                 steps: 4,
@@ -1232,7 +1307,7 @@ mod tests {
         ));
 
         let step = workflow_progress_to_local(
-            WorkflowProgress::StepDone {
+            WorkflowJobEvent::StepDone {
                 item: "notes.md".into(),
                 step: "embed".into(),
                 uses: "embed:default".into(),
@@ -1260,7 +1335,7 @@ mod tests {
         // Two items finish → done climbs to 2 and never past the total.
         for expected in [1u64, 2] {
             let done = workflow_progress_to_local(
-                WorkflowProgress::ItemDone {
+                WorkflowJobEvent::ItemDone {
                     item: "x".into(),
                     ok: true,
                     ran: 4,
@@ -1276,7 +1351,7 @@ mod tests {
 
         // Terminal + per-element events don't move the bar (the caller owns Complete).
         assert!(workflow_progress_to_local(
-            WorkflowProgress::RunFinished { ok: 2, failed: 0 },
+            WorkflowJobEvent::RunFinished { ok: 2, failed: 0 },
             &mut acc,
         )
         .is_none());

@@ -228,7 +228,7 @@ pub struct CapabilitiesResponse {
 /// file (the CLI with a local path against a remote `--daemon`); otherwise
 /// the daemon resolves `name_or_path` from its own catalog — same
 /// `~/.svrnmesh/workflows` dir, same shadowing rules.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RunRequest {
     pub name_or_path: String,
     #[serde(default)]
@@ -251,7 +251,7 @@ pub struct RunResponse {
     pub corpus: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JobQuery {
     /// Only events with `seq > after` are returned. Default 0 = everything.
     #[serde(default)]
@@ -607,9 +607,9 @@ async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoRe
     .into_response()
 }
 
-#[derive(Debug, Serialize)]
-struct WorkflowListResponse {
-    workflows: Vec<WorkflowListEntry>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkflowListResponse {
+    pub workflows: Vec<WorkflowListEntry>,
 }
 
 async fn capabilities_handler(

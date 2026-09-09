@@ -1,125 +1,82 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands for the **Run a workflow** surface: list the runnable
-//! workflows, describe what one can do (the consent bullets), and run one
-//! in-process while streaming per-step progress to the UI.
+//! workflows, describe what one can do (the consent bullets), and run one as
+//! a DAEMON job while streaming per-step progress to the UI.
 //!
-//! Running is in-process via
-//! [`sovereign_workflow_host::run_workflow_with_provider`], fed the desktop's own
-//! `AppState.inference` provider — so it works in both attach and embedded modes
-//! and reuses exactly the provider chat uses, with no `/v1/models` round trip.
-//! Progress is the Runner's [`WorkflowProgress`] observer, forwarded onto a
-//! job-scoped Tauri channel the UI subscribes to — the same handle pattern as
-//! `enrich_build_async`.
+//! sv-surface rung 5 (2026-09-09): execution moved daemon-side. This module
+//! is a client of the daemon's `/internal/workflows/*` routes (defined in
+//! `sovereign-workflow-host::workflow_http` — the wire types below are
+//! imported from there, the same one-definition rule `watched_folder_commands`
+//! follows), in BOTH boot modes: the embedded desktop daemon serves the same
+//! routes in-process, and attach hits the external daemon's port. The run
+//! POSTs a job, then a poll task bridges the job's events onto the SAME
+//! job-scoped Tauri channel with the SAME event shape the frontend already
+//! renders — the UI is unchanged.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Serialize;
-use sovereign_workflow::Workflow;
-use sovereign_workflow_host::{
-    first_comment_line, resolve_workflow_source, run_workflow_with_provider,
-    summarize_capabilities, workflows_dir, HttpCorpusInstaller, StepObserver, WorkflowProgress,
-    SHIPPED_WORKFLOWS,
-};
 use tauri::{AppHandle, Emitter, State};
+
+use sovereign_workflow_host::workflow_http::{
+    CapabilitiesResponse, JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
+    WorkflowListEntry, WorkflowListResponse,
+};
 
 use crate::state::AppState;
 
+fn http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-/// One runnable workflow + the inputs it needs at run time.
-#[derive(Debug, Serialize, Clone)]
-pub struct WorkflowCatalogEntry {
-    pub name: String,
-    pub description: String,
-    /// `"shipped:<name>"` | `"user:<name>"` — where the TOML came from.
-    pub origin: String,
-    pub params: Vec<WorkflowParamSpec>,
-}
-
-/// One input field. `kind` lets the UI render a dedicated control for the
-/// well-known folder/corpus/glob params and a plain text box for the rest.
-#[derive(Debug, Serialize, Clone)]
-pub struct WorkflowParamSpec {
-    pub key: String,
-    /// `"folder"` | `"corpus"` | `"glob"` | `"text"`.
-    pub kind: String,
-    pub label: String,
-}
-
-fn classify_param(key: &str) -> WorkflowParamSpec {
-    let kind = match key {
-        "folder" | "corpus" | "glob" => key,
-        _ => "text",
-    };
-    WorkflowParamSpec {
-        key: key.to_string(),
-        kind: kind.to_string(),
-        label: key.to_string(),
-    }
-}
-
-fn catalog_entry(name: &str, origin: String, toml: &str) -> Option<WorkflowCatalogEntry> {
-    let wf = Workflow::parse(toml).ok()?;
-    let params = wf
-        .referenced_params()
-        .into_iter()
-        .map(|k| classify_param(&k))
-        .collect();
-    Some(WorkflowCatalogEntry {
-        name: name.to_string(),
-        description: first_comment_line(toml),
-        origin,
-        params,
-    })
-}
-
-/// List the workflows a user can run: their own (`~/.svrnmesh/workflows/`, which
-/// shadow shipped starters of the same name) plus the shipped starters.
+/// List the workflows a user can run. The catalog (user workflows shadowing
+/// shipped starters) is the DAEMON's — one home, served by the route.
 #[tauri::command]
-pub async fn workflow_list_runnable() -> Result<Vec<WorkflowCatalogEntry>, String> {
-    let mut entries: Vec<WorkflowCatalogEntry> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-
-    // The user's own workflows first — a same-named file shadows the shipped one.
-    if let Ok(rd) = std::fs::read_dir(workflows_dir()) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.extension().and_then(|x| x.to_str()) != Some("toml") {
-                continue;
-            }
-            let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            let Ok(toml) = std::fs::read_to_string(&p) else {
-                continue;
-            };
-            if let Some(entry) = catalog_entry(stem, format!("user:{stem}"), &toml) {
-                seen.insert(stem.to_string());
-                entries.push(entry);
-            }
-        }
-    }
-    for (name, toml) in SHIPPED_WORKFLOWS {
-        if seen.contains(*name) {
-            continue;
-        }
-        if let Some(entry) = catalog_entry(name, format!("shipped:{name}"), toml) {
-            entries.push(entry);
-        }
-    }
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(entries)
+pub async fn workflow_list_runnable(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<WorkflowListEntry>, String> {
+    let base = state.client_base_url();
+    let resp: WorkflowListResponse = http_client()?
+        .get(format!("{base}/internal/workflows/list"))
+        .send()
+        .await
+        .map_err(|e| format!("workflow list: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("workflow list: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse workflow list: {e}"))?;
+    Ok(resp.workflows)
 }
 
 /// The plain-language things a workflow can do (write files, use your local
 /// model, fetch the network…) — the same consent bullets the living trigger
 /// shows, so the user sees what a run will do before starting it.
 #[tauri::command]
-pub async fn workflow_capabilities(name_or_path: String) -> Result<Vec<String>, String> {
-    let (toml, _origin) = resolve_workflow_source(&name_or_path)?;
-    let wf = Workflow::parse(&toml).map_err(|e| format!("workflow parse: {e}"))?;
-    Ok(summarize_capabilities(&wf).await.describe())
+pub async fn workflow_capabilities(
+    state: State<'_, Arc<AppState>>,
+    name_or_path: String,
+) -> Result<Vec<String>, String> {
+    let base = state.client_base_url();
+    let resp: CapabilitiesResponse = http_client()?
+        .get(format!("{base}/internal/workflows/capabilities"))
+        .query(&[("name", name_or_path)])
+        .send()
+        .await
+        .map_err(|e| format!("workflow capabilities: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("workflow capabilities: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse workflow capabilities: {e}"))?;
+    Ok(resp.bullets)
 }
 
 // ── Run ──────────────────────────────────────────────────────────────────────
@@ -134,12 +91,14 @@ pub struct WorkflowRunHandle {
     pub channel: String,
     /// The corpus this run will build (it has a `tool:corpus_store` step and a
     /// resolved `corpus` param) — so the UI can offer "chat with it" on success.
+    /// Derived daemon-side by the run route; one home.
     pub corpus: Option<String>,
 }
 
-/// A frontend-facing progress event: the Runner's [`WorkflowProgress`] plus the
-/// terminal `complete`/`failed` the command appends after the run. A tagged union
-/// on `kind` (matching the `WorkflowRunProgress` TS type).
+/// A frontend-facing progress event: the job's wire events plus the terminal
+/// `complete`/`failed`. A tagged union on `kind` (matching the
+/// `WorkflowRunProgress` TS type) — UNCHANGED from the in-process era, so the
+/// frontend needs no edit.
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WorkflowRunEvent {
@@ -185,10 +144,10 @@ pub enum WorkflowRunEvent {
     },
 }
 
-impl From<WorkflowProgress> for WorkflowRunEvent {
-    fn from(p: WorkflowProgress) -> Self {
-        match p {
-            WorkflowProgress::RunStarted {
+impl From<WorkflowJobEvent> for WorkflowRunEvent {
+    fn from(ev: WorkflowJobEvent) -> Self {
+        match ev {
+            WorkflowJobEvent::RunStarted {
                 workflow,
                 items,
                 steps,
@@ -197,7 +156,7 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
                 items,
                 steps,
             },
-            WorkflowProgress::StepDone {
+            WorkflowJobEvent::StepDone {
                 item,
                 step,
                 uses,
@@ -214,7 +173,7 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
                 step_index,
                 total_steps,
             },
-            WorkflowProgress::ElementSkipped {
+            WorkflowJobEvent::ElementSkipped {
                 item,
                 step,
                 index,
@@ -225,7 +184,7 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
                 index,
                 error,
             },
-            WorkflowProgress::ItemDone {
+            WorkflowJobEvent::ItemDone {
                 item,
                 ok,
                 ran,
@@ -236,19 +195,27 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
                 ran,
                 cached,
             },
-            WorkflowProgress::RunFinished { ok, failed } => Self::RunFinished { ok, failed },
+            WorkflowJobEvent::RunFinished { ok, failed } => Self::RunFinished { ok, failed },
+            // The per-item outcomes are the CLI's print material; the UI
+            // shape carries only the tallies + corpus handoff.
+            WorkflowJobEvent::Complete {
+                ok, failed, corpus, ..
+            } => Self::Complete { ok, failed, corpus },
+            WorkflowJobEvent::Failed { error } => Self::Failed { error },
         }
     }
 }
 
-/// Resolve + run a workflow in-process, streaming progress on a job-scoped
-/// channel. Returns the handle immediately; the run proceeds on a background task
-/// and the terminal `complete`/`failed` event lands on the channel.
+/// How often the poll task bridges new job events onto the Tauri channel.
+const POLL_INTERVAL: Duration = Duration::from_millis(400);
+
+/// Submit a workflow run to the daemon and bridge its events onto a
+/// job-scoped channel. Returns the handle immediately; a background poll task
+/// forwards events and stops at the terminal `complete`/`failed`.
 ///
 /// `params` carries the whole form — `folder`/`corpus`/`glob` and any extra
-/// `{param.*}` the workflow declares. `corpus` is auto-derived from the folder
-/// basename when the workflow builds a corpus but none was supplied (mirroring the
-/// CLI's `cmd_run` ergonomics).
+/// `{param.*}` the workflow declares. The `corpus` default (folder basename)
+/// and the built-corpus derivation are the daemon's.
 #[tauri::command]
 pub async fn workflow_run(
     app: AppHandle,
@@ -256,88 +223,91 @@ pub async fn workflow_run(
     name_or_path: String,
     params: BTreeMap<String, String>,
 ) -> Result<WorkflowRunHandle, String> {
-    let (toml, _origin) = resolve_workflow_source(&name_or_path)?;
-    let wf = Workflow::parse(&toml).map_err(|e| format!("workflow parse: {e}"))?;
-
-    let mut params = params;
-    if !params.contains_key("corpus") {
-        if let Some(folder) = params.get("folder") {
-            if let Some(base) = std::path::Path::new(folder)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .filter(|b| !b.is_empty())
-            {
-                params.insert("corpus".into(), base.to_string());
-            }
-        }
-    }
-
-    // The corpus this run will build, for the "chat with it" handoff: only when a
-    // store step is present and a corpus name resolved.
-    let builds_corpus = wf.steps.iter().any(|s| s.uses == "tool:corpus_store");
-    let corpus = builds_corpus
-        .then(|| params.get("corpus").cloned())
-        .flatten();
-
-    // Reuse the desktop's own inference provider (attach: a SplitInferenceProvider
-    // to the daemon; embedded: in-process) rather than re-discovering models.
-    let inference = {
-        let guard = state.inference.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
-
-    let job_id = uuid::Uuid::new_v4().to_string();
-    let channel = progress_channel(&job_id);
-
-    // Observer → job-scoped Tauri channel. Failed emits are swallowed (the UI
-    // window may have closed) — they must not abort a running workflow.
-    let observer: StepObserver = {
-        let app = app.clone();
-        let channel = channel.clone();
-        Arc::new(move |ev: WorkflowProgress| {
-            let _ = app.emit(&channel, WorkflowRunEvent::from(ev));
-        })
-    };
-
-    let installer = Arc::new(HttpCorpusInstaller::new());
-    let app_terminal = app.clone();
-    let channel_terminal = channel.clone();
-    let corpus_terminal = corpus.clone();
-    tokio::spawn(async move {
-        let terminal = match run_workflow_with_provider(
-            &wf,
-            inference,
-            Some(installer),
-            4,
-            false,
+    let base = state.client_base_url();
+    let client = http_client()?;
+    let run: RunResponse = client
+        .post(format!("{base}/internal/workflows/run"))
+        .json(&RunRequest {
+            name_or_path,
             params,
-            // Preserve the full tool surface: the corpus/atlas tools moved out of
-            // the host's base registry, so inject them here (the desktop links
-            // sovereign-tools).
-            sovereign_tools::workflow_corpus_tools(),
-            Some(observer),
-        )
+            toml: None,
+            concurrency: None,
+            no_cache: None,
+        })
+        .send()
         .await
-        {
-            Ok(report) => {
-                let ok = report.ok_count();
-                WorkflowRunEvent::Complete {
-                    ok,
-                    failed: report.failed_count(),
-                    // Only surface the corpus when at least one item succeeded —
-                    // an all-failed run produced nothing to chat with.
-                    corpus: if ok > 0 { corpus_terminal } else { None },
+        .map_err(|e| format!("workflow run: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("workflow run: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse workflow run ack: {e}"))?;
+
+    let channel = progress_channel(&run.job_id);
+    let channel_for_handle = channel.clone();
+
+    // Poll bridge → job-scoped Tauri channel. Failed emits are swallowed (the
+    // UI window may have closed) — they must not abort the bridge.
+    let job_id = run.job_id.clone();
+    tokio::spawn(async move {
+        let client = match http_client() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let mut after = 0u64;
+        loop {
+            let resp = client
+                .get(format!(
+                    "{base}/internal/workflows/jobs/{job_id}?after={after}"
+                ))
+                .send()
+                .await;
+            match resp {
+                Ok(r) if r.status().is_success() => match r.json::<JobResponse>().await {
+                    Ok(job) => {
+                        let terminal = job.status
+                            != sovereign_workflow_host::workflow_http::JobStatus::Running;
+                        for event in job.events {
+                            after = after.max(event.seq);
+                            let _ = app.emit(&channel, WorkflowRunEvent::from(event.event));
+                        }
+                        if terminal {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(job = %job_id, error = %e, "workflow poll: bad job body");
+                    }
+                },
+                Ok(r) => {
+                    // A 404 past the retention window, or a restarting daemon:
+                    // report the break once and stop bridging rather than
+                    // spinning on a gone job.
+                    tracing::warn!(
+                        job = %job_id,
+                        status = %r.status(),
+                        "workflow poll: job fetch failed — stopping the bridge"
+                    );
+                    let _ = app.emit(
+                        &channel,
+                        WorkflowRunEvent::Failed {
+                            error: format!("job status fetch returned {}", r.status()),
+                        },
+                    );
+                    return;
+                }
+                Err(e) => {
+                    tracing::warn!(job = %job_id, error = %e, "workflow poll: retrying");
                 }
             }
-            Err(error) => WorkflowRunEvent::Failed { error },
-        };
-        let _ = app_terminal.emit(&channel_terminal, terminal);
+            tokio::time::sleep(POLL_INTERVAL).await;
+        }
     });
 
     Ok(WorkflowRunHandle {
-        job_id,
-        channel,
-        corpus,
+        job_id: run.job_id,
+        channel: channel_for_handle,
+        corpus: run.corpus,
     })
 }
 
@@ -345,45 +315,48 @@ pub async fn workflow_run(
 mod tests {
     use super::*;
 
+    /// Every wire event maps onto the frontend shape the TS type already
+    /// declares — the UI contract this conversion must not disturb.
     #[test]
-    fn classify_param_tags_the_well_known_keys() {
-        assert_eq!(classify_param("folder").kind, "folder");
-        assert_eq!(classify_param("corpus").kind, "corpus");
-        assert_eq!(classify_param("glob").kind, "glob");
-        // Anything else is a plain text field.
-        assert_eq!(classify_param("outdir").kind, "text");
-    }
+    fn wire_events_map_onto_the_frontend_shape() {
+        let ev = WorkflowRunEvent::from(WorkflowJobEvent::RunStarted {
+            workflow: "notebook".into(),
+            items: 3,
+            steps: 4,
+        });
+        match ev {
+            WorkflowRunEvent::RunStarted {
+                workflow,
+                items,
+                steps,
+            } => {
+                assert_eq!(workflow, "notebook");
+                assert_eq!((items, steps), (3, 4));
+            }
+            other => panic!("wrong shape: {other:?}"),
+        }
 
-    #[test]
-    fn catalog_entry_classifies_a_workflows_params() {
-        let toml = r#"# turn a folder into a cited notebook
-[workflow]
-name = "notebook"
-[source]
-type = "folder"
-path = "{param.folder}"
-glob = "{param.glob}"
-[[step]]
-id = "store"
-uses = "transform:identity"
-input = "x"
-params = { corpus = "{param.corpus}" }
-"#;
-        let entry = catalog_entry("notebook", "shipped:notebook".to_string(), toml).unwrap();
-        assert_eq!(entry.name, "notebook");
-        assert_eq!(entry.origin, "shipped:notebook");
-        assert!(
-            entry.description.contains("cited notebook"),
-            "{}",
-            entry.description
-        );
-        let kinds: std::collections::BTreeMap<_, _> = entry
-            .params
-            .iter()
-            .map(|p| (p.key.as_str(), p.kind.as_str()))
-            .collect();
-        assert_eq!(kinds.get("folder"), Some(&"folder"));
-        assert_eq!(kinds.get("corpus"), Some(&"corpus"));
-        assert_eq!(kinds.get("glob"), Some(&"glob"));
+        // The terminal keeps the corpus handoff and drops the CLI's per-item
+        // print material.
+        let ev = WorkflowRunEvent::from(WorkflowJobEvent::Complete {
+            ok: 2,
+            failed: 0,
+            corpus: Some("notes".into()),
+            items: vec![sovereign_workflow_host::workflow_http::JobItemOutcome {
+                item: "a.md".into(),
+                ok: true,
+                output: Some("stored 3 chunks".into()),
+                error: None,
+                ran: 4,
+                cached: 0,
+            }],
+        });
+        match ev {
+            WorkflowRunEvent::Complete { ok, failed, corpus } => {
+                assert_eq!((ok, failed), (2, 0));
+                assert_eq!(corpus.as_deref(), Some("notes"));
+            }
+            other => panic!("wrong shape: {other:?}"),
+        }
     }
 }
