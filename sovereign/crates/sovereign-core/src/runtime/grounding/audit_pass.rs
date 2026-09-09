@@ -569,8 +569,86 @@ impl AuditPass<'_> {
                     "extra": &extra,
                 }));
             }
-            match vp_opt {
-                Some(vp) => {
+            // THE LENGTH PIVOT IS A COST DECISION, NOT A CORRECTNESS ONE
+            // (2026-09-09).
+            //
+            // `gate_answer_inner` routes on `draft.chars().count() >
+            // profile.longform_chars` (1,800 everywhere but `ComplexTask`).
+            // Per-claim judging costs N times a single claim's, so pivoting on
+            // length to bound that spend is legitimate. What was NOT
+            // legitimate is what else the pivot decided: the short arm's
+            // `verify_grounding` carries the value-presence veto
+            // unconditionally, this ladder never calls it, and so a
+            // confabulated specific was refused below 1,800 characters and
+            // shipped above it.
+            //
+            // MEASURED, paired — same draft, same evidence, same scripted
+            // judges, `longform_chars` the only difference
+            // (`the_length_pivot_does_not_decide_whether_a_confabulation_is_refused`):
+            //
+            //   short arm  "I couldn't confirm an answer to this …"  (refused)
+            //   long  arm  "Mr Vladimir is employed by the Russian embassy."
+            //
+            // The scan below is not a substitute and was measured not to be:
+            // `judge.rs`'s own rationale for preferring the veto records that a
+            // gestalt "list the claim's absent specifics" *missed "Russian" in
+            // "the Russian embassy"* — the frame drowns the one invented token.
+            //
+            // THE CLAIM IS THE RIGHT GRAIN. On the short path the whole answer
+            // is one claim, which is why the veto reads it whole there; here
+            // the ladder has already split the text into claims, so the veto
+            // runs where an assertion actually lives. It is judged against
+            // `judged` — the same window the calibrated judge saw, shared
+            // chunks plus re-searched extras — so a value the rescue search
+            // found cannot be vetoed for being absent from the prompt set.
+            let vetoed_value = {
+                model_calls += 1;
+                match super::value_presence::value_presence_of(
+                    &*inference,
+                    question,
+                    claim,
+                    &judged,
+                    posture,
+                )
+                .await
+                {
+                    super::value_presence::ValuePresence::Absent(value) => Some(value),
+                    _ => None,
+                }
+            };
+            match (vetoed_value, vp_opt) {
+                // A veto may only REFUSE (ARCH §7.6). It outranks a judge's
+                // PASS and can never rescue a judge's fail, so it folds in as
+                // a forced failure and nothing else about the ladder changes:
+                // a failed claim is what the repair pass already knows how to
+                // rewrite, and what the verification note already knows how to
+                // disclose. `Absent` is a substring test over the window, not
+                // a judge's opinion, so recording it as a verdict is honest
+                // even where the judge itself returned none.
+                (Some(value), vp_opt) => {
+                    tracing::info!(
+                        target: "grounding_gate",
+                        event = "value_presence",
+                        value = %value,
+                        claim = %claim.chars().take(90).collect::<String>(),
+                        judge_vp = vp_opt.map(|vp| format!("{vp:.3}")),
+                        decision = "claim_vetoed_absent",
+                        "value-presence VETO on the per-claim ladder: the claim asserts a \
+                         specific that appears in none of the passages it was judged against"
+                    );
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimVerdict {
+                            index: claim_idx,
+                            supported: false,
+                        },
+                    );
+                    failed.push(FailedClaim {
+                        claim: claim.clone(),
+                        evidence: extra,
+                    });
+                }
+                (None, Some(vp)) => {
                     dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
                     emit_gate_progress(
                         progress,
@@ -586,7 +664,7 @@ impl AuditPass<'_> {
                         });
                     }
                 }
-                None => {
+                (None, None) => {
                     // The judge returned no verdict (provider error,
                     // admission-queue shed, parse gap). The ladder fails
                     // open per claim — the row resolves and the text
@@ -869,15 +947,39 @@ mod tests {
         ForcedChoice,
         /// The holistic specifics scan: the judges' system turn, generative.
         SpecificsScan,
+        /// The value-presence veto's extractor — one 24-token generative call
+        /// per claim. Added 2026-09-09 when the veto joined this ladder.
+        ValueExtraction,
     }
 
+    /// Which register is this request?
+    ///
+    /// EVERY ARM MATCHES A PRODUCTION CONST, AND THERE IS NO CATCH-ALL. The
+    /// arms used to end `_ => Register::SpecificsScan`, and that default is
+    /// what made the per-claim veto's arrival silent: its extraction call
+    /// classified as the scan and was handed the scan's scripted reply — a
+    /// fabricated span, absent from the evidence by construction — so the
+    /// veto refused a claim on a value no extractor had produced.
+    ///
+    /// A mock that ANSWERS a register it was never taught is worse than one
+    /// that refuses: the reply is plausible, so the test goes on measuring
+    /// something nobody chose (ARCH §18.4, §18.3). The panic is the point —
+    /// the next new register fails here, by name, on its first run.
     fn register_of(r: &CompletionRequest) -> Register {
         if r.max_tokens == Some(1) && r.structured_output.is_some() {
             return Register::ForcedChoice;
         }
         match r.system_message.as_deref() {
-            Some(s) if s.contains("extract claims") => Register::ClaimList,
-            _ => Register::SpecificsScan,
+            Some(s) if s.starts_with(judge::CLAIM_EXTRACTION_LEAD) => Register::ClaimList,
+            Some(s) if s == super::value_presence::EXTRACTION_SYSTEM => Register::ValueExtraction,
+            Some(s) if s == judge::CHUNK_JUDGE_SYSTEM => Register::SpecificsScan,
+            other => panic!(
+                "ScriptedAudit was asked a register it does not script: system={other:?}\n\
+                 prompt starts: {:?}\n\
+                 Teach it the register — do NOT widen an arm to swallow this, \
+                 or the reply it gets back will be another register's script.",
+                r.prompt.chars().take(120).collect::<String>()
+            ),
         }
     }
 
@@ -906,6 +1008,12 @@ mod tests {
                     format!(r#"{{"A": {}, "B": {}}}"#, self.support, 1.0 - self.support)
                 }
                 Register::SpecificsScan => self.scan.clone(),
+                // NONE is what a real extractor returns for a discursive
+                // CLAIM: it is asked for "the specific value … not the
+                // surrounding sentence". These fixtures' claims are sentences,
+                // so the veto is correctly vacuous here and the specimen each
+                // test was built around is unchanged.
+                Register::ValueExtraction => "NONE".to_string(),
             };
             Ok(CompletionResponse {
                 text,

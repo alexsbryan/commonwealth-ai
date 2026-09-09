@@ -532,7 +532,7 @@ pub(super) async fn extract_claim_list(
     let req = CompletionRequest {
         prompt,
         system_message: Some(format!(
-            "You extract claims precisely. Reply with up to {max_claims} lines, or NO_CLAIM."
+            "{CLAIM_EXTRACTION_LEAD} Reply with up to {max_claims} lines, or NO_CLAIM."
         )),
         preferred_speed: Speed::Slow,
         // SLOT_POLICY §7: route the Critic through the privacy-gated OICP

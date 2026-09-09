@@ -1417,6 +1417,21 @@ impl crate::traits::InferenceProvider for IncrementalMock {
             } else {
                 r#"{"A": 0.98, "B": 0.02}"#.to_string()
             }
+        } else if p.contains(super::value_presence::EXTRACTION_LEAD) {
+            // The value extractor. NONE is what a real extractor returns for a
+            // discursive CLAIM — it is asked for "the specific value … not the
+            // surrounding sentence", and these fixtures' claims are sentences.
+            //
+            // This branch exists because the per-claim veto (`audit_pass`)
+            // now asks this register on the ladder these mocks drive. Without
+            // it the call fell to the catch-all and "unexpected synthesis
+            // call" became the asserted value — absent from every chunk, so
+            // the veto refused every claim and four tests failed for a reason
+            // none of them named. The mock's catch-all is a plausible STRING,
+            // which is the half of the routing footgun a census of orphaned
+            // branches cannot see: this branch was not orphaned, it was never
+            // written.
+            "NONE".to_string()
         } else if p.contains("List the SPECIFIC factual claims") {
             self.extractions.fetch_add(1, Ordering::SeqCst);
             "The shop is located on Crescent Lane.\n\
@@ -1585,6 +1600,21 @@ impl crate::traits::InferenceProvider for AsymmetricBatchMock {
             }
             // The calibrated judge SUPPORTS everything it is asked.
             r#"{"A": 0.98, "B": 0.02}"#.to_string()
+        } else if p.contains(super::value_presence::EXTRACTION_LEAD) {
+            // The value extractor. NONE is what a real extractor returns for a
+            // discursive CLAIM — it is asked for "the specific value … not the
+            // surrounding sentence", and these fixtures' claims are sentences.
+            //
+            // This branch exists because the per-claim veto (`audit_pass`)
+            // now asks this register on the ladder these mocks drive. Without
+            // it the call fell to the catch-all and "unexpected synthesis
+            // call" became the asserted value — absent from every chunk, so
+            // the veto refused every claim and four tests failed for a reason
+            // none of them named. The mock's catch-all is a plausible STRING,
+            // which is the half of the routing footgun a census of orphaned
+            // branches cannot see: this branch was not orphaned, it was never
+            // written.
+            "NONE".to_string()
         } else if p.contains("List the SPECIFIC factual claims") {
             "The shop sits on Harbour Row, by the quay.\n\
                  The shop is by the quay.\n\
@@ -1774,6 +1804,21 @@ impl crate::traits::InferenceProvider for LadderMock {
                 return Err(Error::queue_shed(1, 75_850));
             }
             r#"{"A": 0.98, "B": 0.02}"#.to_string()
+        } else if p.contains(super::value_presence::EXTRACTION_LEAD) {
+            // The value extractor. NONE is what a real extractor returns for a
+            // discursive CLAIM — it is asked for "the specific value … not the
+            // surrounding sentence", and these fixtures' claims are sentences.
+            //
+            // This branch exists because the per-claim veto (`audit_pass`)
+            // now asks this register on the ladder these mocks drive. Without
+            // it the call fell to the catch-all and "unexpected synthesis
+            // call" became the asserted value — absent from every chunk, so
+            // the veto refused every claim and four tests failed for a reason
+            // none of them named. The mock's catch-all is a plausible STRING,
+            // which is the half of the routing footgun a census of orphaned
+            // branches cannot see: this branch was not orphaned, it was never
+            // written.
+            "NONE".to_string()
         } else if p.contains("List the SPECIFIC factual claims") {
             "The shop sits on Harbour Row, by the quay.\n\
                  The shop is by the quay.\n\
@@ -2679,5 +2724,217 @@ async fn the_citation_exit_still_releases_a_value_the_quote_carries() {
         outcome.answer.text().contains("Chesham Square"),
         "and it must reach the reader: {:?}",
         outcome.answer.text()
+    );
+}
+
+/// Scripted mock for THE CLIFF PROBE. One confabulated value, served to
+/// whichever ladder asks for it, with every judge answering the way the
+/// PRODUCTION judges were measured to answer on this exact case:
+///
+/// - the forced-choice support judge SUPPORTS the claim. Measured
+///   2026-09-04: `absent-embassy-country` released "Mr Vladimir is employed
+///   by the **Russian** embassy in London" at `violation_prob 0.2897` —
+///   a partly-true claim cleared at support 0.71. The veto exists because
+///   the judge can be wrong; a mock whose judge is right would test nothing.
+/// - the holistic specifics scan returns NONE. Measured, and recorded in
+///   `judge.rs`'s own rationale for preferring the veto: a gestalt "list the
+///   claim's absent specifics" *"missed 'Russian' in 'the Russian embassy'"*
+///   — the frame drowns the one invented token.
+/// - the citation stage declines (`QUOTE: NONE`), so the short arm falls
+///   through to `verify_grounding` and this probe measures THE VETO, not the
+///   citation exit that already has its own test above.
+struct CliffMock {
+    value: &'static str,
+    claim: &'static str,
+}
+
+#[async_trait::async_trait]
+impl crate::traits::InferenceProvider for CliffMock {
+    async fn complete(
+        &self,
+        request: &crate::types::CompletionRequest,
+    ) -> Result<CompletionResponse> {
+        let forced = request
+            .structured_output
+            .as_ref()
+            .map(|s| s.to_string().contains("x_forced_choice"))
+            .unwrap_or(false);
+        let p = &request.prompt;
+        let text = if forced {
+            // The yes-biased judge, as measured.
+            r#"{"A": 0.98, "B": 0.02}"#.to_string()
+        } else if p.contains("copy it word for word") {
+            "QUOTE: NONE\nANSWER: NONE".to_string()
+        } else if p.contains(super::value_presence::EXTRACTION_LEAD) {
+            self.value.to_string()
+        } else if p.contains("List the SPECIFIC factual claims")
+            || p.contains("single central factual claim")
+        {
+            self.claim.to_string()
+        } else if p.contains("Compare the ANSWER against the") {
+            // The gestalt scan, missing the invented token — as measured.
+            "NONE".to_string()
+        } else if p.contains("CLAIMS (numbered):") {
+            "1: A".to_string()
+        } else {
+            "unexpected synthesis call".to_string()
+        };
+        Ok(CompletionResponse {
+            text,
+            tokens_used: 0,
+            prompt_tokens: 0,
+            model_id: "cliff-mock".into(),
+            latency_ms: 0,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &crate::types::CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("CliffMock: no streaming".into()))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Ok(vec![])
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 4096,
+            supports_structured_output: true,
+            relative_speed: crate::types::Speed::Fast,
+            relative_reasoning: Depth::Moderate,
+        }
+    }
+}
+
+/// **The length pivot is a COST decision. It must not decide whether a veto
+/// runs.**
+///
+/// `gate_answer_inner` routes on `draft.chars().count() > profile
+/// .longform_chars` (1,800 on every surface but `ComplexTask`). Past that
+/// line the whole ladder changes: the short arm's `verify_grounding` — which
+/// carries the value-presence veto unconditionally — is never called, and the
+/// long arm's `audit_pass` has no veto at all. Per-claim judging costs N times
+/// a single claim's judging, so pivoting on length to bound that spend is
+/// legitimate. Silently dropping a refusal-only safety check at the same
+/// line is not (ARCH §7.6 — a veto may only refuse; §10.6 — one decider).
+///
+/// This is the paired probe. Both arms take the SAME draft, the SAME
+/// evidence, the SAME mock and the same surface; the ONLY difference is
+/// `longform_chars`, which is the cliff itself. A confabulated specific that
+/// one arm refuses and the other ships is the cliff behaving as a
+/// correctness boundary, which is the thing being denied.
+///
+/// FAILING INPUT (§18.1): set both arms to the same pivot and the test is
+/// vacuous; remove the veto from `verify_grounding` and the short arm fails
+/// first.
+#[tokio::test]
+async fn the_length_pivot_does_not_decide_whether_a_confabulation_is_refused() {
+    // "Russian" appears nowhere here, which is the whole point — Conrad
+    // withholds the country. Everything else in the draft is in the text.
+    let evidence = EvidenceContext {
+        chunks: vec![
+            "He had gone to the Embassy in Chesham Square with a note in his pocket. \
+             Mr Vladimir received him without delay."
+                .to_string(),
+        ],
+        ..refinement_evidence()
+    };
+    let draft = "Mr Vladimir is employed by the Russian embassy.".to_string();
+    let mock = || -> Arc<dyn crate::traits::InferenceProvider> {
+        Arc::new(CliffMock {
+            value: "Russian",
+            claim: "Mr Vladimir is employed by the Russian embassy.",
+        })
+    };
+    // Verify-only on both arms: the repair ladder and the corrective retry
+    // would each add a second mechanism and confound which ladder refused.
+    let short_profile = GateSurface::Refinement.profile();
+    assert!(
+        draft.chars().count() < short_profile.longform_chars,
+        "arm A must be BELOW the pivot or the arms are not paired"
+    );
+    let mut long_profile = short_profile;
+    long_profile.longform_chars = 0; // 0 = always per-claim
+
+    let short = gate_answer(
+        &mock(),
+        "Which country's embassy employs Mr Vladimir?",
+        draft.clone(),
+        &evidence,
+        &CompletionRequest::default(),
+        &short_profile,
+    )
+    .await;
+    let long = gate_answer(
+        &mock(),
+        "Which country's embassy employs Mr Vladimir?",
+        draft.clone(),
+        &evidence,
+        &CompletionRequest::default(),
+        &long_profile,
+    )
+    .await;
+
+    // The short arm is the control: it must refuse, or this probe proves
+    // nothing about the other side.
+    assert!(
+        !short.answer.text().contains("Russian"),
+        "control failed — the short arm shipped the confabulation, so the \
+         veto is not running where it is documented to run: {:?}",
+        short.answer.text()
+    );
+
+    // THE INVARIANT IS THE VERDICT, NOT THE TEXT — and that distinction is
+    // the whole architecture of the cliff.
+    //
+    // What each ladder DOES with a refused claim is a legitimate per-ladder
+    // policy: the short arm abstains, because a short answer IS its one
+    // claim and there is nothing left once it goes; the long arm marks the
+    // claim failed and hands it to the repair pass, because an essay with
+    // one bad claim among nine should be rewritten, not thrown away. That
+    // difference is the cost-and-shape decision the pivot exists to make.
+    //
+    // What may NOT differ is whether the gate REACHES a refusal at all. The
+    // measured hole was exactly that: the long arm released
+    // "Mr Vladimir is employed by the Russian embassy." with the claim
+    // marked SUPPORTED and no note — the veto was never asked. It now
+    // fails the claim, which on this verify-only surface appends the
+    // verification note (and `collaboration.rs`'s refinement re-gate then
+    // keeps the already-verified original, so the annotated text is not
+    // what a reader receives), and on every retry-capable surface routes it
+    // into the repair ladder.
+    let vetoed = long
+        .claims
+        .iter()
+        .find(|c| c.text.contains("Russian"))
+        .unwrap_or_else(|| {
+            panic!(
+                "the long arm judged no claim carrying the confabulated value; \
+                 claims = {:?}",
+                long.claims.iter().map(|c| &c.text).collect::<Vec<_>>()
+            )
+        });
+    assert!(
+        !vetoed.supported,
+        "THE CLIFF IS A CORRECTNESS BOUNDARY. Same draft, same evidence, same \
+         judges — only `longform_chars` differed. Below the pivot the \
+         value-presence veto refuses \"Russian\"; above it the per-claim \
+         ladder released the same specific as SUPPORTED.\n  short arm: {:?}\n \
+         long  arm: {:?}",
+        short.answer.text(),
+        long.answer.text()
+    );
+    // And the reader is told. A refused claim that ships with no mark is the
+    // same leak wearing a different coat (§18.3).
+    assert!(
+        long.answer.text().contains("could not be confirmed"),
+        "the long arm failed the claim but released it unmarked: {:?}",
+        long.answer.text()
     );
 }

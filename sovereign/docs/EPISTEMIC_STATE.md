@@ -306,6 +306,26 @@ click. This field is that output as data.
   answer can be lost. Same 4-probe subset after the fix: honesty-when-
   absent 0.50 → 1.00, confab-leaked 1 → 0, competence and distractor
   evasion unchanged at 1.00.
+- **And the length pivot stopped deciding it** (2026-09-09). The gate
+  routes to the per-claim ladder at `draft.chars().count() >
+  profile.longform_chars` (1,800 on every surface but `ComplexTask`).
+  Per-claim judging costs N times a single claim's, so pivoting on
+  length to bound that spend is a legitimate COST decision. What the
+  pivot also decided, silently, was whether the veto ran at all: the
+  short arm reaches it through `verify_grounding`, and `gate_longform`
+  never calls that. Paired probe, same draft and evidence and judges,
+  `longform_chars` the only difference — below the line the veto
+  refused "Russian", above it the ladder released
+  "Mr Vladimir is employed by the Russian embassy." with the claim
+  marked SUPPORTED. The holistic specifics scan is not a substitute and
+  was measured not to be: `judge.rs`'s own rationale for preferring the
+  veto records that a gestalt "list the claim's absent specifics"
+  *missed "Russian" in "the Russian embassy"*. The veto now runs in
+  `audit_pass` at the CLAIM grain — the unit of assertion this ladder
+  already works in — and a refusal becomes a failed claim, which the
+  repair pass rewrites and the verification note discloses. What each
+  ladder DOES with a refusal still differs by design; whether it reaches
+  one no longer does.
 
 ## 5. Consumers — everything becomes a view
 

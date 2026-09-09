@@ -10,6 +10,16 @@ use crate::types::{CompletionRequest, Speed};
 use sovereign_contracts::types::GateCallMechanism;
 use std::sync::Arc;
 
+/// The stable opening of BOTH claim-extraction system turns.
+///
+/// There are two: the single-claim one below, and a multi-claim one that
+/// interpolates the budget ("… Reply with up to {n} lines …"). They differ
+/// after this sentence and nothing said so, which is how a test provider
+/// keyed on the whole const stopped recognising the multi-claim register —
+/// see `audit_pass`'s `register_of`, and [`super::super::value_presence::
+/// EXTRACTION_LEAD`] for the same footgun on the prompt side.
+pub const CLAIM_EXTRACTION_LEAD: &str = "You extract claims precisely.";
+
 /// System turn for claim extraction — step 1 of the two-step gate.
 pub const CLAIM_EXTRACTION_SYSTEM: &str =
     "You extract claims precisely. Reply with one sentence or NO_CLAIM.";
@@ -49,4 +59,36 @@ pub fn claim_extraction_prompt(question: &str, answer: &str, entity_anchored: bo
         question.chars().take(400).collect::<String>(),
         answer.chars().take(2000).collect::<String>(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The lead is only useful if BOTH claim-extraction system turns still
+    /// start with it. The multi-claim one is built from it by `format!`, so
+    /// this pins the single-claim const to the same opening — the moment they
+    /// diverge, `audit_pass`'s register classifier stops recognising one of
+    /// them, and the mock behind it starts answering with another register's
+    /// script (ARCH §18.4).
+    #[test]
+    fn both_claim_extraction_system_turns_share_the_lead() {
+        assert!(
+            CLAIM_EXTRACTION_SYSTEM.starts_with(CLAIM_EXTRACTION_LEAD),
+            "the single-claim system turn drifted off the lead: {CLAIM_EXTRACTION_SYSTEM:?}"
+        );
+        // The multi-claim turn, rendered the way `judge::extract_claim_list`
+        // renders it. A literal here would be the remembered copy this whole
+        // change exists to delete, so it is built the same way.
+        let multi = format!(
+            "{CLAIM_EXTRACTION_LEAD} Reply with up to {n} lines, or NO_CLAIM.",
+            n = 4
+        );
+        assert!(multi.starts_with(CLAIM_EXTRACTION_LEAD));
+        assert_ne!(
+            multi, CLAIM_EXTRACTION_SYSTEM,
+            "these are two distinct registers; if they ever became identical \
+             the classifier's two arms would be one"
+        );
+    }
 }

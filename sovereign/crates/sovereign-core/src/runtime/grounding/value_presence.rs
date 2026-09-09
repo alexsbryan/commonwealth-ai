@@ -338,6 +338,19 @@ fn window_around(value: &str, chunk: &str, room: usize) -> String {
     chars[start..start + room].iter().collect()
 }
 
+/// The extractor's system turn, named for the same reason as
+/// [`EXTRACTION_LEAD`]: a test provider that classifies which REGISTER a
+/// request belongs to reads this, and a remembered copy stops matching in
+/// silence.
+///
+/// `audit_pass`'s `ScriptedAudit` classified on system message with a
+/// catch-all arm, so when the per-claim veto started calling this register the
+/// extractor was handed the SPECIFICS SCAN's scripted reply — a fabricated
+/// span, absent from the evidence by construction — and the veto refused a
+/// claim on it. Same footgun as the orphaned branches, other half: not a rule
+/// that stopped matching, a register nobody had written a rule for.
+pub(crate) const EXTRACTION_SYSTEM: &str = "Extract only the answer's specific value, or NONE.";
+
 /// The opening clause of the extraction prompt, named so the gate's test
 /// mocks route on the SAME literal the prompt is built from.
 ///
@@ -396,7 +409,7 @@ async fn extract_answer_value(
     );
     let req = CompletionRequest {
         prompt,
-        system_message: Some("Extract only the answer's specific value, or NONE.".into()),
+        system_message: Some(EXTRACTION_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         // SLOT_POLICY §7: OICP envelope instead of a `model_id: "primary"`
         // pin (a latent privacy hole — see judge.rs). Carries the session
