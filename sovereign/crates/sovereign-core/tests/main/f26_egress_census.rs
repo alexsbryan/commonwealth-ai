@@ -463,6 +463,31 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // change to it is the review moment, not a change to the count.
     ("sovereign/crates/sovereign-cli-shared/src/code_index.rs", Class::LocalDaemon, 1),
 
+    // rail.rs (2026-09-09): the one rail append/read client moved out of
+    // sovereign-cli-llm into the crate every CLI links (ded2e10b0), so that
+    // `svrn quality check --distribute` could submit a handoff without linking
+    // the LLM dispatcher. CLASSIFIED FRESH for the same reason `code_index`
+    // above was — a client constructor moving from a leaf binary into a SHARED
+    // library is a different reachability story on its face. The three checks:
+    //   - Destination is the operator's own daemon, and unlike `code_index` it
+    //     is NOT a pinned localhost literal. `urls::daemon_base_url` delegates
+    //     to `setup_config::client_daemon_base`, which honours
+    //     `SOVEREIGN_DAEMON_URL` and `[daemon] client_port` — so an operator
+    //     who aims that knob at another host sends these bytes there. That is
+    //     the knob's declared purpose and is true of every `daemon_base_url`
+    //     caller already in this registry, but it is named here rather than
+    //     glossed: a reader checking this row against "never leaves the
+    //     machine" deserves the exception in front of them.
+    //   - What travels is the operator's own signed rail acts — a submission,
+    //     an offer, a report. No corpus content is read out and sent, and the
+    //     receiving daemon refuses any act whose signer its roster does not
+    //     carry.
+    //   - Reachability widened ON PURPOSE. Before ded2e10b0 only
+    //     sovereign-cli-llm could construct this; now every binary linking
+    //     sovereign-cli-shared can. That widening IS the refactor, and the
+    //     class is unchanged by it because the destination did not move.
+    ("sovereign/crates/sovereign-cli-shared/src/rail.rs", Class::LocalDaemon, 1),
+
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —
     // its client construction moved into BOUNDARY_MODULE (egress.rs
