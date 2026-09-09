@@ -495,7 +495,7 @@ status    = "active"
 #       behaviour. Resume/Redirect senders were already G1's. Proven
 #       against a fake WS host on a real socket: prompt->answer mid-drain
 #       (the host holds its turn until answered), post-Complete notice
-#       delivery, unexpected-frame refusal. Commit: see git log (R2).
+#       delivery, unexpected-frame refusal. Commit: 6e37cda8c (+490/-50).
 #   R3  THE WIRE COVERAGE. G1-G10 to DONE, each with its daemon-side producer
 #       in SocketApprovalChannel and its frontend payload reconstructed
 #       byte-identically (the four already-reconstructible events prove the
