@@ -1536,3 +1536,74 @@ quantity that decides it.
 
 Reproduce: the selective-prediction re-scoring runs off
 `uncovered_regime.json` + `scatter_holdout.json`.
+
+## 21. §20 RETRACTED — four defects, including an arithmetic error in the headline curve
+
+**2026-09-09, adversarial pass on §20, written the same hour.** §20 corrected
+§19 and claimed a transferring selective detector plus an N-scaling curve. It
+does not survive. Each defect below was found by attacking §20's own data, and
+the section is retracted rather than softened.
+
+**D1 — the held-out threshold was FIT ON THE HELD-OUT SET.** §20 searched every
+threshold on dataset B and reported the best one. That is the exact error §19
+existed to prevent, committed one section after §19 wrote the standing fix.
+The real test — **A's threshold (0.464) applied to B** — fires on **56/56
+queries at 73.2% precision, which is precisely B's base rate.** The rule is
+inert on held-out data. §20's "it transfers" is false.
+
+**D2 — the published number is a rounding artifact, and the feature is
+knife-edge.** §20 printed threshold `0.143`; the actual value was `0.1429`
+(= 4/28). Used *as printed*, `< 0.143` sweeps in 18 units tied at exactly
+0.14285 and gives **82.1% precision, not 90.0%**. The feature is quantized in
+28ths and **18 of 56 units share one value**, so the operating point sits on a
+tie boundary where one tie group swings precision by 8 points. Anyone
+reimplementing from the published constant gets the worse number.
+
+**D3 — no demonstrated lift on held-out data.** At the honest reading,
+precision 23/28 = 82.1%, **95% CI [64.4%, 92.1%]**, against a base rate of
+73.2%. The interval contains the base rate. (Dataset A does clear it —
+22/24 = 91.7%, CI [74.2%, 97.7%] against 66.1% — but A is the derivation set.)
+
+**D4 — the headline N-curve is arithmetically wrong.** §20 used
+`mesh_recall = 1-(1-r)^N` with `r` = P(detector fires | this node has it) =
+6.7%, which implicitly sets per-node **coverage c = 1** — every node holds the
+answer. The correct form is `1-(1-c*r)^N`:
+
+| N | c=100% | c=50% | c=20% | **c=10%** |
+|---|---|---|---|---|
+| 5 | 29.3% | 15.7% | 6.5% | 3.3% |
+| 10 | 50.0% | 28.9% | 12.6% | 6.5% |
+| **20** | **75.0%** | 49.4% | 23.6% | **12.6%** |
+
+§20 published the c=1.0 column. **At the ~10% coverage the question was actually
+about, N=20 gives 12.6%, not 74.8%** — and `r` itself rests on ONE unit
+(95% CI [20.7%, 100%]), so the base of the exponent is unmeasured too.
+
+### What survives
+
+Only the structural claim, which is logical rather than empirical and needs no
+data: **"nobody has it" is a conjunction whose error equals the holding node's
+false-negative rate, so N does not help it; "someone has it" is a disjunction of
+per-node detectors, so precision is preserved while coverage grows with N.**
+That asymmetry stands. Every magnitude attached to it in §20 does not.
+
+### The pattern across this whole arc, which is the real finding
+
+**Every positive result today died within an hour of being written; every
+negative held.** §13 (reachable) survived only as a statement about an oracle.
+§18 (scatter detects gaps) died in §19. §20 (selective prediction transfers)
+dies here. Meanwhile every "X loses to a simpler baseline" — §11, §12, §14,
+§16, §17 — survived attack.
+
+That asymmetry is not luck. A negative result of the form "this mechanism does
+not beat the baseline" is *supported* by noise; a positive one must exceed it.
+And this instrument's noise is large relative to every effect chased today:
+**7.2% per-fact resampling (§12), ±1 fact run-to-run drift (§17), a feature
+quantized in 28ths with 32% of units tied (D2), and n = 15-21 per class.**
+
+> **Standing rule for this arc: no positive result is credible without a
+> frozen-rule, held-out confirmation, and today produced zero that survived
+> one.** Four bar/metric defects in eight sections (§14 absolute-without-control,
+> §15 uninformative-by-construction, §19 accuracy-on-imbalanced-data, §20
+> fit-on-the-held-out-set) all had the same shape: a statistic that reads as a
+> pass while the mechanism does nothing.
