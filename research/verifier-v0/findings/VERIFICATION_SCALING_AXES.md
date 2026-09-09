@@ -780,3 +780,58 @@ verification one, and nothing in §8-§11 speaks to it.
 Reproduce: `scripts/termination_pipeline.sh` (serve + judge),
 `scripts/termination_sweep.py --phase judge --passes 5`.
 Data: `runs/delta/termination.jsonl`, `runs/delta/termination_summary.json`.
+
+## 12. Spike — a stack change is invisible against its own resampling noise, and has no sign
+
+**2026-09-09, ten seconds of compute, no inference.** §11 left coverage as the
+only untested route from mesh capacity to groundedness. The proposed product
+shape was re-evaluation: on a STATIC corpus the mesh itself is the only thing
+that changes, so a past answer can be upgraded without any source moving —
+*"SEP didn't change, we got better at reading it."* That is only a product if a
+stack change flips CLAIM-LEVEL verdicts at a rate distinguishable from noise.
+
+Rung 6 had already run the experiment and nobody had read it this way: arm A
+(pre-rung-3) vs arm B (rung-3+4), same 21 SEP questions, same static corpus,
+same judge, **two runs per arm** — so the same files carry the signal and its
+own noise floor. The bench headline was a per-question MEAN, which is preserved
+exactly when N facts flip up and N flip down. This reads
+`synth.judge_evidence[].present`, the per-fact boolean, which is the granularity
+of a thing a user was told.
+
+| comparison | stack delta | facts | flips | rate | up | down |
+|---|---|---|---|---|---|---|
+| within-stack (A↔A2, B↔B2) | none | 318 | 23 | **7.23%** | 11 | 12 |
+| across-stack (A↔B, A2↔B2) | 2 days | 318 | 21 | **6.60%** | 8 | 13 |
+| baseline (July 6 ↔ Sept 8) | ~2 months | 636 | 79 | **12.42%** | 37 | 42 |
+
+**Primary bar MISSED: 0.91x against a bar of 2.0x.** Re-running the identical
+binary flips 7.2% of user-visible facts; changing the retrieval stack flips
+6.6%. The rung-6 stack change is invisible against resampling.
+
+**The extension is the finding.** Over ~2 months of stack changes the rate
+roughly doubles to 12.4% — 1.72x the noise floor — so churn *does* scale with
+stack delta and the mechanism is real. But the net movement is **+1, −1, −3, −2**
+across the four comparisons, and −0.79% overall. Two months of retrieval work
+that moved bench means produced as many fact-level downgrades as upgrades.
+
+> **The effect is real and directionless.** We cannot currently tell an
+> improvement from a reshuffle at the level of a thing a user was told — which
+> is exactly the level a notification would speak at. A re-evaluation feature is
+> therefore blocked not on the trigger's rate but on ATTRIBUTION: establishing
+> that a stack change improved THIS claim, rather than the mean.
+
+Two consequences beyond the feature. First, the two-stack paired re-run
+(old retriever+judge vs new, same process) stops being an optimisation and
+becomes the whole mechanism. Second, and independent of any of this: **a 7.2%
+per-fact resampling floor on a 21-question bank means most single-run
+comparisons on it are measuring noise** — rung 6 said as much at the mean, and
+this quantifies it at the fact level.
+
+Confound, named: the July baseline is un-isolated while the arms are isolated to
+`sep` (rung 6 README); the isolated and un-isolated May baselines read the same
+judge mean, so the comparison holds with that attached. And n is small — 7.23%
+vs 6.60% is itself within noise, so the honest primary reading is
+"across ≈ within", not "across < within".
+
+Reproduce: `scripts/verdict_flip_spike.py` (bars in the header, written before
+the run).
