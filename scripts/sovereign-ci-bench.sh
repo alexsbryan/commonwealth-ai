@@ -257,14 +257,18 @@ def flat(o, p=""):
             yield from flat(v, f"{p}.{k}" if p else str(k))
     elif isinstance(o, (int, float)) and not isinstance(o, bool):
         yield p or "value", o
-doc = {"lanes": {}}
+doc = {}
 if raw and raw.strip():
     try:
         prev = json.loads(raw)
-        if isinstance(prev, dict) and isinstance(prev.get("lanes"), dict):
-            doc["lanes"] = prev["lanes"]
+        if isinstance(prev, dict):
+            doc = prev
     except Exception:
         pass
+# Preserve every top-level key: a solve-landed commit's note carries
+# {"jobs": ...} (solve_http commit_reached), and a bench run against
+# that commit must add its lanes without dropping them.
+doc.setdefault("lanes", {})
 entry = {"kind": kind, "status": status, "secs": int(secs), "rc": int(rc), "ts": ts}
 if report:
     try:

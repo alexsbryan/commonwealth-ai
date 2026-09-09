@@ -51,6 +51,10 @@ description = "Override the model (default: the daemon's primary)."
 type = "boolean"
 description = "Acknowledge solving on a dirty tree."
 
+[tool.parameters.properties.commit]
+type = "boolean"
+description = "Land a Reached run: commit the promotion and record it on refs/notes/bench (default true). false leaves the tree dirty for review."
+
 [tool.output_schema]
 job_id = "string \u2014 pass to solve_status / solve_cancel"
 

@@ -77,6 +77,16 @@ pub struct SubmitWire {
     /// Acknowledge solving on a dirty tree.
     #[serde(default)]
     pub force: bool,
+    /// Land a Reached run: commit the promotion and record it on
+    /// `refs/notes/bench` (AVO build order #2, mechanized — a Reached
+    /// solve IS correctness + strict improvement held all the way).
+    /// Default true; `false` leaves the tree dirty for review.
+    #[serde(default = "default_true")]
+    pub commit: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// What submit-time detection found. File-marker based — cheap
@@ -156,6 +166,105 @@ pub struct SolveDone {
     pub generated_test_path: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generated_test_content: Option<String>,
+    /// Set when a Reached run landed (commit-on-reached). Absent on
+    /// every other outcome, and absent on commit failure — which
+    /// never changes the job's own verdict.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitReceipt>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CommitReceipt {
+    /// Short sha of the landing commit.
+    pub sha: String,
+    /// Whether the job record also landed on `refs/notes/bench`.
+    pub noted: bool,
+}
+
+/// Land a Reached run (AVO build order #2, mechanized): commit the
+/// promotion in the workdir and write the job record as a git note on
+/// that commit under `refs/notes/bench` — the same P_t store the
+/// bench lanes use (`scripts/sovereign-ci-bench.sh::note_lane_score`;
+/// lanes key under `lanes` on a shared commit, jobs key under `jobs`
+/// on their OWN commit). A Reached solve earned the landing: the tree
+/// was clean at submit and every promotion was held to strict
+/// improvement against the checker. Non-Reached runs never land here —
+/// their dirty tree stays for review, the way it always was. Failure
+/// is reported, never fatal: a commit problem must not turn a Reached
+/// into something it is not.
+fn commit_reached(
+    workdir: &std::path::Path,
+    job_id: &str,
+    goal: &str,
+    rounds: u32,
+    passed: u32,
+    failed: u32,
+    model: &str,
+) -> Result<CommitReceipt, String> {
+    fn git(workdir: &std::path::Path, args: &[&str]) -> Result<String, String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .args(args)
+            .output()
+            .map_err(|e| format!("git {}: {e}", args.first().unwrap_or(&"")))?;
+        if out.status.success() {
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        } else {
+            Err(format!(
+                "git {}: {}",
+                args.first().unwrap_or(&""),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    }
+    let goal_line: String = goal
+        .lines()
+        .next()
+        .unwrap_or(goal)
+        .chars()
+        .take(72)
+        .collect();
+    let id8 = &job_id[..job_id.len().min(8)];
+    let message = format!(
+        "solve: {goal_line} (reached {passed}p/{failed}f in {rounds} rounds, {model}, job {id8})"
+    );
+    git(workdir, &["add", "-A"])?;
+    // --allow-empty keeps a Reached-that-changed-nothing (already
+    // green at baseline) from failing the landing; the note still
+    // records the run.
+    git(workdir, &["commit", "--allow-empty", "-m", &message])?;
+    let sha = git(workdir, &["rev-parse", "--short", "HEAD"])?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Per-commit notes are the point: `git log --notes=bench` walks
+    // one score per commit and the lineage IS the log — the note on
+    // each landing commit carries that commit's job (the way a bench
+    // commit's note carries that commit's lane scores). Nothing
+    // merges forward; the prior commit keeps its own note.
+    let note = serde_json::json!({
+        "jobs": {
+            job_id: {
+                "status": "reached",
+                "rounds": rounds,
+                "tests_passed": passed,
+                "tests_failed": failed,
+                "model": model,
+                "goal": goal.chars().take(200).collect::<String>(),
+                "ts_unix": ts,
+                "commit": sha,
+            }
+        }
+    });
+    let body = serde_json::to_string(&note).map_err(|e| format!("note serialize: {e}"))?;
+    let noted = git(
+        workdir,
+        &["notes", "--ref=bench", "add", "-f", "-m", &body, "HEAD"],
+    )
+    .is_ok();
+    Ok(CommitReceipt { sha, noted })
 }
 
 #[derive(Debug, Clone)]
@@ -453,6 +562,7 @@ impl SolveJobs {
         let backend: Arc<dyn ChatBackend> =
             Arc::new(ReqwestChatBackend::new(self.backend_url.clone()));
         let runner_job = Arc::clone(&job);
+        let commit = req.commit;
         let args = SolveArgs {
             workdir: vetted,
             model: job.detected.model.clone(),
@@ -466,6 +576,7 @@ impl SolveJobs {
             let observer: SolveRoundObserver = Arc::new(move |stage, summary: &RoundSummary| {
                 observer_job.push_round(stage.as_str(), summary);
             });
+            let commit_enabled = commit;
             let SolveOutcome {
                 path,
                 synthesis,
@@ -473,12 +584,33 @@ impl SolveJobs {
                 generated_test_path,
                 generated_test_content,
             } = solve(args, backend, Some(observer)).await;
+            let commit = if commit_enabled && matches!(result.status, TrialStatus::Reached) {
+                match commit_reached(
+                    &runner_job.workdir,
+                    &runner_job.id,
+                    &runner_job.goal,
+                    result.rounds,
+                    result.tests_after.passed,
+                    result.tests_after.failed,
+                    &runner_job.detected.model,
+                ) {
+                    Ok(receipt) => Some(receipt),
+                    Err(e) => {
+                        tracing::warn!(job_id = %runner_job.id, error = %e,
+                            "solve: commit-on-reached failed (job verdict unchanged)");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             runner_job.finish(SolveDone {
                 path: path.as_str(),
                 result,
                 synthesis,
                 generated_test_path,
                 generated_test_content,
+                commit,
             });
         });
         *job.handle.lock().unwrap() = Some(handle);
@@ -947,5 +1079,78 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    fn note_json(workdir: &std::path::Path, rev: &str) -> serde_json::Value {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .args(["notes", "--ref=bench", "show", rev])
+            .output()
+            .unwrap();
+        serde_json::from_slice(&out.stdout).unwrap()
+    }
+
+    #[test]
+    fn commit_reached_lands_commit_and_per_commit_note() {
+        let tmp = fresh_repo();
+        std::fs::write(tmp.path().join("artifact.json"), "[1]\n").unwrap();
+        let r1 = commit_reached(
+            tmp.path(),
+            "job-aaaa1111",
+            "Make the artifact pass",
+            2,
+            15,
+            0,
+            "commonwealth/primary",
+        )
+        .unwrap();
+        assert!(!r1.sha.is_empty());
+        assert!(r1.noted);
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["status", "--porcelain"])
+            .output()
+            .unwrap();
+        assert!(status.stdout.is_empty(), "tree must be clean after landing");
+        let doc = note_json(tmp.path(), "HEAD");
+        assert_eq!(doc["jobs"]["job-aaaa1111"]["status"], "reached");
+        assert_eq!(doc["jobs"]["job-aaaa1111"]["commit"], r1.sha.as_str());
+        assert_eq!(doc["jobs"]["job-aaaa1111"]["tests_passed"], 15);
+
+        // A second landing creates its OWN commit whose note carries
+        // only its own job; the first job's note stays on the first
+        // commit (per-commit notes: the lineage IS the log).
+        std::fs::write(tmp.path().join("artifact.json"), "[1, 2]\n").unwrap();
+        let r2 = commit_reached(
+            tmp.path(),
+            "job-bbbb2222",
+            "Grow the artifact",
+            1,
+            15,
+            0,
+            "commonwealth/primary",
+        )
+        .unwrap();
+        assert_ne!(r1.sha, r2.sha);
+        let head_note = note_json(tmp.path(), "HEAD");
+        assert!(
+            head_note["jobs"].get("job-aaaa1111").is_none(),
+            "new commit's note must not carry prior jobs"
+        );
+        assert_eq!(head_note["jobs"]["job-bbbb2222"]["commit"], r2.sha.as_str());
+        let prior_note = note_json(tmp.path(), "HEAD~1");
+        assert_eq!(
+            prior_note["jobs"]["job-aaaa1111"]["commit"],
+            r1.sha.as_str(),
+            "prior commit keeps its own note"
+        );
+    }
+
+    #[test]
+    fn commit_reached_failure_is_reported_not_fatal() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(commit_reached(tmp.path(), "job-cccc3333", "g", 1, 1, 0, "m").is_err());
     }
 }
