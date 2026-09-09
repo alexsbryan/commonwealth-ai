@@ -47,26 +47,52 @@ exists for free).
 
 ## Design
 
+Two stages (operator direction 2026-09-09: prove the mechanism with
+the tightest possible iteration loop, then challenge it on the larger
+holdout when confident). Stage bars are separate and the v0 result is
+reported as mechanism-evidence, never as a quality claim.
+
+### v0 — the tight loop (mechanism proof)
+
+- **Slice, not vault**: one root essay (the Ostrom Summary — it
+  carries the concept misses "tragedy of the commons" and
+  "common-pool resource") re-ingested into a scratch corpus
+  `climb-ostrom`. Golden-subset TOML = the existing obsidian golden's
+  entries for that essay, copied verbatim — no re-authoring, no new
+  judgment.
+- **Round cost target**: one essay ≈ a handful of chunks; K=3 serial
+  candidates ≈ minutes per round. If a round exceeds 10 minutes the
+  slice is still too big — shrink, don't subsidize.
+- **v0 bar (mechanism, not quality)**: at least one golden miss flips
+  to matched via monotone promotion; zero forbidden hits; receipts
+  show the winning candidate's prompt diff. Fail mode worth having:
+  a stall whose receipts name the entry — that is the steering
+  surface working, and gets reported as such.
+
+### v1 — the vault challenge (only after v0)
+
+- Full obsidian vault, the original bars below, bk-book-1 transfer
+  arm, over-extraction rungs. v0's slice is NOT part of v1's
+  measurement (it was climbed on).
+
+### Common mechanics (both stages)
+
 - **Artifact / workdir**: the argumentative pipeline's prompt-overlay
   directory as its own git repo (`SOVEREIGN_PROMPT_DIR` already
   selects overlays at enrich time). Candidate snapshots are
   prompt-file-only — cheap. `literary_atlas` is peer-hot right now;
   v1 touches only the obsidian-serving prompts.
 - **Checker**: one adapter script, `counts:`-prefixed:
-  `SOVEREIGN_PROMPT_DIR=<candidate> sovereign enrich build obsidian-vault
-  && sovereign enrich eval obsidian-vault --golden …` → per-golden-entry
+  `SOVEREIGN_PROMPT_DIR=<candidate> sovereign enrich build <corpus>
+  && sovereign enrich eval <corpus> --golden …` → per-golden-entry
   `PASS obsidian.concept.<name>` / `FAIL <name>` lines; every
-  `forbidden_hit` a `FAIL guardrail.forbidden` entry; over-extraction
-  rungs (`unmatched_count ≤ N` descending). Guardrails vacuous-pass
-  red-when-violated, rungs red at baseline — the probe's ladder
-  discipline verbatim.
+  `forbidden_hit` a `FAIL guardrail.forbidden` entry. Guardrails
+  vacuous-pass red-when-violated, rungs red at baseline — the probe's
+  ladder discipline verbatim.
 - **Serial candidates** (Playwright profile precedent): the corpus
   store under `~/.svrnmesh` is shared mutable state OUTSIDE the
   candidate snapshot — parallel candidates race it. K=3, serial.
-- **Regime**: nightly/AVO shape. Full-corpus re-enrich per candidate;
-  round-0 wall-clock is measured and if a round exceeds 45 min the
-  pilot drops to a chunk-subset climb (adapter then scores only
-  golden entries whose chunks are in the subset — named, not silent).
+- **Regime**: nightly/AVO shape for v1; v0 is interactive.
 
 ## Bars (fixed now)
 
@@ -97,5 +123,5 @@ exists for free).
 
 Confirm: (a) which pipeline/schema serves the obsidian axes
 (argumentative via `enrich eval` — verify the prompt dir name),
-(b) wessex-hoard's current truth score (ceiling check), (c) round-0
-wall-clock on the full vault.
+(b) wessex-hoard's current truth score (ceiling check), (c) the
+Ostrom essay's source path + chunk count (v0 slice sizing).
