@@ -41,7 +41,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnPrompt};
+use sovereign_contracts::types::{
+    InformationRequest, LessonProposedPayload, MessageRefinedPayload, TurnAnswer, TurnFrame,
+    TurnNotice, TurnPrompt,
+};
 use sovereign_core::approval_desk::{ApprovalDesk, ResolveOutcome, StepStatus};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::ApprovalChannel;
@@ -60,13 +63,20 @@ pub struct SocketApprovalChannel {
     /// go down, so a consent question arrives in order with the answer it
     /// interrupts.
     frames: mpsc::UnboundedSender<TurnFrame>,
+    /// What `Notice::StepDone` reports as its task. A DISPLAY label, not a
+    /// correlation key (the desk's ids are); stamped from the conversation
+    /// id at construction, which is the same thing both other hosts' UIs
+    /// show — `sovereign-server` stamps `set_task_id(&conversation_id)`,
+    /// the desktop's Tauri channel does the same.
+    task_label: String,
     desk: ApprovalDesk<String>,
 }
 
 impl SocketApprovalChannel {
-    pub fn new(frames: mpsc::UnboundedSender<TurnFrame>) -> Self {
+    pub fn new(frames: mpsc::UnboundedSender<TurnFrame>, task_label: &str) -> Self {
         Self {
             frames,
+            task_label: task_label.to_string(),
             desk: ApprovalDesk::new(),
         }
     }
@@ -144,18 +154,67 @@ impl ApprovalChannel for SocketApprovalChannel {
         .await
     }
 
+    /// G3 — the structured information request. The one prompt kind whose
+    /// closed-socket policy is SKIP rather than cancel: `None` is a real
+    /// answer (the user's skip), so a vanished card and a pressed skip lead
+    /// to the same place — corpus-only synthesis — and the executor cannot
+    /// tell them apart, which is the point.
+    async fn request_information(&self, request: &InformationRequest) -> Option<String> {
+        let id = format!("info:{}", request.step_id);
+        let parked = self.desk.park_information(id.clone());
+        let frame = TurnFrame::Prompt {
+            id: id.clone(),
+            prompt: TurnPrompt::Information {
+                request: request.clone(),
+            },
+        };
+        if self.frames.send(frame).is_err() {
+            self.desk.cancel(&id);
+            tracing::warn!(
+                id = %id,
+                "turn_approval: information request skipped — the socket closed before it reached the user"
+            );
+            return None;
+        }
+        parked.answered_or_skipped().await
+    }
+
+    /// G6 — step progress, as the typed Notice. The daemon TRACED AND
+    /// DROPPED this until R3; the desktop rendered a Tauri `step-done`
+    /// event and the server an `ExecutorEvent`, three spellings of the
+    /// same three fields.
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
-        // No progress frame in the turn protocol yet — `TurnFrame` carries
-        // narration, and the daemon installs no narration broadcast (see
-        // `turn_http`'s module docs). `TurnNotice::StepDone` is the
-        // sv-surface G6 row, landing with its producer. Traced rather than
-        // dropped, so a daemon run's step ledger is readable at `info`.
-        tracing::info!(
-            step_id = step.id,
-            description = %step.description,
-            status = %StepStatus::of(output),
-            "turn_approval: step progress"
-        );
+        self.notice(TurnNotice::StepDone {
+            task_id: self.task_label.clone(),
+            step_id: step.id,
+            description: step.description.clone(),
+            status: StepStatus::of(output),
+        });
+    }
+
+    /// G4 — the post-stream refined answer. CORRECTNESS-LOAD-BEARING: the
+    /// UI sticks on "Refining your answer" forever without it
+    /// (collaboration.rs records the repro). Fires AFTER the terminal
+    /// `Complete`, on a socket the connection loop keeps open.
+    fn emit_message_refined(&self, payload: MessageRefinedPayload) {
+        self.notice(TurnNotice::MessageRefined(payload));
+    }
+
+    /// G5 — a drafted lesson, fire-and-forget: the surface either passes
+    /// the payload to its lesson-save command later or does nothing.
+    fn emit_lesson_proposed(&self, payload: LessonProposedPayload) {
+        self.notice(TurnNotice::LessonProposed(payload));
+    }
+}
+
+impl SocketApprovalChannel {
+    /// Say a Notice. Owed no answer, so a closed socket costs nothing but
+    /// a trace — the turn it belonged to is over or ending, and there is
+    /// nobody left to substitute for.
+    fn notice(&self, notice: TurnNotice) {
+        if self.frames.send(TurnFrame::Notice { notice }).is_err() {
+            tracing::debug!("turn_approval: notice dropped — the socket is closed");
+        }
     }
 }
 
@@ -192,7 +251,7 @@ mod tests {
         mpsc::UnboundedReceiver<TurnFrame>,
     ) {
         let (tx, rx) = mpsc::unbounded_channel();
-        (Arc::new(SocketApprovalChannel::new(tx)), rx)
+        (Arc::new(SocketApprovalChannel::new(tx, "conv-a")), rx)
     }
 
     /// The whole point: the socket is ASKED, and its answer runs the step.
@@ -320,5 +379,155 @@ mod tests {
             ResolveOutcome::Resolved
         );
         assert_eq!(asking.await.unwrap().unwrap(), "main");
+    }
+}
+
+#[cfg(test)]
+mod r3_producer_tests {
+    use super::*;
+    use sovereign_contracts::types::InformationRequest;
+    use sovereign_core::types::StepOutput;
+
+    fn channel() -> (
+        Arc<SocketApprovalChannel>,
+        mpsc::UnboundedReceiver<TurnFrame>,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Arc::new(SocketApprovalChannel::new(tx, "conv-a")), rx)
+    }
+
+    fn info_request(step_id: usize) -> InformationRequest {
+        InformationRequest {
+            current_understanding: "The answer depends on a 2024 figure".into(),
+            gap: "The adoption rate for region Y".into(),
+            relevance: "It decides whether the trend reversed".into(),
+            satisfying_source: "A statistics agency press release".into(),
+            search_hints: Vec::new(),
+            task_id: String::new(),
+            step_id,
+            kind: Default::default(),
+            task_title: String::new(),
+            routes: Vec::new(),
+        }
+    }
+
+    /// G3: the request parks and prompts with its full struct; a pasted
+    /// answer resolves it; the SKIP is `None`, a real answer.
+    #[tokio::test]
+    async fn an_information_request_prompts_and_resolves() {
+        let (chan, mut rx) = channel();
+        let asking = {
+            let chan = Arc::clone(&chan);
+            let req = info_request(3);
+            tokio::spawn(async move { chan.request_information(&req).await })
+        };
+
+        let frame = rx.recv().await.expect("the socket is asked");
+        assert_eq!(
+            frame,
+            TurnFrame::Prompt {
+                id: "info:3".into(),
+                prompt: TurnPrompt::Information {
+                    request: info_request(3),
+                },
+            },
+            "the whole InformationRequest crosses, gap and routes intact"
+        );
+        assert_eq!(chan.parked(), 1);
+
+        assert_eq!(
+            chan.submit(
+                "info:3",
+                &TurnAnswer::Information(Some("12.4% (Eurostat, 2024)".into()))
+            ),
+            ResolveOutcome::Resolved
+        );
+        assert_eq!(
+            asking.await.unwrap(),
+            Some("12.4% (Eurostat, 2024)".to_string()),
+            "the pasted content is the answer"
+        );
+    }
+
+    /// G3's one semantic difference from approvals: a CLOSED socket reads
+    /// as the SKIP, not as a cancellation — the executor falls through to
+    /// corpus-only synthesis either way.
+    #[tokio::test]
+    async fn a_closed_socket_skips_the_information_request_rather_than_cancelling() {
+        let (chan, rx) = channel();
+        drop(rx);
+
+        let outcome = chan.request_information(&info_request(1)).await;
+        assert_eq!(outcome, None, "NOT Err(Cancelled): the skip is the answer");
+        assert_eq!(chan.parked(), 0, "nothing is left parked");
+    }
+
+    /// G6: step progress crosses as the TYPED notice — `Jump(4)` stays a
+    /// number, not the prose "jump to 4".
+    #[tokio::test]
+    async fn step_progress_becomes_a_typed_notice() {
+        let (chan, mut rx) = channel();
+        let step = Step {
+            id: 5,
+            description: "Pick a branch".into(),
+            kind: sovereign_contracts::types::StepKind::Branch {
+                condition: "always".into(),
+                if_true: 6,
+                if_false: 7,
+            },
+            requires_approval: false,
+            inputs: Vec::new(),
+            sampling: None,
+            evaluation: None,
+        };
+        chan.emit_progress(&step, &StepOutput::Jump(4));
+
+        assert_eq!(
+            rx.try_recv().expect("the notice was sent"),
+            TurnFrame::Notice {
+                notice: TurnNotice::StepDone {
+                    task_id: "conv-a".into(),
+                    step_id: 5,
+                    description: "Pick a branch".into(),
+                    status: StepStatus::Jump(4),
+                },
+            },
+            "the task label stamps the notice; the status stays typed"
+        );
+    }
+
+    /// G4/G5: the two post-terminal emits reach the socket as notices —
+    /// the frames that keep the UI off "Refining your answer" forever.
+    #[tokio::test]
+    async fn the_post_terminal_emits_reach_the_socket_as_notices() {
+        let (chan, mut rx) = channel();
+        chan.emit_message_refined(MessageRefinedPayload {
+            conversation_id: "conv-a".into(),
+            message_id: "m1".into(),
+            new_content: "the revised answer.".into(),
+        });
+        chan.emit_lesson_proposed(LessonProposedPayload {
+            id: "l1".into(),
+            conversation_id: "conv-a".into(),
+            message_id: "m1".into(),
+            display: "Prefer terse answers".into(),
+            prompt_form: "answer tersely".into(),
+            enforcement: "prompt".into(),
+            params: serde_json::json!({}),
+            taught_from: "\"too long\"".into(),
+        });
+
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            TurnFrame::Notice {
+                notice: TurnNotice::MessageRefined(_)
+            }
+        ));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            TurnFrame::Notice {
+                notice: TurnNotice::LessonProposed(_)
+            }
+        ));
     }
 }

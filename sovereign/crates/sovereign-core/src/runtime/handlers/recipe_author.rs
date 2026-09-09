@@ -481,6 +481,12 @@ impl Runtime {
                 created_at: now(),
                 metadata: Some(serde_json::json!({
                     "intent": "RecipeAuthor",
+                    // sv-surface G9: the route label the wire's
+                    // `TurnMetadata.routed_intent` projects. Without it a
+                    // pure-client surface cannot tell a recipe-author turn
+                    // from any other and runs `present_answer` over its
+                    // tool-call prose — the exact bug the G9 row names.
+                    "routed_intent": "RecipeAuthor",
                     "tool_calls": tool_calls_total,
                     "completed_cleanly": completed_cleanly,
                     "model": last_model_id,
@@ -559,7 +565,11 @@ impl Runtime {
             role: Role::Assistant,
             content: text,
             created_at: now(),
-            metadata: Some(serde_json::json!({"intent": "RecipeAuthor"})),
+            metadata: Some(serde_json::json!({
+                "intent": "RecipeAuthor",
+                // sv-surface G9 — see the streaming persistence above.
+                "routed_intent": "RecipeAuthor"
+            })),
             version: now(),
         };
         Ok(Response {

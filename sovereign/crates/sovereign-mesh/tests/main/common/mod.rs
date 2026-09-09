@@ -583,6 +583,50 @@ pub fn desktop_services_with_store(
     desktop_services_with_insights(engine, store, provider, None)
 }
 
+/// [`desktop_services_with_store`] with a REAL PLANNER — the sv-surface R3
+/// shape the pausing-turn test needs: a ComplexTask turn whose plan carries
+/// a `UserInput` step, so the executor parks on the socket's approval
+/// channel mid-turn (the C1 OPEN VERIFICATION: no test had ever driven a
+/// real turn that pauses on an approval over the wire). Everything else
+/// stays the stub shape — the point is the seam, not the planner.
+pub fn desktop_services_with_planner(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    store: Arc<dyn sovereign_core::traits::StateStore>,
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    planner: Box<dyn sovereign_core::traits::Planner>,
+) -> sovereign_mesh::DaemonServices {
+    let mut runtime = stub_runtime_parts(Arc::clone(&provider), Some(Arc::clone(&store)));
+    runtime.corpus_engine = Some(Arc::clone(&engine));
+    runtime.planner = planner;
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: provider,
+                    state_store: store,
+                    runtime: Arc::new(runtime),
+                    insights: None,
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Unavailable {
+                        reason: "test fixture: no tool registry".into(),
+                    },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
 /// [`desktop_services_with_store`] with an `InsightService` commissioned —
 /// the sv-surface rung 6 shape the insight-surface parity tests need: a
 /// serving daemon whose `/v1/insights/*` routes have a real service behind

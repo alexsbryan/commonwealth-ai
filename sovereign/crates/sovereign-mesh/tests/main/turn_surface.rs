@@ -761,3 +761,212 @@ async fn a_socket_redirects_its_own_session_and_gets_a_second_answer() {
         other => panic!("unreachable terminal {other:?}"),
     }
 }
+
+/// sv-surface R3 + the C1 OPEN VERIFICATION, closed: a REAL turn that
+/// PAUSES on a question over the wire. Until this, no test anywhere drove
+/// a turn that parks the executor through `serve_turn` +
+/// `capabilities::scope` + a real WebSocket — the unit tests exercised
+/// the channel in isolation, and the stub fixture's `NoOpPlanner` made
+/// the ComplexTask path unreachable. The planner knob
+/// (`desktop_services_with_planner`) exists for exactly this.
+#[tokio::test]
+async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
+    use sovereign_contracts::types::{
+        ConversationContext, Plan, Step, StepKind, ToolDescriptor, TurnNotice,
+    };
+
+    /// A planner whose plan is ONE `UserInput` step: the executor parks on
+    /// the SOCKET's channel (the socket claimed approvals) and the turn
+    /// cannot finish until the wire answers.
+    struct AskPlanner;
+    #[async_trait::async_trait]
+    impl sovereign_core::traits::Planner for AskPlanner {
+        async fn plan(
+            &self,
+            goal: &str,
+            _context: &ConversationContext,
+            _tools: &[ToolDescriptor],
+        ) -> sovereign_core::error::Result<Plan> {
+            Ok(Plan {
+                id: "plan-ask".into(),
+                goal: goal.to_string(),
+                steps: vec![Step {
+                    id: 0,
+                    description: "Ask the user which corpus".into(),
+                    kind: StepKind::UserInput {
+                        question: "Which corpus should I search?".into(),
+                    },
+                    requires_approval: false,
+                    inputs: Vec::new(),
+                    sampling: None,
+                    evaluation: None,
+                }],
+                edges: Vec::new(),
+            })
+        }
+
+        /// The plan cannot fail (one step, no tools), so a replan is the
+        /// same plan again — the executor never asks on this fixture.
+        async fn replan(
+            &self,
+            original: &Plan,
+            _completed: &[(usize, sovereign_core::types::StepOutput)],
+            _failure: &sovereign_core::types::StepError,
+            _tools: &[ToolDescriptor],
+        ) -> sovereign_core::error::Result<Plan> {
+            Ok(original.clone())
+        }
+    }
+
+    let tmp = tempfile::tempdir().unwrap();
+    let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let provider = TestProvider::new().with_complete_text("searched.");
+    let services = common::desktop_services_with_planner(
+        engine(tmp.path()),
+        Arc::clone(&store),
+        Arc::new(provider),
+        Box::new(AskPlanner),
+    );
+    let daemon = Arc::new(EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        services,
+    ));
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{addr}/v1/conversations/{conv}/stream?approvals=true"
+    ))
+    .await
+    .expect("the claimed upgrade is accepted");
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&TurnRequest::Message {
+            content: "search for the adoption figure".to_string(),
+            mode: TurnMode::Grounded,
+            intent: Some(sovereign_contracts::types::Intent::ComplexTask),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    // Read until the turn PAUSES. Bounded: a hang here is the real
+    // failure mode the OPEN VERIFICATION named.
+    let mut frames: Vec<TurnFrame> = Vec::new();
+    let prompt_id = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let Some(Ok(msg)) = ws.next().await else {
+                panic!("socket closed before the turn asked its question");
+            };
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
+            if let TurnFrame::Prompt { id, .. } = &frame {
+                return (frames, id.clone());
+            }
+            frames.push(frame);
+        }
+    })
+    .await
+    .expect("the turn reaches its question rather than hanging");
+    let (frames, id) = prompt_id;
+
+    // On THIS path the pause beats every other frame: ComplexTask is
+    // non-streamable, so the whole turn — pause included — runs inside
+    // `handle_message` before `serve_non_streaming_turn` has a response
+    // to emit. Nothing but the Prompt could have arrived, and nothing
+    // did.
+    assert!(
+        frames.is_empty(),
+        "the pause is the wire's first frame; got {frames:?}"
+    );
+    assert_eq!(id, "input", "ask_user parks under the one id it mints");
+
+    // The answer goes up the same socket; the parked executor resumes.
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&TurnRequest::Answer {
+            id,
+            answer: TurnAnswer::Text("sep".into()),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    // And the turn completes. The tail frames are the fallback path's
+    // fixed order — TurnStarted (late by nature on this path; the
+    // comment in `serve_non_streaming_turn` says so), the whole answer
+    // as one Token, then Complete.
+    let tail = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        let mut tail: Vec<TurnFrame> = Vec::new();
+        while let Some(Ok(msg)) = ws.next().await {
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
+            let done = matches!(frame, TurnFrame::Complete { .. });
+            tail.push(frame);
+            if done {
+                return tail;
+            }
+        }
+        panic!("socket closed without a Complete after the answer");
+    })
+    .await
+    .expect("the answer resumed the turn");
+
+    let position_of = |pred: &dyn Fn(&TurnFrame) -> bool| {
+        tail.iter()
+            .position(pred)
+            .unwrap_or_else(|| panic!("no matching frame in the tail: {tail:?}"))
+    };
+    let started = position_of(&|f| {
+        matches!(
+            f,
+            TurnFrame::Notice {
+                notice: TurnNotice::TurnStarted { .. }
+            }
+        )
+    });
+    let token = position_of(&|f| matches!(f, TurnFrame::Token { .. }));
+    let complete = position_of(&|f| matches!(f, TurnFrame::Complete { .. }));
+    assert!(
+        started < token && token < complete,
+        "the tail is TurnStarted, Token, Complete in order; got {tail:?}"
+    );
+
+    // The pause and the resume left nothing parked: a SECOND answer with
+    // the same id resolves nothing and the refusal says so by name.
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&TurnRequest::Answer {
+            id: "input".into(),
+            answer: TurnAnswer::Text("stale".into()),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+    let refused = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while let Some(Ok(msg)) = ws.next().await {
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
+            if let TurnFrame::StreamError { message, .. } = frame {
+                return message;
+            }
+        }
+        panic!("no frame answered the stale reply");
+    })
+    .await
+    .expect("the stale reply is answered, not swallowed");
+    assert!(
+        refused.contains("no user reply is pending"),
+        "the refusal names what resolved nothing; got {refused:?}"
+    );
+}

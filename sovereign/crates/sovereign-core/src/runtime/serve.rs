@@ -364,6 +364,19 @@ pub async fn drive_stream_handle(
     let mut narration_rx = narration_rx;
     let message_id = handle.message_id.clone();
     sink.on_turn_started(&message_id);
+    // G10 (sv-surface): the placeholder signal, as a frame. In-process the
+    // hook above is enough — the host reads the id synchronously. Over the
+    // wire the id otherwise first arrives on the first `Token`, which is
+    // most of a cold turn's retrieval wait later: exactly the window the
+    // placeholder exists to cover. Emitting HERE, at handle acquisition,
+    // puts it on the socket before retrieval streams a single token.
+    // In-process sinks that render nothing from a Notice are unaffected —
+    // the frame is owed no answer.
+    sink.emit(TurnFrame::Notice {
+        notice: sovereign_contracts::types::TurnNotice::TurnStarted {
+            message_id: message_id.clone(),
+        },
+    });
     let mut stream = handle.stream;
     loop {
         tokio::select! {
@@ -466,6 +479,16 @@ async fn serve_non_streaming_turn(
     // that up front — `is_document_attached` is the same predicate this
     // function was selected by.
     sink.on_turn_started(&message_id);
+    // The G10 frame rides here too, for order's sake: a client reading
+    // `TurnStarted → … → Complete` should not have to know which acquire
+    // path the turn took. On THIS path the id is already late (the comment
+    // above is the honest statement), so the frame carries no placeholder
+    // value — it carries the shape.
+    sink.emit(TurnFrame::Notice {
+        notice: sovereign_contracts::types::TurnNotice::TurnStarted {
+            message_id: message_id.clone(),
+        },
+    });
     sink.emit(TurnFrame::Token {
         message_id: message_id.clone(),
         chunk: response.message.content.clone(),

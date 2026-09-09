@@ -86,7 +86,9 @@ use tokio::sync::mpsc;
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
 };
-use sovereign_contracts::types::{ResumeSession, TurnAnswer, TurnFrame, TurnMode, TurnRequest};
+use sovereign_contracts::types::{
+    ResumeSession, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnRequest,
+};
 use sovereign_core::runtime::Runtime;
 use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
 use sovereign_core::traits::StateStore;
@@ -725,7 +727,8 @@ async fn handle_ws(
     // reply has no map to reach these questions through, and a hangup drops
     // the whole channel with the task rather than leaving entries to purge
     // (`turn_approval`'s module docs).
-    let approvals = claim_approvals.then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone())));
+    let approvals = claim_approvals
+        .then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone(), &conversation_id)));
 
     // The turn's own approval capability, read once per turn and installed
     // around the WHOLE call by each arm that starts one: the executor is built
@@ -983,11 +986,29 @@ async fn handle_ws(
             // reach.
             TurnRequest::Answer { id, answer } => {
                 let outcome = approvals.as_ref().map(|a| a.submit(&id, &answer));
-                if let Some(message) = resolve_refusal(outcome, answer_kind(&answer)) {
-                    let _ = out_tx.send(TurnFrame::StreamError {
-                        message,
-                        retry_after_secs: None,
-                    });
+                match outcome {
+                    Some(ResolveOutcome::Resolved) => {
+                        // G8: the positive acknowledgement. A client that
+                        // answered and heard nothing cannot tell "accepted"
+                        // from "never arrived" — the bool this replaced
+                        // collapsed exactly that distinction (§18.3). The
+                        // refusals below stay StreamErrors: they name what
+                        // the client can FIX.
+                        let _ = out_tx.send(TurnFrame::Notice {
+                            notice: TurnNotice::ResolveAck {
+                                id,
+                                outcome: ResolveOutcome::Resolved,
+                            },
+                        });
+                    }
+                    _ => {
+                        if let Some(message) = resolve_refusal(outcome, answer_kind(&answer)) {
+                            let _ = out_tx.send(TurnFrame::StreamError {
+                                message,
+                                retry_after_secs: None,
+                            });
+                        }
+                    }
                 }
             }
         }
