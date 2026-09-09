@@ -252,20 +252,39 @@ pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
 /// lift exactly this. FastShort already ran 2048 for the same reason.
 /// Whether the MTP prefill flags ONLY its final position for logits.
 ///
-/// Off by default: production keeps flagging every position. See the block at
-/// the MTP prefill in `model_slot.rs` for why the flag is not needed and why
-/// it is nevertheless not the default yet — the short version is that
-/// pre-norm extraction is bit-identical without it, but `n_outputs_all` going
-/// from n to 1 shifts the next-token logits by 1.46e-1 against a zero floor,
-/// which has to clear a byte-identity arm on a real report first.
+/// **ON by default since 2026-09-08**, when the byte-identity arm the
+/// `DEFAULTS_LEDGER` reversal condition asked for finally ran: on a real
+/// composed report (26,226-token prompt, 52-chunk evidence window) the flag
+/// reproduced the control's draft sha256 EXACTLY over 2,000 greedy tokens,
+/// while the prefill's unreclaimable anon step fell from **+21.20 GiB to
+/// +0.01 GiB**. Predicted `n_tokens * 993,280` = 20.88 GiB against a measured
+/// 21.20, so the mechanism is confirmed quantitatively, not merely argued
+/// (`tests/main/mtp_prefill_logits_spike.rs::byte_identity_on_a_real_composed_draft`).
 ///
-/// The prize is the daemon's largest unreclaimable allocation:
-/// `n_vocab * n_prompt_tokens * 4`, ~19.9 GB on a 20k-token prompt, retained
+/// What it buys: the daemon's largest unreclaimable allocation,
+/// `n_vocab * n_prompt_tokens * 4` — ~19.9 GB on a 20k-token prompt, retained
 /// at high-water until the process exits.
+///
+/// Why identity was expected to hold, and what the residual risk really is.
+/// The flag changes only which positions are GATHERED into the output buffer.
+/// The transformer body runs identically over every position either way —
+/// which is why pre-norm hidden states are bit-identical and the KV cache is
+/// unchanged, and why MoE expert routing (a discrete top-k that a numerical
+/// nudge could otherwise flip) is untouched: it happens in the body. Decode is
+/// shape-identical in both arms. So the entire divergence question is ONE
+/// argmax: whether the top-2 logit gap at the final prefill position exceeds
+/// the ~1.46e-1 shift that gathering 1 row instead of n induces in the
+/// `lm_head` matmul through a different tiling and reduction order. That gap is
+/// a property of the PROMPT, not the model — this is not a per-architecture
+/// risk — and a flip would be a different-but-equally-valid greedy
+/// continuation from an identical KV cache, not a defect.
+///
+/// `=0` opts out. Reversal condition and full evidence:
+/// `sovereign/DEFAULTS_LEDGER.md`.
 pub(crate) fn mtp_prefill_tail_logits_only() -> bool {
     std::env::var("SOVEREIGN_MTP_PREFILL_TAIL_LOGITS")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
 }
 
 pub(crate) fn chat_slot_n_ubatch() -> u32 {

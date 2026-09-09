@@ -2840,7 +2840,9 @@ via the new `COMPOSE_SECTIONS`).
 
 ## `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS` — stop reserving a logits row per prompt token
 
-**Landed 2026-08-27, DEFAULT OFF.**
+**Landed 2026-08-27 default OFF. GRADUATED DEFAULT-ON 2026-09-08** on the
+byte-identity arm recorded below — the reversal condition this row itself
+pre-registered. Opt out with `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS=0`.
 
 **What it is for.** The MTP prefill flags every position for logits, which
 makes `n_outputs_all` the whole prompt (`llama-context.cpp:1700`), so
