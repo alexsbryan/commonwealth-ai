@@ -314,13 +314,20 @@ killing established tunnels after ~3 minutes was root-caused and fixed the same 
 (`77a834f31`, notes `1ca75415` / `c903a9c1`) — which matters here because every number
 below would have been measured through a transport that was quietly dying.
 
-**THE RAIL IS NOT A BYTE PIPE, and this is the assumption most likely to be made
-silently.** A `Complete` act is a capped `Value` against a 64 KiB payload ceiling and
-file artifacts are H2 (see "What we will NOT do"). Media does not ride the rail. "Jellyfin
-on the rails" means iroh for reachability, grants for authorisation, the rail for catalog,
-identity and session state — and a DIRECT iroh stream for the bytes. That last leg is
-both unbuilt and unmeasured, and conflating it with the rail would make this customer
-look one rung away when it is not.
+**THE RAIL IS NOT A BYTE PIPE — BUT THE BRIDGE ALREADY IS.** A `Complete` act is a
+capped `Value` against a 64 KiB payload ceiling and file artifacts are H2 (see "What we
+will NOT do"), so media does not ride the rail. It does not need to.
+`commonwealth-transport::HttpBridge` is `tokio::io::copy` in both directions
+(`iroh.rs:816,820`) — a raw splice between the loopback TCP socket and the QUIC stream
+that never parses HTTP and never buffers a body. A Jellyfin stream is an HTTP GET with a
+`Range` header, and Range passes through untouched. **The byte plane is built, streaming,
+and key-authenticated today; what is missing is a measurement, not a mechanism.** (An
+earlier revision of this section called it unbuilt. That was wrong, and it was wrong in
+the expensive direction — it priced a demo as further away than it is.)
+
+Not yet checked, and it decides the multi-viewer case rather than the single-stream one:
+whether each bridge connection is a separate QUIC stream on one connection or a new
+connection each time.
 
 **THE PRE-REGISTERED NO-GO, written before the data exists.** Gap 3 above is the only one
 that can kill the demo rather than cost time, so it gets a bar now rather than a reading
@@ -336,6 +343,35 @@ later (ARCH §18.1):
 Run it BEFORE any shim code. It is hours, not weeks, and it is the cheapest question on
 this page. It shares its unknown with Track A2's tensor tunnel bench, so one measurement
 answers both.
+
+**What the arithmetic says to expect, so the reading has something to disagree with.**
+The bottleneck stack is wifi airtime, then the SERVING side's uplink, then the
+hole-punch outcome, then QUIC windows, then relay capacity. Wifi 6 at 5 GHz gives
+200-600 Mbit/s real and is not binding. The uplink splits sharply — fiber symmetric
+500-1000 up against cable 20-50 up — and 1080p H.265 wants 4-8 Mbit/s, a 1080p H.264
+remux 8-15 with peaks near 40, and 4K HDR 25-80. So: fiber-to-fiber DIRECT is
+link-limited and 4K direct-play is comfortable; cable-upstream DIRECT does 1080p and not
+4K; RELAYED is the unknown, and n0's public relays are shared fallback signalling rather
+than a CDN, so single-digit to low-tens with no SLA is the honest prior. This mesh runs
+`relays=n0-default`, which is the path a failed hole-punch actually lands on.
+
+TWO THINGS MATTER MORE THAN THE AVERAGE. The hole-punch OUTCOME is a bigger swing than
+any tuning, and CGNAT on either side forces the bad case — so the bench must report the
+path it measured, not just the number. And the failure mode on wifi is STALLS, not
+slowness: airtime contention and bufferbloat produce jitter that ruins playback at an
+average bitrate that reads fine. That is why the bar above carries a stall ceiling beside
+the rate, and why a mean alone would pass a stream nobody can watch.
+
+**THE DEGRADED CASE IS ALREADY EXPRESSIBLE, which is the elegant half.**
+`iroh_access::PeerTransportPath` reports `direct | relayed | mixed | idle` plus the
+active direct-address count and the relay in use. So a shim can be honest about
+degradation rather than silently stuttering — "this peer is on the relay, a 4K remux will
+not hold" is a sentence this system can already produce (ARCH §18.3, applied to a product
+surface instead of a log line). Pair it with rung 1's residency pattern — play from the
+holder, transcode where the media lives — and the measured path quality becomes an INPUT
+to the serving node's transcode decision. Jellyfin already transcodes; both facts already
+exist; nothing new is needed to connect them. That, rather than a new transport, is what
+"elegantly, with what is already built" means here.
 
 **Then, in order.** Provider-ID identity is a genuine architectural decision and not a
 port: cross-server item identity is TMDB/IMDB — external, mutable, third-party-controlled
