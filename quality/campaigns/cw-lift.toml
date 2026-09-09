@@ -368,23 +368,163 @@ status    = "active"
 #       donor traces to `commonwealth_work`, not to `sovereign_mesh::
 #       work_donor`, and `job status` printed an unreadable COUNT with the
 #       reasons unreachable from the terminal until `job` got a subscriber.
-#   5e  CI ON YOUR METAL — the pilot, gated on 5d                  OPEN
-#       Not a new runner: `svrn quality check --trigger ci:<job>` gains
-#       --distribute. PLAN.md rung 5 lands here. Four pre-registered bars,
-#       one of them watched failing (a stale donor producing an attribution
-#       that comparable_to refuses).
-#   5f  the second lift: a package-only peer, heterogeneous work   OPEN
-#       The bar is a PHYSICAL lift, not a crate-name count — kernel-types
-#       reads three files through CARGO_MANIFEST_DIR.parent() and shells
-#       `git ls-files`, which a cargo-tree instrument scores green and a
-#       sandbox build fails on.
-#   5g  ingest rides the fold; the deletion payoff, gated on 5e    OPEN
-#       Where the phase pays: work_queue.rs's lease machinery, the four
-#       /internal/corpus queue routes and handlers, the pull loop's HTTP
-#       half, EphemeralGrantStore, the legacy partition push path.
-#   5h  the ledger credits the donor                              OPEN
-#       Half a session, any time after 5d. LedgerEventKind gains one
-#       variant; the emitter is reused as-is.
+#   5e  CI on your metal: --distribute on the runner that already exists
+#                                   2a3437399 DONE +1,789/-57
+#       Not a new runner. Each selected `Instrument` becomes one `process:v1`
+#       unit whose argv, preconditions and RESULT SOURCE are read off the row
+#       — fixing the source at `VerdictLine` would have made four of the five
+#       `ci:test` rows report `no-verdict`, because they are exit-code lanes.
+#       EVERY SELECTED INSTRUMENT GETS A ROW, which is the half of the claim
+#       that can lie: a split run that silently dropped a shard would report a
+#       smaller, greener table than a local one. Queued becomes `never-ran`
+#       carrying each offer's typed `WorkRefusal`, leased at the deadline
+#       becomes `could-not-judge`, lost from the fold becomes `never-ran`
+#       naming the roster. An unplaceable unit is a row that says so.
+#       GATE (i) IS COULD-NOT-JUDGE, NOT PASSED, and it is recorded that way
+#       because the run did not happen, not because it failed. The SINGLE-NODE
+#       merge is proven: `cli-journey-selftest` ran on the ring at b03cbad01
+#       and returned the identical verdict and exit code as the same lane
+#       locally at the same rev, with the donor's worktree really detached at
+#       that pin. The CROSS-NODE reading never ran — blocked on note 1ca75415,
+#       owned elsewhere. The offload share on this host is 0 BY CONSTRUCTION:
+#       the only donor is the submitting node.
+#       TWO DEFECTS THE LIVE RUN FOUND, neither visible to any gate.
+#         (1) TWO INSTRUMENTS WITH IDENTICAL ARGV WERE ONE UNIT. `seal::
+#             unit_hash` covers kind + payload and NOT requirements, so two
+#             rows differing only in a precondition collapsed and the whole
+#             run reported on a unit whose preconditions belonged to the other
+#             row. `units_for` refuses by name now.
+#         (2) THE REFUSAL SURVEY WAS TAKEN AFTER THE WINDOW CLOSED. The
+#             handoff's TTL is the venue budget, so at merge time `admits`
+#             refused everyone and the unplaced rows read `not-allowed` — true
+#             about the closed window and silent about why nobody took the
+#             unit. `survey_ms` clamps the survey clock into the window.
+#       NAMED §10.6 DEVIATION: `distribute::toolchain()` is a SECOND `rustc
+#       --version` reader beside `work_donor::toolchain`, and it HAS to be
+#       independent — a reference attribution that copied the donor's would be
+#       a guard asserting on a field the subject supplies (§18.1). The
+#       convergence target is named in the code and belongs on
+#       cw-work-one-decider's list.
+#   5f  the second lift is paid, and the package surface has three holes
+#                                   b03cbad01 DONE +871/-3
+#       The CLAIM block's second lift, unpaid since 1f was descoped six rungs
+#       ago. Seven crates leave the monorepo — copied FLATTENED to `crates/
+#       <name>` outside the repository, because flattening is what makes a
+#       hand-spelled `path = "../../../x"` fail instead of quietly resolving.
+#       Cold build rc 0 in 8.6 / 12.5 / 10.6 / 9.4 s (n=4), 558 tests pass in
+#       isolation, zero source edits. The peer is 394 code lines and completes
+#       three units heterogeneous in BOTH the work and where the verdict comes
+#       from; the journal carries nine acts including one `Renew` the 27s
+#       shard earned, so the heartbeat is exercised rather than merely written.
+#       THREE HOLES IN THE PACKAGE SURFACE — the finding, and worth more than
+#       the green. All three sit in `sovereign-mesh/work_donor.rs`, outside
+#       what a third party gets, and each is one decision that acquires a
+#       second implementation the moment a second donor exists (§10.6):
+#         (1) "DO I STILL HOLD THIS LEASE?" — `lease_state`, a pure Held/Lost/
+#             Unknown, is not in the package. THIS ONE PRODUCED A REAL BUG:
+#             the peer's first draft collapsed it to a bool, so a journal that
+#             merely FAILED TO READ during a heartbeat read as "somebody else
+#             holds it" and cancelled a running unit — the §18.3 substitution,
+#             written while looking at the correct version. Watched red by
+#             `chmod 000` on the oplog mid-heartbeat.
+#         (2) THE HOST HALF OF CONSENT — `host_satisfies`. `may_take`'s docs
+#             hand the host-side refusals to "the caller ... with this same
+#             type", so the VOCABULARY is shared and the DECIDER is not. The
+#             peer re-derived it.
+#         (3) PROVENANCE — `attribution` plus `ABSENT_REV`/`ABSENT_TOOLCHAIN`.
+#             Every donor invents its own `ComputeAttribution`, which is the
+#             exact value `comparable_to` exists to compare.
+#       The repair is to move all three into `commonwealth-work`, and it is
+#       NOT done here: `sovereign-mesh` was outside the lane's scope and the
+#       finding is the deliverable.
+#       TWO CORRECTIONS THIS RUNG MADE RATHER THAN PASSED. The kernel-types
+#       hazard in cw-work-package-lift's own text was already closed on
+#       2026-09-04 and the bar was describing a repair that had happened —
+#       corrected in that bar below. And the set-equality claim was off by two
+#       every time it was read literally: 58 = 56 + 2, because the recipe
+#       EXCLUDES the crate itself. Corrected in BOUNDARY.md.
+#   5g  ingest rides the fold; the deletion payoff, gated on 5e
+#                                   1e5418f4b PARTIAL +958/-14
+#       PART 1 ONLY. Part 2 — the deletion this rung exists to collect — is
+#       OPEN and in flight in another lane, with its own pre-registration.
+#       This row is deliberately NOT `DONE`: cw-net-deletion's instrument
+#       reads this block with `grep DONE`, and counting a rung that has not
+#       paid would credit the phase with a deletion nobody has landed.
+#       Two `ingest:v1` units went onto the `work` fold, were leased BY THE
+#       FOLD, ran, reported, and merged into a canonical corpus that answers
+#       from both ranges. NOTHING IS DELETED HERE, deliberately: deleting a
+#       working path before its replacement is proven is the one way this rung
+#       does real damage. The executor is the pull loop's body with the lease
+#       machinery removed, and it DELETES machinery rather than adding it —
+#       the old path spent a separate spawned task bridging cancellation;
+#       here the three concerns are one `select!`.
+#       "ON ATTEMPT 2" WAS NOT STAGED and is the best evidence in the run. The
+#       first proof corpus pointed at a 17.9 GB archive, the non-sharded path
+#       concatenates every entry to /tmp BEFORE `article_range` applies, and
+#       it died at shard 43/76 on `Disk quota exceeded`. The executor returned
+#       `NoVerdict`, the donor appended `work.fail` after 335s, THE FOLD
+#       REQUEUED THE UNIT WITH ITS ATTEMPT COUNTED, and both units passed on
+#       the retry. Retry semantics watched working under a real failure
+#       rather than asserted.
+#       AN HONESTY FIX THE RUN FORCED. `IngestResult.chunks_created` is seeded
+#       from `index.chunk_count()` before the run writes anything, so on a
+#       second unit into one partition it is the PARTITION'S RUNNING TOTAL —
+#       measured 813 after a unit that added 391 — and every unit on a node
+#       shares one partition path, so that is the normal case. Publishing it
+#       as `chunks_created` would have put a number on the rail forever that
+#       nobody can reconcile against the merge. Renamed
+#       `partition_chunks_total`. NOTHING measures a unit's own contribution.
+#       `EphemeralGrantStore` IS NOT SUBSUMED and must survive part 2:
+#       different principal, lifetime and plane from `Submit.allowed` ∩
+#       `Offer.accept_from`. The consent pair speaks for the SUBMITTER and the
+#       DONOR; the grant speaks for the CORPUS OWNER, and where the submitter
+#       is not the owner nothing in the pair speaks for them. Its DERIVED
+#       output (`handoff.allowed_peers`) is the half part 2 may fold.
+#       A GATE THAT IS NOT A GATE, found in passing and belonging to gate
+#       integrity rather than to this rung: `cargo xtask boundary-gate` does
+#       NOT catch a `commonwealth-work -> sovereign-*` edge. Adding
+#       `sovereign-contracts` to that manifest reported `commonwealth 7/7
+#       crates present … ✓`, exit 0, twice. `layer-gate` catches it. So the
+#       guard keeping `commonwealth-work` liftable — the claim 5f just paid —
+#       is ONE gate, not two, and the one that names itself for the job is the
+#       one that missed.
+#       OWED: the §1.1 `SYSTEM_OVERVIEW.md` text is drafted with both anchors
+#       and NOT applied — another lane was in that file. It lands with part 2.
+#   5h  the ledger credits the donor, and only the donor can
+#                                   9eb723b37 DONE +541/-12
+#       A node had been running other people's compute since 5d and the
+#       contributions ledger recorded nothing about who paid for it. One
+#       variant closes it — `LedgerEventKind::JobUnitCompleted { handoff,
+#       unit_hash, donor_actor, kind, wall_seconds }` with `DonatedCompute` on
+#       `NodeContributions` — and the emitter is reused exactly as it was.
+#       THE DONOR EMITS, NOT EVERY NODE THAT FOLDS, and the argument is
+#       mechanism rather than taste. The fold-convergent design is ruled out
+#       twice over: the ledger is ALREADY a replicated log that converges by
+#       one write site per event, so N nodes folding one completion would
+#       write N rows and multiply one fact by the ring size — and making that
+#       safe needs the credit keyed on `unit_hash`, a SECOND idempotence key
+#       beside the one the fold already owns (§10.6). And a folding third
+#       party cannot produce the event anyway: the journal carries
+#       `completed_at_ms - leased_at_ms`, which is LEASE-HELD time including
+#       admit latency and heartbeat scheduling, not compute. Only the donor
+#       measured it.
+#       `donor_actor` is the `ActorKey` ADMISSION verified, never the
+#       emitter's self-reported node id (§7.5); `ComputeAttribution` was
+#       checked and deliberately NOT used as the identity, because it carries
+#       a self-reported `host`. A unit that lapses and is re-run IS credited
+#       twice, to two donors — two machines really did spend the time — and a
+#       named test pins that as intended rather than leaving it to be read as
+#       a bug. `converge noun` caught the name before it landed: the rejected
+#       spelling would have put a THIRD `WorkUnit*` name in the very crate
+#       where `WorkUnit` already means the ingest unit.
+#       THE DEMO RUNS AND THEN STOPS ONE STEP SHORT, said plainly. The credit
+#       is written, measured and correlated to a handoff a person submitted
+#       (`wall_seconds=0.0154` in the daemon's own journal) and NOTHING
+#       RENDERS IT: the daemon's `MeshStore` is in-memory, `GET /internal/
+#       contribution/view` is mounted on `commonwealth-api`'s server rather
+#       than this daemon, and `svrn mesh balance` prints "(contribution
+#       balance requires a running daemon)" and exits 0 WITH a daemon running
+#       — a success-shaped stub, pre-existing and not this rung's to fix.
 #
 # G IS DONE, and it found a third gate the order did not know about.
 # The pre-commit ARG_MAX kill is fixed and WATCHED: scripts/tests/
@@ -679,6 +819,78 @@ status       = "open"
 # once by choosing a measure after seeing which one passed (§18.6). Re-pin all
 # seven or none — the 4b pair is the blocker, and like the instrument itself
 # it is the operator's call, not a worker's.
+# ── 2026-09-09 · PHASE 5 RE-DERIVED, AND THE BAR STAYS OPEN ─────────────────
+#
+# The declared instrument still returns 0 (seven shas do not resolve, above),
+# so this is a hand-sum of per-commit diffs — the way every number in this bar
+# has been produced since the declared instrument was found to be measuring
+# another campaign. Unit is the instrument's own: `git show --numstat -- '*.rs'`
+# per commit, added − deleted. Every row below is reproducible with
+# `git show --numstat --format= <sha> -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'`.
+#
+# STARTING POSITION is the last one this bar STATED: −582, the 2026-09-08
+# table above, 21 shas. It does not contain the five 4-series shas that
+# 02ac6de77 later added to the ladder (4b's pair, 2e, 4d, 4e) because all five
+# are among the seven that do not resolve. Nothing below re-pins them.
+#
+#   PHASE 5, the rungs the instrument can now SEE (rows carrying `DONE`):
+#     rung  sha         +added  -deleted       net
+#     5d    3338f43e4    3,162      -192    +2,970
+#     5d    a69c674c8      255       -18      +237
+#     5e    2a3437399    1,534       -55    +1,479
+#     5f    b03cbad01      505         0      +505
+#     5h    9eb723b37      516        -8      +508
+#     ------------------------------------------------
+#     subtotal            5,972      -273    +5,699
+#
+#   −582 + 5,699 = +5,117  vs target −3,800  ->  BREACHED by 8,917.
+#
+# THAT IS THE FLATTERING READING AND IT IS NOT THE POSITION. Four more Phase-5
+# commits have landed and are invisible to `grep DONE` — 5a, 5b and 5c because
+# their ladder rows still read OPEN, and 5g because it is PARTIAL by the
+# argument on its own row (part 2, the deletion, has not landed):
+#
+#     rung  sha         +added  -deleted       net
+#     5a    df832d294      516       -48      +468
+#     5b    405aa2f4e    1,085       -88      +997
+#     5c    239f93354    5,611        -2    +5,609
+#     5g    1e5418f4b      958       -14      +944
+#     ------------------------------------------------
+#     subtotal            8,170      -152    +8,018
+#
+#   PHASE 5 ENTIRE:  +14,142 / −425  =  +13,717
+#   −582 + 13,717 = +13,135  vs target −3,800  ->  BREACHED by 16,935.
+#
+# The 8,018 gap between the two readings is not an accounting choice, it is a
+# LEDGER DEFECT: three rungs landed and were never marked. 5a df832d294, 5b
+# 405aa2f4e and 5c 239f93354 are matched to their rows by commit SUBJECT
+# (`feat(cw-lift): 5a|5b|5c — …`), which is the same inference this bar
+# REFUSED to make for the seven unresolvable shas, so they are recorded here
+# and NOT written onto the ladder. Marking them is a ledger decision with a
+# measurable consequence — it moves this bar by +7,074 — and the operator
+# takes it, not a worker. Until then the instrument under-reports by that
+# amount and the honest position is +13,135.
+#
+# NOT COUNTED, by the rule this bar already declared (declared rungs only):
+# ded2e10b0 (the append client's move, 5e's precondition, +79) and df99e2030
+# (the 5b budget pin, +29) — +108 between them, which changes no verdict.
+#
+# A THIRD NUMBER FORMAT IS NOW IN THE LADDER COLUMN, recorded because the last
+# undeclared switch cost this bar a correction. 0a–4b are all-files NET. 1b
+# onward were hand-curated. 5d's `+3604` is all-files INSERTIONS (3,337 + 267;
+# its net is +3,382). The four rows written 2026-09-09 (5e–5h) are all-files
+# `+added/-deleted`, from `git show --stat`, so a reader can derive either.
+# NONE of these is the unit this bar scores on — that is `.rs` net, the table
+# above — and the ladder column has never been summable. It still is not.
+#
+# THE BAR STAYS OPEN. `failed` is a verdict and belongs in a measurement row;
+# a measured miss leaves a bar open (`closes_a_bar = ["met", "descoped"]`).
+# The target is NOT adjusted: Phase 5 was pre-registered as net-additive
+# through 5f, paying at 5g, and 5g part 2 is exactly the deletion that has not
+# landed. Judging the phase before its payoff would price the bar on half a
+# transaction — which is why the judging-point question above is still the
+# operator's, and is now worth 16,935 lines rather than the 8,917 the
+# instrument would print.
 floor        = -4690.0
 floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
@@ -1351,20 +1563,52 @@ id           = "cw-work-package-lift"
 one_line     = "CLAIM: commonwealth-work and a package-only work peer BUILD and RUN outside this monorepo, with zero sovereign-*, zero corpus-engine* and zero commonwealth-{knowledge,inference,api} in the closure"
 derives_from = "the CLAIM block at the top of this file, lift #2 — descoped at 1f for want of a product, re-opened 2026-09-09 with one; plus BOUNDARY.md's physical-lift discipline"
 status       = "open"
-# NEVER RUN, and there is nothing yet to run it against: commonwealth-work
-# does not exist until 5c and the peer binary until 5f. Until then the
-# instrument below is absent, the runner reads rc 127, and the row is
-# could-not-judge:instrument-missing. That is the honest reading and it is
-# NOT a floor — the instrument deliberately does not swallow its own failure
-# into an `echo 0`, because a 0 written by a missing script is a substitution
-# (§18.3) and would be indistinguishable from a measured failure.
+# NO MEASUREMENT ROW, so this bar is OPEN — and the reason it has none changed
+# on 2026-09-09. It used to be that there was nothing to run: commonwealth-work
+# did not exist until 5c and the peer binary until 5f, the instrument below was
+# absent, and the runner read rc 127 as could-not-judge:instrument-missing.
+# Both now exist and 5f (b03cbad01) reports running the lift at exit 0, value 1.
+# That is a commit body's claim, not a row this runner wrote, and a bar closes
+# on a row reading `met` and never on prose here — so the reading stays absent
+# rather than being written up from the ladder.
+# THE INSTRUMENT STILL REFUSES TO SWALLOW ITS OWN FAILURE into an `echo 0`,
+# which is what 5f's eight sabotages were written to prove: a `sovereign-core`
+# dep and a hand-spelled path each drive value 0, while an unresolvable
+# dependency and a missing `python3` each drive rc 3 with NO number emitted. A
+# 0 written by a missing tool is a substitution (§18.3) and would be
+# indistinguishable from a measured failure.
 # THE BAR IS A PHYSICAL LIFT, NOT A CRATE-NAME COUNT, and 1f' is why: the
 # package built standalone in 8.4s with zero source edits, which is a fact
-# `cargo tree` could not have produced. The known hazard is kernel-types — an
-# admitted leaf that reads three files through CARGO_MANIFEST_DIR.parent()
-# and shells `git ls-files`. A crate-count instrument scores that green and a
-# sandbox build fails on it, which is exactly the gap cw-rail-closure's own
-# correction was about.
+# `cargo tree` could not have produced.
+# THE kernel-types HAZARD IS CLOSED — CORRECTED 2026-09-09, and this text
+# asserted the opposite for six rungs after it stopped being true. It was real
+# at 1f', which failed `490 passed, 2 failed` on exactly two leaf-side tests
+# that read the repo root: `requirements_registry.rs:94` through
+# `CARGO_MANIFEST_DIR.parent()` and `conformance_tags.rs:80` shelling
+# `git ls-files`. Both generators LEFT kernel-types on 2026-09-04 (c1116b31e,
+# "the two repo-root generators leave the liftable kernel") for
+# `corpus-engine/xtask/tests/`, which sits in NO declared package so no lift
+# carries it. 5f's sandbox scan found no `CARGO_MANIFEST_DIR` read, no
+# `git ls-files` and no `include_str!` escaping a crate root anywhere in the
+# lifted closure; `oicp-types`' embed of `default_aliases.toml` is crate-local.
+# No kernel-types change was necessary for the lift. Same correction in
+# commonwealth/BOUNDARY.md, §"The kernel-types hazard is closed".
+# THE GATE THAT MISSED IT HAS SINCE GROWN THE RULE, which is the other half
+# the old text got wrong. `boundary-gate` used to grep only for `build.rs`,
+# `include_str!` and `include_bytes!` — compile-time shapes — so a RUNTIME
+# subprocess reach-out was invisible to it. 787eda806 (2026-09-04) added
+# `scan_runtime_escapes`, which windows both shapes: a `CARGO_MANIFEST_DIR`
+# read with a `.parent()`/`join("..")` climb within [-2,+8], and a `git`
+# subprocess with no `current_dir(…)` within 15 lines — deliberately NOT
+# flagging git run at a path the CALLER supplied, which is how
+# corpus-engine-archaeology lifts fine.
+# WHAT A BUILD STILL CATCHES AND NO GATE DOES, so this bar keeps asking for
+# one: 5g (1e5418f4b) found that `boundary-gate` does NOT catch a
+# `commonwealth-work -> sovereign-*` dependency EDGE — adding
+# `sovereign-contracts` to that manifest reported `commonwealth 7/7 crates
+# present … ✓`, exit 0, twice. `layer-gate` catches that one, so the guard
+# keeping this package liftable is ONE gate rather than two, and it is not the
+# gate named for the job.
 floor        = 0.0
 floor_basis  = "never-ran, 2026-09-09 — 0 is the absence of a lift rather than a measured failure (§18.2); the first real reading is 5f's sandbox build"
 target       = 1.0
