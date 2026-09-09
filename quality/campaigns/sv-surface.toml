@@ -471,7 +471,7 @@ status    = "active"
 #       (struct variants externally tag as {"approved":{"approved":..}},
 #       so TurnAnswer is newtype variants — {"approved":true}); the pin
 #       caught it before any consumer could, which is the §18.1 property
-#       working, not a rework.
+#       working, not a rework. Commit: 3272395d3 (+743/-336).
 #   R2  THE CLIENT. sovereign-turn-client: split the socket (G11), the
 #       approvals claim (G12), drain past Complete (G13), Resume/Redirect
 #       senders. One crate, all three surfaces gain it.
