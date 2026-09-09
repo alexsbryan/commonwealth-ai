@@ -904,6 +904,31 @@ _Historical record below — the reasoning while this row was `preview`._
   (`E-operator-holdout` is terminal). Under tombstone-then-delete that
   retreat is a flag flip, not a revert, which is why the ratchet was
   retargeted.
+- **Evidence bearing on "marking discharges G2 completely", 2026-09-09
+  — for ONE class, and NOT on the default configuration.** The
+  value-presence veto reached this ladder that day (commit
+  `5d0dca076`); it is refusal-only and deterministic, and a claim it
+  refuses asserts a specific present in NO passage the claim was judged
+  against. Traced live on `absent-embassy-country` with
+  `SOVEREIGN_LONGFORM_CHARS=0` forcing the per-claim ladder:
+  `value_presence … decision=claim_vetoed_absent`, then
+  `repair_tombstoned`, then release as `annotated_marked`. The released
+  text led with "Mr. Vladimir is employed by the **Russian** embassy in
+  London" — a country Conrad never names — and the chaos lane's own
+  scorer classified the turn `confab_leaked`, honesty-when-absent
+  0.50 (RED-LINE 2 FAIL), wrong answers reaching the reader 1.
+  So for a VETO-REFUSED claim, marking does not discharge the honesty
+  function the way it does for a claim the judge merely could not
+  support: the mark rides under the fabrication rather than instead of
+  it, which is the same laundering-by-caveat this session removed from
+  the value extractor earlier the same day.
+  **This is not K2 firing.** K2 is the chaos gate regressing on the
+  DEFAULT configuration, and it has not: the same 4-probe subset on the
+  default pivot the same hour returned RED-LINE 1 and 2 both PASS,
+  confab-leaked 0, wrong answers reaching the reader 0. The forced arm
+  is an instrument, not production, and n=1. What it establishes is that
+  the premise above is class-dependent, which is the operator's call to
+  weigh at the review below — not a flag this seat flips.
 - **Settling plan item:** Phase 5, the single deletion pass, triggered
   when these tombstones have held across the window below, `E-wall-time`
   and `E-variance` have readings, and the operator says the new stack is
