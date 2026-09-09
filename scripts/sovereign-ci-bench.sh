@@ -44,6 +44,7 @@ set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/ci-bench-verdict.sh
 source "${SCRIPT_DIR}/lib/ci-bench-verdict.sh"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
@@ -215,6 +216,77 @@ DAEMON_WAS_DOWN=0
 elapsed() { echo $(( $(date +%s) - START_TS )); }
 remaining() { echo $(( BUDGET_SECS - $(elapsed) )); }
 
+# ── Score-on-commit (AVO build order #1 — research/agentic-variation/README.md) ──
+# Every completed lane writes its metric map to a git note on refs/notes/bench,
+# merged per commit, keyed by lane name: `git log --notes=bench` then reads P_t —
+# prior solutions WITH their scores — for both humans and the next iteration's
+# prompts. target/ is gitignored, so the note must CARRY the numbers, not point
+# at a file that will not exist tomorrow: a shape-agnostic flat projection of
+# the report's numeric leaves (<=64, rounded).
+#
+# Recording, not gating: FAIL lands in the note exactly like PASS — the monotone
+# commit gate (build order #2) decides what gets LANDED, and it is not this.
+# SKIP* verdicts measured nothing and write nothing. Lanes without a --report
+# (or with a non-JSON one, e.g. the chaos jsonl) record status/secs/rc only.
+# Model attribution rides along when the daemon answers in time — the stale
+# routing-baseline lesson: a score nobody can attribute to a model silently
+# outlives the model it was minted against. Off with CI_BENCH_NOTES=0; a note
+# failure must never turn a bench verdict into something it is not.
+note_lane_score() {
+  local name="$1" kind="$2" status="$3" secs="$4" rc="$5" report="$6"
+  [[ "${CI_BENCH_NOTES:-1}" == "1" ]] || return 0
+  case "$status" in SKIP*) return 0 ;; esac
+  local model=""
+  model=$(curl -fsm 2 http://localhost:9741/v1/models 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null || true)
+  local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  local existing
+  existing=$(git -C "$ROOT" notes --ref=bench show HEAD 2>/dev/null || true)
+  local merged
+  # NB: the prior note travels via argv, NOT stdin — `python3 -` reads its
+  # script from stdin, so a piped payload and the <<heredoc fight for the
+  # same descriptor and the payload silently loses (caught live in the
+  # multi-lane smoke: every write replaced the note instead of merging).
+  if ! merged=$(python3 - "$name" "$kind" "$status" \
+        "$secs" "$rc" "$report" "$model" "$ts" "$existing" <<'PY'
+import json, sys
+name, kind, status, secs, rc, report, model, ts, raw = sys.argv[1:10]
+def flat(o, p=""):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield from flat(v, f"{p}.{k}" if p else str(k))
+    elif isinstance(o, (int, float)) and not isinstance(o, bool):
+        yield p or "value", o
+doc = {"lanes": {}}
+if raw and raw.strip():
+    try:
+        prev = json.loads(raw)
+        if isinstance(prev, dict) and isinstance(prev.get("lanes"), dict):
+            doc["lanes"] = prev["lanes"]
+    except Exception:
+        pass
+entry = {"kind": kind, "status": status, "secs": int(secs), "rc": int(rc), "ts": ts}
+if report:
+    try:
+        with open(report) as f:
+            d = json.load(f)
+        entry["metrics"] = {k: round(float(v), 4) for k, v in list(flat(d))[:64]}
+    except Exception:
+        pass
+if model:
+    entry["model"] = model
+doc["lanes"][name] = entry
+print(json.dumps(doc, sort_keys=True))
+PY
+  ); then
+    echo "── WARN  notes: merge failed for '$name' (continuing)"
+    return 0
+  fi
+  if ! git -C "$ROOT" notes --ref=bench add -f -m "$merged" HEAD >/dev/null 2>&1; then
+    echo "── WARN  notes: could not write refs/notes/bench for '$name' (continuing)"
+  fi
+}
+
 # run_lane <name> <HARD|SOFT|TRACKED> <cmd...>
 # Gates on the command's exit code. HARD failures break the build; SOFT and
 # TRACKED failures are recorded but do not.
@@ -272,6 +344,15 @@ run_lane() {
   local secs=$(( $(date +%s) - t0 ))
   echo "── ${status}  [$kind] $name   (${secs}s)"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
+  local report_path=""
+  local args=("$@")
+  local ai
+  for (( ai=0; ai<${#args[@]}; ai++ )); do
+    if [[ "${args[$ai]}" == "--report" && $((ai+1)) -lt ${#args[@]} ]]; then
+      report_path="${args[$((ai+1))]}"
+    fi
+  done
+  note_lane_score "$name" "$kind" "$status" "$secs" "$rc" "$report_path"
   # PASS and PASS(warn:setup) both clear the gate; everything else fails HARD.
   if [[ "$kind" == "HARD" && "$status" != PASS* ]]; then
     HARD_FAIL=1

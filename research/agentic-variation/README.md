@@ -80,3 +80,10 @@ a MAP-Elites archive over a single-main-branch repo is ceremony.
 
 - `PRE-REG-retrieval-headroom-2026-09-04.md` — go/no-go for the whole
   programme. Written before any data.
+- 2026-09-08: build order #1 LANDED — `run_lane` in
+  `scripts/sovereign-ci-bench.sh` writes every completed lane's metric
+  map to a git note on `refs/notes/bench` (merged per commit, keyed by
+  lane, model-attributed, `CI_BENCH_NOTES=0` to disable). `P_t` is now
+  one `git log --notes=bench` away. Smoke-verified multi-lane; the
+  smoke also caught a real bug before it shipped (stdin payload vs
+  heredoc script — every write replaced instead of merging).
