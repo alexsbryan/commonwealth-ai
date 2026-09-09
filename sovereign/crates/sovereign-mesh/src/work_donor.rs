@@ -729,6 +729,12 @@ async fn run_unit(
     lease_interval_ms: u64,
 ) {
     let ctx = JobContext::new(&workdir);
+    // The donor's own metal, measured the way `routes_inference` measures the
+    // server's for `InferenceServed` — one `Instant` around the work, read
+    // once. It spans the heartbeat loop because the heartbeat is what holds
+    // the lease this unit occupies; it is time this node could not sell to
+    // anybody else.
+    let started = std::time::Instant::now();
     let outcome = {
         let fut = executor.execute(&unit, &ctx);
         tokio::pin!(fut);
@@ -822,20 +828,147 @@ async fn run_unit(
               "work donor: the unit finished and this node has no rail to report it on");
         return;
     };
+    let wall_seconds = started.elapsed().as_secs_f64();
     match append(&app_state, &rail, &act).await {
-        Ok(()) => info!(
-            target: TRACE_TARGET,
-            handoff = %unit_ref.handoff,
-            unit = %unit_ref.unit_hash,
-            act = %act.kind(),
-            "work donor: reported"
-        ),
+        Ok(()) => {
+            info!(
+                target: TRACE_TARGET,
+                handoff = %unit_ref.handoff,
+                unit = %unit_ref.unit_hash,
+                act = %act.kind(),
+                wall_seconds,
+                "work donor: reported"
+            );
+            // THE CREDIT (cw-lift 5h). Inside the `Ok` arm and nowhere else:
+            // a report this node could not append is work the ring has no
+            // record of, and crediting it would be the ledger disagreeing
+            // with the journal it is supposed to be auditable against.
+            match credit_for(&act, &unit, &self_key, wall_seconds) {
+                Some(credit) => {
+                    debug!(
+                        target: TRACE_TARGET,
+                        handoff = %unit_ref.handoff,
+                        unit = %unit_ref.unit_hash,
+                        wall_seconds,
+                        "work donor: crediting this node's contribution ledger"
+                    );
+                    app_state.inner.contribution_emitter.record(credit);
+                }
+                None => debug!(
+                    target: TRACE_TARGET,
+                    handoff = %unit_ref.handoff,
+                    unit = %unit_ref.unit_hash,
+                    act = %act.kind(),
+                    "work donor: not a completion — nothing credited"
+                ),
+            }
+        }
         Err(e) => warn!(
             target: TRACE_TARGET,
             unit = %unit_ref.unit_hash,
             error = %e,
             "work donor: the report could not be appended — the lease will lapse and the unit re-queue"
         ),
+    }
+}
+
+// -----------------------------------------------------------------
+// The credit
+// -----------------------------------------------------------------
+
+/// What this node's contribution ledger owes itself for a unit it just
+/// reported, or `None` when it owes nothing.
+///
+/// # Why the DONOR emits this, and not every node that folds the `Complete`
+///
+/// The other candidate looked like the convergent one and is written down
+/// here because it is the argument, not the conclusion, that the next reader
+/// needs: every node emits a credit when its own fold applies a `Complete`,
+/// so the ledger becomes a function of the journal exactly the way the queue
+/// is — the queue is a fold over admission, `svrn job status` folds the same
+/// acts on any node, and a third replicated derivation of the same journal
+/// would be in good company. It is still the wrong shape here, for two
+/// reasons that are mechanism rather than taste.
+///
+/// **The contributions ledger is ALREADY a replicated log, and it converges
+/// by "one write site, one event".** `LedgerEvent`s are stored in `MeshStore`
+/// under the `contributions` app id, gossip to peers, and merge LWW on a key
+/// of `origin:secs:nanos:seq` (`commonwealth_state::contributions`). N nodes
+/// folding one `Complete` would therefore write N rows under N DISTINCT keys,
+/// and `aggregate` sums rows: one donated shard would be credited once per
+/// ring member, and the error would grow with the ring. Making that safe
+/// needs the credit keyed by `unit_hash` — a second idempotence key beside
+/// the one the work fold already owns, which is the two-deciders defect ARCH
+/// §10.6 names. Fold-emission would not make this ledger more convergent; it
+/// would multiply one fact by the membership.
+///
+/// **A folding third party cannot produce this event anyway.** It can see
+/// THAT the unit completed — that part is on the rail, signed and totally
+/// ordered, and that is precisely why the rail is where the *fact* lives. It
+/// cannot see `wall_seconds`: the journal carries `leased_at_ms` and
+/// `completed_at_ms`, whose difference is lease-held time including journal
+/// admit latency and heartbeat scheduling, not the compute. Only the machine
+/// that ran the process measured that. This is the same reason
+/// `InferenceServed` is emitted by the server, `KnowledgeQueryServed` by the
+/// node that served it and `StorageSnapshot` by the host: in this ledger the
+/// OBSERVER emits, once. On the work plane the donor is the observer.
+///
+/// What the rail keeps is the AUDIT. `handoff` + `unit_hash` + `donor_actor`
+/// point at the signed `Complete` that has to exist for the credit to be
+/// honest, and `donor_actor` is the [`ActorKey`] admission verified rather
+/// than the self-reported `node_id` the emitter stamps (ARCH §7.5) — so the
+/// two halves of the record can be checked against each other, which neither
+/// could alone (ARCH §18.1: a claim asserted only on a field its own subject
+/// supplies is not evidence).
+///
+/// # Double counting, under at-least-once delivery
+///
+/// The rail delivers a `Complete` at least once, and the fold is idempotent
+/// per `unit_hash`: `WorkProjection::complete` moves `Leased -> Complete`
+/// exactly once and every repeat lands on `double_deliveries` without
+/// changing state. This credit is not derived from that stream at all — it is
+/// written once, by the single process that ran the unit, in the arm where
+/// that process's own `append` returned `Ok`. Redelivery cannot multiply it
+/// because redelivery never reaches it, and a peer replaying the journal
+/// emits nothing.
+///
+/// A unit whose report lapsed and which is re-leased and re-run IS credited
+/// twice, to two different donors. That is not a double count: two machines
+/// really did spend the time, and the ledger's job is to say so.
+///
+/// # `Complete` is credited and `Fail` is not
+///
+/// `WorkUnitStatus`' own distinction, kept: `Complete` is "the unit ran and
+/// reached a verdict" — a red test shard included, since the unit did its job
+/// — while `Fail` is "the plane failed to run the work". Crediting the second
+/// would pay a donor for burning the submitter's attempts, which is a reward
+/// pointed at exactly the wrong behaviour.
+fn credit_for(
+    act: &WorkAct,
+    unit: &JobUnit,
+    self_key: &ActorKey,
+    wall_seconds: f64,
+) -> Option<commonwealth_core::contributions::LedgerEventKind> {
+    match act {
+        WorkAct::Complete(c) => Some(
+            commonwealth_core::contributions::LedgerEventKind::JobUnitCompleted {
+                handoff: c.handoff,
+                unit_hash: c.unit_hash.clone(),
+                // The key this node SIGNED with, taken from the rail signer
+                // rather than from any field of the act — an actor is the one
+                // thing on a journal line a writer cannot forge for somebody
+                // else, and re-reading it off the payload would throw that
+                // away.
+                donor_actor: self_key.as_str().to_string(),
+                kind: unit.kind.clone(),
+                wall_seconds,
+            },
+        ),
+        // `Fail` is the one other act `run_unit` builds, and it is uncredited
+        // for the reason above. Nothing else can arrive here; a `Lease` or a
+        // `Renew` is not a report, so "no credit" is the right answer for any
+        // future act too rather than a hole this wildcard hides.
+        _ => None,
     }
 }
 

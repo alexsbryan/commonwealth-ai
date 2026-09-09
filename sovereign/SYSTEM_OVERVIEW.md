@@ -5726,15 +5726,36 @@ absent and the guards fail closed for *every* caller.
 - **Dimensional contribution ledger**
   (`commonwealth-core::contributions`) — append-only event log
   (`LedgerEventKind` variants `InferenceServed`, `InferenceReceived`,
-  `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`)
-  with pure aggregation into per-node `NodeContributions`. No
-  `balance`, no exchange rate, no ranking — units are
-  incommensurable. Storage in
+  `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`,
+  `JobUnitCompleted`) with pure aggregation into per-node
+  `NodeContributions`. No `balance`, no exchange rate, no ranking —
+  units are incommensurable. Storage in
   `commonwealth-state::ContributionEmitter` (gossip-replicated
   `MeshStore` under `app_id = "contributions"`). Pull-side
   `ShardTransferred` is emitted by the merge leader on behalf of
   the peer that shipped bytes — the schema carries an explicit
   `from_node`, and the aggregator credits `bytes_served` to it.
+  **`JobUnitCompleted` is the work plane's dimension** (cw-lift 5h):
+  a donor that ran another member's unit to a verdict credits
+  `NodeContributions.compute_donated` (a `DonatedCompute` of `units`
+  + `wall_seconds`), counted apart from inference because a CI shard
+  is not an inference request. It is emitted ONCE by the donor, in
+  `sovereign-mesh::work_donor::run_unit`'s `Ok` arm after its own
+  signed `Complete` appends — deliberately NOT derived by every node
+  that folds that act, because this log converges by "one write site,
+  one event" while the `work` journal converges by total order, so a
+  per-folder derivation would write one fact once per ring member
+  under N distinct LWW keys. `work_donor::credit_for` carries the
+  argument and the at-least-once analysis. `wall_seconds` is also the
+  half a folding third party could not reconstruct: the journal
+  carries lease-held time, not compute. `handoff` + `unit_hash` +
+  `donor_actor` (the `ActorKey` admission verified, not the emitter's
+  self-reported `node_id`) are the audit trail back to the signed act.
+  **Nothing renders this dimension to a person yet**: `mesh_admin.rs`'s
+  `NodeContributionsView` is a field-frozen flat mirror carrying only
+  the inference/corpora/bytes fields, `svrn mesh balance` is a stub,
+  and the daemon's `MeshStore` is in-memory — the rendering surface is
+  the next rung's work, not this one's.
 - **Local Activity ledger** (`commonwealth-core::activity`) — the
   glassbox counterpart answering "what is *my* daemon doing, even as
   a mesh of one?" A sibling of the contribution ledger, not part of

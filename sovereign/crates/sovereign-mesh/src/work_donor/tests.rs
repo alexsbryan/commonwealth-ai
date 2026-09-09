@@ -284,3 +284,140 @@ fn a_precondition_this_build_cannot_check_is_refused_not_assumed() {
         "the control: `git` is on PATH in every environment this test runs in"
     );
 }
+
+// -----------------------------------------------------------------
+// The credit (cw-lift 5h)
+// -----------------------------------------------------------------
+
+fn a_unit() -> JobUnit {
+    JobUnit {
+        kind: JobKind::parse("process:v1").expect("kind"),
+        unit_hash: "a".repeat(64),
+        payload: serde_json::json!({}),
+        requirements: Default::default(),
+        tenant: None,
+    }
+}
+
+fn a_provenance() -> ComputeAttribution {
+    ComputeAttribution {
+        repo_rev: "0".repeat(40),
+        os: "linux".to_string(),
+        arch: "x86_64".to_string(),
+        toolchain: "rustc 1.0.0".to_string(),
+        host: Server::Local,
+    }
+}
+
+/// **THE CREDIT, and the failing input is the whole of 5d and 5e.** The work
+/// plane ran other members' compute and its contribution ledger recorded
+/// nothing about who paid for it: every gate was green, `svrn job status`
+/// showed the verdicts, and `commonwealth balance` showed a donor that had
+/// donated nothing.
+///
+/// The assertions are on the FIELDS, not on `is_some()`. A credit that names
+/// no unit is not auditable against the journal it claims to describe, and
+/// "some event was emitted" is exactly the shape of green that ARCH §18.1
+/// says is not a check.
+#[test]
+fn a_completed_unit_credits_this_node_with_the_time_it_actually_spent() {
+    use commonwealth_core::contributions::LedgerEventKind;
+
+    let me = a_key('a');
+    let unit = a_unit();
+    let handoff = commonwealth_core::HandoffId::from_u128(7);
+    let act = WorkAct::Complete(Completion {
+        handoff,
+        unit_hash: unit.unit_hash.clone(),
+        outcome: kernel_types::Judgement::passed(
+            "unit",
+            kernel_types::Reason::literal("8412 passed, 0 failed"),
+        ),
+        result: serde_json::json!({ "exit_code": 0 }),
+        provenance: a_provenance(),
+    });
+
+    match credit_for(&act, &unit, &me, 42.5) {
+        Some(LedgerEventKind::JobUnitCompleted {
+            handoff: h,
+            unit_hash,
+            donor_actor,
+            kind,
+            wall_seconds,
+        }) => {
+            assert_eq!(h, handoff, "the credit must point at the handoff it ran");
+            assert_eq!(unit_hash, unit.unit_hash, "and at the unit");
+            assert_eq!(
+                donor_actor,
+                me.as_str(),
+                "the donor is the key that SIGNED the report — ARCH §7.5, never \
+                 a self-reported id"
+            );
+            assert_eq!(kind, unit.kind);
+            assert!((wall_seconds - 42.5).abs() < 1e-9);
+        }
+        other => panic!("a completion must credit this node, got {other:?}"),
+    }
+}
+
+/// The negative half, and the one that keeps the test above from passing
+/// vacuously on a `credit_for` that credits everything.
+///
+/// A `Fail` is the plane failing to run the work, not the work coming back
+/// red — `WorkUnitStatus` keeps those apart and so does this. Crediting a
+/// failure would pay a donor for burning the submitter's attempts.
+#[test]
+fn a_unit_that_never_reached_a_verdict_credits_nothing() {
+    let me = a_key('a');
+    let unit = a_unit();
+    let act = WorkAct::Fail(Failure {
+        handoff: commonwealth_core::HandoffId::from_u128(7),
+        unit_hash: unit.unit_hash.clone(),
+        outcome: kernel_types::Judgement::could_not_judge(
+            "unit",
+            kernel_types::Reason::literal("killed on timeout"),
+        ),
+        provenance: a_provenance(),
+    });
+    assert!(
+        credit_for(&act, &unit, &me, 42.5).is_none(),
+        "a unit the plane could not run is not a donation"
+    );
+}
+
+/// A RED shard is a completed unit and the donor is paid for it. The verdict
+/// belongs to the submitter's tree, the compute belongs to the donor, and
+/// conflating them would make every donor prefer submitters whose tests are
+/// green.
+#[test]
+fn a_red_shard_is_still_a_donation() {
+    let me = a_key('a');
+    let unit = a_unit();
+    let act = WorkAct::Complete(Completion {
+        handoff: commonwealth_core::HandoffId::from_u128(7),
+        unit_hash: unit.unit_hash.clone(),
+        outcome: kernel_types::Judgement::failed("unit", kernel_types::Reason::literal("3 failed")),
+        result: serde_json::json!({ "exit_code": 101 }),
+        provenance: a_provenance(),
+    });
+    assert!(
+        credit_for(&act, &unit, &me, 1.0).is_some(),
+        "the unit did its job; the verdict is about the submitter's tree"
+    );
+}
+
+/// Acts that are not reports credit nothing. `run_unit` builds only
+/// `Complete` and `Fail`, so this pins the wildcard arm rather than a
+/// reachable path — a future act that starts arriving here must not be
+/// silently paid.
+#[test]
+fn an_act_that_is_not_a_report_credits_nothing() {
+    let me = a_key('a');
+    let unit = a_unit();
+    let r = UnitRef {
+        handoff: commonwealth_core::HandoffId::from_u128(7),
+        unit_hash: unit.unit_hash.clone(),
+    };
+    assert!(credit_for(&WorkAct::Lease(r.clone()), &unit, &me, 9.0).is_none());
+    assert!(credit_for(&WorkAct::Renew(r), &unit, &me, 9.0).is_none());
+}

@@ -31,8 +31,10 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use oicp_types::JobKind;
+
 use crate::capabilities::NodeCapabilities;
-use crate::ids::NodeId;
+use crate::ids::{HandoffId, NodeId};
 
 /// One discrete event describing mesh activity. Append-only,
 /// gossip-replicated, never mutated after emission.
@@ -108,6 +110,57 @@ pub enum LedgerEventKind {
     /// events because the hourly cadence is sufficient for routing
     /// and reporting and it cleanly handles process restarts.
     StorageSnapshot { corpora: Vec<(String, f64)> },
+    /// This node ran a unit of ANOTHER member's work to a verdict on
+    /// its own metal — the donor half of the work plane (cw-lift 5h).
+    ///
+    /// A genuinely new dimension, and not a fourth spelling of an old
+    /// one: it is neither inference (no model, no tokens), nor
+    /// storage, nor bandwidth. Per principle 1 above it is counted in
+    /// its own units and never folded into the others — a CI shard is
+    /// not an inference request, and adding one to
+    /// `inference_served.requests` would make that count a lie.
+    ///
+    /// **Emitted once, by the donor, when its own signed `Complete`
+    /// act appends.** It is NOT derived by every node that folds that
+    /// act; `sovereign_mesh::work_donor::credit_for` carries the full
+    /// argument for why, and the short form is that this log converges
+    /// by "one write site, one event" (principle 2) while the work
+    /// journal converges by total order — deriving here would put one
+    /// fact into this log once per ring member.
+    ///
+    /// `handoff` + `unit_hash` + `donor_actor` are the audit: they
+    /// point at the signed `Complete` on the `work` journal that has
+    /// to exist for this credit to be honest. `LedgerEvent.node_id` is
+    /// the emitter's own self-reported id and `donor_actor` is the key
+    /// admission verified (ARCH §7.5) — the two together are checkable
+    /// against the journal and either one alone is not.
+    JobUnitCompleted {
+        /// The handoff the unit belongs to, as the `work` journal
+        /// spells it.
+        handoff: HandoffId,
+        /// The unit's content hash — the work fold's idempotence key,
+        /// carried so this credit can be matched back to exactly one
+        /// admitted `Complete`.
+        unit_hash: String,
+        /// The rail actor the donor signed that `Complete` with: 64
+        /// lowercase hex characters of an Ed25519 verifying key, in
+        /// the one spelling `commonwealth_work::actor::ActorKey`
+        /// enforces. A `String` here rather than that type because
+        /// `commonwealth-work` sits ABOVE this crate; it is the same
+        /// bytes in the same spelling, so there is no second name for
+        /// one identity to drift.
+        donor_actor: String,
+        /// What kind of unit it was — `InferenceServed.model_id`'s
+        /// counterpart, and the answer to "43 units of what?".
+        kind: JobKind,
+        /// Wall clock the donor's own metal spent on it. The same
+        /// quantity `InferenceServed.wall_seconds` records and
+        /// measured the same way, and the one field a third party
+        /// folding the journal could not reconstruct: the rail carries
+        /// lease-held time, which includes admit latency and heartbeat
+        /// scheduling, not compute.
+        wall_seconds: f64,
+    },
 }
 
 /// Aggregated activity for a single inference role (served or
@@ -118,6 +171,21 @@ pub enum LedgerEventKind {
 pub struct InferenceActivity {
     pub requests: u64,
     pub total_tokens_generated: u64,
+    pub wall_seconds: f64,
+}
+
+/// Aggregated compute a node donated to other members' work units.
+///
+/// Two counts, and deliberately not [`InferenceActivity`]: that struct
+/// carries `total_tokens_generated`, which has no meaning for a CI
+/// shard and would be a permanent zero pretending to be a
+/// measurement (ARCH §18.3). The two numbers here are the two the
+/// ledger already counts — a request count and a wall clock.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct DonatedCompute {
+    /// How many units this node ran to a verdict for somebody else.
+    pub units: u64,
+    /// Wall clock those units held this node's metal, summed.
     pub wall_seconds: f64,
 }
 
@@ -154,6 +222,10 @@ pub struct NodeContributions {
     pub corpora_hosted: Vec<CorpusHosting>,
     pub bytes_served: u64,
     pub bytes_received: u64,
+    /// Work units this node ran on the work plane for other members.
+    /// A fourth incommensurable dimension beside inference, storage
+    /// and bytes — see [`LedgerEventKind::JobUnitCompleted`].
+    pub compute_donated: DonatedCompute,
 }
 
 /// Default aggregation window. 30 days roughly matches the cadence
@@ -265,6 +337,20 @@ pub fn aggregate(
                             ..Default::default()
                         });
                 recipient_entry.bytes_received += bytes;
+            }
+            LedgerEventKind::JobUnitCompleted { wall_seconds, .. } => {
+                // Credits the ORIGIN, which is `InferenceServed`'s rule and
+                // not `ShardTransferred`'s: the donor is the one node that
+                // ran the unit AND the one node that emits, so the emitter
+                // and the actor are the same machine by construction. The
+                // counter-party (the submitter) is reachable through
+                // `handoff` on the work journal and is deliberately not
+                // copied onto a second node's bucket here — nothing was
+                // donated TO a submitter in a unit this ledger counts, and
+                // inventing a `work_received` from one emission would be the
+                // phantom counterpart `inference_served` refuses.
+                entry.compute_donated.units += 1;
+                entry.compute_donated.wall_seconds += wall_seconds;
             }
             LedgerEventKind::StorageSnapshot { corpora } => {
                 // A snapshot is the canonical view of "what this
@@ -538,6 +624,127 @@ mod tests {
         assert_eq!(sep.corpus_id, "sep");
         assert!((sep.size_gb - 12.5).abs() < 1e-6);
         assert_eq!(sep.queries_served, 1, "queries preserved across snapshot");
+    }
+
+    fn kind(s: &str) -> JobKind {
+        JobKind::parse(s).expect("a valid `id:vN` kind")
+    }
+
+    fn work_done(seconds: f64) -> LedgerEventKind {
+        LedgerEventKind::JobUnitCompleted {
+            handoff: HandoffId::from_u128(7),
+            unit_hash: "a".repeat(64),
+            donor_actor: "3".repeat(64),
+            kind: kind("process:v1"),
+            wall_seconds: seconds,
+        }
+    }
+
+    /// **The credit itself.** The failing input is a ledger with a
+    /// `JobUnitCompleted` in it and a `compute_donated` that stays zero — which
+    /// is what the work plane did through all of 5d and 5e: it ran other
+    /// people's compute and recorded nothing about who paid for it.
+    #[test]
+    fn a_completed_work_unit_credits_the_donor_that_emitted_it() {
+        let donor = nid(1);
+        let now = 1_000_000;
+        let events = vec![ev(donor, now - 10, work_done(42.5))];
+        let result = aggregate(&events, now, 86_400, &HashMap::new());
+        assert_eq!(result[&donor].compute_donated.units, 1);
+        assert!((result[&donor].compute_donated.wall_seconds - 42.5).abs() < 1e-6);
+    }
+
+    /// Principle 1 — plural and incommensurable. A donated CI shard is not
+    /// an inference request, is not a byte and is not a hosted gigabyte, and
+    /// the failing input is an `aggregate` that folded the new dimension into
+    /// an old bucket to avoid adding a field.
+    #[test]
+    fn a_work_credit_lands_in_no_other_dimension() {
+        let donor = nid(1);
+        let now = 1_000_000;
+        let result = aggregate(
+            &[ev(donor, now - 10, work_done(9.0))],
+            now,
+            86_400,
+            &HashMap::new(),
+        );
+        let c = &result[&donor];
+        assert_eq!(c.inference_served, InferenceActivity::default());
+        assert_eq!(c.inference_consumed, InferenceActivity::default());
+        assert_eq!(c.bytes_served, 0);
+        assert_eq!(c.bytes_received, 0);
+        assert!(c.corpora_hosted.is_empty());
+    }
+
+    /// The counterpart `ShardTransferred` HAS and this variant deliberately
+    /// does not. A submitter is not credited for work somebody else ran, and
+    /// no third node appears in the map off one donor's emission — the same
+    /// no-phantom-counterpart rule
+    /// `inference_served_lands_on_origin_node_only` pins for inference.
+    #[test]
+    fn a_work_credit_opens_no_bucket_for_anybody_but_the_donor() {
+        let donor = nid(1);
+        let now = 1_000_000;
+        let result = aggregate(
+            &[ev(donor, now - 10, work_done(1.0))],
+            now,
+            86_400,
+            &HashMap::new(),
+        );
+        assert_eq!(result.len(), 1, "one emission, one credited node");
+        assert!(result.contains_key(&donor));
+    }
+
+    /// Two runs are two credits, and that is correct rather than a
+    /// double-count: a unit whose report lapsed is re-leased and re-run, and
+    /// two machines really did spend the time. The idempotence that matters
+    /// is per-RUN and it lives at the emit site — the rail's at-least-once
+    /// redelivery of one `Complete` never reaches this log, because nothing
+    /// here is derived from the journal (see `work_donor::credit_for`).
+    #[test]
+    fn two_runs_of_one_unit_are_two_credits_on_two_donors() {
+        let first = nid(1);
+        let second = nid(2);
+        let now = 1_000_000;
+        let events = vec![
+            ev(first, now - 100, work_done(3.0)),
+            ev(second, now - 10, work_done(5.0)),
+        ];
+        let result = aggregate(&events, now, 86_400, &HashMap::new());
+        assert_eq!(result[&first].compute_donated.units, 1);
+        assert_eq!(result[&second].compute_donated.units, 1);
+        assert!((result[&second].compute_donated.wall_seconds - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_work_credit_outside_the_window_is_dropped_like_every_other_event() {
+        let donor = nid(1);
+        let now = 1_000_000;
+        let window = 86_400;
+        let events = vec![
+            ev(donor, now - window - 1, work_done(999.0)),
+            ev(donor, now - 1, work_done(2.0)),
+        ];
+        let result = aggregate(&events, now, window, &HashMap::new());
+        assert_eq!(result[&donor].compute_donated.units, 1);
+        assert!((result[&donor].compute_donated.wall_seconds - 2.0).abs() < 1e-6);
+    }
+
+    /// The wire form carries the audit trail, so a reader holding a stored
+    /// event can go find the signed `Complete` it claims. The failing input
+    /// is a variant that serialized the donor key away.
+    #[test]
+    fn a_work_credit_round_trips_with_its_rail_pointers_intact() {
+        let event = LedgerEvent {
+            node_id: nid(1),
+            timestamp: 1_000,
+            kind: work_done(7.5),
+        };
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains(&"3".repeat(64)), "the donor key must survive");
+        assert!(json.contains("process:v1"), "the kind must survive");
+        let back: LedgerEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, event);
     }
 
     #[test]

@@ -271,7 +271,38 @@ fn emit_tracing_event(kind: &LedgerEventKind) {
                 "contribution_emit: StorageSnapshot"
             );
         }
+        LedgerEventKind::JobUnitCompleted {
+            handoff,
+            unit_hash,
+            donor_actor,
+            kind: job_kind,
+            wall_seconds,
+        } => {
+            // `handoff` and `unit_hash` are logged in FULL, unlike the node
+            // ids above: they are the pointer an operator follows from this
+            // line to the signed `Complete` on the `work` journal, and a
+            // truncated hash does not find a unit.
+            tracing::debug!(
+                kind = "JobUnitCompleted",
+                handoff = %handoff,
+                unit = %unit_hash,
+                donor = %fmt_actor(donor_actor),
+                job_kind = %job_kind,
+                wall_secs = wall_seconds,
+                "contribution_emit: JobUnitCompleted"
+            );
+        }
     }
+}
+
+/// Render a rail actor key as its leading 16 hex characters — the
+/// `short()`-style prefix `commonwealth_work::actor::InvalidActorKey`
+/// names as "what a human copies out of a log line". Not a redaction
+/// (a verifying key is public); a log-volume convention. Takes chars
+/// rather than bytes so a malformed key logs short instead of
+/// panicking on a slice boundary.
+fn fmt_actor(key: &str) -> String {
+    key.chars().take(16).collect()
 }
 
 /// Render a node id as 12 hex chars (matches the redaction policy
