@@ -87,22 +87,25 @@ fn the_daemon_pushes_the_recipe_authoring_bundle() {
 fn the_compiled_in_set_is_the_measured_two_and_lives_in_contracts() {
     let src = contracts_skills_source();
     assert_eq!(
-        src.match_indices("modes/inner-work/skill.toml").count(),
+        src.match_indices("skills_data/inner-work.toml").count(),
         1,
         "the shared builtin set must embed inner-work — the desktop's \
-         measured set, now both hosts'"
+         measured set, now both hosts'. The TOMLs moved into the crate \
+         (src/skills_data/) when boundary-gate flagged the out-of-tree \
+         embed on 2026-09-09"
     );
     assert_eq!(
-        src.match_indices("modes/recipe-author/skill.toml").count(),
+        src.match_indices("skills_data/recipe-author.toml").count(),
         1,
         "the shared builtin set must embed recipe-author"
     );
     assert_eq!(
-        src.match_indices("modes/workflow-author/skill.toml")
+        src.match_indices("skills_data/workflow-author.toml")
             .count(),
         0,
         "workflow-author's TOML ships in NO registry (its TOOLS ship, via \
-         WorkflowAuthoringTools). Adding it to the compiled-in set is a \
+         WorkflowAuthoringTools; the file itself still sits unembedded in \
+         `sovereign/modes/`). Adding it to the compiled-in set is a \
          both-hosts decision — this pin makes the change a deliberate one, \
          not a drift."
     );

@@ -912,9 +912,18 @@ impl Default for SkillRegistry {
 /// this crate. Embedding at compile time keeps the surviving modes
 /// available on fresh installs regardless of filesystem layout, and
 /// survives bundle repackaging without resource plumbing.
+///
+/// The TOMLs live in `src/skills_data/` — INSIDE the crate, since
+/// 2026-09-09. Until then they were embedded from `sovereign/modes/`
+/// three directories up, which `boundary-gate` flagged: a third party
+/// who lifts this package has none of that tree, and the embed made the
+/// monorepo's directory shape a build requirement. Same class as the
+/// test-side reach-out this crate's own history records (the tests moved
+/// to `sovereign-core` on 2026-09-04 for the runtime-`fs` spelling of
+/// it) — this is the compile-time spelling, fixed by carrying the data.
 const BUILTIN_SKILL_TOMLS: &[&str] = &[
-    include_str!("../../../modes/inner-work/skill.toml"),
-    include_str!("../../../modes/recipe-author/skill.toml"),
+    include_str!("skills_data/inner-work.toml"),
+    include_str!("skills_data/recipe-author.toml"),
 ];
 
 /// The compiled-in skill TOMLs, in registration order. Exposed for hosts

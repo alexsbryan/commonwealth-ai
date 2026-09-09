@@ -375,17 +375,21 @@ fn memory_format_relational_register_does_not_emit_factual_heading() {
 
 #[test]
 fn bundled_inner_work_mode_resolves_to_relational_register_via_registry() {
-    // This test pins the full chain from mode TOML file → registry
-    // → contract selection. If anyone removes or mistypes
-    // `register = "relational"` in modes/inner-work/skill.toml,
+    // This test pins the full chain from the COMPILED-IN mode TOML →
+    // registry → contract selection — the same embedded string every
+    // linked binary registers (`builtin_skill_tomls()`, the one home
+    // since the TOMLs moved into sovereign-contracts' crate on
+    // 2026-09-09). If anyone removes or mistypes
+    // `register = "relational"` in skills_data/inner-work.toml,
     // this test fails — and the relational voice silently
     // disappears from the production session that enters the
     // inner-work surface.
-    let path = crate::mode_declarations::modes_dir()
-        .join("inner-work")
-        .join("skill.toml");
-    let content = std::fs::read_to_string(&path).unwrap();
-    let skill = parse_skill_toml(&content).unwrap();
+    let content = sovereign_contracts::skills::builtin_skill_tomls()
+        .iter()
+        .find(|toml| toml.contains("id = \"inner-work\""))
+        .copied()
+        .expect("the compiled-in set must carry inner-work");
+    let skill = parse_skill_toml(content).unwrap();
     let mut reg = SkillRegistry::new();
     reg.register(skill);
     reg.activate("inner-work");
