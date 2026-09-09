@@ -61,36 +61,37 @@ pub(super) async fn stop_daemon() -> i32 {
         );
         match svc.stop() {
             Ok(()) => {
-                // THE MANAGER'S EXIT CODE DESCRIBES ITS UNIT, NOT THE DAEMON,
-                // and until 2026-09-09 this leg returned 0 on the strength of
-                // it (ARCH §18.3 — a success-shaped result that measured
-                // nothing).
+                // THE MANAGER'S EXIT CODE DESCRIBES ITS UNIT, NOT THE DAEMON.
+                // Until 2026-09-09 this leg returned 0 on the strength of it
+                // (ARCH §18.3 — a success-shaped result standing where no
+                // measurement was made).
                 //
-                // The topology that breaks the assumption is this host's:
-                // `sovereign.service` ExecStarts `toolbox run … sovereign-cli
-                // daemon run`, so the unit's cgroup holds the toolbox wrapper
-                // and its podman client while the daemon that actually binds
-                // the client port lives in the CONTAINER's cgroup
-                // (`libpod-<id>.scope/container`). `systemctl --user stop`
-                // reaps the cgroup it owns, the unit goes inactive, and the
-                // daemon keeps serving. Measured 2026-09-09: unit MainPID
-                // 2496484 under `app.slice/sovereign.service`, listener pid
-                // 2496571 under `libpod-c0142767….scope/container`.
+                // CORRECTION, 2026-09-09, same day: the first version of this
+                // comment blamed a cgroup escape — `sovereign.service`
+                // ExecStarts `toolbox run … daemon run`, so the unit's cgroup
+                // holds the toolbox wrapper and its podman client while the
+                // process that binds the port lives in the container's
+                // (`libpod-<id>.scope/container`). That topology is real and
+                // measured, but the conclusion drawn from it was not tested
+                // and is FALSE: `systemctl --user stop` was then watched
+                // killing the container process, `:9741` free within three
+                // seconds. podman propagates it.
                 //
-                // The cost of believing it is not an inconvenience: the
-                // operator starts what they think is a fresh daemon, the old
-                // one still holds the port, and every subsequent command talks
-                // to a STALE BINARY. It cost two debugging sessions on the
-                // peer-path work before anyone looked at a cgroup.
+                // WHAT ACTUALLY GOES WRONG is the race note `c99e9a85`
+                // recorded: stop returns as soon as the manager returns, while
+                // the listener is still releasing the port, and the `start`
+                // that follows loses the bind. The operator then believes they
+                // are on a fresh binary and is not. That cost two sessions of
+                // the peer-path investigation.
                 //
-                // So the claim is checked against its subject — is anything
-                // still serving the client port — and the check has a failing
-                // input this comment names. Note that the port fallback forty
-                // lines below was written for precisely this failure ("falls
+                // Either way the repair is the same and is why the fix stands
+                // unchanged: do not report a stop until the daemon has
+                // actually stopped serving. The port fallback forty lines
+                // below was written for a sibling of this failure ("falls
                 // through to `systemctl stop` on an inactive unit … silently
-                // reports success while the actual daemon keeps serving"); the
-                // service-manager leg added 2026-07-29 returns above it, so
-                // that guard was unreachable in this topology.
+                // reports success while the actual daemon keeps serving"), and
+                // the service-manager leg added 2026-07-29 returns above it,
+                // so that guard could not run here.
                 match await_port_release(client_port()).await {
                     None => {
                         eprintln!("✓ daemon stopped");
