@@ -588,7 +588,13 @@ pub async fn ground(
                 (site, selector),
                 (score, preview, motivating, verbatim, section_rows, mut previews),
             )| {
-                previews.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: this
+                // sort decides which 16 previews survive the truncate below,
+                // so a NaN weight collapsed to `Equal` would leave a real
+                // preview displaced out of the window with nothing said
+                // (ARCH §18.3). A total order has no fallback branch to get
+                // wrong.
+                previews.sort_by(|a, b| b.0.total_cmp(&a.0));
                 previews.truncate(16);
                 let previews: Vec<String> = previews.into_iter().map(|(_, p)| p).collect();
                 ChunkRequest {
