@@ -146,6 +146,27 @@ status    = "active"
 #       reading Dto mirrors (44 refs), health report adoption of
 #       sovereign_contracts::health (desktop health.rs carries its own
 #       HealthReport by its own comment).
+#       PARTIALLY LANDED 2026-09-09, RESHAPED BY MEASUREMENT (the rung's
+#       own ritual): reading DTOs DELETED - the 10 *Dto mirror structs in
+#       commands/reading.rs are gone, the wire types import from
+#       sovereign_mesh::reading_http, and the mirrors had ALREADY drifted
+#       when deleted (missing skip_serializing_if: in-process emitted
+#       "title": null where attach's verbatim daemon JSON omitted the key
+#       - the exact byte-compat break the mirrors existed to prevent;
+#       commit 6016e1b1f, -150/+47). Behavior delta named: in-process
+#       reading responses now omit null/empty keys, matching attach
+#       byte-for-byte. CENSUS: tests/reading_wire_types_census.rs
+#       (needle line-anchored on definitions after the first draft's
+#       `match_indices("struct ")` false-fired on the word "construct";
+#       sabotage: planted pub struct SabotageDto, red naming the rule,
+#       reverted, green). health report STRUCK as not-a-twin (measured):
+#       health.rs:123 is the whole-app roll-up of user-readable checks
+#       with fix_hints - a different question from
+#       sovereign_contracts::health's per-component typed HealthIssues;
+#       its own comment records the distinction. REMAINS: mesh status
+#       up-conversion at mesh_commands.rs:247 (attach path up-converts
+#       the flat /v1/mesh/status wire shape into a private
+#       MeshStateResponse).
 #   5   workflows daemon-side (operator decision, 2026-09-08): the daemon
 #       executes; workflow_commands.rs becomes a job-submission client;
 #       desktop's sovereign-workflow/-host deps leave with the dep shrink.
@@ -211,7 +232,8 @@ id           = "sv-capability-twins"
 one_line     = "CLAIM: no capability the surfaces share is implemented twice"
 derives_from = "the duplication table verified 2026-09-08, file:line in the ladder rows"
 status       = "open"
-# Six twin families, measured 2026-09-08. FOUR remain after rungs 1-2:
+# Six twin families, measured 2026-09-08. ONE remains after rungs 1, 2
+# and 4:
 #   corpus status      DELETED 2026-09-08 (rung 1) - one decider at
 #                      corpus_engine::engine::status, served at
 #                      /internal/corpus/status
@@ -222,13 +244,21 @@ status       = "open"
 #                      model_fetch is peer file distribution, the desktop's
 #                      scan is local UI discovery, the CLI resolves one
 #                      path. Different questions, no shared decider.
-#   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO
-#   reading DTOs       commands/reading.rs - 44 Dto refs mirroring daemon DTOs (byte-compat by comment)
-#   health report      health.rs:123 - its own HealthReport, NOT sovereign_contracts::health, by its own comment
+#   reading DTOs       DELETED 2026-09-09 (rung 4) - the 10 mirror
+#                      structs are gone; commands/reading.rs constructs
+#                      and serializes sovereign_mesh::reading_http's
+#                      wire types (they had already drifted, 6016e1b1f)
+#   health report      STRUCK 2026-09-09 (rung 4, measured): NOT a twin —
+#                      health.rs:123's own comment records it: the
+#                      whole-app roll-up of user-readable checks with
+#                      fix_hints, vs sovereign_contracts::health's
+#                      per-component typed HealthIssues. Different
+#                      questions, no shared decider.
+#   mesh status shape  mesh_commands.rs:247 up-converts the flat /v1/mesh/status into its own DTO - the one remaining
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
-floor        = 4.0
-floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured): 4 remain"
+floor        = 1.0
+floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs and STRUCK the health row as not-a-twin (measured): 1 remains"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
@@ -254,9 +284,20 @@ status       = "open"
 #      sailed a planted http://…:9741/status const through GREEN; widened
 #      to the URL spelling, watched red, reverted (§18.1 — the check now
 #      names the failing input that beat it).
-floor        = 2.0
-floor_basis  = "rungs 1-2 landed their controls, 2026-09-08; 0 before"
-target       = 6.0
+#   3. reading wire types - LANDED 2026-09-09:
+#      sovereign-desktop tests/reading_wire_types_census.rs (planted
+#      pub struct SabotageDto, watched red naming the rule, reverted,
+#      green). The needle is line-anchored on struct/enum DEFINITIONS —
+#      the first draft's match_indices("struct ") counted prose and
+#      false-fired on the word "construct" (§18.4: validate the
+#      instrument; the first run of a needle is not a measurement).
+floor        = 3.0
+floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
+# 4.0 = one control per REAL twin family (corpus status, model residency,
+# reading DTOs, mesh status). Was 6.0 over the naive enumeration; the GGUF
+# and health strikes (both measured) shrank the deletable set to 4. Moves
+# only through a rung row.
+target       = 4.0
 direction    = "higher_is_better"
 instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"
 kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
