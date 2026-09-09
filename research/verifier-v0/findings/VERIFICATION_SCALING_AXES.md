@@ -835,3 +835,77 @@ vs 6.60% is itself within noise, so the honest primary reading is
 
 Reproduce: `scripts/verdict_flip_spike.py` (bars in the header, written before
 the run).
+
+## 13. The retrieval ceiling is a QUERY artifact, not a corpus gap — and that is the first live mesh mechanism
+
+**2026-09-09, minutes, no synthesis.** §12 killed re-evaluation as a product.
+This is the follow-on it pointed at: of the two routes from mesh capacity to
+groundedness, is the residue we cannot retrieve **absent** from what we hold, or
+**unreached**? Acquisition and fan-out are different builds and the fork had
+never been measured.
+
+### Configuration diversity is exhausted
+
+Rung 6's four arms are 2 stack versions x 2 samples over the same 21 SEP
+questions. Their retrieval coverage of expected facts:
+
+| | facts retrieved | of 158 |
+|---|---|---|
+| armA / armA2 / armB / armB2 | 141 / 140 / 139 / 140 | 89.2 / 88.6 / 88.0 / 88.6% |
+| best single arm, per question | 148 | 93.7% |
+| **union of all four** | **150** | **94.9%** |
+
+**Diversity of configuration buys +1.3 points, on 2 of 21 questions.** Four
+retrieval configurations converge and miss the SAME 8 facts. This is §8's
+lineage result in the retrieval layer: same-lineage judges nest their errors,
+and **same-query retrievals nest their misses.** Twenty rerankers over one
+library are twenty views of one blind spot.
+
+### But the hard core is one query away
+
+The 8 facts no arm reached are `self-reference`, `BonJour`, `mentalism`,
+`MacCallum`, `regularity theory`, `Worrall`, `individualism`, `descriptivism` —
+canonical vocabulary of the very entries their own questions name. Issuing each
+as an ORACLE query against the same `sep` corpus, scored by the bench's own rule
+(`score.rs::partition_facts`, every token >= 3 chars present):
+
+- **hard core: 8/8 recovered.** Bar was >= 5/8.
+- **instrument control: 7/7** on facts the arms did find, so the probe detects
+  presence rather than always answering yes.
+
+The haystack is the CLI's truncated titles + snippets (~190 chars a hit), so the
+probe is conservative and 8/8 is a LOWER bound on presence.
+
+> **The window is not the corpus.** §11 established that you cannot extract more
+> groundedness than the window contains. This shows the window's limit is a
+> QUERY-FORMULATION artifact, not the library's contents — and query diversity is
+> cheap, is the fast half of the pipeline, and is genuinely independent across
+> nodes in a way configuration diversity is not.
+
+### What this licenses, and what it does not
+
+Live mechanism: **fan out over formulations, not over models.** One question
+decomposed into sub-queries, N cheap retrievals in parallel over the same or
+different libraries, the union of evidence returned to ONE synthesis — which
+leaves the expensive stage (58.8 s median here) singular while multiplying the
+stage that determines the ceiling.
+
+The limit, stated plainly because it is the whole caveat: **the oracle query is
+the fact itself, and you cannot query for a fact you do not know you are
+missing.** This proves REACHABILITY and bounds the problem; it does NOT show
+that any realistic formulation strategy recovers the gap. The next experiment is
+exactly that — generate sub-queries from the question alone, fan out, union, and
+measure what share of the 8 comes back without the oracle.
+
+### Scope
+
+- One bank (21 SEP questions), one corpus, n=8 hard-core facts.
+- The bench matcher is keyword-substring by construction (`score.rs`), so both
+  the miss and the recovery are keyword events, not semantic ones.
+- Retrieval cost is UNMEASURED on this path: `embed_ms` and `search_ms` are 0
+  for all 21 questions while synthesis runs a 58.8 s median. "Retrieval is the
+  cheap part" is believed here, not measured, and instrumenting it is owed
+  before anything is designed around the asymmetry.
+
+Reproduce: `scripts/oracle_query_probe.py` (bars in the header, written before
+the first query).
