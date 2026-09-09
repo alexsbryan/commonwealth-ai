@@ -283,7 +283,7 @@ pub async fn mesh_get_state(
             members_online = remote.members_online,
             "mesh_get_state(attach): fetched mesh status"
         );
-        return Ok(Some(MeshStateResponse::from_remote_status(remote)));
+        return Ok(Some(MeshStateResponse::from_remote_status(remote)?));
     }
 
     let Some(mesh) = state.mesh().await else {
@@ -667,33 +667,44 @@ impl MeshStateResponse {
     /// weren't surfaced over HTTP (contribution ledger, corpora shard
     /// plan) come back empty — they're populated on the daemon side
     /// and a future iteration can extend the HTTP shape to include them.
-    pub fn from_remote_status(remote: sovereign_mesh::mesh_http::StatusResponse) -> Self {
+    ///
+    /// Member status strings are parsed by the enum's OWN serde repr
+    /// (`MemberStatus` is `rename_all = "lowercase"` in sovereign-mesh
+    /// types) — one decider for the string set. Until 2026-09-09 this
+    /// was a hand match with `_ => Offline`, so a daemon newer than the
+    /// desktop (a new status variant) silently rendered its members as
+    /// offline instead of surfacing the unknown string — the §18.3
+    /// substitution. The parse now refuses (sv-surface rung 4).
+    pub fn from_remote_status(
+        remote: sovereign_mesh::mesh_http::StatusResponse,
+    ) -> Result<Self, String> {
+        use serde::de::IntoDeserializer;
         use sovereign_mesh::{MemberStatus, MeshMember, MeshStatus};
         let members: Vec<MeshMember> = remote
             .members
             .into_iter()
-            .map(|m| MeshMember {
-                name: m.name,
-                node_id: m.node_id,
-                is_self: m.is_self,
-                status: match m.status.as_str() {
-                    "online" => MemberStatus::Online,
-                    "busy" => MemberStatus::Busy,
-                    "away" => MemberStatus::Away,
-                    _ => MemberStatus::Offline,
-                },
-                vram_gb: m.vram_gb,
-                can_anchor: m.can_anchor,
-                contribution_level: 0,
-                contribution_label: String::new(),
-                addresses: m.addresses,
-                node_pubkey: m.node_pubkey,
-                active: m.active,
-                hw_fingerprint: m.hw_fingerprint,
-                backend: m.backend,
+            .map(|m| {
+                Ok(MeshMember {
+                    name: m.name,
+                    node_id: m.node_id,
+                    is_self: m.is_self,
+                    status: MemberStatus::deserialize(m.status.as_str().into_deserializer())
+                        .map_err(|e: serde::de::value::Error| {
+                            format!("mesh member status {:?}: {e}", m.status)
+                        })?,
+                    vram_gb: m.vram_gb,
+                    can_anchor: m.can_anchor,
+                    contribution_level: 0,
+                    contribution_label: String::new(),
+                    addresses: m.addresses,
+                    node_pubkey: m.node_pubkey,
+                    active: m.active,
+                    hw_fingerprint: m.hw_fingerprint,
+                    backend: m.backend,
+                })
             })
-            .collect();
-        Self {
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(Self {
             status: MeshStatus {
                 name: remote.mesh_name.unwrap_or_default(),
                 members_online: remote.members_online,
@@ -709,7 +720,7 @@ impl MeshStateResponse {
             corpora: Vec::new(),
             contribution: None,
             client_token: remote.client_token,
-        }
+        })
     }
 }
 
