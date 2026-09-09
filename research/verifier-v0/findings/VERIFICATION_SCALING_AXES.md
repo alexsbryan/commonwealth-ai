@@ -1394,3 +1394,72 @@ leakage). The detector is one post-hoc sign flip on one feature family and is
 NOT confirmed. No synthesis arm.
 
 Reproduce: `scripts/uncovered_regime.py`.
+
+## 19. The scatter detector does NOT confirm — §18's effect was largely SEP's document granularity
+
+**2026-09-09.** §18 closed with the caveat that its sign flip was post-hoc and
+needed a held-out bank before anything routed on it. This is that run, and the
+caveat was justified. **§18's headline claim is hereby qualified: do not build
+on it.**
+
+**Protocol.** The rule was FROZEN before the held-out corpus was touched —
+feature, k, direction and threshold written to disk from §18's SEP units alone
+(`top3_title_share @k=28 >= 0.607`, 75.8% there). The held-out corpus is
+`commonwealth-ai` (55.2k chunks of code and docs) — structurally different by
+design, since SEP averages ~106 chunks per article while a code corpus has many
+small files. 15 positives, each with every expected fact **grep-verified against
+the repo** so the covered label is checkable rather than authored; 41 negatives
+(the SEP and wikipedia banks run against a code corpus).
+
+| | §18 (SEP, derivation) | §19 (commonwealth-ai, held out) |
+|---|---|---|
+| scatter feature AUC | **0.803** | **0.659** |
+| frozen-threshold accuracy | 75.8% | 73.2% — **but TPR 0/15** |
+| 4B evaluator AUC | 0.626 | **0.700** |
+| mean top-3 share, covered | 0.658 | 0.212 |
+| mean distinct titles, covered | 10.2 | 25.0 |
+
+**B1 MARGINAL (0.659 against a 0.75 bar).** The direction survives — covered
+0.212 vs uncovered 0.173 — so the mechanism is not nothing. But it is far below
+the 0.803 that made it look like a solution.
+
+**B2 fails completely, and the metric nearly hid it.** The frozen threshold
+scores 73.2% accuracy while making **zero correct positive predictions** (TPR
+0/15, TNR 41/41): it calls everything uncovered, and looks 73% accurate only
+because 41 of 56 units are negative. Accuracy on an imbalanced set was the wrong
+statistic and it would have read as a near-pass. The cause is scale, exactly as
+predicted: SEP's covered queries concentrate on a handful of ~106-chunk articles
+(share 0.658), while a code corpus returns 25 distinct files out of 28 hits
+(0.212). The threshold 0.607 sits above every value on the held-out corpus.
+
+**B3 reverses.** The 4B evaluator — which scatter beat 0.803 to 0.626 on SEP —
+**wins here, 0.700 to 0.659.** Whichever detector looked better was a property of
+the corpus, not of the detector.
+
+### What this means, stated plainly
+
+> **§18's effect was substantially SEP's document granularity, not a general
+> law.** Concentration is a strong signal when documents are large and few; it
+> nearly vanishes when they are small and many. Nothing here is routable:
+> 0.659 and 0.700 are both under §18's own "blocked" reading of ≤0.65 and its
+> "solvable" bar of ≥0.80.
+
+**Cheap gap detection remains UNSOLVED**, and that is the more important finding
+than a working detector would have been. The 90% regime's load-bearing decision —
+*do I have this?* — has no cheap answer yet on either the free-signal or the
+small-model side, and both candidates swap places depending on the corpus.
+
+**A methodological note worth more than the result.** This is the third bar
+defect in this arc (§14 absolute-without-control, §15 uninformative-by-
+construction, §19 accuracy-on-imbalanced-data). All three shared one shape: a
+statistic that can look like a pass while the mechanism does nothing. The
+standing fix is the one that caught this — always print the confusion matrix,
+never the summary statistic alone.
+
+### Scope
+
+15 positives is small; the positives are authored (though every fact is
+grep-verified). One held-out corpus. The negatives are cross-domain rather than
+ablated, so this tests the easier half of §18's design.
+
+Reproduce: `scripts/scatter_holdout.py`; frozen rule in the header.
