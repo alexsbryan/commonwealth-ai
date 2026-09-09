@@ -194,7 +194,10 @@ pub(crate) fn inventory_for(corpus: &str) -> (AtlasInventory, usize) {
 /// instead for a built-in pipeline's DECLARED map — what a corpus would walk
 /// under once `svrn atlas migrate-all` has written that map beside its atoms
 /// — so the effect of a map on a bank is measurable before any file changes.
-pub(crate) fn policy_for(corpus: Option<&str>, pipeline: Option<&str>) -> (NavigationPolicy, String) {
+pub(crate) fn policy_for(
+    corpus: Option<&str>,
+    pipeline: Option<&str>,
+) -> (NavigationPolicy, String) {
     if let Some(id) = pipeline {
         return match corpus_engine::enrichment::pipeline::PipelineRegistry::builtin().get(id) {
             Some(p) => (
@@ -218,11 +221,37 @@ pub(crate) fn policy_for(corpus: Option<&str>, pipeline: Option<&str>) -> (Navig
                 ),
             );
         }
-        // No file: the loader's fallback (map-conversion rung 3) — the
-        // corpus's own config names its pipeline, else the first `<id>-*`
-        // sibling's does (the `sep` umbrella has no config; its articles do).
-        let mut candidates = vec![id.to_string()];
+        // No file of its own. The walk grounds across `<id>-*` too, and its
+        // decider (`navigation_policy_for`) takes the FIRST graph in scope
+        // whose map is declared — so an umbrella like `sep`, whose own atlas
+        // is empty, walks under its articles' maps once `migrate-all` has
+        // written them. Read the same way here, or the instrument keeps
+        // saying "no atlas/ontology.json yet" over 1,770 files that exist.
         let prefix = format!("{id}-");
+        let mut sibling_atlases: Vec<(String, std::path::PathBuf)> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(paths::indexes_dir()) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with(&prefix) {
+                    sibling_atlases.push((name, e.path().join(ATLAS_DIRNAME)));
+                }
+            }
+        }
+        sibling_atlases.sort();
+        if let Some((first, policy, carrying)) = first_declared_map(&sibling_atlases) {
+            return (
+                policy,
+                format!(
+                    "declared by `{first}` ({carrying} of {} `{prefix}*` siblings carry atlas/ontology.json)",
+                    sibling_atlases.len()
+                ),
+            );
+        }
+        // No declared map anywhere in scope: the loader's fallback
+        // (map-conversion rung 3) — the corpus's own config names its
+        // pipeline, else the first `<id>-*` sibling's does (the `sep`
+        // umbrella has no config; its articles do).
+        let mut candidates = vec![id.to_string()];
         if let Ok(entries) = std::fs::read_dir(paths::enrichment_dir()) {
             let mut sibs: Vec<String> = entries
                 .flatten()
@@ -233,8 +262,7 @@ pub(crate) fn policy_for(corpus: Option<&str>, pipeline: Option<&str>) -> (Navig
             candidates.extend(sibs);
         }
         for c in candidates {
-            let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(&c)
-            else {
+            let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(&c) else {
                 continue;
             };
             if cfg.ontology.is_some() {
@@ -261,6 +289,25 @@ pub(crate) fn policy_for(corpus: Option<&str>, pipeline: Option<&str>) -> (Navig
         NavigationPolicy::default(),
         "pre-registered defaults (no --corpus given)".to_string(),
     )
+}
+
+/// The first sibling (in the given order) whose atlas dir carries a declared
+/// map, that map's navigation rows, and how many of the siblings carry one at
+/// all. `None` when no sibling does.
+fn first_declared_map(
+    siblings: &[(String, std::path::PathBuf)],
+) -> Option<(String, NavigationPolicy, usize)> {
+    let mut first: Option<(String, NavigationPolicy)> = None;
+    let mut carrying = 0usize;
+    for (name, atlas_dir) in siblings {
+        if let Some(file) = read_atlas_ontology(atlas_dir) {
+            carrying += 1;
+            if first.is_none() {
+                first = Some((name.clone(), file.policies.navigation));
+            }
+        }
+    }
+    first.map(|(name, policy)| (name, policy, carrying))
 }
 
 fn usage() -> i32 {
@@ -639,5 +686,44 @@ mod tests {
             .as_deref()
             .unwrap()
             .starts_with("no claim or position atoms"));
+    }
+
+    /// An umbrella with no map of its own reads the first sibling's declared
+    /// map, the way the walk does, and says how many siblings carry one.
+    /// Failing input: no sibling carries a map (`None`).
+    #[test]
+    fn the_first_siblings_declared_map_is_the_umbrellas() {
+        use corpus_engine::enrichment::atlas::{write_atlas_ontology, AtlasOntologyFile};
+        use corpus_engine::enrichment::pipeline::PipelineRegistry;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let bare = tmp.path().join("sep-a").join(ATLAS_DIRNAME);
+        let mapped = tmp.path().join("sep-b").join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&bare).expect("mkdir");
+        std::fs::create_dir_all(&mapped).expect("mkdir");
+        let sibs = vec![
+            ("sep-a".to_string(), bare.clone()),
+            ("sep-b".to_string(), mapped.clone()),
+        ];
+        assert!(
+            first_declared_map(&sibs).is_none(),
+            "no sibling carries a map"
+        );
+
+        let philosophy = PipelineRegistry::builtin()
+            .get("philosophy_atlas")
+            .expect("philosophy_atlas is built in");
+        write_atlas_ontology(
+            &mapped,
+            philosophy.id(),
+            AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
+            &philosophy.declared_ontology(),
+        )
+        .expect("write map");
+        let (first, policy, carrying) =
+            first_declared_map(&sibs).expect("one sibling carries a map");
+        assert_eq!(first, "sep-b");
+        assert_eq!(carrying, 1);
+        assert_eq!(policy, philosophy.declared_ontology().navigation);
     }
 }

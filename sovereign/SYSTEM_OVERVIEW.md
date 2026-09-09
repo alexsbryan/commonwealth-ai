@@ -1669,7 +1669,17 @@ means one thing.
   the atlas dir, applied INSIDE `backfill_ann`, so all four author sites (the
   atlas writer, `svrn atlas backfill-ann`, `enrich build`'s Backfill step,
   `atlas migrate-all`) get it with no signature change and `AtlasSeeding`
-  gains no arm. `atlas migrate-all` only became one of the four at ei-5c
+  gains no arm. Its freshness test, `population_marker_is_current`, reads one
+  line and two mtimes on the common path; when `ontology.json` is NEWER than
+  the marker (a map re-declared after the table was embedded — which is what
+  map-conversion does to every converted atlas) it compares the marker's
+  recorded kinds with the kinds the map now derives, and the table is current
+  when it was seeded on a superset and the atlas's current `_summary.json`
+  census shows zero atoms of every surplus kind. The walk filters seeds by row
+  kind at query time (`ground::seed_admits`), so such a table is the same
+  table; the surplus clause is for the unfiltered row. Without a current
+  census it is stale — rebuild rather than trust
+  (`a_map_written_after_the_table_is_current_when_the_table_already_holds_its_population`). `atlas migrate-all` only became one of the four at ei-5c
   (2026-09-07): it had kept its own ANN step — `load_atlas_context` under the
   production retrieval filter, then `build_persistent_ann_seed_table` — which
   is the same filter-authors-the-table defect one layer up, and it stamped no
@@ -1931,8 +1941,14 @@ means one thing.
 
   Cost, for whoever runs it: every installed atlas rebuilds its store once at
   its next `migrate-all` — about 1.9 s each, measured over n=1,078 in ei-3b —
-  which is roughly an hour for SEP's 1,770 and folds into the same pass as the
-  re-embed rather than being a third one.
+  which is roughly an hour for SEP's 1,770. The rebuild no longer drags a
+  re-embed with it (map-conversion rung 3 run, 2026-09-08): the ANN column
+  reads `current` on `ann_table_is_fresh`'s verdict — table newer than
+  `atoms.json`, population marker current — not on "the store was not rebuilt
+  this pass", because a store rebuild transforms the same `atoms.json` and the
+  content-hash atom ids the table is keyed on do not move. The first run over
+  SEP under the old rule re-seeded every rebuilt store through the daemon's
+  embed slot and was stopped before it reached a single `sep-*` sibling.
 
   **RAPTOR is COMPOSED, not deleted (operator directive 25ae5815,
   2026-09-08).** "One grounding implementation" means one INTERFACE a corpus

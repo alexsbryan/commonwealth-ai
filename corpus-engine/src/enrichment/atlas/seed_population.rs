@@ -186,26 +186,40 @@ pub fn write_population_marker(atlas_dir: &Path, population: &SeedPopulation) ->
 
 /// Is the recorded population still the one this build would derive?
 ///
-/// Deliberately cheap — one small read and two mtimes, no `ontology.json`
-/// parse — because the daemon runs it once per installed atlas at boot. Three
-/// ways to be stale, and each is a real table on this box:
+/// Deliberately cheap on the common path — one small read and two mtimes, no
+/// `ontology.json` parse — because the daemon runs it once per installed atlas
+/// at boot. Three ways to be stale, and each is a real table on this box:
 ///
 /// - **No marker.** Every table written before ei-3c, including the ones the
 ///   SEP backfill battery is producing right now. They are Entity-only and must
 ///   be rebuilt, not trusted.
 /// - **A different [`SEED_POPULATION_SCHEMA`].** The code's derivation moved
 ///   under a table that cannot know it.
-/// - **`ontology.json` newer than the marker.** The corpus re-declared its map
-///   after the table was embedded.
+/// - **`ontology.json` newer than the marker, AND the population it derives is
+///   not already in the table.** The corpus re-declared its map after the
+///   table was embedded. A re-declaration is not by itself a different
+///   population: map-conversion rung 3 (2026-09-08) writes `ontology.json`
+///   beside 1,770 SEP tables whose rows it does not change, and the philosophy
+///   map's population is the pre-registered one minus `Position` — a kind SEP
+///   has no atoms of. So on this branch, and only on this branch, the marker's
+///   recorded kinds are compared with the derived ones: the table is current
+///   when it was seeded on a SUPERSET of what the map now asks for and the
+///   atlas holds no atoms of the surplus kinds. The walk filters seeds by row
+///   kind at query time (`ground::seed_admits`), so such a table is the same
+///   table; the surplus-kind clause is for the unfiltered row, which seeds on
+///   whatever the table returns. Absent census (`_summary.json` missing or
+///   stale) reads as stale — rebuild rather than trust.
 ///
-/// Failing input for the mtime clause: write a table, then rewrite
-/// `ontology.json` with a different `navigation` section.
+/// Failing inputs: write a table, then rewrite `ontology.json` with a
+/// `navigation` section that adds a kind (stale); rewrite it with one that
+/// drops a kind the atlas has no atoms of (current) — both in the tests below.
 pub fn population_marker_is_current(atlas_dir: &Path) -> bool {
     let path = population_marker_path(atlas_dir);
     let Ok(raw) = std::fs::read_to_string(&path) else {
         return false;
     };
-    match raw.lines().next() {
+    let mut lines = raw.lines();
+    match lines.next() {
         Some(v) if v.trim().parse::<u32>() == Ok(SEED_POPULATION_SCHEMA) => {}
         _ => return false,
     }
@@ -214,12 +228,55 @@ pub fn population_marker_is_current(atlas_dir: &Path) -> bool {
         mtime(&path),
         mtime(&atlas_dir.join(AtlasOntologyFile::FILE)),
     ) {
-        (Some(marker), Some(ontology)) => marker >= ontology,
+        (Some(marker), Some(ontology)) if marker >= ontology => true,
         // No map on disk: nothing newer than the marker exists to honour.
         (Some(_), None) => true,
+        // The map moved after the table was embedded: ask whether the table
+        // already holds the population the map now derives.
+        (Some(_), Some(_)) => {
+            let Some(recorded) = lines.next().map(kinds_from_marker_line) else {
+                return false;
+            };
+            recorded_population_covers(atlas_dir, &recorded)
+        }
         // The marker read but will not stat — rebuild rather than trust it.
         _ => false,
     }
+}
+
+/// The kinds line of a marker (`entity,claim,…`), parsed back through the same
+/// labels [`SeedPopulation::fingerprint`] wrote. An unknown label is dropped:
+/// a kind this build no longer knows cannot be one it needs.
+fn kinds_from_marker_line(line: &str) -> BTreeSet<AtomType> {
+    line.split(',')
+        .map(str::trim)
+        .filter_map(|label| AtomType::ALL.iter().copied().find(|k| k.label() == label))
+        .collect()
+}
+
+/// Does a table seeded on `recorded` already hold the population this atlas
+/// derives today? True when `recorded` ⊇ derived and every surplus kind has
+/// zero atoms in the atlas's census; false without a census.
+///
+/// The census is the cached `_summary.json` when its key still matches, else
+/// one computed in memory from `atoms.json` — computed and NOT persisted,
+/// because this runs inside a freshness probe and a probe writes nothing.
+/// The cache key covers the CSR's mtime, so right after `migrate-all` rebuilds
+/// a store the cached summary is stale by construction; reading only the cache
+/// here made every rebuilt store re-seed on the first run (2026-09-08).
+fn recorded_population_covers(atlas_dir: &Path, recorded: &BTreeSet<AtomType>) -> bool {
+    let derived = seed_population(atlas_dir).kinds;
+    if !recorded.is_superset(&derived) {
+        return false;
+    }
+    let Some(summary) = super::summary::read_current_summary(atlas_dir)
+        .or_else(|| super::summary::compute_summary(atlas_dir).ok())
+    else {
+        return false;
+    };
+    recorded
+        .difference(&derived)
+        .all(|surplus| summary.atom_counts.get(surplus).copied().unwrap_or(0) == 0)
 }
 
 #[cfg(test)]
@@ -333,6 +390,72 @@ mod tests {
         assert!(
             !population_marker_is_current(tmp.path()),
             "a map re-declared after the table was embedded is stale"
+        );
+    }
+
+    /// A map re-declared AFTER the table was embedded is current when the
+    /// table was seeded on a superset of what the map now derives and the
+    /// atlas holds no atoms of the surplus kinds — the map-conversion case
+    /// (rung 3, 2026-09-08): 1,770 SEP tables seeded under the pre-registered
+    /// union receive philosophy's map, which asks for that union minus
+    /// `Position`, a kind SEP has no atoms of. Watched failing in both
+    /// directions (§18.1, §18.6): no census is stale; a map that ADDS a kind
+    /// is stale; the covering map with a census is current.
+    #[test]
+    fn a_map_written_after_the_table_is_current_when_the_table_already_holds_its_population() {
+        use crate::enrichment::atlas::atoms::AtomsFile;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // The table was seeded under the pre-registered union: seven kinds.
+        let seeded = seed_population(tmp.path());
+        write_population_marker(tmp.path(), &seeded).expect("write marker");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        // The map arrives later and derives a SUBSET: Entity + Argument (floor) + Claim.
+        let narrower = r#"{"schema_version":"1","ontology_version":1,
+            "pipeline_id":"philosophy_atlas","policies":{
+              "shape":{"types":[]},
+              "navigation":{
+                "thematic":{"seed":{"kinds":["Claim"]},"walk":[],"hops":1,"budget":6},
+                "trajectory":{"seed":{"kinds":[]},"walk":[],"hops":1,"budget":6},
+                "tension":{"seed":{"kinds":[]},"walk":[],"hops":1,"budget":6},
+                "enumeration":{"seed":{"kinds":[]},"walk":[],"hops":0,"budget":6},
+                "lookup":{"seed":{"kinds":[]},"walk":[],"hops":1,"budget":6}}}}"#;
+        std::fs::write(tmp.path().join(AtlasOntologyFile::FILE), narrower).expect("write ontology");
+        assert!(
+            seeded.kinds.is_superset(&seed_population(tmp.path()).kinds),
+            "fixture: the recorded population must cover the new map's"
+        );
+        assert!(
+            !population_marker_is_current(tmp.path()),
+            "no atoms.json, so no census: the surplus kinds cannot be shown absent, so stale"
+        );
+
+        // A census with zero atoms of every kind — computed in memory, no
+        // `_summary.json` written, which is the state right after a store
+        // rebuild invalidates the cached one.
+        std::fs::write(
+            tmp.path().join("atoms.json"),
+            serde_json::to_vec_pretty(&AtomsFile::new(Vec::new())).expect("json"),
+        )
+        .expect("write atoms");
+        assert!(
+            population_marker_is_current(tmp.path()),
+            "the table holds every kind the map asks for and the surplus kinds have no atoms"
+        );
+        assert!(
+            !tmp.path().join("_summary.json").exists(),
+            "a freshness probe writes nothing into the atlas dir"
+        );
+
+        // The other direction: a map that asks for a kind the table was never
+        // seeded on (Event is in no pre-registered row) is stale.
+        let wider = narrower.replace(r#""kinds":["Claim"]"#, r#""kinds":["Claim","Event"]"#);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(tmp.path().join(AtlasOntologyFile::FILE), wider).expect("write ontology");
+        assert!(
+            !population_marker_is_current(tmp.path()),
+            "a map that adds a kind the table lacks is stale"
         );
     }
 }

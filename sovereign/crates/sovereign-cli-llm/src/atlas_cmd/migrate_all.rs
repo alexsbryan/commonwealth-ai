@@ -40,7 +40,7 @@
 
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::ann_store::ann_table_present;
+use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
 use corpus_engine::enrichment::atlas::store::{build_and_write_store, store_needs_build};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::wikipedia_graph_present;
@@ -61,10 +61,19 @@ pub async fn run(args: &[String]) -> i32 {
     };
     let mut flip = true; // the migration flips read_v2 by default
     let mut only: Option<String> = None;
-    for a in &rest {
+    let mut prefix: Option<String> = None;
+    let mut args_iter = rest.iter();
+    while let Some(a) = args_iter.next() {
         match a.as_str() {
             "--flip" => flip = true,
             "--no-flip" => flip = false,
+            "--prefix" => match args_iter.next() {
+                Some(p) => prefix = Some(p.clone()),
+                None => {
+                    eprintln!("atlas migrate-all: --prefix needs a value");
+                    return 2;
+                }
+            },
             "-h" | "--help" => {
                 print_help();
                 return 0;
@@ -97,6 +106,7 @@ pub async fn run(args: &[String]) -> i32 {
                             .map(String::from)
                     })
                     .filter(|n| !n.starts_with('.') && !n.starts_with('_'))
+                    .filter(|n| prefix.as_deref().is_none_or(|p| n.starts_with(p)))
                     .collect();
                 v.sort();
                 v
@@ -171,12 +181,10 @@ pub async fn run(args: &[String]) -> i32 {
         }
 
         // Atom track. 1) store (idempotent).
-        let mut store_built = false;
         let store_state = if store_needs_build(&atlas_dir) {
             match build_and_write_store(&atlas_dir, corpus_id).await {
                 Ok(w) => {
                     stores += 1;
-                    store_built = true;
                     // The edge accounting is the writer's, printed here so
                     // "built" never hides a graph that lost a third of its
                     // declared edges on the way in (ARCH §18.3).
@@ -233,12 +241,22 @@ pub async fn run(args: &[String]) -> i32 {
         // persists on disk as the legacy "this corpus was embedded" marker, and
         // an existing ANN table is the forward-looking equivalent — either signal
         // admits the corpus. Builds the stragglers (embedded but no table yet)
-        // and leaves current tables as-is; fresh corpora get their table via
+        // and leaves FRESH tables as-is; fresh corpora get their table via
         // `svrn atlas backfill-ann`.
+        //
+        // Fresh is `ann_table_is_fresh`'s verdict — table newer than
+        // `atoms.json`, population marker current — and NOT "the store was not
+        // rebuilt this pass". A store rebuild is a transform of the same
+        // `atoms.json` into `atoms.lance` + `edges.csr`; the atom ids are
+        // content hashes, so the table keyed on them is unchanged by it. Until
+        // map-conversion rung 3's run (2026-09-08) this branch re-seeded every
+        // rebuilt store through the daemon's embed slot, which over the 1,770
+        // SEP siblings — all of them rebuilding for the derivation marker — is
+        // 1,770 embeds of a table that was already right.
         let ann_state: &str =
             if !ann_table_present(&atlas_dir) && !atlas_dir.join("atoms.embeddings.bin").exists() {
                 "n/a"
-            } else if ann_table_present(&atlas_dir) && !store_built {
+            } else if ann_table_present(&atlas_dir) && ann_table_is_fresh(&atlas_dir) {
                 "current"
             } else {
                 // FIRST corpus that actually needs to embed pays for the session;
@@ -346,6 +364,9 @@ fn print_help() {
         "  sovereign atlas migrate-all --no-flip       build v2 artifacts but do NOT flip read_v2"
     );
     println!("  sovereign atlas migrate-all <corpus_id>     migrate one corpus");
+    println!(
+        "  sovereign atlas migrate-all --prefix sep-   migrate every corpus whose id starts with the prefix"
+    );
     println!(
         "\natom corpora -> atoms.lance + edges.csr (+ atoms_ann.lance if embedded) + .read_v2"
     );

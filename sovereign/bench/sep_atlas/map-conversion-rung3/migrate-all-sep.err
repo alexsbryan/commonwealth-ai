@@ -1,0 +1,2 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+atlas migrate-all: 1770 atlas-bearing corpora; flip=true

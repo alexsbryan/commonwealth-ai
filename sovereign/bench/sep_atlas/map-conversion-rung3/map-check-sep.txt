@@ -1,0 +1,13 @@
+corpus:  sep
+map:     declared by `sep-18thGerman-preKant` (1770 of 1770 `sep-*` siblings carry atlas/ontology.json)
+         no-map: nothing under /home/alexbryan/.svrnmesh/indexes/sep/atlas declares the rows — `svrn atlas migrate-all sep` writes the pipeline's map
+census:  1771 atlas(es); atoms entity:88801 event:6750 state:23984 relation:19807 claim:59100 question:33949 configuration:4817 argument:13610; edges transition:6335 tension:4758 involves:103236 configures:24599
+
+row          on   verdict      missing
+thematic     yes  fits         
+trajectory   yes  fits         
+tension      yes  fits         
+enumeration  yes  fits         
+lookup       yes  fits         
+
+map-check: 5/5 rows on this map can fire on `sep`
