@@ -167,90 +167,20 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("http client: {e}"))
 }
 
-async fn error_text(resp: reqwest::Response) -> String {
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    let detail = serde_json::from_str::<serde_json::Value>(&body)
-        .ok()
-        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-        .unwrap_or(body);
-    if detail.is_empty() {
-        status.to_string()
-    } else {
-        format!("{status}: {detail}")
-    }
-}
-
-/// The rail's two routes, spelled once for every caller in this crate.
+/// The rail's two routes and its two operator-side clients — **re-exported,
+/// not defined here** (cw-lift 5e).
 ///
-/// [`rail_log`] and [`rail_append`] below are the operator-side clients and
-/// they use these. [`dev`](super::ring_cmd::dev) cannot use the FUNCTIONS —
-/// it proxies a browser's opaque bytes to a different listener under a grant
-/// token (see `dev.rs`'s note on `UNTRUSTED_LOOPBACK`) — but it must not
-/// spell the paths a second time either, so it uses these constants. A route
-/// renamed on the daemon then breaks the build at every caller rather than at
-/// runtime on whichever one is exercised first.
-pub(crate) const RAIL_LOG_PATH: &str = "/v1/rail/log";
-pub(crate) const RAIL_APPEND_PATH: &str = "/v1/rail/append";
-
-/// One operator-side read of a namespace: the admitted acts, the gaps, and
-/// the roster the DAEMON actually loaded.
-///
-/// Loopback with no grant, so the daemon trusts the listener rather than a
-/// token — which is exactly why the rail routes are mounted on the operator
-/// surface as well as the rail one.
-pub(crate) async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
-    let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}{RAIL_LOG_PATH}?namespace={namespace}");
-    let resp = http_client()?
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(error_text(resp).await);
-    }
-    resp.json().await.map_err(|e| format!("bad response: {e}"))
-}
-
-/// One operator-side WRITE to a namespace: hand the daemon one act, and get
-/// back what it assigned.
-///
-/// **The one append client** (ARCH §10.6). The read side has been a function
-/// since `ring log` was written; the write side was copy-pasted — URL, client,
-/// status check, JSON decode — at every site that appended, which is how
-/// `ring seal` and a second verb come to disagree about what a 422 body says.
-/// Every caller in this crate goes through here.
-///
-/// It goes over HTTP rather than opening the journal, and the reason is `seq`:
-/// the daemon serialises appends behind one writer lock per namespace, and a
-/// second process picking the next sequence number from its own read would
-/// race it — both land on the same `seq`, and the fork is reported by every
-/// node forever. See [`run_seal`]'s note.
-///
-/// The act is typed rather than a hand-built `json!` object. `RailAct`'s own
-/// `Serialize` is the wire form the door parses with `RailAct::from_json`, so
-/// a caller cannot spell `{"op": "sealed"}` and learn about it from a 422.
-pub(crate) async fn rail_append(
-    namespace: &str,
-    act: &commonwealth_rail::RailAct,
-) -> Result<serde_json::Value, String> {
-    let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}{RAIL_APPEND_PATH}?namespace={namespace}");
-    let resp = http_client()?
-        .post(&url)
-        .json(act)
-        .send()
-        .await
-        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
-    if !resp.status().is_success() {
-        // The refusal sentence is the RAIL's, on the wire — a roster miss, a
-        // non-canonical payload, an unknown namespace. Rewording it here would
-        // be a second wording of one condition (ARCH §10.6).
-        return Err(error_text(resp).await);
-    }
-    resp.json().await.map_err(|e| format!("bad response: {e}"))
-}
+/// They were this module's while `ring` and `job` were the only callers. `svrn
+/// quality check --distribute` is a third and it lives in `sovereign-cli`, so
+/// the pair moved to `sovereign_cli_shared::rail`, the crate both already
+/// link. Re-exported rather than re-imported at each call site because
+/// [`dev`](super::ring_cmd::dev) needs the CONSTANTS (it proxies opaque bytes
+/// under a grant token and cannot use the functions) and every other caller
+/// here needs the functions, so one `use` line serves both and a route renamed
+/// on the daemon still breaks the build at every caller.
+pub(crate) use sovereign_cli_shared::rail::{
+    error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LOG_PATH,
+};
 
 /// Mint a grant that reaches exactly one namespace's rail and nothing else.
 async fn mint_rail_grant(namespace: &str) -> Result<String, String> {

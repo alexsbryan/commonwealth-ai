@@ -12340,6 +12340,7 @@ name = "sovereign-cli-shared"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "commonwealth-rail",
  "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",
