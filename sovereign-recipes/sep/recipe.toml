@@ -94,10 +94,21 @@ dedup_by_source = true
 # The 2026-06-08 snapshot also bundles the RAPTOR summary-node ANN index
 # (raptor_summaries.lance) on the main corpus, so collapsed-tree grounding
 # works on a fresh install with no re-enrichment.
+#
+# THE 2026-09-09 FILENAME WAS REPUBLISHED IN PLACE — same name, different
+# bytes, so the sha256 below moved from 8fee66d1... to 2eaddf02.... The first
+# archive under this name declared pooling=last over chunk vectors embedded
+# MEAN-pooled in 2026-04: true of the name, false of the vectors, and a
+# name-mismatched restorer would have been told "a genuine surprise" where the
+# honest answer was "an older stack". The replacement re-embeds chunks and
+# RAPTOR summaries on the current stack through the daemon's document path
+# (187,967 + 11,181 vectors, ~111 min) and the publisher's probe VERIFIES the
+# declaration at cosine 0.9999 before writing it (38ebf8157). If you hold a
+# copy fetched under the old sha, discard it.
 [prebuilt]
 hf_repo = "svrnmesh/sep-index"
 hf_filename = "sep-qwen-embedding-0.6b-2026-09-09.tar.zst"
-sha256 = "8fee66d1c66e0cb218c1c53d1334e3cfa244d1929eaa16e29fa0d029b5997535"
+sha256 = "2eaddf0220bbb16670164da34dfb49c7987f471b280e26fba53c47a1f61a921f"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # ── Atlas enrichment (v2, per-article) ───────────────────────────────
