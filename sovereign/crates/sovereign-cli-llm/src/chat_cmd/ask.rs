@@ -306,6 +306,7 @@ async fn run_turn(
             on_token: Some(&mut echo),
             on_narration: Some(&mut narrate),
             on_queue_position: Some(&mut queued),
+            on_notice: None,
         };
         client
             .run_turn(conversation_id, question, mode, None, &mut observer)

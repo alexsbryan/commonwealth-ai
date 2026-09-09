@@ -222,6 +222,7 @@ async fn run_one(
             on_token: Some(&mut echo),
             on_narration: Some(&mut narrate),
             on_queue_position: None,
+            on_notice: None,
         };
         client
             .run_turn(

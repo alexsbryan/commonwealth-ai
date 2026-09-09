@@ -263,16 +263,21 @@ status    = "active"
 #       conversion started — C2 discovers a frame, not a dilemma. The
 #       daemon-side emit (at stream-handle acquisition, beside
 #       drive_stream_handle) is R3.
-#   G11 TurnStream cannot reply      OPEN, BLOCKS G3/G8 and approvals.
-#       next_frame(&mut self) holds the socket exclusively, so no Tauri
-#       command can answer while a reader runs. The daemon already does the
-#       right thing (turn_http.rs:702 splits sink/stream, writer fed by mpsc).
-#       Fix once in sovereign-turn-client and all three surfaces gain it.
-#   G12 ?approvals=true              OPEN. TurnClient::stream_url takes no
-#       query params, so the client family cannot claim approvals at all.
-#   G13 drain_turn ends at Complete  OPEN. message-refined and lesson-proposed
-#       fire AFTER the terminal frame. The socket stays open host-side, so
-#       this is the CLIENT's drain contract, not a protocol limit.
+#   G11 TurnStream cannot reply      DONE 2026-09-09 (R2). The socket
+#       splits at connect: writer task fed by mpsc, cloneable TurnSender
+#       answers mid-drain. Was: next_frame(&mut self) held the socket
+#       exclusively, so no Tauri command could answer while a reader ran.
+#       The daemon's own split (turn_http.rs:702) was the shape copied.
+#   G12 ?approvals=true              DONE 2026-09-09 (R2).
+#       connect_with(StreamOptions) claims; the unclaimed URL is
+#       byte-identical to the pre-R2 one. Was: TurnClient::stream_url took
+#       no query params, so the client family could not claim at all.
+#   G13 drain_turn ends at Complete  DONE 2026-09-09 (R2) — this row was
+#       the CLIENT's drain contract, and the client now honours it:
+#       TurnObserver::on_notice during the turn, drain_after_complete for
+#       the window after (socket-open until host close, non-Notice frames
+#       refused by name). Surfaces RENDERING the notices is R3/C2, where
+#       the producers land.
 #   G14 THE WHOLE COMMAND SURFACE    MEASURED 2026-09-09. See the census
 #       immediately below — this row is no longer a guess.
 #
@@ -475,6 +480,22 @@ status    = "active"
 #   R2  THE CLIENT. sovereign-turn-client: split the socket (G11), the
 #       approvals claim (G12), drain past Complete (G13), Resume/Redirect
 #       senders. One crate, all three surfaces gain it.
+#       LANDED 2026-09-09. The socket splits on CONNECT — one writer task
+#       fed by an unbounded channel (the daemon's own turn_http shape),
+#       reader kept by TurnStream — and the write half is a CLONEABLE
+#       TurnSender, so an answer goes onto the wire while a drain is
+#       mid-read; that shape could not be written against this crate
+#       before. connect_with(StreamOptions { claim_approvals }) claims
+#       (?approvals=true, the host's own spelling; the unclaimed URL is
+#       byte-identical to before), TurnSender::send_answer is the reply,
+#       and TurnObserver gained on_notice + TurnStream::drain_after_complete
+#       reads the post-terminal window (any non-Notice frame there is an
+#       error BY NAME — a token after Complete is a protocol violation,
+#       not noise). The one-shot paths (connect/run_turn) are unchanged
+#       behaviour. Resume/Redirect senders were already G1's. Proven
+#       against a fake WS host on a real socket: prompt->answer mid-drain
+#       (the host holds its turn until answered), post-Complete notice
+#       delivery, unexpected-frame refusal. Commit: see git log (R2).
 #   R3  THE WIRE COVERAGE. G1-G10 to DONE, each with its daemon-side producer
 #       in SocketApprovalChannel and its frontend payload reconstructed
 #       byte-identically (the four already-reconstructible events prove the

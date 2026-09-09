@@ -35,18 +35,37 @@
 //! of "drive one turn to completion and tell me what it did". Five CLI ask
 //! commands each had their own version of the in-process equivalent, and each
 //! ended by going back to the store to find out what the turn had done —
-//! which only works from inside the process that owns the store. Here the
+//! only that works from inside the process that owns the store. Here the
 //! answer arrives as a [`TurnOutcome`], because `Complete` is a value that
 //! serializes.
+//!
+//! # The socket is split (sv-surface R2, 2026-09-09)
+//!
+//! A turn socket answers questions WHILE it streams: the host parks its
+//! executor on a [`TurnFrame::Prompt`] and the surface owes it a
+//! [`TurnRequest::Answer`] — from whatever task renders the card, which is
+//! never the task draining tokens. Until R2 this crate could not express
+//! that: `next_frame` held `&mut self` across every read, so nothing could
+//! write while a drain ran (G11), the URL could not claim approvals at all
+//! (G12), and the drain stopped at `Complete`, one frame before the
+//! re-synthesised answer arrives (G13). [`TurnClient::connect_with`] claims;
+//! [`TurnStream::sender`] is the cloneable write half that answers
+//! mid-drain; [`TurnStream::drain_after_complete`] reads the post-turn
+//! window. The one-shot drains (`run_turn`, `connect`) are byte-for-byte
+//! the pre-R2 behaviour — an unclaimed plain stream.
 
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
+use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::projection::{Citation, Provenance};
 use sovereign_contracts::types::{
-    EpistemicState, Intent, NarrationPhase, TurnFrame, TurnMode, TurnRequest,
+    EpistemicState, Intent, NarrationPhase, TurnAnswer, TurnFrame, TurnMode, TurnNotice,
+    TurnRequest,
 };
 
 /// What one turn did, assembled from the terminal `Complete` frame.
@@ -90,6 +109,13 @@ pub struct TurnObserver<'a> {
     pub on_narration: Option<&'a mut (dyn FnMut(&NarrationPhase, &str, u64) + Send)>,
     /// Called when the host reports this turn is queued behind others.
     pub on_queue_position: Option<&'a mut (dyn FnMut(u32, u64) + Send)>,
+    /// Called with each Notice — what the host said that no answer is owed
+    /// (step progress, the re-synthesised answer, a proposed lesson, a
+    /// resolve acknowledgement). sv-surface R2/G13: notices are part of
+    /// the stream, not noise around it, and the two that fire AFTER the
+    /// terminal frame reach [`TurnStream::drain_after_complete`] through
+    /// this same hook.
+    pub on_notice: Option<&'a mut (dyn FnMut(&TurnNotice) + Send)>,
 }
 
 /// A connection to a serving host's turn surface.
@@ -97,6 +123,27 @@ pub struct TurnObserver<'a> {
 pub struct TurnClient {
     base: String,
     http: reqwest::Client,
+}
+
+/// How to open one conversation's turn stream (sv-surface R2 / G12).
+///
+/// Defaults are the pre-R2 behaviour byte-for-byte: an unclaimed plain
+/// stream. Every field is opt-in, and each one carries an obligation the
+/// doc names.
+#[derive(Debug, Clone, Default)]
+pub struct StreamOptions {
+    /// Claim this conversation's approvals on the upgrade
+    /// (`?approvals=true`): the host puts its consent questions to this
+    /// socket, as `TurnFrame::Prompt`, and expects
+    /// [`TurnRequest::Answer`] back — [`TurnSender::send_answer`] is the
+    /// spelling.
+    ///
+    /// Off by default, and the default is load-bearing: a reader that
+    /// installs no answer handler (`svrn chat`, the bench harness, a
+    /// one-shot drain) must keep running under the host's own
+    /// non-interactive channel. Claiming for such a reader turns the
+    /// host's auto-answer into a hang — the exact inversion C1 removed.
+    pub claim_approvals: bool,
 }
 
 /// A conversation the host created and now owns a row for.
@@ -610,7 +657,7 @@ impl TurnClient {
     }
 
     /// The WebSocket URL for one conversation's turn stream.
-    fn stream_url(&self, conversation_id: &str) -> String {
+    fn stream_url(&self, conversation_id: &str, options: &StreamOptions) -> String {
         let ws = if let Some(rest) = self.base.strip_prefix("https://") {
             format!("wss://{rest}")
         } else if let Some(rest) = self.base.strip_prefix("http://") {
@@ -618,16 +665,65 @@ impl TurnClient {
         } else {
             format!("ws://{}", self.base)
         };
-        format!("{ws}/v1/conversations/{conversation_id}/stream")
+        let mut url = format!("{ws}/v1/conversations/{conversation_id}/stream");
+        if options.claim_approvals {
+            // The host's own spelling (`StreamParams::approvals`) — one
+            // query key, and its absence is the unclaimed byte-for-byte
+            // URL every client sent before this field existed.
+            url.push_str("?approvals=true");
+        }
+        url
     }
 
-    /// Open the turn stream for a conversation.
+    /// Open the turn stream for a conversation, unclaimed.
     pub async fn connect(&self, conversation_id: &str) -> Result<TurnStream> {
-        let url = self.stream_url(conversation_id);
+        self.connect_with(conversation_id, StreamOptions::default())
+            .await
+    }
+
+    /// Open the turn stream with options — the claimed spelling (G12).
+    ///
+    /// `claim_approvals` is the same bargain the host's `?approvals=true`
+    /// makes: the host puts this conversation's consent questions to THIS
+    /// socket as `TurnFrame::Prompt` and parks its executor until
+    /// [`TurnSender::send_answer`] replies. Claiming installs the
+    /// obligation — a claimed socket with no answer path turns the host's
+    /// auto-answer into a hang — so [`Self::connect`] stays the unclaimed
+    /// default and one-shot drains keep working exactly as before.
+    pub async fn connect_with(
+        &self,
+        conversation_id: &str,
+        options: StreamOptions,
+    ) -> Result<TurnStream> {
+        let url = self.stream_url(conversation_id, &options);
         let (socket, _) = tokio_tungstenite::connect_async(&url)
             .await
             .map_err(|e| Error::Inference(format!("connect {url}: {e}")))?;
-        Ok(TurnStream { socket })
+
+        // Split the socket, the daemon's own writer shape (turn_http):
+        // one writer task fed by an unbounded channel, the reader kept by
+        // the stream. Before this split (sv-surface R2/G11) `next_frame`
+        // held `&mut self` across every read, so nothing else in the
+        // process could put an `Answer` on the wire while a drain was
+        // running — exactly the shape a Tauri command needs to refuse.
+        // Now the write half is a cloneable [`TurnSender`] that answers
+        // mid-drain.
+        let (sink, stream) = socket.split();
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        tokio::spawn(async move {
+            let mut sink = sink;
+            while let Some(text) = rx.recv().await {
+                if sink.send(WsMessage::Text(text.into())).await.is_err() {
+                    break; // the host went away; the reader will see it
+                }
+            }
+            // rx exhausted = every sender dropped = the stream is closing;
+            // dropping the sink here closes the write half cleanly.
+        });
+        Ok(TurnStream {
+            socket: stream,
+            tx: TurnSender { tx },
+        })
     }
 
     /// Drive ONE turn to completion — the client-side mirror of
@@ -1004,16 +1100,55 @@ mod crud_wire_tests {
 /// in-flight turn per socket and refuses a second BY NAME rather than
 /// queueing it — so the socket, not the client, is the thing whose state
 /// matters to a caller.
+///
+/// The socket is SPLIT (sv-surface R2/G11): this struct owns the read
+/// half, and the write half is a cloneable [`TurnSender`] — get it from
+/// [`Self::sender`] — so an answer can go onto the wire while a drain is
+/// mid-read. That is not a convenience: the desktop's Tauri commands
+/// answer prompts from a different task than the one rendering tokens,
+/// and before the split that shape could not be written against this
+/// crate at all.
 pub struct TurnStream {
-    socket: tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    socket: futures::stream::SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    tx: TurnSender,
 }
 
-impl TurnStream {
+/// The write half of a turn socket — send requests, including the answers
+/// to prompts, from ANY task that holds a clone (sv-surface R2/G11).
+///
+/// Cheap to clone (one channel sender). A send after the stream closed
+/// fails by name; a send into a host that went gone surfaces at the next
+/// read as the connection ending, which is where the reader already
+/// looks.
+#[derive(Debug, Clone)]
+pub struct TurnSender {
+    tx: mpsc::UnboundedSender<String>,
+}
+
+impl TurnSender {
+    /// Queue one request onto the socket. THE write (ARCH §10.6) — the
+    /// `send_*` methods differ only in the value they build.
+    pub fn send(&self, req: TurnRequest) -> Result<()> {
+        let text = serde_json::to_string(&req)
+            .map_err(|e| Error::Serialization(format!("serializing TurnRequest: {e}")))?;
+        self.tx
+            .send(text)
+            .map_err(|_| Error::Inference("turn socket writer is gone".to_string()))
+    }
+
+    /// Answer a parked [`TurnFrame::Prompt`] — the reply carrying the same
+    /// `id` the question arrived with (G12's second half: a claimed socket
+    /// now has something to answer WITH).
+    pub fn send_answer(&self, id: &str, answer: &TurnAnswer) -> Result<()> {
+        self.send(TurnRequest::Answer {
+            id: id.to_string(),
+            answer: answer.clone(),
+        })
+    }
+
     /// Ask for a turn.
     pub async fn send_message(
-        &mut self,
+        &self,
         content: &str,
         mode: TurnMode,
         intent: Option<Intent>,
@@ -1023,7 +1158,58 @@ impl TurnStream {
             mode,
             intent,
         })
-        .await
+    }
+
+    /// Continue an earlier turn under a picked intent — the wire form of
+    /// `Runtime::resume_session_stream`, and what a clarification card's
+    /// option click becomes once the surface holds no `Runtime`.
+    ///
+    /// A `session_id` the host no longer holds is not an error: sessions are
+    /// dropped ~30s after their turn and the resume path reads nothing out of
+    /// one. A `session_id` on a DIFFERENT conversation is refused by the host
+    /// with a `TurnFrame::StreamError` naming it.
+    pub async fn send_resume(
+        &self,
+        content: &str,
+        session_id: &str,
+        intent_hint: &str,
+    ) -> Result<()> {
+        self.send(TurnRequest::Resume {
+            content: content.to_string(),
+            session_id: session_id.to_string(),
+            intent_hint: intent_hint.to_string(),
+        })
+    }
+
+    /// Cancel the in-flight turn and re-answer the SAME message under a
+    /// different intent — the wire form of `Runtime::redirect_turn_stream`.
+    ///
+    /// No `content` parameter, deliberately: the host re-answers the message
+    /// the session already holds, so there is nothing here that could disagree
+    /// with what was asked. The session must be live and on this stream's own
+    /// conversation; both misses come back as a named `StreamError`.
+    pub async fn send_redirect(&self, session_id: &str, intent_hint: &str) -> Result<()> {
+        self.send(TurnRequest::Redirect {
+            session_id: session_id.to_string(),
+            intent_hint: intent_hint.to_string(),
+        })
+    }
+}
+
+impl TurnStream {
+    /// The write half, cloneable — answer prompts mid-drain (G11).
+    pub fn sender(&self) -> TurnSender {
+        self.tx.clone()
+    }
+
+    /// Ask for a turn.
+    pub async fn send_message(
+        &mut self,
+        content: &str,
+        mode: TurnMode,
+        intent: Option<Intent>,
+    ) -> Result<()> {
+        self.tx.send_message(content, mode, intent).await
     }
 
     /// Continue an earlier turn under a picked intent — the wire form of
@@ -1040,12 +1226,7 @@ impl TurnStream {
         session_id: &str,
         intent_hint: &str,
     ) -> Result<()> {
-        self.send(TurnRequest::Resume {
-            content: content.to_string(),
-            session_id: session_id.to_string(),
-            intent_hint: intent_hint.to_string(),
-        })
-        .await
+        self.tx.send_resume(content, session_id, intent_hint).await
     }
 
     /// Cancel the in-flight turn and re-answer the SAME message under a
@@ -1056,22 +1237,7 @@ impl TurnStream {
     /// with what was asked. The session must be live and on this stream's own
     /// conversation; both misses come back as a named `StreamError`.
     pub async fn send_redirect(&mut self, session_id: &str, intent_hint: &str) -> Result<()> {
-        self.send(TurnRequest::Redirect {
-            session_id: session_id.to_string(),
-            intent_hint: intent_hint.to_string(),
-        })
-        .await
-    }
-
-    /// Serialize one request onto the socket. THE write (ARCH §10.6) — the
-    /// three `send_*` methods differ only in the value they build.
-    async fn send(&mut self, req: TurnRequest) -> Result<()> {
-        let text = serde_json::to_string(&req)
-            .map_err(|e| Error::Serialization(format!("serializing TurnRequest: {e}")))?;
-        self.socket
-            .send(WsMessage::Text(text.into()))
-            .await
-            .map_err(|e| Error::Inference(format!("sending turn: {e}")))
+        self.tx.send_redirect(session_id, intent_hint).await
     }
 
     /// Read the next protocol frame, or `None` when the host hung up.
@@ -1079,6 +1245,11 @@ impl TurnStream {
     /// Non-text frames are skipped rather than surfaced: ping/pong are the
     /// codec's business, and they are the reason the host spawns its turn
     /// instead of awaiting it inline.
+    ///
+    /// This is also the CONTINUOUS-read primitive: it has no opinion about
+    /// turn boundaries, so a host that keeps talking after the terminal
+    /// frame (the post-turn notices, G13) is read by staying in this loop
+    /// — [`Self::drain_after_complete`] is the packaged spelling.
     pub async fn next_frame(&mut self) -> Result<Option<TurnFrame>> {
         while let Some(msg) = self.socket.next().await {
             let msg = msg.map_err(|e| Error::Inference(format!("turn stream: {e}")))?;
@@ -1149,11 +1320,11 @@ impl TurnStream {
                     return Ok(outcome);
                 }
                 // A host only sends a Prompt to the socket that CLAIMED
-                // this conversation's approvals (`?approvals=1` on the
-                // upgrade), and this reader installs no handler for them.
-                // Erroring names the gap; ignoring it would park the
-                // host's turn on a decision nobody is going to make
-                // (ARCH §18.3).
+                // this conversation's approvals, and this drain installs
+                // no answer path. Erroring names the gap; ignoring it
+                // would park the host's turn on a decision nobody is
+                // going to make (ARCH §18.3). The claimed spelling is
+                // `next_frame` plus `Self::sender()`'s `send_answer`.
                 TurnFrame::Prompt { id, prompt } => {
                     use sovereign_contracts::types::TurnPrompt;
                     let kind = match prompt {
@@ -1163,16 +1334,15 @@ impl TurnStream {
                     };
                     return Err(Error::Inference(format!(
                         "turn stream: the host asked this client to {kind} (prompt id \
-                         {id}), but this client did not claim approvals for the \
-                         conversation"
+                         {id}), but this drain installs no answer path — read with \
+                         next_frame and reply with TurnStream::sender().send_answer"
                     )));
                 }
-                // Owed nothing by construction, so skipping one is not a
-                // dropped obligation. Rendered when the client family grows
-                // its observer surface (sv-surface R2/G13 — which also
-                // extends the drain past `Complete` for the two notices
-                // that fire after it).
-                TurnFrame::Notice { .. } => {}
+                TurnFrame::Notice { notice } => {
+                    if let Some(f) = observer.on_notice.as_deref_mut() {
+                        f(&notice);
+                    }
+                }
                 TurnFrame::StreamError {
                     message,
                     retry_after_secs,
@@ -1193,5 +1363,252 @@ impl TurnStream {
                 }
             }
         }
+    }
+
+    /// Read what the host says AFTER the terminal frame (sv-surface
+    /// R2/G13) — the post-turn window.
+    ///
+    /// `MessageRefined` and `LessonProposed` fire after `Complete`
+    /// (post-stream refinement, a detached capture spawn) and the socket
+    /// stays open host-side until it closes, so "the turn ended" and
+    /// "the host is done talking" are different moments. This drains
+    /// the second: every `Notice` goes to `observer.on_notice`, the
+    /// host closing the socket ends it `Ok(())`, and any other frame in
+    /// the window is an error BY NAME — a token after the terminal
+    /// frame is a protocol violation a caller must not swallow.
+    pub async fn drain_after_complete(&mut self, observer: &mut TurnObserver<'_>) -> Result<()> {
+        loop {
+            let Some(frame) = self.next_frame().await? else {
+                return Ok(());
+            };
+            match frame {
+                TurnFrame::Notice { notice } => {
+                    if let Some(f) = observer.on_notice.as_deref_mut() {
+                        f(&notice);
+                    }
+                }
+                other => {
+                    return Err(Error::Inference(format!(
+                        "turn stream: unexpected frame after the turn completed: {other:?}"
+                    )));
+                }
+            }
+        }
+    }
+}
+
+/// The R2 split, proven against a fake host on a real socket: the claim
+/// rides the URL (G12), an answer flows while the reader is mid-drain
+/// (G11), and the post-terminal window is readable (G13).
+#[cfg(test)]
+mod stream_split_tests {
+    use futures::{SinkExt, StreamExt};
+    use tokio::time::Duration;
+    use tokio_tungstenite::tungstenite::Message as WsMessage;
+
+    use super::{StreamOptions, TurnAnswer, TurnClient, TurnFrame, TurnNotice, TurnObserver};
+
+    /// `?approvals=true` appears when claimed and NOT otherwise — the
+    /// unclaimed URL is byte-for-byte what every client sent before the
+    /// field existed (the same discipline `TurnMode` keeps).
+    #[test]
+    fn a_claimed_url_carries_the_query_and_a_plain_one_does_not() {
+        let client = TurnClient::new("http://127.0.0.1:9741");
+        assert_eq!(
+            client.stream_url("c1", &StreamOptions::default()),
+            "ws://127.0.0.1:9741/v1/conversations/c1/stream",
+            "the unclaimed URL must not carry a query"
+        );
+        assert_eq!(
+            client.stream_url(
+                "c1",
+                &StreamOptions {
+                    claim_approvals: true
+                }
+            ),
+            "ws://127.0.0.1:9741/v1/conversations/c1/stream?approvals=true",
+            "the claim is the host's own `StreamParams::approvals` spelling"
+        );
+    }
+
+    /// THE G11 property, end to end: the host asks BEFORE streaming and
+    /// will not stream until answered, the reader is inside `next_frame`
+    /// when the answer goes out, and the answer is put on the wire by the
+    /// SENDER — a handle the reader does not own. Before the split this
+    /// test could not be written: `send_answer` did not exist, and any
+    /// write would have needed `&mut` of the very stream being read.
+    #[tokio::test]
+    async fn an_answer_flows_while_the_reader_is_mid_drain() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let host = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+            // Ask first. The preview is a minimal ActionPreview.
+            ws.send(WsMessage::Text(
+                r#"{"type":"prompt","data":{"id":"step:1","prompt":{"approval":{"preview":{"tool_id":"shell","description":"Run it","params":{"cmd":"ls"}}}}}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            // Hold the turn until the answer arrives — the parked executor.
+            let Some(Ok(answer)) = tokio::time::timeout(Duration::from_secs(5), ws.next())
+                .await
+                .expect("the host was answered rather than left parked")
+            else {
+                panic!("connection died before the answer");
+            };
+            // Then stream the turn to completion.
+            ws.send(WsMessage::Text(
+                r#"{"type":"token","data":{"message_id":"m1","chunk":"done"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"complete","data":{"message_id":"m1"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            answer.to_string()
+        });
+
+        let client = TurnClient::new(format!("http://{addr}"));
+        let mut stream = client
+            .connect_with(
+                "c1",
+                StreamOptions {
+                    claim_approvals: true,
+                },
+            )
+            .await
+            .unwrap();
+        // The write half, taken BEFORE the read loop — a clone the reader
+        // does not hold.
+        let sender = stream.sender();
+
+        let mut answered: Vec<String> = Vec::new();
+        let mut text = String::new();
+        loop {
+            let frame = stream
+                .next_frame()
+                .await
+                .expect("the stream stays readable")
+                .expect("the host closes only after Complete");
+            match frame {
+                TurnFrame::Prompt { id, .. } => {
+                    // The reader is mid-loop here; the answer goes out
+                    // through the sender alone.
+                    sender
+                        .send_answer(&id, &TurnAnswer::Approved(true))
+                        .expect("the answer is queued while the reader runs");
+                    answered.push(id);
+                }
+                TurnFrame::Token { chunk, .. } => text.push_str(&chunk),
+                TurnFrame::Complete { .. } => break,
+                _ => {}
+            }
+        }
+        assert_eq!(answered, ["step:1"], "the prompt was answered by id");
+        assert_eq!(text, "done");
+
+        let on_the_wire = host.await.unwrap();
+        assert!(
+            on_the_wire.contains(r#""type":"answer""#),
+            "the host received an Answer frame; got {on_the_wire}"
+        );
+        assert!(
+            on_the_wire.contains(r#""id":"step:1""#) && on_the_wire.contains(r#""approved":true"#),
+            "the answer echoes the prompt's id with the consent; got {on_the_wire}"
+        );
+    }
+
+    /// G13: `MessageRefined` fires AFTER the terminal `Complete`, the
+    /// socket stays open, and the post-turn window is readable to its end.
+    #[tokio::test]
+    async fn post_complete_notices_reach_the_observer() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"complete","data":{"message_id":"m1"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"notice","data":{"notice":{"message_refined":{"conversation_id":"c1","message_id":"m1","new_content":"the revised answer."}}}}"#
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            // Host-side the socket closes when it is done talking; the
+            // drain must read that as the end, not an error. (A CLEAN
+            // close — a reset without the handshake is a different fact
+            // and the client is right to surface it.)
+            ws.close(None).await.unwrap();
+        });
+
+        let client = TurnClient::new(format!("http://{addr}"));
+        let mut stream = client.connect("c1").await.unwrap();
+        let mut observer = TurnObserver::default();
+        let outcome = stream.drain_turn(&mut observer).await.unwrap();
+        assert_eq!(outcome.message_id, "m1");
+
+        let mut seen: Vec<String> = Vec::new();
+        let mut on_notice = |n: &TurnNotice| {
+            if let TurnNotice::MessageRefined(p) = n {
+                seen.push(p.new_content.clone());
+            }
+        };
+        let mut observer = TurnObserver {
+            on_notice: Some(&mut on_notice),
+            ..Default::default()
+        };
+        stream.drain_after_complete(&mut observer).await.unwrap();
+        assert_eq!(
+            seen,
+            ["the revised answer.".to_string()],
+            "the post-terminal notice reached the caller"
+        );
+    }
+
+    /// A non-Notice frame in the post-turn window is a protocol violation
+    /// and is refused by name — a caller must not swallow a token that
+    /// arrived after the terminal frame (§18.3).
+    #[tokio::test]
+    async fn an_unexpected_frame_after_complete_is_an_error() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"complete","data":{"message_id":"m1"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"token","data":{"message_id":"m1","chunk":"?"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+        });
+
+        let client = TurnClient::new(format!("http://{addr}"));
+        let mut stream = client.connect("c1").await.unwrap();
+        let mut observer = TurnObserver::default();
+        stream.drain_turn(&mut observer).await.unwrap();
+        let err = stream
+            .drain_after_complete(&mut observer)
+            .await
+            .expect_err("a token after Complete is refused");
+        assert!(
+            err.to_string()
+                .contains("unexpected frame after the turn completed"),
+            "the error names the violation; got {err}"
+        );
     }
 }
