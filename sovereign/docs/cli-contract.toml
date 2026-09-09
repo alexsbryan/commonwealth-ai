@@ -609,6 +609,7 @@ flags = [
   { name = "--budget-secs", takes_value = true },
   { name = "--mint" },
   { name = "--registry", takes_value = true },
+  { name = "--distribute" },
 ]
 [[command]]
 path = "quality lane"
@@ -3588,6 +3589,22 @@ note = """The BUDGET RULE is the assertable half of `quality check`. Driving a r
 [journey.step.expect]
 exit = 4
 stdout_contains = "out of budget"
+
+[[journey.step]]
+run = "quality check --trigger ci:test --distribute --dry-run"
+note = """cw-lift 5e. The assertable half of `--distribute` without submitting \
+anything: a dry run prints WHAT WOULD BE PINNED, and the pin is the one thing \
+a reader cannot infer from the selection. The assertion is the rev line, \
+because it is DERIVED — `git rev-parse HEAD` in the checkout — rather than \
+echoed from a flag, so the step fails if `ci:test` stops declaring a \
+[[trigger]] (exit 2), if the venue selects nothing (exit 4), or if the pin \
+stops being computed. Driving the real submission here would need a daemon, a \
+`work` roster entry and a donor, none of which a journey lane may assume; the \
+merge itself is proven by `quality_check_cmd::distribute`'s tests, two of them \
+watched failing."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "each pinned to rev"
 
 [[journey.step]]
 run = "quality map --fidelity"

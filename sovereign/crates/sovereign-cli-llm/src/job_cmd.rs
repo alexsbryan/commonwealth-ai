@@ -45,15 +45,15 @@
 //! wire rather than being composed here — `ring log`'s two rules, applied to
 //! the same wire shape (`ring_cmd/mod.rs`, `run_log`).
 
-use std::collections::BTreeMap;
-
 use commonwealth_core::HandoffId;
-use commonwealth_rail::{Admission, AdmittedOp, Payload, RailAct, RailGap};
+use commonwealth_rail::RailAct;
 use commonwealth_work::act::{Submission, WorkAct};
 use commonwealth_work::process::ProcessPayload;
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{seal, ActorKey, WORK_NAMESPACE};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
+
+use sovereign_cli_shared::rail::admission_from_wire;
 
 use crate::ring_cmd::{rail_append, rail_log, short_stamp};
 
@@ -502,50 +502,6 @@ async fn run_status(args: &[String]) -> i32 {
     println!();
     println!("  A gap does not make the fold above wrong, it makes it PARTIAL.");
     0
-}
-
-/// Rebuild the `Admission` the daemon already computed, so the fold here is
-/// the SAME function the donor loop runs.
-///
-/// The alternative was walking `ops` in this file and deciding what an act
-/// means, which is a second fold and therefore a second answer to who holds a
-/// lease (ARCH §10.6). `AdmittedOp` gained `Deserialize` for exactly this.
-///
-/// `floors` is empty and that is correct rather than lossy: it is an INPUT to
-/// admission — the sealed floor below which a missing op is absent by
-/// agreement rather than a hole — and the daemon has already applied it to the
-/// `ops` and `gaps` on the wire. The fold reads neither.
-fn admission_from_wire(v: &serde_json::Value) -> Result<Admission, String> {
-    // THE KEYS ARE REQUIRED, the contents are not, and the asymmetry is the
-    // point (ARCH §18.3). An answer with no `ops` at all folds to an empty
-    // projection, and this verb would then print "nothing submitted yet" — a
-    // confident claim about the ring composed out of a shape this build could
-    // not read. Absence of the key is a daemon/CLI mismatch and says so;
-    // absence of any op is a quiet ring and is `[]` on the wire.
-    let missing = |k: &str| {
-        format!("the daemon's log answer carried no `{k}` — this build and that daemon do not agree on the shape of `/v1/rail/log`")
-    };
-    let ops: Vec<AdmittedOp> = serde_json::from_value(
-        v.get("ops").cloned().ok_or_else(|| missing("ops"))?,
-    )
-    .map_err(|e| format!("the daemon's log answer carried ops this build cannot read: {e}"))?;
-    // Gaps are decoded for their COUNT, which the fold reports; the sentences
-    // are rendered from the wire value itself, above. A gap kind a newer
-    // daemon added is not a reason to refuse the whole answer — but a missing
-    // key still is, because "no gaps" is what this verb reports as complete.
-    let gaps: Vec<RailGap> =
-        serde_json::from_value(v.get("gaps").cloned().ok_or_else(|| missing("gaps"))?)
-            .unwrap_or_default();
-    let held = v
-        .get("held")
-        .and_then(|h| h.as_u64())
-        .ok_or_else(|| missing("held"))? as usize;
-    Ok(Admission {
-        ops,
-        gaps,
-        held,
-        floors: BTreeMap::new(),
-    })
 }
 
 /// Does this handoff answer to what the operator typed? Prefix over the full

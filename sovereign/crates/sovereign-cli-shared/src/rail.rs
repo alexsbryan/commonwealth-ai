@@ -31,7 +31,9 @@
 //! reader uses. A base that is not loopback simply fails at the door: these
 //! routes are mounted on the operator surface and trust the listener.
 
-use commonwealth_rail::RailAct;
+use std::collections::BTreeMap;
+
+use commonwealth_rail::{Admission, AdmittedOp, RailAct, RailGap};
 
 /// The rail's two routes, spelled once for every caller in the workspace.
 ///
@@ -117,6 +119,54 @@ pub async fn rail_append(namespace: &str, act: &RailAct) -> Result<serde_json::V
         return Err(error_text(resp).await);
     }
     resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
+/// Rebuild the [`Admission`] the daemon already computed, so a caller's fold
+/// is the SAME function the donor loop runs.
+///
+/// The alternative was walking `ops` at each call site and deciding what an
+/// act means, which is a second fold and therefore a second answer to who
+/// holds a lease (ARCH §10.6). `AdmittedOp` gained `Deserialize` for exactly
+/// this. It lives here rather than in `svrn job` because cw-lift 5e gave it a
+/// second reader in a different crate — `svrn quality check --distribute`
+/// folds the same answer to merge a distributed run's verdicts.
+///
+/// `floors` is empty and that is correct rather than lossy: it is an INPUT to
+/// admission — the sealed floor below which a missing op is absent by
+/// agreement rather than a hole — and the daemon has already applied it to the
+/// `ops` and `gaps` on the wire. The fold reads neither.
+///
+/// THE KEYS ARE REQUIRED, the contents are not, and the asymmetry is the point
+/// (ARCH §18.3). An answer with no `ops` at all folds to an empty projection,
+/// and a caller would then report "nothing submitted yet" — a confident claim
+/// about the ring composed out of a shape this build could not read. Absence
+/// of the key is a daemon/CLI mismatch and says so; absence of any op is a
+/// quiet ring and is `[]` on the wire.
+pub fn admission_from_wire(v: &serde_json::Value) -> Result<Admission, String> {
+    let missing = |k: &str| {
+        format!("the daemon's log answer carried no `{k}` — this build and that daemon do not agree on the shape of `{RAIL_LOG_PATH}`")
+    };
+    let ops: Vec<AdmittedOp> = serde_json::from_value(
+        v.get("ops").cloned().ok_or_else(|| missing("ops"))?,
+    )
+    .map_err(|e| format!("the daemon's log answer carried ops this build cannot read: {e}"))?;
+    // Gaps are decoded for their COUNT, which the fold reports; the sentences
+    // are rendered from the wire value itself by the caller. A gap kind a newer
+    // daemon added is not a reason to refuse the whole answer — but a missing
+    // key still is, because "no gaps" is what a caller reports as complete.
+    let gaps: Vec<RailGap> =
+        serde_json::from_value(v.get("gaps").cloned().ok_or_else(|| missing("gaps"))?)
+            .unwrap_or_default();
+    let held = v
+        .get("held")
+        .and_then(|h| h.as_u64())
+        .ok_or_else(|| missing("held"))? as usize;
+    Ok(Admission {
+        ops,
+        gaps,
+        held,
+        floors: BTreeMap::new(),
+    })
 }
 
 #[cfg(test)]

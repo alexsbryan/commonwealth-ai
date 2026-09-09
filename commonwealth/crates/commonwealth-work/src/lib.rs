@@ -63,6 +63,13 @@ pub use act::{
     MIN_TTL_SECS,
 };
 pub use actor::{ActorKey, InvalidActorKey};
+// The handoff id, re-exported for the same reason `ActorKey` and `seal` are:
+// a client of this plane should not have to link the crate that happens to
+// DEFINE the noun in order to use the plane. `svrn quality check --distribute`
+// (cw-lift 5e) needed exactly `HandoffId::generate()` and nothing else from
+// `commonwealth-core`, and taking the direct dep grew that crate's fan-in
+// 14 -> 15 — a god-crate edge bought for one constructor (ARCH §8.3).
+pub use commonwealth_core::ids::HandoffId;
 pub use seal::{seal, unit_hash, verify, WorkSealError};
 
 /// The rail namespace every act in this crate rides on.

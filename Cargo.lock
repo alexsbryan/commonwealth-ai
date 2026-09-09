@@ -12144,7 +12144,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
- "commonwealth-core",
  "commonwealth-rail",
  "commonwealth-work",
  "corpus-engine",

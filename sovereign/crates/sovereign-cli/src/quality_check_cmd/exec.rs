@@ -217,6 +217,21 @@ pub(super) struct InstrumentRun {
     /// [`Covariates`].
     pub(super) before: Covariates,
     pub(super) after: Covariates,
+    /// **Which node produced this row** — the donor's rail actor key on a
+    /// `--distribute` run, `None` everywhere else (cw-lift 5e).
+    ///
+    /// `None` is a NAMED absence and never this node's own key: a local run
+    /// signs nothing and leases nothing, so there is no actor that took part
+    /// in it, and writing one there would put an identity on a row that
+    /// identity did not touch (ARCH §18.3). The offload share reads
+    /// `node != submitted_by` over EVERY row on both paths — a local run's
+    /// `None == None` is exactly the bar's measured floor of 0, and a
+    /// distributed row the cohort could not place is `None` against a real
+    /// submitter, which counts in the denominator and never in the
+    /// numerator. That is what makes a dropped shard cost the share rather
+    /// than flatter it (`quality/campaigns/cw-lift.toml`,
+    /// `cw-work-ci-offload`).
+    pub(super) node: Option<String>,
 }
 
 impl InstrumentRun {
@@ -235,6 +250,7 @@ impl InstrumentRun {
             tail: String::new(),
             before: at,
             after: at,
+            node: None,
         }
     }
 }
@@ -377,6 +393,7 @@ pub(super) fn finish(
                 tail: String::new(),
                 before: f.before,
                 after,
+                node: None,
             };
         }
     };
@@ -457,6 +474,8 @@ pub(super) fn finish(
         tail: tail_of(&joined, 12),
         before: f.before,
         after,
+        // A locally spawned lane names no node. See the field docs.
+        node: None,
     }
 }
 

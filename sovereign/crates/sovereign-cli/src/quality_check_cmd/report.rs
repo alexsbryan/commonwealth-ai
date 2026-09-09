@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use kernel_types::quality::{Instrument, Trigger};
+use kernel_types::{render_rows, Judgement};
 
 use super::exec::InstrumentRun;
 use super::fingerprint::Fingerprint;
@@ -29,6 +30,47 @@ pub(super) fn report_one(inst: &Instrument, run: &InstrumentRun) {
         for line in run.tail.lines() {
             println!("     {line}");
         }
+    }
+}
+
+/// The verdict table, with the `node` column beside it (cw-lift 5e).
+///
+/// **`render_rows` is still the one renderer.** It owns the subject / label /
+/// age / reason columns and their widths, and this function does not
+/// reimplement any of it — it zips the SAME `rows` slice against the lines
+/// that renderer produced and appends one field. A second table here is what
+/// would make a distributed verdict stop being diffable against a local one,
+/// which is the whole reason the column exists (ARCH §10.6).
+///
+/// The column is printed on BOTH paths and for every row, with `—` where the
+/// row names no node. A column that appeared only on distributed runs would
+/// make the two tables different SHAPES, and the acceptance gate for this
+/// rung is a diff between them.
+pub(super) fn render_table(rows: &[Judgement], nodes: &[Option<String>]) -> String {
+    let table = render_rows(rows);
+    let mut out = String::new();
+    for (i, line) in table.lines().enumerate() {
+        match nodes.get(i) {
+            Some(node) => out.push_str(&format!("{line}   [{}]\n", node_label(node.as_deref()))),
+            // More rendered lines than rows means `render_rows` changed shape
+            // under this function. Print the line unchanged rather than
+            // dropping it: a row missing from the table is the one failure
+            // this rung is not allowed to have.
+            None => out.push_str(&format!("{line}\n")),
+        }
+    }
+    out
+}
+
+/// A node key, shortened for a terminal, or the named absence.
+///
+/// Never "local" and never this node's key: a row with no node had no actor
+/// take part in it, and inventing one would be a substitution (ARCH §18.3).
+pub(super) fn node_label(node: Option<&str>) -> String {
+    match node {
+        Some(k) if k.len() > 12 => format!("{}…", &k[..12]),
+        Some(k) => k.to_string(),
+        None => "—".to_string(),
     }
 }
 
@@ -100,6 +142,14 @@ pub(super) fn print_selection(
     }
 }
 
+/// The durable `quality-check/v1` table.
+///
+/// `submitted_by` is the actor key that SUBMITTED this run's work on a
+/// `--distribute` run. `None` on a local run and that is the honest reading,
+/// not a gap: a local run signs nothing, so no actor submitted it. Paired
+/// with each row's `node`, it is the whole input to the offload share
+/// (`scripts/cw-work-offload-share.sh`), and both are written by ONE path so
+/// a local run and a distributed one are read by one formula.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_summary(
     path: &Path,
@@ -111,6 +161,7 @@ pub(super) fn write_summary(
     total_secs: u64,
     budget_secs: u64,
     comparable: usize,
+    submitted_by: Option<&str>,
 ) -> std::io::Result<()> {
     let lane_rows: Vec<serde_json::Value> = lanes
         .iter()
@@ -143,6 +194,15 @@ pub(super) fn write_summary(
                 // one.
                 "daemon_uptime_secs_start": r.before.daemon_uptime_secs,
                 "daemon_uptime_secs_end": r.after.daemon_uptime_secs,
+                // WHICH NODE PRODUCED THIS ROW (cw-lift 5e). `null` where no
+                // actor took part — a locally spawned lane, or a distributed
+                // unit the cohort never placed. The share the
+                // `cw-work-ci-offload` bar scores counts rows where this is
+                // non-null AND differs from the document's `submitted_by`,
+                // over EVERY row: a shard that was dropped stays in the
+                // denominator, so silently losing one costs the share rather
+                // than flattering it.
+                "node": r.node,
             })
         })
         .collect();
@@ -150,6 +210,9 @@ pub(super) fn write_summary(
         "schema": "quality-check/v1",
         "stamp": stamp,
         "trigger": venue,
+        // See the parameter docs: `null` on a local run is "nobody submitted
+        // this", not "we could not tell".
+        "submitted_by": submitted_by,
         "fingerprint": {
             "hex": fp.hex,
             "primary": fp.primary,
@@ -234,6 +297,7 @@ mod tests {
             0,
             1800,
             0,
+            None,
         )
         .expect("writes");
         let doc: serde_json::Value =
@@ -269,7 +333,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("qc-summary-null-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("tmp dir");
         let path = dir.join("summary.json");
-        write_summary(&path, "s", "prepush", &fp(), &[lane], &results, 0, 60, 0).expect("writes");
+        write_summary(&path, "s", "prepush", &fp(), &[lane], &results, 0, 60, 0, None)
+            .expect("writes");
         let doc: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).expect("reads")).expect("json");
         let row = &doc["lanes"][0];
