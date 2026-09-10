@@ -1,0 +1,42 @@
+# First HONEST relayed reading, two machines on different networks
+# 2026-09-10 04:5x UTC. RuggedFox (Fedora, 69.181.167.209) pulling from
+# a MacBook tethered to a phone hotspot (172.20.10.5, public 71.134.157.175).
+#
+# THE GATE PASSED — this is the bench's OWN path line, not the daemon's:
+#
+#   path=relayed direct=[] relay=[https://usw1-1.relay.n0.iroh.link./]
+#
+# `direct=[]` is empty, and the class is `relayed`, not `mixed`. This is the
+# reading `relay-leg-CONTAMINATED.stdout` failed to take.
+#
+# Different networks CONFIRMED by different public IPs (71.134.157.175 vs
+# 69.181.167.209), not assumed from subnets.
+
+pathprobe viewer=0 status=206 clen=Some(33554432) crange=Some("bytes 0-33554431/1073741824") bytes=33554432 secs=31.01 rate=8.7 Mbit/s ttfb=189.8ms gaps: n=17957 p50=0.1 p99=82.5 max=98.2ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=7.9 Mbit/s verify=off
+
+# ---------------------------------------------------------------------------
+# THIS IS A PROBE, NOT THE BAR. Two reasons it does not close the NO-GO:
+#
+# 1. n=1 at 31 s. The bar is >=3 runs of 600 s reported as a distribution
+#    (ARCH 18.5 — a single-run number is not a result).
+#
+# 2. AN UNEXCLUDED CONFOUND, which matters more. The SENDER is a laptop
+#    tethered to a phone. Cellular uplink is typically 5-20 Mbit/s, so 8.7
+#    may be the phone's upstream rather than the n0 relay. The bar's intent
+#    is to characterise THE RELAY as the floor; this configuration cannot
+#    separate the two.
+#
+#    The contaminated run reported 7.8 Mbit/s and this one 8.7. They agree —
+#    but agreement between two numbers that may share a confound is not
+#    corroboration, and 7.8 already sat inside the prior WORK_PLANE.md writes
+#    down. That is the trap note 04b80710 named: a number that agrees with
+#    your prior is the one nobody checks.
+#
+# TO DISAMBIGUATE, cheapest first:
+#   - measure the phone's raw uplink (any speed test on the tethered Mac);
+#     if it is ~9 Mbit/s, this reading is the uplink and says nothing about
+#     the relay.
+#   - or re-run with the ROLES REVERSED (RuggedFox serves on wired/home,
+#     the Mac pulls) so the sender is not the cellular leg.
+#   - or re-run relayed between two machines that both have real uplinks,
+#     forcing relay by blocking direct rather than by NAT topology.
