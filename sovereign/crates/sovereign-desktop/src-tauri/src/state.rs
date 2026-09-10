@@ -1748,7 +1748,39 @@ pub async fn bootstrap_with_progress(
 
         match daemon.try_resume().await {
             Ok(true) => tracing::info!("mesh: resumed from persisted state"),
-            Ok(false) => tracing::debug!("mesh: no persisted state, starting fresh"),
+            Ok(false) => {
+                // sv-surface R4/B1: a fresh install has no mesh.json, and
+                // try_resume returns WITHOUT binding — until now the
+                // desktop's listener existed only after an explicit
+                // create/join, so a first-time user had no port at all.
+                // The CLI daemon already answers this (daemon_cmd's `None`
+                // arm): create a silent solo mesh, which brings the
+                // listener up inside `create_mesh`. Loopback profile by
+                // default — binding wide is what the explicit create flow
+                // opts into via `expose_client_api`.
+                let hostname = hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "sovereign".to_string());
+                let mesh_name = format!("{hostname}'s Mesh");
+                match daemon.create_mesh(&mesh_name, &hostname).await {
+                    Ok(_) => tracing::info!(
+                        %mesh_name,
+                        "mesh: solo mesh created — the listener is bound on first boot"
+                    ),
+                    Err(e) => {
+                        // B3, surfaced: no listener means the turn port
+                        // will not answer, and the readiness probe in
+                        // `main.rs` will say so instead of a ready event.
+                        // Fatal-at-R5 is noted on the row — today the
+                        // in-process chat surfaces keep working.
+                        tracing::error!(
+                            error = %e,
+                            "mesh: could not create the first-boot solo mesh — the daemon's port will not answer"
+                        );
+                    }
+                }
+            }
             Err(e) => tracing::warn!(error = %e, "mesh: try_resume failed"),
         }
     } else {

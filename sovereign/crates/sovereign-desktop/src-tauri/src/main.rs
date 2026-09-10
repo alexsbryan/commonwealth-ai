@@ -489,8 +489,62 @@ fn main() -> ExitCode {
                             total_ms = boot_start.elapsed().as_millis() as u64,
                             "bootstrap complete"
                         );
-                        tracing::info!("Backend ready");
-                        let _ = handle_clone.emit("backend-ready", ());
+                        // sv-surface R4/B2: ready is the PORT ANSWERING, not
+                        // the runtime existing. The daemon binds inside
+                        // bootstrap (resume, or the first-boot solo mesh B1
+                        // creates), so on the happy path this probe lands
+                        // within milliseconds of bootstrap returning — and on
+                        // the unhappy one (bind failed) the user hears
+                        // `backend-error`, not a ready event about a port
+                        // that never answers (B3). `GET /v1/models` is the
+                        // same shape the supervisor's health loop and
+                        // supervisor_setup's cold-boot measurement use.
+                        // This is also the cold-boot measurement the
+                        // campaign said this pass mints: first_ready_ms.
+                        let probe_base = state_clone.client_base_url();
+                        let probe_start = std::time::Instant::now();
+                        let probe_handle = handle_clone.clone();
+                        tokio::spawn(async move {
+                            let http = reqwest::Client::builder()
+                                .timeout(std::time::Duration::from_secs(2))
+                                .build()
+                                .expect("probe client builds");
+                            let deadline =
+                                probe_start + std::time::Duration::from_secs(90);
+                            loop {
+                                match http
+                                    .get(format!("{probe_base}/v1/models"))
+                                    .send()
+                                    .await
+                                {
+                                    Ok(resp) if resp.status().is_success() => {
+                                        tracing::info!(
+                                            first_ready_ms =
+                                                probe_start.elapsed().as_millis() as u64,
+                                            "backend ready — the port answered /v1/models"
+                                        );
+                                        let _ = probe_handle.emit("backend-ready", ());
+                                        return;
+                                    }
+                                    _ => {}
+                                }
+                                if std::time::Instant::now() > deadline {
+                                    tracing::error!(
+                                        base = %probe_base,
+                                        "backend never answered /v1/models within 90s — the daemon did not bind (sv-surface B3)"
+                                    );
+                                    let _ = probe_handle.emit(
+                                        "backend-error",
+                                        serde_json::json!({
+                                            "message":
+                                                "the local backend did not start — its port never answered. Restart the app; if this repeats, the logs hold the bind failure."
+                                        }),
+                                    );
+                                    return;
+                                }
+                                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                            }
+                        });
                         // Start the continuous corpus-status poller so
                         // the Knowledge settings pane reflects ingests
                         // the daemon is running regardless of whether
