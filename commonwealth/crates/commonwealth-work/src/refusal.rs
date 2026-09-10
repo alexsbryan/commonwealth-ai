@@ -12,22 +12,32 @@
 //! # What `may_take` can and cannot judge, and why that is not a second rule
 //!
 //! Its parameters are the fold, the donor's own key, the donor's own offer and
-//! `now_ms`. That is the whole of the rail's state, and eight of the ten
+//! `now_ms`. That is the whole of the rail's state, and nine of the ten
 //! refusals below are decided from it.
 //!
-//! Three are **not facts about the rail**, and no signature over the rail
+//! [`WorkRefusal::IsolationBelow`] JOINED THEM ON 2026-09-10 and the paragraph
+//! that stood here said the opposite — that a unit does not carry an isolation
+//! requirement, so only the executor registry could decide it. Units now do:
+//! `JobRequirements::isolation` is the weakest isolation a donor may run this
+//! unit under, absent meaning any, and it is signed into the unit like `os`
+//! and `arch`. So it IS a fact about the rail and `may_take` decides it.
+//!
+//! That leaves two DIFFERENT questions which must not be confused. The donor's
+//! own floor (`JobExecutorRegistry::offerable`) decides what this node may
+//! offer AT ALL; `may_take` decides whether what it offers is enough for what
+//! this unit's submitter asked for. Collapsing them would let a donor's own
+//! generosity answer the submitter's requirement.
+//!
+//! Two are **not facts about the rail**, and no signature over the rail
 //! could decide them:
 //!
-//! - [`WorkRefusal::IsolationBelow`] compares a unit's required isolation
-//!   against the donor's. A unit does not carry one — `JobExecutorDescriptor`
-//!   does — so it is the executor registry that decides it, at registration.
 //! - [`UnmetRequirement::Precondition`] and [`UnmetRequirement::RepoRev`] ask
 //!   whether THIS host has a binary, a container, a checkout at a rev. Only
 //!   the host knows.
 //! - [`WorkRefusal::Yielding`] asks whether the operator is at the keyboard
 //!   right now. Only the daemon knows (`AppState::should_yield_to_foreground`).
 //!
-//! Those four are constructed by the caller that holds the knowledge —
+//! Those three are constructed by the caller that holds the knowledge —
 //! `JobExecutor::validate` and the donor loop — **in this same closed type**,
 //! so there is still one refusal vocabulary, one `id()` table and one set of
 //! sentences reaching an operator. A second enum for "host refusals" is the
@@ -157,8 +167,15 @@ pub enum WorkRefusal {
     /// Nobody consented. See [`GrantSide`] for which half.
     #[error("`{actor}` is not inside the {} half of the grant", side.id())]
     NotAllowed { actor: ActorKey, side: GrantSide },
-    /// The donor cannot isolate the unit as strongly as its executor requires.
-    /// Constructed by the executor registry — see the module docs.
+    /// The donor cannot isolate the unit as strongly as its SUBMITTER asked
+    /// for — `JobRequirements::isolation` against `WorkOffer.isolation`,
+    /// compared by `may_take` since 2026-09-10. It had no producer at all
+    /// before that: this variant, the offer field and `Isolation::covers` all
+    /// existed and nothing joined them.
+    ///
+    /// Not to be confused with the donor's own floor, which decides what this
+    /// node may OFFER (`JobExecutorRegistry::offerable`) and refuses earlier
+    /// and for a different reason.
     #[error("this unit needs `{required:?}` isolation and this donor offers `{offered:?}`")]
     IsolationBelow {
         required: Isolation,
@@ -366,6 +383,32 @@ fn decide(
             },
         };
         return Err(WorkRefusal::RequirementUnmet(unmet));
+    }
+
+    // 4b. THE ISOLATION HALF, and it had no producer until 2026-09-10.
+    //     `WorkRefusal::IsolationBelow` has carried these two fields since the
+    //     plane was written, `Isolation::covers` has been an upward-only
+    //     ladder the whole time, and `WorkOffer.isolation` was written by
+    //     every donor — and nothing compared them. A refusal nobody
+    //     constructs and an offer field nobody reads together read, to the
+    //     next person, as a check that happens.
+    //
+    //     It sits AFTER the platform half deliberately: os and arch decide
+    //     whether the verdict would even be about the submitter's program,
+    //     and there is no point telling them about isolation on a host whose
+    //     answer could not have counted.
+    //
+    //     Note which way round this is. The donor's own floor
+    //     (`JobExecutorRegistry::offerable`) decides what this node may OFFER
+    //     at all; this decides whether what it offers is enough for what this
+    //     unit's submitter asked for. Two questions, two deciders, and
+    //     collapsing them would let a donor's own generosity answer the
+    //     submitter's requirement.
+    if !requirements.accepts_isolation(self_offer.isolation) {
+        return Err(WorkRefusal::IsolationBelow {
+            required: requirements.isolation.unwrap_or(self_offer.isolation),
+            offered: self_offer.isolation,
+        });
     }
 
     // 5. The queue. Expiry is derived here exactly as every other reader
@@ -993,6 +1036,66 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.id(), "payload-not-canonical");
         assert!(err.to_string().contains("seals as"), "{err}");
+    }
+
+    /// **THE ISOLATION HALF (ARCH §18.1), which had no producer until
+    /// 2026-09-10.**
+    ///
+    /// The failing input is a unit whose submitter demands `Vm` reaching a
+    /// donor that offers `Subprocess`. Before this check, `may_take` returned
+    /// `Ok` and the unit LEASED, RAN and reported a verdict from a host giving
+    /// it none of what was asked for — the submitter would have read a plain
+    /// `passed` with no way to know. `WorkRefusal::IsolationBelow` existed the
+    /// whole time with exactly these two fields and nothing constructed it.
+    ///
+    /// Three directions, because the failure mode here is asymmetric and a
+    /// one-direction test would pass on a decider that refuses everything or
+    /// on one that refuses nothing.
+    #[test]
+    fn a_unit_demanding_more_isolation_than_the_donor_offers_is_refused() {
+        let demands_vm = JobRequirements {
+            isolation: Some(oicp_types::Isolation::Vm),
+            ..JobRequirements::any()
+        };
+        let (ops, unit) = submitted("process:v1", demands_vm, None);
+        let proj = fold(&ops);
+        let weak = WorkOffer {
+            isolation: oicp_types::Isolation::Subprocess,
+            ..offer_of(&["process:v1"], None, 4)
+        };
+        assert_eq!(
+            may_take(&proj, &who(2), &weak, &unit_ref(&unit), 100_000),
+            Err(WorkRefusal::IsolationBelow {
+                required: oicp_types::Isolation::Vm,
+                offered: oicp_types::Isolation::Subprocess,
+            }),
+            "a donor weaker than the unit asked for must refuse BY NAME, not \
+             run it and report a verdict about a host that gave it none of \
+             what was demanded"
+        );
+
+        // Direction two: a donor that MEETS the demand takes it. `covers` is
+        // upward-only, so this is the arm a floor written backwards breaks.
+        let strong = WorkOffer {
+            isolation: oicp_types::Isolation::Vm,
+            ..offer_of(&["process:v1"], None, 4)
+        };
+        assert_eq!(
+            may_take(&proj, &who(2), &strong, &unit_ref(&unit), 100_000),
+            Ok(())
+        );
+
+        // Direction three: an ABSENT requirement is no constraint. The trap
+        // here is materializing the donor's own level as the demand, which
+        // would make every donor trivially sufficient for itself (§18.3).
+        let (ops, unsaid) = submitted("process:v1", JobRequirements::any(), None);
+        let proj = fold(&ops);
+        assert_eq!(
+            may_take(&proj, &who(2), &weak, &unit_ref(&unsaid), 100_000),
+            Ok(()),
+            "a submitter who stated no isolation requirement has not thereby \
+             demanded the strongest one"
+        );
     }
 }
 

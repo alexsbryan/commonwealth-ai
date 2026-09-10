@@ -362,6 +362,26 @@ pub struct JobRequirements {
     /// (`x86_64`, `aarch64`). Absent means any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
+    /// The WEAKEST isolation a donor may run this unit under. Absent means the
+    /// submitter states no requirement and the donor's own floor decides.
+    ///
+    /// Added 2026-09-10, and the gap it closes is worth recording: [`Isolation`]
+    /// has been an ordered ladder with an upward-only [`covers`](Isolation::covers)
+    /// since the plane was designed, `WorkOffer` has carried an `isolation`
+    /// field the whole time, and `commonwealth_work::WorkRefusal::IsolationBelow`
+    /// has existed with the two fields this comparison produces — and NOTHING
+    /// read any of it. The offer was written by every donor and read by none,
+    /// and the refusal's only construction was a Display test. A vocabulary
+    /// for a check nobody performs reads, to the next person, as a check that
+    /// happens.
+    ///
+    /// Absent is "any" for the same reason `os` and `arch` are (see the type
+    /// doc): materializing the donor's own level as though the submitter had
+    /// asked for it would let the weakest donor manufacture its own
+    /// permission, which is §18.3's silent substitution in the one place it
+    /// would be least visible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub isolation: Option<Isolation>,
     /// What must be true of the host before the unit can run at all.
     ///
     /// Serialized as the registry's own label strings (`container:
@@ -396,6 +416,19 @@ impl JobRequirements {
     /// `repo_rev` is no constraint.
     pub fn accepts_repo_rev(&self, rev: &str) -> bool {
         self.repo_rev.as_deref().is_none_or(|want| want == rev)
+    }
+
+    /// True iff a donor `offering` this isolation may run the unit.
+    ///
+    /// The comparison is [`Isolation::covers`]'s and not a second one — the
+    /// direction is the whole point and it is pinned there: a stronger donor
+    /// covers a weaker demand, never the reverse. An absent requirement is no
+    /// constraint, which is NOT the same as satisfied-by-anything downstream:
+    /// the donor's own floor still applies, and these are two different
+    /// questions (is this donor allowed to offer the kind at all, and does
+    /// this unit's submitter demand more than the donor gives).
+    pub fn accepts_isolation(&self, offering: Isolation) -> bool {
+        self.isolation.is_none_or(|want| offering.covers(want))
     }
 }
 
@@ -788,12 +821,24 @@ mod tests {
             os: Some("linux".into()),
             arch: Some("x86_64".into()),
             repo_rev: Some("deadbeef".into()),
+            isolation: Some(Isolation::RootlessContainer),
             preconditions: vec![Precondition::Container("sovereign-vulkan".into())],
         };
         assert!(req.accepts_host("linux", "x86_64"));
         assert!(!req.accepts_host("macos", "x86_64"));
         assert!(!req.accepts_host("linux", "aarch64"));
         assert!(!req.accepts_repo_rev("cafe"));
+        // The isolation half is a LADDER, not equality: a stronger donor
+        // satisfies a weaker demand and never the reverse. Asserting only the
+        // refusal would pass on a decider that refuses every donor.
+        assert!(req.accepts_isolation(Isolation::RootlessContainer));
+        assert!(req.accepts_isolation(Isolation::Vm));
+        assert!(!req.accepts_isolation(Isolation::Subprocess));
+        assert!(
+            JobRequirements::any().accepts_isolation(Isolation::InProcess),
+            "an absent requirement is no constraint — the donor's own floor \
+             still decides what it may offer, and that is a different question"
+        );
     }
 
     #[test]

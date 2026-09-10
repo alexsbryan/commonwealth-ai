@@ -213,6 +213,18 @@ pub(super) fn requirements_for(inst: &Instrument, repo_rev: &str) -> JobRequirem
         repo_rev: Some(repo_rev.to_string()),
         os: Some(std::env::consts::OS.to_string()),
         arch: Some(std::env::consts::ARCH.to_string()),
+        // ABSENT ON PURPOSE, and it is the one field here that is a judgement
+        // rather than a fact. `isolation` is what the SUBMITTER demands of a
+        // donor; the donor's own floor (`JobExecutorRegistry::offerable`) is
+        // what protects the donor from us. Naming `RootlessContainer` here
+        // would state the same threshold `ProcessExecutor`'s descriptor
+        // already states, in a second place, where the two could drift — and
+        // the protection it looks like it is buying is not ours to claim
+        // (ARCH §10.6). This run has no isolation requirement of its own: it
+        // asks for a rev, an os, an arch and the row's preconditions, and
+        // whether a donor may run a stranger's argv at all is that donor's
+        // decision, made before it ever leases.
+        isolation: None,
         preconditions: inst.preconditions.clone(),
     }
 }
