@@ -3254,8 +3254,15 @@ impl EmbeddedDaemon {
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these
             // paths, which `mount_names` below still reports as mounted.
-            mounted.push(crate::insight_http::insight_router(self_arc));
+            mounted.push(crate::insight_http::insight_router(Arc::clone(&self_arc)));
             mount_names.push("insight_http");
+            // sv-surface D4 — the atlas-browse surface, beside reading_http
+            // and on the same loopback posture. Unconditional for the same
+            // reason: a daemon with no corpus engine answers 503 with that
+            // named reason, which is a different fact from an unmounted
+            // router's 404 (ARCH §18.3).
+            mounted.push(crate::atlas_http::atlas_router(self_arc));
+            mount_names.push("atlas_http");
             for (router, name) in self
                 .services
                 .host_routers()

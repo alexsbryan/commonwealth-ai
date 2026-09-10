@@ -213,6 +213,37 @@ pub struct InsightEntry {
     pub sink_state: sovereign_contracts::types::InsightSinkState,
 }
 
+/// Page size [`TurnClient::corpus_atoms_all`] asks for. The host caps
+/// at `reading_http::ATOMS_PAGE_MAX` and says what it applied, so this
+/// is a hint about round-trip count, never a correctness knob.
+pub const ATOMS_PAGE_REQUEST: usize = 1_000;
+
+/// One page of `GET /internal/corpus/{corpus}/atoms` — the wire form of
+/// the desktop's `load_atoms` primitive (sv-surface D3).
+///
+/// `T` is `corpus_engine::enrichment::atlas::AtomEnvelope` for every
+/// real caller; this crate cannot name that type (see the note above
+/// [`TurnClient::corpus_atoms`]), so the caller supplies it.
+///
+/// Mirrors `sovereign_mesh::reading_http::CorpusAtomsPage`. `total` and
+/// `next_offset` are the reason this is a struct rather than a bare
+/// `Vec`: a client must be able to tell a finished read from a clipped
+/// one without inferring it from a length (ARCH §18.3).
+#[derive(Debug, Clone, Deserialize)]
+pub struct AtomsPage<T> {
+    pub corpus_id: String,
+    pub schema_version: String,
+    /// Atom count in the whole atlas, not in this page.
+    pub total: usize,
+    pub offset: usize,
+    /// The limit the host ACTUALLY applied, after clamping.
+    pub limit: usize,
+    /// Offset to ask for next; `None` when the read is finished.
+    #[serde(default)]
+    pub next_offset: Option<usize>,
+    pub atoms: Vec<T>,
+}
+
 /// The clip payload for [`TurnClient::clip_insight`].
 pub struct ClipInsight<'a> {
     pub clipped_text: &'a str,
@@ -654,6 +685,236 @@ impl TurnClient {
             return Err(host_words(status, &body, &format!("POST {url}")));
         }
         Ok(())
+    }
+
+    // ── The reading + atlas surfaces (sv-surface D3 / D4) ─────────
+    //
+    // These answer with types owned by `corpus-engine-vocab`
+    // (`AtomEnvelope`) and `sovereign-tools` (`atlas_view::*`), both of
+    // which sit ABOVE this crate's Tier-0 dependency budget
+    // (`quality/ARCH_LAYERS.toml:103-111` — "its only non-leaf
+    // dependency is `sovereign-contracts`"). Two ways out of that, and
+    // only one is honest: mirror each type here as a Deserialize twin —
+    // the `InsightEntry` pattern, which is fine for nine fields and an
+    // ARCH §10.6 disaster for `AtomEnvelope`'s twelve variants over
+    // eleven structs — or let the CALLER name the type it wants and
+    // parse into it.
+    //
+    // The caller names it. Every method below is generic over its
+    // response, and its doc comment names the exact type the bytes ARE,
+    // so the desktop writes `client.corpus_atoms::<AtomEnvelope>(…)` and
+    // gets back the same `Vec<AtomEnvelope>` its in-process
+    // `load_atoms` returned. No twin, no layer edge, and the repoint is
+    // a call-site change rather than a rewrite.
+
+    /// `GET /internal/corpus/{corpus}/atoms?offset=&limit=` — one page
+    /// of a corpus's atlas atoms.
+    ///
+    /// The wire form of the desktop's `commands::meshapp::load_atoms`
+    /// primitive — the read behind `meshapp_read_corpus`,
+    /// `meshapp_search_parcels` and `meshapp_parcel_analytics`. `T` is
+    /// `corpus_engine::enrichment::atlas::AtomEnvelope`.
+    ///
+    /// `limit` is a REQUEST, not a guarantee: the host clamps it to
+    /// `reading_http::ATOMS_PAGE_MAX` and reports what it actually
+    /// applied in [`AtomsPage::limit`]. Read [`AtomsPage::next_offset`],
+    /// never `atoms.len()`, to decide whether the read is finished —
+    /// or call [`Self::corpus_atoms_all`], which does that for you.
+    pub async fn corpus_atoms<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<AtomsPage<T>> {
+        let url = format!("{}/internal/corpus/{corpus_id}/atoms", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("offset", offset), ("limit", limit)])
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}"))
+    }
+
+    /// Every atom in a corpus's atlas, paged until the host says the
+    /// read is finished — the drop-in replacement for the desktop's
+    /// in-process `load_atoms`, which returns the whole vec because it
+    /// never crossed a socket.
+    ///
+    /// Pages at the host's default size. The loop terminates on
+    /// `next_offset: None`, and defends against a host that would
+    /// otherwise spin it: a page that returns zero rows while still
+    /// advertising a next offset is a broken host, and this reports
+    /// that rather than looping forever (ARCH §18.3 — the absence is
+    /// named, not defaulted to "done").
+    pub async fn corpus_atoms_all<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Vec<T>> {
+        let mut out: Vec<T> = Vec::new();
+        let mut offset = 0usize;
+        loop {
+            let page = self
+                .corpus_atoms::<T>(corpus_id, offset, ATOMS_PAGE_REQUEST)
+                .await?;
+            let got = page.atoms.len();
+            out.extend(page.atoms);
+            match page.next_offset {
+                None => return Ok(out),
+                Some(next) if got > 0 && next > offset => offset = next,
+                Some(next) => {
+                    return Err(Error::Inference(format!(
+                        "GET /internal/corpus/{corpus_id}/atoms: host advertised \
+                         next_offset={next} after returning {got} rows at offset \
+                         {offset} — the page would not advance"
+                    )))
+                }
+            }
+        }
+    }
+
+    /// `GET /internal/atlas/corpora` — every installed corpus that has
+    /// an atlas, with per-atom-type counts.
+    ///
+    /// `T` is `Vec<sovereign_tools::atlas_view::AtlasCorpusSummary>`.
+    pub async fn atlas_corpora<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.atlas_get("/internal/atlas/corpora".to_string()).await
+    }
+
+    /// `GET /internal/atlas/{corpus}/report` — what the last build
+    /// found. `T` is `sovereign_tools::atlas_view::AtlasBuildReport`.
+    ///
+    /// A corpus whose report step never ran answers `reported: false`,
+    /// which is a SUCCESS, not an error.
+    pub async fn atlas_build_report<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.atlas_get(format!("/internal/atlas/{corpus_id}/report"))
+            .await
+    }
+
+    /// `GET /internal/atlas/{corpus}/members` — the member atlases of a
+    /// collection corpus. `T` is
+    /// `Vec<sovereign_tools::atlas_view::AtlasMemberSummary>`.
+    ///
+    /// An empty list is the right answer for an ordinary corpus.
+    pub async fn atlas_members<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.atlas_get(format!("/internal/atlas/{corpus_id}/members"))
+            .await
+    }
+
+    /// `POST /internal/atlas/{corpus}/atoms` — filterable, paginated
+    /// atom browse. `T` is `sovereign_tools::atlas_view::AtomListPage`.
+    ///
+    /// `request` serialises to `{"filter": …, "page": …}` — the two
+    /// arguments `FileAtlasReader::list_atoms` takes; either key may be
+    /// omitted for that type's `Default`. A POST because `AtomFilter`
+    /// carries a list of subtype names, which no flat query string
+    /// expresses without inventing a second encoding.
+    pub async fn atlas_atoms<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        request: &B,
+    ) -> Result<T> {
+        let url = format!("{}/internal/atlas/{corpus_id}/atoms", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(request)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        parse(&body, &format!("POST {url}"))
+    }
+
+    /// `GET /internal/atlas/{corpus}/subgraph?max_nodes=` — the curated
+    /// landscape map. `T` is
+    /// `sovereign_tools::atlas_view::AtlasSubgraph`.
+    ///
+    /// `max_nodes: None` leaves the cap to the host, which applies
+    /// `atlas_view::DEFAULT_MAX_NODES` — one decider for that number,
+    /// and it is not this crate's.
+    pub async fn atlas_subgraph<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        max_nodes: Option<usize>,
+    ) -> Result<T> {
+        let url = format!("{}/internal/atlas/{corpus_id}/subgraph", self.base);
+        let mut req = self.http.get(&url);
+        if let Some(n) = max_nodes {
+            req = req.query(&[("max_nodes", n)]);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}"))
+    }
+
+    /// `GET /internal/atlas/{corpus}/atoms/{atom_id}` — the full
+    /// inspector record. `T` is
+    /// `sovereign_tools::atlas_view::AtomDetail`.
+    ///
+    /// `Ok(None)` for a 404, which is the host saying the atom is not in
+    /// this corpus's atoms.json — a stale UI link, or extraction
+    /// renumbered ids. Every OTHER non-success is an `Err`: a corpus
+    /// that will not open must not read as "atom absent", which is the
+    /// exact confusion `daemon_reading_get` shipped by mapping ANY 404
+    /// to `Ok(None)` (see `reading_http_e2e`'s unpromoted-partition
+    /// case).
+    pub async fn atlas_atom_detail<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        atom_id: &str,
+    ) -> Result<Option<T>> {
+        let url = format!("{}/internal/atlas/{corpus_id}/atoms/{atom_id}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// The three plain atlas GETs differ only in path; spelled once.
+    async fn atlas_get<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}"))
     }
 
     /// The WebSocket URL for one conversation's turn stream.

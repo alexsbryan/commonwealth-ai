@@ -18,6 +18,8 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
+#[path = "main/atlas_surface_e2e.rs"]
+mod atlas_surface_e2e;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
 #[path = "main/capabilities_published.rs"]

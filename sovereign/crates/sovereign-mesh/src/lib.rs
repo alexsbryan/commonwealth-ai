@@ -12,6 +12,7 @@
 //! - Expose mesh operations for both GUI and CLI
 
 pub mod admin_http;
+pub mod atlas_http;
 pub mod auto_ingest;
 pub mod auto_resume;
 pub mod canonical_pull;

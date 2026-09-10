@@ -17,6 +17,9 @@
 //! - `GET /internal/corpus/{corpus}/chunks/{chunk_id}` — single chunk
 //! - `GET /internal/corpus/{corpus}/chunks/{chunk_id}/neighbors?radius=N`
 //!   — center chunk plus up to N prev/next within the same source_doc
+//! - `GET /internal/corpus/{corpus}/atoms?offset=&limit=` — the
+//!   corpus's atlas atoms, paged (sv-surface D3: the wire form of
+//!   the desktop's one `load_atoms` primitive)
 //! - Atom routes ship in PR3/PR4 once the AtomSpan detector lands.
 //!
 //! Section-bounded reading (layer-2) is intentionally deferred — see
@@ -178,6 +181,97 @@ fn default_radius() -> usize {
     1
 }
 
+// ─── Whole-atlas atom paging (sv-surface D3) ───────────────────
+//
+// The wire form of `commands::meshapp::load_atoms` —
+// `installed_indexes()` + `read_atlas_atoms()`, then fold a
+// projection over the resulting `Vec<AtomEnvelope>`. It deliberately
+// serves ENVELOPES, not the projected rows
+// `sovereign_tools::atlas_view::list_atoms` returns: the meshapp
+// folds read type-specific fields (parcel attributes, claim
+// evidence) that a browse row does not carry.
+//
+// CORRECTION to the D3 ladder row, measured 2026-09-10. That row
+// says the desktop's "17 reads funnel through ONE primitive
+// (meshapp.rs:85-108 load_atoms) so one route serves all 17". The
+// code says THREE of them do — `meshapp_read_corpus` (:132),
+// `meshapp_search_parcels` (:168) and `meshapp_parcel_analytics`
+// (:219). Thirteen more go through a DIFFERENT primitive,
+// `resolve_index_path` (meshapp.rs:312), which hands an on-disk
+// index path to `sovereign_meshapp::{load_graph, graph_nodes,
+// subgraph, timeline, corpus_stats, …}` — the projection library
+// the desktop host and `sovereign meshapp dev` already share. The
+// seventeenth, `meshapp_open_outer_work` (:580), focuses a window
+// and emits a Tauri event; it reads nothing and is app-local by the
+// same rule as the rest of the closed set.
+//
+// So this route retires the three, and the other thirteen need a
+// `meshapp_http` route family over `sovereign-meshapp` — mechanical,
+// because every DTO those calls return already lives in that shared
+// lib, but a rung of its own and NOT this one.
+
+/// Default page size for `GET /internal/corpus/{corpus}/atoms`.
+/// Matches `atlas_view::PageCursor`'s own default so the two
+/// paginated atom surfaces answer with the same granularity.
+pub const ATOMS_PAGE_DEFAULT: usize = 200;
+
+/// Hard cap on `limit`. A request asking for more is SERVED at this
+/// size — never refused, never silently satisfied: `limit` in the
+/// response says what was actually applied, and `next_offset` says
+/// the read is unfinished (ARCH §18.3).
+///
+/// Why a cap at all, measured rather than guessed: on this host
+/// `~/.svrnmesh/indexes/wikipedia/atlas/atoms.json` is 846,211,326
+/// bytes and `commonwealth-ai-self-atlas` is 3,575,689. An
+/// unpaginated route over the first would serialise ~846 MB into
+/// one response body; the desktop's in-process `load_atoms` got
+/// away with returning the whole `Vec` because it never crossed a
+/// socket.
+pub const ATOMS_PAGE_MAX: usize = 2_000;
+
+#[derive(Debug, Deserialize)]
+pub struct AtomsPageQuery {
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_atoms_limit")]
+    pub limit: usize,
+}
+
+fn default_atoms_limit() -> usize {
+    ATOMS_PAGE_DEFAULT
+}
+
+/// One page of a corpus's atlas atoms.
+///
+/// `total` and `next_offset` are ALWAYS present, so a caller can
+/// tell a finished read from a clipped one without comparing
+/// `atoms.len()` against a limit it may not have chosen (the server
+/// clamps). `next_offset` is `None` exactly when this page reached
+/// the end.
+#[derive(Debug, Clone, Serialize)]
+pub struct CorpusAtomsPage {
+    pub corpus_id: String,
+    /// `atoms.json`'s own `schema_version`, passed through verbatim.
+    /// A client that folds type-specific fields needs it to know
+    /// which variants it may encounter.
+    pub schema_version: String,
+    /// Atom count in the whole atlas, not in this page.
+    pub total: usize,
+    pub offset: usize,
+    /// The limit the server ACTUALLY applied after clamping to
+    /// [`ATOMS_PAGE_MAX`] — which may be smaller than the one asked
+    /// for.
+    pub limit: usize,
+    /// Offset to pass next, or `null` when this page ended the read.
+    ///
+    /// Deliberately NOT `skip_serializing_if`: "the read is finished"
+    /// is an ANSWER, and a reader should not have to infer it from a
+    /// key's absence — which is indistinguishable from a field the
+    /// host is too old to send (ARCH §18.3).
+    pub next_offset: Option<usize>,
+    pub atoms: Vec<AtomEnvelope>,
+}
+
 #[derive(Debug, Serialize)]
 struct ErrorBody {
     error: String,
@@ -272,6 +366,7 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/corpus/{corpus}/chunks/{chunk_id}/neighbors",
             get(get_neighbors),
         )
+        .route("/internal/corpus/{corpus}/atoms", get(get_corpus_atoms))
         .route(
             "/internal/corpus/{corpus}/atoms/{atom_id}",
             get(get_atom_card),
@@ -321,6 +416,71 @@ async fn get_corpus_status(
         )
             .into_response(),
     }
+}
+
+/// GET /internal/corpus/{corpus}/atoms?offset=&limit= — the whole
+/// atlas, paged (sv-surface D3).
+///
+/// The wire form of the desktop's `commands::meshapp::load_atoms`
+/// primitive: `installed_indexes()` to find the corpus, then
+/// `read_atlas_atoms()` on its `atlas/` dir. Three `meshapp_*`
+/// commands fold a projection over that `Vec<AtomEnvelope>` and are
+/// what this route retires — see the correction beside
+/// [`CorpusAtomsPage`] for why it is three and not seventeen.
+///
+/// Failure posture matches `load_atoms`, deliberately: a corpus
+/// that is not installed, or an `atoms.json` that will not parse,
+/// is an ERROR with a reason — never an empty page. (The sibling
+/// `load_atlas_atoms` helper in this file degrades to `None`
+/// instead, because there the atom layer is a garnish on a chunk
+/// read; here the atoms ARE the answer.)
+async fn get_corpus_atoms(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(AtomsPageQuery { offset, limit }): Query<AtomsPageQuery>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let limit = limit.min(ATOMS_PAGE_MAX);
+    let engine = match daemon.corpus_engine() {
+        Some(e) => e,
+        None => return service_unavailable("corpus engine not initialised"),
+    };
+    let Some((atlas_dir, _index_path)) = atlas_dir_for_corpus(&engine, &corpus).await else {
+        return not_found("corpus not installed or atlas missing");
+    };
+    let file = match read_atlas_atoms(&atlas_dir) {
+        Ok(f) => f,
+        Err(e) => return internal_error(&format!("read atoms for `{corpus}`: {e}")),
+    };
+
+    let total = file.atoms.len();
+    let page: Vec<AtomEnvelope> = file.atoms.into_iter().skip(offset).take(limit).collect();
+    let next_offset = {
+        let end = offset.saturating_add(page.len());
+        (end < total).then_some(end)
+    };
+    tracing::debug!(
+        corpus = %corpus,
+        offset,
+        limit,
+        returned = page.len(),
+        total,
+        next_offset = ?next_offset,
+        "reading_http: atlas atom page served",
+    );
+    let response = CorpusAtomsPage {
+        corpus_id: corpus,
+        schema_version: file.schema_version,
+        total,
+        offset,
+        limit,
+        next_offset,
+        atoms: page,
+    };
+    (StatusCode::OK, Json(response)).into_response()
 }
 
 async fn get_chunk(

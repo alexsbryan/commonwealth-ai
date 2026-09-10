@@ -209,6 +209,24 @@ async fn insight_http_rejects_non_loopback_via_insights_list() {
 }
 
 #[tokio::test]
+async fn atlas_http_rejects_non_loopback_via_corpora_list() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::atlas_http::atlas_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/internal/atlas/corpora"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "atlas_http loopback guard slipped — the atlas enumerates THIS host's \
+         corpora by name, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
 async fn reading_http_rejects_non_loopback_via_chunk_fetch() {
     let (_tmp, daemon) = fresh_daemon();
     let base = spawn_with_spoof(reading_router(daemon)).await;
@@ -354,6 +372,13 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(
         sovereign_mesh::insight_http::insight_router(d6),
         "/v1/insights",
+    )
+    .await;
+
+    let (_t7, d7) = fresh_daemon();
+    assert_500_on_bare_serve(
+        sovereign_mesh::atlas_http::atlas_router(d7),
+        "/internal/atlas/corpora",
     )
     .await;
 }
