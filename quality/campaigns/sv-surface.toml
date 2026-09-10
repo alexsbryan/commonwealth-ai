@@ -193,10 +193,16 @@ status    = "active"
 #       in-process only. drive_stream_handle (serve.rs:355) is public, so the
 #       daemon dispatch is small. Cross-conversation refusal required: a
 #       client must not resume/redirect another conversation's session.
-#   G2  cancel                       OPEN. No TurnRequest::Cancel; the
-#       QuerySession registry (query_session.rs) is in-process. Socket close
-#       aborts the turn today (turn_http.rs hangup abort), so the fallback is
-#       "drop the stream" — but cancel_preparing has no equivalent at all.
+#   G2  cancel                       DONE 2026-09-09 (R5, 154e14ca4).
+#       TurnRequest::Cancel {} — the daemon trips the SAME pair the
+#       in-process host tripped (session token + preparing token), so the
+#       turn ends the way a cancelled turn always ended: Complete with
+#       finish_reason=cancelled, not a task abort with no terminal frame.
+#       cancel_preparing's race is gone by construction — over the wire
+#       the preparing window is inside the turn task. The server refuses
+#       by name (same tenant-scoping debt as resume/redirect: its session
+#       store is unscoped, and cancelling by an unscoped key could trip
+#       another tenant's token).
 #   G3  request_information          DONE 2026-09-09 (R3).
 #       SocketApprovalChannel::request_information parks under
 #       "info:{step_id}" and prompts with the whole InformationRequest;
@@ -590,6 +596,20 @@ status    = "active"
 #   R5  THE COLLAPSE. Delete the 15 forks and the desktop's in-process turn
 #       path. `sv-attach-pure-client` floor 13 -> 0. THIS is where the ledger
 #       turns; nothing before it deletes much.
+#       TURN-COMMAND HALF LANDED 2026-09-09 (05e56c483 + 154e14ca4 +
+#       f7fe8cfff): every turn-shaped command drives the wire in BOTH boot
+#       modes — send_message_stream/redirect/resume share finish_wire_turn
+#       (socket claims approvals, TurnStarted is the sync id, pump_wire_frames
+#       raises the same cards, ONE renderer unchanged, zero TypeScript
+#       moved); send_message + document_ask ride the REST one-shot;
+#       cancel_stream is wire-first; DesktopTurnSink is DELETED and the
+#       rung-0 censuses evolved (wire sends pinned where the in-process
+#       drive was). METADATA DELTA named on both one-shots: the wire's
+#       typed projection replaces the raw blob (G9's client half; the two
+#       blob gates have wire homes). REMAINS: delete the local deciders
+#       (floor 14 -> 0 via the boot assertion replacing the census), the
+#       15 is_attach_mode forks in non-turn commands, and the seven object
+#       migrations (the census's bulk-retire plan).
 #   R6  MOBILE (M-1/M-2). By construction once it consumes the client family.
 #
 # ── WHERE TO PICK THIS UP ───────────────────────────────────────────────────
