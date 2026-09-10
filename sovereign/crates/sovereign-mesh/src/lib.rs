@@ -141,7 +141,7 @@ pub mod pinned_pod_snapshot;
 pub mod pinned_transport;
 pub mod pinned_worker_source;
 
-pub use daemon::EmbeddedDaemon;
+pub use daemon::{ClientListener, EmbeddedDaemon};
 pub use daemon_services::{
     assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
     HeadlessServices, LaunchParts, McpMount, McpSurface, MeshAdminWitness, ServingCapability,

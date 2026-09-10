@@ -489,6 +489,16 @@ status    = "active"
 #   B3  BIND FAILURE IS BEST-EFFORT. daemon.rs logs a warn! and returns from
 #       the serve task. Harmless today (chat is in-process); a silent total
 #       outage in an always-client world. Must become surfaced and fatal.
+#       LANDED 2026-09-10, both hosts, without changing the task's posture:
+#       the serve task publishes `sovereign_mesh::ClientListener`
+#       (Pending/Bound/Failed, a watch on EmbeddedDaemon); `daemon run`
+#       reads it before "svrn daemon is running" and exits 1 on Failed;
+#       the desktop's Local bootstrap reads it after resume/create and
+#       returns Err (backend-error) on Failed or a 30s Pending. Watched
+#       fail twice the same day, both as "a port is not an identity": the
+#       fixture daemon lost :9741 to the operator's launchd relaunch (D3),
+#       and the first-launch journey's embedded daemon lost :9741 to the
+#       fixture daemon and served its turn through the stranger.
 #   B4  RUN-LOCK REFUSAL commissions NO daemon, deliberately, and state.rs
 #       says so: "Every desktop surface that does not need the mesh keeps
 #       working." Chat is one of those surfaces today. It will not be.
@@ -513,6 +523,65 @@ status    = "active"
 #       local_daemon_wiring` (state.rs:980) — Local-only. The census FLOOR and
 #       this file's floor_basis have both been counting a needle that cannot
 #       fire in attach. Correct the census and the bar in ONE commit.
+#
+#   D3  THE INGEST ESCAPE WAS NEVER A REBRAND SPLIT-BRAIN. Scratch .sovereign
+#       is a symlink to .svrnmesh (same as the real home). The fixture daemon
+#       lost the :9741 bind to the operator's launchd-relaunched daemon, kept
+#       running (the in-task bind is best-effort), logged "is running", and
+#       the harness's /v1/models probe was answered by the STRANGER — so the
+#       app attached to the real daemon and the fixture corpus landed in the
+#       real ~/.svrnmesh (the 2026-07-30 incident, again). Fixed 2026-09-10:
+#       `daemon run` reads the serve task's bind outcome
+#       (sovereign_mesh::ClientListener) before claiming to run and exits 1 on
+#       Failed; /status.process carries pid + run_id; the harness's readiness
+#       is IDENTITY (pid == spawned child), not liveness.
+#
+# ── REVIEW 2026-09-10 — three read-only reviewers over R1-R5 (HEAD aaf09ddbe) ─
+#
+# Structure delivers the claim: closed enums over existing serde payloads,
+# one resolve mapping, ResolveOutcome moved not mirrored, socket split
+# falsified on a real socket, DesktopTurnSink gone, one renderer, all four
+# turn commands on the wire in both modes. BEHAVIOUR does not yet, and each
+# of the six below is survivable today ONLY because a local path still
+# exists — so they gate the deletion half, in this order. Full findings
+# (35, with scenarios) are the note tagged sv-surface-review-2026-09-10.
+#
+#   RB1 NOBODY CLOSES THE SOCKET AFTER Complete. turn_http.rs:1093 continues
+#       forever; drain_after_complete (turn-client lib.rs:1387) and the
+#       desktop pump (chat.rs:280) end only on socket end. One leaked
+#       WebSocket + writer task + SocketApprovalChannel PER TURN, both ends;
+#       `turn_wire` never cleared. E1 has no closer. (all three reviewers)
+#   RB2 CANCEL DOES NOT UNPARK A PROMPT. turn_http.rs:1020 trips tokens;
+#       Parked::answered (approval_desk.rs:85) blocks; executor.rs:757 has no
+#       select. Stop on an open consent card -> no Complete, ever.
+#   RB3 finish_wire_turn DROPS A PROMPT THAT PRECEDES TurnStarted
+#       (chat.rs:228-235 forwards only Narration|Notice). ComplexTask sends
+#       Prompt FIRST (turn_surface.rs:877 pins it): every agentic ask hangs,
+#       and the fallback id is taken — the aaf09ddbe hang, re-created.
+#   RB4 StreamError CARRIES RECOVERABLE REFUSALS (turn_http.rs:1216) and both
+#       clients treat it as terminal (turn-client lib.rs:1354; chat.rs:456).
+#       Double-click approve -> a healthy turn is discarded. Refusals ride
+#       Notice::ResolveAck, which exists.
+#   RB5 `state.turn_wire` IS ONE GLOBAL SLOT for a per-conversation resource
+#       (chat.rs:207/:353/:816; state.rs:116). cancel_stream ignores its
+#       conversation_id; a redirect overwrites and the first pump's end
+#       clears the live one. HashMap<conversation_id, TurnSender>.
+#   RB6 G7 IS NOT DELIVERED AS CLAIMED. emit_clarification_request still
+#       reads self.routing_events (no-op on the daemon) at
+#       knowledge_query.rs:117,243 and ask_move.rs:90,209; narration at
+#       document_op.rs:233,268 and attached_doc.rs:278,373,670,718. The card
+#       fires in-process and vanishes on the wire. Boundary test owed.
+#
+#   ALSO COUNTED: 16 is_attach_mode decision points at HEAD vs the 15 above —
+#   conversation.rs:641, added by 0f76bde5c (G3b), and it double-folds the
+#   searched sources now that Local rides the wire. Plus four new
+#   turn_wire.is_some()/runtime.sessions wire-or-local branches (chat.rs:816,
+#   :893; conversation.rs:293, :687) — the additive pattern under a new
+#   predicate. Feature loss against directive 2: TurnMetadata carries no
+#   retrieved_chunks/provenance and the live bubble reads both. try_resume's
+#   Err arm still only warns (state.rs:1806) — post-R5 that is a total chat
+#   outage. Ledger honesty: G3/G3b/G8/G10 DONE with e2e that fails without
+#   the producer; G4/G5/G6 unit-proven only; G2 byte-pinned only.
 #
 # ── CLOSEOUT LADDER (revised 2026-09-09; supersedes rung 6's C2/E sketch) ────
 #

@@ -1763,13 +1763,17 @@ pub async fn bootstrap_with_progress(
         .unwrap_or_else(|refusal| {
             panic!("desktop: cannot commission the in-process daemon: {refusal}")
         });
+        let client_port = cli_cfg.daemon.client_port;
         let daemon =
             sovereign_mesh::EmbeddedDaemon::new(config.data_dir.clone(), cli_cfg, services);
         daemon_handle.bind(Arc::clone(&daemon));
         *state.mesh.write().await = Some(Arc::clone(&daemon));
 
-        match daemon.try_resume().await {
-            Ok(true) => tracing::info!("mesh: resumed from persisted state"),
+        let started = match daemon.try_resume().await {
+            Ok(true) => {
+                tracing::info!("mesh: resumed from persisted state");
+                true
+            }
             Ok(false) => {
                 // sv-surface R4/B1: a fresh install has no mesh.json, and
                 // try_resume returns WITHOUT binding — until now the
@@ -1786,24 +1790,58 @@ pub async fn bootstrap_with_progress(
                     .unwrap_or_else(|| "sovereign".to_string());
                 let mesh_name = format!("{hostname}'s Mesh");
                 match daemon.create_mesh(&mesh_name, &hostname).await {
-                    Ok(_) => tracing::info!(
-                        %mesh_name,
-                        "mesh: solo mesh created — the listener is bound on first boot"
-                    ),
+                    Ok(_) => {
+                        tracing::info!(%mesh_name, "mesh: solo mesh created on first boot");
+                        true
+                    }
                     Err(e) => {
-                        // B3, surfaced: no listener means the turn port
-                        // will not answer, and the readiness probe in
-                        // `main.rs` will say so instead of a ready event.
-                        // Fatal-at-R5 is noted on the row — today the
-                        // in-process chat surfaces keep working.
                         tracing::error!(
                             error = %e,
-                            "mesh: could not create the first-boot solo mesh — the daemon's port will not answer"
+                            "mesh: could not create the first-boot solo mesh"
                         );
+                        false
                     }
                 }
             }
-            Err(e) => tracing::warn!(error = %e, "mesh: try_resume failed"),
+            Err(e) => {
+                tracing::error!(error = %e, "mesh: try_resume failed — no mesh, no listener");
+                false
+            }
+        };
+
+        // sv-surface B3, fatal at R5 as the row said: every turn now rides
+        // the wire, so a Local boot whose own daemon holds no client
+        // listener has NOTHING to serve chat — and worse than nothing, its
+        // wire client would connect to whoever else answers on the port.
+        // Watched live 2026-09-10: the first-launch e2e journey booted
+        // Local while a fixture daemon held :9741; the embedded bind failed
+        // best-effort, the turn was served by the fixture daemon and
+        // persisted in ITS store, and this process read metadata back from
+        // its own empty one. A port is not an identity. The bind outcome is
+        // the serve task's own word (`ClientListener`), read here rather
+        // than inferred from a port probe a stranger can answer.
+        if !started {
+            return Err(format!(
+                "the local daemon did not start, so nothing serves chat on :{client_port} — see the log for the mesh error"
+            ));
+        }
+        match daemon
+            .client_listener(std::time::Duration::from_secs(30))
+            .await
+        {
+            sovereign_mesh::ClientListener::Bound(addr) => {
+                tracing::info!(%addr, "mesh: client listener bound — this process owns its port");
+            }
+            sovereign_mesh::ClientListener::Failed(e) => {
+                return Err(format!(
+                    "the local daemon could not bind :{client_port} — {e}. Another sovereign on this machine is holding the port: stop it, or give this one a different client_port."
+                ));
+            }
+            sovereign_mesh::ClientListener::Pending => {
+                return Err(format!(
+                    "the local daemon's bind on :{client_port} did not settle within 30s — refusing to report a backend that may be serving nothing"
+                ));
+            }
         }
     } else {
         tracing::info!("mesh: attach mode — CLI daemon owns mesh state");

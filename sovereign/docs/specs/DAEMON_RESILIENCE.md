@@ -202,6 +202,20 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   old-binary daemon) holding the port satisfies it; P2.1's
   identity-stamped `/healthz` (pid in the response, compared by the
   watchdog) closes that.
+  **Boot half closed 2026-09-10.** The serve task now publishes its bind
+  outcome (`sovereign_mesh::ClientListener` — `Pending` / `Bound` /
+  `Failed`, a `watch` on `EmbeddedDaemon`), and `daemon run` reads it
+  before logging "svrn daemon is running": `Failed` or a 60s `Pending`
+  exits 1, so the service manager retries instead of supervising a
+  process that serves nothing. The in-task bind stays best-effort, so
+  the default-port tests are untouched. `/status.process` carries
+  `pid` + `run_id` — the daemon saying WHICH process answered — and
+  the desktop e2e harness's readiness probe compares `pid` to the
+  child it spawned. Trigger: the fixture daemon lost `:9741` to the
+  operator's launchd-relaunched daemon, logged "is running" anyway,
+  the port probe was answered by the stranger, and a fixture ingest
+  landed in the real `~/.svrnmesh`. The RUNTIME half (a stranger
+  taking the port after boot fools the TCP watchdog) is still P2.1.
 ### P1 — request-level containment
 
 - [ ] **P1.1** `CatchPanicLayer` (panic → 500) + request-timeout layer +

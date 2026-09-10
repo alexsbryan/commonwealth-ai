@@ -1322,8 +1322,36 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // The log is append-only across restarts by design, so this line is the
     // KEY every later line in this generation joins against: which binary,
     // built when, under which run id (sovereign_core::run_identity).
+    // The serve task's bind is best-effort by design (the default-port
+    // integration tests must not be stranded), so "running" is a claim this
+    // process may make only AFTER reading the bind outcome. Until 2026-09-10
+    // the line below fired before the bind finished: the desktop e2e
+    // harness's fixture daemon lost `:9741` to the operator's
+    // launchd-relaunched daemon, logged "is running", served nothing, and
+    // the harness's port probe was answered by the stranger — a fixture
+    // ingest landed in the operator's real home. A daemon with no client
+    // API is not running; it exits non-zero so the service manager retries.
+    let client_addr = match daemon
+        .client_listener(std::time::Duration::from_secs(60))
+        .await
+    {
+        sovereign_mesh::ClientListener::Bound(addr) => addr,
+        sovereign_mesh::ClientListener::Failed(e) => {
+            eprintln!("error: the client API is not listening — {e}");
+            return 1;
+        }
+        sovereign_mesh::ClientListener::Pending => {
+            eprintln!(
+                "error: the client API bind did not settle within 60s — \
+                 refusing to report a daemon that may be serving nothing"
+            );
+            return 1;
+        }
+    };
+
     let build = sovereign_core::run_identity::build();
     tracing::info!(
+        client_addr = %client_addr,
         client_port = config.daemon.client_port,
         internal_port = config.daemon.internal_port,
         run = sovereign_core::run_identity::run_id(),

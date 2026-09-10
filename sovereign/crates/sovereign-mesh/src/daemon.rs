@@ -206,6 +206,8 @@ use crate::state::MeshState;
 /// carries a `ProviderFactory`.
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
+    /// Bind outcome of the current serve task — see [`ClientListener`].
+    client_listener: tokio::sync::watch::Sender<ClientListener>,
     /// Where to persist `mesh.json` so the daemon can auto-resume on
     /// app restart. Empty means persistence is off — but it is NOT the
     /// in-memory constructor's spelling any more: the identity key and the
@@ -279,6 +281,30 @@ pub struct EmbeddedDaemon {
     /// answers a different question: have we ever seen a worker here, so that an
     /// unanswered probe is reportable as `unconfirmed` rather than as absence.
     rpc_worker_last_seen: std::sync::RwLock<std::collections::HashMap<NodeId, std::time::Instant>>,
+}
+
+/// What became of the API listeners the serve task binds.
+///
+/// A closed set (ARCH §2) because callers fork on it: `daemon run` refuses
+/// to report itself running until this reads `Bound`, and `Failed` is fatal
+/// there. The bind itself stays best-effort INSIDE the serve task (the
+/// default-port integration tests bind `:9741` under parallel contention and
+/// must not be stranded) — this is how a caller that needs the truth reads
+/// it without changing the task's posture. Minted 2026-09-10: the desktop
+/// e2e harness's fixture daemon lost `:9741` to the operator's
+/// launchd-relaunched daemon, logged "is running" anyway, and the harness's
+/// port probe was answered by the stranger — a fixture ingest landed in the
+/// operator's real home.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientListener {
+    /// The serve task has not reached its bind yet.
+    Pending,
+    /// Both API listeners are bound; this is the client address.
+    Bound(SocketAddr),
+    /// A bind failed after retries. The serve task has exited and this
+    /// process serves NO client API — whatever answers on the port is
+    /// someone else.
+    Failed(String),
 }
 
 enum DaemonState {
@@ -561,6 +587,7 @@ impl EmbeddedDaemon {
         }
         Arc::new_cyclic(|self_weak| Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
+            client_listener: tokio::sync::watch::Sender::new(ClientListener::Pending),
             data_dir,
             _scratch: std::sync::Mutex::new(None),
             self_weak: self_weak.clone(),
@@ -819,6 +846,24 @@ impl EmbeddedDaemon {
     /// existing members can reconnect without the user recreating.
     /// No-op if no persisted file exists or if persistence is
     /// disabled (the [`in_memory`](Self::in_memory) constructor).
+    /// Await the serve task's bind outcome, bounded by `timeout`.
+    ///
+    /// `Pending` comes back ONLY on timeout — a caller that needs a verdict
+    /// treats it as could-not-judge (§18.1), never as bound. The in-process
+    /// tests never call this, so their best-effort posture is untouched.
+    pub async fn client_listener(&self, timeout: std::time::Duration) -> ClientListener {
+        let mut rx = self.client_listener.subscribe();
+        let settled = rx.wait_for(|s| !matches!(s, ClientListener::Pending));
+        let outcome = match tokio::time::timeout(timeout, settled).await {
+            Ok(Ok(state)) => state.clone(),
+            // The sender lives in `self`, so this arm is unreachable while
+            // `&self` is borrowed; named rather than unwrapped.
+            Ok(Err(_)) => ClientListener::Failed("daemon dropped before its listener bound".into()),
+            Err(_) => ClientListener::Pending,
+        };
+        outcome
+    }
+
     pub async fn try_resume(&self) -> Result<bool, MeshError> {
         if !self.persistence_enabled() {
             return Ok(false);
@@ -3310,6 +3355,10 @@ impl EmbeddedDaemon {
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
         // in-process re-create (`leave_to_solo`) rebinds the same ports.
         let app_state_clone = app_state.clone();
+        // Each start (including an in-process re-create) answers the bind
+        // question afresh; the serve task publishes the outcome below.
+        self.client_listener.send_replace(ClientListener::Pending);
+        let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
             let mut client_router =
                 commonwealth_api::server::client_router(app_state_clone.clone());
@@ -3371,6 +3420,7 @@ impl EmbeddedDaemon {
                 Ok(l) => l,
                 Err(e) => {
                     warn!("{e}");
+                    listener_outcome.send_replace(ClientListener::Failed(e.to_string()));
                     return;
                 }
             };
@@ -3379,11 +3429,13 @@ impl EmbeddedDaemon {
                     Ok(l) => l,
                     Err(e) => {
                         warn!("{e}");
+                        listener_outcome.send_replace(ClientListener::Failed(e.to_string()));
                         return;
                     }
                 };
 
             info!("Commonwealth daemon started (client: {client_addr}, internal: {internal_addr})");
+            listener_outcome.send_replace(ClientListener::Bound(client_addr));
 
             // Enumerate local non-loopback IPs so the founder can copy one
             // into a `?relay=<IP>` query param if mDNS doesn't reach the

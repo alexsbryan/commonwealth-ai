@@ -30,6 +30,7 @@ import {
   portInUse,
   spawnDesktop,
 } from "../faults/spawn";
+import { managedDaemonOwnsPort, startManagedDaemon, stopManagedDaemon } from "../global-setup";
 import { assertTurnInvariants, sendAndAwaitTurn } from "../invariants";
 import { RUN_ID, recordJourneyResult } from "./journey";
 import { J_FIRST_LAUNCH_SETUP as J } from "./manifest";
@@ -64,6 +65,14 @@ test.describe.serial("first-launch setup", () => {
           `Kill it before re-running.`,
       );
     }
+    // A first launch boots its OWN embedded daemon, and since sv-surface R5
+    // every turn rides that daemon's wire — so this app must own :9741. The
+    // managed fixture daemon holds it for the rest of the suite; stop it for
+    // this journey and bring it back after. Before this (2026-09-10) the
+    // embedded bind failed best-effort, the turn was served by the FIXTURE
+    // daemon and persisted in its store, and the app read metadata back from
+    // its own empty one: "message-complete.metadata must be present".
+    if (managedDaemonOwnsPort()) await stopManagedDaemon();
     app = await spawnDesktop({
       profileDir: PROFILE_DIR,
       bridgePort: BRIDGE_PORT,
@@ -71,9 +80,9 @@ test.describe.serial("first-launch setup", () => {
       // Clean first-launch: desktop.toml-only (matches global-setup's
       // proven profile shape), routed to the wizard, no daemon config.
       profile: { setupComplete: false, cliSetupConfig: false },
-      // Force the embedded first-launch path: the managed-daemon suite keeps a
-      // daemon on :9741, which the bootstrap would otherwise Attach to (skipping
-      // the wizard this journey exists to prove).
+      // Force the embedded first-launch path: in attach mode (opt-out) a
+      // daemon still sits on :9741, which the bootstrap would otherwise
+      // Attach to (skipping the wizard this journey exists to prove).
       env: { SOVEREIGN_FORCE_LOCAL: "1" },
     });
     // The boot guard must route to the wizard (fires before any model
@@ -91,6 +100,7 @@ test.describe.serial("first-launch setup", () => {
 
   test.afterAll(async () => {
     await app?.stop();
+    if (managedDaemonOwnsPort()) await startManagedDaemon();
   });
 
   test(`[T${J.tier}] ${J.id} — ${J.title}`, async ({ page }) => {

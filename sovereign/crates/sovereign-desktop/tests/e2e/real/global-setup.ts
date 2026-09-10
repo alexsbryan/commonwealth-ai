@@ -976,7 +976,56 @@ function bakeProfile(): void {
  *  fixture ingest lands in the real data dir (hit live 2026-07-30:
  *  "E2E Fixture Corpus" ingested into ~/.svrnmesh/indexes). `daemon run`
  *  is foreground + env-faithful; global-teardown kills the PID. */
-async function startManagedDaemon(): Promise<void> {
+/** True when the harness owns the daemon on :9741 (the default). A spec that
+ *  must boot its OWN embedded daemon on that port (first-launch) stops the
+ *  managed one for its duration and restarts it after. */
+export function managedDaemonOwnsPort(): boolean {
+  return MANAGED_DAEMON;
+}
+
+/** SIGTERM the managed fixture daemon (the PID this harness banked) and
+ *  wait for it to exit. A no-op when none is running. Never touches a PID
+ *  the harness did not spawn — the operator's daemon is not ours to stop. */
+export async function stopManagedDaemon(): Promise<void> {
+  if (!fs.existsSync(DAEMON_PID_FILE)) return;
+  const pid = Number(fs.readFileSync(DAEMON_PID_FILE, "utf8").trim());
+  fs.rmSync(DAEMON_PID_FILE, { force: true });
+  const alive = (p: number) => {
+    try {
+      process.kill(p, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!Number.isFinite(pid) || pid <= 1 || !alive(pid)) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    /* already gone */
+  }
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline && alive(pid)) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (alive(pid)) {
+    console.warn(`[real-setup] managed daemon pid ${pid} ignored SIGTERM — SIGKILL`);
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  // The listener is released a beat after the process; a spec that binds
+  // :9741 next must not race it.
+  const free = Date.now() + 10_000;
+  while (Date.now() < free && (await portInUse(9741))) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  console.log(`[real-setup] managed-daemon: stopped (pid=${pid})`);
+}
+
+export async function startManagedDaemon(): Promise<void> {
   console.log(
     "[real-setup] managed-daemon: spawning fixture-scoped `daemon run` (HOME=test profile)…",
   );
@@ -995,23 +1044,54 @@ async function startManagedDaemon(): Promise<void> {
   });
   child.unref();
   if (!child.pid) throw new Error("managed-daemon: failed to spawn `daemon run`");
-  fs.writeFileSync(DAEMON_PID_FILE, String(child.pid));
+  const spawnedPid = child.pid;
+  fs.writeFileSync(DAEMON_PID_FILE, String(spawnedPid));
+  // The child exits non-zero when its client API does not bind (a stranger
+  // holds :9741). Watch for that so setup fails on the CHILD's verdict
+  // instead of timing out — or worse, proceeding.
+  let exited: number | null = null;
+  child.once("exit", (code) => {
+    exited = code ?? -1;
+  });
+  // Readiness is IDENTITY, not liveness. The :9741 guard above is a
+  // point-in-time check, and launchd (KeepAlive) can relaunch the operator's
+  // daemon between it and our bind — hit live 2026-09-10: the fixture daemon
+  // lost the bind, `/v1/models` was answered by the operator's daemon, the
+  // app attached to it, and "E2E Fixture Corpus" landed in the real
+  // ~/.svrnmesh (the 2026-07-30 incident, again). `/status.process.pid` is
+  // the daemon saying WHICH process answered; only our child counts.
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
+    if (exited !== null) {
+      throw new Error(
+        `managed-daemon: \`daemon run\` (pid=${spawnedPid}) exited with code ${exited} ` +
+          `before serving — see ${DAEMON_LOG}`,
+      );
+    }
     try {
-      const r = await fetchJson("http://127.0.0.1:9741/v1/models");
-      if (Array.isArray((r as { data?: unknown }).data)) {
+      const r = await fetchJson("http://127.0.0.1:9741/status");
+      const pid = (r as { process?: { pid?: unknown } }).process?.pid;
+      if (typeof pid === "number") {
+        if (pid !== spawnedPid) {
+          throw new Error(
+            `managed-daemon: :9741 is answered by pid ${pid}, not the fixture daemon this ` +
+              `harness spawned (pid=${spawnedPid}). A stranger holds the port — the operator's ` +
+              `daemon relaunched by launchd, or a twin. Stop it (\`sovereign daemon stop\`) ` +
+              `and rerun; see ${DAEMON_LOG} for the fixture daemon's bind attempts.`,
+          );
+        }
         console.log(
-          `[real-setup] managed-daemon: ready on :9741 (pid=${child.pid}, log=${DAEMON_LOG})`,
+          `[real-setup] managed-daemon: ready on :9741 (pid=${spawnedPid}, log=${DAEMON_LOG})`,
         );
         return;
       }
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("managed-daemon:")) throw e;
       /* not up yet */
     }
     await new Promise((res) => setTimeout(res, 1000));
   }
-  throw new Error(`managed-daemon: not serving /v1/models on :9741 within 120s — see ${DAEMON_LOG}`);
+  throw new Error(`managed-daemon: not serving /status on :9741 within 120s — see ${DAEMON_LOG}`);
 }
 
 export default async function globalSetup(): Promise<void> {

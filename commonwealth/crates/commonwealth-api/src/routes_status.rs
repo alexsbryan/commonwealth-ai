@@ -182,6 +182,8 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             total_chunks_searchable,
         },
         process: ProcessStatus {
+            pid: std::process::id(),
+            run_id: sovereign_core::run_identity::run_id(),
             uptime_seconds: state.inner.started_at.elapsed().as_secs(),
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -339,6 +341,15 @@ pub struct StatusResponse {
 /// check compares against the soft limit.
 #[derive(Debug, Serialize)]
 pub struct ProcessStatus {
+    /// The answering process. A PORT is not an identity: a caller that
+    /// spawned a daemon and probes its port must compare this to the pid it
+    /// spawned, because a stranger — a launchd relaunch, a twin — can hold
+    /// the port and answer in its place (2026-09-10, the desktop e2e
+    /// harness; `tests/e2e/real/global-setup.ts`).
+    pub pid: u32,
+    /// `sovereign_core::run_identity::run_id()` — the key every log line of
+    /// this generation carries, so a reader can join `/status` to the log.
+    pub run_id: &'static str,
     pub uptime_seconds: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rss_mb: Option<u64>,
@@ -563,6 +574,8 @@ mod process_status_tests {
     #[test]
     fn process_status_serializes_and_samples() {
         let p = ProcessStatus {
+            pid: std::process::id(),
+            run_id: sovereign_core::run_identity::run_id(),
             uptime_seconds: 42,
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -576,6 +589,14 @@ mod process_status_tests {
         }
         let json = serde_json::to_value(&p).unwrap();
         assert_eq!(json["uptime_seconds"], 42);
+        // Pins the KEY NAMES the e2e harness reads (`process.pid`,
+        // `process.run_id`) — a rename or a `skip_serializing` goes red here.
+        // It is not the identity gate: the test constructed the pid, so the
+        // subject echoes it (§18.1). The gate is the harness comparing
+        // `process.pid` to the child it spawned, which the daemon cannot
+        // author — watched necessary live on 2026-09-10.
+        assert_eq!(json["pid"], std::process::id());
+        assert!(json["run_id"].as_str().is_some_and(|s| !s.is_empty()));
     }
 
     #[test]
