@@ -537,7 +537,10 @@ status    = "active"
 #       order it cannot have. REMAINS: G7 (routing events — payload move
 #       first), G3b (the information-search split), G9's client-side
 #       consumption (C2). Also named-kept-open: the non-streaming
-#       emits' channel read (G4 row).
+#       emits' channel read (G4 row). Code: 3d009994c (+538/-22, re-applied
+#       after a concurrent session's checkout wiped the first uncommitted
+#       batch — rows in 658e9873c; commit early, the tree is shared).
+#       Initiative test pass: 12463/12463.
 #   R4  THE BLOCKERS. B1-B4. B1 is a design problem, not a code problem, and
 #       should be settled with the operator before it is built.
 #   R5  THE COLLAPSE. Delete the 15 forks and the desktop's in-process turn
