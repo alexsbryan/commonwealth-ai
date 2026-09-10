@@ -832,23 +832,27 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
-                                serve_turn(
-                                    &rt,
-                                    st.as_ref(),
-                                    &cid,
-                                    &content,
-                                    mode,
-                                    intent,
-                                    // See the module docs — the daemon has no
-                                    // narration broadcast yet, and a `None`
-                                    // here is that fact rather than a dropped
-                                    // channel.
-                                    None,
-                                    &tx,
-                                )
-                                .await;
-                    })
+                    sovereign_core::runtime::capabilities::scope_turn(
+                        turn_approval,
+                        Some(routing),
+                        async {
+                            serve_turn(
+                                &rt,
+                                st.as_ref(),
+                                &cid,
+                                &content,
+                                mode,
+                                intent,
+                                // See the module docs — the daemon has no
+                                // narration broadcast yet, and a `None`
+                                // here is that fact rather than a dropped
+                                // channel.
+                                None,
+                                &tx,
+                            )
+                            .await;
+                        },
+                    )
                     .await;
                 }));
             }
@@ -907,19 +911,23 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
-                                let resume = ResumeSession {
-                                    session_id,
-                                    intent_hint,
-                                };
-                                drive_acquired(
-                                    rt.resume_session_stream(&content, &cid, resume).await,
-                                    st.as_ref(),
-                                    &cid,
-                                    &tx,
-                                )
-                                .await;
-                    })
+                    sovereign_core::runtime::capabilities::scope_turn(
+                        turn_approval,
+                        Some(routing),
+                        async {
+                            let resume = ResumeSession {
+                                session_id,
+                                intent_hint,
+                            };
+                            drive_acquired(
+                                rt.resume_session_stream(&content, &cid, resume).await,
+                                st.as_ref(),
+                                &cid,
+                                &tx,
+                            )
+                            .await;
+                        },
+                    )
                     .await;
                 }));
             }
@@ -981,19 +989,23 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
-                                drive_acquired(
-                                    rt.redirect_turn_stream(&session_id, &intent_hint).await,
-                                    st.as_ref(),
-                                    // The socket's conversation, which the guard
-                                    // above proved is also the session's — so the
-                                    // terminal metadata is read from the row the
-                                    // turn wrote.
-                                    &cid,
-                                    &tx,
-                                )
-                                .await;
-                    })
+                    sovereign_core::runtime::capabilities::scope_turn(
+                        turn_approval,
+                        Some(routing),
+                        async {
+                            drive_acquired(
+                                rt.redirect_turn_stream(&session_id, &intent_hint).await,
+                                st.as_ref(),
+                                // The socket's conversation, which the guard
+                                // above proved is also the session's — so the
+                                // terminal metadata is read from the row the
+                                // turn wrote.
+                                &cid,
+                                &tx,
+                            )
+                            .await;
+                        },
+                    )
                     .await;
                 }));
             }
