@@ -49,9 +49,10 @@ use std::time::{Duration, Instant, SystemTime};
 use kernel_types::quality::{
     Enforcement, Instrument, Overrun, Registry, RunsIn, Trigger, VenueAction,
 };
-use kernel_types::{honesty_footer, render_rows, Judgement, Reason};
+use kernel_types::{honesty_footer, Judgement, Reason};
 use sovereign_cli_shared::lane_verdict;
 
+mod distribute;
 mod exec;
 mod fingerprint;
 mod report;
@@ -62,7 +63,7 @@ use exec::{
     Covariates, InFlight, InstrumentRun,
 };
 use fingerprint::{compute_fingerprint, Fingerprint};
-use report::{print_selection, report_one, stamp_now, write_summary};
+use report::{print_selection, render_table, report_one, stamp_now, write_summary};
 use select::{baseline_dir, changed_paths, comparable_baselines, run_order, selected_by_change};
 
 /// How often the runner checks on a lane subprocess.
@@ -111,6 +112,13 @@ struct Args {
     /// second reader of a rendering nobody promised to keep, which is the
     /// defect `scripts/lib/ci-bench-verdict.sh` is 130 lines of.
     list: bool,
+    /// `--distribute` — run this venue's selection as work on the `work` ring
+    /// instead of as child processes here (cw-lift 5e).
+    ///
+    /// Everything else about the run is unchanged: same selection, same
+    /// budget, same four verdicts, same table, same `summary.json`. See
+    /// [`distribute`].
+    distribute: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -122,6 +130,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         table: None,
         dry_run: false,
         list: false,
+        distribute: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -147,6 +156,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--mint" => out.mint = true,
             "--dry-run" => out.dry_run = true,
             "--list" => out.list = true,
+            "--distribute" => out.distribute = true,
             "--registry" => {
                 let v = args.get(i + 1).ok_or("--registry needs a path")?;
                 out.table = Some(PathBuf::from(v));
@@ -307,6 +317,26 @@ pub async fn run(args: &[String]) -> i32 {
     }
     if parsed.dry_run {
         print_selection(&venue_word, &trigger, &lanes, &deselected, budget_secs);
+        if parsed.distribute {
+            // What the submission WOULD pin, without submitting it. The rev is
+            // the one thing a reader cannot infer from the selection, and it
+            // is what every unit's `repo_rev` requirement carries — a donor
+            // whose checkout cannot resolve it refuses rather than answering
+            // about a different tree.
+            println!();
+            match distribute::head_rev(&repo) {
+                Ok(rev) => println!(
+                    "  --distribute: {} unit(s) onto the `work` ring, each pinned to rev {rev} \
+                     on {}/{}",
+                    lanes.len(),
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                ),
+                // Printed, not swallowed: a dry run that hid the reason the
+                // real one will refuse teaches nothing.
+                Err(e) => println!("  --distribute: this run could not be pinned — {e}"),
+            }
+        }
         return 0;
     }
     if lanes.is_empty() {
@@ -375,7 +405,17 @@ pub async fn run(args: &[String]) -> i32 {
     // applied, every instrument runs its declared command, and the venue is
     // SLOW rather than blind.
     let mut applied: Vec<usize> = Vec::new();
-    for (i, p) in trigger.prepare.iter().enumerate() {
+    // A prepare step substitutes a LOCAL artifact into a local argv (`cargo
+    // xtask` → `target/debug/xtask`), so it is skipped when the units run
+    // elsewhere: a donor has no `target/debug` of ours, and rewriting an argv
+    // against one would submit a path that does not exist on the machine that
+    // runs it.
+    let prepare = if parsed.distribute {
+        &[][..]
+    } else {
+        &trigger.prepare[..]
+    };
+    for (i, p) in prepare.iter().enumerate() {
         let t0 = Instant::now();
         let ok = std::process::Command::new(resolve_program(&p.command[0]))
             .args(&p.command[1..])
@@ -401,8 +441,43 @@ pub async fn run(args: &[String]) -> i32 {
     let started = Instant::now();
     let budget = Duration::from_secs(budget_secs);
     let mut results: BTreeMap<String, InstrumentRun> = BTreeMap::new();
+    let mut submitted_by: Option<String> = None;
 
-    let queue = run_order(&lanes, trigger.concurrency);
+    // cw-lift 5e. THE ONLY BRANCH: `--distribute` fills `results` from the
+    // ring and leaves the local queue empty, so everything below — the table,
+    // the honesty footer, the durable summary, the enforcement × venue exit
+    // rule — is one implementation over both paths. A second table or a second
+    // exit rule here is what would stop a distributed verdict being diffable
+    // against a local one, which is the whole claim of this rung (ARCH §10.6).
+    let queue: Vec<&Instrument> = if parsed.distribute {
+        match distribute::run_distributed(&repo, &lanes, &trigger, budget_secs).await {
+            Ok(d) => {
+                // The handle a reader needs to go look at the ring themselves,
+                // printed rather than only traced: the merged table below says
+                // what happened, and this says where to see it happen again.
+                println!();
+                println!(
+                    "  ring: svrn job status {}   (rev {})",
+                    d.handoff.to_hex(),
+                    &d.repo_rev[..d.repo_rev.len().min(12)]
+                );
+                println!();
+                results = d.results;
+                submitted_by = d.submitted_by;
+                Vec::new()
+            }
+            // A refusal to submit is a refusal to run, never an empty table:
+            // an unreachable daemon or a roster that will not take the act
+            // says nothing about the code under test, and printing zero rows
+            // would read as a venue that selected nothing (ARCH §18.3).
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        }
+    } else {
+        run_order(&lanes, trigger.concurrency)
+    };
 
     let mut flight: Vec<InFlight> = Vec::new();
     let mut next = 0usize;
@@ -572,8 +647,14 @@ pub async fn run(args: &[String]) -> i32 {
         .iter()
         .filter_map(|l| results.get(&l.id).map(|r| r.judgement.clone()))
         .collect();
+    // The node each row was produced on, in the SAME order as `rows` — the
+    // column is derived from one walk of `lanes` so the two cannot skew.
+    let nodes: Vec<Option<String>> = lanes
+        .iter()
+        .filter_map(|l| results.get(&l.id).map(|r| r.node.clone()))
+        .collect();
     println!();
-    print!("{}", render_rows(&rows));
+    print!("{}", render_table(&rows, &nodes));
     if let Some(footer) = honesty_footer(&rows) {
         println!();
         println!("  {footer}");
@@ -595,6 +676,7 @@ pub async fn run(args: &[String]) -> i32 {
         total_secs,
         budget_secs,
         comparable,
+        submitted_by.as_deref(),
     ) {
         // The durable table is the reason this command exists. Losing it is
         // not a footnote.
@@ -669,6 +751,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "Print one selected instrument id per line and run nothing. Exit 4 if the selection is empty.",
             ),
             (
+                "--distribute",
+                "Run this venue's selection as `process:v1` work on the `work` ring instead of as child processes here. Same selection, budget and four verdicts; the table gains a node column. A unit the cohort cannot place is a never-ran row carrying its refusal, never an absent one.",
+            ),
+            (
                 "--budget-secs <n>",
                 "Override the trigger's declared wall budget. An instrument with less runway than the trigger's min is could-not-judge, not a pass.",
             ),
@@ -687,6 +773,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             (
                 "svrn quality check --trigger prepush --dry-run",
                 "what the push gate would run, in order, against its 60s budget",
+            ),
+            (
+                "svrn quality check --trigger ci:test --distribute",
+                "this repository's own CI, run by whichever ring member offers `process:v1`",
             ),
         ]),
     ],

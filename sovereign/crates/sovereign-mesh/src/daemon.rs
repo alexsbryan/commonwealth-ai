@@ -325,6 +325,11 @@ enum DaemonState {
         /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
         /// its `tokio::spawn` in a stray diff and stay silent about it.
         _rail_kv_pump_handle: Option<crate::rail_kv_pump::RailKvPumpHandle>,
+        /// Aborts the work-plane donor loop on Drop — the loop that leases,
+        /// runs and reports other people's units (cw-lift 5d). `None` on a
+        /// local-only daemon AND on a node whose `[compute.work_offer]` names
+        /// no kind; `running_services` is what tells those two apart.
+        _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -2719,6 +2724,39 @@ impl EmbeddedDaemon {
                 crate::local_only::ENV_VAR,
             )));
         }
+        // ── The work offer: resolved ONCE, here, and refused loudly rather
+        // than half-honoured (ARCH §18.3). A daemon that offers a kind it has
+        // no executor for is a donor that leases units and then fails every
+        // one of them, and the submitter reads that as a verdict about their
+        // tree. Resolved BEFORE the profile branch on purpose: a config that
+        // contradicts this build is wrong whether or not this boot would have
+        // donated, and a local-only run must not be the reason nobody found
+        // out.
+        // Resolved here, above the registry, because `donor_registry` needs it:
+        // a node with no corpus engine registers no `ingest:v1` executor, and
+        // `resolve_offer` then REFUSES a config that offers that kind, naming it
+        // (cw-lift 5g). Moved up from the `AppState` construction below, which
+        // still takes the same clone.
+        let corpus_engine = self
+            .services
+            .serving()
+            .map(|s| Arc::clone(&s.core.corpus_engine));
+        let work_registry =
+            std::sync::Arc::new(crate::work_donor::donor_registry(corpus_engine.clone()));
+        let work_offer = {
+            let c = self.setup_config.read().await;
+            crate::work_donor::resolve_offer(
+                &c.compute.work_offer,
+                &work_registry,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .map_err(|e| MeshError::Config(e.to_string()))?
+        };
+        // Assigned inside the networked branch below. A `mut` binding rather
+        // than a fifth tuple element so the gate stays the SAME `if` the four
+        // loops already sit in without re-indenting sixty lines of it.
+        let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -2740,10 +2778,6 @@ impl EmbeddedDaemon {
         // the same store gossip publishes from) inject one via
         // `set_mesh_store` before this point. Long-term persistence
         // for the legacy mesh state still flows through `mesh.json`.
-        let corpus_engine = self
-            .services
-            .serving()
-            .map(|s| Arc::clone(&s.core.corpus_engine));
         let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
             Some(provided) => provided.inner(),
             // Only the headless daemon carries a shared store; the desktop and
@@ -3512,6 +3546,23 @@ impl EmbeddedDaemon {
                 );
                 running_services.record(crate::local_only::MeshService::RailKvPump);
 
+                // The work-plane donor. Gated by the SAME branch the four
+                // loops above are — the profile's whole point is that "is
+                // this daemon local-only" is answered once (ARCH §10.6) — and
+                // then by the offer: a node whose `[compute.work_offer]` names
+                // no kind spawns nothing, which is the shipped posture.
+                work_donor_handle = work_offer.map(|offer| {
+                    let handle = crate::work_donor::spawn_work_donor(
+                        app_state.clone(),
+                        offer,
+                        std::sync::Arc::clone(&work_registry),
+                        self.data_dir.join(crate::work_donor::DONOR_DIR),
+                        crate::work_donor::DONOR_POLL_INTERVAL,
+                    );
+                    running_services.record(crate::local_only::MeshService::WorkDonor);
+                    handle
+                });
+
                 (
                     Some(gossip_handle),
                     Some(collaborate_handle),
@@ -3942,6 +3993,26 @@ impl EmbeddedDaemon {
                         >,
                     >
             });
+            // The peer-path term's eye: every member the endpoint COULD hold a
+            // path to, what membership believes about it, and what the
+            // endpoint actually holds. Lives here because membership is
+            // daemon state; the watchdog stays transport-mechanism-only.
+            // Takes the endpoint as an argument because the watchdog swaps its
+            // handle on rebuild and must judge the one it is holding.
+            let paths_state = app_state.clone();
+            let peer_paths: crate::iroh_watchdog::PeerPathsFn = Arc::new(move |ep| {
+                let app_state = paths_state.clone();
+                Box::pin(
+                    async move { crate::iroh_access::observe_peer_paths(&app_state, &ep).await },
+                )
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<
+                                    Output = Vec<crate::iroh_watchdog::PeerPathObservation>,
+                                > + Send,
+                        >,
+                    >
+            });
             let mut cfg = crate::iroh_watchdog::WatchdogConfig::from_env();
             cfg.self_probe = iroh_relay_cfg.n0_services;
             // Relay-home is a health signal only when this node actually uses a
@@ -3949,7 +4020,7 @@ impl EmbeddedDaemon {
             // (netns soak) is reachable by direct addrs — don't rebuild-loop it.
             cfg.relays_expected =
                 iroh_relay_cfg.n0_services || !iroh_relay_cfg.relay_urls.is_empty();
-            crate::iroh_watchdog::spawn(endpoint, rebuild, cfg)
+            crate::iroh_watchdog::spawn(endpoint, rebuild, Some(peer_paths), cfg)
         });
         if reachability_watchdog.is_some() {
             running_services.record(crate::local_only::MeshService::IrohWatchdog);
@@ -3979,6 +4050,7 @@ impl EmbeddedDaemon {
             _collaborate_handle: collaborate_handle,
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
+            _work_donor_handle: work_donor_handle,
             local_only,
             running_services,
             _shutdown_tx: shutdown_tx,

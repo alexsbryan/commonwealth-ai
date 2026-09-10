@@ -175,6 +175,13 @@ pub fn missing_package_crates(map: &LayerMap, crates: &BTreeSet<String>) -> Vec<
 ///    stack is still a violation if the target is outside the closure. "Below
 ///    me" and "inside my closure" are different questions.
 ///
+/// What is SHARED with [`crate::evaluate`] is the `[[forbid]]` table, read
+/// through the one decider [`crate::forbidden_by`]. A forbid row outranks
+/// membership and the shared-leaf allowance here just as it outranks layer
+/// ordering there; the exception ledgers stay separate, so grandfathering such
+/// an edge out of BOTH passes takes two rows, one of them carrying
+/// `package = "<scope>"`.
+///
 /// The filesystem half of the contract — no `build.rs`, no crate-escaping
 /// `include_str!` — is not expressible over dependency edges and lives in
 /// `xtask boundary-gate`.
@@ -210,7 +217,23 @@ pub fn evaluate_packages(map: &LayerMap, edges: &[DepEdge]) -> Vec<Violation> {
                 continue;
             };
 
-        if allowed.contains(edge.to.as_str()) {
+        // The `[[forbid]]` table FIRST — it is the sharper statement, exactly
+        // as in `crate::evaluate`, and it is the half this pass was missing.
+        //
+        // Membership alone cannot express "this package, unlike the others,
+        // may not reach that leaf". Leaves are GLOBAL: admitting one widens
+        // every package's closure at once (the leaf comments in
+        // ARCH_LAYERS.toml say so), so `sovereign-contracts` being liftable
+        // WITH studio made it liftable with `commonwealth` too — whose entire
+        // declared property is that it names no `sovereign-*`. The forbid row
+        // is where that per-package refinement is written, and until
+        // 2026-09-09 this pass never read it: `commonwealth-work ->
+        // sovereign-contracts` was admitted here on the leaf allowance while
+        // layer-gate failed on the forbid row for the same edge. Two gates,
+        // one policy file, opposite verdicts — and the one that names itself
+        // for lift closure was the one that said yes (ARCH §18.1).
+        let forbidden = crate::forbidden_by(map, &edge.from, &edge.to);
+        if forbidden.is_none() && allowed.contains(edge.to.as_str()) {
             continue;
         }
 
@@ -227,12 +250,21 @@ pub fn evaluate_packages(map: &LayerMap, edges: &[DepEdge]) -> Vec<Violation> {
             continue;
         }
 
-        violations.push(Violation::PackageEdge {
-            package: scope.to_string(),
-            doc: doc.to_string(),
-            from: edge.from.clone(),
-            to: edge.to.clone(),
-            kind: edge.kind,
+        violations.push(match forbidden {
+            Some(rule) => Violation::ForbiddenEdge {
+                package: Some(scope.to_string()),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                kind: edge.kind,
+                reason: rule.reason.clone(),
+            },
+            None => Violation::PackageEdge {
+                package: scope.to_string(),
+                doc: doc.to_string(),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                kind: edge.kind,
+            },
         });
     }
 
@@ -398,6 +430,129 @@ crates = ["pkg-a", "pkg-b"]
         let stale = evaluate_packages(&excepted, &[]);
         assert_eq!(stale.len(), 1);
         assert!(matches!(stale[0], Violation::StalePackageException { .. }));
+    }
+
+    /// The `[[forbid]]` table outranks BOTH allowances this pass grants.
+    ///
+    /// WHY THIS EXISTS. Measured 2026-09-09 on the real map, twice: adding
+    /// `sovereign-contracts = { workspace = true }` to `commonwealth-work`
+    /// made `cargo xtask layer-gate` exit 1 (the `[[forbid]] commonwealth-work
+    /// -> sovereign-*` row) and `cargo xtask boundary-gate` exit **0**,
+    /// printing "✓ every declared package reaches only itself + the shared
+    /// leaves". The gate that names itself for lift closure was the one that
+    /// said yes, on the exact edge `commonwealth/BOUNDARY.md` was written
+    /// about. `sovereign-contracts` is a `[[package_leaf]]`, leaves are
+    /// GLOBAL, and this pass read membership and nothing else (ARCH §18.1).
+    ///
+    /// CASE 0 IS THE NEGATIVE CONTROL, and it is why the rest are not
+    /// decoration. `leafy` is a declared leaf, so the offending edge is
+    /// genuinely INSIDE the allowance; without case 0 every assertion below
+    /// would pass just as happily against the OLD code if the target had
+    /// simply been outside the closure — which `PackageEdge` already caught.
+    /// It pins that the new check fires for the right reason.
+    #[test]
+    fn a_forbid_row_outranks_package_membership_and_the_shared_leaf_allowance() {
+        const BASE: &str = r#"
+schema_version = 3
+backstage = ["xtask"]
+[[layer]]
+name = "all"
+crates = ["*"]
+[[package_leaf]]
+name = "leafy"
+allow = []
+[[package]]
+name = "demo"
+doc = "d"
+crates = ["pkg-a", "pkg-b"]
+"#;
+        let all: BTreeSet<String> = ["pkg-a", "pkg-b", "leafy", "xtask"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let dev = |from: &str, to: &str| DepEdge {
+            kind: DepKind::Dev,
+            ..edge(from, to)
+        };
+        let forbid = |from: &str, to: &str, except: &str| {
+            format!("{BASE}\n[[forbid]]\nfrom = \"{from}\"\nto = \"{to}\"\nexcept = [{except}]\nreason = \"r\"\n")
+        };
+
+        // ── Case 0: NEGATIVE CONTROL. No [[forbid]] anywhere, so membership
+        // is the only rule — exactly the code this test was written against.
+        // The edge MUST be admitted here, or the cases below prove nothing.
+        let bare = parse(BASE).unwrap();
+        assert!(
+            evaluate_packages(&bare, &[edge("pkg-a", "leafy")]).is_empty(),
+            "negative control: `leafy` is a declared [[package_leaf]], so this \
+             edge must be inside the allowance — if it already failed, the \
+             cases below could pass without the forbid table being read at all"
+        );
+
+        // ── Case 1: the defect. Same edge, same allowance, one forbid row.
+        let map = parse(&forbid("pkg-a", "leafy", "")).unwrap();
+        let v = evaluate_packages(&map, &[edge("pkg-a", "leafy")]);
+        assert_eq!(v.len(), 1, "{v:?}");
+        match &v[0] {
+            Violation::ForbiddenEdge { package, to, .. } => {
+                assert_eq!(package.as_deref(), Some("demo"));
+                assert_eq!(to, "leafy");
+            }
+            other => panic!("expected a ForbiddenEdge, got {other:?}"),
+        }
+        // The remediation must name the PACKAGE-scoped ledger: a bare
+        // [[exception]] answers to layer-gate and would suppress nothing here.
+        let msg = v[0].describe();
+        assert!(msg.contains(r#"package = "demo""#), "{msg}");
+
+        // ── Case 2: `except` and wildcards behave as they do in the layer
+        // pass — one decider (`crate::forbidden_by`), so they cannot drift.
+        let map = parse(&forbid("pkg-*", "leaf*", "\"leafy\"")).unwrap();
+        assert!(
+            evaluate_packages(&map, &[edge("pkg-a", "leafy")]).is_empty(),
+            "an `except` entry must exempt the package pass too"
+        );
+
+        // ── Case 3: membership, not just leaves. `pkg-b` is a package MEMBER
+        // and a forbid row still outranks that.
+        let map = parse(&forbid("pkg-a", "pkg-b", "")).unwrap();
+        assert_eq!(evaluate_packages(&map, &[edge("pkg-a", "pkg-b")]).len(), 1);
+
+        // ── Case 4: the soft landing. A package-scoped [[exception]]
+        // grandfathers it, same as any other package violation.
+        let text = format!(
+            "{}\n[[exception]]\npackage = \"demo\"\nfrom = \"pkg-a\"\nto = \"leafy\"\nreason = \"r\"\n",
+            forbid("pkg-a", "leafy", "")
+        );
+        let map = parse(&text).unwrap();
+        assert!(evaluate_packages(&map, &[edge("pkg-a", "leafy")]).is_empty());
+
+        // ── Case 5: a BARE [[exception]] does NOT suppress it. The two
+        // ledgers are separate by design (see `evaluate`), and the message in
+        // case 1 promises exactly this — grandfathering an edge out of both
+        // passes takes two rows.
+        let text = format!(
+            "{}\n[[exception]]\nfrom = \"pkg-a\"\nto = \"leafy\"\nreason = \"r\"\n",
+            forbid("pkg-a", "leafy", "")
+        );
+        let map = parse(&text).unwrap();
+        assert_eq!(
+            evaluate_packages(&map, &[edge("pkg-a", "leafy")]).len(),
+            1,
+            "a layer-scoped exception must not reach the package pass"
+        );
+
+        // ── Case 6: DEV edges, where the two gates legitimately disagree. A
+        // third party lifting the package carries its tests, so this pass
+        // enforces dev edges and the layer pass skips them.
+        let map = parse(&forbid("pkg-a", "leafy", "")).unwrap();
+        assert_eq!(evaluate_packages(&map, &[dev("pkg-a", "leafy")]).len(), 1);
+        assert!(
+            !crate::evaluate(&map, &all, &[dev("pkg-a", "leafy")])
+                .iter()
+                .any(|x| matches!(x, Violation::ForbiddenEdge { .. })),
+            "the layer pass exempts dev edges; only the package pass catches this one"
+        );
     }
 
     /// A leaf's budget is tighter than a package's and is enforced the same

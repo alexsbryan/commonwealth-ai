@@ -19,6 +19,16 @@
 //! — no `build.rs`, no crate-escaping `include_str!`, and no RUNTIME reach-out
 //! past the crate root.
 //!
+//! The `[[forbid]]` table is the one thing the two passes SHARE, through
+//! `arch_layers::forbidden_by`, and it was not shared until 2026-09-09. The
+//! allowlist this gate pins is per-package plus the GLOBAL shared leaves, so
+//! it cannot say "this package, unlike the others, may not reach that leaf" —
+//! and `commonwealth-work -> sovereign-contracts` (a declared leaf) was
+//! admitted here on membership while layer-gate failed on the forbid row for
+//! the same edge. Two gates, one policy file, opposite verdicts, and the one
+//! that names itself for lift closure said yes. A forbid row now outranks
+//! membership and the leaf allowance alike (ARCH §18.1, §10.6).
+//!
 //! The third one is younger than the other two and exists because they were
 //! not enough. Both are COMPILE-TIME rules, and a test that resolves the repo
 //! root from `CARGO_MANIFEST_DIR` at runtime — or shells `git` wherever the
@@ -542,7 +552,16 @@ mod tests {
                 .clone()
         };
 
-        assert!(budget("oicp-types").is_empty());
+        // `oicp-types` WAS empty by contract and is no longer, as of
+        // 2026-09-09 (cw-lift 5b, operator decision). `JobRequirements`
+        // carries `kernel_types::quality::Precondition`, and the
+        // alternatives were a second spelling of `Precondition` in this
+        // leaf (§10.6) or one noun with halves in two crates. The widening
+        // is on `corpus-engine-vocab`'s precedent below and costs the
+        // closure ZERO third-party crates: `kernel-types` is itself an
+        // empty leaf, and `toml` — the only dep its `quality-registry`
+        // feature adds — was already an `oicp-types` dependency.
+        assert_eq!(budget("oicp-types"), ["kernel-types"]);
         assert!(budget("kernel-types").is_empty());
         assert!(budget("corpus-engine-sections").is_empty());
         assert!(budget("sovereign-time").is_empty());

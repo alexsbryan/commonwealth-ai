@@ -6,7 +6,7 @@ pub mod work_queue;
 
 pub use guest_grant::{GuestGrant, GuestGrantStore, Scope};
 pub use ingest_grant::{EphemeralGrantStore, EphemeralIngestGrant};
-pub use shard_manager::{verify_merge_sample, ShardManager, VerifyReport};
+pub use shard_manager::{verify_merge_sample, MergePlan, ShardManager, VerifyReport};
 pub use work_queue::{
     HandoffQueue, HeartbeatResult, LeasedUnit, QueueError, ReapStats, WorkQueueManager,
 };

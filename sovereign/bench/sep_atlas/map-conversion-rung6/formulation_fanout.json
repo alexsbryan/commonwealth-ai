@@ -1,0 +1,474 @@
+[
+ {
+  "q": "argument_aristotle_hylomorphism",
+  "question": "Reconstruct Aristotle's hylomorphic account of substance, and explain\nwhy some commentators read De Anima's account of the soul as\nnon-reductive form-of-the-body and others as a kind of property\ndualism.\n",
+  "subs": [
+   "Aristotle hylomorphism substance form matter",
+   "De Anima soul non-reductive form of body commentators",
+   "Aristotle De Anima property dualism interpretation",
+   "hylomorphic account Aristotle vs dualism"
+  ],
+  "expected": 8,
+  "baseline": 7,
+  "fanout": 7,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8748,
+  "f_chars": 7874,
+  "b_time": 1.4334983825683594,
+  "f_serial": 5.844357252120972,
+  "f_parallel": 1.5577235221862793
+ },
+ {
+  "q": "argument_consequence_against_compatibilism",
+  "question": "Reconstruct van Inwagen's consequence argument and explain the strongest\ncompatibilist response to it.\n",
+  "subs": [
+   "van Inwagen consequence argument summary",
+   "compatibilist response to van Inwagen's free will theorem",
+   "determinism and the possibility of alternative possibilities",
+   "Erik J. Wielenberg critique of van Inwagen"
+  ],
+  "expected": 7,
+  "baseline": 7,
+  "fanout": 6,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8542,
+  "f_chars": 7431,
+  "b_time": 1.42034912109375,
+  "f_serial": 5.863159656524658,
+  "f_parallel": 1.5648341178894043
+ },
+ {
+  "q": "argument_godel_incompleteness",
+  "question": "State G\u00f6del's two incompleteness theorems and explain what philosophical\nlessons they have been taken to draw, separately, against logicism and\nagainst Hilbert's program.\n",
+  "subs": [
+   "G\u00f6del's first incompleteness theorem statement and proof summary",
+   "G\u00f6del's second incompleteness theorem formalization explanation",
+   "Logicism critique by G\u00f6del incompleteness theorems historical analysis",
+   "Hilbert's program refutation via G\u00f6del undecidability results"
+  ],
+  "expected": 8,
+  "baseline": 7,
+  "fanout": 8,
+  "hard": [
+   "self-reference"
+  ],
+  "hard_baseline": [
+   "self-reference"
+  ],
+  "hard_fanout": [
+   "self-reference"
+  ],
+  "b_chars": 8749,
+  "f_chars": 8496,
+  "b_time": 1.4239788055419922,
+  "f_serial": 5.8941261768341064,
+  "f_parallel": 1.554570198059082
+ },
+ {
+  "q": "argument_internalism_externalism_justification",
+  "question": "Reconstruct the new evil demon problem and explain why it is taken as a\nserious challenge to externalist accounts of epistemic justification.\n",
+  "subs": [
+   "Reconstructing the new evil demon problem",
+   "Externalism vs internalism epistemic justification",
+   "New evil demon thought experiment origin",
+   "How externalism responds to the new evil demon"
+  ],
+  "expected": 7,
+  "baseline": 6,
+  "fanout": 6,
+  "hard": [
+   "BonJour",
+   "mentalism"
+  ],
+  "hard_baseline": [
+   "mentalism"
+  ],
+  "hard_fanout": [
+   "mentalism"
+  ],
+  "b_chars": 8780,
+  "f_chars": 7366,
+  "b_time": 1.4064104557037354,
+  "f_serial": 5.94377589225769,
+  "f_parallel": 1.5894978046417236
+ },
+ {
+  "q": "argument_rawls_original_position",
+  "question": "Reconstruct Rawls's original-position argument for the two principles of\njustice, and explain Nozick's entitlement-theory objection that the\nargument illegitimately privileges patterned over historical\nconceptions of justice.\n",
+  "subs": [
+   "Rawls original position veil of ignorance derivation",
+   "Nozick entitlement theory historical justice vs patterned principles",
+   "Rawls two principles of justice difference principle explanation",
+   "Nozick Wilt Chamberlain argument against utilitarian patterns"
+  ],
+  "expected": 8,
+  "baseline": 7,
+  "fanout": 8,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8642,
+  "f_chars": 8080,
+  "b_time": 1.4374442100524902,
+  "f_serial": 5.911059617996216,
+  "f_parallel": 1.567760705947876
+ },
+ {
+  "q": "comparative_berlin_liberty",
+  "question": "Compare Berlin's negative and positive conceptions of liberty, and\nexplain why Berlin thinks positive liberty is historically liable to\nauthoritarian inversion.\n",
+  "subs": [
+   "Berlin definition of negative liberty",
+   "Berlin definition of positive liberty",
+   "Berlin critique of positive liberty leading to tyranny",
+   "Historical examples of authoritarian inversion from positive liberty"
+  ],
+  "expected": 7,
+  "baseline": 6,
+  "fanout": 5,
+  "hard": [
+   "MacCallum"
+  ],
+  "hard_baseline": [
+   "MacCallum"
+  ],
+  "hard_fanout": [],
+  "b_chars": 8734,
+  "f_chars": 8548,
+  "b_time": 1.3977465629577637,
+  "f_serial": 5.8164732456207275,
+  "f_parallel": 1.551145076751709
+ },
+ {
+  "q": "comparative_kant_hume_causation",
+  "question": "Compare Hume's and Kant's accounts of causation, and explain why Kant\ntook Hume to have shown a problem that demanded a transcendental\nsolution.\n",
+  "subs": [
+   "Hume's critique of causation and constant conjunction",
+   "Kant's response to Hume on the necessity of cause",
+   "Transcendental idealism as a solution to skepticism about nature",
+   "The distinction between analytic and synthetic judgments in Kant"
+  ],
+  "expected": 8,
+  "baseline": 5,
+  "fanout": 7,
+  "hard": [
+   "regularity theory"
+  ],
+  "hard_baseline": [],
+  "hard_fanout": [
+   "regularity theory"
+  ],
+  "b_chars": 8510,
+  "f_chars": 8199,
+  "b_time": 1.4080440998077393,
+  "f_serial": 5.849803686141968,
+  "f_parallel": 1.572378396987915
+ },
+ {
+  "q": "comparative_locke_reid_personal_identity",
+  "question": "Reconstruct Locke's memory criterion of personal identity and explain\nReid's brave-officer objection. What does the objection show about the\ntransitivity of identity?\n",
+  "subs": [
+   "Locke's memory criterion of personal identity explanation",
+   "Reid's brave officer objection Locke",
+   "transitivity of identity Reid objection analysis",
+   "memory and transitive property in personal identity"
+  ],
+  "expected": 7,
+  "baseline": 7,
+  "fanout": 7,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8603,
+  "f_chars": 8100,
+  "b_time": 1.4171380996704102,
+  "f_serial": 6.295159339904785,
+  "f_parallel": 1.7227771282196045
+ },
+ {
+  "q": "comparative_mencius_xunzi_human_nature",
+  "question": "Compare Mencius's and Xunzi's accounts of human nature (xing), and\nexplain how their different starting points lead to different views on\nthe role of ritual (li) in moral cultivation.\n",
+  "subs": [
+   "Mencius on human nature innate goodness",
+   "Xunzi on human nature innate evil",
+   "Confucian ritual li moral cultivation Mencius",
+   "Confucian ritual li moral cultivation Xunzi"
+  ],
+  "expected": 8,
+  "baseline": 8,
+  "fanout": 8,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8501,
+  "f_chars": 8472,
+  "b_time": 1.4222588539123535,
+  "f_serial": 5.895601511001587,
+  "f_parallel": 1.5557804107666016
+ },
+ {
+  "q": "concept_modality_necessary_aposteriori",
+  "question": "What is the distinction between epistemic and metaphysical possibility,\nand why does Kripke think there are necessary a posteriori truths like\n'water is H2O'?\n",
+  "subs": [
+   "epistemic vs metaphysical possibility definitions",
+   "Kripke necessary a posteriori water is H2O argument",
+   "rigid designator and identity statements Kripke",
+   "modal status of chemical composition in natural kinds"
+  ],
+  "expected": 7,
+  "baseline": 7,
+  "fanout": 7,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8776,
+  "f_chars": 7937,
+  "b_time": 1.4626967906951904,
+  "f_serial": 5.960699558258057,
+  "f_parallel": 1.5962188243865967
+ },
+ {
+  "q": "concept_qualia_physicalism",
+  "question": "What is the distinction between phenomenal and access consciousness, and\nwhy does it matter for the knowledge argument against physicalism?\n",
+  "subs": [
+   "phenomenal consciousness vs access consciousness definition",
+   "Frankish and Farah phenomenal versus access consciousness distinction",
+   "knowledge argument against physicalism Mary the color theorist",
+   "access consciousness role in knowledge argument counterarguments"
+  ],
+  "expected": 7,
+  "baseline": 5,
+  "fanout": 6,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8837,
+  "f_chars": 8364,
+  "b_time": 1.4263067245483398,
+  "f_serial": 6.000387668609619,
+  "f_parallel": 1.598982810974121
+ },
+ {
+  "q": "contested_bioethics_principlism",
+  "question": "What are the four principles of biomedical ethics in the Beauchamp-\nChildress framework, and what are the main lines of objection\n(particularist, virtue-ethical, casuist) to principlism as a\nmethodology in bioethics?\n",
+  "subs": [
+   "Beauchamp and Childress four principles of biomedical ethics",
+   "criticisms of principlism particularist objections bioethics",
+   "virtue-ethical critique of the Beauchamp-Childress framework",
+   "casuistry as an alternative to principled methodology in medicine"
+  ],
+  "expected": 9,
+  "baseline": 8,
+  "fanout": 7,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8842,
+  "f_chars": 8291,
+  "b_time": 1.4227206707000732,
+  "f_serial": 5.963382720947266,
+  "f_parallel": 1.6000587940216064
+ },
+ {
+  "q": "contested_no_miracles_scientific_realism",
+  "question": "Reconstruct the no-miracles argument for scientific realism, and explain\nthe pessimistic meta-induction response. Which other contemporary\npositions (constructive empiricism, structural realism) try to thread\nbetween them?\n",
+  "subs": [
+   "no-miracles argument scientific realism reconstruction",
+   "pessimistic meta-induction response philosophy of science",
+   "constructive empiricism van fraassen empirical adequacy",
+   "structural realism structure of the world theoretical entities"
+  ],
+  "expected": 9,
+  "baseline": 9,
+  "fanout": 8,
+  "hard": [
+   "Worrall"
+  ],
+  "hard_baseline": [
+   "Worrall"
+  ],
+  "hard_fanout": [
+   "Worrall"
+  ],
+  "b_chars": 8897,
+  "f_chars": 8486,
+  "b_time": 1.421191692352295,
+  "f_serial": 5.842010498046875,
+  "f_parallel": 1.5457310676574707
+ },
+ {
+  "q": "contested_trolley_doctrine_double_effect",
+  "question": "What are the main positions on whether the doctrine of double effect can\njustify the asymmetry between the trolley and footbridge cases?\n",
+  "subs": [
+   "Doctrine of double effect trolley footbridge asymmetry justification",
+   "Utilitarianism vs deontology trolley problem moral dilemmas",
+   "Can DDE justify killing to save five lives in footbridge case",
+   "Asymmetry between trolley and fat man cases ethical analysis"
+  ],
+  "expected": 7,
+  "baseline": 6,
+  "fanout": 6,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8600,
+  "f_chars": 7571,
+  "b_time": 1.4294888973236084,
+  "f_serial": 5.940890312194824,
+  "f_parallel": 1.5704033374786377
+ },
+ {
+  "q": "dialectical_content_narrow_wide_burge",
+  "question": "Compare narrow and wide content, and explain how Burge's arthritis\nthought experiment is supposed to show that mental content is partly\nconstituted by social and linguistic facts external to the individual.\n",
+  "subs": [
+   "Burge arthritis thought experiment summary",
+   "Narrow vs wide content definition philosophy",
+   "Externalism mental content social facts",
+   "Burke's argument language and individual identity"
+  ],
+  "expected": 7,
+  "baseline": 7,
+  "fanout": 5,
+  "hard": [
+   "individualism"
+  ],
+  "hard_baseline": [
+   "individualism"
+  ],
+  "hard_fanout": [],
+  "b_chars": 8755,
+  "f_chars": 8126,
+  "b_time": 1.4533770084381104,
+  "f_serial": 5.9168782234191895,
+  "f_parallel": 1.5659902095794678
+ },
+ {
+  "q": "dialectical_gettier_lottery",
+  "question": "How do reliabilist analyses of knowledge handle Gettier cases, and what\ndoes the lottery paradox suggest about whether reliability is enough?\n",
+  "subs": [
+   "reliabilist theories of knowledge gettier cases",
+   "lottery paradox reliabilism sufficient condition for knowledge"
+  ],
+  "expected": 7,
+  "baseline": 6,
+  "fanout": 4,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8703,
+  "f_chars": 3937,
+  "b_time": 1.4273321628570557,
+  "f_serial": 2.5644891262054443,
+  "f_parallel": 1.3126764297485352
+ },
+ {
+  "q": "dialectical_putnam_twin_earth_meaning",
+  "question": "What is Putnam's twin earth thought experiment, and what does the\nslogan 'meanings just ain't in the head' commit one to about the\nlocation of mental content?\n",
+  "subs": [
+   "Putnam twin earth thought experiment summary",
+   "Meanings just ain't in the head slogan explanation",
+   "Externalism mental content location philosophy",
+   "Twin Earth semantics and environmental determination"
+  ],
+  "expected": 7,
+  "baseline": 6,
+  "fanout": 7,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8805,
+  "f_chars": 7704,
+  "b_time": 1.430859088897705,
+  "f_serial": 5.946424245834351,
+  "f_parallel": 1.5916194915771484
+ },
+ {
+  "q": "position_summary_hard_problem_illusionism",
+  "question": "What is Chalmers's hard problem of consciousness, and how does\nillusionism propose to dissolve rather than solve it?\n",
+  "subs": [
+   "Chalmers hard problem of consciousness definition",
+   "Illusionism approach to dissolving the hard problem",
+   "Neural correlates of consciousness vs illusionist views",
+   "David Chalmers critique of qualia realism"
+  ],
+  "expected": 7,
+  "baseline": 7,
+  "fanout": 6,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8552,
+  "f_chars": 7731,
+  "b_time": 1.4373035430908203,
+  "f_serial": 5.869323253631592,
+  "f_parallel": 1.5693168640136719
+ },
+ {
+  "q": "position_summary_husserl_heidegger",
+  "question": "What is Husserl's transcendental reduction (the epoch\u00e9), and how does\nHeidegger's analysis of being-in-the-world in Being and Time depart\nfrom the methodological commitments of Husserlian phenomenology?\n",
+  "subs": [
+   "Husserl transcendental reduction epoch\u00e9 definition",
+   "Heidegger Being and Time being-in-the-world analysis",
+   "Critique Husserlian phenomenology Heidegger methodological shift",
+   "Epoch\u00e9 vs Dasein ontological difference"
+  ],
+  "expected": 8,
+  "baseline": 7,
+  "fanout": 8,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8583,
+  "f_chars": 7973,
+  "b_time": 1.4280219078063965,
+  "f_serial": 5.912871360778809,
+  "f_parallel": 1.577770709991455
+ },
+ {
+  "q": "position_summary_kripke_reference_causal_historical",
+  "question": "Reconstruct Kripke's causal-historical theory of reference and explain\nhow it handles names whose initial baptism is uncertain or whose\nreference may shift over time.\n",
+  "subs": [
+   "Kripke causal-historical theory of reference explanation",
+   "names with uncertain initial baptism Kripke",
+   "reference shift over time Kripke rigid designation",
+   "causal chain naming convention uncertainty"
+  ],
+  "expected": 7,
+  "baseline": 4,
+  "fanout": 4,
+  "hard": [
+   "descriptivism"
+  ],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8568,
+  "f_chars": 7705,
+  "b_time": 1.4168474674224854,
+  "f_serial": 5.8512208461761475,
+  "f_parallel": 1.5512416362762451
+ },
+ {
+  "q": "position_summary_virtue_ethics_function",
+  "question": "Reconstruct Aristotle's function argument for virtue ethics in\nNicomachean Ethics I, and explain MacIntyre's communitarian update of it\nin After Virtue.\n",
+  "subs": [
+   "Aristotle Nicomachean Ethics Book I function argument eudaimonia",
+   "MacIntyre After Virtue critique of modern moral philosophy",
+   "communitarian ethics MacIntyre virtue and social practice",
+   "Nicomachean Ethics telos human flourishing definition"
+  ],
+  "expected": 8,
+  "baseline": 6,
+  "fanout": 8,
+  "hard": [],
+  "hard_baseline": [],
+  "hard_fanout": [],
+  "b_chars": 8612,
+  "f_chars": 8053,
+  "b_time": 1.422062873840332,
+  "f_serial": 5.971794843673706,
+  "f_parallel": 1.582655906677246
+ }
+]

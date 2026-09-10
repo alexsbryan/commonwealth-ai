@@ -1,0 +1,57 @@
+# cw-lift 5g part 2, bar D1 — PROOF corpus, host-local only, not a shipped recipe.
+#
+# A verbatim copy of part 1's `cw5g-proof.toml` (`~/.svrnmesh/recipes/`) with ONE
+# field changed: the corpus id. Part 1's `cw5g-proof` already carries a finished
+# canonical on this host, and `merge_from_fold_coverage` short-circuits on
+# `AlreadyHasCanonical` — so re-using that id would have made the collector
+# decline for a reason that has nothing to do with whether it works.
+#
+# D1 needs the collector's precondition to be REAL rather than arranged:
+# `<corpus>-partition-*/` on disk, no canonical, so the corpus appears in
+# `CorpusEngine::corpora_with_stranded_partitions()` and the tick loop's fold
+# arm is reached. A fresh id is the whole of what that takes.
+#
+# Everything else is part 1's, including the reasoning for the shape:
+#
+#   A SINGLE-FILE JSONL, which is the shape `JsonlRange` units are FOR. The
+#   first attempt pointed this at the 17.9 GB `wikipedia.zip` and it does not
+#   work: the non-sharded `wikipedia_jsonl` path concatenates all 76 ZIP entries
+#   into one ~40 GB temp file BEFORE `article_range` is applied, so a 30-article
+#   range still pays the whole extraction — and on this host it died at shard
+#   43/76 with "Disk quota exceeded" on /tmp.
+#
+#   So: 60 real structured-wikipedia article lines, lifted verbatim out of the
+#   ZIP's smallest entry (`enwiki_namespace_0_37.jsonl`) into a plain `.jsonl`.
+#   `WikipediaJsonlLineIterator::open` reads a non-`.zip` path through a plain
+#   BufReader, so extraction is instant and the range slicing is the real one.
+#
+#   NO `[[filter]]`: the shipped `wikipedia` recipe filters to Vital Articles L5
+#   (~0.76% acceptance), so a 30-article range would produce zero chunks and a
+#   green run that ingested nothing.
+[corpus]
+id = "cw5g-d1"
+name = "cw-lift 5g D1 proof corpus"
+description = "Host-local proof corpus for bar D1 — the fold-side merge collector on a live daemon. First articles of the English Wikipedia ZIP, unfiltered."
+license = "CC-BY-SA-4.0"
+mesh_sharing = true
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+[acquire]
+type = "local_file"
+path = "/home/alexbryan/.svrnmesh/corpora-staging/cw5g-proof.jsonl"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+max_chars = 1024
+overlap_chars = 128
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = false

@@ -235,6 +235,30 @@ pub fn wildcard_match(pattern: &str, name: &str) -> bool {
     inner(pattern.as_bytes(), name.as_bytes())
 }
 
+/// The `[[forbid]]` decider — the ONE place an edge is tested against the
+/// forbid table, for every pass that evaluates edges (ARCH §10.6).
+///
+/// It is a function rather than a closure inside [`evaluate`] because it was
+/// one until 2026-09-09, and the package pass — which has its own, WIDER
+/// allowance — could not reach it. `sovereign-contracts` is a
+/// `[[package_leaf]]`, and leaves are GLOBAL, so
+/// `evaluate_packages` admitted `commonwealth-work -> sovereign-contracts`
+/// on membership alone while `[[forbid]] commonwealth-work -> sovereign-*`
+/// sat two hundred lines up the same file saying the opposite. boundary-gate
+/// printed "✓ every declared package reaches only itself + the shared leaves"
+/// and exited 0 on the exact edge it exists to catch (ARCH §18.1).
+///
+/// A `[[forbid]]` row outranks EVERY allowance in the map — layer ordering,
+/// package membership, and the shared-leaf budget alike. That precedence is
+/// why both callers check this first.
+pub fn forbidden_by<'a>(map: &'a LayerMap, from: &str, to: &str) -> Option<&'a Forbid> {
+    map.forbids.iter().find(|f| {
+        wildcard_match(&f.from, from)
+            && wildcard_match(&f.to, to)
+            && !f.except.iter().any(|x| wildcard_match(x, to))
+    })
+}
+
 // ── Evaluation ────────────────────────────────────────────────────────────────
 
 /// Assign every crate to a layer and check every edge. `crates` must be the
@@ -307,16 +331,13 @@ pub fn evaluate(map: &LayerMap, crates: &BTreeSet<String>, edges: &[DepEdge]) ->
             continue;
         }
         // [[forbid]] rules first — they're the sharper statement.
-        let forbidden = map.forbids.iter().find(|f| {
-            wildcard_match(&f.from, &edge.from)
-                && wildcard_match(&f.to, &edge.to)
-                && !f.except.iter().any(|x| wildcard_match(x, &edge.to))
-        });
-        if let Some(rule) = forbidden {
+        if let Some(rule) = forbidden_by(map, &edge.from, &edge.to) {
             if !excepted(&edge.from, &edge.to) {
                 violations.push(Violation::ForbiddenEdge {
+                    package: None,
                     from: edge.from.clone(),
                     to: edge.to.clone(),
+                    kind: edge.kind,
                     reason: rule.reason.clone(),
                 });
             }

@@ -70,7 +70,7 @@ impl ReciprocityTable {
 pub fn user_key(tenant: &TenantId, headers: &HeaderMap) -> UserKey {
     match headers.get("x-node-id").and_then(|v| v.to_str().ok()) {
         Some(hex) if !hex.is_empty() => UserKey::Node(hex.to_string()),
-        _ => UserKey::Tenant(tenant.0.clone()),
+        _ => UserKey::Tenant(tenant.to_string()),
     }
 }
 
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn user_key_prefers_x_node_id() {
-        let tenant = TenantId("default".to_string());
+        let tenant = TenantId::default_tenant();
         let mut headers = HeaderMap::new();
         assert_eq!(
             user_key(&tenant, &headers),

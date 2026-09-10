@@ -170,7 +170,7 @@ fn a_correction_pointing_at_an_op_we_do_not_hold_is_reported() {
     assert!(applied(&healed).is_empty(), "the target is voided");
 }
 
-/// The total order is `(ts_unix, actor, id)`, but the void set does not
+/// The total order is `(ts_unix, actor, seq, id)`, but the void set does not
 /// consult it at all — so a correction stamped in the past still corrects.
 #[test]
 fn a_correction_stamped_in_the_past_still_corrects() {
@@ -186,6 +186,56 @@ fn a_correction_stamped_in_the_past_still_corrects() {
     );
     let f = admitted(&[target, fix]);
     assert_eq!(applied(&f), vec!["right"]);
+}
+
+/// **One actor's own acts inside one second fold in the order it wrote them.**
+///
+/// `ts_unix` is second resolution, so a burst from one node is one timestamp;
+/// before the `seq` term the tie fell to the content-derived id, which is
+/// arbitrary with respect to causality. Failing input: three acts at one
+/// timestamp whose ids do not sort in seq order — which is what happened on
+/// the work plane on 2026-09-09 (`Submit`, `Lease`, `Complete` in one second,
+/// folded lease-first, both later acts reported unreadable, and the unit ran
+/// twice).
+///
+/// Ordering by seq costs nothing in determinism: it is on the wire, and
+/// `SequenceFork` already refuses two ops sharing one.
+#[test]
+fn one_actors_acts_inside_one_second_fold_in_seq_order() {
+    let ops: Vec<_> = ["first", "second", "third"]
+        .iter()
+        .enumerate()
+        .map(|(i, what)| signed(&key(1), 700, i as u64, record(what)))
+        .collect();
+    // The precondition that makes this a gate rather than a coincidence: the
+    // ids do NOT already sort in seq order, so the old comparator produced a
+    // different answer.
+    let by_id: Vec<&str> = {
+        let mut v: Vec<_> = ops.iter().collect();
+        v.sort_by(|a, b| a.id.cmp(&b.id));
+        v.iter()
+            .map(|o| match &o.kind.act {
+                RailAct::Record { payload } => payload
+                    .as_value()
+                    .get("what")
+                    .and_then(|w| w.as_str())
+                    .expect("what"),
+                _ => unreachable!(),
+            })
+            .collect()
+    };
+    assert_ne!(
+        by_id,
+        vec!["first", "second", "third"],
+        "these three payloads sort the same by id as by seq, so this test \
+         cannot tell the two comparators apart — pick different ones"
+    );
+
+    assert_eq!(
+        applied(&admitted(&ops)),
+        vec!["first", "second", "third"],
+        "one actor's acts must fold in the order it wrote them"
+    );
 }
 
 /// **A correction never resurrects.** Correcting a correction cancels ITS

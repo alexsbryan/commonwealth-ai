@@ -3356,6 +3356,35 @@ async fn cmd_transport(args: &[String]) -> i32 {
         };
         println!("  {name:<12} {path:<9} {detail}");
     }
+    // The watchdog's verdict on the SAME question, printed next to the table
+    // it judges. On 2026-09-09 this table read "no endpoint record yet" for
+    // every peer while `self_reachability` reported healthy, and nothing on
+    // this surface connected the two — so the green light won.
+    if let Some(r) = status.self_reachability.as_ref() {
+        let h = &r.health;
+        println!();
+        if h.peer_paths_wedged {
+            println!(
+                "  watchdog: peer paths WEDGED — {}/{} active; this endpoint held a path and \
+                 lost it. Self-heal is escalating (rebuilds so far: {}).",
+                h.peer_paths_active, h.peer_paths_total, h.rebuilds
+            );
+        } else {
+            println!(
+                "  watchdog: {}/{} peer paths active · relay_homed={} · discovery_ok={} · \
+                 rebuilds={}",
+                h.peer_paths_active,
+                h.peer_paths_total,
+                h.relay_homed,
+                match h.discovery_ok {
+                    Some(true) => "yes",
+                    Some(false) => "no",
+                    None => "not-run",
+                },
+                h.rebuilds
+            );
+        }
+    }
     0
 }
 

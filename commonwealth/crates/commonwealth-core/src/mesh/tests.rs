@@ -550,6 +550,37 @@ fn genuine_rejoin_resurrects_a_tombstone() {
     assert_eq!(merged.last_seen, 100);
 }
 
+/// THE PROPERTY THAT KILLED THE WIDENING, pinned so nobody re-derives it.
+///
+/// `is_active` was briefly widened to treat `last_seen > removed_at` as a
+/// rejoin. Revocation is the case that forbids it: `revoke_member` targets a
+/// LIVE member, so it stamps `removed_at` at roughly that member's `last_seen`,
+/// and the member's next heartbeat carries `last_seen` past it. Under the
+/// widened rule the revoked node re-admits itself using a field it supplies
+/// itself (ARCH §18.1). The failing input below is exactly the shape
+/// `commonwealth-discovery`'s `revoke_member_tombstones_instead_of_deleting`
+/// produces — a synthetic revocation instant against a wall-clock `last_seen`.
+#[test]
+fn a_revoked_member_cannot_re_admit_itself_by_being_seen_again() {
+    let mut m = member(NodeId::from_u128(200), "revoked-but-chatty", 1_788_985_799);
+    m.removed_at = Some(1_000);
+    assert!(
+        !m.is_active(),
+        "a revocation must not be overturnable by the subject's own gossip"
+    );
+}
+
+/// The control: the tombstone is what does the excluding, so a member with no
+/// tombstone must stay active however its timestamps sit. Without this, the
+/// assertion above is satisfiable by an `is_active` that returns `false`
+/// always — which would empty the roster.
+#[test]
+fn a_member_with_no_tombstone_is_active() {
+    let m = member(NodeId::from_u128(201), "live", 1_788_985_799);
+    assert!(m.is_active());
+    assert_eq!(m.event_time(), 1_788_985_799);
+}
+
 /// covers: FE-6
 #[test]
 fn merge_preserves_pubkey_when_old_peer_relays_record_without_it() {

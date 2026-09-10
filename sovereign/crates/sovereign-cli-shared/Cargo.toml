@@ -36,6 +36,9 @@ which = { version = "7", optional = true }
 # Only for `mcp_client` (feature-gated) — the daemon-first path for
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
+# `rail` only (feature `rail-client`) — for `RailAct`, the typed wire form the
+# daemon's append door parses with `RailAct::from_json`.
+commonwealth-rail = { workspace = true, optional = true }
 dirs = "5"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has
@@ -89,6 +92,14 @@ project-model = ["dep:corpus-engine-scip", "dep:which"]
 # `code` router also serves it). Each carried its own copy until 2026-08-20 and
 # the two drifted; see the module docs for the three defects that merged.
 code-index = ["dep:corpus-engine", "dep:oicp-client", "dep:sovereign-core"]
+# Enables `sovereign_cli_shared::rail` — the ONE operator-side rail client
+# (cw-lift 5e). It was `ring_cmd`'s private pair while `ring` and `job` were
+# the only callers; `svrn quality check --distribute` is a third, and it lives
+# in `sovereign-cli`. Gated because most siblings never touch a ring, and
+# `commonwealth-rail` is what carries `RailAct` — the act is typed on the way
+# out, so a caller cannot spell the wire form wrong and learn about it from a
+# 422 (ARCH §10.6).
+rail-client = ["dep:reqwest", "dep:commonwealth-rail"]
 
 [lints]
 workspace = true

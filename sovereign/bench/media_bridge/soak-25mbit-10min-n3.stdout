@@ -1,0 +1,4 @@
+soak10m-r1 viewer=0 status=206 clen=Some(1875000000) crange=Some("bytes 0-1874999999/2147483648") bytes=1875000000 secs=600.00 rate=25.0 Mbit/s ttfb=2.6ms gaps: n=143303 p50=0.0 p99=84.2 max=87.3ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=23.1 Mbit/s verify=off
+soak10m-r2 viewer=0 status=206 clen=Some(1875000000) crange=Some("bytes 0-1874999999/2147483648") bytes=1875000000 secs=600.00 rate=25.0 Mbit/s ttfb=1.6ms gaps: n=153848 p50=0.0 p99=84.1 max=88.9ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=23.1 Mbit/s verify=off
+soak10m-r3 viewer=0 status=206 clen=Some(1875000000) crange=Some("bytes 0-1874999999/2147483648") bytes=1875000000 secs=600.00 rate=25.0 Mbit/s ttfb=1.4ms gaps: n=155721 p50=0.0 p99=84.1 max=87.7ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=23.1 Mbit/s verify=off
+SOAK_DONE

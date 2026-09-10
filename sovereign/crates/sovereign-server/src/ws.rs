@@ -67,7 +67,7 @@ async fn handle_ws(
     conversation_id: String,
 ) {
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let tr = TenantRuntime::new(Arc::clone(&runtime), store, tenant.0.clone());
+    let tr = TenantRuntime::new(Arc::clone(&runtime), store, tenant.to_string());
 
     // Single writer to the socket. A forwarder task drains two sources:
     //   (a) this connection's per-turn token stream, via `out_rx`, and

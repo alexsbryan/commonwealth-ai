@@ -200,11 +200,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // reproduction of a tombstone stranded by the seal that retired it, over
     // the same loopback `internal_router`. The partial-pull control beside it
     // feeds the fold directly and builds no client.
-    // 15 -> 16 (aff5873f1, 2026-09-08, "retention is part of the fold"): the
-    // retention-on-projection regression drives the same two-node exchange
-    // over the same loopback `internal_router` as the fifteen before it. A
-    // `#[cfg(test)]` construction site in a src/ file, which the census
-    // counts; class unchanged, and nothing new leaves the machine.
+    // 15 -> 16 (2026-09-08, aff5873f1): retention became part of the fold, and
+    // `a_retention_sweep_is_not_undone_by_the_next_projection` drives the
+    // two-node reproduction — a sweep on A, then B's next projection round —
+    // over the same loopback `internal_router`. One more `exchange` client in
+    // this file's test module; class unchanged.
     ("sovereign/crates/sovereign-mesh/src/ring_sync.rs", Class::Mesh, 16),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
@@ -481,6 +481,31 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // census stays green. The pinned-localhost literal is the invariant; a
     // change to it is the review moment, not a change to the count.
     ("sovereign/crates/sovereign-cli-shared/src/code_index.rs", Class::LocalDaemon, 1),
+
+    // rail.rs (2026-09-09): the one rail append/read client moved out of
+    // sovereign-cli-llm into the crate every CLI links (ded2e10b0), so that
+    // `svrn quality check --distribute` could submit a handoff without linking
+    // the LLM dispatcher. CLASSIFIED FRESH for the same reason `code_index`
+    // above was — a client constructor moving from a leaf binary into a SHARED
+    // library is a different reachability story on its face. The three checks:
+    //   - Destination is the operator's own daemon, and unlike `code_index` it
+    //     is NOT a pinned localhost literal. `urls::daemon_base_url` delegates
+    //     to `setup_config::client_daemon_base`, which honours
+    //     `SOVEREIGN_DAEMON_URL` and `[daemon] client_port` — so an operator
+    //     who aims that knob at another host sends these bytes there. That is
+    //     the knob's declared purpose and is true of every `daemon_base_url`
+    //     caller already in this registry, but it is named here rather than
+    //     glossed: a reader checking this row against "never leaves the
+    //     machine" deserves the exception in front of them.
+    //   - What travels is the operator's own signed rail acts — a submission,
+    //     an offer, a report. No corpus content is read out and sent, and the
+    //     receiving daemon refuses any act whose signer its roster does not
+    //     carry.
+    //   - Reachability widened ON PURPOSE. Before ded2e10b0 only
+    //     sovereign-cli-llm could construct this; now every binary linking
+    //     sovereign-cli-shared can. That widening IS the refactor, and the
+    //     class is unchanged by it because the destination did not move.
+    ("sovereign/crates/sovereign-cli-shared/src/rail.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —

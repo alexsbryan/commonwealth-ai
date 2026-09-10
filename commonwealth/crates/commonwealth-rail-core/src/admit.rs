@@ -31,7 +31,7 @@
 //! | Rule | Without it |
 //! |---|---|
 //! | dedupe by re-derived [`OpId`] | a replayed op is counted twice |
-//! | total order `(ts_unix, actor, id)` | tie-breaking differs per node |
+//! | total order `(ts_unix, actor, seq, id)` | tie-breaking differs per node, and one actor's own burst inside a second folds against its causality |
 //! | void set built from ALL corrections at once | a correction that arrives before its target does nothing on one node and something on another |
 //! | corrections never resurrect | un-voiding depends on which correction is "last" |
 //! | gaps sorted before returning | the *report* differs even when the payloads agree |
@@ -188,7 +188,13 @@ impl std::fmt::Display for RailGap {
 /// from content, the signature verified, the signer looked up in the roster,
 /// and the position in `Admission::ops` is the total order every node agrees
 /// on. What is left — what the payload *means* — is the app's.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+/// `Deserialize` as well as `Serialize` since cw-lift 5d, and the pair is the
+/// point: `GET /v1/rail/log` ships `Admission::ops` verbatim, and a client that
+/// wants to FOLD that answer — `svrn job status` is the first — has to be able
+/// to read back exactly what this type wrote. The alternative was a second
+/// struct in the CLI mirroring these fields, which is one wire shape with two
+/// spellings and drifts the day a field is added here (ARCH §10.6).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AdmittedOp {
     /// Content-derived id. This is what a correction names, and what an app
     /// hands back to [`RailAct::Correct`](crate::RailAct::Correct).
@@ -205,7 +211,7 @@ pub struct AdmittedOp {
     /// What this op voids, when it is a correction. The void is **already
     /// applied** — carried so an app can say *what changed*, never so it can
     /// re-derive the void set.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corrects: Option<OpId>,
     /// `true` when a correction voided this op. It stays in the list so an
     /// app can render history, and the SDK's `fold` skips it. An app that
@@ -214,7 +220,7 @@ pub struct AdmittedOp {
     pub voided: bool,
     /// The app's act. `None` is a correction that only voids, and states no
     /// replacement.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Payload>,
 }
 
@@ -230,7 +236,7 @@ impl AdmittedOp {
 /// account of what could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Admission {
-    /// Every admitted op in the total order `(ts_unix, actor, id)`, voided
+    /// Every admitted op in the total order `(ts_unix, actor, seq, id)`, voided
     /// ones included and marked. An app folds this; it never sorts it.
     pub ops: Vec<AdmittedOp>,
     /// Everything the rail could not account for, sorted and deduplicated.
@@ -432,9 +438,32 @@ pub fn admit(
     }
 
     // ── the content-derived total order ──────────────────────
+    //
+    // `seq` sits between the actor and the id, and it is not decoration.
+    // `ts_unix` is SECOND resolution, so an actor writing twice inside one
+    // second used to be ordered by content hash — arbitrary, and arbitrary
+    // against its own causality. Observed 2026-09-09 on the work plane: a
+    // `Submit` and the `Lease` + `Complete` that answered it landed in the
+    // same second, folded lease-then-complete-then-submit, and both of the
+    // later acts were reported `unreadable` ("no admitted submission opened
+    // this handoff") — so a unit ran TWICE, once for the discarded pair and
+    // once for the retry. The rail already holds each actor's `seq` and
+    // already refuses a fork on it (`SequenceFork` above), so ordering one
+    // actor's own acts by anything else discards information this function
+    // has verified (ARCH §7.5 — order from essence, not from an address).
+    //
+    // It stays DETERMINISTIC: `seq` is on the wire and every node reads the
+    // same value, and the id remains the last term so the comparator is total
+    // even for a pair the fork check somehow let through. Only within-actor,
+    // within-second order changes.
     let mut order: Vec<&Candidate<'_>> = admitted.values().collect();
     order.sort_by(|x, y| {
-        (x.op.ts_unix, &x.op.actor, &x.id).cmp(&(y.op.ts_unix, &y.op.actor, &y.id))
+        (x.op.ts_unix, &x.op.actor, x.op.kind.seq, &x.id).cmp(&(
+            y.op.ts_unix,
+            &y.op.actor,
+            y.op.kind.seq,
+            &y.id,
+        ))
     });
 
     let out: Vec<AdmittedOp> = order

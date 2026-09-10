@@ -92,17 +92,17 @@ pub type ProviderResult<T> = std::result::Result<T, ProviderError>;
 
 // ───── Job spec ─────────────────────────────────────────────────────
 
-/// What the owner ships to `WorkerController::create_and_run`. Captures
-/// the provider-shaped knobs (image, disk, GPU, max price) and the
-/// payload (files to upload, work-queue manifest).
+/// What the owner ships to `WorkerController::create_and_run` — the
+/// payload the controller actually consumes: the files to upload and
+/// the work-queue manifest.
+///
+/// Provider-shaped knobs (image, disk, GPU, max price) are deliberately
+/// NOT here. Every `WorkerProvider` is constructed with its own, and
+/// both real providers take the spec as `_spec`; carrying a second copy
+/// on the spec gave two homes for one decision and no reader for either.
 #[derive(Debug, Clone)]
 pub struct JobSpec {
     pub job_id: String,
-    /// Container image ref (e.g. `ghcr.io/you/sovereign-cuda:latest`).
-    pub image: String,
-    pub disk_gb: u32,
-    pub gpu_name: String,
-    pub max_price_per_hour: f64,
     /// Human label propagated to the provider + cost ledger.
     pub label: String,
     /// Files the owner will stream to the pod via `/upload`. Map of
@@ -761,10 +761,6 @@ mod tests {
         uploads.insert("f.gguf".to_string(), UploadFile::local(path, [9u8; 32]));
         let spec = JobSpec {
             job_id: "spec-test".into(),
-            image: "img".into(),
-            disk_gb: 1,
-            gpu_name: "g".into(),
-            max_price_per_hour: 0.0,
             label: "t".into(),
             uploads,
             units: vec![],
@@ -793,10 +789,6 @@ mod tests {
         );
         let spec = JobSpec {
             job_id: "url-spec".into(),
-            image: "img".into(),
-            disk_gb: 1,
-            gpu_name: "g".into(),
-            max_price_per_hour: 0.0,
             label: "t".into(),
             uploads,
             units: vec![],
@@ -845,10 +837,6 @@ mod tests {
     fn dummy_spec() -> JobSpec {
         JobSpec {
             job_id: "d".into(),
-            image: "img".into(),
-            disk_gb: 0,
-            gpu_name: "g".into(),
-            max_price_per_hour: 0.0,
             label: "t".into(),
             uploads: BTreeMap::new(),
             units: vec![],

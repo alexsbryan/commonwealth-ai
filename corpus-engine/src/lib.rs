@@ -170,8 +170,8 @@ pub use recipe::{
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use sharding::{
-    append_partition_to_canonical, merge_partitions_into_canonical, AppendReport,
-    MergePhaseProgress, PartitionMergeReport,
+    append_partition_to_canonical, finalize_canonical, merge_partitions_into_canonical,
+    AppendReport, MergePhaseProgress, PartitionMergeReport,
 };
 pub use snapshot::{
     default_snapshot_filename, prebuilt_toml_snippet, publish_snapshot, read_local_index_meta,
@@ -180,7 +180,10 @@ pub use snapshot::{
     SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX, SNAPSHOT_MANIFEST_FILENAME,
     SNAPSHOT_SCHEMA_VERSION,
 };
-pub use snapshot_compat::{judge_restored_snapshot, SnapshotAcceptance};
+pub use snapshot_compat::{
+    decide_publish_declaration, judge_restored_snapshot, probe_embedding_space_at,
+    PublishDeclaration, SnapshotAcceptance,
+};
 pub use snapshot_restore::{restore_snapshot_archive, RestoreOutcome};
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use testing::{

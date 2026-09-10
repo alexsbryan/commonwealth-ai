@@ -33,6 +33,10 @@ pub enum WatcherKind {
     Lint,
     /// Sovereign.toml config watcher that live-reloads on TOML changes.
     Config,
+    /// The mesh work-plane donor loop (`crate::work_donor`). Supervised for
+    /// the same reason the three above are: its body runs a THIRD PARTY's
+    /// argv, so a panic in it must take out its own task and nothing else.
+    WorkDonor,
 }
 
 impl WatcherKind {
@@ -42,6 +46,7 @@ impl WatcherKind {
             Self::Test => "test",
             Self::Lint => "lint",
             Self::Config => "config",
+            Self::WorkDonor => "work_donor",
         }
     }
 }

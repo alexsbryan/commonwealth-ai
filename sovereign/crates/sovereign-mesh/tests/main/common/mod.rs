@@ -35,6 +35,16 @@ use sovereign_core::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 
+// ── Corpus layout ───────────────────────────────────────────────
+
+/// One corpus's layout on one node. `corpus_engine::Corpus` is the ONE speller
+/// of `<index_dir>/<id>` and `<id>-partition-<node>`, and `cargo xtask
+/// layout-gate` is what keeps it that way — a test that retypes the infix is a
+/// second answer to where a partition lives.
+pub fn corpus_at(index_dir: impl Into<std::path::PathBuf>, id: &str) -> corpus_engine::Corpus {
+    corpus_engine::Corpus::named(index_dir, id).expect("a non-empty corpus id")
+}
+
 // ── Capabilities + member helpers ───────────────────────────────
 
 /// A `NodeCapabilities` with every field zeroed / empty. Useful for

@@ -63,6 +63,66 @@ pub enum Error {
     #[error("No shards found for corpus: {0}")]
     NoShardsFound(String),
 
+    /// A merge was asked to cover `expected` partitions and could only
+    /// resolve `covered` of them. Refused rather than merged: a subset
+    /// merge produces a canonical that *looks* complete, gets
+    /// re-advertised on gossip, and every peer then holds a different
+    /// "complete" canonical. See `auto_ingest`'s 17/38 note for the
+    /// wild instance.
+    ///
+    /// Sibling concept, deliberately NOT the same type:
+    /// `commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage`
+    /// names the identical decision on the stranded-partition recovery
+    /// path. It stays a separate type only because `commonwealth-api`
+    /// depends on `commonwealth-knowledge` (and on this crate) and not
+    /// the reverse — that enum is simply unreachable from here.
+    /// Collapsing the two would invert the dependency, so do not
+    /// "helpfully" merge them; keep the two spellings in step instead.
+    #[error("merge for corpus {corpus} would cover only {covered} of {expected} partitions")]
+    IncompleteCoverage {
+        corpus: String,
+        covered: usize,
+        expected: usize,
+    },
+
+    /// The shards merged into the canonical directory and the finalize that
+    /// makes the corpus REACHABLE did not — `build_indexes` /
+    /// `mark_indexes_built` / `mark_ingestion_complete` / the fingerprint
+    /// stamp, in [`crate::finalize_canonical`].
+    ///
+    /// Its own variant because the state it names is neither of the two
+    /// neighbours a caller would otherwise file it under (ARCH §18.3):
+    ///
+    /// * It is not a plain failure. `chunks` rows ARE on disk at
+    ///   `canonical_path`, and by the time this is returned the merge has
+    ///   already deleted every source partition — so that directory holds the
+    ///   ONLY copy. A caller told "nothing happened" may re-derive the corpus
+    ///   from partitions that are gone.
+    /// * It is not a success. The canonical carries
+    ///   `ingestion_in_progress: true, indexes_built: false`, so
+    ///   [`crate::CorpusEngine::installed_indexes`] skips it,
+    ///   [`crate::CorpusEngine::usable_indexes`] never sees it, and the
+    ///   `hosted_corpora` gossip built from the former advertises it to no
+    ///   peer. Reporting that as a merge result is the defect this variant
+    ///   was minted alongside.
+    ///
+    /// The canonical is deliberately LEFT IN PLACE for the reason above.
+    ///
+    /// Sibling concept, deliberately not the same type — same reasoning as
+    /// [`Error::IncompleteCoverage`]:
+    /// `commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled`
+    /// carries these three fields across the crate boundary unchanged.
+    #[error(
+        "corpus {corpus}: {chunks} chunks merged into {canonical_path} but the canonical was \
+         NOT finalized ({detail}) — the chunks are on disk and no surface can reach them"
+    )]
+    MergedNotFinalized {
+        corpus: String,
+        canonical_path: String,
+        chunks: u64,
+        detail: String,
+    },
+
     #[error("Already installed: {0}")]
     AlreadyInstalled(String),
 

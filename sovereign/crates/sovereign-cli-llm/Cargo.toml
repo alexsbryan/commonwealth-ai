@@ -85,7 +85,7 @@ sovereign-authoring-harness = { workspace = true }
 sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-meshapp = { workspace = true }
-sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client"] }
+sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
 # the runner that reads its trailing line speak one verdict vocabulary rather
 # than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.
@@ -103,6 +103,19 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no
 # type, one link — and `ring dev` mints its grant over HTTP.
 commonwealth-rail = { workspace = true }
+# `svrn job` is a client of the work plane, not a second implementation of it:
+# the act codec, the unit seal and `WorkProjection::fold` all come from here, so
+# the terminal, the daemon's donor loop and a lifted third-party peer are three
+# readers of ONE fold and cannot disagree about who holds a lease (ARCH §10.6).
+# `features = ["process"]` for the PAYLOAD TYPE, not the executor: `svrn job
+# submit -- <argv>` has to spell a `process:v1` body, and spelling it as a JSON
+# literal here is what shipped a unit with no `timeout_secs` that every donor
+# then refused. The shape and the runner sit behind one feature today, so
+# reaching the shape means enabling it; the closure cost is zero (`process =
+# ["dep:tokio"]` and this crate already links tokio). If a submitter-only peer
+# ever needs the shape without the runner, the cut is to ungate `ProcessPayload`
+# and leave `ProcessExecutor` behind the flag.
+commonwealth-work = { workspace = true, features = ["process"] }
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }

@@ -1,0 +1,43 @@
+# media_bridge_bench — 2026-09-09, release build, one host, n0 severed (presets::Minimal), path=direct
+# harness: commonwealth-transport/examples/media_bridge_bench.rs
+
+## Range headers across the splice
+HTTP/1.1 206 Partial Content
+Content-Type: video/mp4
+Accept-Ranges: bytes
+Content-Length: 2000
+Content-Range: bytes 1000-2999/2147483648
+Connection: close
+
+HTTP/1.1 416 Range Not Satisfiable
+Content-Range: bytes */2147483648
+Content-Length: 0
+Connection: close
+
+## Range byte-exactness: curl through the bridge vs dd on the source (sha256)
+PASS  small-range  bytes=1000-2999 n=2000 sha=28b68ea0b05fff675dc5081c9d384b8edc39ef486a2e8a9afb78d3681827d018
+PASS  1GiB-boundary  bytes=1073741824-1073742847 n=1024 sha=ec351faa02bd7b5f850fbf7ebd283aafb3ee2b43e375d0434c12853a5fdabb9d
+PASS  last-100B  bytes=2147483548-2147483647 n=100 sha=b05016c7af6474530222f45c0c5560c1a47dc0bc1af85d58f06a61cc34fa112e
+PASS  100MiB-range  bytes=500000000-604857343 n=104857344 sha=22e1f375b19e30858204b5ee5ba252cf812e9f8fbf32d00916bd6e8f06cefd13
+PASS  whole-file-2GiB  bytes=0-2147483647 n=2147483648 sha=0b4e5591b805de2ca5839bf8a9c7d26a9d4228284aef4fee8da229a30896be7a
+PASS  suffix-1MiB  sha=0d81e38880c6644c500b1a95968674da4898898b9e3c56107cb2862edea02fe1
+## NEGATIVE CONTROL — source read one byte off. The checker MUST report FAIL.
+FAIL  negative-control  via_bridge=28b68ea0b05fff675dc5081c9d384b8edc39ef486a2e8a9afb78d3681827d018 source=2cf6bffe095c9b176bd03e701b948357808ea517d54d0815beec0bf2bebf1be6
+
+## Ceiling, 1 GiB per run
+direct-nobridge-r1 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=0.34 rate=25259.3 Mbit/s ttfb=0.2ms gaps: n=17922 p50=0.0 p99=0.1 max=1.2ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+direct-nobridge-r2 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=0.31 rate=28081.1 Mbit/s ttfb=0.3ms gaps: n=18723 p50=0.0 p99=0.1 max=0.2ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+direct-nobridge-r3 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=0.34 rate=25611.6 Mbit/s ttfb=0.1ms gaps: n=18895 p50=0.0 p99=0.1 max=0.9ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-r1 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.83 rate=4684.9 Mbit/s ttfb=2.0ms gaps: n=123350 p50=0.0 p99=0.1 max=28.0ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-r2 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.87 rate=4583.1 Mbit/s ttfb=1.5ms gaps: n=123588 p50=0.0 p99=0.1 max=27.9ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-r3 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.78 rate=4822.7 Mbit/s ttfb=1.1ms gaps: n=121561 p50=0.0 p99=0.1 max=28.4ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-r4 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.68 rate=5117.6 Mbit/s ttfb=1.2ms gaps: n=124956 p50=0.0 p99=0.1 max=28.3ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-r5 viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.65 rate=5214.4 Mbit/s ttfb=1.1ms gaps: n=123283 p50=0.0 p99=0.1 max=27.8ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+bridge-verify-every-byte viewer=0 status=206 clen=Some(1073741824) crange=Some("bytes 0-1073741823/2147483648") bytes=1073741824 secs=1.64 rate=5243.1 Mbit/s ttfb=1.6ms gaps: n=43296 p50=0.0 p99=0.2 max=28.3ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=OK
+
+## 4 simultaneous viewers, 100 MiB each
+viewers4 viewer=0 status=206 clen=Some(104857600) crange=Some("bytes 0-104857599/2147483648") bytes=104857600 secs=0.18 rate=4783.9 Mbit/s ttfb=1.4ms gaps: n=7811 p50=0.0 p99=0.2 max=0.8ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+viewers4 viewer=1 status=206 clen=Some(104857600) crange=Some("bytes 0-104857599/2147483648") bytes=104857600 secs=0.19 rate=4528.1 Mbit/s ttfb=1.9ms gaps: n=8024 p50=0.0 p99=0.2 max=0.8ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+viewers4 viewer=2 status=206 clen=Some(104857600) crange=Some("bytes 0-104857599/2147483648") bytes=104857600 secs=0.19 rate=4475.1 Mbit/s ttfb=1.4ms gaps: n=8051 p50=0.0 p99=0.2 max=0.6ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+viewers4 viewer=3 status=206 clen=Some(104857600) crange=Some("bytes 0-104857599/2147483648") bytes=104857600 secs=0.20 rate=4227.6 Mbit/s ttfb=2.1ms gaps: n=8171 p50=0.0 p99=0.2 max=26.4ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off
+viewers4 AGGREGATE viewers=4 bytes=419430400 wall=0.20s rate=16721.3 Mbit/s

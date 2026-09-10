@@ -122,7 +122,23 @@ listens on a routable interface except via iroh.
 - **`sovereign mesh transport`** (or `GET /v1/mesh/status` → `iroh_transport`):
   per-peer live path — `direct` (hole-punched), `relayed` (via a relay),
   `mixed`, or `idle`. This is the "is anyone actually on the relay?" surface.
-  Empty means the mesh is on the IP path (no iroh).
+  Empty means the mesh is on the IP path (no iroh). `no endpoint record yet`
+  means the endpoint holds nothing for that peer at all — which is what a path
+  that died, rather than one that never formed, also looks like.
+  The command now prints the reachability watchdog's verdict under the table
+  (`watchdog: N/M peer paths active …`, or `peer paths WEDGED`). Read the two
+  together: before 2026-09-09 the table could read empty for every peer while
+  `self_reachability` read healthy, because the watchdog's two original signals
+  — relay-home and self-discovery — are both INBOUND and neither moves when an
+  established outbound path decays and dies.
+- **Peer-path decay in the log.** The watchdog logs `peer path LOST` (WARN)
+  with `path_at_death=direct|relayed|mixed`, `peer path established` and
+  `peer path migrated` (INFO), plus a per-poll census at DEBUG. Gossip emits
+  one verdict per peer per round: `reach ok` (INFO), `round FAILED … every
+  address refused or timed out` (WARN), or `round skipped — no dialable
+  address` (INFO). Those two failure lines were DEBUG until 2026-09-09, which
+  is why a decaying peer used to look like a gossip loop that had stopped
+  running rather than like every dial failing.
 - **`GET /v1/mesh/status`** also carries member liveness, in-flight load, and
   (on a shared-model fleet) the elected host — scrapeable for a dashboard.
 

@@ -82,21 +82,21 @@ pub fn load_or_create_owner_key_at(path: &Path) -> std::io::Result<SigningKey> {
 // ───── Vast provider ─────────────────────────────────────────────────
 
 /// Vast-backed [`WorkerProvider`]. Constructed with the target
-/// container image and an [`Offer`] picked from `vastai search`.
+/// container image and a [`VastOffer`] picked from `vastai search`.
 pub struct VastWorkerProvider {
     pub image: String,
     pub disk_gb: u32,
     pub label: String,
     /// The offer the controller will create on. Stored so `create()`
     /// has the price + offer-id at the moment of `vastai create`.
-    pub offer: pod::Offer,
+    pub offer: pod::VastOffer,
     /// Internal pod port the daemon binds. Vast maps it to a host
     /// port; the [`address`] method resolves the mapping.
     pub worker_port: u16,
 }
 
 impl VastWorkerProvider {
-    pub fn new(image: String, disk_gb: u32, label: String, offer: pod::Offer) -> Self {
+    pub fn new(image: String, disk_gb: u32, label: String, offer: pod::VastOffer) -> Self {
         Self {
             image,
             disk_gb,
@@ -193,13 +193,18 @@ pub struct MultiOfferVastWorkerProvider {
     pub worker_port: u16,
     /// Queue of offers — popped in order. The first `create()` call
     /// gets `offers[0]`, the second `offers[1]`, etc.
-    offers: std::sync::Mutex<Vec<pod::Offer>>,
+    offers: std::sync::Mutex<Vec<pod::VastOffer>>,
     /// Monotonically increasing per-pod index, used for label suffix.
     next_index: std::sync::atomic::AtomicUsize,
 }
 
 impl MultiOfferVastWorkerProvider {
-    pub fn new(image: String, disk_gb: u32, label_prefix: String, offers: Vec<pod::Offer>) -> Self {
+    pub fn new(
+        image: String,
+        disk_gb: u32,
+        label_prefix: String,
+        offers: Vec<pod::VastOffer>,
+    ) -> Self {
         Self {
             image,
             disk_gb,

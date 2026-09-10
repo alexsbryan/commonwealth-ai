@@ -1,0 +1,1279 @@
+# cw-lift 5g part 2 — pre-registration
+
+Written 2026-09-09, BEFORE any collector code exists and before any data.
+Bars first or the verdict is not honest. Supersedes nothing; the ladder row
+in `cw-lift.toml` stays OPEN until a measurement row here reads `met`.
+
+## What part 2 was ordered to be, and why that order was wrong
+
+The order (supervisor, 2026-09-09) priced part 2 as a deletion: ~2,465 lines
+of parallel lease machinery against a fold plus one executor. Static survey
+before touching it found the arithmetic wrong in three ways and the shape
+wrong in one.
+
+**The shape.** `ShardManager::coordinate_merge`
+(`commonwealth-knowledge/src/shard_manager.rs:183`) is the only code path in
+the workspace that pulls a peer's shard tarball and merges it. Its only two
+production call sites are `commonwealth-api/src/routes_internal/corpus_queue.
+rs:210` and `:550` — both inside the file the order says to delete. The CLI
+does not cover it: `cmd_corpus_merge_partitions`
+(`sovereign-cli-llm/src/corpus_cmd/partitions.rs:180`) merges every
+`<corpus>-partition-*/` directory ON THIS NODE and documents itself as a
+one-shot rescue. So the deletion as ordered would leave every donor's chunks
+on the donor, with the fold reporting the handoff terminal and every unit
+`Complete`. Exit 0, wrong corpus — this workspace's characteristic failure.
+
+Part 1's proof did not catch it because it was single-node: two units, one
+Halo, one partition directory. The gap is invisible at n=1, and 5e's
+cross-node half is still could-not-judge, so nothing in phase 5 has yet
+exercised a two-node merge.
+
+**The arithmetic.** `corpus_queue.rs` is not wholly deletable —
+`corpus_partition_evict` (700-727) and `corpus_collaborate_status` (728-843)
+are separate surfaces, so its legacy half is ~500 of 843 lines. With
+`ingest_grant.rs` (258) kept per part 1's decision, the real deletion is
+~1,876 lines, not 2,465. Two live `WorkQueueManager` consumers the order's
+table did not list: `shard_manager.rs` (`with_work_queue`, reading
+`HandoffQueue.participating_peers`) and `corpus_collaborate.rs:260`.
+
+## The seam, and why it needs no new decider
+
+The fold already carries everything the merge needs. Three reads, each cited:
+
+- **Trigger.** `WorkHandoff::phase_at` returns `HandoffPhase::Complete` when
+  `queued == 0 && leased == 0` (`commonwealth-work/src/projection.rs:306`).
+- **Leader.** `WorkHandoff.submitter: ActorKey`, "from ADMISSION, never from
+  the payload" (`projection.rs:274`). Single-valued, identical on every node,
+  already the only actor permitted to revoke. It is the merge leader and
+  costs no second decider (ARCH §10.6).
+- **Peer set.** `WorkUnitStatus::Complete` carries `lessee: ActorKey` and
+  `provenance: ComputeAttribution` (`projection.rs:172-179`). The union of
+  `lessee` over a handoff's terminal units is the participating-peer set,
+  read off a durable replicated journal.
+
+That last one is a strict improvement on what it replaces, and the
+improvement should be claimed as one. `HandoffQueue.participating_peers` is
+in-memory and dies with the coordinator, which is why `coordinate_merge`
+carries a gossip-derived fallback for "queue-mode handoff that outlived a
+coordinator restart" (`shard_manager.rs:235-260`). On the rail there is no
+such case: the acts are the record. The fallback and its helper
+`participating_peers_from_gossip` (`shard_manager.rs:661`) become deletable,
+which the order did not count.
+
+`Merging` was reserved for exactly this and says so:
+`projection.rs:299-305` — "It is not pruned from the enum because pruning it
+would fork the vocabulary ingest still uses, and cw-lift 5g brings ingest
+onto this fold, at which point an `IngestExecutor` is what will produce it."
+The test `the_handoff_phase_walks_open_to_draining_to_complete_and_never_
+merges` (`projection/tests.rs:414`) stays true and must not be weakened: it
+pins that the phase DERIVED FROM UNIT STATUSES never yields `Merging`. The
+merge is a leader-side step after `Complete`, not a unit-derived state.
+
+`commonwealth-work` learns nothing about ingest. It carries a
+`[[forbid]] -> sovereign-*` row in `quality/ARCH_LAYERS.toml` and 5f builds
+it in a sandbox; the collector lives on the sovereign side beside the
+executor, same shape as `IngestExecutor` itself.
+
+## Bars — fixed now, before the data
+
+**B1 — the gap is real.** Two donors, one corpus, one handoff; both units
+`Complete`; the canonical index is missing the non-leader donor's chunks.
+Watched failing on the current tree before any collector exists. A negative
+control at n=1 must PASS in the same harness, or B1 proves only that the
+harness never merges.
+KILL: if the merge already works cross-node today, part 2 is the ordered
+deletion after all and this pre-registration is withdrawn in writing.
+
+**B2 — the collector closes it.** Same scenario, collector wired: the
+canonical index contains chunks from BOTH donors, and `svrn` answers a query
+that only the remote donor's range can satisfy. Chunk count alone is not the
+bar — a count can be right for the wrong reason; the query is what proves the
+data is reachable.
+
+**B3 — exactly one node merges.** Both donors run the collector; the
+non-submitter must decline. Instrument: a tracing event at a captured target
+naming the decision and the submitter it compared against. Two merges racing
+one output directory is the failure this bar exists to catch, and a passing
+B2 does not imply it.
+
+**B4 — the merge is idempotent under at-least-once.** Run the collector twice
+against the same terminal handoff. `merge_shards` dedupes on `content_hash`
+and `(unit_id, source_doc_id)` (`corpus-engine/src/sharding.rs:780-784`), so
+the claim is already load-bearing in `IngestExecutor`'s
+`Idempotency::Idempotent` declaration. It has never been exercised at the
+MERGE level, only asserted. Second run must not change the chunk count.
+
+**B5 — a donor that never reports is named, not silently dropped.** One unit
+terminal `Failed` (attempts spent, `outcome: None`), the rest `Complete`. The
+merge must proceed with what exists AND the corpus must record that it is
+partial. Absence is reported, never defaulted (ARCH §18.3). A merge that
+quietly ships 2-of-3 partitions as if complete is the same defect as the gap
+this whole rung is fixing.
+
+**B7 — a partial canonical is never advertised as complete.** Added
+2026-09-09 AFTER B1 ran and BEFORE any fix, because B1's measurement found a
+live hazard wider than this rung.
+
+`auto_recover::try_recover_stranded_partitions` is reachable on the fold path
+(`sovereign-mesh/src/auto_ingest.rs:297`) and merges only the partitions under
+one node's index dir. Its guard against publishing a partial canonical —
+`RecoveryOutcome::IncompleteCoverage` — arms only when a partition meta stamps
+`total_shards`, and `corpus-engine/src/engine/ingest.rs:718` stamps it for
+`ExtractorConfig::WikipediaJsonl` and nothing else, scoped with the comment
+"the only multi-shard extractor today; trivial to extend when more arrive."
+
+**That comment is now false and `ingest:v1` is what falsified it.** A fold unit
+slices ANY recipe across donors, so every recipe is multi-shard the moment the
+fold is used. `auto_ingest.rs:263-276` states what the dark guard costs, from a
+failure already had in the wild: "what produced the 17/38 partial canonical bug
+linux-peer hit … Producing a partial canonical ourselves and then re-
+advertising it on gossip pollutes the mesh's canonical-sync convergence — every
+peer ends up with a different 'complete' canonical and they fight forever."
+
+The bar: a non-Wikipedia recipe sliced into two units across two donors, and
+the node holding one partition must REFUSE to publish a canonical and say which
+coverage it lacks. Arming `total_shards` for every sliced recipe is the likely
+shape; the collector knows the unit count from the handoff, which is the number
+the guard wants and the legacy path never had.
+
+This bar gates the collector rather than following it. The collector makes the
+fold the normal path, so shipping it with the guard dark would take a hazard
+that today needs a stranded partition to reach and put it on the main road.
+
+**B6 — no gate regressions.** `layer-gate` exit 0 (the forbid row is what
+keeps `commonwealth-work` liftable), `boundary-gate` exit 0 — with the caveat
+that boundary-gate is under repair in a parallel lane and its exit 0 is worth
+less than it looks until that lands. `sovereign-lint.sh --human --full` exit
+0. Workspace tests exit 0.
+
+## What this plan does NOT check, stated now rather than discovered later
+
+- **The network half.** An in-process two-donor simulation stubs the HTTP
+  tarball pull. `coordinate_merge` fetches over the wire and an in-process
+  test proves none of that. B1-B5 are mechanism bars; a real two-machine run
+  is a separate, later reading and is currently gated behind `forget-member`
+  on the duplicate Mac row (endpoint key 86627fd5).
+- **Byte-level shard integrity across the wire.** The post-merge re-embed
+  spot-check (`VerifyReport`) exists and is reused, not re-derived.
+- **Whether the deletion's line count meets `cw-net-deletion`.** That is that
+  bar's measurement row, not this one's, and a measured miss leaves it open.
+
+## Order of work
+
+The deletion does not start until B2 and B3 are green. Deleting a working
+path before its replacement is proven is what part 1 refused to do and the
+reason it split; part 2 inherits the rule.
+
+## B8 — added 2026-09-09, on operator direction, BEFORE the change
+
+**A merge produces a corpus someone can reach — for BOTH callers, not just
+the one that remembered.**
+
+`ShardManager::merge_participants` writes merged chunks and stops. The fold
+path was fixed by calling `finalize_canonical` after it (`2dc1bf160`); the
+queue-mode path was NOT, and has the identical gap: `coordinate_merge` returns
+to `corpus_queue.rs:210`, which logs and returns, and to `:550`, which goes
+straight to `verify_merge_sample`. Neither finalizes. Verified at the code
+level that an unfinalized canonical is skipped by `installed_indexes`
+(`corpus-engine/src/engine/mod.rs:~1621`, "skip indexes where ingestion was
+interrupted"), so it is neither searchable nor advertised.
+
+The operator directed the finalize into the shared function rather than a
+second call site. The argument is ARCH #10 rather than §10.6: "a merge
+produces a corpus someone can reach" is a POST-CONDITION, and two callers each
+REMEMBERING to satisfy it is exactly the shape that just failed once.
+`merge_participants`' own doc already claims it "either produces an index or
+fails", which an unfinalized index does not satisfy — so this is the function
+being made to keep a promise it already made.
+
+**The bar.** A queue-mode merge through `coordinate_merge` yields a corpus in
+`installed_indexes()` and `usable_indexes()`, reachable by query — measured at
+the user's altitude, never through `CorpusIndex::open`, which bypasses both
+gates and is what made B2's first reading wrong.
+
+**Watched red is required and is the point of writing this down.** This
+changes SHIPPED behaviour as a side effect of a rung whose subject is deletion
+(§10.2), so the queue-mode path must be seen failing this bar BEFORE the move
+and passing after. A move that was never watched failing on the caller it was
+made for is the §18.1 defect one layer up.
+
+**Ordering inside the finalize is load-bearing and must not be reshuffled.**
+`mark_indexes_built` before `mark_ingestion_complete`, because
+`installed_indexes` gates on the latter and `usable_indexes` on the former —
+reversed, there is a window where a corpus is advertised to peers before it is
+searchable. The fingerprint is stamped LAST, after `mark_ingestion_complete`,
+because a peer pulling against a fingerprint trusts the chunk set is stable.
+
+**A calibration this bar states rather than implies.** The gap is verified in
+the CODE; it is NOT established that users hit it. `auto_recover`'s disk path
+does finalize and is the fallback that has been carrying this, and the whole
+reason `auto_recover` exists is that the queue path deadlocks. So the honest
+claim is "the queue-mode merge cannot produce a usable corpus on its own",
+not "collaborative ingest is broken for users". Do not let the commit body
+inflate it.
+
+**Not in scope:** B5's corpus clause. The finalize made that miss SHARPER — a
+2-of-3 and a 2-of-2 corpus now carry the same non-null `canonical_fingerprint`
+(`48cecea9…`), so a peer choosing by fingerprint reads them as identical, a
+hazard previously masked by the very defect being fixed. That stays B5's, and
+B5 stays open.
+
+
+## RE-SCOPE 2026-09-09 — part 2 is a BUILD before it is a deletion
+
+The survey at `4e5534b5e` established that no candidate is deletable, for a
+reason upstream of the call graph: **the fold has no producer.**
+
+`WorkAct::Submit` has ZERO automated production sites workspace-wide. Three
+manual-CLI sites (`job_cmd.rs:195`, the only one that can carry `ingest:v1`;
+`distribute.rs:706`, hard-wired `process:v1`; `work_peer.rs:285`, an example)
+and ten test fixtures. `IngestPayload::slice` — the only constructor of an
+`ingest:v1` unit body — has two call sites, both tests. So a corpus installed
+the shipped way writes a `commonwealth_core::knowledge::IngestionHandoff` into
+`mesh_store`, `fold_coverage_for` returns `None` at `auto_ingest.rs:249`, and
+the legacy path runs. **B7's control `without_a_fold_the_same_tick_publishes_
+the_partial_canonical` is the NORMAL case, not the control.**
+
+`IngestExecutor` + `fold_coverage_for` + `merge_from_fold_coverage` are a
+fully-wired consumer half. Nobody built the producer half. Operator direction
+2026-09-09: finish the scope of work.
+
+**This rung ADDS lines before it subtracts, and that is stated up front rather
+than discovered in the arithmetic.** `cw-net-deletion` is +13,135 against a
+−3,800 target and takes no payment until the deletion lands.
+
+### Where the producer goes, and why it needs no new crate edge
+
+`sovereign-mesh` already depends on BOTH `commonwealth-api` and
+`commonwealth-work` (`Cargo.toml:48,76`), already owns `IngestPayload`, already
+holds the rail, and its tick loop already decides a corpus needs collaborative
+ingest — `auto_ingest.rs:567` POSTs `/internal/corpus/collaborate` at exactly
+that moment. The producer goes there.
+
+The alternative was `commonwealth-api` gaining `commonwealth-work` so
+`corpus_collaborate` could mint the `Submit` where it calls
+`work_queue.register`. That edge would be legal, and it is still the wrong one:
+`IngestPayload` is deliberately on the sovereign side of the package boundary
+(`ingest_executor.rs:26-31`), so commonwealth-api could not build a unit body
+without moving the type. Put the producer where the decision already is (§19).
+
+### D0 — EVERY BAR SO FAR IS FIXTURE-PROVEN, AND THAT IS THE FINDING
+
+Operator direction 2026-09-09, and it is the correction this rung most needed:
+**ground the work in real demos, not imagined constraints.**
+
+B1 through B8 are all green and every one of them was measured against an
+in-process test that HAND-BUILT the precondition — a `WorkProjection` folded
+from ops the fixture signed itself. Not one ran a real corpus through a real
+daemon. The proposition no fixture could ever falsify is the exact one that
+turned out to be false: that anything reaches the fold in production. A fixture
+that constructs the world it then asserts about cannot report that the world
+does not occur.
+
+This is 5d's lesson verbatim. Its own ladder row: "5d shipped green on every
+gate and its own demo did not work: a unit sat `queued` and nothing in 12,448
+tests said so." 5g part 1 DID run for real — two `JsonlRange` units through
+`svrn job submit`, leased, run, merged, answering queries from both ranges.
+Part 2 has not, and its bars read greener than part 1's because of it.
+
+**So no K bar below closes on a test alone.** Each names the RUN that closes
+it, and a bar with a passing test and no run is COULD-NOT-JUDGE, not met.
+
+### D1 — the collector runs for real, and this one is runnable TODAY
+
+Before any producer is built. Submit `ingest:v1` units the way part 1 did
+(`svrn job submit --kind ingest:v1 --units`), on a live daemon, and watch the
+COLLECTOR do what B2/B7/B8 assert: the fold reaches `HandoffPhase::Complete`,
+`auto_ingest`'s tick loop picks it up, the merge runs, `finalize_canonical`
+lands, and `svrn` answers a query against the merged corpus.
+
+This validates everything built today against a real daemon rather than a
+fixture, and it needs no new code. **Run it first.** If it fails, today's eight
+green bars were measuring the wrong thing and the re-scope below is premature.
+
+Instrument: `RUST_LOG=info,commonwealth_work=debug` INSIDE the toolbox, strip
+ANSI; the collector traces to `commonwealth_work`, the same target as the
+donor, deliberately. A detached daemon discards `eprintln`; confirm the trace
+lands before trusting an absence of one.
+
+### D2 — the producer runs for real
+
+`svrn corpus install` (or the desktop collaborate button — it POSTs the same
+route, `collaborate_commands.rs:126`) on a real corpus, and the fold picks it
+up with NO human typing `job submit`. That is K1's actual closure. A test
+asserting `fold_coverage_for` returns `Some` from a hand-built handoff closes
+nothing, because that is what already passes today while production returns
+`None`.
+
+### K1 — the fold is reached without a human typing anything
+
+A corpus install that today triggers collaborative ingest instead produces an
+`ingest:v1` handoff on the rail, and `fold_coverage_for` returns `Some` for it.
+**Watched red first:** on the current tree that call returns `None` for every
+real install, which is the whole finding — so the red is free and must be shown
+anyway, because a producer test that passes without ever having failed proves
+only that the fixture built a handoff by hand.
+
+### K2 — ONE kickoff, never two
+
+The tick loop must not both submit to the fold AND register the legacy queue
+for the same corpus. Two lease deciders running concurrently on one corpus is
+precisely what this rung exists to remove, and shipping both at once would be
+the §10.6 defect wearing the fix's clothes. Whatever selects between them is
+ONE decider with one name, and a test asserts that for any corpus exactly one
+path runs.
+
+`use_pull_queue()` defaults TRUE today and `SOVEREIGN_USE_LEGACY_PARTITION=1`
+is the opt-out, so there is already a selector; prefer extending it to minting
+a second. A new env read must be declared in `quality/env-flags.toml` or
+`cargo xtask env-gate` fails.
+
+### K3 — the grant's teardown survives without `WorkQueueManager`
+
+`EphemeralGrantStore`'s teardown obligation — the fourth of the four properties
+5g part 1 ruled the consent pair cannot carry — is implemented as
+`state.inner.work_queue.retire(&handoff_id)` (`corpus_grant.rs:166`), and
+`retire` exists only on `WorkQueueManager`. So "the grant store must survive"
+and "delete `WorkQueueManager`" cannot both hold today.
+
+The fold's equivalent is `WorkAct::Revoke` by the submitter: `WorkHandoff.
+revoked` makes `phase_at` return `Failed`, and `may_take` already refuses a
+revoked handoff (`refusal.rs:60`, pinned by
+`a_revoked_or_expired_handoff_refuses_the_submitter_side`). Strictly better
+than `retire` — durable, replicated, and signed by an actor admission verified.
+
+The bar: revoking a grant stops an in-flight FOLD ingest. Measured, not
+reasoned — a running unit must actually stop, not merely fail to be re-leased.
+If it only prevents new leases and lets the running one finish, say so; that is
+a different guarantee from what `retire` gives and the difference must be
+recorded, not glossed.
+
+### K4 — and THEN the deletion pays
+
+With K1-K3 met, re-run the survey. Candidates go only if proven unreachable.
+Report the real number against `cw-net-deletion` and let a miss leave the bar
+open.
+
+### K5 — the audit: lean and clean
+
+Operator direction, and it is a bar rather than a mood. After K4, audit the
+whole 5g surface for duplication and missed reuse and report what was cut:
+every noun defined twice, every predicate spelled twice, every helper that
+duplicates one already in the workspace. `sovereign code converge noun` on
+every type this rung minted. The day already produced three cases where a
+second speller hid a defect — the boundary-gate allowlist, `sharding.rs`'s
+false dedupe comment, and the finalize that two callers each had to remember.
+
+
+## Measurements
+
+**B1 — MET (red for the right reason), 2026-09-09, commit `50238f364`.**
+`sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs::
+two_donors_on_two_nodes_leave_the_canonical_missing_the_peers_chunks`. Two
+`ingest:v1` units, real Ed25519-signed ops through `commonwealth_rail::admit`
+into `WorkProjection::fold`, completed by two DIFFERENT lessees, handoff
+asserted at `HandoffPhase::Complete` before the corpus is asked anything.
+
+    merge outcome on the leader : Recovered { chunks: 2, shards_covered: 0 }
+    canonical exists            : true
+    canonical chunk_count       : 2   (expected 4 — 2 local + 2 peer)
+    leader-only term reachable  : true
+    peer-only term reachable    : false
+
+Negative control `two_donors_on_one_node_do_land_both_slices_in_the_canonical`
+PASSES at 4 chunks with both terms reachable, so the red is the cross-node
+case and not a harness that never merges.
+
+**The prediction was right in substance and wrong in mechanism, which made it
+worse.** The pre-registration above predicted nothing would merge. What
+actually happens is that the merge SUCCEEDS and REPORTS success on half the
+corpus, and the canonical is then re-advertised in `hosted_corpora` gossip. A
+node advertising a complete corpus that holds half the data is a stronger
+version of the same defect, and it is what minted B7.
+
+B1's kill condition did NOT fire: the merge does not work cross-node today.
+The pre-registration stands and part 2 proceeds as the collector, not as the
+ordered deletion.
+
+Both tests are `#[ignore]`d with reasons naming this rung. That is a temporary
+marker and not a verdict — the suite is not green because this passed, it is
+green because this is hidden. The ignore comes off with the collector.
+
+Known not checked by B1: the HTTP tarball pull, the ingest pipeline itself (no
+recipe, no acquirer, no embedder), and the `total_shards` coverage gate — which
+is now B7's subject.
+
+---
+
+**B2 — first reading MET AT THE WRONG ALTITUDE (2026-09-09, `df2ffecb8`);
+re-measured and MET (2026-09-09). Read the correction below the first reading
+before citing it — the first reading proved the bytes landed, not that the
+corpus works.** The reading as originally recorded is kept verbatim, because a
+pre-registration whose measurements get quietly retrofitted is worth nothing.
+`sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs`. Both halves
+of the new path are measured, because the seam between them is thin glue and a
+test that drives only the glue proves little.
+
+*First half — `ingest_executor::fold_coverage_for`, a pure read.*
+`the_fold_names_both_verified_donors_and_where_to_find_them`. Same fold as B1
+(real Ed25519-signed ops through `commonwealth_rail::admit` → `WorkProjection::
+fold`, two units, two lessees), asked for coverage:
+
+    handoff_id : handoff-0000000000000000   (the submitted handoff)
+    expected   : 2                          (distinct VERIFIED lessees)
+    nodes      : [node-1100000000000000, node-2200000000000000]
+    abandoned  : []                         (is_partial() == false)
+
+Watched red by gating the collection loop on `&lessee == self_key` — the
+local-donor-only defect moved down to the fold: `expected: left 1, right 2`.
+
+*Second half — the merge, over a real socket.*
+`two_donors_on_two_nodes_land_both_slices_in_the_canonical`, driving
+`commonwealth_api::auto_recover::merge_from_fold_coverage` → `ShardManager::
+merge_participants`. The peer donor's partition is served by the peer's OWN
+`commonwealth_api::server::internal_router` on a loopback socket and reaches
+the leader through `GET /internal/index/serve` → `tar xf`; the leader resolves
+the peer's address through `peer_control_urls` → `PeerTransport::endpoints`
+over a `MemberRecord`, the same as production. B1 could say nothing about any
+of that, because B1 pulled nothing.
+
+    merge outcome               : Recovered { chunks: 4, shards_covered: 2 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..] abandoned=[]
+    canonical exists            : true
+    canonical chunk_count       : 4
+    leader-only term reachable  : true
+    peer-only term reachable    : true      ← THE BAR
+
+`peer-only term reachable` is the bar and the chunk count is corroboration,
+in that order, exactly as this pre-registration specified: a count can be
+right for the wrong reason.
+
+Watched red by truncating the participant list to the local node — the
+original defect, where participants come from local disk rather than from the
+fold. It reproduces B1's reading exactly:
+
+    merge outcome               : Recovered { chunks: 2, shards_covered: 1 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..]
+    canonical chunk_count       : 2 (expected 4)
+    peer-only term reachable    : false
+
+The fold names both donors in the red as in the green, so the red is about the
+participant set the merge was handed and not about the fold.
+
+Both `#[ignore]`s from `50238f364` are GONE. B1's negative control
+(`two_donors_on_one_node_do_land_both_slices_in_the_canonical`) is retained
+unignored and still runs the DISK-derived path, because it controls for the
+fixture rather than for the collector.
+
+Known not checked by B2: two real machines (this is two index dirs, two
+`AppState`s and two sockets in one process); the ingest pipeline itself (no
+recipe, no acquirer, no embedder); `auto_ingest`'s tick loop, so the ORDER of
+its arms — including the load-bearing `continue` after a coverage refusal — is
+still unmeasured; and the actor-vs-host distinction `FoldCoverage::expected`
+documents, which this fixture cannot see because one lessee reports one host,
+so 2 actors and 2 hosts are the same number here.
+
+**B2 — THE CORRECTION. The reading above was taken at the wrong altitude, and
+what it actually proved was that the bytes are on disk. 2026-09-09.**
+
+The bar says the merged canonical must answer "a QUERY that only the remote
+donor's slice can satisfy", and says why in its own words: "a count can be
+right for the wrong reason; the query is what proves the data is reachable."
+The reading above satisfied it with `probe_canonical`, which opens the
+canonical directory through `CorpusIndex::open`. That bypasses both gates
+between a merged chunk set and a corpus anyone can reach, so it answers a
+weaker question than the bar asked — and on `df2ffecb8` the two answers
+disagreed.
+
+*What the corpus actually was.* `merge_from_fold_coverage` →
+`ShardManager::merge_participants` → `CorpusEngine::merge_partitions`
+(`corpus-engine/src/engine/mod.rs:2771`) writes the merged chunks and stops. It
+never called `build_indexes`, `mark_indexes_built`, `mark_ingestion_complete`
+or `compute_and_stamp_fingerprint` — all four of which the disk-derived sibling
+does (`sharding.rs`, and the fingerprint stamp after them). So the canonical
+carried `ingestion_in_progress: true, indexes_built: false`;
+`CorpusEngine::installed_indexes` skips it on the first
+(`is_ingestion_complete`), `usable_indexes` on the second, and
+`hosted_corpora` gossip is built from `installed_indexes()`
+(`sovereign-mesh/src/capabilities.rs:103` → `:122`).
+
+This was already recorded in this file, under B5, as "A SEPARATE DEFECT FOUND
+WHILE MEASURING B5, NOT FIXED", together with the sentence "that means B2's
+green overstates the end-user reading". It was recorded and not acted on, and
+the row above went on saying MET. Recording a defect is not the same as
+correcting the measurement it invalidates.
+
+*The re-measurement.* `two_donors_on_two_nodes_land_both_slices_in_the_canonical`
+now reads the bar through `CorpusEngine::usable_indexes()` — opening the corpus
+by id through `CorpusEngine::open_index_for_corpus`, so the search runs on a
+handle the product's own accessor produced — and asserts the corpus is present
+in `installed_indexes()`, which is the gossip term. The disk-level probe is
+kept beside it as corroboration, so "the peer's chunks never arrived" and "the
+chunks arrived and nothing routes to them" print as different failures.
+
+Watched RED on the tree before the fix, with both probes side by side:
+
+    merge outcome               : Recovered { chunks: 4, shards_covered: 2 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..]
+    installed_indexes()         : []
+    usable_indexes()            : []
+    canonical dirs on disk      : ["cw-lift-5g-two-nodes"]
+    leader-only term (installed): None
+    peer-only term (installed)  : None      ← THE BAR, and it was never asked
+    --- through CorpusIndex::open, which bypasses both gates ---
+    canonical exists            : true
+    canonical chunk_count       : 4
+    leader-only term (on disk)  : true
+    peer-only term (on disk)    : true
+
+`None` rather than `false` is deliberate (§18.3): the search never RAN, because
+`usable_indexes()` had no row to run it against, and "asked and missed" is a
+different reading from "never asked".
+
+The red also settles which half was broken. The merge was fine — 4 chunks, both
+donors' terms retrievable from a handle that already existed. Only the finalize
+was missing, so the correction is about the bar's altitude and not about the
+collector.
+
+*The fix.* `merge_from_fold_coverage` calls `corpus_engine::finalize_canonical`
+after `merge_participants` returns `Ok(Some(_))`. That function is the disk
+path's own Phase 3, lifted out of `merge_partitions_into_canonical` and given
+one name (ARCH §10.6) rather than re-spelled: `build_indexes` →
+`mark_indexes_built` → `mark_ingestion_complete` → fingerprint LAST, with the
+ordering rationale — a peer pulling against a fingerprint trusts the chunk set
+is stable, and the ingestion-complete bit is the proxy for stable — living in
+that one place. `merge_partitions_into_canonical`'s behaviour is byte-for-byte
+what it was; the finalize is on the FOLD path only, and NOT inside
+`merge_participants`, which `coordinate_merge` shares (§10.2).
+
+GREEN after, same test, exit 0:
+
+    installed_indexes()         : ["cw-lift-5g-two-nodes"]
+    usable_indexes()            : ["cw-lift-5g-two-nodes"]
+    leader-only term (installed): Some(true)
+    peer-only term (installed)  : Some(true)    ← THE BAR
+    canonical chunk_count       : 4
+
+*Merge succeeds, finalize fails.* Reported as its own fact, not folded into
+either neighbour (§18.3): `RecoveryOutcome::MergedButNotInstalled { chunks,
+canonical_path, error }`, with an `error!` at the `auto_ingest` arm. `Recovered`
+would claim a built canonical, which is the defect above verbatim; `Failed`
+would claim nothing was produced, and `merge_participants` has by then deleted
+every source partition, so the chunks in that directory are the only copy. The
+canonical is deliberately left in place for that reason. The consequence,
+stated rather than discovered: the next tick short-circuits on
+`AlreadyHasCanonical` (it tests for the meta the merge already wrote), so
+nothing retries the finalize. Making the finalize a repair loop would have to
+tell "finalize failed here" apart from "another writer is mid-ingest", and that
+is a separate decision this rung does not make.
+
+*Not fixed, named:* `coordinate_merge` shares `merge_participants` and has the
+identical gap — a queue-mode merge produces the same unfinalized canonical.
+Left alone on purpose (§10.2): fixing it inside the shared function would move
+the legacy path's behaviour as a side effect of this rung.
+
+**B5 and B7 under the correction, checked.**
+
+*B5's merge clause — affected, same correction, no change to the verdict.*
+`the_merge_proceeds_with_the_slices_that_exist` asserts reachability through
+`probe_canonical`, the same `CorpusIndex::open` probe B2's first reading used,
+so its "both donors' terms reachable" was true on disk and overstated at the
+user's altitude for the same reason. The clause's own question — "does the
+merge proceed with the slices that exist" — is answered either way, and it
+still passes. Measured rather than reasoned: the corpora this fixture builds
+through `merge_from_fold_coverage` now carry `ingestion_in_progress: false,
+indexes_built: true` (printed by the corpus-clause reading below, on the same
+fixture). Its assertions are unchanged; its docs now name the altitude and
+point at B2 for the installed-altitude reading of the same merge path.
+
+*B5's corpus clause — STILL NOT MET, re-measured after the fix, and one field
+sharper.* Re-run with `--run-ignored`: both `_corpus_meta.json` files are still
+equal field for field, so the bar is unmoved and the `#[ignore]` stays. What
+changed is that the indistinguishability is now REACHABLE — previously it was
+blocked by this very defect, since neither corpus was advertised at all. Both
+now carry `indexes_built: true`, both reach `installed_indexes()`, and
+`canonical_fingerprint` — `None` on both before — is now the same non-null hash
+on both:
+
+    canonical_fingerprint : 48cecea964a5708290d88f724e33f9b96613d25587f157e25944944e2ad8b9d6
+    (identical on the 2-of-3 corpus and the 2-of-2 corpus)
+
+A peer choosing which canonical to pull by fingerprint now reads a corpus
+missing a slice and a whole one as the same corpus. That is the same bar, one
+notch sharper, and it argues for closing B5's corpus clause sooner rather than
+later.
+
+*B7 — untouched, checked.* Its refusal case writes no canonical (the merge
+returns `Err(IncompleteCoverage)` before `merge_partitions` is reached), so no
+finalize runs and the assertion "canonical: ABSENT" is unaffected. Its paired
+positive and reading 2's control DO merge, and now finalize as well; both
+assert on the `RecoveryOutcome` variant and the disk-level probe, neither of
+which moved. Reading 3 is about `total_shards` on the disk path and does not
+touch this. All ten tests across the three `fold_ingest_*` files pass, exit 0.
+
+**B3 — MET, 2026-09-09.** `only_the_submitter_reads_a_merge_out_of_the_fold`.
+The peer folds the SAME journal and asks the same question; `fold_coverage_for`
+returns `None`. The paired positive control in the same test — the submitter
+DOES get an answer from that same projection — is what stops the refusal being
+"a function that always declines".
+
+The pre-registered instrument is in place and asserted, not merely present.
+`fold_coverage_for` now emits a `debug` event on the decline naming the
+decision and BOTH keys it compared:
+
+    fold_coverage_for: declining — this node is not the submitter of this
+    ingest handoff, so another node leads its merge
+      handoff=… submitter=<leader actor> self_key=<peer actor>
+
+Watched red by disabling the `&handoff.submitter != self_key` arm: the peer
+comes back with `Some(FoldCoverage { nodes: [node-11.., node-22..], expected:
+2, abandoned: [] })` — the leader's coverage, verbatim. Two nodes, one output
+directory.
+
+Known not checked by B3: that two nodes running the real `auto_ingest` loop
+concurrently do not race. This is the leader DECISION, which is where the race
+is prevented; it is not a concurrency test.
+
+**B4 — the bar is MET and the mechanism this pre-registration named is NOT the
+one that holds it. 2026-09-09.**
+`commonwealth-knowledge/tests/main/merge_participants_idempotence.rs`, driving
+`ShardManager::merge_participants` directly — going through
+`merge_from_fold_coverage` would have measured its `AlreadyHasCanonical`
+short-circuit, which says the second run declined, not that a second run would
+have been safe.
+
+*The bar.* `a_second_merge_of_the_same_handoff_leaves_the_canonical_untouched`.
+Two merges of the same participant set. The second run is not a no-op: the
+local partition dir was cleaned up by run one, so `merge_participants` resolves
+this node's shard through its `original_path` fallback — the canonical itself —
+and re-pulls the peer's shard down the socket. Chunk count 2 → 2, both rows
+still reachable. **Met.**
+
+*How it is met.* Not by dedupe. The second run returns
+
+    Err(Database("Table 'chunks' already exists"))
+
+and leaves the canonical exactly as it was. `merge_shards` builds its output
+with `CorpusIndex::create` → `create_empty_table`, which refuses a directory
+already holding a `chunks` table, so the merge never reaches the dedupe at all.
+This falsifies `corpus-engine/src/sharding.rs`'s own comment on the
+single-shard fast path — "callers that actually do want to fold a partition
+into an existing canonical fall through to the full merge below (which dedupes
+via `content_hash`)". The fall-through errors first.
+`CorpusIndex::create_or_resume` documents this exact LanceDB failure and works
+around it; `merge_shards` does not. NOT FIXED HERE: whether folding into a live
+canonical is a capability or a refusal is corpus-engine's decision, and the
+refusal is the safe half.
+
+Watched red by making `CorpusIndex::create_with_sharing` clear an existing
+directory first — the obvious "fix" for that error. Run two then deletes the
+canonical it had just named as its own local shard, and reports success over
+the wreckage:
+
+    the second delivery changed the canonical's chunk count: 2 → 0
+    Second run returned: Ok(Some(IndexInfo { chunk_count: 1, … }))
+
+That is why the bar is asserted on the CORPUS and not on the return value.
+
+*The dedupe, measured where it is reachable.*
+`the_merge_dedupes_a_row_two_donors_both_contributed`. One merge, three shards,
+four input rows, two of them the same `content_hash` from two different donors.
+Canonical holds three, all reachable. This is the mechanism
+`IngestExecutor`'s `Idempotency::Idempotent` is declared on and it is real —
+it just cannot be reached by running the merge twice. Watched red by deleting
+the `seen_hashes.contains(h)` early return: `left 4, right 3`.
+
+Known not checked by B4: the fold (no journal — the handoff is an id); the
+SECONDARY `(unit_id, source_doc_id)` dedupe key, since these rows carry a
+populated `content_hash`; concurrent merges; and whether the refused second run
+leaves its re-pulled shard directory on disk (it does — `merge_participants`
+cleans up only after a successful merge — which is why the caller's
+`AlreadyHasCanonical` short-circuit is load-bearing rather than an
+optimisation).
+
+**A hazard confirmed NOT live in production, 2026-09-09.** `NodeId`'s `Display`
+is `node-<hex of the first EIGHT bytes>` and every partition directory name is
+built from it, so two nodes sharing a 64-bit prefix would collide on one
+directory and the merge would silently see fewer shards. Every production
+`NodeId` comes from `NodeId::generate()` — 16 CSPRNG bytes via `getrandom`
+(`kernel-types/src/ids.rs`) — reached through
+`persist::load_or_generate_self_node_id` and `membership::init_mesh*`; every
+`NodeId::from_u128` call site in the workspace is inside a `mod tests`. So the
+truncation leaves 64 random bits and a collision needs a birthday collision at
+that width: about `n²/2^65`, which is ~3e-14 at a thousand nodes. The hazard is
+real in FIXTURES, where ids are minted from small integers, and both test files
+say so at the point where the ids are chosen. Not fixed, and no fix is owed.
+
+---
+
+**B5 — the merge clause is MET; THE CORPUS CLAUSE IS MEASURED AND NOT MET.
+2026-09-09.** `sovereign-mesh/tests/main/fold_ingest_abandoned_unit_e2e.rs`.
+
+The bar has two clauses and only one of them holds. "The merge must proceed
+with what exists" — met. "AND the corpus must record that it is partial" — not
+met, and not by a small margin: the canonical's `_corpus_meta.json` is
+identical, field for field, to one built from a handoff that delivered
+everything.
+
+*The fixture.* One handoff, THREE `ingest:v1` units, real Ed25519 ops through
+`commonwealth_rail::admit` → `WorkProjection::fold`. Two units completed by two
+different lessees; the third leased three times by real `Lease` acts, each
+after the previous `LEASE_MS` window closed, and never reported at all. The
+`Failed { outcome: None }` is therefore DERIVED by `ProjectedUnit::status_at`
+(`projection.rs:237`) from a journal a mesh would actually accumulate, not
+hand-written. Asserted as a precondition, not assumed: `attempts ==
+MAX_UNIT_ATTEMPTS`, `outcome.is_none()`, handoff `Complete`.
+
+*Clause one — the fold names it.*
+`a_unit_whose_attempts_are_spent_is_named_in_the_coverage`.
+
+    handoff_id : the submitted handoff, asserted equal to it
+    expected   : 2                       (the two VERIFIED lessees; the
+                                           abandoned unit has no lessee and
+                                           does not inflate the denominator)
+    nodes      : [node-1100000000000000, node-2200000000000000]
+    abandoned  : ["01f4c6c1…e72dd"]      (is_partial() == true)
+
+Watched red by deleting the `WorkUnitStatus::Failed { .. } => abandoned.push(…)`
+arm — the `_ => {}` below it swallows the unit: `left: [], right: ["01f4c6c1…"]`.
+
+*Clause one — the merge proceeds.*
+`the_merge_proceeds_with_the_slices_that_exist`, over the same real socket B2
+uses. `Recovered { chunks: 4 }`, both donors' terms reachable. Watched red by
+counting the abandoned unit into `expected` (`actors.len() + abandoned.len()`):
+`PartitionsUnreachable { covered: 2, expected: 3 }`, no canonical, every tick,
+forever — an abandoned unit is work that never happened, not a missing
+partition, and conflating the two strands the corpus over a slice no retry can
+produce.
+
+*Clause two — NOT MET.*
+`a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so`, `#[ignore]`d
+with B5's number on it. Two corpora on one node, merged the same way from the
+same fold: one from the three-unit handoff above, one from B2's two-unit
+handoff. Both `_corpus_meta.json` files, with `corpus_id` / `corpus_name` /
+`created_at` / `last_updated` blanked, are EQUAL — and so is every `IndexInfo`
+field `build_hosted_corpora` (`capabilities.rs:285-310`) copies onto the wire:
+
+    partial : query_sharing=true is_shard=false chunk_range=None
+              chunk_count=4 total_shards=None processed_shards=[]
+    whole   : query_sharing=true is_shard=false chunk_range=None
+              chunk_count=4 total_shards=None processed_shards=[]
+
+**The chunk counts are equal and that is the sharpest form of it**: a
+three-unit handoff that delivered two slices is byte-identical to a two-unit
+handoff that delivered both of its own. A reading that compared 1-of-2 against
+2-of-2 would find different counts and could be talked into calling that a
+signal; it is not one, because no peer knows what the count should have been.
+
+The only record of the abandonment is the `tracing::warn!` in `auto_ingest`'s
+arm — process-local, gone on the next restart, invisible to every peer. The
+shape a signal would take already exists (`CorpusShardInfo.total_shards` /
+`processed_shards`, and `coverage_ratio()` over them) and is `None`/`[]` for
+every fold-sliced recipe, because the only production writer of `total_shards`
+is `ingest.rs:718` under `ExtractorConfig::WikipediaJsonl`.
+
+The test asserts the BAR and is ignored, rather than asserting today's
+behaviour: pinning the indistinguishability would pass forever and go red the
+day somebody fixes it. The ignore marks an OPEN bar, the way `50238f364`
+marked B1's.
+
+**A SEPARATE DEFECT FOUND WHILE MEASURING B5, NOT FIXED — since fixed, see
+"B2 — THE CORRECTION" above; the reading below is kept as it was written,
+because it is also the record of B2's first green being taken at the wrong
+altitude and of that being noticed here and not acted on.** A canonical built by
+the fold path is not advertised at all. `merge_participants` →
+`CorpusEngine::merge_partitions` → `sharding::merge_shards` creates the output
+with `CorpusIndex::create` and never clears `ingestion_in_progress`; the DISK
+path's `merge_partitions_into_canonical` does (`sharding.rs:1424`). So the
+fold-built canonical carries `ingestion_in_progress: true, indexes_built:
+false`, and `CorpusEngine::installed_indexes` skips it — measured on the disk
+this test builds:
+
+    installed_indexes rows = 0 -> []
+    hosted_corpora         = []
+    canonical dirs on disk = ["cw-lift-5g-record-whole", "cw-lift-5g-record-partial"]
+
+That means B2's green overstates the end-user reading: the merged corpus is
+searchable through `CorpusIndex::open` (which is what the probe does) and NOT
+through `usable_indexes`, which requires `indexes_built`. It also means the
+"advertised indistinguishably" hazard is currently blocked by an unrelated bug
+rather than absent — the moment the canonical becomes advertisable, the two
+records above are what a peer receives. Same class as B4's `Table 'chunks'
+already exists`: the merge's post-conditions are corpus-engine's decision, and
+this lane records it rather than guessing at it. `coordinate_merge` shares
+`merge_participants` verbatim, so this is not new with the fold.
+
+Known not checked by B5: two real machines; the ingest pipeline; whether a peer
+would behave differently given a completeness signal (that is the fix's bar);
+and the actor-vs-host rule, which this fixture still cannot witness for B2's
+reason.
+
+---
+
+**B7 — MET, in all three of the parts that were open. 2026-09-09.**
+`sovereign-mesh/tests/main/fold_ingest_coverage_refusal_e2e.rs`.
+
+*1. The guard is armed on the FOLD path.*
+`a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical`. B2's
+scenario with the peer's socket never spawned — the peer is a mesh member at a
+port bound and released, so it is genuinely dead rather than guessed.
+
+    merge outcome  : PartitionsUnreachable { covered: 1, expected: 2 }
+    canonical      : ABSENT                      ← THE BAR
+    local partition: still on disk
+
+The last line is not cosmetic: `merge_participants` deletes every resolved
+shard dir after a successful merge, so a refusal that ran the cleanup would
+destroy the half of the corpus that does exist while reporting only that
+coverage was short.
+
+Watched red by disabling the `shard_dirs.len() < expected` arm in
+`merge_participants`: `Recovered { chunks: 2, shards_covered: 2 }` and a
+canonical holding half the corpus. The test also carries its own paired
+positive — the same disk and the same dead peer merged with `expected = 1`
+produces exactly that partial canonical — because a refusal that never merges
+anything is indistinguishable from a merge path that is simply broken.
+
+*2. THE `continue`, which was the point.*
+`the_folds_refusal_is_final_and_the_disk_path_never_runs`, driven through the
+REAL `sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop` — the claim is
+about the ORDER of that loop's arms and nothing smaller can see an order. The
+bar is asserted only after the arm's own REFUSED warning is observed, so
+"nothing happened" cannot pass as "the refusal held".
+
+Its control, `without_a_fold_the_same_tick_publishes_the_partial_canonical`, is
+the same disk and the same loop with no rail installed: `fold_now` returns
+`None`, the tick falls through, and a 1-of-2 canonical lands with the peer's
+term unreachable. Without it, "no canonical appeared" would also be what a loop
+that never reached the stranded scan looks like.
+
+Watched red by deleting the `continue` at the end of the fold arm. The trace is
+the bug verbatim, in order, in one tick:
+
+    WARN  merge_participants: refusing to merge — coverage is incomplete
+          covered=1 expected=2 missing=[node-2200000000000000]
+    WARN  auto_ingest: REFUSED — merging now would publish a partial canonical
+    INFO  auto_recover: attempting stranded-partition merge into canonical
+          partition_count=1
+    INFO  auto_recover: chunk-merge phase complete chunks_merged=2
+    INFO  auto_recover: canonical meta stamped
+    → canonical chunk_count 2, peer-only term unreachable
+
+*3. The `total_shards` premise.*
+`the_older_disk_guard_is_dark_without_a_total_shards_stamp`. Confirmed at HEAD:
+the only production caller of `CorpusIndex::set_total_shards` outside
+`sharding.rs`'s merge-replay is `corpus-engine/src/engine/ingest.rs:718`, inside
+`if let ExtractorConfig::WikipediaJsonl { .. }`. Measured rather than cited: a
+partition written the way a fold unit writes one carries no `total_shards`, and
+`try_recover_stranded_partitions` merges a 1-of-2 canonical without returning
+`IncompleteCoverage`. Stamp the field by hand on the same disk and the same
+call refuses (`IncompleteCoverage { total: 2 }`) with no canonical left behind.
+Watched red by disabling `shard_union.len() < n`: the armed half comes back
+`Recovered { chunks: 2 }`.
+
+**The useful finding either way:** for a FOLD-driven merge the `total_shards`
+gap is irrelevant, because `merge_from_fold_coverage` arms
+`expected_partitions` from the handoff's own verified-donor count and never
+consults `total_shards` at all. The gap stays open for every merge that still
+comes off local disk — which is where reading 3's first half lands, and which
+the `continue` in reading 2 is what keeps the fold path away from.
+
+**A mis-report found and not fixed.** `RecoveryOutcome::Recovered.shards_covered`
+is `participants.len()` — the number the merge was ASKED for, not the number it
+resolved. Visible in the watched red above: `Recovered { chunks: 2,
+shards_covered: 2 }` after one of the two participants was unreachable. It is
+only a log field today, and every caller that acts on coverage acts on
+`PartitionsUnreachable` instead, but it is a count derived from the request
+rather than from what happened (ARCH §18.1).
+
+Known not checked by B7: two real machines; the ingest pipeline; two nodes
+ticking concurrently (that is B3's decision, not a concurrency test); the
+peer-canonical pull arm between the two, which needs a gossip advertisement
+this fixture has none of; and any tick after the first.
+
+---
+
+**B8 — MET, 2026-09-09.**
+`commonwealth-knowledge/tests/main/coordinate_merge_installs_the_canonical.rs::
+a_queue_mode_merge_lands_a_corpus_a_user_can_reach`, driving
+`ShardManager::coordinate_merge` — the queue-mode caller — end to end: a
+queue-mode `IngestionHandoff` serialized into the `MeshStore` under
+`handoff:<id>` where `load_handoff` reads it, a live `WorkQueueManager` whose
+two units were leased and completed by the two donors through `next_unit` /
+`complete_unit` (so `participating_peers` is populated the way
+`corpus_complete_unit` populates it, not hand-stuffed and not through the
+coordinator-restart gossip fallback), and the peer's partition arriving as a
+tarball over a loopback socket through `fetch_remote_shard`'s
+`GET /internal/index/serve` -> `tar xf`.
+
+**This is `coordinate_merge`'s first test.** Re-checked at HEAD before writing
+it, as `c001e3634` recorded: every prior mention of `coordinate_merge` under a
+`tests/` path was prose in a module comment. The state machine that decides
+queue-mode participation, leadership and the merge had no executable claim on
+it at all — which is why the gap `2dc1bf160` found on one caller could sit
+unnoticed on the other.
+
+Watched RED on the tree BEFORE the move, both probes side by side:
+
+    merge returned              : chunks=2 corpus=coverage
+    installed_indexes()         : []
+    usable_indexes()            : []
+    canonical dirs on disk      : ["coverage"]
+    local-only term (installed) : None
+    peer-only term (installed)  : None      <- THE BAR, and it was never asked
+    --- through CorpusIndex::open, which bypasses both gates ---
+    canonical exists            : true
+    canonical chunk_count       : 2 (expected 2: 1 local + 1 peer)
+    local-only term (on disk)   : true
+    peer-only term (on disk)    : true
+
+The merge REPORTED success — `Ok(Some(IndexInfo))`, 2 chunks — and both
+donors' rows were retrievable from a handle opened by path. Only the finalize
+was missing. `None` rather than `false` is deliberate (§18.3): the search never
+ran, because `usable_indexes()` had no row to run it against.
+
+GREEN after the move, same test, exit 0. Read by inverting the bar's expected
+value once so the diagnostic block renders its post-fix values rather than
+being unreachable:
+
+    merge returned              : chunks=2 corpus=coverage
+    installed_indexes()         : ["coverage"]
+    usable_indexes()            : ["coverage"]
+    local-only term (installed) : Some(true)
+    peer-only term (installed)  : Some(true)    <- THE BAR
+    canonical chunk_count       : 2
+
+*The change.* `corpus_engine::finalize_canonical` is now the last step of
+`ShardManager::merge_participants` itself, after the shard-dir cleanup, and
+`auto_recover::merge_from_fold_coverage`'s own call to it is gone. Not a second
+call site — the shared function — because "a merge produces a corpus someone
+can reach" is a POST-CONDITION, and two callers each REMEMBERING to satisfy it
+is exactly the shape that had already failed once (ARCH #10: structural, not
+remembered). `merge_participants`' own doc already claimed it "either produces
+an index or fails"; that sentence is now true. `Ok(Some(info))` from it means
+REACHABLE, for both callers and for any third one.
+
+*Ordering.* Unchanged inside the finalize — `build_indexes` ->
+`mark_indexes_built` -> `mark_ingestion_complete` -> fingerprint LAST — because
+that order is the contract and lives in one place. Unchanged around it too: the
+finalize runs AFTER the shard-dir cleanup, as it did when the caller ran it,
+because the state a finalize failure leaves behind is already documented in
+terms of that order (every source partition gone, the canonical holding the
+only copy). Moving it earlier would quietly change which directories survive a
+failure, and that is a different decision.
+
+*Merge succeeds, finalize fails — the state survives the move as an error that
+CARRIES it.* `merge_participants` returns
+`corpus_engine::Error::MergedNotFinalized { corpus, canonical_path, chunks,
+detail }` and logs it at `error!` at the site that discovers it. `Err` rather
+than a success-shaped value on purpose: an `Ok` carrying a "finalize: failed"
+field would put every caller back to REMEMBERING to check it, which is the
+shape this rung removes — and §18.3's smell is an `Err` collapsed into a
+success shape, not the reverse. Nothing is lost by the collapse because the
+variant carries the chunk count and the canonical path, which is the whole of
+"chunks exist, indexes do not". It sits beside `IncompleteCoverage` for the
+same reason and with the same crate-boundary note:
+`commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled` stays
+its own type because `corpus-engine` cannot name it, and now carries the three
+fields across unchanged rather than deriving them.
+
+Watched, on BOTH callers, by making the canonical fail to open after the merge:
+
+    queue-mode  Err(MergedNotFinalized { corpus: "coverage", chunks: 2,
+                canonical_path: ".../indexes/coverage",
+                detail: "Index not found: .../__b8_forced_failure" })
+    fold        RecoveryOutcome::MergedButNotInstalled { chunks: 4,
+                canonical_path: ".../indexes/cw-lift-5g-two-nodes",
+                error: "Index not found: .../__b8_forced_failure" }
+
+The fold reading is the same shape `2dc1bf160` produced from its own call site,
+so the move did not change what that caller reports.
+
+*B2 stayed green.* `two_donors_on_two_nodes_land_both_slices_in_the_canonical`
+passes unchanged after the move — the fold path was already correct and the
+move did not disturb it. Gates: `sovereign-lint.sh --human --full` exit 0;
+`sovereign-test.sh` exit 0 on commonwealth-knowledge (37), corpus-engine
+(2265), commonwealth-api (589), sovereign-mesh (1023). Conformance tags
+regenerated (one line: `sharding.rs` ST-9 shifted by a doc edit).
+
+**The claim, not inflated.** What is established is that **the queue-mode merge
+could not produce a usable corpus on its own** — verified in the code and now
+in a test on that caller. It is NOT established that users hit it.
+`auto_recover`'s disk path does finalize and is the fallback that has been
+carrying this, and the reason `auto_recover` exists at all is that the queue
+path deadlocks. Nothing here measures how often the queue path completes and
+reaches the merge in the field, so "collaborative ingest is broken for users"
+is a claim this rung cannot make.
+
+Known not checked by B8: the LEGACY static-partition branch of
+`coordinate_merge` (this fixture has empty `partitions` by construction, which
+is what makes it queue mode) — its peer-status poll and lowest-`NodeId` leader
+rule remain untested; the `Ok(None)` non-leader arm; the gossip participant
+fallback; two real machines; and the two `corpus_queue.rs` call sites
+themselves, which are unchanged and whose `Err` arms now surface
+`MergedNotFinalized` through their existing `error!` rather than through a
+variant of their own.
+
+---
+
+**D1 — MET, ON A LIVE DAEMON, 2026-09-09.** The full run is
+`sovereign/bench/cw_lift_5g_d1/` — `transcript.txt` (four steps, the binary
+check, the queries), `trace-excerpt.txt` (the journal window), plus the recipe
+and units file the run was actually given.
+
+This is the first reading in this rung taken against a real corpus on a real
+daemon rather than an in-process fixture, which is the whole of why D0 was
+written. **The collector was reached and it did the right thing**, so the eight
+bars resting on it are not resting on nothing.
+
+*What was running, because everything after it is worthless otherwise.* The
+daemon already up reported its own exe `(deleted)` and predated the tree by ~2
+hours, so it was thrown away. Full workspace rebuild, debug, in the toolbox
+(`cargo build --workspace --features corpus-engine/treesitter,sovereign-cli/
+dev-tools` — the first attempt omitted `dev-tools` and silently downgraded the
+dispatcher, which AGENTS.md names). Then, read off the live process:
+
+    PID 3654947
+    readlink -f /proc/3654947/exe  →  target/debug/sovereign-cli-daemon
+    that path's mtime             →  2026-09-09 20:47:52   (== the build)
+    process started               →  2026-09-09 20:50:43   (after the build)
+
+*The instrument was confirmed landing BEFORE anything was submitted*, since a
+detached daemon discards output and an absent trace would otherwise be
+unreadable. `daemon start` handed off to the service manager, so the env on
+that command line did NOT reach the daemon — named as a deviation rather than
+glossed. The unit's drop-in already carries a superset of D1's pre-registered
+filter, read back out of `/proc/<pid>/environ`, and it produced
+`commonwealth_work` events at once:
+
+    DEBUG executor registered kind=ingest:v1
+     INFO work donor: this node offers work kinds=process:v1, ingest:v1
+     INFO auto_ingest: loop started check_interval_secs=30 cooldown_secs=1800
+
+*The corpus is part 1's own*, 60 lines and 1.6 MB, with ONE field changed — the
+corpus id, because part 1's `cw5g-proof` already carries a finished canonical
+and the collector short-circuits on `AlreadyHasCanonical`, which would have made
+it decline for a reason unrelated to whether it works. (/home is at 99% here;
+part 1's first attempt died on `Disk quota exceeded`.)
+
+*Steps 1 and 2 — the fold.* `svrn job submit --kind ingest:v1 --units …` →
+handoff `3755df0cf837499f4b78b6fccb1e1643` at seq 61. Polled at 15s:
+
+    t+15s  open       unit 1 leased (attempt 1) · unit 0 queued
+    t+30s  draining   unit 1 passed on attempt 1, 13s, partition holds 422
+    t+45s  complete   unit 0 passed on attempt 1, 13s, partition holds 813
+
+Both units on ATTEMPT 1; no retry was needed and none is claimed. `813` is the
+partition's RUNNING TOTAL, the field part 1 renamed `partition_chunks_total`
+for exactly this reason.
+
+*Step 3 — the tick loop, which no test had ever exercised on a daemon.*
+
+    20:52:47  [cw5g-d1] Ingestion complete — 813 chunks in 0m13s
+    20:52:47  [cw5g-d1] Unit-scoped run — deferring index build to merge leader
+    20:53:00  [cw5g-d1] Pre-build dedupe pass / Building vector index (1/3)
+    20:53:06  [cw5g-d1] Vector index done · FTS content done · FTS title done
+    20:53:06   INFO auto_ingest: canonical built from the fold's participant set
+               corpus=cw5g-d1 handoff=handoff-3755df0cf837499f chunks=813
+               nodes=0 partial=false
+    20:53:06   INFO gossip: hosted_corpora set changed — re-publishing …"cw5g-d1"…
+
+All four collector steps: `fold_coverage_for` returned `Some`, the arm ran,
+`merge_from_fold_coverage` merged, and `finalize_canonical` landed — the three
+index builds between 20:53:00 and 20:53:06 ARE that finalize, in B8's pinned
+order.
+
+**That it was the COLLECTOR and not the disk path is checked, not inferred.**
+The success sentence has exactly one site in the workspace —
+`sovereign-mesh/src/auto_ingest.rs:282`, the `RecoveryOutcome::Recovered` arm of
+`merge_from_fold_coverage` — and the disk-derived sibling logged nothing at all
+for this corpus across the window (`auto_recover` / `stranded-partition` /
+`chunk-merge phase`: empty). The `continue` held on a live daemon, which is what
+B7's reading 2 pre-registered and could only assert in-process.
+
+*Step 4 — the end-user reading, at three altitudes, weakest first.* On disk:
+the partition dir is GONE and the canonical carries `ingestion_in_progress:
+false, indexes_built: true`, all three sub-indexes built, fingerprint stamped.
+At `installed_indexes()`: the gossip re-publish above IS that term, not a proxy
+for it — `build_hosted_corpora` is fed by `engine.installed_indexes()`
+(`capabilities.rs:103`), the same accessor B2's correction re-measured through.
+And the bar itself, through the product's own surface:
+
+    $ svrn chat ask --corpus cw5g-d1 \
+        "What was the population of Mount Molar, Queensland at the 2021
+         census, and which region is it in?"
+
+    Population at the 2021 census: 117
+    Region it is in: Toowoomba Region
+    Grounded in the source:
+      "In the 2021 census, Mount Molar had a population of 117 people."
+      "Mount Molar is a rural locality in the Toowoomba Region, Queensland…"
+    Searched cw5g-d1 · 37.5s · EMBED_ROUTER · Qwen3.5-4B-UD-MTP-Q6_K_XL
+
+Mount Molar is article 37, in unit 1's range (30..60). A second question was
+asked against unit 0's range (0..30) and answered from it — *Ameerega
+pulchripecta*: family Dendrobatidae, endemic to Brazil, threatened by habitat
+loss — with second-slice articles in the same source list. So one corpus holds
+both slices and both are reachable, which is the reading a chunk count cannot
+give.
+
+**What D1 does NOT add, stated rather than discovered.** This is ONE node.
+`expected` was 1 and `nodes` was empty, so the HTTP tarball pull inside
+`merge_participants` did not run here — B2's loopback-socket reading is still
+the only one that has driven it, and two real machines remain unmeasured. The
+PRODUCER is untouched: this run typed `job submit` by hand, which is exactly the
+gap D2 is about, so D1 does not move K1. Nor does it exercise any tick after the
+merge (the next one short-circuits on `AlreadyHasCanonical`).
+
+**And one thing that did not happen and is not explained.** At the 20:52:29
+tick the handoff was not yet `Complete`, so `fold_coverage_for` returned `None`
+and control fell through to the disk path — with one partition on disk holding
+422 chunks, i.e. exactly the half-canonical B7 exists to prevent. Nothing
+merged and nothing logged. This run does not establish WHICH guard held
+(`active_ingests`, the partition's own `ingestion_in_progress`, or the
+cooldown), and an unattributed absence is not a guard (§18.1, §18.2). It wants
+a bar of its own.
+
+**Found in passing, none of them fixed, none of them blocking.** Full text and
+citations in `transcript.txt`; the four that matter:
+
+- `svrn corpus list` never lists an installed corpus, for ANY corpus:
+  `cmd_corpus_list` (`corpus_cmd/inventory.rs:18-29`) is six hard-coded
+  `println!`s of built-in recipe ids and reads no index directory, while
+  `corpus --help` calls it "List installed and available corpora". D1's step-4
+  wording is unsatisfiable by that verb; the installed reading came from gossip
+  and from the query instead.
+- `nodes=0` on a merge that used one shard — B7's `shards_covered` mis-report
+  (`participants.len()`, the number ASKED for), seen LIVE for the first time. On
+  a single-node fold every completion carries `provenance.host: Server::Local`,
+  which `fold_coverage_for` deliberately keeps out of `nodes`, so `participants`
+  is empty by construction. The merge was right: `merge_participants` collects
+  the LOCAL shard first (`shard_manager.rs:494-516`), so `expected = 1` was met.
+- The `total_shards` guard was dark here too, for a NEW reason. This recipe IS
+  `wikipedia_jsonl` — B7 reading 3's one stamped extractor — and it still went
+  unstamped, twice: `WARN ingest: could not enumerate canonical shards …
+  Failed to read ZIP TOC at …/cw5g-proof.jsonl: invalid Zip archive`. The stamp
+  path assumes a ZIP even when the extractor is reading a plain `.jsonl`.
+  Irrelevant on the fold path (`expected_partitions` comes from the handoff) and
+  it widens B7 reading 3: dark not only for non-Wikipedia recipes but for a
+  Wikipedia recipe over a non-ZIP source.
+- The refusal text teaches a payload the parser rejects (§10.6). Same file, two
+  spellings: `ingest_executor.rs:189` says `"kind": "hf-file"|"jsonl-shard"|
+  "jsonl-range"`, `:463` says `["HfFile","JsonlShard","JsonlRange"]`. `WorkUnit`
+  is `#[serde(tag="kind", content="value")]` with no `rename_all`, so PascalCase
+  is what parses — and the wrong spelling is the one on the FAILURE path, where
+  a stuck submitter reads it and gets refused again, silently, at the donor.
+- B5's corpus clause, corroborated live: `cw5g-proof` and `cw5g-d1` — different
+  ids, separate merges, different days — carry the SAME
+  `canonical_fingerprint` `ebae85630ca70ab1…c994540`. Correct for a content
+  hash, and that is B5's point: the fingerprint says nothing about which handoff
+  produced the corpus or whether it is whole.
+
+**What D1's result does to B2, B7 and B8.** It corroborates all three and
+replaces none of them. B2's re-measured claim — that a fold-driven merge
+produces a corpus reachable at the user's altitude — now has a live reading
+behind it as well as a fixture one, taken through `chat ask` rather than through
+`usable_indexes()` directly, which is a rung ABOVE what B2 could reach. B7's
+`continue` was watched holding on a real tick loop. B8's finalize was watched
+running inside `merge_participants` on the fold caller, in its pinned order,
+against a real corpus. None of their KNOWN-NOT-CHECKED lists shrinks: two
+machines, the wire pull, and the producer are exactly as unmeasured as they
+were.
+
+---
+
+## THE DELETION DID NOT RUN, AND THE REASON IS A MISSING PRODUCER
+
+**Surveyed 2026-09-09, before any deletion. Nothing was deleted. Every
+candidate is reachable from a live entry point, and the blocker is upstream of
+the call graph the order argued about.**
+
+B1-B4, B7 and B8 measured the fold-side MERGE and it is proven. What was never
+built is the fold-side SUBMITTER. `IngestExecutor` and `fold_coverage_for` are
+a fully-wired consumer half with no automated producer half.
+
+**Census of `WorkAct::Submit` across the workspace — zero automated production
+sites.** Three manual-CLI sites: `sovereign-cli-llm/src/job_cmd.rs:195` (the
+only one that can carry `ingest:v1`, via `--kind`),
+`sovereign-cli/src/quality_check_cmd/distribute.rs:706` (hard-wired
+`process:v1` at `:142`), `commonwealth-work/examples/work_peer.rs:285`
+(`process:v1`). Ten test fixtures. The daemon appends only donor-side acts
+(`work_donor.rs` Offer/Lease/Renew/Complete/Fail); there is no `Submit`
+anywhere in `sovereign-mesh/src/`.
+
+**And no production code can build a unit body either.**
+`IngestPayload::slice` (`ingest_executor.rs:165`) is the only constructor and
+has exactly two call sites, both tests (`ingest_executor/tests.rs:42`,
+`fold_ingest_cross_node_merge_e2e.rs:200`).
+
+**The two paths are disjoint types on disjoint substrates.**
+`fold_coverage_for` matches `handoff.kind == ingest:v1` over a
+`commonwealth_work::WorkHandoff` on the rail journal. A corpus installed the
+shipped way produces a `commonwealth_core::knowledge::IngestionHandoff` written
+to `mesh_store` under `handoff:<id>` (`corpus_collaborate.rs:585`) — a KV row on
+the `corpus-engine` namespace, routed by `Projector::Kv` and never
+`Projector::Work` (`rail_kv_pump.rs:849-874`). Same word, different mechanism.
+So on a real corpus install `fold_coverage_for` returns `None` at
+`auto_ingest.rs:249` and control falls through to the disk-derived legacy path
+every time. B7's control `without_a_fold_the_same_tick_publishes_the_partial
+_canonical` is that case, and it is the NORMAL case, not the control.
+
+**`corpus_collaborate` structurally cannot be the producer today.**
+`commonwealth-api` takes no dependency on `commonwealth-work`, so the route
+cannot name `WorkAct` or `Submission` even in principle. The edge would be
+LEGAL if added — `mesh-api` → `mesh-foundation` is downward, and
+`commonwealth-work`'s only `[[forbid]]` is outbound (`-> sovereign-*`) — but
+adding it is a design decision, not a patch.
+
+### Reachability, per candidate — all KEPT, none deletable
+
+The live chain, compiler-resolved via `callers()`: `daemon.rs:3492` →
+`spawn_auto_collaborate_loop` → `auto_collaborate_loop` (`auto_ingest.rs:102`),
+which every tick calls `discover_and_spawn_pull_loops` (`:179`) and POSTs
+`/internal/corpus/collaborate` (`:567`). `use_pull_queue()` defaults TRUE —
+the pull queue is the shipped default and `SOVEREIGN_USE_LEGACY_PARTITION=1`
+is the opt-OUT. It is user-facing too:
+`sovereign-desktop/src-tauri/src/collaborate_commands.rs:126` and `:169`.
+
+| Candidate | Verdict | Reached from |
+|---|---|---|
+| `commonwealth-knowledge/src/work_queue.rs` (511 non-test lines) | KEPT | `corpus_collaborate.rs:557` register · `corpus_grant.rs:166` retire · `corpus_queue.rs` 267/294/346/422/777 · `state.rs:939`+`:1904` · `shard_manager.rs:87` |
+| `corpus_queue.rs` lease half (~614 lines) | KEPT | routes live at `server.rs:376/382/386/390`, driven by `pull_loop` and by peers |
+| `auto_ingest.rs` pull half (~575 lines) | KEPT | `auto_ingest.rs:179` |
+| the four route registrations | KEPT | `server.rs:376/382/386/390` |
+| `AppState.work_queue` | KEPT | `state.rs:939`, reaper at `:1904` |
+| `coordinate_merge` / `spawn_queue_merge` | KEPT | TWO triggers — `corpus_queue.rs:445` AND `corpus_collaborate.rs:377` |
+
+B8's `commonwealth-knowledge/tests/main/coordinate_merge_installs_the_canonical.rs`
+stays LIVE: its subject survives.
+
+Two the pre-registration above expected to fall survive for the opposite
+reason — they are part of the REPLACEMENT, not of the legacy path:
+`peer_control_urls` (`corpus_queue.rs:36`) is called by
+`merge_from_fold_coverage` (`auto_recover.rs:240`), and
+`corpus_partition_evict` is POSTed by `merge_participants`
+(`shard_manager.rs:572`).
+
+### A hard rule and the deletion are in direct conflict
+
+`EphemeralGrantStore`'s teardown obligation — the fourth of the four things
+part 1 established the consent pair structurally cannot carry — **is
+implemented through `WorkQueueManager`**. `corpus_grant.rs:166`:
+`state.inner.work_queue.retire(&handoff_id).await`, the revoke path that stops
+the in-flight job so peers get 404 on `next_unit` and exit their pull loops.
+There is no fold-side `retire`. "The grant store survives" and "delete
+`WorkQueueManager`" cannot both hold on this tree.
+
+### What the order got wrong, and it was written down in the code
+
+`sovereign-mesh/src/ingest_executor.rs:17-23` says "Replaced, not yet deleted,
+and the tense is load-bearing … Part 2 is the deletion and is a separate,
+explicitly-authorised step." That sentence is half right. Part 2 *is* the
+deletion, and the deletion has an unmet precondition nobody wrote down. The
+corrected estimate of ~1,876 lines was arithmetic on a set that is not yet
+free; the honest number available to this rung is **0**.
+
+The remaining work is a BUILD — a fold-side kickoff that submits an `ingest:v1`
+handoff where `corpus_collaborate` today calls `work_queue.register` — and it
+ADDS lines before it can subtract. It needs its own pre-registration and its
+own bars. `cw-net-deletion` takes no payment here and is not adjusted to fit.

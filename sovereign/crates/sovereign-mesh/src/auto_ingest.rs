@@ -213,6 +213,10 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         let active_for_recovery: HashSet<String> =
             { state.inner.active_ingests.read().await.clone() };
         let stranded = engine.corpora_with_stranded_partitions();
+        // Folded ONCE per tick rather than once per corpus: admitting a
+        // journal is not free, and every corpus in `stranded` asks the same
+        // projection a different question.
+        let fold = crate::work_donor::fold_now(&state).await;
         for corpus_id in &stranded {
             if active_for_recovery.contains(corpus_id) {
                 tracing::debug!(
@@ -221,6 +225,110 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                      (will produce canonical itself)"
                 );
                 continue;
+            }
+
+            // ── The fold's half of the coverage question (cw-lift 5g p2) ──
+            //
+            // Everything below this point derives participants from LOCAL
+            // DISK and from gossip. Neither can see a donor whose partition
+            // was never pulled here, which is how two donors on two nodes
+            // produced a canonical holding half the data while `auto_recover`
+            // reported `Recovered` — watched red in
+            // `tests/main/fold_ingest_cross_node_merge_e2e.rs`.
+            //
+            // The `work` fold does know: every `ingest:v1` completion names
+            // its lessee and its host on a replicated journal.
+            //
+            // THE `continue` IS LOAD-BEARING. When the fold has an answer for
+            // this corpus that answer is authoritative, including when the
+            // answer is a refusal. Falling through to the disk-derived path
+            // after a coverage refusal would merge the local half anyway,
+            // which is the bug verbatim.
+            if let Some((_, proj, self_key, now_ms)) = fold.as_ref() {
+                if let Some(cov) =
+                    crate::ingest_executor::fold_coverage_for(proj, self_key, corpus_id, *now_ms)
+                {
+                    if cov.is_partial() {
+                        // Per unit rather than as a count: "which slice is
+                        // missing" is the question an operator has (§18.3).
+                        // Distinct from the unreachable-peer case below — no
+                        // retry will ever fix this one.
+                        tracing::warn!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            units = ?cov.abandoned,
+                            "auto_ingest: units whose attempts are spent — this corpus \
+                             can never be complete"
+                        );
+                    }
+                    match commonwealth_api::auto_recover::merge_from_fold_coverage(
+                        &state,
+                        corpus_id,
+                        cov.handoff_id,
+                        &cov.nodes,
+                        cov.expected,
+                    )
+                    .await
+                    {
+                        commonwealth_api::auto_recover::RecoveryOutcome::Recovered {
+                            chunks,
+                            shards_covered,
+                        } => tracing::info!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            chunks,
+                            nodes = shards_covered,
+                            partial = cov.is_partial(),
+                            "auto_ingest: canonical built from the fold's participant set"
+                        ),
+                        commonwealth_api::auto_recover::RecoveryOutcome::PartitionsUnreachable {
+                            covered,
+                            expected,
+                        } => tracing::warn!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            covered,
+                            expected,
+                            "auto_ingest: REFUSED — merging now would publish a partial \
+                             canonical and gossip would advertise it; retrying next tick"
+                        ),
+                        commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled {
+                            chunks,
+                            canonical_path,
+                            error,
+                        } => {
+                            // Its own arm, not the quiet `_` below, because it
+                            // is its own fact: chunks on disk that no surface
+                            // can see, holding the only copy (the source
+                            // partitions are already cleaned up). ERROR rather
+                            // than WARN — unlike the refusal above, no later
+                            // tick retries this one.
+                            tracing::error!(
+                                corpus = %corpus_id,
+                                handoff = %cov.handoff_id,
+                                chunks,
+                                canonical = %canonical_path,
+                                recovery_error = %error,
+                                "auto_ingest: merged but NOT installed — the canonical holds \
+                                 {chunks} chunks and is invisible to installed_indexes(), \
+                                 usable_indexes() and hosted_corpora gossip. No retry: the \
+                                 next tick short-circuits on AlreadyHasCanonical"
+                            )
+                        }
+                        commonwealth_api::auto_recover::RecoveryOutcome::Failed(err) => {
+                            tracing::warn!(
+                                corpus = %corpus_id,
+                                handoff = %cov.handoff_id,
+                                recovery_error = %err,
+                                "auto_ingest: fold-driven merge failed"
+                            )
+                        }
+                        // AlreadyHasCanonical / NotEnoughPartitions /
+                        // InvalidCorpusId — quiet, same as the block below.
+                        _ => {}
+                    }
+                    continue;
+                }
             }
             // Phase 6 canonical-sync: before falling through to a
             // local merge (which may produce an incomplete canonical
@@ -1139,9 +1247,14 @@ async fn pull_loop(
         .remove(&handoff_id);
 }
 
+mod heartbeat_verdict;
+
+use self::heartbeat_verdict::{heartbeat_verdict, AbortCause, HeartbeatOutcome, HeartbeatVerdict};
+
 /// Spawn a heartbeat task for the duration of a single unit's ingest.
 /// Fires `POST /internal/corpus/heartbeat` every `HEARTBEAT_INTERVAL`.
-/// On 410 Gone, sets the cancellation flag so the ingest loop aborts.
+/// A thin loop over [`heartbeat_verdict`]; on any `Abort` it sets the
+/// cancellation flag so the ingest loop stops.
 fn spawn_heartbeat(
     client: reqwest::Client,
     coordinator_url: String,
@@ -1156,6 +1269,7 @@ fn spawn_heartbeat(
         // Skip the immediate first tick — the lease starts fresh at
         // next_unit return, no need to heartbeat until ~100s in.
         ticker.tick().await;
+        let mut consecutive_misses = 0u32;
         loop {
             ticker.tick().await;
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1166,32 +1280,13 @@ fn spawn_heartbeat(
                 "peer_id": peer_id,
                 "unit_id": unit_id,
             });
-            match client
+            let outcome = match client
                 .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
                 .json(&body)
                 .send()
                 .await
             {
-                Ok(r) if r.status() == reqwest::StatusCode::GONE => {
-                    tracing::warn!(
-                        handoff = %handoff_id,
-                        unit_id,
-                        "heartbeat: 410 Gone — lease reclaimed, aborting unit"
-                    );
-                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-                    return;
-                }
-                Ok(r) if r.status().is_success() => {
-                    // Lease renewed; nothing to do.
-                }
-                Ok(r) => {
-                    tracing::debug!(
-                        handoff = %handoff_id,
-                        unit_id,
-                        status = %r.status(),
-                        "heartbeat: non-success response"
-                    );
-                }
+                Ok(r) => HeartbeatOutcome::Answered(r.status()),
                 Err(e) => {
                     tracing::debug!(
                         handoff = %handoff_id,
@@ -1199,6 +1294,40 @@ fn spawn_heartbeat(
                         error = %e,
                         "heartbeat: request failed"
                     );
+                    HeartbeatOutcome::NoAnswer
+                }
+            };
+            let verdict = heartbeat_verdict(outcome, consecutive_misses);
+            consecutive_misses = verdict.next_misses(consecutive_misses);
+            match verdict {
+                HeartbeatVerdict::Renewed => {}
+                HeartbeatVerdict::Miss => {
+                    tracing::debug!(
+                        handoff = %handoff_id,
+                        unit_id,
+                        ?outcome,
+                        consecutive_misses,
+                        "heartbeat: beat did not land"
+                    );
+                }
+                HeartbeatVerdict::Abort(cause) => {
+                    let reason = match cause {
+                        AbortCause::Gone => "410 Gone — lease reclaimed",
+                        AbortCause::NotFound => {
+                            "404 — handoff gone from the coordinator (restart or reap)"
+                        }
+                        AbortCause::Silence => "coordinator silent for the miss limit",
+                    };
+                    tracing::warn!(
+                        handoff = %handoff_id,
+                        unit_id,
+                        ?cause,
+                        consecutive_misses,
+                        "heartbeat: aborting unit — {}",
+                        reason
+                    );
+                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return;
                 }
             }
         }

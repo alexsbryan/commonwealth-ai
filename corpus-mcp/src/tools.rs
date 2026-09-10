@@ -1010,15 +1010,14 @@ mod tests {
         // Configuration as a seed and no edge a Configuration has, so it was a
         // terminus by accident. Both literals are spelled out for the same
         // reason as `budget 12`.
-        //
-        // `Grounds` and `OpposesIn` LEFT these rows on 2026-09-08
-        // (map-conversion rung 2): the built-in maps are now written against
-        // what each pipeline can actually emit, and `Grounds` is written from
-        // an atom to a CHUNK — it has no seat in the atom CSR, so a row
-        // walking it walks nothing — while `OpposesIn` and `Position` are
-        // emitted by no built-in build. This test still asserted the
-        // pre-conversion strings and had been failing since; it is corrected
-        // to the declaration rather than the memory of one.
+        // `Grounds` left the thematic walk, and `OpposesIn` left the tension
+        // row, in ff0c81eeb — deliberately, and the ontology says why in its
+        // own comment: the resolvers write `Grounds` from an atom to a CHUNK,
+        // so it has no seat in the atom CSR and a row walking it walks
+        // nothing; `OpposesIn` is a kind no built-in build produces. This
+        // assertion kept naming both for a day afterwards, which is a test
+        // pinning a table the data had already stopped declaring. It asserts
+        // the DECLARED table — that is the whole point of rendering it.
         assert!(
             out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept], Summary at most 8 | walk Involves → Tension → Configures | hops 2 | budget 12"),
             "{}",

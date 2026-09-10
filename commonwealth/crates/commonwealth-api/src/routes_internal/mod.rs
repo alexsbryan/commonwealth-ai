@@ -61,8 +61,9 @@ pub use ring_sync::{ring_sync, RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_
 pub(crate) use corpus_ingest::progress_fraction;
 pub use corpus_queue::{
     corpus_collaborate_status, corpus_complete_unit, corpus_heartbeat, corpus_ingest_partition,
-    corpus_next_unit, corpus_partition_evict, CompleteUnitRequest, CompleteUnitResponse,
-    HeartbeatRequest, HeartbeatResponseBody, NextUnitRequest, NextUnitResponse,
+    corpus_next_unit, corpus_partition_evict, peer_control_urls, CompleteUnitRequest,
+    CompleteUnitResponse, HeartbeatRequest, HeartbeatResponseBody, NextUnitRequest,
+    NextUnitResponse,
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
 pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};

@@ -150,6 +150,13 @@ members = [
     # now re-exports them so no consumer moved in the same commit.
     "commonwealth/crates/commonwealth-rail-core",
     "commonwealth/crates/commonwealth-rail",
+    # The work plane on the rail (cw-lift 5c, 2026-09-09) — the WorkAct
+    # vocabulary, the unit seal, the fold, the one lease predicate and the
+    # executor seam. A PACKAGE crate: its whole dependency list is
+    # `commonwealth-{core,rail-core}` plus the `oicp-types`/`kernel-types`
+    # leaves, because cw-lift 5f lifts this closure out of the monorepo and
+    # builds it in a sandbox.
+    "commonwealth/crates/commonwealth-work",
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
@@ -282,6 +289,7 @@ commonwealth-api = { path = "commonwealth/crates/commonwealth-api" }
 commonwealth-knowledge = { path = "commonwealth/crates/commonwealth-knowledge" }
 commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
+commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-app = { path = "commonwealth/crates/commonwealth-app" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 

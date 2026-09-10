@@ -44,7 +44,7 @@ pub type Result<T> = std::result::Result<T, WorklistError>;
 
 /// One unit of work — what the driver claims, executes, and acks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkUnit {
+pub struct WorklistRow {
     pub recipe_id: String,
     pub key: String,
     pub state: State,

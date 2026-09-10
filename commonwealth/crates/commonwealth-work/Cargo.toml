@@ -1,0 +1,78 @@
+[package]
+name = "commonwealth-work"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The work plane on the ring rail — the WorkAct vocabulary, the unit seal, the fold, the one lease predicate and the executor seam. Package-closure clean: no sovereign runtime, no corpus engine, no model."
+
+# DELIBERATE, and the whole point of the crate (cw-lift 5f lifts this closure
+# out of the monorepo and builds it in a sandbox). Seven dependencies, no new
+# third-party crate in the workspace:
+#
+#   commonwealth-core      HandoffId, and the ingest handoff vocabulary the
+#                          fold reuses (UnitStatus, HandoffPhase, LEASE_MS,
+#                          MAX_UNIT_ATTEMPTS, LeasedUnit::is_live_at).
+#   commonwealth-rail-core Payload — the ONE canonical writer in this tree —
+#                          plus Admission/AdmittedOp/Person, the total order
+#                          the fold reads. Zero I/O, and that is inherited.
+#   oicp-types             the job vocabulary (JobKind, JobUnit, WorkOffer,
+#                          JobRequirements, Isolation, JobExecutorDescriptor).
+#   kernel-types           ContentHash for the unit seal, Judgement for
+#                          outcomes, ComputeAttribution for provenance.
+#   serde/serde_json       the wire form. serde_json is NOT a new crate: it is
+#                          already inside this package's closure through
+#                          commonwealth-rail-core, which cannot express a
+#                          Payload without it. Declaring it directly adds zero
+#                          crates to the measured closure and avoids reaching
+#                          for a re-export that does not carry `json!`.
+#   thiserror              the seal's refusals are typed and render as
+#                          sentences (ARCH §18.3).
+#   tracing                every refusal is visible at debug (ARCH §9.1).
+#
+# What is deliberately ABSENT and must stay absent: any `sovereign-*` (the
+# [[forbid]] row in quality/ARCH_LAYERS.toml is what enforces it, not this
+# comment), any `corpus-engine*`, and commonwealth-{knowledge,inference,api}
+# — the three 577-690-crate applications on this substrate. `commonwealth-rail`
+# is absent too: the JOURNAL reads a disk, and everything in this crate takes
+# the acts it is given.
+[dependencies]
+commonwealth-core = { workspace = true }
+commonwealth-rail-core = { workspace = true }
+oicp-types = { workspace = true }
+kernel-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+# The executor seam's only I/O, and the reason it is a feature: the core —
+# codec, seal, fold, predicate — is zero I/O and zero clock, and a manifest is
+# how that is enforced rather than remembered. A third party lifting this crate
+# for the fold alone never links tokio.
+tokio = { workspace = true, optional = true }
+
+[features]
+default = []
+# `ProcessExecutor` (`process:v1`). Adds tokio::process and nothing else.
+process = ["dep:tokio"]
+
+[lints]
+workspace = true
+
+# The package-only work peer (cw-lift 5f). DEV-ONLY, and both entries are
+# package crates, so the boundary's "dev- and build-dependencies count too"
+# rule is satisfied by construction rather than by an [[exception]] row.
+#
+# `commonwealth-rail` is the JOURNAL — the one thing this crate deliberately
+# does not take as a normal dependency (everything above reads the acts it is
+# given). A PEER has to open a log, so it names the I/O half here, where a
+# consumer of the fold never links it.
+[dev-dependencies]
+commonwealth-rail = { workspace = true }
+
+[[example]]
+name = "work_peer"
+# It registers `ProcessExecutor`, which is the feature's entire content. Named
+# rather than assumed: without this, `cargo build --examples` on a default
+# build fails on a missing module instead of skipping an example that cannot
+# apply.
+required-features = ["process"]

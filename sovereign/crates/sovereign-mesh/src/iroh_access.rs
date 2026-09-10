@@ -231,19 +231,65 @@ pub struct PeerTransportPath {
     pub active_direct_addrs: usize,
 }
 
-/// Classify a peer's live path from what iroh reports ACTIVE: a direct
-/// (hole-punched) IP path is preferred once established; the relay is
-/// the always-works fallback. `any_addr` distinguishes "known peer,
-/// nothing active right now" (`idle`) from "endpoint has no record"
-/// (`unknown`).
-fn classify_path(direct_active: bool, relay_active: bool, any_addr: bool) -> &'static str {
-    match (direct_active, relay_active) {
-        (true, true) => "mixed",
-        (true, false) => "direct",
-        (false, true) => "relayed",
-        (false, false) if any_addr => "idle",
-        (false, false) => "unknown",
+/// Every member the iroh endpoint could hold a path to, paired with what
+/// membership believes and what the endpoint actually holds — the watchdog's
+/// peer-path health term (note `a3f3fbff`).
+///
+/// A free function taking the endpoint rather than a method on
+/// `EmbeddedDaemon` because the watchdog swaps its own endpoint handle on
+/// rebuild: the health judgement must be made against the endpoint the
+/// watchdog is holding, not against whatever the daemon state last recorded.
+/// Members without a pubkey are not iroh-dialable and are left out entirely —
+/// counting them would make an IP-only peer look like a lost path.
+pub(crate) async fn observe_peer_paths(
+    app_state: &commonwealth_api::state::AppState,
+    endpoint: &Endpoint,
+) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
+    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    // Clone the members out before awaiting — the codebase's
+    // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
+    let members: Vec<commonwealth_core::mesh::MemberRecord> = {
+        let mesh = app_state.inner.mesh.read().await;
+        mesh.members
+            .values()
+            .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
+            .cloned()
+            .collect()
+    };
+    let mut out = Vec::with_capacity(members.len());
+    for m in members {
+        let pubkey = m.node_pubkey.expect("filtered to Some above");
+        let path = match commonwealth_transport::iroh::PublicKey::from_bytes(&pubkey.0) {
+            Ok(id) => commonwealth_transport::iroh::peer_path_snapshot(endpoint, id)
+                .await
+                .map(|s| s.path),
+            // A member whose stored pubkey is not a valid Ed25519 point can
+            // never be dialed by key — a roster fault, not a transport one.
+            // It reads as `None` (no record) so the census still accounts for
+            // every member, and it SAYS SO rather than being absorbed into
+            // the no-record population it is indistinguishable from (§18.3).
+            // Harmless to the health term either way: a peer that could never
+            // be dialed never enters `last_active`, so it can only ever add
+            // to the total, never report a loss or arm the term.
+            Err(e) => {
+                tracing::warn!(
+                    peer = %m.node_id,
+                    name = %m.name,
+                    error = %e,
+                    "iroh(mesh): member pubkey is not a valid endpoint id — not dialable by \
+                     key; counted as no-path, never as a lost path"
+                );
+                None
+            }
+        };
+        out.push(crate::iroh_watchdog::PeerPathObservation {
+            node_id: m.node_id.to_string(),
+            name: m.name.clone(),
+            believed_online: m.status != commonwealth_core::mesh::NodeStatus::Offline,
+            path,
+        });
     }
+    out
 }
 
 /// Handle to the running mesh iroh access path. Holds the endpoint
@@ -595,31 +641,16 @@ impl MeshIrohAccess {
         peer_pubkey: &[u8; 32],
     ) -> Option<PeerTransportPath> {
         let id = commonwealth_transport::iroh::PublicKey::from_bytes(peer_pubkey).ok()?;
-        let info = endpoint.remote_info(id).await?;
-        let mut active_relay: Option<String> = None;
-        let mut active_direct = 0usize;
-        let mut any_addr = false;
-        for a in info.addrs() {
-            any_addr = true;
-            let active = matches!(
-                a.usage(),
-                commonwealth_transport::iroh::TransportAddrUsage::Active
-            );
-            match a.addr() {
-                commonwealth_transport::iroh::TransportAddr::Relay(url) if active => {
-                    active_relay.get_or_insert_with(|| url.to_string());
-                }
-                commonwealth_transport::iroh::TransportAddr::Ip(_) if active => {
-                    active_direct += 1;
-                }
-                _ => {}
-            }
-        }
-        let path = classify_path(active_direct > 0, active_relay.is_some(), any_addr);
+        // The classification itself lives in `commonwealth_transport::iroh`
+        // (ARCH §10.6 — one implementation): the watchdog's peer-path health
+        // term reads the same snapshot, and a second copy here is how the
+        // operator surface and the health term would come to disagree about
+        // what "reachable" means.
+        let snap = commonwealth_transport::iroh::peer_path_snapshot(endpoint, id).await?;
         Some(PeerTransportPath {
-            path: path.to_string(),
-            relay: active_relay,
-            active_direct_addrs: active_direct,
+            path: snap.path.as_str().to_string(),
+            relay: snap.relay,
+            active_direct_addrs: snap.active_direct_addrs,
         })
     }
 
@@ -712,15 +743,18 @@ mod tests {
         assert_eq!(out, TrafficClass::ALL.to_vec());
     }
 
+    /// The wire spelling `PeerTransportPath.path` carries is the classifier's
+    /// own `as_str`, not a second vocabulary maintained here. The classifier's
+    /// state table is tested where it lives (`commonwealth_transport::iroh`);
+    /// this guards the ADAPTER — that the DTO keeps speaking those words.
     #[test]
-    fn classify_path_covers_all_states() {
-        assert_eq!(classify_path(true, true, true), "mixed");
-        assert_eq!(classify_path(true, false, true), "direct");
-        assert_eq!(classify_path(false, true, true), "relayed");
-        // Known peer (has addrs) but nothing active this instant.
-        assert_eq!(classify_path(false, false, true), "idle");
-        // Endpoint has no record of the peer at all.
-        assert_eq!(classify_path(false, false, false), "unknown");
+    fn wire_path_spelling_comes_from_the_shared_classifier() {
+        use commonwealth_transport::iroh::PeerPath;
+        assert_eq!(PeerPath::Mixed.as_str(), "mixed");
+        assert_eq!(PeerPath::Direct.as_str(), "direct");
+        assert_eq!(PeerPath::Relayed.as_str(), "relayed");
+        assert_eq!(PeerPath::Idle.as_str(), "idle");
+        assert_eq!(PeerPath::Unknown.as_str(), "unknown");
     }
 
     #[test]

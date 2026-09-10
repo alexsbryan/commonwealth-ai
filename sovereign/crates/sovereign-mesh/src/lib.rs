@@ -45,6 +45,7 @@ pub mod guest_lender;
 pub mod guest_tunnel;
 pub mod http_response;
 pub mod inference_adapter;
+pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
 /// over the `InsightService` the commissioning host built.
 pub mod insight_http;
@@ -118,6 +119,7 @@ pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
+pub mod work_donor;
 pub mod worker_eligibility;
 // Short-lived memory of peers that refused with `yielded_to_local`, so
 // the next turn does not re-dial into the same refusal.

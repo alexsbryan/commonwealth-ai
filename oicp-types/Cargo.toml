@@ -10,11 +10,30 @@ rust-version.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # `ModelAliasTable::default_table` parses the embedded `default_aliases.toml`.
-# THIRD-PARTY, so it costs this crate no in-repo edge — the `[[package_leaf]]`
-# budget in `quality/ARCH_LAYERS.toml` is `allow = []` and stays that way.
-# Pinned through the workspace so the version cannot drift from the other four
-# `toml` consumers (ARCH §8.2).
+# THIRD-PARTY, so it costs this crate no in-repo edge at all — the
+# `[[package_leaf]]` budget in `quality/ARCH_LAYERS.toml` counts in-repo crates
+# and this one is invisible to it. (That budget read `allow = []` until
+# 2026-09-09; see the `kernel-types` entry below for the one edge it now
+# carries and why.) Pinned through the workspace so the version cannot drift
+# from the other four `toml` consumers (ARCH §8.2).
 toml = { workspace = true }
+# `JobRequirements.preconditions` is `kernel_types::quality::Precondition` and
+# `JobExecutorDescriptor.verdict` is its `VerdictSource` — the instrument
+# registry's own vocabulary, which already spells a toolbox as `Container` and
+# an executable as `Binary`. Reusing it is what stops this crate becoming a
+# second speller of the same closed set (ARCH §10.6); the alternative was a
+# fourth precondition enum.
+#
+# The ONE in-repo edge this crate has, and it is budgeted: `quality/
+# ARCH_LAYERS.toml` grants `oicp-types` `allow = ["kernel-types"]` on the
+# `corpus-engine-vocab` precedent — kernel-types is itself an empty leaf, so
+# the closure is two crates.
+#
+# `quality-registry` because `kernel_types::quality` is feature-gated
+# (`kernel-types/src/lib.rs:107`); the feature's only cost is `toml`, which
+# this crate already links two lines above. Same spelling as
+# `corpus-engine/xtask/Cargo.toml:23`, the other consumer of that module.
+kernel-types = { workspace = true, features = ["quality-registry"] }
 
 [lints]
 workspace = true

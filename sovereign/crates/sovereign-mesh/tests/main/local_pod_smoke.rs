@@ -348,10 +348,6 @@ async fn local_pod_smoke_full_lifecycle() {
     // 2. Dispatch a 3-unit echo job (unit_ids start at 1).
     let spec = JobSpec {
         job_id: "local-smoke".into(),
-        image: "ignored".into(),
-        disk_gb: 0,
-        gpu_name: "Local".into(),
-        max_price_per_hour: 0.0,
         label: "smoke".into(),
         uploads: BTreeMap::new(),
         units: vec![
@@ -624,10 +620,6 @@ async fn local_pod_pool_three_containers_drain() {
         }
         let spec = JobSpec {
             job_id: pp.handle.job_id().to_string(),
-            image: "ignored".into(),
-            disk_gb: 0,
-            gpu_name: "Local".into(),
-            max_price_per_hour: 0.0,
             label: format!("pool-p{i}"),
             uploads: BTreeMap::new(),
             units: partitions[i].clone(),

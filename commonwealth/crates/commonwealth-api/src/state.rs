@@ -771,6 +771,28 @@ pub struct AppStateInner {
     /// Offline (the "~9 min flap"). Ephemeral; rebuilt after restart as gossip
     /// re-observes peers.
     pub peer_last_contact: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
+    /// Selection-fairness map: `node_id -> local-clock seconds at which we last
+    /// SPENT A ROUND'S SLOT on this peer, whether or not the dial worked.
+    ///
+    /// A SEPARATE CLOCK FROM `peer_last_contact` BECAUSE THEY ANSWER DIFFERENT
+    /// QUESTIONS, and one field answering both is what starved a live peer.
+    /// `peer_last_contact` is LIVENESS EVIDENCE and must stay success-only —
+    /// the comment on its stamp site in `gossip::run_one_round` records the
+    /// 2026-07-29 false-Offline that cost a distributed 122B its remote shard.
+    /// But `select_round_peers` orders by most-stale-first, so using evidence
+    /// as the ordering key means a peer that never answers never advances and
+    /// therefore holds its slot for ever.
+    ///
+    /// MEASURED on RuggedFox 2026-09-09, `FANOUT = 2`: 74 gossip dials to each
+    /// of the same two unreachable peers in twenty minutes, and ZERO to the
+    /// other five members — one of whose daemons was up throughout.
+    /// `select_round_peers`' own bound ("a peer waits at most
+    /// `ceil(n / FANOUT)` rounds, because every round it goes unpicked it
+    /// moves up the order") holds only if being PICKED advances your key. For
+    /// a peer that does not answer, it did not.
+    ///
+    /// Ephemeral like `peer_last_contact`; rebuilt after restart.
+    pub peer_last_attempt: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
     /// Which peers we have CONFIRMED are running a post-credential-split
     /// build, by having merged a gossip payload from them that carried a
     /// `mesh_secret`.
@@ -1546,6 +1568,36 @@ impl AppState {
             .insert(peer, now_secs);
     }
 
+    /// Record that this round SPENT A SLOT dialing `peer` — called for every
+    /// selected peer before the dial, so it stamps refusals and timeouts too.
+    ///
+    /// Deliberately not folded into [`Self::observe_peer_contact`]: that one is
+    /// liveness evidence and a failed dial is not evidence of life. See
+    /// `peer_last_attempt` for why the two clocks are separate.
+    pub fn note_peer_attempt(&self, peer: NodeId, now_secs: u64) {
+        self.inner
+            .peer_last_attempt
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(peer, now_secs);
+    }
+
+    /// When a round last spent a slot on `peer`, initializing to `now_secs`
+    /// when we have never dialed it.
+    ///
+    /// The lazy init matters for FAIRNESS rather than for grace: a peer we have
+    /// never tried starts level with one we just tried, so it takes its turn on
+    /// staleness like everyone else instead of jumping the queue for ever.
+    pub fn peer_attempt_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
+        *self
+            .inner
+            .peer_last_attempt
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(peer)
+            .or_insert(now_secs)
+    }
+
     /// Local-observation time for `peer`, initializing it to `now_secs` (and
     /// returning that) when we have no record yet. The lazy init gives a
     /// freshly-seen peer a full threshold grace window before it can decay, so
@@ -1719,6 +1771,7 @@ impl AppState {
                 )),
                 clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
                 peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
+                peer_last_attempt: std::sync::RwLock::new(std::collections::HashMap::new()),
                 peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
                 middleware_registry: Arc::new(middleware_registry),
                 #[cfg(feature = "atos")]

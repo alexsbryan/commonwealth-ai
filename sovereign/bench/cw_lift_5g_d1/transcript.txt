@@ -1,0 +1,381 @@
+cw-lift 5g part 2 — bar D1, the run transcript
+==============================================
+
+Pre-registration: quality/campaigns/cw-lift-5g-part2-prereg.md §D1.
+Host: fedora (Strix Halo), 2026-09-09. Build posture: HOST, so every cargo /
+daemon invocation is prefixed `toolbox run -c sovereign-vulkan`.
+
+D1 asks whether the fold-side merge COLLECTOR works on a live daemon, because
+B1-B8 were all measured against in-process fixtures that hand-built their own
+precondition. Nothing before this ran a real corpus through a real daemon.
+
+
+0. WHAT WAS RUNNING, AND WHY THE FIRST DAEMON WAS THROWN AWAY
+─────────────────────────────────────────────────────────────
+
+The daemon already up when this run started was STALE and said so — its own
+exe had been replaced underneath it:
+
+    $ readlink -f /proc/2755490/exe
+    /home/alexbryan/dev/commonwealth-ai/target/debug/sovereign-cli-daemon (deleted)
+    $ ps -o pid,lstart -p 2755490
+    2755490 Wed Sep  9 16:13:49 2026
+    $ stat -c '%y' target/debug/sovereign-cli-daemon
+    2026-09-09 18:09:53 -0700          # ~2h newer than the process
+
+Full workspace rebuild, debug, in the toolbox:
+
+    $ toolbox run -c sovereign-vulkan cargo build --workspace \
+        --features corpus-engine/treesitter
+    Finished `dev` profile [unoptimized] target(s) in 1m 52s      # exit 0
+
+That build SILENTLY DOWNGRADED the dispatcher — `cargo build --workspace` does
+not carry `sovereign-cli/dev-tools`, and the next `tools call` came back with
+"not in the default build" (AGENTS.md names this trap). Re-run with both
+features:
+
+    $ toolbox run -c sovereign-vulkan cargo build --workspace \
+        --features corpus-engine/treesitter,sovereign-cli/dev-tools
+    Finished `dev` profile [unoptimized] target(s) in 16.26s      # exit 0
+
+    $ stat -c '%y %n' target/debug/sovereign-cli target/debug/sovereign-cli-daemon
+    2026-09-09 20:47:56.330556733 -0700 target/debug/sovereign-cli
+    2026-09-09 20:47:52.234542912 -0700 target/debug/sovereign-cli-daemon
+
+Restart, as TWO commands:
+
+    $ ./target/debug/sovereign-cli daemon stop
+      sovereign.service is registered — stopping via the service manager
+    ✓ daemon stopped
+    $ pgrep -af 'sovereign-cli(-daemon)? daemon'     # empty: it stayed down
+
+    $ toolbox run -c sovereign-vulkan env … ./target/debug/sovereign-cli daemon start
+    ✓ daemon ready at http://127.0.0.1:9741 (managed by sovereign.service)
+
+WHAT IS ACTUALLY RUNNING — the check that makes everything after it worth
+anything:
+
+    $ PID=$(pgrep -f 'sovereign-cli-daemon daemon' | head -1)   # 3654947
+    $ readlink -f /proc/$PID/exe
+    /home/alexbryan/dev/commonwealth-ai/target/debug/sovereign-cli-daemon
+    $ stat -c '%y' <that path>
+    2026-09-09 20:47:52.234542912 -0700        # == the build above
+    $ ps -o pid,lstart -p $PID
+    3654947 Wed Sep  9 20:50:43 2026           # started AFTER the build
+
+NAMED AS A DEVIATION: `daemon start` handed off to the service manager, so the
+env on that command line did NOT reach the daemon. The unit's own drop-in
+(`~/.config/systemd/user/sovereign.service.d/zz-peerpath-capture.conf`) already
+carries a RUST_LOG that is a SUPERSET of D1's pre-registered instrument —
+`commonwealth_work=debug` plus `sovereign_mesh=debug`, `commonwealth_api=info`,
+`corpus_engine=info`. Read off the live process, not off the file:
+
+    $ tr '\0' '\n' < /proc/3654947/environ | grep RUST_LOG
+    RUST_LOG=…,corpus_engine=info,commonwealth_api=info,…,commonwealth_work=debug,…
+
+THE TRACE WAS CONFIRMED TO LAND BEFORE ANYTHING WAS SUBMITTED, because a
+detached daemon discards output and an absent trace would otherwise be
+unreadable. Logs go to the journal (`StandardOutput=journal`), not to
+~/.svrnmesh/logs/daemon.log, which this unit never creates:
+
+    $ journalctl --user -u sovereign --since 20:50:00 | grep commonwealth_work…
+    20:51:18 DEBUG executor registered kind=ingest:v1
+    20:51:18  INFO work donor: this node offers work kinds=process:v1, ingest:v1 …
+    20:51:28  INFO auto_ingest: loop started check_interval_secs=30 cooldown_secs=1800
+
+The corpus is part 1's own 60-line, 1.6 MB single-file JSONL (part 1's first
+attempt died at shard 43/76 on `Disk quota exceeded` against a 17.9 GB archive;
+/home on this host is at 99%). ONE field changed — the corpus id, because part
+1's `cw5g-proof` already carries a finished canonical and the collector
+short-circuits on `AlreadyHasCanonical`, which would have made it decline for a
+reason that has nothing to do with whether it works. See recipe-cw5g-d1.toml.
+
+
+1. SUBMIT — two `ingest:v1` units on a live daemon
+──────────────────────────────────────────────────
+++ timeout 120 ./target/debug/sovereign-cli job submit --kind ingest:v1 --units sovereign/bench/cw_lift_5g_d1/units-cw5g-d1.json --ttl 1800
+svrnmesh: bridged 2 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+submitted 2 unit(s) of `ingest:v1` to the `work` ring at seq 61.
+  handoff : 3755df0cf837499f4b78b6fccb1e1643
+  allowed : anyone in the `work` roster who offers `ingest:v1`
+  ttl     : 1800s
+
+  Nothing is placed yet — a donor takes it by appending its own Lease.
+  svrn job status 3755df0cf837499f4b78b6fccb1e1643
+
+2. LEASED, RUN, AND `HandoffPhase::Complete`
+────────────────────────────────────────────
+
+`svrn job status 3755df0cf837499f4b78b6fccb1e1643`, polled every 15s. Three
+readings, all from the same fold every node folds:
+
+  t+15s (20:52:21)  open
+    8313303731db…  leased by 46d0c1fb4e0c… until 03:57 (attempt 1)
+    d741cb6ebb6e…  queued
+
+  t+30s (20:52:37)  draining
+    8313303731db…  passed on attempt 1 — unit 1 of `cw5g-d1` ran in 13s,
+                   0 document(s) skipped; its partition
+                   …/indexes/cw5g-d1-partition-node-44ae76142b0c3c72
+                   now holds 422 chunk(s) in total
+    d741cb6ebb6e…  leased by 46d0c1fb4e0c… until 03:57 (attempt 1)
+
+  t+45s (20:52:52)  complete                          <- HandoffPhase::Complete
+    8313303731db…  passed on attempt 1 — unit 1 … 422 chunk(s) in total
+    d741cb6ebb6e…  passed on attempt 1 — unit 0 … 813 chunk(s) in total
+
+Both units on ATTEMPT 1 — no retry was needed and none is claimed. `813` on the
+second is the partition's RUNNING TOTAL, not that unit's delta; part 1 renamed
+the field `partition_chunks_total` for exactly this reason and the reading is
+the same one it took (422 + 391 = 813).
+
+
+3. THE TICK LOOP PICKS IT UP — the part no test has exercised on a daemon
+─────────────────────────────────────────────────────────────────────────
+
+`auto_ingest`'s loop ticks every 30s. See trace-excerpt.txt for the full
+window; the load-bearing lines:
+
+  20:52:47  [cw5g-d1] Ingestion complete — 813 chunks in 0m13s
+  20:52:47  [cw5g-d1] Unit-scoped run — deferring index build to merge leader
+  ----- the tick at ~20:52:59 -----
+  20:53:00  [cw5g-d1] Pre-build dedupe pass (0/3)...
+  20:53:00  [cw5g-d1] Building vector index (1/3)...
+  20:53:06  [cw5g-d1] Vector index done
+  20:53:06  [cw5g-d1] Building FTS content index (2/3)...  FTS content index done
+  20:53:06  [cw5g-d1] Building FTS title index (3/3)...    FTS title index done
+  20:53:06  INFO auto_ingest: canonical built from the fold's participant set
+            corpus=cw5g-d1 handoff=handoff-3755df0cf837499f chunks=813
+            nodes=0 partial=false
+  20:53:06  INFO gossip: hosted_corpora set changed — re-publishing
+            hosted_corpora={…, "cw5g-d1", …}
+
+IT WAS THE COLLECTOR AND NOT THE DISK PATH, and that is checked rather than
+inferred. The success sentence has exactly ONE site in the workspace:
+
+    $ grep -rn "canonical built from the fold" --include=*.rs .
+    sovereign/crates/sovereign-mesh/src/auto_ingest.rs:282
+
+which is the `RecoveryOutcome::Recovered` arm of `merge_from_fold_coverage`.
+And the disk-derived sibling logged NOTHING for this corpus in the whole window
+— its `continue` held, which is what B7's reading 2 pre-registered:
+
+    $ journalctl --user -u sovereign --since 20:52:00 \
+        | grep -iE "auto_recover|stranded-partition|chunk-merge phase"
+    (empty)
+
+So all four collector steps ran: `fold_coverage_for` returned `Some`, the arm
+ran, `merge_from_fold_coverage` merged, and `finalize_canonical` landed — the
+three index builds between 20:53:00 and 20:53:06 ARE that finalize, in B8's
+pinned order (build_indexes -> mark_indexes_built -> mark_ingestion_complete ->
+fingerprint last).
+
+
+4. THE END-USER READING — three altitudes, weakest first
+────────────────────────────────────────────────────────
+
+(a) ON DISK. The partition is gone (merge_participants cleans up after a
+    successful merge) and the canonical is finalized:
+
+    $ ls -d ~/.svrnmesh/indexes/cw5g-d1*
+    /home/alexbryan/.svrnmesh/indexes/cw5g-d1        # no -partition-* left
+
+    corpus_id                cw5g-d1
+    next_chunk_id            814
+    ingestion_in_progress    False
+    indexes_built            True
+    vector_index_built       True     content_fts_built True   title_fts_built True
+    is_shard                 False
+    total_shards             None     processed_shards []
+    canonical_fingerprint    ebae85630ca70ab19d0ec69cf0b6476a7669d0da8442bd116bbb0d3f7c994540
+
+(b) `installed_indexes()`. The gossip re-publish at 20:53:06.844 IS this
+    reading and not a proxy for it: `build_hosted_corpora` is fed by
+    `engine.installed_indexes()` (`sovereign-mesh/src/capabilities.rs:103`),
+    which is the exact term B2's correction re-measured the bar through.
+
+    $ ./target/debug/sovereign-cli corpus status cw5g-d1
+    corpus     state      chunks
+    cw5g-d1    ready      813
+
+    (`corpus status` reads the meta on disk via `corpus_readiness`
+    — `status.rs:236` — so it is an (a)-altitude reading wearing a
+    user-facing name. The gossip line is the (b)-altitude one.)
+
+(c) THE BAR — a query whose answer can only come from the ingested content,
+    asked through the product's own surface. Both slices, so the merge is
+    shown to have produced ONE corpus and not the first unit's leftovers.
+=== QUERY 1 (second slice, articles 30..60) 2026-09-09T20:55:02-07:00 ===
+$ sovereign chat ask --corpus cw5g-d1 "What was the population of Mount Molar, Queensland at the 2021 census, and which region is it in?"
+corpora: cw5g-d1
+
+─────────────────────────────────────────────────────────────
+conversation: dfc15a56-0c9a-426c-8ae2-75521f85b828
+> What was the population of Mount Molar, Queensland at the 2021 census, and which region is it in?
+─────────────────────────────────────────────────────────────
+
+Population at the 2021 census: 117
+Region it is in: Toowoomba Region
+
+Grounded in the source:
+  "In the 2021 census, Mount Molar had a population of 117 people."
+  "Mount Molar is a rural locality in the Toowoomba Region, Queensland, Australia."
+
+─────────────────────────────────────────────────────────────
+Searched cw5g-d1 · 37.5s · EMBED_ROUTER · Qwen3.5-4B-UD-MTP-Q6_K_XL
+--- sources (5) ---
+[ 1] Mount Molar, Queensland — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Mount_Molar,_Queensland
+     Mount Molar, Queensland
+
+Mount Molar is a rural locality in the Toowoomba Region, Queensland, Australia. In the 2021 census, Mount Molar had a population of 117 people.
+[ 2] Mount Molar, Queensland — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Mount_Molar,_Queensland#Demographics
+     Mount Molar, Queensland
+
+In the 2016 census, Mount Molar had a population of 115 people.
+
+In the 2021 census, Mount Molar had a population of 117 people.
+[ 3] Mount Molar, Queensland — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Mount_Molar,_Queensland#Education
+     Mount Molar, Queensland
+
+There are no schools in Mount Molar. The nearest government primary schools are Back Plains State School in neighbouring Back Plains to the west, Nobby State School in...
+[ 4] Aussie Malcolm — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Aussie_Malcolm#Personal_life_and_death
+     Aussie Malcolm
+
+On 27 February 1965, Malcolm married Astrid Margaret Silver, the daughter of Frederick Brailsford Silver and Helga Adela Elisabeth Silver (née Henkel). Astrid Malcolm was elected to...
+[ 5] Fakhar Zaman (cricketer) — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Fakhar_Zaman_(cricketer)#2020–2022
+     Fakhar Zaman (cricketer)
+
+In June 2020, he was named in a 29-man squad for Pakistan's tour to England during the COVID-19 pandemic. However, on 23 June 2020, Zaman was one of seven players from...
+─────────────────────────────────────────────────────────────
+
+=== QUERY 2 (first slice, articles 0..30) 2026-09-09T20:55:54-07:00 ===
+$ sovereign chat ask --corpus cw5g-d1 "What family is the frog Ameerega pulchripecta in, which country is it endemic to, and what threatens it?"
+corpora: cw5g-d1
+
+─────────────────────────────────────────────────────────────
+conversation: b43a1465-0612-4fa2-836e-5c2132e9f3f2
+> What family is the frog Ameerega pulchripecta in, which country is it endemic to, and what threatens it?
+─────────────────────────────────────────────────────────────
+
+What family is the frog Ameerega pulchripecta in: Dendrobatidae
+Which country is it endemic to: Brazil
+What threatens it: habitat loss
+
+Grounded in the source:
+  "Ameerega pulchripecta, formerly Epipedobates pulchripecta, is a species of frog in the family Dendrobatidae endemic to Brazil."
+  "Ameerega pulchripecta, formerly Epipedobates pulchripecta, is a species of frog in the family Dendrobatidae endemic to Brazil."
+  "It is threatened by habitat loss."
+
+─────────────────────────────────────────────────────────────
+Searched cw5g-d1 · 14.3s · LOOKUP · Qwen3.5-4B-UD-MTP-Q6_K_XL
+--- sources (14) ---
+[ 1] Ameerega pulchripecta — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Ameerega_pulchripecta
+     Ameerega pulchripecta, formerly Epipedobates pulchripecta, is a species of frog in the family Dendrobatidae endemic to Brazil. Its natural habitats are subtropical or tropical moist lowland forests...
+[ 2] Maggie Horton — cw5g-d1  [web]
+     https://en.wikipedia.org/wiki/Maggie_Horton#Abstract
+     Maggie Horton
+
+For her work as Maggie, Rogers won the Daytime Emmy Award for Outstanding Supporting Actress in a Drama Series in 1979.
+
+Maggie's storylines often focus on romance and family troubles....
+[ 3] 2024 European floods — cw5g-d1  [web]
+
+VERDICT: D1 MET. All four steps ran on a live daemon on the binary built
+minutes earlier. The collector was REACHED and did the RIGHT THING.
+
+
+FOUND IN PASSING — NOT FIXED, REPORTED WITH THE EVIDENCE
+─────────────────────────────────────────────────────────
+
+None of these blocked the run and none was worked around; a one-line change to
+unblock would have been named, and there was none to make.
+
+(i) `svrn corpus list` NEVER LISTS AN INSTALLED CORPUS — for any corpus, not
+    just this one. `cmd_corpus_list` (`sovereign-cli-llm/src/corpus_cmd/
+    inventory.rs:18-29`) is six hard-coded `println!`s of built-in recipe ids
+    and reads no index directory at all, while `corpus --help` describes it as
+    "List installed and available corpora". So D1's step-4 wording ("appears in
+    `sovereign corpus list`") is unsatisfiable BY THAT VERB, and the installed
+    reading was taken from `installed_indexes()`-fed gossip and from the query
+    instead. Pre-existing and unrelated to the collector.
+
+(ii) `nodes=0` ON A MERGE THAT USED ONE SHARD — B7's mis-report, first seen
+    LIVE. `RecoveryOutcome::Recovered.shards_covered` is `participants.len()`,
+    the number the merge was ASKED for, not the number it resolved. On a
+    single-node fold every completion carries `provenance.host: Server::Local`,
+    which `fold_coverage_for` deliberately does not put in `nodes` (it is the
+    donor describing ITS machine), so `participants` is empty by construction
+    and the success line reads `chunks=813 nodes=0`. The merge was correct —
+    `merge_participants` always collects the LOCAL shard first
+    (`shard_manager.rs:494-516`), which is why `expected=1` was satisfied. The
+    number in the log is still derived from the request rather than from what
+    happened (ARCH §18.1).
+
+(iii) THE `total_shards` GUARD WAS DARK HERE TOO, AND FOR A NEW REASON. B7
+    reading 3 established the stamp is scoped to `ExtractorConfig::
+    WikipediaJsonl`. This recipe IS `wikipedia_jsonl` and it STILL went
+    unstamped, twice:
+
+      WARN ingest: could not enumerate canonical shards — total_shards left
+      unstamped corpus=cw5g-d1 error=Extraction error: Failed to read ZIP TOC
+      at …/cw5g-proof.jsonl: invalid Zip archive
+
+    The stamp path assumes a ZIP even when the extractor is reading a plain
+    `.jsonl`. Harmless on the fold path — `merge_from_fold_coverage` arms
+    `expected_partitions` from the handoff's own verified-donor count and never
+    consults `total_shards` — and the resulting `total_shards: None` in the meta
+    above is that WARN's consequence, visible. It widens B7 reading 3's finding:
+    the guard is dark not only for non-Wikipedia recipes but for a Wikipedia
+    recipe over a non-ZIP source.
+
+(iv) THE REFUSAL TEXT TEACHES A PAYLOAD THE PARSER REJECTS. Two spellings of
+     one vocabulary in one file (ARCH §10.6), and the wrong one is on the
+     failure path where a stuck submitter reads it:
+
+       ingest_executor.rs:189   "kind": "hf-file"|"jsonl-shard"|"jsonl-range"
+       ingest_executor.rs:463   "kind": {"enum": ["HfFile","JsonlShard","JsonlRange"]}
+       ingest_executor.rs:485   "unit": {"kind": "JsonlRange", "value": {...}}
+
+     `WorkUnit` is `#[serde(tag = "kind", content = "value")]` with no
+     `rename_all` (`commonwealth-core/src/knowledge.rs:316-318`), so PascalCase
+     is what parses. This units file uses the schema's spelling and was accepted
+     first try; a submitter following the ERROR would be refused again, and the
+     refusal is silent at the donor.
+
+(v) TWO CORPORA WITH DIFFERENT IDS SHARE ONE `canonical_fingerprint` — B5's
+    corpus clause, corroborated live rather than in a fixture:
+
+      cw5g-proof   next_chunk_id=814  ebae85630ca70ab1…c994540
+      cw5g-d1      next_chunk_id=814  ebae85630ca70ab1…c994540
+
+    Correct for a content hash — the chunk sets genuinely are identical — and
+    that is the point B5 makes: the fingerprint carries NO information about
+    which handoff produced the corpus or whether it is complete. B5's fixture
+    showed a 2-of-3 and a 2-of-2 agreeing; this shows two separately-merged
+    corpora on different days agreeing. B5 stays open and this is one more
+    reason to close it.
+
+
+WHAT D1 DID NOT CHECK
+─────────────────────
+
+- TWO MACHINES. This is one node. `expected` was 1 and `nodes` was empty, so
+  the HTTP tarball pull inside `merge_participants` — the half B1 could not
+  reach and B2 exercised over a loopback socket — did not run here either. D1
+  proves the collector is REACHED and merges on a real daemon; it does not
+  add a cross-machine reading.
+- The producer. D2/K1 remain untouched: this run typed `job submit` by hand,
+  which is exactly the gap D2 is about.
+- Any tick after the merge. The next tick short-circuits on
+  `AlreadyHasCanonical`; that was not exercised.
+- Which guard kept the 20:52:29 tick (handoff not yet `Complete`, one partition
+  on disk holding 422 chunks) from publishing a HALF canonical down the disk
+  path. It did not — nothing logged — but this run does not establish whether
+  that was `active_ingests`, the partition's own `ingestion_in_progress`, or the
+  cooldown. Worth a bar of its own; it is the hazard B7 exists for.

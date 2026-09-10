@@ -1261,8 +1261,11 @@ doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
 #
 # `cargo xtask instrument-gate`'s FIRST run named all four among 24
 # unregistered keys, which is the only reason this section can be trusted to
-# be complete (ARCH §18.1). Three of them still run nowhere, and `runs_in = []`
-# is how the registry says so instead of leaving them invisible.
+# be complete (ARCH §18.1). Three of them ran nowhere when this section was
+# written; as of 2026-09-08 (e4488491d, 7aba1bf8d) each names a venue that
+# actually fires or an honest `by-hand`. `runs_in = []` stays legal and is
+# still how the registry says "nothing runs this" rather than leaving it
+# invisible — it is simply not true of these four any more.
 
 [[instrument]]
 id = "wizard-verify"
@@ -1939,6 +1942,38 @@ on_fail = "block"
 # A HARD lane goes red on could-not-judge too: "suddenly nothing to judge" on
 # a gated surface is a regression signal, not a pass.
 on_could_not_judge = "block"
+
+[[trigger]]
+id = "ci:test"
+# THE JOB'S OWN CEILING, not a guess: `.github/workflows/ci.yml`'s `test` job
+# declares `timeout-minutes: 75`, and a venue whose budget exceeded the runner
+# that hosts it would report could-not-judge on a lane the runner had already
+# killed. 4500 s is that 75 minutes.
+#
+# It is generous against the ~168 s these four rows RESERVE because the
+# reservations are warm-cache numbers on a dev peer and this job pays a cold
+# workspace compile. Under-budgeting starves the run; the budget is not the
+# schedule.
+budget_secs = 4500
+# TWO, matching the `check` venue's reason inverted: these are compile-bound
+# rather than model-bound, so a second slot is real parallelism rather than two
+# jobs fighting over one GPU. `sovereign-test` and `bench-compile` both take
+# the cargo file lock, which is what stops this being higher.
+concurrency = 2
+# Verbatim from `check`: under a minute of runway is not a lane, it is a lane
+# that will be killed and report a TIMEOUT saying nothing about the code.
+min_runway_secs = 60
+overrun = "kill"
+on_fail = "block"
+# A HARD lane goes red on could-not-judge too — "suddenly nothing to judge" on
+# a gated surface is a regression signal, not a pass. `sovereign-test` declares
+# `container:sovereign-vulkan`, so an unmet precondition is exactly the row
+# this rule is about: a test run that could not start is never a green.
+on_could_not_judge = "block"
+# NO [[trigger.prepare]]. `prepush`'s step substitutes `target/debug/xtask`
+# into a local argv, and this venue is the one `--distribute` submits: a donor
+# has no `target/debug` of ours, and none of these four rows invokes `cargo
+# xtask` anyway.
 
 [[trigger]]
 id = "run-if-stale"

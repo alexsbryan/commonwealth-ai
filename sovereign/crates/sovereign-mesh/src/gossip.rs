@@ -306,6 +306,105 @@ pub async fn initial_sync(
 /// returning peer runs this same loop and dials US, and the receive-side
 /// merge stamps `observe_peer_contact` — already the documented
 /// offline→online path, not a new assumption.
+/// Whether this member is worth dialing at all — asked once, before
+/// [`select_round_peers`] decides which of the candidates get this round's
+/// slots (ARCH §10.6: one decider for "who do we talk to").
+///
+/// Two exclusions, and the second is not an optimisation.
+///
+/// - **Ourselves.** We are authoritative for our own record.
+/// - **A tombstone** (`!is_active()`, i.e. `removed_at` is set). The member
+///   departed and said so. Dialing it cannot converge anything: the tombstone
+///   travels in the snapshot we push to LIVE peers, and a genuine rejoin dials
+///   US — the receive-side merge is the documented offline→online path, which
+///   [`select_round_peers`] already relies on for resurrection.
+///
+/// The harm is concrete, not theoretical. A departed row sharing an endpoint
+/// key with a live one is the LEGITIMATE rejoin shape that
+/// `commonwealth_core::mesh_identity`'s alias rule deliberately permits — a
+/// tombstone is explicitly never refused. But `IrohTransport` keys its bridge
+/// cache on `(pubkey, alpn)`, so both rows resolve to ONE bridge, and their
+/// gossiped dial info differs. Dialing the dead row retargets the LIVE peer's
+/// tunnel to a stale address, and the next round retargets it back.
+///
+/// Measured on RuggedFox 2026-09-09 (note `1ca75415`): 181 retargets in 12
+/// minutes on one endpoint, gossip to the live Mac failing at exactly
+/// `PEER_TIMEOUT`, and that peer decaying to Offline — while iroh reported an
+/// ACTIVE path throughout, which is why relay-home, self-discovery and the
+/// peer-path health term all read green through it.
+///
+/// `announce_presence_change` has filtered `is_active()` on its own push
+/// targets all along; the ordinary round simply never got the same predicate.
+fn is_gossip_candidate(m: &MemberRecord, self_id: NodeId) -> bool {
+    m.node_id != self_id && m.is_active()
+}
+
+/// Collapse live members that share ONE endpoint key down to one row each,
+/// so a round dials a physical machine once however many names it joined
+/// under (ARCH §7.5 — identity is the Ed25519 key; `node_id` is a second name
+/// for the same thing).
+///
+/// # Why this is a WINNER and not a refusal
+///
+/// `Mesh::merge_from`'s `alias_clash` already refuses to ADMIT a second active
+/// record on one key. This is the read-side companion for the roster that
+/// already contains one — and it deliberately makes the opposite choice about
+/// what to do when it finds one, because refusing is what produced the failure
+/// this exists to prevent:
+///
+/// `is_gossip_candidate` excluded a tombstoned row, one physical Mac held two
+/// roster rows, and the row that came back was the tombstoned one. Nobody
+/// dialed it, so no inbound merge could clear it, so nobody dialed it. A
+/// reachable member was unreachable for 11.8 days and the state could not
+/// decay. A resilient roster must never contain a partition that cannot heal,
+/// so when this finds an ambiguity it RESOLVES it rather than dropping every
+/// row involved.
+///
+/// # Why the collapse, and what it costs when it is wrong
+///
+/// `IrohTransport::bridge_for` caches on `(pubkey, alpn)`, so two rows on one
+/// key share ONE bridge and their differing dial info retargets it under every
+/// round — measured at ~14/min on this host both before the tombstone filter
+/// (note `1ca75415`, 181 in 12 min) and again the moment the second row came
+/// back to life (83 in 6 min). Retargeting repoints a live tunnel mid-flight,
+/// so in-flight gossip dies at exactly `PEER_TIMEOUT` and the peer decays
+/// while iroh reports a healthy path throughout.
+///
+/// Picking the wrong row costs nothing structural: both names resolve to the
+/// same endpoint key, so the dial reaches the same machine either way. What
+/// would cost something is picking a DIFFERENT row each round — that is the
+/// retarget storm with extra steps — so the choice has to be stable, not
+/// merely correct.
+///
+/// # The winner, and why it converges
+///
+/// Greatest [`MemberRecord::event_time`], `node_id` as a deterministic
+/// tiebreak. This is self-reinforcing in the right direction: the winner is
+/// dialed, answers, and its record advances on merge, while the loser is not
+/// dialed and its `event_time` stands still — so the gap widens and the choice
+/// stops moving. A row with NO pubkey cannot collide on a key it does not
+/// have and is always kept; `None` is not an identity.
+fn one_row_per_endpoint_key<'a>(members: Vec<&'a MemberRecord>) -> Vec<&'a MemberRecord> {
+    use std::collections::HashMap;
+    let mut best: HashMap<commonwealth_core::ids::NodePubkey, &'a MemberRecord> = HashMap::new();
+    let mut keyless: Vec<&'a MemberRecord> = Vec::new();
+    for m in members {
+        let Some(key) = m.node_pubkey else {
+            keyless.push(m);
+            continue;
+        };
+        match best.get(&key) {
+            Some(held) if (held.event_time(), held.node_id) >= (m.event_time(), m.node_id) => {}
+            _ => {
+                best.insert(key, m);
+            }
+        }
+    }
+    let mut out: Vec<&'a MemberRecord> = best.into_values().collect();
+    out.extend(keyless);
+    out
+}
+
 fn select_round_peers<T>(
     mut online: Vec<(T, u64)>,
     mut offline: Vec<(T, u64)>,
@@ -501,23 +600,49 @@ pub async fn run_one_round(
             // and flips status back to Online. The decay pass only moves
             // Online→Offline, so no online-transition log here.
         }
-        mesh.members
+        let live: Vec<&MemberRecord> = mesh
+            .members
             .values()
-            .filter(|m| m.node_id != self_id)
+            .filter(|m| is_gossip_candidate(m, self_id))
+            .collect();
+        let before = live.len();
+        let deduped = one_row_per_endpoint_key(live);
+        if deduped.len() < before {
+            // SAY IT OUT LOUD (§9.1). This is a roster defect the operator has
+            // to repair — one machine holding two node_ids — and the whole
+            // reason it went unnoticed for 11.8 days is that nothing ever
+            // named it. `mesh_identity` makes the repair an operator act, so
+            // the least this round can do is report the condition.
+            debug!(
+                target: "mesh.peer_path",
+                collapsed = before - deduped.len(),
+                dialing = deduped.len(),
+                "gossip: members share an endpoint key — dialing one row per key"
+            );
+        }
+        deduped
+            .into_iter()
             // The transport sorts candidates IPv4-first on
             // resolution and promotes the last-working address,
             // so the contact carries the raw gossiped list.
             //
-            // Status AND local-contact staleness ride along, because the
-            // round's SELECTION depends on both — see `select_round_peers`.
-            // Read here, inside the same lock that just ran the offline-decay
-            // pass and via the same `peer_contact_or_init` it used, so the
-            // selection sees this round's numbers and not last round's.
+            // Status AND selection staleness ride along, because the round's
+            // SELECTION depends on both — see `select_round_peers`.
+            //
+            // THE STALENESS HERE IS THE ATTEMPT CLOCK, NOT THE CONTACT CLOCK,
+            // and the difference is the whole of the starvation fix. The decay
+            // pass above rightly measures `peer_contact_or_init` — liveness
+            // evidence, stamped only when a peer actually answers. Ordering
+            // SELECTION by that same number means a peer that never answers
+            // never advances and so is picked every round for ever, which is
+            // not a fairness wobble but a permanent exclusion of everyone else:
+            // 74 dials each to two dead peers and zero to the other five,
+            // measured 2026-09-09 with a live peer among the five.
             .map(|m| {
                 (
                     peer_contact(m),
                     m.status != NodeStatus::Offline,
-                    app_state.peer_contact_or_init(m.node_id, now),
+                    app_state.peer_attempt_or_init(m.node_id, now),
                 )
             })
             .collect()
@@ -554,6 +679,13 @@ pub async fn run_one_round(
     let transport = app_state.peer_transport();
     for contact in selection {
         let peer_id = contact.node_id;
+        // SPENDING THE SLOT IS THE EVENT THIS STAMPS, not the outcome. It goes
+        // here, before the dial, so a refusal and a `PEER_TIMEOUT` advance the
+        // selection order exactly as a success does — that is what stops two
+        // unreachable peers from holding both slots for ever. Liveness is
+        // stamped separately and only on a completed round-trip
+        // (`observe_peer_contact`, below).
+        app_state.note_peer_attempt(peer_id, now);
         // The transport resolves and orders candidates: the address
         // that worked last round goes first. The common case is
         // "Tailscale 100.x stable, LAN 192.168.x stale because the
@@ -564,9 +696,27 @@ pub async fn run_one_round(
         // the next success rewrites it.
         let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
         if endpoints.is_empty() {
-            debug!(peer = %peer_id, "gossip: no addresses on record, skipping");
+            // INFO, not debug. At debug this round leaves NO trace, and the
+            // operator reads a log that goes `reach ok … reach ok … [nothing]
+            // … peer marked Offline` — from which "we stopped trying" and "we
+            // tried and failed" are indistinguishable. Both were live
+            // candidates in the 2026-09-09 capture (note `a3f3fbff`) and
+            // neither could be ruled out from the record. One line per peer
+            // per round, the same volume the success path already emits.
+            info!(
+                peer = %peer_id,
+                transport = transport.name(),
+                outcome = "no-addresses",
+                "gossip: round skipped — the transport resolved no dialable address for this peer"
+            );
             continue;
         }
+        // Whether ANY address worked this round. The per-address lines stay at
+        // debug (a multi-homed peer failing one address is routine); this is
+        // the per-peer verdict, and it is emitted on every path out of the
+        // loop below so a round is never silent about a peer it selected.
+        let mut reached = false;
+        let attempts = endpoints.len();
         for ep in &endpoints {
             // Per-address timing so we can diagnose the Online↔Offline
             // flap (see todo `f152dfe7` #4). Each line is one address
@@ -592,6 +742,7 @@ pub async fn run_one_round(
                         reach_ms,
                         "gossip: reach ok"
                     );
+                    reached = true;
                     // Pin this endpoint as the preferred starting
                     // point for the next round's resolution.
                     transport.note_success(peer_id, TrafficClass::Gossip, ep);
@@ -718,6 +869,21 @@ pub async fn run_one_round(
                     continue;
                 }
             }
+        }
+        if !reached {
+            // The other half of the four-verdict rule (ARCH §18.2): a round
+            // that reached nobody must SAY so, at the same level the success
+            // says it. Until 2026-09-09 this case was invisible above debug,
+            // which is why a peer decaying to Offline looked like the gossip
+            // loop had stopped running rather than like every dial failing.
+            warn!(
+                peer = %peer_id,
+                transport = transport.name(),
+                attempts,
+                outcome = "unreachable",
+                "gossip: round FAILED — every address for this peer refused or timed out \
+                 (run with RUST_LOG=debug for the per-address errors)"
+            );
         }
     }
 
@@ -914,6 +1080,146 @@ use commonwealth_api::routes_internal::{
 use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
 
 #[cfg(test)]
+mod gossip_candidate_tests {
+    use super::{is_gossip_candidate, one_row_per_endpoint_key};
+    // The record builder already lives in `ring_roster::tests` and is
+    // `pub(crate)` for exactly this (ARCH §19 — reuse before minting).
+    use crate::ring_roster::tests::member;
+    use commonwealth_core::ids::{NodeId, NodePubkey};
+    use commonwealth_core::mesh::NodeStatus;
+
+    const SELF: u128 = 1;
+
+    fn me() -> NodeId {
+        NodeId::from_u128(SELF)
+    }
+
+    #[test]
+    fn a_live_peer_is_a_candidate() {
+        assert!(is_gossip_candidate(
+            &member(NodeId::from_u128(2), "live", None),
+            me()
+        ));
+    }
+
+    #[test]
+    fn we_never_dial_ourselves() {
+        assert!(!is_gossip_candidate(&member(me(), "me", None), me()));
+    }
+
+    /// A departed member is not dialed. Until 2026-09-09 it was: the round
+    /// filtered only `self`, so every tombstone in the roster drew a dial
+    /// attempt forever.
+    #[test]
+    fn a_tombstoned_member_is_not_dialed() {
+        let mut gone = member(NodeId::from_u128(2), "departed", None);
+        gone.removed_at = Some(200);
+        assert!(!is_gossip_candidate(&gone, me()));
+    }
+
+    /// A tombstone can still read Online — the decay pass demotes on
+    /// staleness, not on departure — so a filter keyed on `status` would have
+    /// gone on dialing it. The predicate reads `removed_at`, not liveness.
+    #[test]
+    fn a_tombstone_is_excluded_even_while_it_still_reads_online() {
+        let mut gone = member(NodeId::from_u128(2), "departed-but-fresh", None);
+        gone.removed_at = Some(200);
+        gone.status = NodeStatus::Online;
+        assert!(!is_gossip_candidate(&gone, me()));
+    }
+
+    /// THE REGRESSION, as the live roster actually held it (note `1ca75415`).
+    ///
+    /// One machine, two rows, one endpoint key: `BeefyMac` retired,
+    /// `Alexs-MacBook-Pro-2` live. The alias rule deliberately PERMITS this —
+    /// a tombstone sharing a key with a rejoined node is a legitimate rejoin
+    /// and is never refused — so the roster is correct and the round must
+    /// still dial only the live row. Dial both and they resolve to one
+    /// `(pubkey, alpn)` bridge and retarget it against each other.
+    #[test]
+    fn a_retired_twin_sharing_an_endpoint_key_is_dropped_and_the_live_row_kept() {
+        let key = NodePubkey([0x86; 32]);
+        let mut retired = member(NodeId::from_u128(2), "BeefyMac", Some(key));
+        retired.removed_at = Some(200);
+        let live = member(NodeId::from_u128(3), "Alexs-MacBook-Pro-2", Some(key));
+
+        assert!(
+            !is_gossip_candidate(&retired, me()),
+            "the retired twin must not be dialed — it shares the live row's bridge"
+        );
+        assert!(
+            is_gossip_candidate(&live, me()),
+            "the live row must still be dialed; dropping both would strand the peer"
+        );
+    }
+
+    // ── one row per endpoint key ──────────────────────────────────────────
+
+    /// THE FAILING INPUT, and it is the state this host was left in an hour
+    /// ago. The test above holds only while ONE of the twins is a tombstone.
+    /// Resurrect the retired row — which is correct, it is a live machine —
+    /// and both are candidates again, both dial, and they share one
+    /// `(pubkey, alpn)` bridge: measured 83 retargets in six minutes, against
+    /// 181 in twelve before the tombstone filter (note `1ca75415`).
+    #[test]
+    fn two_live_rows_on_one_endpoint_key_are_dialed_once() {
+        let key = NodePubkey([0x86; 32]);
+        let mut older = member(NodeId::from_u128(2), "Alexs-MacBook-Pro-2", Some(key));
+        older.last_seen = 100;
+        let mut newer = member(NodeId::from_u128(3), "BeefyMac", Some(key));
+        newer.last_seen = 200;
+
+        let picked = one_row_per_endpoint_key(vec![&older, &newer]);
+        assert_eq!(picked.len(), 1, "one machine, one dial");
+        assert_eq!(
+            picked[0].node_id, newer.node_id,
+            "the freshest row wins, so the choice converges as it keeps answering"
+        );
+    }
+
+    /// THE CONTROL THAT MATTERS: this collapses an AMBIGUITY, never a mesh.
+    /// Without it the assertion above is satisfiable by a function that
+    /// returns one row full stop — which would quietly reduce every round to a
+    /// single peer while still looking like a working mesh.
+    #[test]
+    fn distinct_endpoint_keys_are_all_kept() {
+        let a = member(NodeId::from_u128(2), "a", Some(NodePubkey([1; 32])));
+        let b = member(NodeId::from_u128(3), "b", Some(NodePubkey([2; 32])));
+        let c = member(NodeId::from_u128(4), "c", Some(NodePubkey([3; 32])));
+        assert_eq!(one_row_per_endpoint_key(vec![&a, &b, &c]).len(), 3);
+    }
+
+    /// `None` is not an identity. Pre-identity builds gossip no pubkey, and
+    /// keying on the `Option` would collapse every one of them into a single
+    /// row — a mesh of older nodes silently reduced to one reachable peer,
+    /// which is the same un-healable partition this change exists to remove.
+    #[test]
+    fn members_without_a_pubkey_are_never_collapsed_together() {
+        let a = member(NodeId::from_u128(2), "old-a", None);
+        let b = member(NodeId::from_u128(3), "old-b", None);
+        assert_eq!(one_row_per_endpoint_key(vec![&a, &b]).len(), 2);
+    }
+
+    /// The choice must not move between rounds: alternating winners IS the
+    /// retarget storm, paced by the gossip interval instead of the bridge
+    /// cache. Both input orders are fed in because `HashMap` iteration order
+    /// must not be able to decide who gets dialed.
+    #[test]
+    fn the_winner_is_stable_across_repeated_selection() {
+        let key = NodePubkey([0x86; 32]);
+        let mut x = member(NodeId::from_u128(2), "x", Some(key));
+        let mut y = member(NodeId::from_u128(3), "y", Some(key));
+        x.last_seen = 200;
+        y.last_seen = 200; // a tie — the node_id tiebreak must settle it
+        let first = one_row_per_endpoint_key(vec![&x, &y])[0].node_id;
+        for _ in 0..20 {
+            assert_eq!(one_row_per_endpoint_key(vec![&x, &y])[0].node_id, first);
+            assert_eq!(one_row_per_endpoint_key(vec![&y, &x])[0].node_id, first);
+        }
+    }
+}
+
+#[cfg(test)]
 mod select_round_peers_tests {
     use super::{
         max_online_peers_before_false_offline, select_round_peers, DEFAULT_GOSSIP_INTERVAL,
@@ -1058,6 +1364,84 @@ mod select_round_peers_tests {
         assert_eq!(select_round_peers(vec![("a", 0)], Vec::new(), 2), vec!["a"]);
         assert!(select_round_peers(Vec::<(&str, u64)>::new(), Vec::new(), 2).is_empty());
         assert!(select_round_peers(vec![("a", 0)], vec![("b", 0)], 0).is_empty());
+    }
+
+    /// THE FAILING INPUT. Three unreachable peers, `FANOUT = 2`, and a
+    /// selection key that only advances when a dial SUCCEEDS. Measured on
+    /// RuggedFox 2026-09-09: 74 dials to each of two peers in twenty minutes
+    /// and zero to the other five, one of whose daemons was up throughout.
+    ///
+    /// The two rounds are driven through `select_round_peers` with the stamping
+    /// rule the round applies, so this fails against the pre-fix code path
+    /// (stamp only on success) and passes against the fixed one (stamp on every
+    /// dial). It is the rotation `select_round_peers`' own doc promises.
+    #[test]
+    fn a_failed_dial_gives_up_its_slot_to_the_next_peer() {
+        use std::collections::HashMap;
+        // The attempt clock: peer -> when a round last spent a slot on it.
+        let mut attempt: HashMap<&str, u64> = HashMap::new();
+        attempt.insert("dead-a", 100);
+        attempt.insert("dead-b", 200);
+        attempt.insert("live-c", 300);
+
+        let round = |attempt: &mut HashMap<&str, u64>, now: u64| -> Vec<&'static str> {
+            let mut offline: Vec<(&'static str, u64)> =
+                vec![("dead-a", 0), ("dead-b", 0), ("live-c", 0)]
+                    .into_iter()
+                    .map(|(p, _)| (p, attempt[p]))
+                    .collect();
+            offline.sort_by_key(|(p, _)| *p);
+            let picked = select_round_peers(Vec::new(), offline, 2);
+            // Every peer given a slot is stamped, whether or not it answered.
+            for p in &picked {
+                attempt.insert(p, now);
+            }
+            picked
+        };
+
+        let first = round(&mut attempt, 1_000);
+        assert_eq!(first, vec!["dead-a", "dead-b"], "most stale first");
+
+        let second = round(&mut attempt, 1_010);
+        assert!(
+            second.contains(&"live-c"),
+            "the peer nobody has dialed must get a slot in round two, got {second:?} \
+             — two unreachable peers holding both slots for ever is the starvation"
+        );
+    }
+
+    /// The control: stamping ONLY on success is the pre-fix rule, and under it
+    /// the third peer is never reached. Without this, the assertion above is
+    /// satisfiable by any selection that happens to rotate, and the reader
+    /// cannot see what was actually wrong.
+    #[test]
+    fn stamping_only_on_success_starves_every_other_peer() {
+        use std::collections::HashMap;
+        let mut clock: HashMap<&str, u64> = HashMap::new();
+        clock.insert("dead-a", 100);
+        clock.insert("dead-b", 200);
+        clock.insert("live-c", 300);
+
+        let mut ever_picked_c = false;
+        for _ in 0..50 {
+            let mut offline: Vec<(&'static str, u64)> =
+                vec![("dead-a", 0), ("dead-b", 0), ("live-c", 0)]
+                    .into_iter()
+                    .map(|(p, _)| (p, clock[p]))
+                    .collect();
+            offline.sort_by_key(|(p, _)| *p);
+            let picked = select_round_peers(Vec::new(), offline, 2);
+            // The pre-fix rule: dead-a and dead-b never answer, so nothing is
+            // stamped and their keys never move.
+            if picked.contains(&"live-c") {
+                ever_picked_c = true;
+            }
+        }
+        assert!(
+            !ever_picked_c,
+            "this test documents the BUG: under success-only stamping the third \
+             peer is starved for ever, which is why the attempt clock exists"
+        );
     }
 
     /// The ceiling is a real number the operator could act on, not a

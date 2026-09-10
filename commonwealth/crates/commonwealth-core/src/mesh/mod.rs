@@ -265,10 +265,38 @@ fn is_zero_u64(v: &u64) -> bool {
 }
 
 impl MemberRecord {
-    /// Whether this member is active (not tombstoned). Read paths
-    /// (online counts, gossip targets, knowledge fan-out roster) filter on
-    /// this so a departed node is invisible to scheduling while its tombstone
-    /// still circulates for convergence.
+    /// Whether this member is active (not tombstoned). Read paths (online
+    /// counts, gossip targets, knowledge fan-out roster) filter on this so a
+    /// departed node is invisible to scheduling while its tombstone still
+    /// circulates for convergence.
+    ///
+    /// # This was widened on 2026-09-09 and the widening was REVERTED the same
+    /// day. Do not re-derive it.
+    ///
+    /// The widening read `last_seen > removed_at` as "the member came back",
+    /// citing [`Self::event_time`]'s own documented rule. The motivating bug is
+    /// real: this host held a `BeefyMac` record with `removed_at = 1787962251`
+    /// and `last_seen = 1788985799`, 11.8 days later, and because
+    /// `gossip::is_gossip_candidate` is this predicate, nobody dialed it — so
+    /// no inbound merge could clear it, so nobody dialed it. A reachable peer
+    /// was unreachable and the state could not decay.
+    ///
+    /// WHY IT CANNOT BE FIXED HERE: `removed_at` is stamped by BOTH a graceful
+    /// `leave` and `membership::revoke_member`, and the two must answer this
+    /// question differently. A node that left may overturn its own tombstone by
+    /// coming back; a node that was REVOKED may not. Revocation targets a
+    /// member that is live, so `removed_at` is stamped at ~`last_seen`, and
+    /// that member's very next heartbeat advances `last_seen` past it — the
+    /// subject re-admitting itself with a field the subject supplies, which is
+    /// ARCH §18.1's exact shape. Caught by
+    /// `commonwealth-discovery`'s `revoke_member_tombstones_instead_of_deleting`
+    /// on the full-workspace run, after the scoped runs were green.
+    ///
+    /// THE FIX THIS NEEDS is a `RemovalKind` (`Left` | `Revoked`) on the record
+    /// — additive and wire-compatible via serde default — so resurrection is
+    /// permitted for the first and refused for the second. Until that lands,
+    /// this stays narrow and the BeefyMac case is repaired the way
+    /// `mesh_identity` already says it must be: as an operator act.
     pub fn is_active(&self) -> bool {
         self.removed_at.is_none()
     }

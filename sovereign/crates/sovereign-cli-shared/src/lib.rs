@@ -59,6 +59,8 @@ pub mod observation;
 #[cfg(feature = "project-model")]
 pub mod project_toml;
 pub mod prompts;
+#[cfg(feature = "rail-client")]
+pub mod rail;
 pub mod repo;
 #[cfg(feature = "scip")]
 pub mod scip;

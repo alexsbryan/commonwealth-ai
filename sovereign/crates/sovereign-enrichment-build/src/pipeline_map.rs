@@ -181,7 +181,10 @@ mod tests {
             panic!("no map on disk means written");
         };
         assert_eq!(w.pipeline, "philosophy_atlas");
-        assert_eq!(w.ontology_version, AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION);
+        assert_eq!(
+            w.ontology_version,
+            AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION
+        );
         let file = read_atlas_ontology(&atlas_dir).unwrap();
         let expected = PipelineRegistry::builtin()
             .get("philosophy_atlas")

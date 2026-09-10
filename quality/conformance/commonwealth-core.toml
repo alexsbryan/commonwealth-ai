@@ -49,5 +49,5 @@ asserts = 1
 requirement = "FE-6"
 test = "commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it"
 file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
-line = 555
+line = 586
 asserts = 3

@@ -112,6 +112,14 @@ pub use iroh::endpoint::TransportAddrUsage;
 pub use iroh::endpoint::RelayStatus;
 pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey, TransportAddr, Watcher};
 
+// Per-peer path classification. Lives in its own module — `iroh.rs` is past
+// ARCH §3.2's ceiling and this was new surface, so it went beside the file
+// rather than into it. Re-exported here so every call site keeps spelling it
+// `commonwealth_transport::iroh::peer_path_snapshot`, and so the "iroh symbol
+// use is confined" note above stays checkable: `iroh_path.rs` is the second
+// (and only other) file that names iroh types.
+pub use crate::iroh_path::{peer_path_snapshot, PeerPath, PeerPathSnapshot};
+
 /// The rustls crypto provider for `EndpointBuilder::crypto_provider`.
 /// iroh's `Builder::empty()` deliberately sets no provider (only
 /// presets choose one), and `bind()` errors without it — pass this.

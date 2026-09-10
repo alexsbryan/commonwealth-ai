@@ -7,7 +7,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{ChunkRange, Corpus, CorpusEngine, IndexInfo, ShardInfo};
+use corpus_engine::{ChunkRange, Corpus, CorpusEngine, CorpusIndex, IndexInfo, ShardInfo};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -32,6 +32,28 @@ pub struct ShardManager {
     work_queue: Option<Arc<crate::work_queue::WorkQueueManager>>,
 }
 
+/// Everything one merge needs, as data rather than seven positional
+/// arguments.
+///
+/// The input to [`ShardManager::merge_participants`]. Deciding WHO
+/// participated is the caller's job and differs completely between the
+/// two callers (`coordinate_merge`'s handoff/partition state machine
+/// versus the fold-side collector in sovereign-mesh); the merge itself
+/// is one implementation, and this struct is the seam between them.
+pub struct MergePlan<'a> {
+    pub handoff_id: HandoffId,
+    pub corpus_id: &'a str,
+    pub local_node_id: NodeId,
+    /// Every node that produced a partition for this corpus, LOCAL INCLUDED.
+    pub participants: &'a [NodeId],
+    pub peer_shard_base_urls: &'a [(NodeId, String)],
+    /// Ephemeral grant-scoped ingest: wipe-after-pull.
+    pub ephemeral: bool,
+    /// How many partitions this merge must cover to be honest. `None` keeps
+    /// the legacy behaviour — merge whatever is present.
+    pub expected_partitions: Option<usize>,
+}
+
 impl ShardManager {
     pub fn new(engine: Arc<CorpusEngine>, shard_dir: PathBuf, mesh_store: Arc<MeshStore>) -> Self {
         Self {
@@ -44,7 +66,8 @@ impl ShardManager {
     }
 
     /// Attach a `ContributionEmitter` so successful peer-shard
-    /// pulls during `coordinate_merge` write `ShardTransferred`
+    /// pulls during `merge_participants` (the merge half of
+    /// `coordinate_merge`) write `ShardTransferred`
     /// events into the dimensional ledger. The emit is on behalf
     /// of the peer (`from_node = peer.node_id`), so the aggregator
     /// credits the actual sender's `bytes_served` rather than the
@@ -180,6 +203,12 @@ impl ShardManager {
     ///   Participating peers come from `HandoffQueue.participating_peers`
     ///   rather than the empty `partitions` list. Merge leader is set
     ///   to the coordinator at handoff creation.
+    ///
+    /// Both modes end in [`ShardManager::merge_participants`], so `Ok(Some(_))`
+    /// here means a canonical that `installed_indexes()` and `usable_indexes()`
+    /// can see — not merely one whose chunks are on disk. That was NOT true
+    /// before cw-lift 5g B8; see `merge_participants` for what changed and why
+    /// the finalize lives there rather than at each call site.
     pub async fn coordinate_merge(
         &self,
         handoff_id: HandoffId,
@@ -351,13 +380,114 @@ impl ShardManager {
             }
         }
 
+        // Front half done: we know who participated and that we lead.
+        // Everything past this point is the merge itself, and it is
+        // shared verbatim with the fold-side collector through
+        // `merge_participants` (ARCH §10.6 — one merge implementation,
+        // not a copy per caller).
+        //
+        // The Complete filter that used to live inside the pull loop
+        // happens HERE, because deciding who counts is the front half's
+        // job; `merge_participants` takes that decision as data.
+        let mut participants: Vec<NodeId> = Vec::new();
+        for partition in &handoff.partitions {
+            if matches!(partition.status, PartitionStatus::Complete { .. }) {
+                participants.push(partition.node_id);
+            } else {
+                tracing::warn!(
+                    node = %partition.node_id,
+                    "coordinate_merge: skipping incomplete/failed partition"
+                );
+            }
+        }
+        if !participants.contains(&local_node_id) {
+            // The local shard is resolved from disk whether or not this
+            // node appears in the partition list — it may have ingested
+            // into the corpus path directly — so name it here and keep
+            // `participants` an honest census of who contributed.
+            participants.push(local_node_id);
+        }
+
+        self.merge_participants(MergePlan {
+            handoff_id,
+            corpus_id: &handoff.corpus_id,
+            local_node_id,
+            participants: &participants,
+            peer_shard_base_urls,
+            ephemeral: handoff.ephemeral,
+            // Legacy behaviour: merge whatever is present. Setting a
+            // coverage bar is the fold-side collector's call, not this
+            // path's — nothing upstream of `coordinate_merge` knows the
+            // expected partition count today.
+            expected_partitions: None,
+        })
+        .await
+    }
+
+    /// The merge half of a collaborative ingest: resolve every
+    /// participant's shard directory (this node's from disk, each
+    /// peer's by HTTP pull), merge them into the canonical index, clean
+    /// the shard dirs up, and FINISH the canonical so someone can reach it.
+    ///
+    /// Split out of [`ShardManager::coordinate_merge`] so that path and
+    /// sovereign-mesh's fold-side collector — which resolve
+    /// participation in completely different ways — share ONE merge
+    /// implementation (ARCH §10.6). Everything the merge needs arrives
+    /// as a [`MergePlan`]; nothing here reads handoff or queue state.
+    ///
+    /// # `Ok(Some(info))` means REACHABLE, and that is new
+    ///
+    /// The finalize — [`corpus_engine::finalize_canonical`] — is the last
+    /// step of this function rather than something each caller does after it
+    /// (cw-lift 5g B8). Until then it was neither: `merge_partitions` writes
+    /// the chunks and stops, so both callers produced a canonical carrying
+    /// `ingestion_in_progress: true, indexes_built: false`, which
+    /// `CorpusEngine::installed_indexes` skips, `usable_indexes` therefore
+    /// never sees, and `hosted_corpora` gossip (built from the former in
+    /// `sovereign-mesh::capabilities`) advertises to no peer. `2dc1bf160`
+    /// gave the fold-side caller a finalize of its own; `coordinate_merge`
+    /// and its two call sites in `commonwealth-api`'s `corpus_queue` got
+    /// nothing and had the identical gap.
+    ///
+    /// "A merge produces a corpus someone can reach" is a POST-CONDITION, and
+    /// two callers each REMEMBERING to satisfy it is the shape that had
+    /// already failed once — so it lives with the function that promises it
+    /// (ARCH #10: structural, not remembered). It also makes the sentence
+    /// below true, which it was not before: this function either produces an
+    /// index or fails.
+    ///
+    /// The `Option` in the return type is inherited from
+    /// `coordinate_merge`, whose `None` means "not the merge leader".
+    /// This function itself never returns `Ok(None)`.
+    ///
+    /// # Two refusals, each with its own name
+    ///
+    /// * [`corpus_engine::Error::IncompleteCoverage`] — `plan.expected_partitions`
+    ///   named a bar the resolved shards miss, so nothing was merged.
+    /// * [`corpus_engine::Error::MergedNotFinalized`] — the chunks merged and
+    ///   the finalize did not. Not folded into a generic error: it carries
+    ///   the chunk count and the canonical path because that directory holds
+    ///   the only surviving copy of the merged rows (ARCH §18.3).
+    pub async fn merge_participants(
+        &self,
+        plan: MergePlan<'_>,
+    ) -> corpus_engine::Result<Option<IndexInfo>> {
+        let MergePlan {
+            handoff_id,
+            corpus_id,
+            local_node_id,
+            participants,
+            peer_shard_base_urls,
+            ephemeral,
+            expected_partitions,
+        } = plan;
+
         // Collect shard directories.
         let mut shard_dirs: Vec<PathBuf> = Vec::new();
-
-        // Ephemeral grant-scoped ingest: once we pull a peer's shard we tell
-        // that peer to wipe its own working partition dir (wipe-after-pull).
-        // Captured here so the borrow doesn't tangle with the loop below.
-        let is_ephemeral = handoff.ephemeral;
+        // Participants whose shard never landed. Named in the coverage
+        // refusal below so the caller learns WHICH coverage is missing
+        // and not merely how much.
+        let mut unresolved: Vec<NodeId> = Vec::new();
 
         // Local shard. Machine A may have ingested into the original corpus
         // path instead of a partition path (when it had existing partial data).
@@ -365,52 +495,53 @@ impl ShardManager {
             let partition_path = self
                 .engine
                 .index_dir()
-                .join(format!("{}-partition-{}", handoff.corpus_id, local_node_id));
-            let original_path = self.engine.index_dir().join(&handoff.corpus_id);
+                .join(format!("{}-partition-{}", corpus_id, local_node_id));
+            let original_path = self.engine.index_dir().join(corpus_id);
             if partition_path.exists() {
                 shard_dirs.push(partition_path);
             } else if Corpus::meta_in(&original_path).exists() {
                 tracing::info!(
-                    corpus = %handoff.corpus_id,
-                    "coordinate_merge: using original index path as local shard"
+                    corpus = %corpus_id,
+                    "merge_participants: using original index path as local shard"
                 );
                 shard_dirs.push(original_path);
+            } else {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    node = %local_node_id,
+                    "merge_participants: no local shard dir on disk"
+                );
+                unresolved.push(local_node_id);
             }
         }
 
         // Remote shards.
-        for partition in &handoff.partitions {
-            if partition.node_id == local_node_id {
-                continue;
-            }
-            if !matches!(partition.status, PartitionStatus::Complete { .. }) {
-                tracing::warn!(
-                    node = %partition.node_id,
-                    "coordinate_merge: skipping incomplete/failed partition"
-                );
+        for &node_id in participants {
+            if node_id == local_node_id {
                 continue;
             }
 
             let peer_url = peer_shard_base_urls
                 .iter()
-                .find(|(nid, _)| *nid == partition.node_id)
+                .find(|(nid, _)| *nid == node_id)
                 .map(|(_, u)| u.clone());
 
             let Some(base_url) = peer_url else {
                 tracing::warn!(
-                    node = %partition.node_id,
-                    "coordinate_merge: no address for peer, skipping"
+                    node = %node_id,
+                    "merge_participants: no address for peer, skipping"
                 );
+                unresolved.push(node_id);
                 continue;
             };
 
-            let dest_dir = self.engine.index_dir().join(format!(
-                "{}-partition-{}",
-                handoff.corpus_id, partition.node_id
-            ));
+            let dest_dir = self
+                .engine
+                .index_dir()
+                .join(format!("{}-partition-{}", corpus_id, node_id));
 
             match self
-                .fetch_remote_shard(&handoff.corpus_id, &base_url, &dest_dir, local_node_id)
+                .fetch_remote_shard(corpus_id, &base_url, &dest_dir, local_node_id)
                 .await
             {
                 Ok(bytes_received) => {
@@ -424,9 +555,9 @@ impl ShardManager {
                     // the pull-emission special case.
                     if let Some(em) = &self.emitter {
                         em.record(LedgerEventKind::ShardTransferred {
-                            from_node: partition.node_id,
+                            from_node: node_id,
                             to_node: local_node_id,
-                            corpus_id: handoff.corpus_id.clone(),
+                            corpus_id: corpus_id.to_string(),
                             bytes: bytes_received,
                         });
                     }
@@ -437,9 +568,9 @@ impl ShardManager {
                     // and-forget — the peer also self-evicts when its pull
                     // loop exits (auto_ingest), so a missed call here is
                     // covered by that belt-and-suspenders path.
-                    if is_ephemeral {
+                    if ephemeral {
                         let evict_url = format!("{base_url}/internal/corpus/partition_evict");
-                        let corpus = handoff.corpus_id.clone();
+                        let corpus = corpus_id.to_string();
                         let hid = handoff_id;
                         tokio::spawn(async move {
                             let _ = reqwest::Client::new()
@@ -453,11 +584,47 @@ impl ShardManager {
                         });
                     }
                 }
-                Err(e) => tracing::warn!(
-                    node = %partition.node_id,
-                    error = %e,
-                    "coordinate_merge: failed to fetch remote shard"
-                ),
+                Err(e) => {
+                    tracing::warn!(
+                        node = %node_id,
+                        error = %e,
+                        "merge_participants: failed to fetch remote shard"
+                    );
+                    unresolved.push(node_id);
+                }
+            }
+        }
+
+        // Coverage guard. When the caller states how many partitions
+        // this merge has to cover, a subset is a refusal and not a
+        // result: merging 2 of 3 produces a canonical that LOOKS
+        // complete, gets re-advertised on gossip, and leaves every peer
+        // holding a different "complete" canonical that it will then
+        // defend (the 17/38 wikipedia case recorded in
+        // `sovereign-mesh/src/auto_ingest.rs`).
+        //
+        // Placed BEFORE the empty check so that, whenever a bar is set,
+        // exactly ONE error names the decision; `NoShardsFound` stays
+        // the answer only on the unbarred (`None`) legacy path.
+        //
+        // Returning here also leaves every resolved dir in place —
+        // including this node's own partition, which the cleanup loop
+        // at the end would otherwise delete.
+        if let Some(expected) = expected_partitions {
+            if shard_dirs.len() < expected {
+                tracing::warn!(
+                    handoff = %handoff_id,
+                    corpus = %corpus_id,
+                    covered = shard_dirs.len(),
+                    expected,
+                    missing = ?unresolved,
+                    "merge_participants: refusing to merge — coverage is incomplete"
+                );
+                return Err(corpus_engine::Error::IncompleteCoverage {
+                    corpus: corpus_id.to_string(),
+                    covered: shard_dirs.len(),
+                    expected,
+                });
             }
         }
 
@@ -467,12 +634,12 @@ impl ShardManager {
             )));
         }
 
-        let output_dir = self.engine.index_dir().join(&handoff.corpus_id);
+        let output_dir = self.engine.index_dir().join(corpus_id);
         tracing::info!(
             handoff = %handoff_id,
             shards = shard_dirs.len(),
             output = %output_dir.display(),
-            "coordinate_merge: merging partitions"
+            "merge_participants: merging partitions"
         );
 
         let info = self
@@ -484,13 +651,69 @@ impl ShardManager {
             std::fs::remove_dir_all(shard_dir).ok();
         }
 
+        // A merged chunk set is not yet a corpus anyone can reach.
+        // `merge_partitions` writes the rows and stops, leaving
+        // `ingestion_in_progress: true, indexes_built: false` — the two bits
+        // every surface that shows a corpus to anyone gates on. Finalizing
+        // here rather than at each caller is the whole of B8: the post-
+        // condition belongs to the function that promises it, not to two
+        // callers each remembering.
+        //
+        // AFTER the cleanup loop, not before, because that ordering is
+        // already documented as a state: when this fails, every source
+        // partition is gone and the canonical below holds the only copy of
+        // the chunks. Moving the finalize earlier would quietly change which
+        // directories survive a finalize failure, and that is a different
+        // decision from this one.
+        let canonical = match CorpusIndex::open(&output_dir).await {
+            Ok(index) => index,
+            Err(e) => return Err(self.not_finalized(corpus_id, &output_dir, &info, e)),
+        };
+        if let Err(e) = corpus_engine::finalize_canonical(&canonical, corpus_id, None).await {
+            return Err(self.not_finalized(corpus_id, &output_dir, &info, e));
+        }
+
         tracing::info!(
             handoff = %handoff_id,
             chunks = info.chunk_count,
-            "coordinate_merge: complete"
+            "merge_participants: complete"
         );
 
         Ok(Some(info))
+    }
+
+    /// Report "the chunks merged and the finalize did not" as its own fact.
+    ///
+    /// One spelling for both ways the finalize can be missed — the canonical
+    /// would not open, or [`corpus_engine::finalize_canonical`] itself failed
+    /// — because the STATE they leave behind is identical and a caller that
+    /// had to tell them apart would be deciding the same thing twice
+    /// (ARCH §10.6). The `error!` lives here, at the site that discovers it,
+    /// so no caller has to remember to log it.
+    fn not_finalized(
+        &self,
+        corpus_id: &str,
+        canonical_path: &Path,
+        info: &IndexInfo,
+        cause: corpus_engine::Error,
+    ) -> corpus_engine::Error {
+        tracing::error!(
+            corpus = %corpus_id,
+            chunks = info.chunk_count,
+            canonical = %canonical_path.display(),
+            error = %cause,
+            "merge_participants: the merge landed but the canonical was NOT \
+             finalized — its chunks are on disk and no surface can see them \
+             (installed_indexes, usable_indexes and hosted_corpora all gate on \
+             the bits finalize writes). The source partitions were already \
+             cleaned up, so this canonical holds the only copy."
+        );
+        corpus_engine::Error::MergedNotFinalized {
+            corpus: corpus_id.to_string(),
+            canonical_path: canonical_path.display().to_string(),
+            chunks: info.chunk_count,
+            detail: cause.to_string(),
+        }
     }
 
     /// Fetch a remote corpus partition shard via HTTP transfer.
@@ -707,7 +930,7 @@ pub struct TransferReceipt {
 /// pull-loop self-evict may both fire).
 ///
 /// The dir name uses the node id's `Display` form, matching how partitions are
-/// created (`corpus_queue::ingest_partition` and `coordinate_merge` above).
+/// created (`corpus_queue::ingest_partition` and `merge_participants` above).
 /// This is the mechanism behind the "no peer retention" guarantee for
 /// ephemeral grant-scoped ingests.
 pub fn evict_partition_dir(index_dir: &Path, corpus_id: &str, node_id: NodeId) -> bool {

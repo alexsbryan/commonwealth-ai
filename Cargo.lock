@@ -2021,6 +2021,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2101,6 +2102,23 @@ dependencies = [
  "rustls",
  "serde_json",
  "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "commonwealth-work"
+version = "0.6.0"
+dependencies = [
+ "commonwealth-core",
+ "commonwealth-rail",
+ "commonwealth-rail-core",
+ "kernel-types",
+ "oicp-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
@@ -8960,6 +8978,7 @@ dependencies = [
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [
+ "kernel-types",
  "serde",
  "serde_json",
  "toml 0.8.2",
@@ -12127,6 +12146,8 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "commonwealth-rail",
+ "commonwealth-work",
  "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
@@ -12138,6 +12159,7 @@ dependencies = [
  "kernel-types",
  "libc",
  "oicp-client",
+ "oicp-types",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
@@ -12268,6 +12290,7 @@ dependencies = [
  "commonwealth-rail",
  "commonwealth-state",
  "commonwealth-transport",
+ "commonwealth-work",
  "corpus-engine",
  "corpus-engine-atos",
  "corpus-engine-notes",
@@ -12323,6 +12346,7 @@ name = "sovereign-cli-shared"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "commonwealth-rail",
  "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",
@@ -12617,6 +12641,7 @@ dependencies = [
  "commonwealth-state",
  "commonwealth-test-harness",
  "commonwealth-transport",
+ "commonwealth-work",
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
@@ -12629,6 +12654,7 @@ dependencies = [
  "ignore",
  "kernel-types",
  "notify",
+ "oicp-types",
  "rand 0.9.4",
  "rcgen 0.13.2",
  "reqwest 0.12.28",

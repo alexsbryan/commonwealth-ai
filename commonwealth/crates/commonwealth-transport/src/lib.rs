@@ -82,6 +82,8 @@ pub mod identity;
 mod ip;
 #[cfg(feature = "iroh")]
 pub mod iroh;
+#[cfg(feature = "iroh")]
+mod iroh_path;
 mod routed;
 
 pub use ip::IpTransport;

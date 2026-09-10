@@ -167,39 +167,20 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("http client: {e}"))
 }
 
-async fn error_text(resp: reqwest::Response) -> String {
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    let detail = serde_json::from_str::<serde_json::Value>(&body)
-        .ok()
-        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-        .unwrap_or(body);
-    if detail.is_empty() {
-        status.to_string()
-    } else {
-        format!("{status}: {detail}")
-    }
-}
-
-/// One operator-side read of a namespace: the admitted acts, the gaps, and
-/// the roster the DAEMON actually loaded.
+/// The rail's two routes and its two operator-side clients — **re-exported,
+/// not defined here** (cw-lift 5e).
 ///
-/// Loopback with no grant, so the daemon trusts the listener rather than a
-/// token — which is exactly why the rail routes are mounted on the operator
-/// surface as well as the rail one.
-async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
-    let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/rail/log?namespace={namespace}");
-    let resp = http_client()?
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(error_text(resp).await);
-    }
-    resp.json().await.map_err(|e| format!("bad response: {e}"))
-}
+/// They were this module's while `ring` and `job` were the only callers. `svrn
+/// quality check --distribute` is a third and it lives in `sovereign-cli`, so
+/// the pair moved to `sovereign_cli_shared::rail`, the crate both already
+/// link. Re-exported rather than re-imported at each call site because
+/// [`dev`](super::ring_cmd::dev) needs the CONSTANTS (it proxies opaque bytes
+/// under a grant token and cannot use the functions) and every other caller
+/// here needs the functions, so one `use` line serves both and a route renamed
+/// on the daemon still breaks the build at every caller.
+pub(crate) use sovereign_cli_shared::rail::{
+    error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LOG_PATH,
+};
 
 /// Mint a grant that reaches exactly one namespace's rail and nothing else.
 async fn mint_rail_grant(namespace: &str) -> Result<String, String> {
@@ -549,7 +530,7 @@ fn short_id(id: &str) -> String {
 
 /// `YYYY-MM-DD HH:MM` in UTC. Enough to order a conversation about the
 /// journal, without a date library.
-fn short_stamp(ts: i64) -> String {
+pub(crate) fn short_stamp(ts: i64) -> String {
     let days = ts.div_euclid(86_400);
     let secs = ts.rem_euclid(86_400);
     // Civil-from-days (Howard Hinnant's algorithm), shifted to the 0000-03-01
@@ -706,35 +687,10 @@ async fn run_seal(args: &[String]) -> i32 {
         eprintln!("ring seal: which ring? `svrn ring seal <namespace>`");
         return 2;
     };
-    let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/rail/append?namespace={namespace}");
-    let client = match http_client() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("ring seal: {e}");
-            return 1;
-        }
-    };
-    let resp = match client
-        .post(&url)
-        .json(&serde_json::json!({ "op": "seal" }))
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("ring seal: cannot reach the daemon at {url}: {e}");
-            return 1;
-        }
-    };
-    if !resp.status().is_success() {
-        eprintln!("ring seal: {}", error_text(resp).await);
-        return 1;
-    }
-    let v: serde_json::Value = match resp.json().await {
+    let v = match rail_append(namespace, &commonwealth_rail::RailAct::Seal).await {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("ring seal: bad response: {e}");
+            eprintln!("ring seal: {e}");
             return 1;
         }
     };

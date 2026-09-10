@@ -29,3 +29,58 @@ Bars (per arm, judge ratio mean over 21):
 
 Reading rule: judge ratio is the headline (answer conveys the fact); keyword-in-answer is
 secondary; retrieval facts/sources are NOT the bar here — they already read 152/159.
+
+## Run record (2026-09-08, session 955ed251)
+
+Both arms now run on the CONVERTED stores (rung 3 run, commit 75b51cd70):
+until that run 662 of the 1,770 siblings were on CSR v1, which the v2 reader
+refuses with no fallback (`load skipped`, DEBUG), so an arm on the
+pre-conversion stores walked 1,108 atlases while the July baseline saw 1,770.
+Arm A therefore = the pre-rung-3 binary (`/home/alexbryan/dev/cw-armA` @
+9d3a94831, target `cw-armA-target`) with every `sep-*/atlas/ontology.json`
+renamed `.armA-hidden` for its duration (`run-arms.sh` hides and restores under
+a trap; a pre-rung-3 binary reads a typed map as Declared, and the current
+binary's loader fallback supplies philosophy's rows even with no file).
+
+NOT RUN TO COMPLETION. Arm B was started four times and the kernel OOM-killed
+the daemon (exit 137) each time — 16:42, 17:14, 17:41, 18:00 — at the lane's
+first synthesis or within 12 questions. Kernel Mem-Info at the 17:41 kill:
+anon 52 GB, file cache <0.1 GB, free 0.4 GB, swap 8 GB full; the rest of the
+125 GB is GPU-pinned system memory (GTT read 72.6 GB with every slot resident:
+35B 28.6 GB + 4B + FastShort 4B + embed + KV/compute), which process RSS and
+MemAvailable do not show until the 35B loads. Resident beside the daemon at
+the kills: two or three rust-analyzer instances (22-26 GB) and, at three of
+four, a peer session's `cargo check --workspace` / `cargo test -p
+sovereign-core`. The eval process itself was 1.8 GB. `armB.oom3.log` /
+`armB.oom4.log` are the killed runs; `run-arms.out` the guard trace.
+
+`run-arms.sh` warms the 35B before its guard (so its memory is counted),
+waits for no cargo/rustc/scip and MemAvailable ≥ 12 GB, fails an arm on any
+`turn: Inference error` line (eval run exits 0 over them — §18.3, open), and
+retries up to 3 times. It still cannot finish while ~26 GB of rust-analyzer
+is resident. To resume: free that memory (close the IDE's rust-analyzers, or
+pause the peer session), then `setsid nohup $D/run-arms.sh > $D/run-arms.out
+2>&1 &` and `python3 $D/compare.py` when both WALL lines land.
+
+## Verdict (2026-09-08, n=2, fixed daemon 19eed063b, converted stores)
+
+| arm | run 1 | run 2 | mean of 2 | rows fired |
+|---|---|---|---|---|
+| A — pre-registered rows | 0.923 | 0.909 | 0.916 | 21/21 |
+| B — converted philosophy rows | 0.897 | 0.907 | 0.902 | 21/21 |
+| July baseline (un-isolated, pre-v2) | 0.916 | | | |
+
+Judge ratio, mean over 21. Run-to-run |Δ| per question averages 0.06 for
+both arms; the two A runs differ by 0.014 between themselves, the same size
+as the A–B gap. Over 21 questions B is better on 4, worse on 6, equal on 11.
+Six named: B < A on consequence (0.86/0.79), kripke (0.86/0.79), principlism
+(0.94/0.78); equal on gettier, berlin, hylomorphism. Bars: B ≥ 0.916 NOT MET
+(0.902); B ≥ A on the six NOT MET (3 of 6). Reading: the converted rows are
+not worse than the fallback beyond noise on the mean, and are worse on the
+tension-classified questions, whose lost facts are breadth facts. Both arms
+sit at July's level, so there is no platform regression; the July→now
+gains (modality, locke_reid, virtue_ethics) come from all 1,770 stores
+being readable after rung 3. Operator accepted the result (2026-09-08) and
+the converted snapshot was published: svrnmesh/sep-index
+sep-qwen-embedding-0.6b-2026-09-09.tar.zst. Row quality on SEP is a
+philosophy_atlas.toml question now, not a conversion one.

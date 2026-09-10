@@ -1,0 +1,61 @@
+{
+  "tau": 14.317318081848953,
+  "fa": 0.2,
+  "passes": [
+    {
+      "pass": 1,
+      "in": 193,
+      "cleared": 142,
+      "still_flagged": 51,
+      "clearance_rate": 0.7358,
+      "unscorable": 0,
+      "cumulative_damaged": 2,
+      "checkable": 123,
+      "cum_damage_rate": 0.0163
+    },
+    {
+      "pass": 2,
+      "in": 51,
+      "cleared": 13,
+      "still_flagged": 38,
+      "clearance_rate": 0.2549,
+      "unscorable": 0,
+      "cumulative_damaged": 0,
+      "checkable": 31,
+      "cum_damage_rate": 0.0
+    },
+    {
+      "pass": 3,
+      "in": 38,
+      "cleared": 1,
+      "still_flagged": 37,
+      "clearance_rate": 0.0263,
+      "unscorable": 0,
+      "cumulative_damaged": 0,
+      "checkable": 19,
+      "cum_damage_rate": 0.0
+    },
+    {
+      "pass": 4,
+      "in": 37,
+      "cleared": 2,
+      "still_flagged": 35,
+      "clearance_rate": 0.0541,
+      "unscorable": 0,
+      "cumulative_damaged": 0,
+      "checkable": 18,
+      "cum_damage_rate": 0.0
+    },
+    {
+      "pass": 5,
+      "in": 35,
+      "cleared": 0,
+      "still_flagged": 35,
+      "clearance_rate": 0.0,
+      "unscorable": 0,
+      "cumulative_damaged": 0,
+      "checkable": 18,
+      "cum_damage_rate": 0.0
+    }
+  ]
+}

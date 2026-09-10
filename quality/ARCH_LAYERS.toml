@@ -162,6 +162,14 @@ crates = [
     # crates exist is a dependency property.
     "commonwealth-rail-core",
     "commonwealth-rail",
+    # The work plane (cw-lift 5c, 2026-09-09). Sits here for the same reason
+    # the rail does: it is mesh vocabulary, not a neutral kernel. Its in-repo
+    # dependency surface is `commonwealth-core` + `commonwealth-rail-core`
+    # plus the `oicp-types`/`kernel-types` leaves — no `commonwealth-rail`,
+    # because the JOURNAL reads a disk and everything in this crate takes the
+    # acts it is given. See its [[forbid]] block below; the layer entry alone
+    # would be a green gate enforcing nothing (§5.1).
+    "commonwealth-work",
 ]
 
 # The agent substrate: runtime core, inference, persistence, and the studio
@@ -436,6 +444,18 @@ to = "commonwealth-*"
 except = ["commonwealth-rail-core"]
 reason = "the rail's manifests declare commonwealth-core ABSENT in prose and nothing enforced it; membership cannot, because core and state are package members. Absorbing MeshStore into the rail crate (Phase 2's (a2) reading) takes rail -> core via StoreEntry.origin: NodeId and puts the closure at 78 against cw-rail-closure's floor of 50. The exception is the journal naming the fold, which is the split itself"
 
+# The work plane, cw-lift 5c. It needs its OWN row: the `commonwealth-rail*`
+# blocks above are the nearest thing to a catch-all in this file and the
+# matcher is a literal glob (`arch-layers/src/lib.rs:231`), so
+# `commonwealth-rail*` does not match `commonwealth-work` -- checked, not
+# assumed. Without this block the crate would sit in `mesh-foundation` with
+# nothing at all stopping a `sovereign-*` edge, which is the exact failure
+# `commonwealth/BOUNDARY.md` was written about.
+[[forbid]]
+from = "commonwealth-work"
+to = "sovereign-*"
+reason = "cw-lift 5f builds this crate in a sandbox outside the monorepo; a sovereign-* edge is the one thing that makes that impossible and it would be acquired in a commit nothing else here goes red on"
+
 [[forbid]]
 from = "commonwealth-core"
 to = "sovereign-*"
@@ -556,10 +576,22 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 
 [[package_leaf]]
 name = "oicp-types"
-# The wire vocabulary, a pure leaf. Empty is also enforced from above by
-# `[[forbid]] oicp-types -> sovereign-*`: a protocol crate that names the
-# runtime cannot be lifted, versioned, or implemented by a third party.
-allow = []
+# The wire vocabulary. `kernel-types` is its ONE internal dep, admitted
+# 2026-09-09 (cw-lift rung 5b) for `oicp_types::job`: `JobRequirements
+# .preconditions` is `kernel_types::quality::Precondition` and
+# `JobExecutorDescriptor.verdict` its `VerdictSource` — the instrument
+# registry's closed vocabulary, which already spells a toolbox as `Container`
+# and an executable as `Binary`. The alternative was a second precondition enum
+# in this crate, which is the ARCH §10.6 defect the budget exists to prevent,
+# so the edge buys a deletion rather than paying for one.
+#
+# Same justification as `corpus-engine-vocab` below (`:581-588`): kernel-types
+# is itself an empty leaf, so the closure is two crates and stays that way.
+# Still enforced from above by `[[forbid]] oicp-types -> sovereign-*` — a
+# protocol crate that names the RUNTIME cannot be lifted, versioned, or
+# implemented by a third party, and that is the edge this budget is really
+# guarding.
+allow = ["kernel-types"]
 
 [[package_leaf]]
 name = "kernel-types"
@@ -775,6 +807,17 @@ crates = [
     # property above still holds — which is the ONLY reason they are in here.
     "commonwealth-rail-core",
     "commonwealth-rail",
+    # The work plane, admitted 2026-09-09 at cw-lift 5c. Six crates -> seven,
+    # and the zero-exception property still holds: its entire internal surface
+    # is `commonwealth-core` + `commonwealth-rail-core` + the `oicp-types` and
+    # `kernel-types` leaves already in this list, so the widening admits NO new
+    # leaf at all -- cheaper than the `oplog` admission the rail cost.
+    #
+    # It is here BEFORE it has a consumer, and that is the point: cw-lift 5f
+    # lifts this closure out of the monorepo and builds a third-party peer
+    # against it, and every gate in the repo would be green on a
+    # `sovereign-*` dep acquired the day before that lift.
+    "commonwealth-work",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────

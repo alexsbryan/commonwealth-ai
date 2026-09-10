@@ -668,3 +668,942 @@ one.**
   needs a labeller this session did not have.
 - 122 of 193 revisions were witness-checkable; the other 71 assert no
   extractable value.
+
+## 11. Depth terminates at two passes — the floor is a mutual fixed point, and the loop announces it
+
+**2026-09-08, the judge phase §10 left NEVER-RAN.** §9 and §10 established that
+sequential refinement is *safe* (p_damage 1.64%, and the reviser is itself a
+second gate). §10 closed by naming the cost side as the open question: 41.5% of
+revisions were still flagged after one pass, so "buy passes, get quality" — the
+one mesh shape §8/§8.1 left standing — rested on an unmeasured extrapolation
+from a single pass. The two hypotheses and their bars were written into
+`termination_sweep.py`'s header before pass 2 was run.
+
+Generation walked all 193 claims through 5 passes on the daemon's 4B (965 rows,
+zero errors). Judging is one run against one rung-1000 server, tau derived
+in-run from 150 fresh grounded non-multi_hop claims: **tau = +14.317**.
+
+### The result — the stuck-floor hypothesis fired
+
+| pass | in | cleared | rate | still flagged | cumulative damage |
+|---|---|---|---|---|---|
+| 1 | 193 | 142 | 73.6% | 51 | 2/123 = 1.6% |
+| 2 | 51 | 13 | **25.5%** | 38 | 0/31 |
+| 3 | 38 | 1 | 2.6% | 37 | 0/19 |
+| 4 | 37 | 2 | 5.4% | 35 | 0/18 |
+| 5 | 35 | 0 | 0.0% | 35 | 0/18 |
+
+**Primary bar: MISSED, decisively.** Pass-2 clearance 13/51 = 25.5%, Wilson 95%
+CI [15.5%, 38.9%] — the optimistic end of the interval is still below the 40%
+floor bar. Clearance does not decay geometrically, it collapses: 73.6 → 25.5 →
+2.6 → 5.4 → 0.0. Passes 3-5 together clear **three items**.
+
+**Secondary bar: PASSED.** Cumulative damage against the ORIGINAL claim is
+0/18 at pass 5 and never exceeds §10's per-pass 1.64%. Depth is safe. It is
+simply bounded.
+
+### The floor is a hard core, not a threshold artifact
+
+Re-running the whole loop at other thresholds on the same judged margins:
+
+| tau | p1 | p2 | p3 | p4 | p5 | floor |
+|---|---|---|---|---|---|---|
+| +12.00 | 81.9% | 22.9% | 0.0% | 0.0% | 0.0% | 27/193 = 14.0% |
+| +14.32 | 73.6% | 25.5% | 2.6% | 5.4% | 0.0% | 35/193 = 18.1% *(this run)* |
+| +15.63 | 59.1% | 13.9% | 5.9% | 1.6% | 1.6% | 62/193 = 32.1% *(§10's tau)* |
+| +16.50 | 43.5% | 11.9% | 4.2% | 2.2% | 0.0% | 90/193 = 46.6% |
+
+Every operating point shows the same shape, and **at §10's own tau the pass-2
+rate is 13.9% — worse.** This run drew the charitable threshold (§18.6: the
+change is reported in the direction that hurts the finding as well as the one
+that helps it). The floors are strictly NESTED — all 35 items stuck at +14.32
+are among the 62 stuck at +15.63, 100% overlap — so the residual is a hard core
+that tau resizes rather than a population tau invents.
+
+### Why it is stuck: both sides stopped working
+
+The 35 sit a median **+4.70** against tau **+14.32** — about nine points below
+on a ±18 scale, not at the boundary (one item is 0.13 away; the rest are not).
+And they do not move: median margin shift from pass 1 to pass 5 is **+0.04**,
+mean −0.62, with 18/35 drifting toward tau and 17 away — a coin flip.
+
+The reason is visible in the text: **34 of 35 have a pass-5 revision byte-identical
+to pass 4.** The reviser is returning them unchanged. §10 found that the reviser
+is a second gate that declines to damage claims it judges grounded; this is that
+same mechanism at its limit. The verifier says unsupported, the reviser says
+there is nothing to fix, and both are confident. The loop is not *spinning* on
+this population — it is **idling**, and §10's phrase "its cost is unbounded" is
+wrong in a way that is good news.
+
+> **A refinement loop's residual is a disagreement between two confident
+> components, and neither compute nor iteration is the currency that settles
+> it.** Composition, over the whole population: `verbatim` claims are stuck at
+> 24.4% (19/78) against `reframe` at 13.9% (16/115).
+
+### Termination is free, and it is not the gate clearing
+
+The loop signals its own fixed point one pass before the gate would: a revision
+identical to its predecessor. Over all 193 claims that no-op rate runs 68.4% →
+91.2% → 94.3% → 96.4% across passes 2-5. **Stop on the no-op, not on the
+verdict** — it converts §10's open cost question into a fixed budget of about
+two working passes plus one detection pass, with no quality cost, because a
+pass that changes nothing cannot clear anything.
+
+### What this does to the mesh argument
+
+§8 killed parallel breadth (same-lineage judges nest their errors; the whole
+jury is worth +1.1pt against a threshold move worth +13.6pt). Sequential depth
+was the survivor. It now has a measured ceiling: **80.3% of the false-alarm
+population clears in two passes, and everything after is 1.6%.** So the
+compute→groundedness conversion is bounded on BOTH axes — breadth dead, depth
+worth roughly 2x rather than Nx.
+
+The operating point dominates again, exactly as in §8.1: the floor moves from
+14.0% to 46.6% across the tau range while five passes of compute move it by
+1.6pt. **Of the two mechanisms the frame carried forward — depth and coverage —
+depth is now measured and capped, which leaves coverage as the only untested
+route from mesh capacity to groundedness.** That is a retrieval question, not a
+verification one, and nothing in §8-§11 speaks to it.
+
+### Scope
+
+- One bank, one reviser (the daemon's 4B, not a 35B primary), one judge lineage.
+  The floor being a *disagreement* makes the shared-lineage caveat sharper here
+  than elsewhere: a reviser of a different lineage than the verifier is the one
+  intervention this experiment cannot rule out, and §8's lineage finding is the
+  reason to expect it might matter.
+- The damage witness is the §10 witness and inherits its bound — value-anchored
+  damage only, so cumulative damage is a LOWER bound.
+- Clearance rates are one run at one tau; the sensitivity table above is
+  re-thresholding the same margins, not a second measurement (§18.5).
+
+Reproduce: `scripts/termination_pipeline.sh` (serve + judge),
+`scripts/termination_sweep.py --phase judge --passes 5`.
+Data: `runs/delta/termination.jsonl`, `runs/delta/termination_summary.json`.
+
+## 12. Spike — a stack change is invisible against its own resampling noise, and has no sign
+
+**2026-09-09, ten seconds of compute, no inference.** §11 left coverage as the
+only untested route from mesh capacity to groundedness. The proposed product
+shape was re-evaluation: on a STATIC corpus the mesh itself is the only thing
+that changes, so a past answer can be upgraded without any source moving —
+*"SEP didn't change, we got better at reading it."* That is only a product if a
+stack change flips CLAIM-LEVEL verdicts at a rate distinguishable from noise.
+
+Rung 6 had already run the experiment and nobody had read it this way: arm A
+(pre-rung-3) vs arm B (rung-3+4), same 21 SEP questions, same static corpus,
+same judge, **two runs per arm** — so the same files carry the signal and its
+own noise floor. The bench headline was a per-question MEAN, which is preserved
+exactly when N facts flip up and N flip down. This reads
+`synth.judge_evidence[].present`, the per-fact boolean, which is the granularity
+of a thing a user was told.
+
+| comparison | stack delta | facts | flips | rate | up | down |
+|---|---|---|---|---|---|---|
+| within-stack (A↔A2, B↔B2) | none | 318 | 23 | **7.23%** | 11 | 12 |
+| across-stack (A↔B, A2↔B2) | 2 days | 318 | 21 | **6.60%** | 8 | 13 |
+| baseline (July 6 ↔ Sept 8) | ~2 months | 636 | 79 | **12.42%** | 37 | 42 |
+
+**Primary bar MISSED: 0.91x against a bar of 2.0x.** Re-running the identical
+binary flips 7.2% of user-visible facts; changing the retrieval stack flips
+6.6%. The rung-6 stack change is invisible against resampling.
+
+**The extension is the finding.** Over ~2 months of stack changes the rate
+roughly doubles to 12.4% — 1.72x the noise floor — so churn *does* scale with
+stack delta and the mechanism is real. But the net movement is **+1, −1, −3, −2**
+across the four comparisons, and −0.79% overall. Two months of retrieval work
+that moved bench means produced as many fact-level downgrades as upgrades.
+
+> **The effect is real and directionless.** We cannot currently tell an
+> improvement from a reshuffle at the level of a thing a user was told — which
+> is exactly the level a notification would speak at. A re-evaluation feature is
+> therefore blocked not on the trigger's rate but on ATTRIBUTION: establishing
+> that a stack change improved THIS claim, rather than the mean.
+
+Two consequences beyond the feature. First, the two-stack paired re-run
+(old retriever+judge vs new, same process) stops being an optimisation and
+becomes the whole mechanism. Second, and independent of any of this: **a 7.2%
+per-fact resampling floor on a 21-question bank means most single-run
+comparisons on it are measuring noise** — rung 6 said as much at the mean, and
+this quantifies it at the fact level.
+
+Confound, named: the July baseline is un-isolated while the arms are isolated to
+`sep` (rung 6 README); the isolated and un-isolated May baselines read the same
+judge mean, so the comparison holds with that attached. And n is small — 7.23%
+vs 6.60% is itself within noise, so the honest primary reading is
+"across ≈ within", not "across < within".
+
+Reproduce: `scripts/verdict_flip_spike.py` (bars in the header, written before
+the run).
+
+## 13. The retrieval ceiling is a QUERY artifact, not a corpus gap — and that is the first live mesh mechanism
+
+**2026-09-09, minutes, no synthesis.** §12 killed re-evaluation as a product.
+This is the follow-on it pointed at: of the two routes from mesh capacity to
+groundedness, is the residue we cannot retrieve **absent** from what we hold, or
+**unreached**? Acquisition and fan-out are different builds and the fork had
+never been measured.
+
+### Configuration diversity is exhausted
+
+Rung 6's four arms are 2 stack versions x 2 samples over the same 21 SEP
+questions. Their retrieval coverage of expected facts:
+
+| | facts retrieved | of 158 |
+|---|---|---|
+| armA / armA2 / armB / armB2 | 141 / 140 / 139 / 140 | 89.2 / 88.6 / 88.0 / 88.6% |
+| best single arm, per question | 148 | 93.7% |
+| **union of all four** | **150** | **94.9%** |
+
+**Diversity of configuration buys +1.3 points, on 2 of 21 questions.** Four
+retrieval configurations converge and miss the SAME 8 facts. This is §8's
+lineage result in the retrieval layer: same-lineage judges nest their errors,
+and **same-query retrievals nest their misses.** Twenty rerankers over one
+library are twenty views of one blind spot.
+
+### But the hard core is one query away
+
+The 8 facts no arm reached are `self-reference`, `BonJour`, `mentalism`,
+`MacCallum`, `regularity theory`, `Worrall`, `individualism`, `descriptivism` —
+canonical vocabulary of the very entries their own questions name. Issuing each
+as an ORACLE query against the same `sep` corpus, scored by the bench's own rule
+(`score.rs::partition_facts`, every token >= 3 chars present):
+
+- **hard core: 8/8 recovered.** Bar was >= 5/8.
+- **instrument control: 7/7** on facts the arms did find, so the probe detects
+  presence rather than always answering yes.
+
+The haystack is the CLI's truncated titles + snippets (~190 chars a hit), so the
+probe is conservative and 8/8 is a LOWER bound on presence.
+
+> **The window is not the corpus.** §11 established that you cannot extract more
+> groundedness than the window contains. This shows the window's limit is a
+> QUERY-FORMULATION artifact, not the library's contents — and query diversity is
+> cheap, is the fast half of the pipeline, and is genuinely independent across
+> nodes in a way configuration diversity is not.
+
+### What this licenses, and what it does not
+
+Live mechanism: **fan out over formulations, not over models.** One question
+decomposed into sub-queries, N cheap retrievals in parallel over the same or
+different libraries, the union of evidence returned to ONE synthesis — which
+leaves the expensive stage (58.8 s median here) singular while multiplying the
+stage that determines the ceiling.
+
+The limit, stated plainly because it is the whole caveat: **the oracle query is
+the fact itself, and you cannot query for a fact you do not know you are
+missing.** This proves REACHABILITY and bounds the problem; it does NOT show
+that any realistic formulation strategy recovers the gap. The next experiment is
+exactly that — generate sub-queries from the question alone, fan out, union, and
+measure what share of the 8 comes back without the oracle.
+
+### Scope
+
+- One bank (21 SEP questions), one corpus, n=8 hard-core facts.
+- The bench matcher is keyword-substring by construction (`score.rs`), so both
+  the miss and the recovery are keyword events, not semantic ones.
+- Retrieval cost is UNMEASURED on this path: `embed_ms` and `search_ms` are 0
+  for all 21 questions while synthesis runs a 58.8 s median. "Retrieval is the
+  cheap part" is believed here, not measured, and instrumenting it is owed
+  before anything is designed around the asymmetry.
+
+Reproduce: `scripts/oracle_query_probe.py` (bars in the header, written before
+the first query).
+
+## 14. Fan-out over formulations is dead; k is the lever, and the binding cost is context not time
+
+**2026-09-09.** §13 proved the hard core is REACHABLE by an oracle query and
+said plainly that reachability is not a strategy. This removes the oracle:
+sub-queries generated from the QUESTION ALONE by the resident 4B, three arms
+through one instrument (plain `corpus search`, bench matcher, truncated
+snippets — identically biased across arms, so deltas are conservative).
+
+### The pre-registered bar was mis-specified, and saying so is the result
+
+The bar read "fanout >= 4/8 of the hard core -> live". Fan-out returned **4/8**
+and the script duly printed LIVE. **The baseline in the same harness returned
+5/8.** An absolute bar with no paired control cannot distinguish "the strategy
+works" from "anything at this budget works", and the paired control beats the
+strategy. The verdict is therefore NEGATIVE, not positive, and the bar is
+recorded as the defect it was.
+
+| arm | hard core | all 158 facts | retrievals | context chars |
+|---|---|---|---|---|
+| baseline — 1 query @ 40 | **5/8** | 138 = 87.3% | 21 | 182,339 |
+| fan-out — 4 sub-queries @ 10 | 4/8 | 138 = 87.3% | 84 | 164,444 (0.90x) |
+
+At an equal hit budget, splitting it across four narrower queries returns **more
+redundancy, not more coverage** — same total facts, fewer unique characters,
+four times the retrievals. Decomposition is not free diversity; the sub-queries
+land on the same documents.
+
+### The lever is k, and it is nearly free in time
+
+One query, same harness, sweeping the hit count:
+
+| k | hard core | all facts | context chars | retrieval wall / question |
+|---|---|---|---|---|
+| 10 | 2/8 | 114/158 = 72.2% | 48,823 | 1.20 s |
+| 20 | 2/8 | 126/158 = 79.7% | 93,322 | 1.24 s |
+| 40 | 5/8 | 138/158 = 87.3% | 182,339 | 1.43 s |
+| 80 | **7/8** | **147/158 = 93.0%** | 360,195 | 1.55 s |
+
+**7 of 8 hard-core facts and 93.0% coverage from asking one query for more
+hits.** Against the rung-6 arms' 88.0-89.2% with an atlas walk and a reranker,
+and against fan-out's 4/8. The boring lever beats the clever one, which is the
+third time this arc has landed there (§8.1: the threshold beat the jury;
+§11: the bound beat the ladder).
+
+**And retrieval wall time is almost flat in k** — +29% for 8x the hits, because
+the query embedding dominates and the search itself is cheap. Measured against a
+58.8 s synthesis median, retrieval is **~2-3% of a turn**. This closes the debt
+§13 recorded: the premise "retrieval is the fast, load-bearing part" is now a
+number rather than a belief.
+
+### So the constraint is context, and that relocates the mesh mechanism
+
+Time is not what k costs. **Characters are: 7.4x from k=10 to k=80**, and that is
+on TRUNCATED snippets — real chunks are several times larger, so the context bill
+is materially worse than this table shows while the coverage figures stay
+conservative. You cannot feed a 93%-coverage candidate set to one synthesis.
+
+> **Retrieval is nearly free and selection is the scarce resource.** The mesh's
+> job is therefore not to retrieve more in parallel — one node can already
+> over-retrieve almost for nothing — but to REDUCE a large candidate set to a
+> small high-value window. That is judging N candidate chunks, which is
+> embarrassingly parallel, and unlike §8's jury the nodes judge DIFFERENT
+> chunks rather than voting on one claim, so lineage-nested error does not
+> apply the same way.
+
+That is the one shape this arc has not tested and the first the measured cost
+structure actually favours. It is a hypothesis, not a result.
+
+### Scope
+
+- One bank, one corpus, one decomposition prompt at K=4. A different prompt or a
+  larger K could differ; what is measured is that THIS realistic strategy loses
+  to a larger k at equal budget.
+- Snippet-truncated haystack: coverage is a lower bound, context cost an
+  understatement.
+- Coverage is retrieval-layer only. Whether a bigger window improves the ANSWER
+  is unmeasured and prior work says it is not monotone (prefill dominates;
+  K-cuts have hurt synthesis). ~21 x 59 s per arm to find out.
+
+Reproduce: `scripts/formulation_fanout.py` (bars in the header, mis-specification
+and all).
+
+## 15. Selection is a context-efficiency multiplier, not a ceiling raise — and production may already have it
+
+**2026-09-09.** §14 relocated the mesh mechanism to selection: retrieval is
+nearly free in time, context is scarce, so reduce a large candidate set to a
+small high-value window. This bounds what ANY selector could win, before pricing
+one.
+
+**Inventory first (§19), and it changes the question.** Two things already
+exist. `corpus-engine/src/index/search.rs:659` composes the final set by greedy
+**facility-location** over the pool instead of top-k truncation, behind a
+`coverage_factor` flag with a no-lose fallback. And the cross-encoder reranker
+was REJECTED 2026-08-04 on cost, not quality — `quality/env-flags.toml:1152`
+records "+2.8s TTFT + 4th resident slot + 60x memory fragility", with the
+re-open condition stated as **"a NEW integration shape (off-TTFT-path margins,
+no in-turn slot)"**. That sentence describes a mesh peer, which is the first
+time this arc has found the mesh answering a question the repo had already
+written down.
+
+### The curve
+
+One retrieval per question at k=80 (1.55 s/question), then two policies over the
+same candidates: `rank` = first N hits (top-k truncation, the paired control),
+`oracle` = greedily pick the N hits maximising fact coverage (reads the answer
+key; an unreachable ceiling, like §13's oracle query).
+
+| N | rank | oracle | headroom | chars @ rank |
+|---|---|---|---|---|
+| 5 | 50.6% | **86.1%** | **+35.4%** | 21,751 |
+| 10 | 63.3% | 86.1% | +22.8% | 43,498 |
+| 20 | 75.3% | 88.0% | +12.7% | 86,961 |
+| 28 | 79.7% | 88.6% | +8.9% | 121,540 |
+| 40 | 83.5% | 89.2% | +5.7% | 173,350 |
+| 80 | 90.5% | 90.5% | +0.0% | 346,084 |
+
+**Selection does not raise the ceiling — it collapses the window.** Both
+policies land on 90.5% once N=80 (they are the same set). What changes is the
+price: the oracle reaches **86.1% coverage in FIVE chunks / 21.7k chars**, where
+rank order needs 40 chunks / 173k chars to reach a *lower* 83.5%. That is ~8x
+less context for more coverage, and it is the "small high-value window" argument
+stated as a ratio rather than a hope.
+
+The secondary bar as written ("smallest N where the oracle reaches the ceiling")
+was **uninformative by construction** — defining the ceiling as the oracle's own
+maximum puts it trivially at N=80. Second bar-specification defect in two
+sections; the corrected comparison is the one above, computed from the same data.
+
+### The caveat that cuts hardest, and it is not in the bars
+
+`rank` here is NAIVE top-k truncation. **Production is not naive.** The rung-6
+arms score 88.0-89.2% at 28 chunks with their atlas walk and `dedup_by_source`,
+against this oracle's 88.6% at N=28. On the face of it the shipped pipeline is
+already at oracle parity at that window — so **+8.9% is headroom over naive
+truncation, NOT over what we ship**, and the honest statement of the remaining
+headroom is that it is unmeasured and may be near zero.
+
+The comparison is confounded and cannot be resolved from here: the arms use full
+chunks, this harness uses ~190-char truncated snippets, which biases these
+coverage numbers DOWN and the context figures down as well. Settling it needs
+one instrument — full chunks through the eval pipeline with `coverage_factor`
+on and off.
+
+### What this licenses
+
+- **The small-window claim is real and quantified** (86.1% in 5 chunks), and it
+  is the right shape for a context-scarce turn.
+- **A new selector is NOT licensed** on this evidence, because the incumbent may
+  already capture the gap. The next measurement is not a better selector, it is
+  `coverage_factor` on/off, full chunks, one instrument.
+- The reranker's re-open condition is a live thread and belongs to whoever
+  measures the above first — its quality already passed; only its integration
+  cost failed, and that is exactly the cost a peer absorbs.
+
+### Scope
+
+One bank, one corpus, k=80 pool, truncated snippets, greedy set-cover on the
+answer key. Retrieval-layer coverage only: whether a 5-chunk window synthesises
+a BETTER answer than a 28-chunk one is unmeasured, and prior work says window
+size is not monotone for synthesis.
+
+Reproduce: `scripts/selection_headroom.py`.
+
+## 16. CRAG-style adaptive routing: the evaluator buys nothing, and the prize is small even with a perfect one
+
+**2026-09-09.** §15's architecture argument was the CRAG shape — grade the
+retrieved window with something cheap, escalate only when it is judged
+insufficient, synthesise once. That rests on one unmeasured assumption: that
+sufficiency is PREDICTABLE without the answer key. This measures that and
+nothing else.
+
+**Cheapest possible instrument, by construction.** ONE retrieval pass per
+question at k=80 — every window is a prefix, so the sweep costs zero extra
+retrievals. Ground truth is free (the bench's own matcher over the bank's
+expected facts). FREE predictors are tested BEFORE paying for a model. The
+evaluator is one constrained token on the resident 4B, binary and uncalibrated
+because the daemon returns no logprobs (recorded dead end). Ground truth:
+6/21 windows fully sufficient at k=28.
+
+### B1/B2 — sufficiency is barely predictable, and the model loses to counting
+
+| predictor | AUC |
+|---|---|
+| `f_max` (top similarity) | 0.511 |
+| `f_mean5` | 0.561 |
+| `f_gap` (top1 − top10) | 0.378 |
+| **`f_titles` (distinct documents)** | **0.661** |
+| `f_model` (4B evaluator) | 0.633 |
+
+The 4B sufficiency judge is **worse than counting how many distinct documents
+are in the window**, and the best signal available is itself weak. Model lift
+over the best free predictor: **−0.028**, against a bar of ≥+0.10 to earn its
+call and ≤+0.03 to skip it. Skip it.
+
+Similarity scores being near-useless (0.51) is the predicted result and worth
+keeping: a score says how well the top chunk matches the QUESTION, and §13/§14
+established the misses are terms the question never contains.
+
+### B3 — and the routing itself buys exactly nothing
+
+| policy | coverage | context |
+|---|---|---|
+| fixed k=28 | 126/158 = 79.7% | 121,540 |
+| **adaptive (escalate 11/21 on the evaluator)** | **139/158 = 88.0%** | **238,901** |
+| **fixed k=55 — iso-cost control** | **139/158 = 88.0%** | **238,444** |
+| fixed k=80 | 143/158 = 90.5% | 346,084 |
+
+**+0 facts.** A single dial, set once, matches the adaptive policy exactly at the
+same context budget — and needs no evaluator, no extra call, and no branch.
+
+### The ceiling: even a PERFECT evaluator wins at most +3.2 points
+
+Escalating the N questions with the largest TRUE gain (an oracle evaluator; the
+ceiling on any CRAG-style router here), against the best fixed k at each budget:
+
+| escalated | adaptive | iso-cost fixed k | delta |
+|---|---|---|---|
+| 3 | 84.2% | k=34 → 82.3% | **+3** |
+| 5 | 86.7% | k=39 → 83.5% | **+5** |
+| 8 | 88.6% | k=46 → 86.1% | +4 |
+| 11 | 90.5% | k=53 → 88.0% | +4 |
+| 15 | 90.5% | k=62 → 89.9% | +1 |
+
+> **The prize is +5 facts of 158 at its best point, and the cheapest evaluator
+> captures 0 of it.** So this is not "our evaluator was bad" — it is that
+> adaptive escalation has almost nothing to win on this bank no matter how good
+> the evaluator gets.
+
+### The law, and when it would NOT hold
+
+> **Adaptive escalation is worth the discriminative power of its evaluator times
+> the VARIANCE of per-query retrieval difficulty.** At AUC≈0.5 it degenerates
+> into a fixed-k policy with extra steps — escalating a near-random half is, in
+> expectation, raising k for everyone by half as much. And when per-query
+> difficulty is uniform, it degenerates into fixed-k *even with a perfect
+> evaluator*, which is what the oracle table shows.
+
+That names the condition under which the published pattern does work, and why
+this bank is the wrong place to see it: 21 questions on ONE encyclopedia, all
+answerable from it, is about as homogeneous as retrieval difficulty gets. CRAG's
+own setting is heterogeneous — some queries answerable from the corpus, some
+requiring the web — which is exactly where the variance term is large. **The
+mechanism to test is therefore acquisition routing on a MIXED corpus, not
+sufficiency routing on a single one.**
+
+### Scope
+
+- The cheapest evaluator (zero-shot, one token, general 4B), NOT CRAG's
+  fine-tuned retrieval evaluator. That limit does not touch the oracle bound,
+  which holds for any evaluator.
+- Binary and uncalibrated: no logprobs from the daemon, so no threshold sweep.
+- One bank, 21 questions, 6 positives — AUCs on that base are wide.
+- Retrieval-layer coverage only; no synthesis arm.
+- Fourth time in this arc the boring lever matched or beat the clever one
+  (§8.1 threshold > jury, §11 bound > ladder, §14 k > decomposition, this fixed-k
+  > adaptive routing). That is now a pattern worth treating as a prior.
+
+Reproduce: `scripts/crag_sufficiency_probe.py` (bars in the header).
+
+### 16.1 Scope correction — what §16 tests, and what it does not
+
+**Added 2026-09-09, same day, in response to the right question: how does this
+test CRAG?** It does not. §16's own commit title is correctly scoped ("buys +0
+over a FIXED K"), but the surrounding framing drifted into "the CRAG pipeline is
+killed", and that is not what was measured. The record is corrected here rather
+than quietly reworded.
+
+**§16 tests exactly one edge:** can a cheap sufficiency verdict route between
+k=28 and k=80 OF THE SAME CORPUS. Four ways that differs from the published
+mechanism:
+
+1. **The corrective action is wrong.** CRAG's INCORRECT branch DISCARDS the
+   retrieved set and goes to a different knowledge source (web search). §16
+   escalates to more of the same corpus. Those have different payoff ceilings,
+   and the +5/158 oracle bound applies ONLY to the k-escalation action.
+2. **Knowledge refinement is untested.** CRAG's decompose-into-strips, filter,
+   recompose step — its action on the CORRECT branch, and plausibly the larger
+   contributor — was not implemented or measured at all.
+3. **The evaluator is not comparable.** CRAG uses a fine-tuned scorer judging
+   document RELEVANCE; §16 uses a zero-shot prompt to a general 4B judging
+   answer SUFFICIENCY, which is a harder target. AUC 0.633 prices the cheapest
+   thing, not the published thing.
+4. **The setting has no instances of the target condition.** This is the deepest
+   one. §13 measured that this corpus HOLDS every hard-core fact (8/8
+   reachable). CRAG exists to handle "the corpus does not have this, go
+   elsewhere" — and on a 21-question bank over one encyclopedia that answers all
+   21, that branch has essentially nothing to fire on. **§16 ran the experiment
+   on a bank where CRAG's corrective action has nothing to correct.**
+
+**What §16 does establish, and it stands:**
+
+- A cheap zero-shot sufficiency signal does not discriminate here (0.633 AUC,
+  beaten by counting distinct documents at 0.661). Any router needing such a
+  signal from a general small model, on long-form questions, should price that.
+- Escalating k on a per-query basis is worth at most +5/158 over one fixed k,
+  at ANY evaluator quality. That is a real bound on one specific action.
+- The law in §16 — value = evaluator discrimination x variance of per-query
+  difficulty — is unaffected, and it PREDICTS this outcome rather than being
+  contradicted by it.
+
+**What would actually test the pipeline**, in the order this arc ranked it
+before running anything:
+
+1. **HyDE / query2doc reformulation** — ranked FIRST in the prior analysis and
+   still untested. §13 showed the oracle (fact-as-query) recovers 8/8 and §14
+   showed question-decomposition recovers none of it; HyDE is the untested
+   member that supplies the ANSWER's vocabulary, which is the measured failure
+   mode. §16 tested neither.
+2. **Acquisition routing on a MIXED corpus** — the setting where the variance
+   term is large and where CRAG's corrective branch has instances. Needs a bank
+   whose questions are NOT all answerable from the local corpus.
+3. **Knowledge refinement (strip filtering)** — CRAG's other half, and the one
+   that speaks to §15's context-scarcity finding.
+
+**Methodological note worth keeping.** The instrument was built to be the
+cheapest possible, and it was — but cheapest-to-run is not the same as
+cheapest-per-unit-of-decision. The pipeline's own ranking put HyDE first and
+sufficiency routing second; the instrument went where measurement was easy
+rather than where the claim was load-bearing. That is a real ordering error, and
+naming it is cheaper than repeating it.
+
+## 17. HyDE relocates coverage rather than adding it — the reformulation family is now exhausted
+
+**2026-09-09.** §16.1 ranked HyDE/query2doc first among untested mechanisms: the
+measured failure mode is terms the QUESTION never contains (§13, §14), and HyDE
+is the only member of the reformulation family that supplies the ANSWER's
+vocabulary from the question alone. One instrument, one matcher, one k=80 pool
+per arm; the generation prompt is the canonical shape ("write a passage that
+answers this question") with NO nudge toward names, since the answer key is
+proper nouns and nudging would be teaching to the test. 5.34 s/question to
+generate.
+
+| k | baseline | hyde | hyde_concat |
+|---|---|---|---|
+| 10 | 62.7% h1/8 | 50.6% h2/8 | 63.3% h2/8 |
+| 20 | 74.1% h3/8 | 69.0% h3/8 | 74.1% h4/8 |
+| **28** | **79.1% h3/8** | **76.6% h5/8** | 77.2% h4/8 |
+| 40 | 82.9% h4/8 | 79.7% h5/8 | 80.4% h4/8 |
+| 55 | 87.3% h6/8 | 86.1% h6/8 | 85.4% h5/8 |
+| 80 | 89.9% h7/8 | 88.0% h7/8 | 90.5% h5/8 |
+
+**B1 passed at exactly the bar and the bar was not enough.** HyDE recovers 5/8
+of the hard core at k=28 against the baseline's 3/8 — +2, the threshold. And the
+mechanism is real and visible: the hypothetical passage names `MacCallum` where
+the question cannot. But **HyDE is worse on total coverage at every single k**,
+and the +2 sits on a demonstrated ±1 run-to-run drift (this run's baseline reads
+125/158 at k=28 where §16's read 126/158, on a corpus rebuilt the same day).
+
+**B2 failed outright.** Baseline reaches 139/158 at k=80; so does HyDE. There is
+no context saving, which is the only currency §15 says matters.
+
+**And the iso-budget control settles it.** HyDE finding different facts is only
+worth something if combining beats spending the same budget on one query:
+
+| policy | coverage | hard | context |
+|---|---|---|---|
+| union(baseline@28, hyde@28) | 137/158 = 86.7% | 5/8 | 244,089 |
+| **baseline @ k=56 — iso-cost** | **140/158 = 88.6%** | **6/8** | 242,218 |
+
+**−3 facts and −1 hard-core.** HyDE is not additive. Its k=28 advantage vanishes
+entirely once the comparison is at equal context, exactly as §14's fan-out did.
+
+### The law this arc has now hit five times
+
+> **A mechanism that spends budget to CHOOSE BETTER loses to spending it to
+> RETRIEVE MORE, unless it reduces the context bill.** Query decomposition
+> (§14), sufficiency routing (§16) and HyDE (§17) all change WHICH chunks fill
+> the window. None of them makes the window smaller, and retrieval is ~2-3% of a
+> turn (§14), so the thing they compete against is nearly free.
+
+Five for five: threshold > jury (§8.1), bound > ladder (§11), k > decomposition
+(§14), fixed-k > adaptive routing (§16), k > HyDE (§17).
+
+**The reformulation family is exhausted.** Oracle-by-fact works and is
+unavailable (§13); decomposition loses (§14); HyDE loses at iso-cost (§17).
+
+### What is left standing
+
+Exactly one mechanism reduces the context bill rather than reshuffling it:
+**selection** (§15) — a perfect selector reaches 86.1% in FIVE chunks where rank
+order needs 40 for 83.5%. And §15's own open question is still the next
+measurement, unchanged and now the only one: **`coverage_factor` on/off, full
+chunks, one instrument** — because the shipped pipeline may already capture that
+gap (rung-6 arms 88.0-89.2% at 28 chunks vs the oracle's 88.6%).
+
+### Scope
+
+One bank, one corpus, one generation prompt at temperature 0.3, truncated-snippet
+haystack, retrieval-layer coverage only. A different HyDE prompt or multiple
+sampled hypotheticals could differ; what is measured is that THIS canonical form
+loses to a larger k at equal context.
+
+Reproduce: `scripts/hyde_probe.py` (bars in the header).
+
+## 18. The uncovered regime — retrieval SCATTER detects "I don't have this", and the model doesn't
+
+**2026-09-09. This section repairs a scope defect running through §11-§17.**
+Every one of those ran on the SEP bank, and §13 proved that corpus HOLDS every
+hard-core fact. So all of it measured the COVERED case. A mesh RAG system
+covering ~10% of what could be asked lives in the other 90%, where no k reaches
+anything and the only decisions are ACQUIRE or ABSTAIN. §16's sufficiency AUC of
+0.633 was computed on a distribution with **no true negatives of the kind that
+matter**. The correction is owed and this is it.
+
+Three regimes, from banks already on disk: **covered** (21 SEP questions on
+SEP), **ablated** (the same 21 with each question's own `expected_sources`
+articles removed from the pool — topically adjacent, specifically missing, and
+PAIRED with covered), **foreign** (20 wikipedia-bank questions — Yalta, Einstein's
+1905 papers — against a philosophy corpus). 41 genuine negatives.
+
+### B2 — k still helps where the source was removed, and my prediction was wrong
+
+| regime | k=10 | k=28 | k=80 |
+|---|---|---|---|
+| covered | 62.9% | 79.2% | 89.9% |
+| ablated | 56.6% | 71.1% | **78.6%** |
+| foreign | 16.2% | 23.1% | 39.2% |
+
+I predicted k would be flat once the fact was absent. It is not: ablation
+removed 33 hits/question and cost only 11 points at k=80. **An encyclopedia is
+cross-referential** — deleting the three home articles does not delete the fact,
+because other entries discuss it. So the ablation is a WEAKER manipulation than
+intended, and §14/§17's "k wins" survives into it rather than being scoped away.
+
+### B1 — the load-bearing result, and it inverts
+
+Detection of "the corpus has this", covered as positive:
+
+| predictor | all negatives | ablated only | foreign only |
+|---|---|---|---|
+| **fewer distinct titles** | **0.803** | **0.811** | 0.794 |
+| **top-3 title share** | 0.797 | **0.821** | 0.773 |
+| top-1 title share | 0.729 | 0.764 | 0.693 |
+| window chars | 0.312 | 0.500 | 0.114 |
+| **4B evaluator** | **0.626** | **0.595** | 0.658 |
+
+Mean behaviour at k=28 shows the mechanism directly:
+
+| regime | distinct titles | top-title share | model says YES |
+|---|---|---|---|
+| covered | 10.2 | 0.37 | 67% |
+| ablated | 15.1 | 0.24 | 48% |
+| foreign | 16.2 | 0.28 | 35% |
+
+> **When the corpus holds the answer, retrieval CONCENTRATES. When it does not,
+> retrieval SCATTERS.** Counting distinct documents in the window detects the
+> difference at AUC ~0.80 — free, model-free, no extra call — and it holds on the
+> HARD ablated case (0.811) as well as the easy foreign one.
+
+**The 4B evaluator is blocked at 0.626.** It still answers "yes, these passages
+contain what is needed" on **35% of questions about Yalta put to a philosophy
+encyclopedia**. It moves in the right direction and far too weakly to route on.
+Sixth time in this arc the boring lever beat the clever one — and the first time
+the boring lever produced a POSITIVE result rather than a null.
+
+### The caveat that must travel with this
+
+**The sign flip is post-hoc.** §16 measured `f_titles` at 0.661 in the
+*positive* direction on an all-covered distribution; here it is 0.197, i.e.
+0.803 inverted. Both are explicable — within covered questions more documents
+means more evidence, while across regimes scatter means no home — but that
+two-regime story was written AFTER seeing the data. It needs confirmation on a
+held-out bank before anything routes on it. Also: `foreign` coverage of 39.2% at
+k=80 is implausibly high and is keyword-matcher leakage (a fact like "special
+relativity" matches any SEP text using both words), so the foreign column
+overstates coverage and understates the detector's job.
+
+### What this licenses
+
+The trigger for acquisition and abstention — the two decisions that matter in
+the 90% — appears to be **free and model-free**. That is a much better result
+than a working evaluator would have been: no slot, no TTFT cost, no lineage, and
+it is computable from the retrieval the system already did. It also answers the
+mesh question differently than every prior section: if detection is free, the
+mesh's job is not to detect, it is to ACT on the detection — which is
+acquisition, and which is `deep-research-t6f`.
+
+### Scope
+
+n=21/21/20, one corpus, one embedder. The ablation is partial (cross-reference
+leakage). The detector is one post-hoc sign flip on one feature family and is
+NOT confirmed. No synthesis arm.
+
+Reproduce: `scripts/uncovered_regime.py`.
+
+## 19. The scatter detector does NOT confirm — §18's effect was largely SEP's document granularity
+
+**2026-09-09.** §18 closed with the caveat that its sign flip was post-hoc and
+needed a held-out bank before anything routed on it. This is that run, and the
+caveat was justified. **§18's headline claim is hereby qualified: do not build
+on it.**
+
+**Protocol.** The rule was FROZEN before the held-out corpus was touched —
+feature, k, direction and threshold written to disk from §18's SEP units alone
+(`top3_title_share @k=28 >= 0.607`, 75.8% there). The held-out corpus is
+`commonwealth-ai` (55.2k chunks of code and docs) — structurally different by
+design, since SEP averages ~106 chunks per article while a code corpus has many
+small files. 15 positives, each with every expected fact **grep-verified against
+the repo** so the covered label is checkable rather than authored; 41 negatives
+(the SEP and wikipedia banks run against a code corpus).
+
+| | §18 (SEP, derivation) | §19 (commonwealth-ai, held out) |
+|---|---|---|
+| scatter feature AUC | **0.803** | **0.659** |
+| frozen-threshold accuracy | 75.8% | 73.2% — **but TPR 0/15** |
+| 4B evaluator AUC | 0.626 | **0.700** |
+| mean top-3 share, covered | 0.658 | 0.212 |
+| mean distinct titles, covered | 10.2 | 25.0 |
+
+**B1 MARGINAL (0.659 against a 0.75 bar).** The direction survives — covered
+0.212 vs uncovered 0.173 — so the mechanism is not nothing. But it is far below
+the 0.803 that made it look like a solution.
+
+**B2 fails completely, and the metric nearly hid it.** The frozen threshold
+scores 73.2% accuracy while making **zero correct positive predictions** (TPR
+0/15, TNR 41/41): it calls everything uncovered, and looks 73% accurate only
+because 41 of 56 units are negative. Accuracy on an imbalanced set was the wrong
+statistic and it would have read as a near-pass. The cause is scale, exactly as
+predicted: SEP's covered queries concentrate on a handful of ~106-chunk articles
+(share 0.658), while a code corpus returns 25 distinct files out of 28 hits
+(0.212). The threshold 0.607 sits above every value on the held-out corpus.
+
+**B3 reverses.** The 4B evaluator — which scatter beat 0.803 to 0.626 on SEP —
+**wins here, 0.700 to 0.659.** Whichever detector looked better was a property of
+the corpus, not of the detector.
+
+### What this means, stated plainly
+
+> **§18's effect was substantially SEP's document granularity, not a general
+> law.** Concentration is a strong signal when documents are large and few; it
+> nearly vanishes when they are small and many. Nothing here is routable:
+> 0.659 and 0.700 are both under §18's own "blocked" reading of ≤0.65 and its
+> "solvable" bar of ≥0.80.
+
+**Cheap gap detection remains UNSOLVED**, and that is the more important finding
+than a working detector would have been. The 90% regime's load-bearing decision —
+*do I have this?* — has no cheap answer yet on either the free-signal or the
+small-model side, and both candidates swap places depending on the corpus.
+
+**A methodological note worth more than the result.** This is the third bar
+defect in this arc (§14 absolute-without-control, §15 uninformative-by-
+construction, §19 accuracy-on-imbalanced-data). All three shared one shape: a
+statistic that can look like a pass while the mechanism does nothing. The
+standing fix is the one that caught this — always print the confusion matrix,
+never the summary statistic alone.
+
+### Scope
+
+15 positives is small; the positives are authored (though every fact is
+grep-verified). One held-out corpus. The negatives are cross-domain rather than
+ablated, so this tests the easier half of §18's design.
+
+Reproduce: `scripts/scatter_holdout.py`; frozen rule in the header.
+
+## 20. Correcting §19: selective prediction works where ranking failed — and the POSITIVE claim is what scales with N
+
+**2026-09-09. §19's "cheap gap detection remains unsolved" was wrong, and the
+error was the metric.** AUC scores a whole ranking; the decision only has to be
+right WHERE IT FIRES. Re-scoring both datasets as selective prediction —
+abstain on most queries, be confident on some — changes the answer.
+
+### The negative call: ≥90% precision, and it transfers
+
+| dataset | threshold | fires on | precision |
+|---|---|---|---|
+| A — SEP regimes (§18) | 0.464 | 38.7% of queries | **91.7%** |
+| B — held-out `commonwealth-ai` (§19) | 0.143 | 17.9% of queries | **90.0%** |
+
+And at **100% positive-recall** (never wrong about something we DO have), A
+fires on 21.0% of queries at 100% precision. B has no such point — some covered
+question scores below the lowest uncovered one — so soundness is not free.
+
+**The caveat that governs whether this is worth anything.** Base rates here are
+66% and 73% uncovered. In the regime that motivated the question — a corpus
+covering ~10% of what is asked — "we don't have it" is **90% precise by saying
+it always**, and a 90%-precision detector adds nothing. Precision must be read
+against base rate, and at realistic coverage this detector's lift is unmeasured.
+
+### So the scarce claim is the POSITIVE one, and it is much harder
+
+| dataset | ≥90% precision on "I DO have this" |
+|---|---|
+| A — SEP | **unreachable at any threshold** |
+| B — held out | reachable, but **6.7% recall** (fires on 1.8% of queries) |
+
+### And that is the shape that scales with N — the first one in this arc
+
+> **"Nobody has it" is a CONJUNCTION.** It is wrong whenever the single node
+> that HOLDS the answer misfires, so the mesh's error rate equals one node's
+> false-negative rate. **N does not help it at all.**
+>
+> **"Someone has it" is a DISJUNCTION.** A per-node detector that is PRECISE and
+> low-recall composes: the mesh answers if ANY node's confident-yes fires.
+> Precision is preserved and coverage grows with N.
+
+Taking B's 100%-precision operating point (6.7% per-node recall) and assuming
+independent node coverage:
+
+| N | 1 | 3 | 5 | 10 | 20 |
+|---|---|---|---|---|---|
+| mesh recall | 6.7% | 18.7% | 29.2% | 49.8% | **74.8%** |
+
+**This is the first mechanism in §8-§20 where N genuinely compounds**, and it
+compounds for the reason §8 said independence requires: the nodes are reading
+DIFFERENT CORPORA, not voting on the same evidence. A precise, low-recall
+detector is exactly the wrong tool for one node and exactly the right one for
+twenty.
+
+### What must be measured before believing the curve
+
+**Corpus overlap sets the effective N**, and the table assumes independence,
+which is certainly false — if every node installs the same wikipedia snapshot,
+N=20 is N=1. The binding unknown is no longer detection; it is **how much of a
+mesh's corpus coverage is disjoint**. That is directly measurable and is the
+next experiment.
+
+### Scope, and it is thin
+
+15 positives in B, 21 in A. The 100%-precision point in B rests on ONE unit and
+would move with a single relabelling. Base rates are not the production base
+rate. Independence is assumed, not measured. This corrects §19's conclusion but
+does not license a build; it says the question was mis-posed and names the
+quantity that decides it.
+
+Reproduce: the selective-prediction re-scoring runs off
+`uncovered_regime.json` + `scatter_holdout.json`.
+
+## 21. §20 RETRACTED — four defects, including an arithmetic error in the headline curve
+
+**2026-09-09, adversarial pass on §20, written the same hour.** §20 corrected
+§19 and claimed a transferring selective detector plus an N-scaling curve. It
+does not survive. Each defect below was found by attacking §20's own data, and
+the section is retracted rather than softened.
+
+**D1 — the held-out threshold was FIT ON THE HELD-OUT SET.** §20 searched every
+threshold on dataset B and reported the best one. That is the exact error §19
+existed to prevent, committed one section after §19 wrote the standing fix.
+The real test — **A's threshold (0.464) applied to B** — fires on **56/56
+queries at 73.2% precision, which is precisely B's base rate.** The rule is
+inert on held-out data. §20's "it transfers" is false.
+
+**D2 — the published number is a rounding artifact, and the feature is
+knife-edge.** §20 printed threshold `0.143`; the actual value was `0.1429`
+(= 4/28). Used *as printed*, `< 0.143` sweeps in 18 units tied at exactly
+0.14285 and gives **82.1% precision, not 90.0%**. The feature is quantized in
+28ths and **18 of 56 units share one value**, so the operating point sits on a
+tie boundary where one tie group swings precision by 8 points. Anyone
+reimplementing from the published constant gets the worse number.
+
+**D3 — no demonstrated lift on held-out data.** At the honest reading,
+precision 23/28 = 82.1%, **95% CI [64.4%, 92.1%]**, against a base rate of
+73.2%. The interval contains the base rate. (Dataset A does clear it —
+22/24 = 91.7%, CI [74.2%, 97.7%] against 66.1% — but A is the derivation set.)
+
+**D4 — the headline N-curve is arithmetically wrong.** §20 used
+`mesh_recall = 1-(1-r)^N` with `r` = P(detector fires | this node has it) =
+6.7%, which implicitly sets per-node **coverage c = 1** — every node holds the
+answer. The correct form is `1-(1-c*r)^N`:
+
+| N | c=100% | c=50% | c=20% | **c=10%** |
+|---|---|---|---|---|
+| 5 | 29.3% | 15.7% | 6.5% | 3.3% |
+| 10 | 50.0% | 28.9% | 12.6% | 6.5% |
+| **20** | **75.0%** | 49.4% | 23.6% | **12.6%** |
+
+§20 published the c=1.0 column. **At the ~10% coverage the question was actually
+about, N=20 gives 12.6%, not 74.8%** — and `r` itself rests on ONE unit
+(95% CI [20.7%, 100%]), so the base of the exponent is unmeasured too.
+
+### What survives
+
+Only the structural claim, which is logical rather than empirical and needs no
+data: **"nobody has it" is a conjunction whose error equals the holding node's
+false-negative rate, so N does not help it; "someone has it" is a disjunction of
+per-node detectors, so precision is preserved while coverage grows with N.**
+That asymmetry stands. Every magnitude attached to it in §20 does not.
+
+### The pattern across this whole arc, which is the real finding
+
+**Every positive result today died within an hour of being written; every
+negative held.** §13 (reachable) survived only as a statement about an oracle.
+§18 (scatter detects gaps) died in §19. §20 (selective prediction transfers)
+dies here. Meanwhile every "X loses to a simpler baseline" — §11, §12, §14,
+§16, §17 — survived attack.
+
+That asymmetry is not luck. A negative result of the form "this mechanism does
+not beat the baseline" is *supported* by noise; a positive one must exceed it.
+And this instrument's noise is large relative to every effect chased today:
+**7.2% per-fact resampling (§12), ±1 fact run-to-run drift (§17), a feature
+quantized in 28ths with 32% of units tied (D2), and n = 15-21 per class.**
+
+> **Standing rule for this arc: no positive result is credible without a
+> frozen-rule, held-out confirmation, and today produced zero that survived
+> one.** Four bar/metric defects in eight sections (§14 absolute-without-control,
+> §15 uninformative-by-construction, §19 accuracy-on-imbalanced-data, §20
+> fit-on-the-held-out-set) all had the same shape: a statistic that reads as a
+> pass while the mechanism does nothing.

@@ -248,7 +248,7 @@ crates/
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
 ├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before. **The protocol's asking half became two shapes (sv-surface R1, 2026-09-09)**: `TurnFrame::{ApprovalRequest,UserInputRequest}` folded into `TurnFrame::Prompt { id, prompt }` and `TurnRequest::{Approve,UserReply}` into `TurnRequest::Answer { id, answer }` — one host-minted id replaces the three key formats, `TurnPrompt`/`TurnAnswer`/`TurnNotice` are closed enums in `sovereign-contracts::types::turn` (`Turn*`-qualified because bare `Prompt`/`Answer` are already nouns in commonwealth-api and kernel-types), and `TurnFrame::Notice { notice }` lands beside them for everything no answer is owed — `StepDone`, `MessageRefined`, `LessonProposed`, `ResolveAck`, `TurnStarted` (gap-ledger rows G4-G8, G10, whose daemon-side producers land at R3; the fold was free because nothing rendered the old variants — three ignore arms, a deliberate error, and the byte pins were the whole consumer census). `ResolveOutcome` and `StepStatus` moved to `sovereign_contracts::types::approval` so the wire carries the type instead of mirroring it (core re-exports at the historical path), `ApprovalDesk::resolve_answer` is the one `TurnAnswer`-to-parked-kind mapping, and `sovereign-server`'s `ExecutorEvent` ask-variants converged on the same `Prompt` shape — its `{task}:{step}` slot format is just what it mints the id FROM, so a client answers identically whichever host it reached. **The client half learned to answer while it reads (sv-surface R2, 2026-09-09)**: the turn socket splits at connect — one writer task fed by an unbounded channel, the reader kept by `TurnStream` — and the write half is a cloneable `TurnSender` (`TurnStream::sender()`), so a prompt's answer goes onto the wire from the task that renders the card while the task draining tokens keeps reading; before the split that shape could not be written against this crate at all. `connect_with(StreamOptions { claim_approvals })` claims the conversation's approvals (`?approvals=true` — the unclaimed URL is byte-identical to before), `TurnSender::send_answer` replies to a `Prompt`, and `TurnObserver::on_notice` + `TurnStream::drain_after_complete` read the post-terminal window (message-refined and lesson-proposed fire after `Complete`; any non-Notice frame there is an error by name). Proven by in-crate tests against a fake WebSocket host that holds its turn until answered.
-├── sovereign-mesh           # In-process cmnwlth embed
+├── sovereign-mesh           # In-process cmnwlth embed; owns the `work` donor loop + both job executors' sovereign half (`ingest:v1`)
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
@@ -286,6 +286,7 @@ crates/
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp, opaque Payload, Ed25519 authorship, admission into one total order, sync digest. Zero I/O, zero clock; deps are oplog + ed25519 + serde + hex
 ├── commonwealth-rail         # The ring rail's JOURNAL — one append-only JSONL log per namespace under <root>/rings/<ns>/, single-writer door + peer ingest; re-exports -rail-core wholesale
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
+├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec (Submit/Offer/Lease/Renew/Complete/Fail/Revoke), the unit seal, the fold, one lease predicate, the executor seam. Zero I/O + zero clock in the core (`process` feature adds tokio); package closure 58, no sovereign-*
 ├── commonwealth-state        # MeshStore — SQLite KV w/ TTL GC; since cw-lift 4 a local PROJECTION of the ring rail (rail_kv vocabulary + fold, rail_outbox table), not a gossip replica
 ├── commonwealth-test-harness # SimulatedMesh, SimulatedNode, MockLlamaServer
 └── oicp-conformance          # OICP protocol conformance suite
@@ -5281,14 +5282,16 @@ variant plus its `paths()` arm and touches neither auth nor the wire.
 **The ring rail is the second scope, and the first deployment target**
 (`commonwealth-api/src/routes_rail.rs` + the `commonwealth-rail-core` /
 `commonwealth-rail` pair, ring-deploy S1–S6, 2026-08-30). **It became two
-crates on 2026-09-04** (cw-lift 1b), out of `commonwealth-knowledge/src/rail/`:
+crates on 2026-09-04** (cw-lift 1b), carved out of what was then
+`commonwealth-knowledge`'s own rail module:
 `-rail-core` is the FOLD — the vocabulary, Ed25519 authorship, admission into
 one total order, and the per-actor sync digest, with no filesystem, no clock
 and no socket — and `-rail` is the JSONL journal that calls it. The split is
 what the campaign's second lift needs: a second application composes on the
 fold without inheriting a file layout, and the fold's whole in-repo dependency
-surface is `oplog`. `commonwealth-knowledge::rail` is a re-export for one more
-commit (order 1c drops it), so no consumer moved in the same diff. The three
+surface is `oplog`. `commonwealth-knowledge::rail` survived as a re-export for
+one commit so no consumer moved in the same diff; order 1c dropped it, and
+`commonwealth-knowledge/src/` carries no rail module today. The three
 `[[forbid]] from = "commonwealth-rail*"` blocks in `quality/ARCH_LAYERS.toml`
 are what hold it — to `corpus-engine*` (the edge order 1a paid for), to
 `sovereign-*`, and back to `commonwealth-knowledge`, which layer ordering
@@ -5350,7 +5353,9 @@ reading different answers off the same journal. That is pinned exhaustively
 over all 720 orderings of a six-op fixture; asserting it at this layer rather
 than over balances made it both stronger and true for every app that will ever
 sit on the rail. It buys the property with: dedupe by re-derived `OpId`; a
-content-derived total order `(ts_unix, actor, id)`; a void set built from every
+content-derived total order `(ts_unix, actor, seq, id)` — the `seq` term added
+2026-09-09 after a work-plane burst inside one second folded a `Lease` ahead of
+the `Submit` that opened its handoff and a unit consequently ran twice; a void set built from every
 correction at once (so a correction arriving before its target pre-emptively
 voids it) that **never resurrects** — correcting a correction cancels its
 replacement and leaves the original void, which is what "compensating entry,
@@ -5549,7 +5554,10 @@ SNAPSHOT re-appends the live set under its ORIGINAL `t`, so the fold puts every
 row back where its author left it. That is exactly what `sync.rs`'s refused
 truncation knob was not: an operator-set line with nothing checking what fell
 below it. The threshold is ONE constant,
-`rail_kv_pump::SEAL_AFTER_OWN_OPS = 2_000`, for KV and measurements alike, and
+`rail_kv_pump::SEAL_AFTER_OWN_OPS = 2_000`, for KV, measurements and the work
+plane alike (cw-lift 5d added the third arm; `work`'s snapshot is its live
+leases and its offer, taken from the fold BEFORE the prune because the journal
+is that plane's only copy of them), and
 what it counts is this node's own ADMITTED ops at or above its authenticated
 floor. The cost of that count is a fold, so a cheap one-sided gate runs first:
 own RAW lines on disk (parsed, not verified) can never be fewer than
@@ -5585,6 +5593,22 @@ second place (§10.6). The app renders them, because it is the only thing that
 knows what one is. The dev server holds the grant itself, so the
 browser tab never sees a credential and the page reaches one namespace's rail
 and nothing else on the daemon; the grant dies with the process.
+
+**`svrn job` is the other verb on the same rail**
+(`sovereign-cli-llm/src/job_cmd.rs`, cw-lift 5d): `ring` deploys an app to a
+trust ring, `job` hands that ring a unit of *compute*. `job submit --kind
+process:v1 -- <argv>` appends ONE act — a `Submit` naming the command, the git
+rev it runs at, and which nodes may take it — through `ring_cmd::rail_append`,
+the same append client `ring` uses, and then stops. It does not wait, poll or
+place: a submitter that also chose a donor would be a second decider for a
+lease (§10.6). `job status` reads `GET /v1/rail/log` and folds it with the SAME
+`commonwealth_work::WorkProjection::fold` the daemon's donor loop runs, which
+is what the package crate is for — the terminal, the daemon and a lifted
+third-party peer are three readers of ONE function and cannot disagree about
+who holds a lease. It goes over HTTP and never opens the journal for `ring
+log`'s reason: the roster the DAEMON loaded is what decides which acts are
+readable, so folding the file directly would be confidently and silently wrong
+on exactly the ring where membership is the question.
 
 Two details are the design. **The op table is two entries** — `log` and
 `append` — where `meshapp dev`'s is twelve, because the rail is two routes and
@@ -5738,6 +5762,54 @@ absent and the guards fail closed for *every* caller.
 
 - `MeshCorpusManager` / `ShardManager` — install / list / remove /
   shard prepare / install received / consolidate.
+- `ShardManager::merge_participants(MergePlan)` — the ONE merge
+  implementation (ARCH §10.6). `coordinate_merge` resolves who
+  participated from handoff/queue state and then calls it;
+  sovereign-mesh's fold-side collector resolves participation
+  completely differently and calls the same function. A `MergePlan`
+  carrying `expected_partitions: Some(n)` REFUSES
+  (`corpus_engine::Error::IncompleteCoverage`) rather than produce a
+  subset canonical that would advertise itself as complete on gossip;
+  `None` keeps the legacy "merge whatever is present" behaviour, which
+  is what `coordinate_merge` passes.
+- **The merge finishes the job: `Ok(Some(info))` from
+  `merge_participants` means REACHABLE.** `CorpusEngine::merge_partitions`
+  → `sharding::merge_shards` writes the merged chunks and stops — the
+  output carries `ingestion_in_progress: true, indexes_built: false`, so
+  `installed_indexes()` skips it, `usable_indexes()` cannot search it,
+  and `hosted_corpora` gossip — built from `installed_indexes()` in
+  `sovereign-mesh::capabilities` — advertises nothing. Finishing it is
+  `corpus_engine::finalize_canonical` (`corpus-engine/src/sharding.rs`):
+  `build_indexes` → `mark_indexes_built` → `mark_ingestion_complete`,
+  then the content fingerprint LAST, because a peer pulling against a
+  fingerprint trusts the chunk set is stable and the ingestion-complete
+  bit is the proxy for stable. One name for that sequence, shared with
+  `merge_partitions_into_canonical`, which is where it was lifted from
+  (ARCH §10.6). **It is the last step of `merge_participants` itself**,
+  after the shard-dir cleanup — cw-lift 5g B8. Before that it was called
+  by the FOLD-side caller only
+  (`commonwealth_api::auto_recover::merge_from_fold_coverage`), and
+  `coordinate_merge` — the queue-mode caller, reached from
+  `routes_internal/corpus_queue.rs:210` and `:550` — shared the same merge
+  and had the identical gap: a queue-mode merge produced a canonical
+  holding every donor's chunks that `installed_indexes()` returned zero
+  rows for. "A merge produces a corpus someone can reach" is a
+  post-condition, so it lives with the function that promises it rather
+  than with two callers each remembering (ARCH #10).
+- When the merge lands and the finalize does not, `merge_participants`
+  returns `corpus_engine::Error::MergedNotFinalized { corpus,
+  canonical_path, chunks, detail }` and logs it at `error!`. Its own
+  variant because the state is neither neighbour (ARCH §18.3): the chunks
+  ARE on disk and the source partitions are already deleted, so that
+  directory holds the only copy — "nothing was produced" invites a caller
+  to re-derive from partitions that are gone, and "merged" claims a built
+  canonical, which is the defect verbatim. The canonical is deliberately
+  left in place. `merge_from_fold_coverage` carries the three fields
+  across the crate boundary unchanged as
+  `RecoveryOutcome::MergedButNotInstalled`; the two spellings stay
+  separate for the same dependency-direction reason `IncompleteCoverage`
+  does. Nothing retries it: the next tick short-circuits on
+  `AlreadyHasCanonical`.
 - `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` so a node
   without a local embed model still ingests via the engine.
 - `grounding.rs` — `GroundingConfig` + `search_for_grounding` +
@@ -5745,15 +5817,36 @@ absent and the guards fail closed for *every* caller.
 - **Dimensional contribution ledger**
   (`commonwealth-core::contributions`) — append-only event log
   (`LedgerEventKind` variants `InferenceServed`, `InferenceReceived`,
-  `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`)
-  with pure aggregation into per-node `NodeContributions`. No
-  `balance`, no exchange rate, no ranking — units are
-  incommensurable. Storage in
+  `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`,
+  `JobUnitCompleted`) with pure aggregation into per-node
+  `NodeContributions`. No `balance`, no exchange rate, no ranking —
+  units are incommensurable. Storage in
   `commonwealth-state::ContributionEmitter` (gossip-replicated
   `MeshStore` under `app_id = "contributions"`). Pull-side
   `ShardTransferred` is emitted by the merge leader on behalf of
   the peer that shipped bytes — the schema carries an explicit
   `from_node`, and the aggregator credits `bytes_served` to it.
+  **`JobUnitCompleted` is the work plane's dimension** (cw-lift 5h):
+  a donor that ran another member's unit to a verdict credits
+  `NodeContributions.compute_donated` (a `DonatedCompute` of `units`
+  + `wall_seconds`), counted apart from inference because a CI shard
+  is not an inference request. It is emitted ONCE by the donor, in
+  `sovereign-mesh::work_donor::run_unit`'s `Ok` arm after its own
+  signed `Complete` appends — deliberately NOT derived by every node
+  that folds that act, because this log converges by "one write site,
+  one event" while the `work` journal converges by total order, so a
+  per-folder derivation would write one fact once per ring member
+  under N distinct LWW keys. `work_donor::credit_for` carries the
+  argument and the at-least-once analysis. `wall_seconds` is also the
+  half a folding third party could not reconstruct: the journal
+  carries lease-held time, not compute. `handoff` + `unit_hash` +
+  `donor_actor` (the `ActorKey` admission verified, not the emitter's
+  self-reported `node_id`) are the audit trail back to the signed act.
+  **Nothing renders this dimension to a person yet**: `mesh_admin.rs`'s
+  `NodeContributionsView` is a field-frozen flat mirror carrying only
+  the inference/corpora/bytes fields, `svrn mesh balance` is a stub,
+  and the daemon's `MeshStore` is in-memory — the rendering surface is
+  the next rung's work, not this one's.
 - **Local Activity ledger** (`commonwealth-core::activity`) — the
   glassbox counterpart answering "what is *my* daemon doing, even as
   a mesh of one?" A sibling of the contribution ledger, not part of
@@ -5999,12 +6092,19 @@ directory per namespace — and this store is the fold of it:
   exactly the direction a local write creates.
   `RoundOutcome::namespaces_projected` reports it, and
   `a_round_projects_the_namespace_even_when_it_pulled_nothing` is the pin.
-- **`mesh-measurements` is skipped by NAME, not by parse failure.**
-  `rail_kv_pump::is_kv_namespace` is one predicate against
-  `MEASUREMENTS_APP_ID`. The KV fold's own `unreadable` count would work as a
-  discriminator and would then report ~28 unreadable acts a round for a
-  namespace behaving perfectly — a count that fires when nothing is wrong
-  stops being read (§18.3).
+- **A namespace's vocabulary is chosen by NAME, not by parse failure.**
+  `rail_kv_pump::projector_for` is one selector returning `Some(Kv)`,
+  `Some(Work)` or `None`, against `MEASUREMENTS_APP_ID` and
+  `commonwealth_work::WORK_NAMESPACE`. Each fold's own `unreadable` count
+  would work as a discriminator and would then report ~28 unreadable acts a
+  round for a measurements ring behaving perfectly — worse for `work`, whose
+  count would rise with how many leases a donor is renewing. A count that
+  fires when nothing is wrong stops being read (§18.3). It is deliberately NOT
+  keyed on `DAEMON_OWN_NAMESPACES`: that list answers whose roster the daemon
+  derives, and keying the projector on it would change every app ring's
+  projection. Both non-KV namespaces are read by `snapshot` through the same
+  selector, so the send and receive halves cannot drift onto two answers
+  (§10.6).
 - **A local write does not wait for the 60-second round.** One
   `tokio::sync::Notify` is held by both halves: the pump raises it after any
   successful append and `spawn_ring_sync_loop` selects on it beside its
@@ -6793,7 +6893,7 @@ Default ports:
 | Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
 
 | Is any quality subsystem's posture stale? | **`svrn posture`** (dev-tools) — one read-only table: artifact age + verdict for drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines; each row names its refresh command. Added 2026-07-30 because drift and arch had both been weeks stale with nothing aggregating that fact |
-| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>] [--budget-secs 1800] [--mint]`** (dev-tools, `sovereign-cli/src/quality_check_cmd/`) — the curated lean check. Lanes are DATA in `quality/instruments.toml` — the SAME table every other instrument in the repo is declared in, since 2026-09-07 (they had their own check-lanes table until then, and two tables answering "what runs here" collided on `kind`, `enforcement`, cost and `baseline` with different meanings on each side; ARCH §10.6). `--trigger <venue>` runs any other venue's selection out of that table — `prepush`, `precommit`, `smoke:<n>` — with the venue's own budget, concurrency, hoisted prepare step and failure disposition declared in its `[[trigger]]` row, and `--dry-run` prints the selection, the run order and the budget arithmetic without running anything. Each lane runs as a subprocess and states its own verdict on its LAST stdout line as a `kernel_types::Judgement` (`sovereign_cli_shared::lane_verdict`), so no caller reconstructs a verdict by grepping lane prose the way `scripts/lib/ci-bench-verdict.sh` must. Preconditions are a closed enum (port / slot-decodes / corpus-installed / binary / container) and an unmet one is could-not-judge NAMING it, never a pass. **Every member asserts that the SUBJECT of the measurement exists; none asserts that the WORLD is convenient** (ARCH §18.2). A sixth, `host-quiet:<max 1-min load>`, was declared on six instruments and on `chat-ask`'s `per-stage ceilings` row until 2026-09-08 and is DELETED, not retuned. The evidence behind it stands — the same binary, bank and bar decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s at load 32 on the authoring host — and the conclusion drawn from it did not: nobody derived the 4, on the host that runs the check it was unmet most of the time, so every wall-clock row emitted could-not-judge naming the load and three consecutive proof runs learned nothing. Sharper still, one `chat-ask` run at load 4.27-4.32 reported `failed` on q1 and `could-not-judge` on q2, because the bound was evaluated PER QUESTION and the load crossed 4.0 between them. **Load is now a COVARIATE on every row and gates nothing**: `summary.json` carries `load_start`/`load_end` and `daemon_uptime_secs_start`/`_end` per row (`quality_check_cmd::exec::Covariates`), the second pair because a row whose start uptime exceeds its end uptime ran across a daemon restart and is interrupted rather than slow — two peer sessions share this daemon and one restarts it deliberately. `sovereign_cli_shared::host_load::load_average_1m` is the one reader. It reads the 1-minute load average and NOT the daemon's in-flight decodes, which this host serves no route for; that is a named substitution, not a silent one. `chat-ask`'s ledger walk now yields TWO rows rather than one: `per-stage calls` (the model-call counts, load-invariant and true on any machine) and `per-stage ceilings` (the milliseconds), so the load-sensitive half no longer decides the load-invariant half's verdict. Every run writes `target/quality-check/<stamp>/summary.json` with per-lane seconds — which `sovereign-ci-bench.sh` has never done (`target/ci-bench` is empty). A run whose stack has no baseline for its fingerprint writes NOTHING; `--mint` is the only door |
+| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>] [--budget-secs 1800] [--mint]`** (dev-tools, `sovereign-cli/src/quality_check_cmd/`) — the curated lean check. Lanes are DATA in `quality/instruments.toml` — the SAME table every other instrument in the repo is declared in, since 2026-09-07 (they had their own check-lanes table until then, and two tables answering "what runs here" collided on `kind`, `enforcement`, cost and `baseline` with different meanings on each side; ARCH §10.6). `--trigger <venue>` runs any other venue's selection out of that table — `prepush`, `precommit`, `smoke:<n>` — with the venue's own budget, concurrency, hoisted prepare step and failure disposition declared in its `[[trigger]]` row, and `--dry-run` prints the selection, the run order and the budget arithmetic without running anything. Each lane runs as a subprocess and states its own verdict on its LAST stdout line as a `kernel_types::Judgement` (`sovereign_cli_shared::lane_verdict`), so no caller reconstructs a verdict by grepping lane prose the way `scripts/lib/ci-bench-verdict.sh` must. Preconditions are a closed enum (port / slot-decodes / corpus-installed / binary / container) and an unmet one is could-not-judge NAMING it, never a pass. **Every member asserts that the SUBJECT of the measurement exists; none asserts that the WORLD is convenient** (ARCH §18.2). A sixth, `host-quiet:<max 1-min load>`, was declared on six instruments and on `chat-ask`'s `per-stage ceilings` row until 2026-09-08 and is DELETED, not retuned. The evidence behind it stands — the same binary, bank and bar decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s at load 32 on the authoring host — and the conclusion drawn from it did not: nobody derived the 4, on the host that runs the check it was unmet most of the time, so every wall-clock row emitted could-not-judge naming the load and three consecutive proof runs learned nothing. Sharper still, one `chat-ask` run at load 4.27-4.32 reported `failed` on q1 and `could-not-judge` on q2, because the bound was evaluated PER QUESTION and the load crossed 4.0 between them. **Load is now a COVARIATE on every row and gates nothing**: `summary.json` carries `load_start`/`load_end` and `daemon_uptime_secs_start`/`_end` per row (`quality_check_cmd::exec::Covariates`), the second pair because a row whose start uptime exceeds its end uptime ran across a daemon restart and is interrupted rather than slow — two peer sessions share this daemon and one restarts it deliberately. `sovereign_cli_shared::host_load::load_average_1m` is the one reader. It reads the 1-minute load average and NOT the daemon's in-flight decodes, which this host serves no route for; that is a named substitution, not a silent one. `chat-ask`'s ledger walk now yields TWO rows rather than one: `per-stage calls` (the model-call counts, load-invariant and true on any machine) and `per-stage ceilings` (the milliseconds), so the load-sensitive half no longer decides the load-invariant half's verdict. Every run writes `target/quality-check/<stamp>/summary.json` with per-lane seconds — which `sovereign-ci-bench.sh` has never done (`target/ci-bench` is empty). A run whose stack has no baseline for its fingerprint writes NOTHING; `--mint` is the only door. **`--distribute` (cw-lift 5e, `quality_check_cmd/distribute.rs`) runs the SAME selection as work on the `work` ring instead of as child processes here.** Each selected instrument becomes one `process:v1` unit — `argv` from the row, `preconditions` from the row (`oicp_types::JobRequirements::preconditions` is `kernel_types::Precondition`, so nothing is re-spelled), the verdict source from the row (`JudgementLine` -> `ResultSource::VerdictLine`, `ExitCode` -> `ResultSource::Stdout`; fixing it at `VerdictLine` would make four of the five `ci:test` rows report `no-verdict`), and the wall cap from the VENUE's own `overrun` policy, the same decider the local path caps a child with. Units pin `repo_rev` to `git rev-parse HEAD` plus this host's os/arch, and the merge refuses any `Complete` whose `ComputeAttribution` is not `comparable_to` this checkout's — a donor one commit behind produces a well-formed `passed` about a tree that is not yours, and the row is could-not-judge NAMING both revs rather than adopting it. The submitter appends through `sovereign_cli_shared::rail::rail_append` (the ONE operator-side rail client; `svrn job` and `svrn ring` are the other two callers) and folds `rail_log` with `WorkProjection::fold` and `admission_from_wire`, which moved from `job_cmd` into that module for this second reader. **A unit the cohort cannot place is a ROW carrying its refusal, never an absence** — never-ran with each offer's typed `WorkRefusal` when every offer refused, could-not-judge naming the three host-side checks the rail cannot see (rev checkout, precondition, executor registration) when some offer could have taken it, and the refusal survey is taken at the last millisecond the handoff was still on offer rather than at the merge's clock, or every unplaced row would read `not-allowed` about a window that had just closed. Two instruments whose payload is byte-identical are ONE unit on the plane (`seal::unit_hash` covers kind + payload, not requirements) and the submission is REFUSED by name rather than giving two rows one fate. Everything downstream is unchanged and shared: `render_rows`, `honesty_footer`, `write_summary` and the enforcement x venue exit rule are one implementation over both paths, so a distributed verdict is diffable against a local one at the same rev. `summary.json` gains a doc-level `submitted_by` and a `node` per lane row — `null` on a local run, because a local run signs nothing and no actor took part; `scripts/cw-work-offload-share.sh` is the `cw-work-ci-offload` bar's instrument and reads them with ONE formula (rows whose `node` is non-null and differs from `submitted_by`, over EVERY row, so a dropped shard costs the share), exiting 3 `artifact-absent` when there is no summary rather than printing the floor back. `quality/instruments.toml` gained the `[[trigger]]` for `ci:test` (budget 4500 s, the `test` job's own `timeout-minutes: 75`; concurrency 2; no prepare step, because a donor has no `target/debug/xtask` of ours) — before it, `--trigger ci:test` exited 2 |
 | Did issue #57 come back — an answerable half refused? | **`svrn quality check --lane chat-ask`** (`sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs`, bank `sovereign/bench/quality-check/chat-ask.toml`) — ingests `docs/ARCHITECTURE_TOUR.md` from source into `qc-arch-tour-<fingerprint8>` (that ingest IS the document-ingest lane: chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads the turn's own ledger through `chat ask --format json`'s `metadata`. Named rows: ingest · ledger present · route · per-stage ceilings · per-stage baseline (TRACKED) · gate outcome · both halves answered · not abstained · useful · judge calibrated. The bank declares PRE-REGISTERED MEDIANS per model stem and the bar is DERIVED by one formula — `ceiling = max(1.5 x median, median + ceiling_floor_ms)`, `ceiling_floor_ms` declared once for every stage (`chat_ask::ceiling_from_median`, ARCH §10.6). The additive term exists because a multiplier alone has no floor: 1.5x a 193 ms `retrieval` median put the bar at 290 ms and a run failed the whole lane on `retrieval 298 ms > 290`, eight milliseconds. A stem with no table is could-not-judge, not a pass, and so is the whole ceilings row on a host that is not quiet. The usefulness judge is the gate's own forced-choice A/B probe (`bench_cmd::live_runner::forced_choice_ab`) and its two controls run on EVERY run — if they stop separating, `useful` is could-not-judge rather than a verdict. Abstention is read through `bench_cmd::chaos_monkey::action_from_gate_signal`, the one decider, never a second detector |
 | Is the ENGINE slower than a number written down first? | **`svrn quality check --lane throughput`** (`sovereign-cli-llm/src/quality_lane_cmd/throughput.rs`, bank `sovereign/bench/quality-check/throughput.toml`) — wraps `scripts/throughput_probe.py --json` rather than re-deriving it, over four declared arms (primary/fast x short/long) plus two plain end-to-end turns through the runtime. Bars are PRE-REGISTERED per model stem: an arm with a bars table for the running stem gates HARD, an arm the operator declared `bars_deferred` records without gating, and an arm with NEITHER is could-not-judge naming the stem — a model swap can never read as a decision someone made. The long arms run one COLD trial against a prompt salted in its first bytes, because the daemon prefix-caches (measured: 5,917 tokens cost TTFT 44,727 ms cold and 375 ms repeated) and the ordinary warm-up-plus-trials shape would measure the cache. Its predecessor, `desktop-smoke.sh::perf_probe`, compared each run against a gitignored baseline directory that does not exist on a fresh checkout, so it captured on every run and compared on none |
 | Which ITEMS does the lean check run, and who decided? | `sovereign/bench/smoke.toml` — one file, one `[[subset]]` row per (subset, bank), either `ids = [...]` or `mode = "full"`. Reached by `--smoke-subset <subset_id>` on `bench all` (forwarded to both its routing and retrieval/synth `eval run` subprocesses) and on `bench chaos-monkey run`; `knowledge-gym` already selected by id, so the lane's argv expands `{ids:<subset>}` into its existing `--fixture` flag rather than growing a second one. DECLARED, not sampled: `--sample-questions N` and `--limit N` count off the front of a bank and so pick a different set as it grows, which is what makes a sampled lane's baseline cap-specific. A selected bank with NO row exits 2 rather than running whole, and a declared id the bank no longer has refuses rather than shrinking the lane. The `subset_id`s are in the run fingerprint |
@@ -7024,6 +7124,62 @@ daemon is re-announced on that node's next round, which is why the repair
 cannot evict a live member. `GET /v1/mesh/status` carries `node_pubkey` and
 `active` per member as of the same date — before that no read surface exposed
 the field, so the collision was undiagnosable from outside the process.
+
+The rule deliberately never refuses a TOMBSTONE sharing a key with a live row:
+that is the legitimate rejoin shape. A fourth site had to learn the same thing
+on 2026-09-09 — the gossip round's candidate list, which filtered only `self`
+and so dialed departed members forever. Harmless on its own; destructive
+against the permitted shape, because `IrohTransport` keys its bridge cache on
+`(pubkey, alpn)`, so the retired and live rows resolve to ONE bridge and their
+differing dial info retargets the live peer's tunnel every round. Measured on
+`Meshsonics`: 181 retargets in 12 minutes on one endpoint, gossip to the live
+Mac timing out at exactly `PEER_TIMEOUT`, and that peer decaying to Offline
+while iroh reported an ACTIVE path throughout — which is why the reachability
+watchdog's relay-home, self-discovery AND peer-path terms all read green
+through it. `gossip::is_gossip_candidate` is now the one predicate for "is this
+member worth dialing", and it reads `removed_at`, not liveness;
+`announce_presence_change` had filtered `is_active()` on its own push targets
+since it was written.
+
+A FIFTH SITE, later the same day, and it is the one the fourth was silently
+standing in for. Filtering tombstones stops the retarget storm only while ONE
+of the twins is a tombstone; the moment both rows are live — any legitimate
+rejoin — the shared `(pubkey, alpn)` bridge is back, measured at 83 retargets
+in six minutes on `27ba8166…`. `gossip::one_row_per_endpoint_key` collapses
+live rows sharing a key to ONE dial per round (greatest `event_time`,
+`node_id` as a deterministic tiebreak) and traces `collapsed`/`dialing` when it
+fires. It deliberately RESOLVES the ambiguity where `merge_from`'s
+`alias_clash` REFUSES it: refusing at the door is right, but refusing at the
+dial site drops every row involved and strands the machine — which is the
+failure this whole rule exists to prevent. Picking the wrong twin costs
+nothing (both names resolve to one endpoint key); picking a different one each
+round would be the storm at gossip cadence, so the choice is stable and
+self-reinforcing.
+
+WHAT IS STILL UNFIXED, and it is the actual defect under all five sites: the
+roster can hold two ACTIVE rows for one physical machine, and `is_active`
+cannot tell a graceful `leave` from a `revoke_member` because both stamp only
+`removed_at`. A widening that read `last_seen > removed_at` as a rejoin was
+tried and reverted the same day (`63743acdf`) — revocation targets a live
+member, so its next heartbeat would carry `last_seen` past its own removal and
+re-admit it (§18.1: a guard asserting on a field the subject supplies). The
+repair is a `RemovalKind` (`Left` | `Revoked`) on the record, additive behind a
+serde default; until then a stranded rejoined row is repaired by
+`forget-member`, an operator act.
+
+SELECTION FAIRNESS is a separate clock as of 2026-09-09, and the two must not
+be merged again. `select_round_peers` orders most-stale-first, and its bound
+("a peer waits at most `ceil(n / FANOUT)` rounds") holds only if being PICKED
+advances the key. It was keyed on `peer_last_contact`, which
+`observe_peer_contact` stamps ONLY on a completed round-trip — correctly, that
+success-only rule is what fixed the 2026-07-29 false-Offline — so a peer that
+never answers never advanced and held a slot for ever: 74 dials each to two
+unreachable peers in twenty minutes and ZERO to the other five members, one of
+whose daemons was up. `AppState::peer_last_attempt` (`note_peer_attempt` /
+`peer_attempt_or_init`) records when a round last SPENT A SLOT, stamped before
+the dial so refusals and timeouts advance it too. Offline-decay reads contact;
+selection reads attempt.
+
 `switch` answers `202` and detaches, like `leave` — it is served by the
 listener it drops.
 
@@ -7161,7 +7317,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
 | `Runtime` surface shrink (desktop + server) — **Phase 0 DONE 2026-08-24** | `sovereign-desktop/src-tauri/src/{state.rs,commands/{mod,conversation,models}.rs}`; `sovereign-server/src/{main,routes,routes_documents,routes_mcp,corpus_upload,tenant,ws}.rs` | `sovereign_core::Runtime` was doubling as a general-purpose DB handle: 11 desktop and 20 server call sites reached `runtime.store` for work that is not a chat turn (conversation list/rename/delete, memory tombstones, message search, document assets, corpus upload). Both hosts already held the SAME `Arc<dyn StateStore>` independently, so those sites now read it directly — desktop via `AppState::store()` / the `require_store!` macro, server via a `store` Extension layered from `main.rs` beside the Runtime (`ToolRegistry` likewise, retiring `runtime.tools` on `/v1/tools` and the whole `/mcp` surface). Desktop consumption surface: 9 methods + 5 fields → 9 methods + **4** fields. **Still on the Runtime, deliberately:** desktop `runtime.tools` (`commands/models.rs`) and `runtime.skills` (`commands/conversation.rs::list_skills`) — `AppState` carries no tool or skill registry of its own, so there is nothing to repoint to; `runtime.sessions` (`commands/chat.rs`, cancel/redirect) is a chat operation and belongs to the daemon-convergence Phase 5 turn protocol. One intended behavioural delta: the store opens earlier than the Runtime and survives a Runtime rebuild, so the repointed commands answer from the database in those two windows instead of reporting "Backend is still loading". |
 | `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** in the feature-gated `sovereign-cli-dev` developer toolchain (see `project_cmd.rs` row), not part of the public build. ATOS runner loop — subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, run-record persistence cohere as one state machine today. One-file-per-stage split when boundaries stabilise. |
-| `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~3,100 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry, and the ONLY daemon implementation — `sovereign daemon run`, the desktop's Local mode and `svrn mesh create/join` all construct this type. Its 17 `RwLock<Option<T>>` slots and their 10 `set_*` + 7 `install_*_router` methods were retired 2026-08-24 (daemon-convergence Phase 2) in favour of a total constructor taking one `daemon_services::DaemonServices` — a three-variant sum (`MeshAdmin` / `Desktop` / `Headless`) whose field placement is the measured pair-independence result over the live construction sites (`quality/TOPOLOGY.md` §4). The three variants NEST as of Phase 3 (2026-08-25): `state_store` moved from the desktop variant into `ServingCore` and `sovereign daemon run` opens its own `<data_root>/sovereign.db`, so `Desktop` is now literally `Box<ServingProfile>` and `Headless` is that plus rails. That store was the one field making the two serving shapes incomparable, and its absence was a live defect: a headless daemon mounted `reading_http` with nothing to resolve a conversation title with. The mesh, admin, reading and — since 2026-08-25 (TOPOLOGY phase 5c) — TURN routers are now built by the daemon itself from a `Weak<Self>` captured by `Arc::new_cyclic`, so no host installs them and no host can differ on them. `turn_http` is what makes `sovereign daemon run` answer rather than merely hold the ingredients of an answer: `ServingCore` gained a non-optional `runtime: Arc<Runtime>` (commissioned through the shared `sovereign-runtime-recipe`), and the router serves `POST /v1/conversations` + `GET /v1/conversations/{id}/stream` in `sovereign-server`'s exact wire form, loopback-only, so a client cannot tell which of the two it reached. **One NAMED exception since sv-surface rung 6 C2-b:** the stream also serves `TurnRequest::{Resume,Redirect}` — session continuation, the wire form of `Runtime::{resume_session_stream,redirect_turn_stream}`, without which an attached surface could ask a question but not answer its own clarification card. `sovereign-server` refuses both by name, because a session id arrives unscoped while every conversation there is `{tenant}:{conv}`; that is a wire-compat debt this entry records rather than a property. The daemon refuses a session belonging to another conversation (redirect resolves the replacement turn's message AND conversation off the session, so without the guard a socket on conversation A could run a turn in B and stream it to A), and deliberately does NOT refuse one it has merely forgotten on the resume path — `SESSION_RETENTION` is 30s and the in-process command answers a stale card, so refusing would trade the divergence rung 6 closes for a new one. Driven end-to-end by `sovereign-mesh/tests/turn_surface.rs`. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. **`start_daemon`'s network posture is one decision as of 2026-09-08** (`local_only.rs`, cw-lift 4d): `LocalOnlyProfile` is resolved once from `[daemon] local_only` + `SOVEREIGN_LOCAL_ONLY` (both directions) and is read by the mDNS gate, `iroh_access::resolve_enabled`, `internal_bind_addr`, and — new — the four peer-facing loops (gossip, auto-ingest collaborate, ring-sync, rail KV pump) that until then spawned unconditionally, so "local-only" was unreachable at runtime whatever the manifest said. On, those four do not start, the internal API binds loopback, and the mesh-of-one is still minted and served (the profile skips the NETWORK, not the model). `local_only + require_encryption` is refused at boot by name rather than resolved silently either way. What a boot spawned is recorded in a `RunningServices` census on `DaemonState::Running` and read back by `EmbeddedDaemon::running_services()` — the instrument for `sovereign-mesh/tests/main/local_only_boot.rs`, which is `cw-local-only-daemon`'s bar instrument now that its K2 fired (the crate seam that would have removed the ten transitive commonwealth deps moves 15,634 lines and deletes none). |
+| `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~3,100 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry, and the ONLY daemon implementation — `sovereign daemon run`, the desktop's Local mode and `svrn mesh create/join` all construct this type. Its 17 `RwLock<Option<T>>` slots and their 10 `set_*` + 7 `install_*_router` methods were retired 2026-08-24 (daemon-convergence Phase 2) in favour of a total constructor taking one `daemon_services::DaemonServices` — a three-variant sum (`MeshAdmin` / `Desktop` / `Headless`) whose field placement is the measured pair-independence result over the live construction sites (`quality/TOPOLOGY.md` §4). The three variants NEST as of Phase 3 (2026-08-25): `state_store` moved from the desktop variant into `ServingCore` and `sovereign daemon run` opens its own `<data_root>/sovereign.db`, so `Desktop` is now literally `Box<ServingProfile>` and `Headless` is that plus rails. That store was the one field making the two serving shapes incomparable, and its absence was a live defect: a headless daemon mounted `reading_http` with nothing to resolve a conversation title with. The mesh, admin, reading and — since 2026-08-25 (TOPOLOGY phase 5c) — TURN routers are now built by the daemon itself from a `Weak<Self>` captured by `Arc::new_cyclic`, so no host installs them and no host can differ on them. `turn_http` is what makes `sovereign daemon run` answer rather than merely hold the ingredients of an answer: `ServingCore` gained a non-optional `runtime: Arc<Runtime>` (commissioned through the shared `sovereign-runtime-recipe`), and the router serves `POST /v1/conversations` + `GET /v1/conversations/{id}/stream` in `sovereign-server`'s exact wire form, loopback-only, so a client cannot tell which of the two it reached. **One NAMED exception since sv-surface rung 6 C2-b:** the stream also serves `TurnRequest::{Resume,Redirect}` — session continuation, the wire form of `Runtime::{resume_session_stream,redirect_turn_stream}`, without which an attached surface could ask a question but not answer its own clarification card. `sovereign-server` refuses both by name, because a session id arrives unscoped while every conversation there is `{tenant}:{conv}`; that is a wire-compat debt this entry records rather than a property. The daemon refuses a session belonging to another conversation (redirect resolves the replacement turn's message AND conversation off the session, so without the guard a socket on conversation A could run a turn in B and stream it to A), and deliberately does NOT refuse one it has merely forgotten on the resume path — `SESSION_RETENTION` is 30s and the in-process command answers a stale card, so refusing would trade the divergence rung 6 closes for a new one. Driven end-to-end by `sovereign-mesh/tests/turn_surface.rs`. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. **`start_daemon`'s network posture is one decision as of 2026-09-08** (`local_only.rs`, cw-lift 4d): `LocalOnlyProfile` is resolved once from `[daemon] local_only` + `SOVEREIGN_LOCAL_ONLY` (both directions) and is read by the mDNS gate, `iroh_access::resolve_enabled`, `internal_bind_addr`, and — new — the peer-facing loops (gossip, auto-ingest collaborate, ring-sync, rail KV pump, and since cw-lift 5d the work-plane donor `work_donor.rs`) that until then spawned unconditionally, so "local-only" was unreachable at runtime whatever the manifest said. On, those five do not start, the internal API binds loopback, and the mesh-of-one is still minted and served (the profile skips the NETWORK, not the model). `local_only + require_encryption` is refused at boot by name rather than resolved silently either way. The donor carries a SECOND gate inside the first — a node whose `[compute.work_offer]` names no kind spawns nothing, which is the shipped posture — so its absence from the census is two different facts and the boot trace names which. `work_donor::resolve_offer` runs BEFORE the profile branch on purpose: a config offering a kind this build has no executor for is wrong whether or not this boot would have donated, and a local-only run must not be the reason nobody found out (§18.3). **A second kind joined the registry on 2026-09-09 (cw-lift 5g): `ingest:v1`, `sovereign-mesh/src/ingest_executor.rs`.** It runs one corpus partition — the same `CorpusEngine::ingest_with_overrides` call `auto_ingest::pull_loop` makes, with the same `(file_indices, article_range)` derived by the same `commonwealth_core::knowledge::WorkUnit::to_ingest_args` — so what moved onto the fold is who HOLDS a unit, not who does the embedding. `donor_registry` therefore takes the node's `Option<Arc<CorpusEngine>>`: a node with no engine registers no `ingest:v1`, and `resolve_offer` then refuses a config that offers it by name, which is the boot invariant just stated applied to a kind whose executor is conditional on a service rather than on a cargo feature. The executor declares `Isolation::InProcess` (it runs on the daemon's own threads; there is no child process) and `Idempotency::Idempotent` — the one honest claim of that kind in the registry, because `merge_shards` dedupes on `content_hash` and `(unit_id, source_doc_id)` (`corpus-engine/src/sharding.rs:780`), which is the whole reason `unit_id` is threaded through `ingest_with_overrides`. An ingest that does not finish returns `JobError::NoVerdict`, never a `Judgement::failed`: `WorkProjection::complete` requeues a `Fail` while attempts remain and makes a `Complete` terminal whatever its verdict, so the `Fail` arm is what preserves `HandoffQueue::ack_failure`'s retry-then-terminal rule at `MAX_UNIT_ATTEMPTS`. Proven end to end on the Halo the day it landed: two `JsonlRange` units submitted with `svrn job submit --kind ingest:v1 --units`, both leased, run, reported and merged into a canonical index that answers queries from both ranges. **The legacy pull path (`work_queue.rs`, `ingest_grant.rs`, `routes_internal/corpus_queue.rs`, `auto_ingest.rs:693-1268`) is UNTOUCHED and still the shipped route** — and after the 2026-09-09 deletion survey the reason is known and is not scheduling. What is proven is the fold-side MERGE (part 2's B1-B4/B7/B8, `quality/campaigns/cw-lift-5g-part2-prereg.md`). What was never built is the fold-side SUBMITTER: `WorkAct::Submit` has ZERO automated production sites workspace-wide, `ingest:v1` reaches the fold only when a human types `svrn job submit`, and `IngestPayload::slice` — the only unit-body constructor — has two call sites and both are tests. `commonwealth-api` takes no dependency on `commonwealth-work`, so `corpus_collaborate` cannot name `WorkAct` even in principle; the two paths are disjoint types on disjoint substrates (`commonwealth_work::WorkHandoff` on the rail journal vs. `commonwealth_core::knowledge::IngestionHandoff` as a `Projector::Kv` row). So on a real corpus install `fold_coverage_for` returns `None` at `auto_ingest.rs:249` and control falls through to the legacy path every time. Every deletion candidate is reachable from `daemon.rs:3492` → `spawn_auto_collaborate_loop`, and `EphemeralGrantStore`'s teardown obligation runs through `WorkQueueManager::retire` (`corpus_grant.rs:166`), so "the grant store survives" and "delete `WorkQueueManager`" cannot both hold. Part 2 is therefore a BUILD before it can be a deletion, and it has not run. What a boot spawned is recorded in a `RunningServices` census on `DaemonState::Running` and read back by `EmbeddedDaemon::running_services()` — the instrument for `sovereign-mesh/tests/main/local_only_boot.rs`, which is `cw-local-only-daemon`'s bar instrument now that its K2 fired (the crate seam that would have removed the ten transitive commonwealth deps moves 15,634 lines and deletes none). |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |

@@ -150,9 +150,11 @@ failure and "no results" are indistinguishable, a §18.3 violation sitting in th
 3-attempt retries, reclaim-with-cancel, content-hash dedup at merge, grant-scoped, revocable,
 evicting (GT: ingest queue). Two gaps close in H1 (local-document units + a grant-scoped
 source-fetch route, so it can carry the customer's own files; integrity — embed gate made live,
-dropped units named). Then the strategic move: **the payload generalizes** — `WorkUnit` grows from
-ingest indices to a job-kind abstraction, and rung 5 (CI) is the pilot payload: this repo's own
-test suite as leased jobs on an idle peer. Services (rung 9) are this same machinery grown up:
+dropped units named). Then the strategic move: **the payload generalizes** — but onto the rail rather than
+out of `WorkUnit` (re-cut 2026-09-09, Phase 3 below): a `work` namespace of signed acts carries a
+`JobUnit` of any kind, and rung 5 (CI) is the pilot payload: this repo's own test suite as leased
+jobs on an idle peer. Ingest becomes one kind on that plane rather than the type everything else
+is grown from. Services (rung 9) are this same machinery grown up:
 long leases, health checks, restart policy.
 
 **4. Data.** Corpora that never move, searched in place, merged by the caller — working today.
@@ -240,13 +242,21 @@ depends only on F1 and carries the first demo).*
   uncleared box.*
 
 **Phase 3 — generalize the work plane** *(the cloud move; design-gated after Phase 2 starts).*
-Design landed 2026-09-04: [`WORK_PLANE.md`](WORK_PLANE.md) — the seam is a `JobKind` envelope
-above `WorkUnit`, OCI images are the payload contract, and the inference plane presents as
-long-lease jobs (the mesh is its own first customer).
-`WorkUnit` grows a job-kind seam; the CI runner is the pilot payload — leased build/test jobs with
-streamed results, this repo as the customer. Rungs 4, 6, 7 follow the same seam; the foreground-
-yield policy (rung 7) gets stated and tested here. *Demo: this repository's own test suite green,
-run as mesh jobs on an idle peer — Actions minutes at $0.*
+Design landed 2026-09-04 and was **re-cut onto the rail 2026-09-09**: [`WORK_PLANE.md`](WORK_PLANE.md).
+Three things in the first cut are superseded, and this paragraph said all three.
+**The substrate is the ring journal, not a job-kind seam grown out of `WorkUnit`** — Submit, Offer,
+Lease, Renew, Complete, Fail and Revoke are signed acts in a `work` namespace, the queue is a fold
+over admission, and no new HTTP route is added. **The pilot kind is `process:v1`, not OCI** — one
+command run from a source checkout at a pinned git rev, LLM-free, with this repo's own CI as the
+in-house customer: a per-crate test shard, an evidence verdict, a lint scope, an xtask ratchet, or
+any argv a third party brings. OCI is named as H2; a trusted-native kind on a social-trust ring is
+what the ring already is, and this repository ships no sandbox mechanism to pretend otherwise.
+**The inference plane is not the first customer** — no unit in v0 touches a model and
+`JobRequirements` carries no model field; inference payloads ride the same kind later.
+This lands as cw-lift Phase 5, rungs 5a–5h (`quality/campaigns/cw-lift.toml`). Rungs 4, 6, 7 follow
+the same seam; the foreground-yield policy (rung 7) is stated as a `WorkOffer` field and tested
+here. *Demo: this repository's own test suite green, run as mesh jobs on an idle peer — Actions
+minutes at $0.*
 
 **Track M — measurement** *(hardware-gated, parallel).* **M0** the operator names four same-class
 boxes on one switch — nothing moves first. **M1** the ingest scaling curve at 1/2/4 nodes: finish
