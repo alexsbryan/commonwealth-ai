@@ -84,6 +84,34 @@ pub async fn scope_routing_events<F: Future>(
     }
 }
 
+/// Run `fut` as a turn with BOTH capabilities installed — what a host that
+/// scopes the whole turn surface calls (the daemon's three turn arms).
+///
+/// Boxes the future ONCE, not per scope: nesting [`scope`] inside
+/// [`scope_routing_events`] constructs the inner state machine on the
+/// caller's stack before the outer scope boxes it, and a debug-built
+/// `serve_turn` is large enough that the doubled construction overflows —
+/// measured as `turn_surface` SIGABRTs the day the second scope landed.
+/// One `Box::pin`, both task-locals around it, the invariant [`scope`]'s
+/// own doc states kept whole.
+pub async fn scope_turn<F: Future>(
+    approval: Option<Arc<dyn ApprovalChannel>>,
+    routing: Option<Arc<dyn RoutingEventSink>>,
+    fut: F,
+) -> F::Output {
+    let fut = Box::pin(fut);
+    match (approval, routing) {
+        (Some(a), Some(r)) => {
+            TURN_APPROVAL
+                .scope(a, TURN_ROUTING_EVENTS.scope(r, fut))
+                .await
+        }
+        (Some(a), None) => TURN_APPROVAL.scope(a, fut).await,
+        (None, Some(r)) => TURN_ROUTING_EVENTS.scope(r, fut).await,
+        (None, None) => fut.await,
+    }
+}
+
 /// The ambient turn approval channel, if this task is running inside a scoped
 /// turn.
 fn current() -> Option<Arc<dyn ApprovalChannel>> {

@@ -832,10 +832,7 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        sovereign_core::runtime::capabilities::scope_routing_events(
-                            Some(routing),
-                            async {
+                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
                                 serve_turn(
                                     &rt,
                                     st.as_ref(),
@@ -851,9 +848,6 @@ async fn handle_ws(
                                     &tx,
                                 )
                                 .await;
-                            },
-                        )
-                        .await;
                     })
                     .await;
                 }));
@@ -913,10 +907,7 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        sovereign_core::runtime::capabilities::scope_routing_events(
-                            Some(routing),
-                            async {
+                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
                                 let resume = ResumeSession {
                                     session_id,
                                     intent_hint,
@@ -928,9 +919,6 @@ async fn handle_ws(
                                     &tx,
                                 )
                                 .await;
-                            },
-                        )
-                        .await;
                     })
                     .await;
                 }));
@@ -993,10 +981,7 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        sovereign_core::runtime::capabilities::scope_routing_events(
-                            Some(routing),
-                            async {
+                    sovereign_core::runtime::capabilities::scope_turn(turn_approval, Some(routing), async {
                                 drive_acquired(
                                     rt.redirect_turn_stream(&session_id, &intent_hint).await,
                                     st.as_ref(),
@@ -1008,9 +993,6 @@ async fn handle_ws(
                                     &tx,
                                 )
                                 .await;
-                            },
-                        )
-                        .await;
                     })
                     .await;
                 }));
