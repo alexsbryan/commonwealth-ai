@@ -67,6 +67,13 @@ export const J_CONVERSATION_LIFECYCLE: Journey = {
   surfaces: ["conversations"],
 };
 
+export const J_SURFACE_PARITY: Journey = {
+  id: "surface-parity",
+  title: "One fixture question, two surfaces (desktop + CLI), identical answer families",
+  tier: 1,
+  surfaces: ["chat-stream", "citations", "cli-chat-ask", "surface-parity"],
+};
+
 export const J_FIRST_LAUNCH_SETUP: Journey = {
   id: "first-launch-setup",
   title: "First launch through setup and consent into a working chat",
@@ -83,4 +90,5 @@ export const JOURNEYS: Journey[] = [
   J_CORPUS_FILTER,
   J_CONVERSATION_LIFECYCLE,
   J_FIRST_LAUNCH_SETUP,
+  J_SURFACE_PARITY,
 ];

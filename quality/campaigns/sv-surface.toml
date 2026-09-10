@@ -742,6 +742,42 @@ status    = "active"
 #       migrations (the census's bulk-retire plan).
 #   R6  MOBILE (M-1/M-2). By construction once it consumes the client family.
 #
+# ── CONSTRUCTION 2, SURFACE PARITY — PROVEN 2026-09-10 on the real harness ──
+#
+# tests/e2e/real/journeys/surface-parity.journey.spec.ts + cli-surface.ts:
+# one fixture question ("Who manufactured the Meridian Lighthouse's Fresnel
+# lens, and in what year was it made?" — both facts in one passage of
+# lamp-mechanism.txt; Aubert/Fresnel appear in no other fixture doc, so a
+# source divergence is a retrieval difference, not a tie-break), asked
+# through the desktop (filter strip pinned to the fixture corpus) and
+# through `svrn chat ask --corpus <same id>` against the SAME fixture
+# daemon under the SAME scratch profile env. Rows, run 1789066857283:
+#   routed_intent          HARD    passed  KnowledgeQuery = KnowledgeQuery
+#   sources                HARD    passed  identical (corpus_id, chunk_id)
+#                                          set, 3 chunks — handles, not
+#                                          titles, so a different top-k of
+#                                          the same doc would show
+#   grounding_gate_action  HARD    passed  released = released, ran both
+#   answer_names_fact      TRACKED passed  Aubert + 1886 on both surfaces
+#   full_text              TRACKED differs desktop 900 chars, CLI 1,578 —
+#                                          same intent, sources and gate;
+#                                          the surfaces PRESENT the same
+#                                          answer differently (the desktop
+#                                          runs present_answer's envelope
+#                                          strip; the CLI prints more). A
+#                                          presentation twin, recorded for
+#                                          the deletion half's D9 to fold
+#                                          into one renderer.
+#   negative control: the same question scoped to the governance corpus
+#   cites 0 fixture chunks and a DIFFERENT source set (differs=true) — the
+#   comparator can tell a twin apart, so the greens above are not vacuous.
+#   one store: the CLI's two conversations are visible in the desktop
+#   sidebar — both surfaces are projections over the daemon's store. (An
+#   earlier draft asserted the opposite as "pollution" and was wrong on
+#   the live run; the row is inverted and says why.)
+#   Record: test-artifacts/results/surface-parity.json (gitignored; the
+#   rows above are the citation). Journey suite 6/6 green with it.
+#
 # ── THE DELETION LADDER (surveyed 2026-09-10 at d51cd2b4c; every claim cited) ─
 #
 # SURVEY FINDING THAT RESIZES THE HALF: all 15 is_attach_mode forks already

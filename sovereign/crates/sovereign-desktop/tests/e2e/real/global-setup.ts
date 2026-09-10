@@ -88,6 +88,29 @@ const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
 const DAEMON_LOG = path.join(RESULTS, "real-daemon.log");
 const DAEMON_PID_FILE = path.join(RESULTS, "real-daemon.pid");
 
+/** The scratch-profile env every harness-owned child process must inherit:
+ *  HOME + XDG_* pointed into `test-artifacts/real-profile/home`, so a
+ *  process spawned from a spec resolves the FIXTURE profile — its
+ *  `~/.svrnmesh/config.toml`, its data dir, its conversation store — and
+ *  never the operator's real one. ONE derivation of that env
+ *  (ARCH_PRINCIPLES §10.6): `startManagedDaemon` below reads it, and so
+ *  does the CLI surface the parity journey drives
+ *  (`journeys/cli-surface.ts`). A second hand-rolled copy is how a spec
+ *  ends up asking the operator's daemon a fixture question. */
+export function fixtureProfileEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME,
+    XDG_CONFIG_HOME: path.join(HOME, ".config"),
+    XDG_DATA_HOME: path.join(HOME, ".local/share"),
+    XDG_CACHE_HOME: path.join(HOME, ".cache"),
+  };
+}
+
+/** Repo root — for a spec that must spawn a sibling binary out of
+ *  `target/debug/` (the CLI surface the parity journey compares against). */
+export const REPO_ROOT_DIR = REPO_ROOT;
+
 // Managed-daemon mode is the DEFAULT for the whole real suite: the harness
 // starts its OWN fixture-scoped daemon on the test-profile HOME, so the daemon's
 // index dir IS the desktop's read path (`list_corpora`/`read_get_chunk` resolve
@@ -1029,13 +1052,7 @@ export async function startManagedDaemon(): Promise<void> {
   console.log(
     "[real-setup] managed-daemon: spawning fixture-scoped `daemon run` (HOME=test profile)…",
   );
-  const env = {
-    ...process.env,
-    HOME,
-    XDG_CONFIG_HOME: path.join(HOME, ".config"),
-    XDG_DATA_HOME: path.join(HOME, ".local/share"),
-    XDG_CACHE_HOME: path.join(HOME, ".cache"),
-  };
+  const env = fixtureProfileEnv();
   const dlog = fs.openSync(DAEMON_LOG, "w");
   const child = spawn(DAEMON_BIN, ["daemon", "run"], {
     env,
