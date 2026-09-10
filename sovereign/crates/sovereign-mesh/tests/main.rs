@@ -34,6 +34,8 @@ mod common;
 mod corpus_sharing_over_iroh_e2e;
 #[path = "main/corpus_watch_http_e2e.rs"]
 mod corpus_watch_http_e2e;
+#[path = "main/d6_surface_e2e.rs"]
+mod d6_surface_e2e;
 #[path = "main/daemon_variant_census.rs"]
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
@@ -96,6 +98,8 @@ mod manifest_fanout_concurrency;
 mod mesh_sim_scoreboard;
 #[path = "main/mesh_switch.rs"]
 mod mesh_switch;
+#[path = "main/meshapp_surface_e2e.rs"]
+mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
 #[path = "main/node_id_persistence.rs"]

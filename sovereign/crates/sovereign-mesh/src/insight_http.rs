@@ -62,6 +62,7 @@ pub fn insight_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/insights/search", get(search_insights))
         .route("/v1/insights/{id}", delete(delete_insight))
         .route("/v1/insights/clip", post(clip_insight))
+        .route("/v1/insights/sinks", get(sink_status))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -137,6 +138,32 @@ pub struct ClipRequest {
 #[derive(Debug, Serialize)]
 pub struct ClipResponse {
     pub insight: InsightEntry,
+}
+
+/// `GET /v1/insights/sinks` — the ONE route D2 left owed.
+///
+/// Same shape the desktop's `get_sink_status` returns today
+/// (`insight_commands.rs:152`): `any_connected` plus a per-sink list.
+/// The desktop's list is a literal `vec![]` with a "populated when
+/// Obsidian sink is added" note; this one is the registry's actual
+/// contents, because `InsightSink` already carries `id()` and
+/// `display_name()` and there was never anything to invent. That is
+/// the defect this route closes, not a bonus: on an attached boot the
+/// command reads THIS process's registry, which is empty, so
+/// `any_connected` was false regardless of the daemon's sinks.
+#[derive(Debug, Serialize)]
+pub struct SinkStatusResponse {
+    pub any_connected: bool,
+    pub sinks: Vec<SinkInfo>,
+}
+
+/// One registered sink. `connected` is probed per sink, so a settings
+/// pane can say WHICH one is down rather than only that something is.
+#[derive(Debug, Serialize)]
+pub struct SinkInfo {
+    pub id: String,
+    pub display_name: String,
+    pub connected: bool,
 }
 
 async fn list_insights(
@@ -233,6 +260,49 @@ async fn clip_insight(
         .into_response(),
         Err(e) => internal_error(&e.to_string()),
     }
+}
+
+/// GET `/v1/insights/sinks` — every registered insight sink and
+/// whether it is reachable right now.
+///
+/// `any_connected` is the registry's own fold, not a re-derivation over
+/// the list below: one decider for "is anything connected" (ARCH
+/// §10.6), and it stays true even if a future sink reports connectivity
+/// some way the per-row probe does not.
+///
+/// An EMPTY list with `any_connected: false` is the correct answer for
+/// a daemon nobody configured a vault on — a successful read, not a
+/// 404. "No insight service at all" is the different fact, and that is
+/// the named 503 the other four handlers give.
+async fn sink_status(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(service) = daemon.insight_service() else {
+        return service_unavailable("this daemon serves no insight surface (no insight service)");
+    };
+    let any_connected = service.sinks.any_connected().await;
+    let mut sinks = Vec::new();
+    for sink in service.sinks.iter() {
+        sinks.push(SinkInfo {
+            id: sink.id().to_string(),
+            display_name: sink.display_name().to_string(),
+            connected: sink.is_connected().await,
+        });
+    }
+    tracing::debug!(
+        any_connected,
+        registered = sinks.len(),
+        "insight_http: sink status served",
+    );
+    Json(SinkStatusResponse {
+        any_connected,
+        sinks,
+    })
+    .into_response()
 }
 
 fn bad_request(reason: &str) -> Response {

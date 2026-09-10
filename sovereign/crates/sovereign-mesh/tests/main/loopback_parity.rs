@@ -209,6 +209,61 @@ async fn insight_http_rejects_non_loopback_via_insights_list() {
 }
 
 #[tokio::test]
+async fn meshapp_http_rejects_non_loopback_via_graph_read() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::meshapp_http::meshapp_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/internal/meshapp/anything/graph"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "meshapp_http loopback guard slipped — the explorer reads THIS \
+         host's corpus index, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn notes_http_rejects_non_loopback_via_note_query() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::notes_http::notes_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/notes/query"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "notes_http loopback guard slipped — notes.db is this operator's \
+         working memory, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn features_http_rejects_non_loopback_via_project_list() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::features_http::features_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/features/projects"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "features_http loopback guard slipped — a project charter is the \
+         operator's private brief, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
 async fn atlas_http_rejects_non_loopback_via_corpora_list() {
     let (_tmp, daemon) = fresh_daemon();
     let base = spawn_with_spoof(sovereign_mesh::atlas_http::atlas_router(daemon)).await;
@@ -379,6 +434,31 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(
         sovereign_mesh::atlas_http::atlas_router(d7),
         "/internal/atlas/corpora",
+    )
+    .await;
+
+    let (_t8, d8) = fresh_daemon();
+    assert_500_on_bare_serve(
+        sovereign_mesh::meshapp_http::meshapp_router(d8),
+        "/internal/meshapp/anything/graph",
+    )
+    .await;
+
+    let (_t9, d9) = fresh_daemon();
+    // The GET on `/v1/notes/{id}` — the router's only GET-shaped read —
+    // stands in for the family here: `assert_500_on_bare_serve` drives a
+    // GET, and what is being proven is the guard's fail-closed posture,
+    // which is per-handler and identical on all six.
+    assert_500_on_bare_serve(
+        sovereign_mesh::notes_http::notes_router(d9),
+        "/v1/notes/any-id",
+    )
+    .await;
+
+    let (_t10, d10) = fresh_daemon();
+    assert_500_on_bare_serve(
+        sovereign_mesh::features_http::features_router(d10),
+        "/v1/features/projects",
     )
     .await;
 }
@@ -1046,6 +1126,171 @@ async fn insight_fixture() -> (
         ),
     );
     (tmp, daemon, service)
+}
+
+/// A sink that reports whatever the test told it to. `InsightSink`'s
+/// four other methods are unused here — this exists to prove `id`,
+/// `display_name` and `connected` CROSS, which is exactly what the
+/// desktop's `get_sink_status` could not do: it hard-codes `sinks:
+/// vec![]` and answers only the boolean.
+struct StubSink {
+    id: &'static str,
+    display_name: &'static str,
+    connected: bool,
+}
+
+#[async_trait::async_trait]
+impl sovereign_core::traits::InsightSink for StubSink {
+    fn id(&self) -> &str {
+        self.id
+    }
+    fn display_name(&self) -> &str {
+        self.display_name
+    }
+    async fn is_connected(&self) -> bool {
+        self.connected
+    }
+    async fn push(
+        &self,
+        _node: &sovereign_contracts::types::InsightNode,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn push_batch(
+        &self,
+        _nodes: &[sovereign_contracts::types::InsightNode],
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+}
+
+/// `GET /v1/insights/sinks` — the route D2 left owed (sv-surface).
+///
+/// Red-watch 2026-09-10 (run, not asserted): the route line was taken
+/// back out of `insight_router` with `sink_status` left in place, and
+/// both sink cases failed — this one on a decode EOF (405, empty body,
+/// because `/v1/insights/{id}` still matches the path with no GET), the
+/// 503 case on `left: 405 right: 503`. `pass: 0 fail: 2`.
+///
+/// The three SPOOF legs above are deliberately NOT part of that
+/// evidence: they exercise the router-level guard, which runs before
+/// routing, so an emptied router still answers 403. They guard the
+/// posture, not the routes, and each says so by naming the guard.
+///
+/// Two sinks, one reachable and one not. The assertion that matters is
+/// the PER-SINK row: `any_connected` alone is what the desktop command
+/// answers today, and it cannot tell a settings pane WHICH vault is
+/// down. A route that returned the right boolean with an empty list
+/// would pass a boolean-only check and ship the same blind spot.
+#[tokio::test]
+async fn insight_sink_status_names_each_sink_and_its_reachability() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state_store =
+        sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap();
+    let insight_store: Arc<dyn sovereign_core::traits::InsightStore> = Arc::new(
+        sovereign_store::insight_store::SqliteInsightStore::new(state_store.connection()),
+    );
+    let mut sinks = sovereign_core::insight::InsightSinkRegistry::new();
+    sinks.register(Arc::new(StubSink {
+        id: "obsidian",
+        display_name: "Obsidian vault",
+        connected: true,
+    }));
+    sinks.register(Arc::new(StubSink {
+        id: "logseq",
+        display_name: "Logseq graph",
+        connected: false,
+    }));
+    let service = Arc::new(sovereign_core::insight::InsightService::new(
+        insight_store,
+        Arc::new(sinks),
+        Arc::new(TestProvider::new()),
+    ));
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        crate::common::desktop_services_with_insights(
+            engine,
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(TestProvider::new()),
+            Some(service),
+        ),
+    );
+    let addr =
+        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+
+    let body: serde_json::Value = reqwest::Client::new()
+        .get(format!("http://{addr}/v1/insights/sinks"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        body["any_connected"], true,
+        "one of the two sinks is reachable: {body}"
+    );
+    let rows = body["sinks"].as_array().expect("the per-sink list");
+    assert_eq!(
+        rows.len(),
+        2,
+        "BOTH registered sinks are named — the desktop command answers an \
+         empty list here, which is the blind spot this route closes: {body}"
+    );
+    let logseq = rows
+        .iter()
+        .find(|s| s["id"] == "logseq")
+        .expect("the unreachable sink is still listed");
+    assert_eq!(logseq["display_name"], "Logseq graph");
+    assert_eq!(
+        logseq["connected"], false,
+        "the pane must be able to say WHICH vault is down: {body}"
+    );
+}
+
+/// A daemon with no insight service answers the named 503 on the sink
+/// route too — never `any_connected: false`, which is a CLAIM about
+/// sinks and would read as "your vault is disconnected" (ARCH §18.3).
+#[tokio::test]
+async fn insight_sink_status_without_a_service_is_the_named_503() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        crate::common::desktop_services_with_insights(
+            engine,
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(TestProvider::new()),
+            None,
+        ),
+    );
+    let addr =
+        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/v1/insights/sinks"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 503);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("no insight service"),
+        "the 503 names the absence: {body}"
+    );
 }
 
 /// Clip → list → search → delete round-trips through the ONE service, and

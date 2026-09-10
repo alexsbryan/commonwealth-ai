@@ -213,6 +213,31 @@ pub struct InsightEntry {
     pub sink_state: sovereign_contracts::types::InsightSinkState,
 }
 
+/// The answer to `GET /v1/insights/sinks` — the wire form of the
+/// desktop's `get_sink_status` (sv-surface D2's one owed route).
+///
+/// Mirrored here rather than made generic, unlike the atlas and meshapp
+/// families below: two fields over a three-field row is exactly the
+/// `InsightEntry` case this crate already resolves by mirroring, and a
+/// caller that had to name `sovereign_mesh::insight_http::
+/// SinkStatusResponse` would be taking a dependency on the HOST to read
+/// its own settings pane.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SinkStatus {
+    /// The registry's own fold. Read THIS, not `sinks.is_empty()` — a
+    /// registry can hold a sink that is registered and not reachable.
+    pub any_connected: bool,
+    pub sinks: Vec<SinkInfo>,
+}
+
+/// One registered insight sink.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SinkInfo {
+    pub id: String,
+    pub display_name: String,
+    pub connected: bool,
+}
+
 /// Page size [`TurnClient::corpus_atoms_all`] asks for. The host caps
 /// at `reading_http::ATOMS_PAGE_MAX` and says what it applied, so this
 /// is a hint about round-trip count, never a correctness knob.
@@ -595,6 +620,18 @@ impl TurnClient {
         Ok(wire.insights)
     }
 
+    /// `GET /v1/insights/sinks` — every registered insight sink and
+    /// whether it is reachable right now.
+    ///
+    /// An empty `sinks` with `any_connected: false` is a real answer —
+    /// nobody configured a vault on this daemon. A daemon with no
+    /// insight service at all answers 503, which arrives here as an
+    /// `Err` naming that reason, so the two stay different facts.
+    pub async fn insight_sinks(&self) -> Result<SinkStatus> {
+        self.internal_get("/v1/insights/sinks".to_string(), &[])
+            .await
+    }
+
     /// `GET /v1/insights/search?q=` — full-text search over the collection.
     pub async fn search_insights(&self, query: &str) -> Result<Vec<InsightEntry>> {
         let url = format!("{}/v1/insights/search", self.base);
@@ -783,7 +820,8 @@ impl TurnClient {
     ///
     /// `T` is `Vec<sovereign_tools::atlas_view::AtlasCorpusSummary>`.
     pub async fn atlas_corpora<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        self.atlas_get("/internal/atlas/corpora".to_string()).await
+        self.internal_get("/internal/atlas/corpora".to_string(), &[])
+            .await
     }
 
     /// `GET /internal/atlas/{corpus}/report` — what the last build
@@ -795,7 +833,7 @@ impl TurnClient {
         &self,
         corpus_id: &str,
     ) -> Result<T> {
-        self.atlas_get(format!("/internal/atlas/{corpus_id}/report"))
+        self.internal_get(format!("/internal/atlas/{corpus_id}/report"), &[])
             .await
     }
 
@@ -808,7 +846,7 @@ impl TurnClient {
         &self,
         corpus_id: &str,
     ) -> Result<T> {
-        self.atlas_get(format!("/internal/atlas/{corpus_id}/members"))
+        self.internal_get(format!("/internal/atlas/{corpus_id}/members"), &[])
             .await
     }
 
@@ -901,12 +939,509 @@ impl TurnClient {
         parse(&body, &format!("GET {url}")).map(Some)
     }
 
-    /// The three plain atlas GETs differ only in path; spelled once.
-    async fn atlas_get<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
-        let url = format!("{}{path}", self.base);
+    // ── The recipe-author project store (sv-surface D6) ──────────
+    //
+    // Answers are `sovereign_mesh::features_http::ProjectEntry`.
+    // Generic over `T` for the family reason; the store's whole surface
+    // is three methods, so these three routes are all of it.
+
+    /// `GET /v1/features/projects?include_archived=` — every
+    /// recipe-author project, newest-updated first. `T` is
+    /// `sovereign_mesh::features_http::ProjectEntry`.
+    ///
+    /// An empty vec is a real answer — a fresh install has no projects,
+    /// and the Welcome pane branches on exactly that.
+    pub async fn feature_projects<T: serde::de::DeserializeOwned>(
+        &self,
+        include_archived: bool,
+    ) -> Result<Vec<T>> {
+        let wire: ProjectListWire<T> = self
+            .internal_get(
+                "/v1/features/projects".to_string(),
+                &[("include_archived", include_archived.to_string())],
+            )
+            .await?;
+        Ok(wire.projects)
+    }
+
+    /// `GET /v1/features/projects/{id}` — one project. `T` is
+    /// `sovereign_mesh::features_http::ProjectEntry`.
+    ///
+    /// `Ok(None)` for a 404, safe here for [`Self::note_get`]'s reason:
+    /// this path has one 404 and it means "no such project". A daemon
+    /// whose `features.db` never opened answers 503.
+    pub async fn feature_project<T: serde::de::DeserializeOwned>(
+        &self,
+        id: &str,
+    ) -> Result<Option<T>> {
+        let url = format!("{}/v1/features/projects/{id}", self.base);
         let resp = self
             .http
             .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// `POST /v1/features/projects` — provision a project; answers the
+    /// row that was written. `T` is
+    /// `sovereign_mesh::features_http::ProjectEntry`.
+    ///
+    /// `body` serialises to `{id, title, charter_md}`. The ID IS THE
+    /// CALLER'S: `RecipeProject` mints it from the project's essence
+    /// before provisioning, and the host does not invent one (ARCH
+    /// §7.5). A duplicate id comes back as a 409 and an empty one as a
+    /// 400 — both `Err`, both naming which.
+    pub async fn feature_project_create<
+        B: serde::Serialize + ?Sized,
+        T: serde::de::DeserializeOwned,
+    >(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}/v1/features/projects", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, resp_body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &resp_body, &format!("POST {url}")));
+        }
+        parse(&resp_body, &format!("POST {url}"))
+    }
+
+    // ── Notes CRUD (sv-surface D6) ───────────────────────────────
+    //
+    // The answers are `sovereign_mesh::notes_http::NoteEntry`, a
+    // twenty-field projection of `corpus_engine_notes::Note`. Generic
+    // over `T` for the same reason the two families below are: a twin
+    // here would be twenty fields this crate would have to keep in step
+    // with a store schema it cannot see change (ARCH §10.6). The
+    // no-payload writes return plain `bool`/`String`, which need no
+    // type from anywhere.
+
+    /// `POST /v1/notes/query` — filtered notes, newest first when
+    /// `query` is absent. `T` is `sovereign_mesh::notes_http::NoteEntry`.
+    ///
+    /// A POST because the filter carries three LISTS (`symbols`,
+    /// `files`, `kinds`) and no flat query string expresses those
+    /// without a second encoding — the call `atlas_atoms` already makes.
+    ///
+    /// An empty vec is a real answer for every filter, never an error.
+    /// `include_retired` must be `true` to see struck-through rows —
+    /// the lesson pane passes `true` because it renders whole supersede
+    /// chains.
+    pub async fn notes_list<T: serde::de::DeserializeOwned>(
+        &self,
+        query: Option<&str>,
+        kinds: &[&str],
+        limit: Option<usize>,
+        include_retired: bool,
+    ) -> Result<Vec<T>> {
+        let url = format!("{}/v1/notes/query", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({
+                "query": query,
+                "kinds": kinds,
+                "limit": limit,
+                "include_retired": include_retired,
+            }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        let wire: NoteListWire<T> = parse(&body, &format!("POST {url}"))?;
+        Ok(wire.notes)
+    }
+
+    /// `GET /v1/notes/{id}` — one note. `T` is
+    /// `sovereign_mesh::notes_http::NoteEntry`.
+    ///
+    /// `Ok(None)` for a 404, and that mapping is safe HERE where it is
+    /// not on the meshapp routes: this path has exactly one 404 — "no
+    /// note with that id". A daemon with no note store answers 503 and
+    /// every read failure answers 500, so an absent store cannot arrive
+    /// as an absent note.
+    pub async fn note_get<T: serde::de::DeserializeOwned>(&self, id: &str) -> Result<Option<T>> {
+        let url = format!("{}/v1/notes/{id}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// `POST /v1/notes` — write one note; answers the id the store
+    /// minted.
+    ///
+    /// `body` serialises to `sovereign_mesh::notes_http::
+    /// CreateNoteRequest`: `kind`, `content`, `session_id`, `scope` and
+    /// `source` are required, the rest default. `scope` and `source`
+    /// are the enums' own strings and an unrecognised one is a 400 — the
+    /// host will not guess `global`/`agent` for you, because a wrong
+    /// guess on `scope` is what puts a node-local note on the mesh.
+    pub async fn note_create<B: serde::Serialize + ?Sized>(&self, body: &B) -> Result<String> {
+        let url = format!("{}/v1/notes", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, resp_body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &resp_body, &format!("POST {url}")));
+        }
+        let wire: CreatedIdWire = parse(&resp_body, &format!("POST {url}"))?;
+        Ok(wire.id)
+    }
+
+    /// `PATCH /v1/notes/{id}/payload` — replace the opaque structured
+    /// payload. `false` means no such note; the payload's schema is the
+    /// caller's and crosses as a string.
+    pub async fn note_set_payload(&self, id: &str, payload_json: &str) -> Result<bool> {
+        self.note_affecting(
+            reqwest::Method::PATCH,
+            format!("/v1/notes/{id}/payload"),
+            &serde_json::json!({ "payload_json": payload_json }),
+        )
+        .await
+    }
+
+    /// `POST /v1/notes/{id}/retire` — strike a note through, KEEPING the
+    /// row so a successor can point back at it. `false` means no such
+    /// note. This is not [`Self::note_delete`].
+    pub async fn note_retire(&self, id: &str, reason: &str) -> Result<bool> {
+        self.note_affecting(
+            reqwest::Method::POST,
+            format!("/v1/notes/{id}/retire"),
+            &serde_json::json!({ "reason": reason }),
+        )
+        .await
+    }
+
+    /// `DELETE /v1/notes/{id}` — real deletion, no tombstone. `false`
+    /// means the row was not there, which is an answer and not an error.
+    pub async fn note_delete(&self, id: &str) -> Result<bool> {
+        let url = format!("{}/v1/notes/{id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        let wire: AffectedWire = parse(&body, &format!("DELETE {url}"))?;
+        Ok(wire.existed)
+    }
+
+    /// The two body-carrying writes that answer `{existed}` differ only
+    /// in method, path and body; spelled once.
+    async fn note_affecting(
+        &self,
+        method: reqwest::Method,
+        path: String,
+        body: &serde_json::Value,
+    ) -> Result<bool> {
+        let url = format!("{}{path}", self.base);
+        let ctx = format!("{method} {url}");
+        let resp = self
+            .http
+            .request(method, &url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("{ctx}: {e}")))?;
+        let (status, resp_body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &resp_body, &ctx));
+        }
+        let wire: AffectedWire = parse(&resp_body, &ctx)?;
+        Ok(wire.existed)
+    }
+
+    // ── The MeshApp explorer surface (sv-surface D3) ─────────────
+    //
+    // Thirteen reads whose answers are `sovereign_meshapp::*` DTOs —
+    // a `capabilities`-layer crate this Tier-0 client may not name, for
+    // the reason spelled out above the atlas block. Same resolution:
+    // the CALLER names the type, and each doc comment below names the
+    // exact one, so the desktop writes
+    // `client.meshapp_graph::<Vec<GraphNodeDto>>(...)` and gets back
+    // what its in-process `sovereign_meshapp::graph_nodes` returned.
+    //
+    // None of these maps a 404 to `Ok(None)`. A meshapp 404 means one
+    // of three different things — the corpus is not installed, it has
+    // no graph to explore, or the id asked for is not in it — and the
+    // desktop commands these replace reported all three as one `Err`
+    // carrying the host's words. `host_words` keeps the status AND the
+    // reason in the message, so that parity holds without inventing an
+    // absence the caller cannot distinguish (the trap
+    // [`Self::atlas_atom_detail`] documents).
+
+    /// `GET /internal/meshapp/{corpus}/graph?node_type=&limit=` —
+    /// degree-ranked entities, highest first. The wire form of
+    /// `meshapp_graph`. `T` is `Vec<sovereign_meshapp::GraphNodeDto>`.
+    ///
+    /// `limit` is a REQUEST: the host applies its own default (50) when
+    /// absent and clamps to its maximum (500). The clamp lives there so
+    /// there is one of it.
+    pub async fn meshapp_graph<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        node_type: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/graph"),
+            &node_list_query(node_type, limit),
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/nodes/{id}` — one entity plus
+    /// every incident edge, each quoting its evidence. The wire form of
+    /// `meshapp_node`. `T` is `sovereign_meshapp::NodeDetailDto`.
+    pub async fn meshapp_node<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/nodes/{id}"), &[])
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/findings?pattern=` — the wire
+    /// form of `meshapp_findings`. `T` is
+    /// `Vec<sovereign_meshapp::FindingDto>`.
+    ///
+    /// An empty list is a legitimate answer for a corpus whose graph
+    /// carries no findings; it is never a 404.
+    pub async fn meshapp_findings<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        pattern: Option<&str>,
+    ) -> Result<T> {
+        let query: Vec<(&str, String)> = pattern
+            .into_iter()
+            .map(|p| ("pattern", p.to_string()))
+            .collect();
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/findings"), &query)
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/entities?q=&node_type=&limit=` —
+    /// case-folded substring search over name, aliases and attributes.
+    /// The wire form of `meshapp_search_entities`. `T` is
+    /// `Vec<sovereign_meshapp::GraphNodeDto>`.
+    ///
+    /// A blank `query` answers `[]` at the host WITHOUT loading the
+    /// graph — the command's own short-circuit, kept, so a cleared
+    /// search box costs one round-trip and no disk.
+    pub async fn meshapp_search_entities<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        query: &str,
+        node_type: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        let mut params = vec![("q", query.to_string())];
+        params.extend(node_list_query(node_type, limit));
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/entities"), &params)
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/claims?limit=` — Claim atoms with
+    /// attribution and cited evidence. The wire form of
+    /// `meshapp_claims`. `T` is `Vec<sovereign_meshapp::ClaimDto>`.
+    pub async fn meshapp_claims<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/claims"),
+            &limit_query(limit),
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/questions?limit=` — Question
+    /// atoms, the open inquiries a corpus raises. The wire form of
+    /// `meshapp_questions`. `T` is
+    /// `Vec<sovereign_meshapp::QuestionDto>`.
+    pub async fn meshapp_questions<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/questions"),
+            &limit_query(limit),
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/reconciliation` — the atlas's
+    /// cross-origin identity merges, richest first. The wire form of
+    /// `meshapp_reconciliation`. `T` is
+    /// `Vec<sovereign_meshapp::ReconciliationMergeDto>`.
+    pub async fn meshapp_reconciliation<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/reconciliation"), &[])
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/subgraph?node_type=&limit=` —
+    /// top-degree nodes plus induced edges, for a node-link map. The
+    /// wire form of `meshapp_subgraph`. `T` is
+    /// `sovereign_meshapp::SubgraphDto`.
+    ///
+    /// NOT [`Self::atlas_subgraph`], which is `atlas_view`'s curated
+    /// landscape map over a different projection and a different shape.
+    pub async fn meshapp_subgraph<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        node_type: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/subgraph"),
+            &node_list_query(node_type, limit),
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/stats` — headline scale and
+    /// provenance counts for a banner. The wire form of
+    /// `meshapp_corpus_stats`. `T` is
+    /// `sovereign_meshapp::CorpusStatsDto`.
+    pub async fn meshapp_corpus_stats<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/stats"), &[])
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/timeline` — documents bucketed
+    /// by month. The wire form of `meshapp_timeline`. `T` is
+    /// `sovereign_meshapp::TimelineDto`.
+    pub async fn meshapp_timeline<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/timeline"), &[])
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/chunks/{chunk_id}` — one chunk's
+    /// full text by the NUMERIC id an edge carries. The wire form of
+    /// `meshapp_read_chunk`. `T` is `sovereign_meshapp::ChunkDto`.
+    ///
+    /// Takes a `u64` rather than the command's `String`: the command
+    /// parsed it and reported a non-numeric id as its own error, and a
+    /// typed argument makes that unrepresentable instead of re-checked
+    /// (ARCH §7 — structural, not remembered). The host still refuses a
+    /// non-numeric segment with a 400, because it is reachable by curl.
+    pub async fn meshapp_read_chunk<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/chunks/{chunk_id}"),
+            &[],
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/documents?limit_docs=` — the
+    /// latest source documents with their chunks and metadata-derived
+    /// outbound links, newest first. The wire form of
+    /// `meshapp_document_feed`. `T` is
+    /// `sovereign_meshapp::DocumentFeedDto`.
+    pub async fn meshapp_document_feed<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        limit_docs: Option<usize>,
+    ) -> Result<T> {
+        let query: Vec<(&str, String)> = limit_docs
+            .into_iter()
+            .map(|n| ("limit_docs", n.to_string()))
+            .collect();
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/documents"), &query)
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/wrapped` — the precomputed
+    /// Wrapped story-card artifact. The wire form of
+    /// `meshapp_wrapped_artifact`. `T` is
+    /// `sovereign_meshapp::wrapped::WrappedArtifact`.
+    ///
+    /// The host serves its cache when fresh and rebuilds otherwise — a
+    /// pure Rust fold over the corpus, no inference — so this call can
+    /// be slow on a cold corpus. It is not a streaming route and does
+    /// not report progress; that is the shape the command had.
+    pub async fn meshapp_wrapped_artifact<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/wrapped"), &[])
+            .await
+    }
+
+    /// One GET against a loopback `/internal/...` read surface, parsed
+    /// as `T`. Every plain atlas and meshapp read goes through here, so
+    /// the URL join, the non-success rendering and the parse-error
+    /// context are decided once (ARCH §10.6) rather than twenty times.
+    ///
+    /// `query` is appended only when non-empty, so a path with no
+    /// parameters is requested verbatim — a trailing `?` is a different
+    /// URL to a router that matches on the whole thing.
+    async fn internal_get<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        query: &[(&str, String)],
+    ) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        let mut req = self.http.get(&url);
+        if !query.is_empty() {
+            req = req.query(query);
+        }
+        let resp = req
             .send()
             .await
             .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
@@ -1153,6 +1688,54 @@ fn host_words(status: reqwest::StatusCode, body: &str, ctx: &str) -> Error {
         .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
         .unwrap_or_else(|| body.trim().to_string());
     Error::Inference(format!("{ctx}: {status}: {reason}"))
+}
+
+/// `{"projects": [...]}` — the envelope `GET /v1/features/projects`
+/// answers in.
+#[derive(Deserialize)]
+struct ProjectListWire<T> {
+    projects: Vec<T>,
+}
+
+/// `{"notes": [...]}` — the envelope `POST /v1/notes/query` answers in.
+#[derive(Deserialize)]
+struct NoteListWire<T> {
+    notes: Vec<T>,
+}
+
+/// `{"id": "..."}` — what `POST /v1/notes` answers.
+#[derive(Deserialize)]
+struct CreatedIdWire {
+    id: String,
+}
+
+/// `{"existed": bool}` — what retire / patch / delete answer. The flag
+/// is NAMED rather than encoded as a status, because "the row was not
+/// there" is a real answer to a delete and the caller should not have
+/// to infer it (ARCH §18.3).
+#[derive(Deserialize)]
+struct AffectedWire {
+    existed: bool,
+}
+
+/// `?node_type=&limit=` — the pair `meshapp_graph`, `meshapp_subgraph`
+/// and `meshapp_search_entities` all take. Absent keys mean "the host's
+/// default", which is where both defaults live.
+fn node_list_query(node_type: Option<&str>, limit: Option<usize>) -> Vec<(&'static str, String)> {
+    let mut q = Vec::new();
+    if let Some(t) = node_type {
+        q.push(("node_type", t.to_string()));
+    }
+    q.extend(limit_query(limit));
+    q
+}
+
+/// `?limit=` on its own — `meshapp_claims` and `meshapp_questions`.
+fn limit_query(limit: Option<usize>) -> Vec<(&'static str, String)> {
+    limit
+        .into_iter()
+        .map(|n| ("limit", n.to_string()))
+        .collect()
 }
 
 /// Parse a success body as `T`, naming the request in the error.

@@ -40,6 +40,7 @@ pub mod deep_link;
 #[cfg(feature = "dst")]
 pub mod dst;
 pub mod entry_endpoint;
+pub mod features_http;
 pub mod fim_adapter;
 pub mod gossip;
 pub mod guest_lender;
@@ -73,8 +74,10 @@ pub mod mesh_http;
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
+pub mod meshapp_http;
 pub mod model_fetch;
 pub mod newsworthy_host;
+pub mod notes_http;
 pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the

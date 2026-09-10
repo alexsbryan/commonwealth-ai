@@ -105,6 +105,18 @@ sovereign-inference = { workspace = true }
 # sovereign-server share this so they advertise the same surface
 # to clients without drifting.
 sovereign-tools = { workspace = true }
+# The MeshApp explorer projections (`meshapp_http`, sv-surface D3). A
+# `capabilities`-layer lib the desktop already reads through; serving it
+# here is what stops the desktop opening the daemon's own index dir in a
+# second process. Downward edge on `quality/ARCH_LAYERS.toml`
+# (capabilities < mesh-api), same as `sovereign-tools` above.
+sovereign-meshapp = { workspace = true }
+# `RecipeProjectStore` (the recipe-author `features.db` layer), reached
+# through its re-exporter rather than by a direct dep on
+# `sovereign-recipe-author` (ARCH §8.3). Was a dev-dep until sv-surface D6
+# — `InMemoryStateStore` for the corpus-watch test — and is now production:
+# `ServingCore.features` is the door `features_http` opens.
+sovereign-store = { workspace = true }
 # Work atlas — `MeshBroadcaster` adapter implements
 # `sovereign_work_atlas::tools::ClaimBroadcaster` using `AppState`
 # + `gossip::broadcast_now`. Lives here (not in work-atlas) so the
@@ -265,11 +277,5 @@ tokio-tungstenite = "0.29"
 # library under test and assert on them. Keeping it scoped to
 # dev-deps so the production binary doesn't pay the inclusion cost.
 tracing-subscriber = { workspace = true }
-# `sovereign-store` provides `InMemoryStateStore`, used by the
-# corpus-watch integration test to stand up a `LocalCorpusManager`
-# without an on-disk SQLite file. Same pattern as the
-# `sovereign-tools/tests/local_corpus_e2e.rs` harness.
-sovereign-store = { workspace = true }
-
 [lints]
 workspace = true

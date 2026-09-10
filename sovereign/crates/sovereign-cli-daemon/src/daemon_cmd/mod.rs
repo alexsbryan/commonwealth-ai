@@ -1134,6 +1134,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // above, from the one shared recipe.
                     runtime: Arc::clone(&runtime),
                     insights: Some(insight_service),
+                    // sv-surface D6: the recipe-author `features.db` opened
+                    // above. Already warn-and-skip, so the `Option` here says
+                    // the same thing the log line did — and `features_http`
+                    // now renders it as a named 503 instead of a route that
+                    // silently is not there.
+                    features: features_store,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),

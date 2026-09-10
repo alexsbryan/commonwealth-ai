@@ -724,6 +724,18 @@ impl EmbeddedDaemon {
             .and_then(|s| s.core.insights.as_ref())
     }
 
+    /// Borrow the recipe-author `RecipeProjectStore` this daemon's
+    /// `features.db` backs (sv-surface D6). `None` on `MeshAdmin` and on a
+    /// serving commission whose `features.db` would not open —
+    /// `features_http` renders that as a named 503, not as a missing route.
+    pub fn features_store(
+        &self,
+    ) -> Option<&Arc<sovereign_store::recipe_project_store::RecipeProjectStore>> {
+        self.services
+            .serving()
+            .and_then(|s| s.core.features.as_ref())
+    }
+
     /// Borrow the `NoteStore` behind this daemon's mounted `/mcp` surface,
     /// when one is mounted (sv-surface rung 6). `None` on `MeshAdmin` and on
     /// a commission whose `notes.db` would not open — the tool-outcome route
@@ -1095,7 +1107,12 @@ impl EmbeddedDaemon {
 
     /// Where mesh state + setup are persisted. Needed by the HTTP
     /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
-    /// directly rather than going through a daemon method.
+    /// directly rather than going through a daemon method — and by
+    /// `meshapp_http`'s Wrapped route, whose GLiNER entity cards read
+    /// `<data_dir>/sovereign.db` (the desktop passed
+    /// `svrnmesh_root()/sovereign.db`; same file whenever the daemon owns
+    /// that root, which is what the one-writer rule on
+    /// `ServingCore::state_store` makes true).
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
     }
@@ -3261,8 +3278,27 @@ impl EmbeddedDaemon {
             // reason: a daemon with no corpus engine answers 503 with that
             // named reason, which is a different fact from an unmounted
             // router's 404 (ARCH §18.3).
-            mounted.push(crate::atlas_http::atlas_router(self_arc));
+            mounted.push(crate::atlas_http::atlas_router(Arc::clone(&self_arc)));
             mount_names.push("atlas_http");
+            // sv-surface D3 — the MeshApp explorer surface. Same posture and
+            // the same unconditional reason as the two above: thirteen desktop
+            // commands read the daemon's OWN index dir out of a second
+            // process today, and a 503 naming the missing corpus engine is a
+            // different fact from an unmounted route's 404.
+            mounted.push(crate::meshapp_http::meshapp_router(Arc::clone(&self_arc)));
+            mount_names.push("meshapp_http");
+            // sv-surface D6 — notes CRUD over the store the `/mcp` surface and
+            // `/v1/notes/tool-outcome` already write to. Unconditional; a
+            // commission whose `notes.db` would not open answers 503 naming
+            // that, which is not the same fact as "no route".
+            mounted.push(crate::notes_http::notes_router(Arc::clone(&self_arc)));
+            mount_names.push("notes_http");
+            // sv-surface D6 — the recipe-author project store. Same reason
+            // again: `features.db` failing to open was a warn-and-skip the
+            // daemon only wrote to a log, and this makes it a 503 a caller
+            // can read.
+            mounted.push(crate::features_http::features_router(self_arc));
+            mount_names.push("features_http");
             for (router, name) in self
                 .services
                 .host_routers()

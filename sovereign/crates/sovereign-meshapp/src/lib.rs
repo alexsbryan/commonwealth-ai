@@ -29,7 +29,7 @@ use corpus_engine::index::CorpusIndex;
 
 /// A degree-ranked node. `degree` = incident relationships; `alias_count` =
 /// surface forms the coalesce phase folded in.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNodeDto {
     pub id: String,
     pub canonical_name: String,
@@ -41,7 +41,7 @@ pub struct GraphNodeDto {
 
 /// One relationship incident to a node, resolved to its other endpoint and
 /// carrying its cited evidence — the glassbox edge.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EdgeDto {
     pub relationship_type: String,
     /// `"out"` — this node is the source; `"in"` — this node is the target.
@@ -56,7 +56,7 @@ pub struct EdgeDto {
 }
 
 /// A node's full detail: attributes, folded aliases, every incident cited edge.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeDetailDto {
     pub id: String,
     pub canonical_name: String,
@@ -67,7 +67,7 @@ pub struct NodeDetailDto {
 }
 
 /// A deterministic pattern finding (e.g. a sighting hotspot).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindingDto {
     pub pattern_name: String,
     pub pattern_kind: String,
@@ -75,7 +75,7 @@ pub struct FindingDto {
     pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindingEntityDto {
     pub id: String,
     pub canonical_name: String,
@@ -84,7 +84,7 @@ pub struct FindingEntityDto {
 
 /// One cross-origin identity merge: a canonical entity + the surface forms
 /// folded into it + the signals that fired (the glassbox reason).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReconciliationMergeDto {
     pub canonical_id: String,
     pub canonical_name: String,
@@ -94,7 +94,7 @@ pub struct ReconciliationMergeDto {
 }
 
 /// One undirected edge of a [`SubgraphDto`].
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubEdgeDto {
     pub source: String,
     pub target: String,
@@ -102,14 +102,14 @@ pub struct SubEdgeDto {
 }
 
 /// Top-degree nodes + the edges induced among them, for a node-link map.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubgraphDto {
     pub nodes: Vec<GraphNodeDto>,
     pub edges: Vec<SubEdgeDto>,
 }
 
 /// Headline scale/provenance counts for a banner.
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CorpusStatsDto {
     pub atoms: usize,
     pub entities: usize,
@@ -123,7 +123,7 @@ pub struct CorpusStatsDto {
     pub documents: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimelineBucketDto {
     /// `YYYY-MM`.
     pub ym: String,
@@ -132,7 +132,7 @@ pub struct TimelineBucketDto {
     pub chunk_ids: Vec<u64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimelineDto {
     pub buckets: Vec<TimelineBucketDto>,
     pub dated: usize,
@@ -140,7 +140,7 @@ pub struct TimelineDto {
 }
 
 /// Full source-chunk text behind a cited edge.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkDto {
     pub chunk_id: String,
     pub content: String,
@@ -178,7 +178,7 @@ pub struct DocumentFeedDto {
 /// graph ops don't surface claims, so this carries the proposition, its
 /// discourse + epistemic framing, who it's attributed to (entity name,
 /// resolved), and its first cited evidence.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimDto {
     pub id: String,
     pub content: String,
@@ -192,7 +192,7 @@ pub struct ClaimDto {
 
 /// A question atom projected for the explorer — the inquiry, its type +
 /// resolution status, how many claims address it, and where it's raised.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionDto {
     pub id: String,
     pub content: String,

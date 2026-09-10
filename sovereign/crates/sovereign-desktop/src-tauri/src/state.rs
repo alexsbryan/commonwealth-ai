@@ -1771,6 +1771,11 @@ pub async fn bootstrap_with_progress(
                         // in-process `/v1/insights/*` routes serve, and the twin
                         // of what the daemon commissions for the attached case.
                         insights: state.insight_service.read().await.as_ref().map(Arc::clone),
+                        // sv-surface D6: the feature-project store the in-process
+                        // /v1/features/* routes serve — the same handle this
+                        // process opened, the twin of what the CLI daemon
+                        // commissions for the attached case.
+                        features: state.features.read().await.as_ref().map(Arc::clone),
                     },
                     capability,
                     advertise_embed,

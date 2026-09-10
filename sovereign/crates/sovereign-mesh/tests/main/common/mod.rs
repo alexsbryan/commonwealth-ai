@@ -510,11 +510,58 @@ pub fn desktop_services_with_engine(
                     state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
                     runtime: stub_runtime(Arc::new(TestProvider::new()), None),
                     insights: None,
+                    features: None,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {
                         reason: "test fixture: no tool registry".into(),
                     },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
+/// A serving desktop commission carrying a real `NoteStore` (behind a
+/// mounted `/mcp` surface, which is where `EmbeddedDaemon::notes_store`
+/// reads it from) and a real `RecipeProjectStore`.
+///
+/// The three fixtures above leave both absent, which is the right shape
+/// for testing the named 503 and the wrong one for testing the routes.
+/// Assembled through THE assembler like every production site — a
+/// fixture that composed a variant directly would be the one place able
+/// to build a shape no launch can produce (Falsifier 3).
+pub fn desktop_services_with_note_and_feature_stores(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    notes: Arc<corpus_engine_notes::NoteStore>,
+    features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+) -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::new(TestProvider::new()),
+                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
+                    insights: None,
+                    features,
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+                        tools: Arc::new(sovereign_core::ToolRegistry::new()),
+                        notes,
+                        session_id: "test-fixture".into(),
+                    }),
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
                     workflow_http: Router::new(),
@@ -619,6 +666,7 @@ pub fn desktop_services_with_planner(
                     state_store: store,
                     runtime: Arc::new(runtime),
                     insights: None,
+                    features: None,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {
@@ -664,6 +712,7 @@ pub fn desktop_services_with_insights(
                     state_store: store,
                     runtime,
                     insights,
+                    features: None,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {
