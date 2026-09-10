@@ -70,6 +70,28 @@ pub struct SocketApprovalChannel {
     /// the desktop's Tauri channel does the same.
     task_label: String,
     desk: ApprovalDesk<String>,
+    /// The TURN this channel is currently serving — a nonce minted where the
+    /// turn is spawned, plus whether that turn's answerer has gone.
+    ///
+    /// The channel is per SOCKET and a socket runs turns sequentially, so
+    /// without the nonce the ids are pure step counters: `step:0` on the
+    /// second turn is spelled exactly like `step:0` on the first, and a late
+    /// answer to the first turn's question resolves the SECOND turn's
+    /// (sv-surface C2). `std::sync::Mutex`, never held across an await.
+    turn: std::sync::Mutex<TurnEpoch>,
+}
+
+/// One turn's identity on a socket that serves many, one after another.
+struct TurnEpoch {
+    /// What every prompt id this turn mints begins with. Empty before the
+    /// first turn — the ids are then unprefixed, which is what a reply
+    /// arriving before any turn started should fail to resolve.
+    nonce: String,
+    /// The answerer is gone for this turn: it cancelled, or the socket hung
+    /// up. Every further question the turn asks is refused AT THE DESK
+    /// rather than parked, so a replan that re-issues the same step cannot
+    /// re-park it on a client that is not coming back (sv-surface RB2).
+    abandoned: bool,
 }
 
 impl SocketApprovalChannel {
@@ -78,7 +100,66 @@ impl SocketApprovalChannel {
             frames,
             task_label: task_label.to_string(),
             desk: ApprovalDesk::new(),
+            turn: std::sync::Mutex::new(TurnEpoch {
+                nonce: String::new(),
+                abandoned: false,
+            }),
         }
+    }
+
+    /// Begin a turn under `nonce` — called where the turn is SPAWNED, which
+    /// is the one place that knows a new turn is starting.
+    ///
+    /// Clears the previous turn's abandonment and re-bases the ids, so an
+    /// answer aimed at a question from a turn that has ended resolves
+    /// nothing (`NoSuchPending`) instead of landing on the same-numbered
+    /// step of the turn now running (sv-surface C2).
+    pub fn begin_turn(&self, nonce: &str) {
+        let mut turn = self.turn.lock().unwrap_or_else(|e| e.into_inner());
+        turn.nonce = nonce.to_string();
+        turn.abandoned = false;
+    }
+
+    /// Nobody is going to answer this turn's questions: resolve every parked
+    /// one by the per-KIND hangup policy (E2 — approval and user reply are
+    /// CANCELLED, information reads as the user's SKIP) and refuse the ones
+    /// that have not been asked yet.
+    ///
+    /// This is what a `Cancel` and a hangup both need. Without it a turn
+    /// parked on a consent card is blocked on a `oneshot` nobody holds, so
+    /// the executor never returns and NO terminal frame is ever emitted —
+    /// the client's stop button does nothing and the socket goes quiet
+    /// forever (sv-surface RB2, C13).
+    ///
+    /// Returns how many parked questions it resolved.
+    pub fn abandon(&self) -> usize {
+        self.turn
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .abandoned = true;
+        let resolved = self.desk.abandon_all();
+        if resolved > 0 {
+            tracing::info!(
+                resolved,
+                "turn_approval: the turn's parked questions were abandoned — the executor \
+                 returns and its turn can terminate"
+            );
+        }
+        resolved
+    }
+
+    /// The id a question asked RIGHT NOW would be parked under, or `None`
+    /// when this turn has been abandoned and must not park anything more.
+    fn prompt_id(&self, suffix: &str) -> Option<String> {
+        let turn = self.turn.lock().unwrap_or_else(|e| e.into_inner());
+        if turn.abandoned {
+            return None;
+        }
+        Some(if turn.nonce.is_empty() {
+            suffix.to_string()
+        } else {
+            format!("{}:{}", turn.nonce, suffix)
+        })
     }
 
     /// Answer a parked question by the id it was asked under.
@@ -125,10 +206,23 @@ impl SocketApprovalChannel {
     }
 }
 
+/// The refusal owed to an executor that asks a question after its turn was
+/// abandoned. `Cancelled` rather than a default answer: nobody is there, and
+/// an invented consent is the substitution this file exists to remove.
+fn abandoned(kind: &str) -> Error {
+    tracing::debug!(
+        kind,
+        "turn_approval: refused a question on an abandoned turn — the client cancelled or hung up"
+    );
+    Error::Cancelled
+}
+
 #[async_trait]
 impl ApprovalChannel for SocketApprovalChannel {
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool> {
-        let id = format!("step:{}", step.id);
+        let Some(id) = self.prompt_id(&format!("step:{}", step.id)) else {
+            return Err(abandoned("approval"));
+        };
         let parked = self.desk.park_approval(id.clone());
         self.ask(
             id,
@@ -141,8 +235,11 @@ impl ApprovalChannel for SocketApprovalChannel {
     }
 
     async fn ask_user(&self, question_text: &str) -> Result<String> {
-        // One at a time — the executor is sequential within a task.
-        let id = "input".to_string();
+        // One at a time — the executor is sequential within a task, so the
+        // turn's nonce plus the word is already unambiguous.
+        let Some(id) = self.prompt_id("input") else {
+            return Err(abandoned("user reply"));
+        };
         let parked = self.desk.park_input(id.clone());
         self.ask(
             id,
@@ -160,7 +257,9 @@ impl ApprovalChannel for SocketApprovalChannel {
     /// to the same place — corpus-only synthesis — and the executor cannot
     /// tell them apart, which is the point.
     async fn request_information(&self, request: &InformationRequest) -> Option<String> {
-        let id = format!("info:{}", request.step_id);
+        // Abandoned reads as the SKIP, not as a cancel — E2's per-kind
+        // policy, and the same `None` a vanished card produces.
+        let id = self.prompt_id(&format!("info:{}", request.step_id))?;
         let parked = self.desk.park_information(id.clone());
         let frame = TurnFrame::Prompt {
             id: id.clone(),
@@ -223,7 +322,7 @@ mod tests {
     use super::*;
     use sovereign_contracts::types::StepKind;
 
-    fn step(id: usize) -> Step {
+    pub(super) fn step(id: usize) -> Step {
         Step {
             id,
             description: "run the migration".into(),
@@ -238,7 +337,7 @@ mod tests {
         }
     }
 
-    fn preview() -> ActionPreview {
+    pub(super) fn preview() -> ActionPreview {
         ActionPreview {
             tool_id: "shell".into(),
             description: "Run the migration".into(),
@@ -385,6 +484,9 @@ mod tests {
 #[cfg(test)]
 mod r3_producer_tests {
     use super::*;
+    // The consent fixtures live one module up; one spelling of a step and
+    // its preview, not two (ARCH §10.6).
+    use super::tests::{preview, step};
     use sovereign_contracts::types::InformationRequest;
     use sovereign_core::types::StepOutput;
 
@@ -532,5 +634,114 @@ mod r3_producer_tests {
                 notice: TurnNotice::LessonProposed(_)
             }
         ));
+    }
+
+    /// E2's hangup policy, applied per prompt KIND — the half sv-surface
+    /// RB2/C13 found unreachable. A consent question is CANCELLED (an
+    /// invented yes on behalf of somebody who left is the §18.3
+    /// substitution) and an information request reads as the user's SKIP,
+    /// which is a real answer the executor cannot tell from a pressed one.
+    ///
+    /// Named failing input (§18.1): delete `abandon`'s `desk.abandon_all()`
+    /// and both awaits below hang forever — which is exactly what a turn
+    /// parked on a consent card did when its client pressed stop.
+    #[tokio::test]
+    async fn abandoning_a_turn_cancels_a_consent_and_skips_an_information_request() {
+        let (chan, mut rx) = channel();
+        let consent = {
+            let chan = Arc::clone(&chan);
+            tokio::spawn(async move { chan.request_approval(&step(1), &preview()).await })
+        };
+        rx.recv().await.expect("the consent question is asked");
+        let asked = {
+            let chan = Arc::clone(&chan);
+            tokio::spawn(async move { chan.request_information(&info_request(2)).await })
+        };
+        rx.recv().await.expect("the information request is asked");
+        assert_eq!(chan.parked(), 2);
+
+        assert_eq!(chan.abandon(), 2, "both parked questions were resolved");
+        assert_eq!(chan.parked(), 0, "and none is still waiting");
+
+        assert!(
+            matches!(consent.await.unwrap(), Err(Error::Cancelled)),
+            "a consent question nobody is left to answer is CANCELLED, never granted"
+        );
+        assert_eq!(
+            asked.await.unwrap(),
+            None,
+            "an information request reads as the skip — the one kind whose absent \
+             answer is an answer"
+        );
+    }
+
+    /// And the turn stays abandoned: a step the executor re-issues after the
+    /// cancel (a replan re-asking the same question) is refused at the desk
+    /// rather than parked on a client that is not coming back — otherwise the
+    /// unpark buys one loop of the executor and then blocks again.
+    #[tokio::test]
+    async fn a_question_asked_after_the_abandon_is_refused_rather_than_parked() {
+        let (chan, mut rx) = channel();
+        chan.abandon();
+
+        assert!(matches!(
+            chan.request_approval(&step(1), &preview()).await,
+            Err(Error::Cancelled)
+        ));
+        assert_eq!(
+            chan.request_information(&info_request(2)).await,
+            None,
+            "same per-kind policy for a question that never got asked"
+        );
+        assert_eq!(chan.parked(), 0, "nothing was parked");
+        assert!(rx.try_recv().is_err(), "and nothing was shown to a client");
+    }
+
+    /// sv-surface C2: the desk is per SOCKET and a socket runs turns one
+    /// after another, so an id that is only a step counter is spelled the
+    /// same on every turn. A late answer to the first turn's question then
+    /// resolves the SECOND turn's — a user's stale click granting a consent
+    /// they were never shown.
+    #[tokio::test]
+    async fn a_late_answer_cannot_reach_the_next_turns_question() {
+        let (chan, mut rx) = channel();
+        chan.begin_turn("turn-one");
+        let first = {
+            let chan = Arc::clone(&chan);
+            tokio::spawn(async move { chan.request_approval(&step(0), &preview()).await })
+        };
+        let TurnFrame::Prompt { id: first_id, .. } = rx.recv().await.unwrap() else {
+            panic!("the first turn asks");
+        };
+        assert_eq!(first_id, "turn-one:step:0");
+        chan.abandon();
+        assert!(matches!(first.await.unwrap(), Err(Error::Cancelled)));
+
+        chan.begin_turn("turn-two");
+        let second = {
+            let chan = Arc::clone(&chan);
+            tokio::spawn(async move { chan.request_approval(&step(0), &preview()).await })
+        };
+        let TurnFrame::Prompt { id: second_id, .. } = rx.recv().await.unwrap() else {
+            panic!("the second turn asks");
+        };
+        assert_ne!(
+            second_id, first_id,
+            "the same step number on a new turn is a DIFFERENT question"
+        );
+
+        assert_eq!(
+            chan.submit(&first_id, &TurnAnswer::Approved(true)),
+            ResolveOutcome::NoSuchPending,
+            "the stale click resolves nothing"
+        );
+        assert_eq!(
+            chan.submit(&second_id, &TurnAnswer::Approved(false)),
+            ResolveOutcome::Resolved
+        );
+        assert!(
+            !second.await.unwrap().unwrap(),
+            "the live question got the answer that was aimed at it"
+        );
     }
 }

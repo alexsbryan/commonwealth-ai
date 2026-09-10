@@ -72,6 +72,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{ConnectInfo, Extension, Path, Query, WebSocketUpgrade};
@@ -82,6 +83,7 @@ use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
@@ -103,6 +105,20 @@ use sovereign_core::approval_desk::ResolveOutcome;
 /// mesh, admin and reading routers — so a serving daemon cannot come up
 /// without it and `mount_names` reports exactly what it has.
 pub fn turn_router(daemon: Arc<EmbeddedDaemon>) -> Router {
+    turn_router_with(daemon, SocketTimers::default())
+}
+
+/// [`turn_router`] with the socket's two clocks supplied by the composition
+/// root instead of taken from the constants.
+///
+/// The production values are seconds and the property they exist for — the
+/// daemon CLOSES a socket the client stopped using (sv-surface RB1) — can
+/// only be watched by living through one, so a test that waited out the real
+/// idle window would add half a minute to the suite and a test that skipped
+/// it would assert nothing. Passing them beats an env override: no ambient
+/// state, no cross-test interference, and the values a socket runs on are
+/// visible at the seam that built it.
+pub fn turn_router_with(daemon: Arc<EmbeddedDaemon>, timers: SocketTimers) -> Router {
     Router::new()
         .route("/v1/conversations", post(create_conversation))
         .route("/v1/conversations", get(list_conversations))
@@ -119,6 +135,7 @@ pub fn turn_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             crate::loopback_guard::loopback_only,
         ))
         .layer(Extension(daemon))
+        .layer(Extension(timers))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -680,6 +697,7 @@ async fn ws_handler(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Query(params): Query<StreamParams>,
+    Extension(timers): Extension<SocketTimers>,
 ) -> Response {
     if let Err(r) = enforce_localhost(&peer) {
         return r;
@@ -687,7 +705,148 @@ async fn ws_handler(
     if daemon.runtime().is_none() {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     }
-    ws.on_upgrade(move |socket| handle_ws(socket, daemon, conversation_id, params.approvals))
+    ws.on_upgrade(move |socket| {
+        handle_ws(socket, daemon, conversation_id, params.approvals, timers)
+    })
+}
+
+/// How long a SETTLED socket waits for the client's next turn before the
+/// daemon closes it.
+///
+/// A turn socket is a per-conversation resource and a client that has its
+/// answer usually wants another turn on it, so the socket is not closed the
+/// instant the turn settles — but it does not live forever either, which is
+/// what it did until sv-surface RB1: `handle_ws` looped on `ws_rx` and
+/// nothing ever ended the loop, so every completed turn left a WebSocket, a
+/// writer task and an approval channel alive on BOTH ends. A client that
+/// wants another turn simply sends the next request inside this window.
+const IDLE_AFTER_SETTLED: Duration = Duration::from_secs(30);
+
+/// The cap on the post-`Complete` window — how long the daemon waits for the
+/// turn's own producers to let go of the frame channel before it says
+/// `TurnSettled` anyway.
+///
+/// The wait itself is not a timer (see `Phase::Settling`); this is the bound
+/// on a producer that never finishes, so one stuck post-stream spawn costs a
+/// socket rather than the process. Reaching it is traced at WARN, which is
+/// the instrument that says the signal was wrong rather than the window
+/// (ARCH §18.4).
+const POST_COMPLETE_SETTLE_MAX: Duration = Duration::from_secs(60);
+
+/// How often the settle predicate is re-read while the post-`Complete`
+/// window is open. There is no notification when a sender handle drops, so
+/// this is a poll — cheap, and only between turns.
+const SETTLE_POLL: Duration = Duration::from_millis(50);
+
+/// How long the daemon gives its writer task to flush what is queued and put
+/// the WebSocket Close on the wire.
+const WRITER_GOODBYE: Duration = Duration::from_secs(2);
+
+/// The two windows one turn socket runs on. [`SocketTimers::default`] is the
+/// production pair; see [`turn_router_with`] for why they are a value.
+#[derive(Clone, Copy, Debug)]
+pub struct SocketTimers {
+    /// How long a settled socket waits for the client's next turn.
+    pub idle_after_settled: Duration,
+    /// The cap on the post-`Complete` window.
+    pub post_complete_settle_max: Duration,
+}
+
+impl Default for SocketTimers {
+    fn default() -> Self {
+        Self {
+            idle_after_settled: IDLE_AFTER_SETTLED,
+            post_complete_settle_max: POST_COMPLETE_SETTLE_MAX,
+        }
+    }
+}
+
+/// Where a turn socket is between turns — the half of a connection's life
+/// with no turn in it, which had no representation at all until sv-surface
+/// RB1 and therefore no end (`Phase::Settled` is the end).
+#[derive(Clone, Copy)]
+enum Phase {
+    /// A turn is running, or none has started yet: the socket waits on the
+    /// client with no deadline of its own.
+    Open,
+    /// The turn's frames are out and its post-`Complete` producers may still
+    /// be holding the frame channel — `MessageRefined` and `LessonProposed`
+    /// fire from a DETACHED post-stream spawn, after the terminal frame (E1),
+    /// so "the turn ended" and "the host is done talking" are different
+    /// moments and only the second one may close a socket.
+    ///
+    /// The predicate is not a quiet timer. Every producer that can still
+    /// speak here must hold a clone of the frame sender, so the sender's
+    /// strong count returning to its resting value IS "nobody can send here
+    /// any more" — structural, and true for producers that do not exist yet
+    /// (ARCH §7). `give_up_at` bounds a producer that never lets go.
+    ///
+    /// A new turn arriving mid-settle skips the notice: the client that
+    /// started it is not waiting to hear the previous turn settle.
+    Settling { give_up_at: Instant },
+    /// `TurnSettled` is on the wire. The socket closes at `close_at` unless
+    /// the client starts another turn.
+    Settled { close_at: Instant },
+}
+
+/// The handle counts a socket has when nothing is running on it.
+///
+/// Measured once, before the first turn, rather than assumed: what "at rest"
+/// means depends on how many per-socket sinks were built, and a hard-coded
+/// number would be wrong the day a third one appears.
+struct RestingHandles {
+    /// Clones of the frame sender.
+    senders: usize,
+    /// Handles on the socket's approval channel.
+    approvals: usize,
+    /// Handles on the socket's routing-event sink.
+    routing: usize,
+}
+
+/// How many producer handles are still out past rest — zero means nothing can
+/// speak on this socket any more, which is what `TurnSettled` claims.
+///
+/// THREE counts, not one, and the reason is the whole correctness of RB1: the
+/// post-`Complete` producers do NOT all reach the socket the same way. The
+/// turn task holds a clone of the frame SENDER, but the detached post-stream
+/// refinement spawn holds `Arc::clone(&approval)` — an `Arc<dyn
+/// ApprovalChannel>` over this socket's channel (`streaming.rs`, the
+/// KnowledgeQuery spawn and the deep-stream one) — and that channel owns ONE
+/// sender for the socket's whole life. Cloning the Arc does not clone the
+/// sender, so a sender-only predicate does not see the refinement spawn at
+/// all: it would settle the instant the turn task's own clone dropped, and
+/// `MessageRefined` would arrive AFTER a `TurnSettled` the client has already
+/// read as "done" — E1's "Refining your answer forever", hidden behind a
+/// frame that says the opposite. Counting the handles the producers actually
+/// hold is what makes this a join instead of a guess.
+fn producers_outstanding(
+    frames: &mpsc::UnboundedSender<TurnFrame>,
+    approvals: Option<&Arc<SocketApprovalChannel>>,
+    routing: &Arc<dyn sovereign_core::traits::RoutingEventSink>,
+    resting: &RestingHandles,
+) -> usize {
+    frames.strong_count().saturating_sub(resting.senders)
+        + approvals
+            .map(Arc::strong_count)
+            .unwrap_or(0)
+            .saturating_sub(resting.approvals)
+        + Arc::strong_count(routing).saturating_sub(resting.routing)
+}
+
+/// Mint this turn's id and re-base the socket channel's prompt ids on it.
+///
+/// The channel is per SOCKET and a socket runs turns one after another, so
+/// unprefixed ids are step counters: `step:0` on the second turn is spelled
+/// exactly like `step:0` on the first, and a late answer to a question that
+/// has already gone resolves the CURRENT turn's question instead
+/// (sv-surface C2). Minted where the turn is spawned, which is the one place
+/// that knows a turn is starting.
+fn begin_turn(approvals: Option<&Arc<SocketApprovalChannel>>) {
+    if let Some(channel) = approvals {
+        let nonce = uuid::Uuid::new_v4().to_string();
+        tracing::debug!(nonce = %nonce, "turn_http: a turn begins — prompt ids re-based on it");
+        channel.begin_turn(&nonce);
+    }
 }
 
 async fn handle_ws(
@@ -695,6 +854,7 @@ async fn handle_ws(
     daemon: Arc<EmbeddedDaemon>,
     conversation_id: String,
     claim_approvals: bool,
+    timers: SocketTimers,
 ) {
     let (Some(runtime), Some(store)) = (daemon.runtime(), daemon.state_store()) else {
         // Re-checked after the upgrade because the borrow cannot cross it.
@@ -712,8 +872,56 @@ async fn handle_ws(
     // precisely because mixing them leaked one tenant's tokens to every
     // client. The daemon has no fan-out events, so it has one channel.
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<TurnFrame>();
+    // The goodbye. `ws_tx` lives in the writer task, so the loop cannot put a
+    // Close frame on the wire itself — it asks, and the writer flushes what is
+    // still queued before saying it (sv-surface RB1).
+    let (close_tx, mut close_rx) = tokio::sync::oneshot::channel::<()>();
     let tx_handle = tokio::spawn(async move {
-        while let Some(frame) = out_rx.recv().await {
+        // The writer is the ONE place every frame passes through, which is why
+        // it — not the loop that decides to settle — stamps `TurnSettled` with
+        // the turn's message id: FIFO makes "the Complete has already been
+        // written" exact here, where a cell shared with the loop would race the
+        // flush and stamp an empty id or a stale one.
+        let mut last_complete = String::new();
+        let mut closing = false;
+        loop {
+            let next = if closing {
+                out_rx.try_recv().ok()
+            } else {
+                tokio::select! {
+                    // Queued frames first: a client's last notices reach it
+                    // before the goodbye does.
+                    biased;
+                    frame = out_rx.recv() => frame,
+                    _ = &mut close_rx => {
+                        closing = true;
+                        out_rx.try_recv().ok()
+                    }
+                }
+            };
+            let Some(frame) = next else {
+                if closing {
+                    let _ = ws_tx.send(Message::Close(None)).await;
+                }
+                break;
+            };
+            if let TurnFrame::Complete { message_id, .. } = &frame {
+                last_complete = message_id.clone();
+            }
+            let frame = if matches!(
+                &frame,
+                TurnFrame::Notice {
+                    notice: TurnNotice::TurnSettled { message_id }
+                } if message_id.is_empty()
+            ) {
+                TurnFrame::Notice {
+                    notice: TurnNotice::TurnSettled {
+                        message_id: last_complete.clone(),
+                    },
+                }
+            } else {
+                frame
+            };
             let Ok(json) = serde_json::to_string(&frame) else {
                 continue;
             };
@@ -746,6 +954,15 @@ async fn handle_ws(
             frames: out_tx.clone(),
         });
 
+    // What this socket looks like with nothing running on it. Read HERE,
+    // after both sinks exist and before any turn, so `producers_outstanding`
+    // is comparing against a measurement rather than a remembered number.
+    let resting = RestingHandles {
+        senders: out_tx.strong_count(),
+        approvals: approvals.as_ref().map(Arc::strong_count).unwrap_or(0),
+        routing: Arc::strong_count(&routing_events),
+    };
+
     // The turn's own approval capability, read once per turn and installed
     // around the WHOLE call by each arm that starts one: the executor is built
     // during the ACQUIRE, and a scope that began at the stream handle would
@@ -774,6 +991,10 @@ async fn handle_ws(
     // keeps "one turn per socket" true without the receive loop having to
     // block to enforce it.
     let mut in_flight: Option<tokio::task::JoinHandle<()>> = None;
+    let mut phase = Phase::Open;
+    // Why the loop ended: the client hung up, or this daemon closed an idle
+    // socket. Only the second one owes a goodbye.
+    let mut idle_close = false;
     loop {
         let turn_finished = async {
             match in_flight.as_mut() {
@@ -785,10 +1006,79 @@ async fn handle_ws(
                 None => std::future::pending().await,
             }
         };
+        // Copied out of `phase` rather than borrowed from it, so the arms
+        // below are free to reassign it.
+        let tick_at = match phase {
+            Phase::Open => None,
+            Phase::Settling { .. } => Some(Instant::now() + SETTLE_POLL),
+            Phase::Settled { close_at } => Some(close_at),
+        };
+        let phase_tick = async move {
+            match tick_at {
+                Some(at) => tokio::time::sleep_until(at).await,
+                None => std::future::pending().await,
+            }
+        };
         let incoming = tokio::select! {
             _ = turn_finished => {
                 in_flight = None;
+                // The turn is over; the socket is not. Its post-`Complete`
+                // producers get the window (E1) before anything closes.
+                phase = Phase::Settling {
+                    give_up_at: Instant::now() + timers.post_complete_settle_max,
+                };
                 continue;
+            }
+            () = phase_tick => {
+                match phase {
+                    Phase::Settling { give_up_at } => {
+                        let outstanding = producers_outstanding(
+                            &out_tx,
+                            approvals.as_ref(),
+                            &routing_events,
+                            &resting,
+                        );
+                        let out_of_time = Instant::now() >= give_up_at;
+                        if outstanding > 0 && !out_of_time {
+                            continue;
+                        }
+                        if outstanding > 0 {
+                            tracing::warn!(
+                                conversation_id = %conversation_id,
+                                outstanding,
+                                "turn_http: settling anyway — a post-turn producer still holds \
+                                 this socket's frame channel past the cap"
+                            );
+                        } else {
+                            tracing::info!(
+                                conversation_id = %conversation_id,
+                                "turn_http: the turn settled — every producer let go of the socket"
+                            );
+                        }
+                        // The writer stamps the message id; an empty one here
+                        // is the ASK, not a claim about the turn.
+                        let _ = out_tx.send(TurnFrame::Notice {
+                            notice: TurnNotice::TurnSettled {
+                                message_id: String::new(),
+                            },
+                        });
+                        phase = Phase::Settled {
+                            close_at: Instant::now() + timers.idle_after_settled,
+                        };
+                        continue;
+                    }
+                    Phase::Settled { .. } => {
+                        tracing::info!(
+                            conversation_id = %conversation_id,
+                            idle_secs = timers.idle_after_settled.as_secs_f32(),
+                            "turn_http: closing a settled socket the client did not reuse"
+                        );
+                        idle_close = true;
+                        break;
+                    }
+                    // Unreachable: `Open` produces no tick.
+                    Phase::Open => continue,
+                }
             }
             incoming = ws_rx.next() => incoming,
         };
@@ -803,6 +1093,13 @@ async fn handle_ws(
             // reason the turn above is a task.
             _ => continue,
         };
+        // The client is alive: any request it sends refreshes the idle
+        // clock, and one that starts a turn replaces the clock with the turn.
+        if let Phase::Settled { .. } = phase {
+            phase = Phase::Settled {
+                close_at: Instant::now() + timers.idle_after_settled,
+            };
+        }
         let event: TurnRequest = match serde_json::from_str(&text) {
             Ok(e) => e,
             Err(e) => {
@@ -823,6 +1120,8 @@ async fn handle_ws(
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
                 }
+                begin_turn(approvals.as_ref());
+                phase = Phase::Open;
                 let (rt, st, cid, tx) = (
                     Arc::clone(&runtime),
                     Arc::clone(&store),
@@ -878,6 +1177,8 @@ async fn handle_ws(
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
                 }
+                begin_turn(approvals.as_ref());
+                phase = Phase::Open;
                 // A resume names its session for PROVENANCE — the resume
                 // acquire reads nothing out of it, only quotes the id in the
                 // synthetic classification's rationale — so an id the daemon
@@ -938,6 +1239,8 @@ async fn handle_ws(
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
                 }
+                begin_turn(approvals.as_ref());
+                phase = Phase::Open;
                 // Redirect resolves the turn's MESSAGE and its CONVERSATION
                 // off the session, so here the id is a KEY and both ways of
                 // missing are refused by name. `Foreign` is the one that would
@@ -1026,11 +1329,21 @@ async fn handle_ws(
                         session.id.clone()
                     });
                 let hit_preparing = runtime.sessions.cancel_preparing(&conversation_id);
-                if hit_session.is_some() || hit_preparing {
+                // AND unpark the desk. A turn stopped on a consent card is
+                // blocked on a `oneshot`, and a cancellation token it will
+                // never poll again cannot reach it: without this the executor
+                // never returns, no terminal frame is ever emitted, and the
+                // user's stop button does nothing at all (sv-surface RB2).
+                // The policy is E2's, per prompt KIND, and it is the same one
+                // a hangup applies below — one rule, two ways of losing the
+                // answerer.
+                let unparked = approvals.as_ref().map(|a| a.abandon()).unwrap_or(0);
+                if hit_session.is_some() || hit_preparing || unparked > 0 {
                     tracing::info!(
                         conversation_id = %conversation_id,
                         session = ?hit_session,
                         preparing = hit_preparing,
+                        unparked,
                         "turn_http: turn cancelled by the client"
                     );
                 } else {
@@ -1049,45 +1362,49 @@ async fn handle_ws(
             // address, and this one's questions are the only ones it can
             // reach.
             TurnRequest::Answer { id, answer } => {
-                let outcome = approvals.as_ref().map(|a| a.submit(&id, &answer));
-                match outcome {
-                    Some(ResolveOutcome::Resolved) => {
-                        // G3b: a search-built information answer carries
-                        // its registry rows; the host folds them into the
-                        // conversation's cumulative searched_sources as
-                        // part of THIS resolve — one user action, one
-                        // atomic effect. Soft-fail like the desktop's
-                        // in-process copy did: a registry miss costs the
-                        // model cumulative-URL awareness for the turn,
-                        // never the answer itself.
-                        if let TurnAnswer::Information { ref sources, .. } = answer {
-                            if !sources.is_empty() {
-                                fold_searched_sources(store.as_ref(), &conversation_id, sources)
-                                    .await;
-                            }
-                        }
-                        // G8: the positive acknowledgement. A client that
-                        // answered and heard nothing cannot tell "accepted"
-                        // from "never arrived" — the bool this replaced
-                        // collapsed exactly that distinction (§18.3). The
-                        // refusals below stay StreamErrors: they name what
-                        // the client can FIX.
-                        let _ = out_tx.send(TurnFrame::Notice {
-                            notice: TurnNotice::ResolveAck {
-                                id,
-                                outcome: ResolveOutcome::Resolved,
-                            },
-                        });
-                    }
-                    _ => {
-                        if let Some(message) = resolve_refusal(outcome, answer_kind(&answer)) {
-                            let _ = out_tx.send(TurnFrame::StreamError {
-                                message,
-                                retry_after_secs: None,
-                            });
+                let outcome = match approvals.as_ref() {
+                    Some(a) => a.submit(&id, &answer),
+                    // Not `NoSuchPending`: this socket owns no desk at all,
+                    // which is a claim the client can go and make.
+                    None => ResolveOutcome::Unclaimed,
+                };
+                if outcome == ResolveOutcome::Resolved {
+                    // G3b: a search-built information answer carries
+                    // its registry rows; the host folds them into the
+                    // conversation's cumulative searched_sources as
+                    // part of THIS resolve — one user action, one
+                    // atomic effect. Soft-fail like the desktop's
+                    // in-process copy did: a registry miss costs the
+                    // model cumulative-URL awareness for the turn,
+                    // never the answer itself.
+                    if let TurnAnswer::Information { ref sources, .. } = answer {
+                        if !sources.is_empty() {
+                            fold_searched_sources(store.as_ref(), &conversation_id, sources).await;
                         }
                     }
+                } else if let Some(refusal) = refusal_sentence(outcome, answer_kind(&answer)) {
+                    // The daemon's own record of what the client got wrong.
+                    // It is a TRACE and not a frame because the frame this
+                    // arm sends is the same one either way — see below.
+                    tracing::debug!(
+                        conversation_id = %conversation_id,
+                        id = %id,
+                        ?outcome,
+                        %refusal,
+                        "turn_http: an answer resolved nothing"
+                    );
                 }
+                // G8: EVERY outcome is said, and every one of them rides the
+                // NOTICE. A client that answered and heard nothing cannot
+                // tell "accepted" from "never arrived" — the bool this
+                // replaced collapsed exactly that (§18.3) — and a refusal
+                // that rode `StreamError` was worse than silence: both
+                // clients treat that frame as TERMINAL, so a double-clicked
+                // approve discarded a turn that was running perfectly well
+                // (sv-surface RB4). `StreamError` is for a turn that DIED.
+                let _ = out_tx.send(TurnFrame::Notice {
+                    notice: TurnNotice::ResolveAck { id, outcome },
+                });
             }
         }
     }
@@ -1095,9 +1412,35 @@ async fn handle_ws(
     if let Some(h) = in_flight {
         // The client hung up mid-turn. Nothing is left to receive the frames,
         // and a turn whose sink is gone is work nobody asked to keep.
+        //
+        // BEFORE the abort, resolve what the turn is parked on by the same
+        // per-kind policy a cancel applies (E2, sv-surface C13): the pre-send
+        // window already cancelled a question the socket died before
+        // receiving, but a question already SHOWN and parked went through
+        // neither — it was torn down by this abort with no policy applied at
+        // all, so an information request that should have read as the user's
+        // SKIP died as a cancel.
+        if let Some(channel) = approvals.as_ref() {
+            channel.abandon();
+        }
         h.abort();
     }
-    tx_handle.abort();
+    if idle_close {
+        // Ask the writer for the goodbye, and give it long enough to flush
+        // what is queued. A client that already left makes this a no-op.
+        let _ = close_tx.send(());
+        if tokio::time::timeout(WRITER_GOODBYE, tx_handle)
+            .await
+            .is_err()
+        {
+            tracing::debug!(
+                conversation_id = %conversation_id,
+                "turn_http: the writer did not finish its goodbye in time"
+            );
+        }
+    } else {
+        tx_handle.abort();
+    }
 }
 
 /// The one-turn-per-socket guard, shared by the three variants that START a
@@ -1206,22 +1549,27 @@ async fn drive_acquired(
     }
 }
 
-/// The sentence owed to a client whose reply resolved nothing, or `None` when
+/// The daemon's own words for a reply that resolved nothing, or `None` when
 /// it resolved a parked question and the turn is running again.
 ///
-/// `outcome` is `None` when this socket claimed no approvals — a different
-/// failure from "nothing is parked", and the one the client can actually fix.
-fn resolve_refusal(outcome: Option<ResolveOutcome>, kind: &str) -> Option<String> {
+/// A TRACE, not a frame, since sv-surface RB4: the wire answer to an answer
+/// is `Notice::ResolveAck`, whose typed [`ResolveOutcome`] is what a client
+/// branches on. This is what the daemon's log says about the same event, and
+/// it is where the sentence a person reads is spelled once.
+fn refusal_sentence(outcome: ResolveOutcome, kind: &str) -> Option<String> {
     match outcome {
-        Some(ResolveOutcome::Resolved) => None,
-        Some(ResolveOutcome::NoSuchPending) => Some(format!(
+        ResolveOutcome::Resolved => None,
+        ResolveOutcome::NoSuchPending => Some(format!(
             "no {kind} is pending on this socket — it was already answered, or \
              the turn ended"
         )),
-        Some(ResolveOutcome::WrongKind) => Some(format!(
+        ResolveOutcome::WrongKind => Some(format!(
             "this turn is waiting on the other kind of answer, not a {kind}"
         )),
-        None => Some(format!(
+        ResolveOutcome::WaiterGone => Some(format!(
+            "the {kind} arrived after its turn had already let the question go"
+        )),
+        ResolveOutcome::Unclaimed => Some(format!(
             "this socket did not claim its turn's approvals — reconnect with \
              `?approvals=true` to receive and answer them (a {kind} on an \
              unclaimed socket resolves nothing)"
@@ -1367,6 +1715,118 @@ impl sovereign_core::traits::RoutingEventSink for SocketRoutingEvents {
             text: payload.event.text,
             elapsed_ms: payload.event.elapsed_ms,
         });
+    }
+}
+
+#[cfg(test)]
+mod settle_predicate_tests {
+    use super::*;
+
+    fn socket() -> (
+        mpsc::UnboundedSender<TurnFrame>,
+        mpsc::UnboundedReceiver<TurnFrame>,
+        Arc<SocketApprovalChannel>,
+        Arc<dyn sovereign_core::traits::RoutingEventSink>,
+        RestingHandles,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let approvals = Arc::new(SocketApprovalChannel::new(tx.clone(), "conv-a"));
+        let routing: Arc<dyn sovereign_core::traits::RoutingEventSink> =
+            Arc::new(SocketRoutingEvents { frames: tx.clone() });
+        let resting = RestingHandles {
+            senders: tx.strong_count(),
+            approvals: Arc::strong_count(&approvals),
+            routing: Arc::strong_count(&routing),
+        };
+        (tx, rx, approvals, routing, resting)
+    }
+
+    /// At rest, nothing is outstanding — the measurement is of THIS socket,
+    /// not of a remembered number.
+    #[test]
+    fn a_socket_with_no_turn_on_it_has_nothing_outstanding() {
+        let (tx, _rx, approvals, routing, resting) = socket();
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            0
+        );
+    }
+
+    /// **The post-stream refinement spawn's shape**, and the reason the
+    /// predicate counts three things.
+    ///
+    /// `streaming.rs` carries the turn's approval channel into a DETACHED
+    /// spawn as `Arc::clone(&approval)` — an `Arc<dyn ApprovalChannel>` — and
+    /// emits `MessageRefined` through it after the terminal frame. The
+    /// channel owns ONE frame sender for the socket's whole life, so that
+    /// clone does not raise the SENDER count by anything: a predicate reading
+    /// only `frames.strong_count()` reports 0 outstanding while this holder
+    /// is still alive and about to speak.
+    ///
+    /// Named failing input (§18.1): drop the `approvals` term from
+    /// `producers_outstanding` and the assertion below reads 0 — the daemon
+    /// then says `TurnSettled` before the refinement, and the client that
+    /// stops on that bookend never repaints the bubble (E1/G4).
+    #[tokio::test]
+    async fn a_detached_holder_of_the_approval_channel_is_outstanding() {
+        let (tx, mut rx, approvals, routing, resting) = socket();
+
+        let held = Arc::clone(&approvals) as Arc<dyn sovereign_core::traits::ApprovalChannel>;
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let spawned = tokio::spawn(async move {
+            let _ = release_rx.await;
+            held.emit_message_refined(sovereign_contracts::types::MessageRefinedPayload {
+                conversation_id: "conv-a".into(),
+                message_id: "m1".into(),
+                new_content: "the revised answer.".into(),
+            });
+        });
+
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            1,
+            "the detached holder is counted while it can still speak"
+        );
+
+        release_tx.send(()).unwrap();
+        spawned.await.unwrap();
+        assert!(
+            matches!(
+                rx.try_recv(),
+                Ok(TurnFrame::Notice {
+                    notice: TurnNotice::MessageRefined(_)
+                })
+            ),
+            "and it did speak — after the point a sender-only predicate would have settled"
+        );
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            0,
+            "and once it is gone the socket is settled"
+        );
+    }
+
+    /// The other two carriers, so no term is load-free: a turn task's frame
+    /// sender clone, and a per-turn clone of the routing sink.
+    #[test]
+    fn a_turn_task_sender_and_a_routing_sink_clone_are_both_counted() {
+        let (tx, _rx, approvals, routing, resting) = socket();
+        let turn_tx = tx.clone();
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            1
+        );
+        let turn_routing = Arc::clone(&routing);
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            2
+        );
+        drop(turn_tx);
+        drop(turn_routing);
+        assert_eq!(
+            producers_outstanding(&tx, Some(&approvals), &routing, &resting),
+            0
+        );
     }
 }
 

@@ -1380,10 +1380,21 @@ impl TurnStream {
     /// (post-stream refinement, a detached capture spawn) and the socket
     /// stays open host-side until it closes, so "the turn ended" and
     /// "the host is done talking" are different moments. This drains
-    /// the second: every `Notice` goes to `observer.on_notice`, the
-    /// host closing the socket ends it `Ok(())`, and any other frame in
-    /// the window is an error BY NAME — a token after the terminal
-    /// frame is a protocol violation a caller must not swallow.
+    /// the second: every `Notice` goes to `observer.on_notice`, and any
+    /// non-`Notice` frame in the window is an error BY NAME — a token
+    /// after the terminal frame is a protocol violation a caller must
+    /// not swallow.
+    ///
+    /// It ends on `Notice::TurnSettled`, which is the host SAYING it has
+    /// nothing further for this turn (sv-surface RB1); the notice is
+    /// forwarded to the observer first, so a caller that wants to see the
+    /// bookend can. A host closing the socket also ends it `Ok(())` —
+    /// that was the ONLY ending until RB1, which is why the daemon leaked
+    /// a socket per turn: nobody closed, so this never returned.
+    ///
+    /// Returning here does not end the socket. A caller that wants
+    /// another turn sends the next request — inside the host's idle
+    /// window, which is the daemon's `IDLE_AFTER_SETTLED`.
     pub async fn drain_after_complete(&mut self, observer: &mut TurnObserver<'_>) -> Result<()> {
         loop {
             let Some(frame) = self.next_frame().await? else {
@@ -1391,8 +1402,12 @@ impl TurnStream {
             };
             match frame {
                 TurnFrame::Notice { notice } => {
+                    let settled = matches!(notice, TurnNotice::TurnSettled { .. });
                     if let Some(f) = observer.on_notice.as_deref_mut() {
                         f(&notice);
+                    }
+                    if settled {
+                        return Ok(());
                     }
                 }
                 other => {
@@ -1580,6 +1595,73 @@ mod stream_split_tests {
             ["the revised answer.".to_string()],
             "the post-terminal notice reached the caller"
         );
+    }
+
+    /// sv-surface RB1: the drain ends on `TurnSettled` — the host SAYING it
+    /// is done — and does not need the socket to close for it.
+    ///
+    /// That distinction is the whole leak: the only ending this had was a
+    /// host close, the daemon never closed, and so every turn left a socket,
+    /// a writer task and an approval channel alive on both ends. The fake
+    /// host below deliberately STAYS OPEN after settling; before the fix
+    /// this test hangs until its timeout rather than returning.
+    #[tokio::test]
+    async fn the_post_turn_drain_ends_when_the_host_says_the_turn_settled() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let host = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"complete","data":{"message_id":"m1"}}"#.into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"notice","data":{"notice":{"message_refined":{"conversation_id":"c1","message_id":"m1","new_content":"the revised answer."}}}}"#
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            ws.send(WsMessage::Text(
+                r#"{"type":"notice","data":{"notice":{"turn_settled":{"message_id":"m1"}}}}"#
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            // Still open, and staying open — the client must not need this.
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        });
+
+        let client = TurnClient::new(format!("http://{addr}"));
+        let mut stream = client.connect("c1").await.unwrap();
+        let mut observer = TurnObserver::default();
+        stream.drain_turn(&mut observer).await.unwrap();
+
+        let mut seen: Vec<String> = Vec::new();
+        let mut on_notice = |n: &TurnNotice| match n {
+            TurnNotice::MessageRefined(p) => seen.push(p.new_content.clone()),
+            TurnNotice::TurnSettled { message_id } => seen.push(format!("settled:{message_id}")),
+            _ => {}
+        };
+        let mut observer = TurnObserver {
+            on_notice: Some(&mut on_notice),
+            ..Default::default()
+        };
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            stream.drain_after_complete(&mut observer),
+        )
+        .await
+        .expect("the drain ends on TurnSettled without waiting for a close")
+        .expect("and ends cleanly");
+        assert_eq!(
+            seen,
+            ["the revised answer.".to_string(), "settled:m1".to_string()],
+            "the post-turn notices AND the bookend reached the caller, in order"
+        );
+        host.abort();
     }
 
     /// A non-Notice frame in the post-turn window is a protocol violation

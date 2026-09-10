@@ -349,6 +349,48 @@ fn notice_frame_wire_form() {
         },
         r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"resolved"}}}}"#,
     );
+    // The two outcomes sv-surface RB2/RB4 added. `waiter_gone` was folded
+    // into `resolved` by the desk (a send into a dropped receiver reported
+    // success); `unclaimed` is the socket that never asked to answer, which
+    // rode a StreamError and therefore READ AS A DEAD TURN to both clients.
+    // Both are now ordinary outcomes on the ordinary notice.
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck {
+                id: "step:7".into(),
+                outcome: sovereign_contracts::types::ResolveOutcome::WaiterGone,
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"waiter_gone"}}}}"#,
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck {
+                id: "step:7".into(),
+                outcome: sovereign_contracts::types::ResolveOutcome::Unclaimed,
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"unclaimed"}}}}"#,
+    );
+    // The bookend to `turn_started` (sv-surface RB1): the host has nothing
+    // further for this turn and the socket may close. `message_id` is
+    // OMITTED when the turn produced none — absent, never `null` (§18.3).
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnSettled {
+                message_id: "m1".into(),
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"turn_settled":{"message_id":"m1"}}}}"#,
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnSettled {
+                message_id: String::new(),
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"turn_settled":{}}}}"#,
+    );
     // G7's two routing events — payloads that already lived in contracts;
     // these pins are their first wire form.
     pin_frame(
