@@ -238,51 +238,30 @@ pub(super) fn head_rev(repo: &Path) -> Result<String, String> {
     Ok(rev)
 }
 
-/// The toolchain that would build this checkout, or a NAMED absence.
+/// The submitter-side toolchain absence.
 ///
-/// **A knowingly second reading of `rustc --version`**, and it is named rather
-/// than left for a reviewer to find (ARCH §10.6). The first is
-/// `sovereign-mesh/src/work_donor.rs::toolchain`, which reports the DONOR's;
-/// this reports the submitter's, and the two must be independent readings or
-/// the guard below would be asserting on a field the subject supplied
-/// (ARCH §18.1). It cannot be shared today because `sovereign-cli` must not
-/// link `sovereign-mesh` (llama.cpp in an end-user dispatcher); the
-/// convergence target is one `ComputeAttribution::of_this_host` in
-/// `kernel-types`, which both would call.
-fn toolchain() -> String {
-    match std::process::Command::new("rustc")
-        .arg("--version")
-        .output()
-    {
-        Ok(out) if out.status.success() => {
-            let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if v.is_empty() {
-                ABSENT_TOOLCHAIN.to_string()
-            } else {
-                v
-            }
-        }
-        _ => ABSENT_TOOLCHAIN.to_string(),
-    }
-}
-
-/// The submitter-side toolchain absence, in the vocabulary
-/// `kernel_types::is_absent_marker` reads as one — never a guess and never an
-/// empty string, which would compare equal to every other unreadable host's.
-pub(super) const ABSENT_TOOLCHAIN: &str = "unknown (rustc is not on this checkout's PATH)";
+/// **This used to be a knowingly SECOND reading of `rustc --version`**, named
+/// as a §10.6 deviation with its own convergence target written in the code:
+/// "one `ComputeAttribution::of_this_host` ... which both would call". That
+/// target is now built, in `commonwealth_work::attribution` rather than in
+/// `kernel-types` — the kernel is a pure serde contract whose own manifest
+/// says anything heavier belongs in a domain crate, and spawning `rustc` from
+/// a leaf every lift carries would have been heavier. `sovereign-cli` already
+/// links `commonwealth-work` with `features = ["process"]`, so the shared
+/// reader costs no new edge.
+///
+/// The readings stay INDEPENDENT, which was the reason the duplicate was
+/// tolerable: each side calls the shared function on its OWN machine and
+/// reads its OWN `rustc`, so the guard is never asserting on a field the
+/// donor supplied (ARCH §18.1). What converged is the method, not the value.
+pub(super) use commonwealth_work::attribution::ABSENT_TOOLCHAIN;
 
 /// What a LOCAL run at `repo_rev` would have been attributed to.
 ///
 /// The reference every donor's `provenance` is checked against, so that "a
 /// verdict that is not yours" is a typed question rather than a footnote.
 pub(super) fn local_attribution(repo_rev: &str) -> ComputeAttribution {
-    ComputeAttribution {
-        repo_rev: repo_rev.to_string(),
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        toolchain: toolchain(),
-        host: Server::Local,
-    }
+    commonwealth_work::attribution::of_this_host(repo_rev)
 }
 
 /// Which fields of a donor's attribution do not match this checkout's.
@@ -292,25 +271,39 @@ pub(super) fn local_attribution(repo_rev: &str) -> ComputeAttribution {
 /// `commonwealth_work::refusal`'s `UnmetRequirement` selection uses.
 fn incomparable_fields(mine: &ComputeAttribution, theirs: &ComputeAttribution) -> Vec<String> {
     let mut out = Vec::new();
-    if mine.repo_rev != theirs.repo_rev {
-        out.push(format!(
-            "rev `{}` here against `{}` there",
-            short(&mine.repo_rev),
-            short(&theirs.repo_rev)
-        ));
-    }
-    if mine.os != theirs.os {
-        out.push(format!("os `{}` against `{}`", mine.os, theirs.os));
-    }
-    if mine.arch != theirs.arch {
-        out.push(format!("arch `{}` against `{}`", mine.arch, theirs.arch));
-    }
-    if mine.toolchain != theirs.toolchain {
-        out.push(format!(
-            "toolchain `{}` against `{}`",
-            mine.toolchain, theirs.toolchain
-        ));
-    }
+    // A field is incomparable two ways, and only the first used to be
+    // reported: the values DIFFER, or they agree on a named absence. The
+    // second is not a corner case — it is what every host without `rustc` on
+    // `PATH` produces, on both sides at once, and before this the row refused
+    // correctly and then named nothing, rendering as "not about — ." with a
+    // dangling dash. A refusal that cannot say which field it refused on is
+    // the absence-shaped half of ARCH §18.3.
+    let mut check = |field: &str, mine: &str, theirs: &str, shorten: bool| {
+        let render = |v: &str| {
+            if shorten {
+                short(v)
+            } else {
+                v.to_string()
+            }
+        };
+        if mine != theirs {
+            out.push(format!(
+                "{field} `{}` here against `{}` there",
+                render(mine),
+                render(theirs)
+            ));
+        } else if kernel_types::is_absent_marker(mine) {
+            out.push(format!(
+                "neither host could read its {field} (`{}`), so the two are not \
+                 evidence about each other",
+                render(mine)
+            ));
+        }
+    };
+    check("rev", &mine.repo_rev, &theirs.repo_rev, true);
+    check("os", &mine.os, &theirs.os, false);
+    check("arch", &mine.arch, &theirs.arch, false);
+    check("toolchain", &mine.toolchain, &theirs.toolchain, false);
     out
 }
 
@@ -866,6 +859,58 @@ on_fail = "report"
             }),
             provenance: attribution(rev),
         }
+    }
+
+    /// TWO HOSTS THAT BOTH COULD NOT READ `rustc` DO NOT THEREBY AGREE, and
+    /// this is the end-to-end half of the rule that lives in
+    /// [`ComputeAttribution::comparable_to`].
+    ///
+    /// Failing input: the submitter's toolchain AND the donor's both set to
+    /// the same named absence — which is the state this checkout produces on
+    /// any machine without `rustc` on `PATH`, on both sides at once.
+    ///
+    /// THIS CASE WAS UNREACHABLE UNTIL THE READERS CONVERGED, which is why it
+    /// is added with them. There were two `rustc --version` readers spelling
+    /// their absence differently ("this checkout's PATH" against "this
+    /// donor's PATH"), so two unreadable hosts compared unequal by accident of
+    /// authorship and the merge did the right thing for the wrong reason. One
+    /// reader means one spelling, and one spelling would have compared EQUAL —
+    /// adopting a donor verdict about a compiler neither host could name.
+    /// Revert `comparable_to` to plain field equality and this test goes red
+    /// with `Passed`; that sabotage was watched before this was believed.
+    #[test]
+    fn two_hosts_that_both_lost_their_toolchain_do_not_agree() {
+        assert!(kernel_types::is_absent_marker(ABSENT_TOOLCHAIN));
+        let r = reg();
+        let inst = lane(&r, "docs-gate");
+        let rev = "aa".repeat(20);
+
+        let mut mine = attribution(&rev);
+        mine.toolchain = ABSENT_TOOLCHAIN.to_string();
+
+        let mut theirs = complete(
+            &rev,
+            Judgement::passed("process:v1 x", Reason::literal("exit 0")),
+        );
+        if let WorkUnitStatus::Complete { provenance, .. } = &mut theirs {
+            provenance.toolchain = ABSENT_TOOLCHAIN.to_string();
+        }
+        // Byte-identical, and still not evidence about each other.
+        if let WorkUnitStatus::Complete { provenance, .. } = &theirs {
+            assert_eq!(mine.toolchain, provenance.toolchain);
+        }
+
+        let row = terminal_row(&inst, &theirs, &mine);
+        assert_eq!(
+            row.judgement.verdict(),
+            Verdict::CouldNotJudge,
+            "a verdict neither host could attribute must not be adopted"
+        );
+        assert!(
+            row.judgement.reason().as_str().contains("toolchain"),
+            "the row must NAME the field that could not be compared: {}",
+            row.judgement.reason().as_str()
+        );
     }
 
     /// **GATE (iii), WATCHED.** A donor one commit behind produces a

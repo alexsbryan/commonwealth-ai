@@ -58,7 +58,7 @@ use commonwealth_work::{
     act, seal, ActorKey, Completion, Failure, Submission, UnitRef, WorkAct, WORK_NAMESPACE,
 };
 use kernel_types::quality::Precondition;
-use kernel_types::{ComputeAttribution, ContentHash, Server, Verdict};
+use kernel_types::{ContentHash, Verdict};
 use oicp_types::{Isolation, JobKind, JobRequirements, JobUnit, WorkOffer};
 
 /// The test shard's argv when the caller does not supply one after `--`. The
@@ -416,16 +416,16 @@ async fn run_unit(
             }
         }
     };
-    let provenance =
-        ComputeAttribution {
-            repo_rev: unit.requirements.repo_rev.clone().unwrap_or_else(|| {
-                "unknown (this peer's workdir is not a git checkout)".to_string()
-            }),
-            os: std::env::consts::OS.to_string(),
-            arch: std::env::consts::ARCH.to_string(),
-            toolchain: "unknown (a lifted peer does not read the donor's rustc)".to_string(),
-            host: Server::Local,
-        };
+    // THE THIRD HAND-BUILT ATTRIBUTION, and 5f named it as this crate's own
+    // hole: every donor invented its own, which is precisely the value
+    // `comparable_to` exists to compare. It also declared a REFUSAL to read
+    // (`"a lifted peer does not read the donor's rustc"`) where the honest
+    // answer is this peer's actual compiler — a lifted peer runs the unit, so
+    // its rustc is the one that matters. One reader now, in the crate the peer
+    // already links.
+    let provenance = commonwealth_work::attribution::of_this_host(
+        unit.requirements.repo_rev.clone().unwrap_or_default(),
+    );
     match outcome {
         Ok((outcome, result)) => WorkAct::Complete(Completion {
             handoff: unit_ref.handoff,

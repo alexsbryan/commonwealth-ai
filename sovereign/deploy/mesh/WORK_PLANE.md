@@ -246,6 +246,23 @@ Provenance is cheap and mandatory day one: a `Complete` carries `ComputeAttribut
 not yours" is a typed question rather than a footnote. A mesh-run result must survive review,
 which is the point of running work on it.
 
+**One reader fills it, and a named absence never matches (2026-09-10).** Three implementations
+described "what host am I" — the donor's, the submitter's reference, and the lifted peer's,
+which 5f recorded as a hole in this crate's surface — each with its own `rustc --version` and
+its own spelling of the absence. They are now one, `commonwealth_work::attribution::
+of_this_host`, behind the same `process` feature as the executor so a lifter of the fold alone
+never links a subprocess. The two readings stay INDEPENDENT, which is why the duplicate was
+tolerable: each side calls the shared function on its OWN machine, so the merge is never
+asserting on a field the donor supplied (§18.1). What converged is the method, not the value.
+Converging them forced a rule that had been holding by accident: `comparable_to` was plain
+field equality, and the only thing stopping two hosts that BOTH failed to read `rustc` from
+comparing equal was that the two readers spelled their absence differently. One spelling would
+have turned "neither of us knows" into "we agree" and adopted a donor's `passed` about a
+compiler neither host could name — watched happening, with the rule reverted. So the rule lives
+in the type now: a field naming an absence (`kernel_types::is_absent_marker`) makes
+`comparable_to` false on either side, and the row names the field rather than rendering an
+empty "not about — ." (§7 structural not remembered, §18.3 absence reported never defaulted).
+
 ## The pilot: this repository's own CI
 
 The 2026-09-04 cut named an external sweep library. The operator's 2026-09-09 decision replaced

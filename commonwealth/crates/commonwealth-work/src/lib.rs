@@ -13,9 +13,10 @@
 //! **Zero I/O and zero clock in the core.** The codec, the seal, the fold and
 //! the lease predicate read nothing and ask nothing what time it is. `now` is
 //! a parameter of every function that needs it, which is what makes the fold
-//! reproducible on a peer that replays a journal from 2029. The one exception
-//! is the executor seam, which is where work actually runs, and it is behind
-//! the `process` feature so a lifter of the fold never links it.
+//! reproducible on a peer that replays a journal from 2029. The exceptions are
+//! [`process`] — the executor seam, where work actually runs — and
+//! [`attribution`], where a host reads its own `rustc` to say what it is; both
+//! are behind the `process` feature so a lifter of the fold never links them.
 //!
 //! **One canonical writer.** A unit's identity is
 //! [`ContentHash`](kernel_types::ContentHash) over the bytes of a
@@ -50,6 +51,11 @@
 
 pub mod act;
 pub mod actor;
+/// How a host describes ITSELF when it reports work. Behind `process` with
+/// the executor, and for the same reason: it reads `rustc --version`, and a
+/// lifter of the fold alone must not link a subprocess.
+#[cfg(feature = "process")]
+pub mod attribution;
 pub mod executor;
 #[cfg(feature = "process")]
 pub mod process;

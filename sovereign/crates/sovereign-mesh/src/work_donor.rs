@@ -72,6 +72,10 @@ use commonwealth_api::state::AppState;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail};
 use commonwealth_work::act::{Completion, Failure, UnitRef, WorkAct};
 use commonwealth_work::actor::ActorKey;
+// The named absence for a workdir that is not a checkout. Imported rather
+// than re-spelled: this donor, the submitter and a lifted peer all have to
+// name the same absence, and the comparability rule keys on it.
+use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::{may_take, UnmetRequirement, WorkRefusal};
@@ -1053,9 +1057,14 @@ fn lease_state(
 /// the comparison `ComputeAttribution::comparable_to` exists to fail (the
 /// plan's 5e bar iii: a stale donor's unpinned verdict must be flaggable).
 ///
-/// Where a value genuinely cannot be read, it is a NAMED absence that
-/// `kernel_types::is_absent_marker` recognises, never a plausible-looking
-/// substitute (ARCH §18.3).
+/// THE REV IS THE ONLY PART THIS FUNCTION STILL DECIDES. Resolving it needs a
+/// workdir, which is a donor's own business; os, arch and toolchain are "what
+/// host am I", and that had three implementations — here, the submitter's
+/// `distribute::local_attribution`, and the lifted peer's — which cw-lift 5f
+/// recorded as a hole in the package's surface. One reader now
+/// (`commonwealth_work::attribution`), called independently by each side, so
+/// the METHOD is shared and the VALUE is still each host's own (ARCH §10.6,
+/// and §18.1 on why the two readings must stay independent).
 fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
     let repo_rev = unit
         .requirements
@@ -1068,53 +1077,7 @@ fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
         })
         .filter(|rev| !rev.is_empty())
         .unwrap_or_else(|| ABSENT_REV.to_string());
-    ComputeAttribution {
-        repo_rev,
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        toolchain: toolchain().to_string(),
-        host: Server::Local,
-    }
-}
-
-/// The rev of a workdir that is not a checkout. A named absence
-/// (`kernel_types::is_absent_marker` reads it as one), so a reader can tell
-/// "no revision" from a revision.
-pub const ABSENT_REV: &str = "unknown (this donor's workdir is not a git checkout)";
-
-/// The toolchain absence, in the same vocabulary.
-pub const ABSENT_TOOLCHAIN: &str = "unknown (rustc is not on this donor's PATH)";
-
-/// `rustc --version`, read once per process.
-///
-/// The compiler identity, which is what `ComputeAttribution::toolchain` asks
-/// for — not this crate's own version, which is a fact about the source and
-/// would compare equal across two machines running different compilers.
-fn toolchain() -> &'static str {
-    static TOOLCHAIN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    TOOLCHAIN.get_or_init(|| {
-        match std::process::Command::new("rustc")
-            .arg("--version")
-            .output()
-        {
-            Ok(out) if out.status.success() => {
-                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if v.is_empty() {
-                    ABSENT_TOOLCHAIN.to_string()
-                } else {
-                    v
-                }
-            }
-            _ => {
-                warn!(
-                    target: TRACE_TARGET,
-                    "work donor: `rustc --version` is unreadable, so results from this node \
-                     carry a named absence for their toolchain rather than a guess"
-                );
-                ABSENT_TOOLCHAIN.to_string()
-            }
-        }
-    })
+    commonwealth_work::attribution::of_this_host(repo_rev)
 }
 
 /// Append one act to the local `work` journal, then nudge the ring round.

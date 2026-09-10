@@ -52,7 +52,11 @@ tokio = { workspace = true, optional = true }
 
 [features]
 default = []
-# `ProcessExecutor` (`process:v1`). Adds tokio::process and nothing else.
+# The two modules that touch a subprocess: `ProcessExecutor` (`process:v1`),
+# which runs the unit, and `attribution`, where a host reads its own `rustc`
+# to describe itself. Adds tokio::process and nothing else — `attribution`
+# uses `std::process` and needs no dependency, but belongs behind the same
+# flag because the flag's meaning is "this build may spawn a process".
 process = ["dep:tokio"]
 
 [lints]
