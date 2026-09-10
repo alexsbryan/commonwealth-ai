@@ -23,7 +23,7 @@
 | `clock-gate` | `cargo xtask clock-gate` | hard | F0 | 0.96s | yes |
 | `concept-gate` | `cargo xtask concept-gate` | advisory | F0 | 5s | **no** |
 | `daemon-concurrency-soak` | `scripts/daemon-concurrency-soak.py --minutes 30` | tracked | F3 | 31m | **no** |
-| `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 1s | yes |
+| `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 4s | yes |
 | `desktop-check` | `npm run check` | hard | F0 | 10s | yes |
 | `desktop-invoke-coverage-gate` | `npm run report:coverage:gate` | tracked | F0 | unmeasured | yes |
 | `docs-gate` | `cargo xtask docs-gate` | hard | F0 | 2s | yes |
@@ -38,7 +38,7 @@
 | `rustfmt` | `cargo fmt --all --check` | hard | F0 | 6s | yes |
 | `size-gate` | `cargo xtask size-gate` | advisory | F0 | 4s | yes |
 | `sovereign-lint` | `./scripts/sovereign-lint.sh --human --full` | hard | F0 | 27s | **no** |
-| `sovereign-lint-scoped` | `./scripts/sovereign-lint.sh --human` | hard | F0 | 22s | **no** |
+| `sovereign-lint-scoped` | `./scripts/sovereign-lint.sh --human` | hard | F0 | 45s | **no** |
 | `windows-crosscheck` | `scripts/windows-crosscheck.sh` | tracked | F0 | unmeasured | **no** |
 | `wizard-verify` | `scripts/wizard-verify.sh` | hard | F5 | 15m | **no** |
 
