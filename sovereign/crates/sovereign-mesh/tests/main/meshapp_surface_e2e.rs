@@ -27,16 +27,26 @@
 //! chunk_id_that_is_not_a_number_is_a_400_…        :396  left: 404  right: 400
 //! ```
 //!
-//! The eighth needs its caveat in the file, not only in a log.
-//! `uninstalled_corpus_is_a_404_naming_it_on_every_route` PASSED under
-//! sabotage: a routerless daemon 404s too, and the loop's body check
-//! reads `unwrap_or_default()`, so an empty 404 body satisfies it the
-//! same way a named one does. That case guards the WORDING of a real
-//! 404 and is not, on its own, evidence the route exists — the seven
-//! above are (ARCH §18.1). The same caveat applies to the two 404
-//! branches inside `node_detail_…` and `chunk_id_…`; both of those
-//! tests went red on their 200/400 half, which is what makes them
-//! gates.
+//! The eighth was RECORDED as passing under sabotage, and re-running it
+//! on 2026-09-10 says otherwise — the record was wrong, and the
+//! correction leads (ARCH §11.1). `uninstalled_corpus_is_a_404_naming_
+//! it_on_every_route` re-watched with the daemon served behind an empty
+//! `axum::Router::new()`:
+//!
+//! ```text
+//! uninstalled_corpus_is_a_404_naming_it_on_every_route  :487  FAILED
+//!   "/graph: the body must NAME the corpus … : Null"
+//! ```
+//!
+//! Its STATUS line does pass routerless (a routerless daemon 404s too),
+//! but the line after it does not: the empty 404 body fails to decode,
+//! `get()` hands back `Value::Null`, and `Null["error"].as_str()` is
+//! `None`, whose `unwrap_or_default()` is `""` — which does not contain
+//! the corpus id. The earlier note read `unwrap_or_default()` as a
+//! swallow; it is the opposite here, an empty body cannot name
+//! anything. The case is a gate. The same reading applies to the two
+//! 404 branches inside `node_detail_…` and `chunk_id_…`; both of those
+//! tests additionally went red on their 200/400 half.
 //!
 //! `wrapped_artifact_builds_over_the_daemons_corpus` was added after
 //! that run and has not been watched red; it is the one case in this

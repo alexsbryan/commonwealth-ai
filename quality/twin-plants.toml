@@ -275,17 +275,35 @@ pub enum PlantedServerEvent {
 #     else's uncommitted work judges nothing.
 
 [[family]]
-id          = "mesh-loopback-parity"
+# Replaces `mesh-loopback-parity` and `mesh-loopback-spoof`, both of which came
+# back NOT-A-GATE on 2026-09-10 (f6a633519) and were re-confirmed NOT-A-GATE on
+# the sv-surface mesh rung. Their tests could not see the plant because
+# `mesh_status` extracts ConnectInfo and calls `enforce_localhost` itself: the
+# spoofed LAN caller was 403'd by the HANDLER and the ConnectInfo-less caller
+# 500'd in the extractor, so both assertions were over-determined. The two
+# guards also answer with the same body (`{"error":"local-only"}`, one
+# decider), so no body assertion separated them either.
+#
+# The fix is an assertion no handler can satisfy because no handler runs:
+# `every_router_refuses_a_request_no_handler_of_ours_can_refuse` drives a
+# method the path does not serve, which lands on axum's MethodRouter fallback
+# — layered like every other endpoint, so `loopback_only` still sees it. With
+# the guard: 403. Without it: 405. Watched red on this tree.
+#
+# The two retired entries are NOT kept as standing NOT-A-GATE rows: a census
+# whose verdict never changes teaches people to skim the table. The finding
+# lives in loopback_parity.rs's own module doc, beside the tests it is about.
+id          = "mesh-loopback-layer"
 crate       = "sovereign-mesh"
 census      = "sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs"
-mustFail    = ["every_router_fails_closed_when_connect_info_absent"]
+mustFail    = ["every_router_refuses_a_request_no_handler_of_ours_can_refuse"]
 breaks      = "a loopback-only router wired without the guard middleware — the LAN-reachable admin surface"
 target      = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
 guard_paths = [
     "sovereign/crates/sovereign-mesh/tests/main.rs",
     "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",
 ]
-expect_red  = "must fail closed (500) when ConnectInfo is absent"
+expect_red  = "only the router's `loopback_only` layer can refuse it"
 find        = '''        .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -294,30 +312,4 @@ replace     = '''        // TWIN-CENSUS PLANT (scripts/twin-census.py) — the r
         // loopback guard, removed. The per-handler `enforce_localhost`
         // checks stay, which is exactly the half-defended state the parity
         // suite exists to catch.
-        .layer(Extension(daemon))'''
-
-# The SECOND test in the same parity file, same plant. Registered after
-# `mesh-loopback-parity` came back NOT-A-GATE (2026-09-10), because "one test
-# in the family is blind" and "the family is blind" are different findings and
-# only a run tells them apart (§18.1 — do not reason about what a test would
-# have caught).
-
-[[family]]
-id          = "mesh-loopback-spoof"
-crate       = "sovereign-mesh"
-census      = "sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs"
-mustFail    = ["mesh_http_rejects_non_loopback_via_mesh_status"]
-breaks      = "a loopback-only router wired without the guard middleware — the LAN-reachable admin surface"
-target      = "sovereign/crates/sovereign-mesh/src/mesh_http.rs"
-guard_paths = [
-    "sovereign/crates/sovereign-mesh/tests/main.rs",
-    "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",
-]
-expect_red  = "mesh_http loopback guard slipped"
-find        = '''        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))'''
-replace     = '''        // TWIN-CENSUS PLANT (scripts/twin-census.py) — the router-level
-        // loopback guard, removed.
         .layer(Extension(daemon))'''

@@ -30,6 +30,8 @@ mod chat_completion_e2e;
 mod client_exposure;
 #[path = "main/common/mod.rs"]
 mod common;
+#[path = "main/conv_surface_e2e.rs"]
+mod conv_surface_e2e;
 #[path = "main/corpus_sharing_over_iroh_e2e.rs"]
 mod corpus_sharing_over_iroh_e2e;
 #[path = "main/corpus_watch_http_e2e.rs"]
@@ -82,6 +84,8 @@ mod knowledge_fanout_e2e;
 mod knowledge_served_e2e;
 #[path = "main/landscape_digest_http_e2e.rs"]
 mod landscape_digest_http_e2e;
+#[path = "main/lc_surface_e2e.rs"]
+mod lc_surface_e2e;
 #[path = "main/load_awareness_e2e.rs"]
 mod load_awareness_e2e;
 #[path = "main/local_only_boot.rs"]

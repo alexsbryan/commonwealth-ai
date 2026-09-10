@@ -3299,6 +3299,14 @@ impl EmbeddedDaemon {
             // can read.
             mounted.push(crate::features_http::features_router(self_arc));
             mount_names.push("features_http");
+            // sv-surface D5 — the non-watch half of `LocalCorpusManager`,
+            // beside the seventeen watch routes that already serve the SAME
+            // singleton. Takes no `Arc<Self>`: the manager is process state
+            // (`watched_folder_runtime`), not a daemon field, which is why
+            // this is the one router here built from nothing. A daemon whose
+            // runtime was never installed answers 503 naming that.
+            mounted.push(crate::lc_http::lc_router());
+            mount_names.push("lc_http");
             for (router, name) in self
                 .services
                 .host_routers()

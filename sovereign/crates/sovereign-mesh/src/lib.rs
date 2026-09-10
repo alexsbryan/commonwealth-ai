@@ -60,6 +60,7 @@ pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
+pub mod lc_http;
 pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]

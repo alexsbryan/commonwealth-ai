@@ -609,6 +609,18 @@ fn stub_runtime_parts(
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
     store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
 ) -> sovereign_core::runtime::Runtime {
+    stub_runtime_parts_with_lanes(
+        provider,
+        store,
+        sovereign_core::runtime::lane::LaneSources::none(),
+    )
+}
+
+fn stub_runtime_parts_with_lanes(
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    lanes: sovereign_core::runtime::lane::LaneSources,
+) -> sovereign_core::runtime::Runtime {
     let store =
         store.unwrap_or_else(|| Arc::new(sovereign_store::memory::InMemoryStateStore::new()));
     sovereign_core::runtime::Runtime::new(sovereign_core::RuntimeParts::new(
@@ -620,8 +632,57 @@ fn stub_runtime_parts(
         Arc::new(sovereign_core::SkillRegistry::new()),
         Arc::new(sovereign_core::executor::AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
-        sovereign_core::runtime::lane::LaneSources::none(),
+        lanes,
     ))
+}
+
+/// A serving desktop commission whose `Runtime` carries `conv` on
+/// `lane_sources.conv_tiered` — the ONE handle `atlas_http`'s six
+/// conversation-tiered routes read (sv-surface D4 remainder). The
+/// production wiring is `state.rs:1549`, which upcasts the daemon's
+/// own `SqliteStateStore` into exactly this slot; a test that stubbed
+/// the reader instead would prove the projections and nothing about
+/// the path the handler takes to reach them.
+pub fn desktop_services_with_conv_reader(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    store: Arc<dyn sovereign_core::traits::StateStore>,
+    conv: Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>,
+) -> sovereign_mesh::DaemonServices {
+    let mut lanes = sovereign_core::runtime::lane::LaneSources::none();
+    lanes.conv_tiered = Some(conv);
+    let runtime = Arc::new(stub_runtime_parts_with_lanes(
+        Arc::new(TestProvider::new()),
+        Some(Arc::clone(&store)),
+        lanes,
+    ));
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::new(TestProvider::new()),
+                    state_store: store,
+                    runtime,
+                    insights: None,
+                    features: None,
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Unavailable {
+                        reason: "test fixture: no tool registry".into(),
+                    },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
 }
 
 /// A `Desktop` serving daemon whose `ServingCore` carries the given store and

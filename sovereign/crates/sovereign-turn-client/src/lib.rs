@@ -62,10 +62,28 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::types::projection::{Citation, Provenance};
-use sovereign_contracts::types::{
-    EpistemicState, Intent, NarrationPhase, TurnAnswer, TurnFrame, TurnMode, TurnNotice,
-    TurnRequest,
+
+// ─── The protocol, re-exported ─────────────────────────────────
+//
+// Every type below already crosses this crate's public surface: a
+// caller cannot read a `TurnFrame`, answer a `TurnPrompt` or match on
+// a `Provenance` without naming them. Re-exporting them means a
+// consumer of `TurnClient` needs ONE dependency, not two — today
+// `sovereign-mobile` declares `sovereign-contracts` solely to spell
+// types it only ever gets from this client, and `quality/baselines/
+// fan_in.tsv` counts every such declaration against contracts.
+//
+// This is a re-export, not a wrapper: `sovereign_turn_client::TurnFrame`
+// IS `sovereign_contracts::types::TurnFrame`, the same type with the
+// same `serde` shape. A parallel mirror here would be the §10.6 twin
+// (`mobile-wire-mirror` in `quality/twin-plants.toml` is the census
+// that catches exactly that), so nothing below is redefined.
+pub use sovereign_contracts::error::{Error as TurnError, Result as TurnResult};
+pub use sovereign_contracts::types::approval::ResolveOutcome;
+pub use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
+pub use sovereign_contracts::types::{
+    ActionPreview, EpistemicState, Intent, NarrationPhase, TurnAnswer, TurnFrame, TurnMode,
+    TurnNotice, TurnPrompt, TurnRequest,
 };
 
 /// What one turn did, assembled from the terminal `Complete` frame.
@@ -939,6 +957,140 @@ impl TurnClient {
         parse(&body, &format!("GET {url}")).map(Some)
     }
 
+    // ── The conversation-tiered browse (sv-surface D4 remainder) ──
+    //
+    // Six methods for `atlas_http`'s six conv routes. Generic for the
+    // family reason: this crate is Tier-0 and cannot name
+    // `atlas_view::ConvListPage` or `conv_tiered::EntityAggregateRow`
+    // without taking a dependency on `sovereign-tools` and
+    // `sovereign-core`. The caller names its type; each doc says
+    // exactly which one.
+    //
+    // A 503 here means the daemon wired no conversation-tiered reader
+    // and a 501 means the reader declines that method by name. Both
+    // arrive as `Err` carrying the host's words — neither is an empty
+    // page (§18.3), which is what the pane would otherwise render as
+    // "you have no conversations".
+
+    /// `GET /internal/atlas/conv/corpora` — every corpus with at least
+    /// one conversation, with its state buckets. `T` is
+    /// `sovereign_tools::atlas_view::ConvCorpusSummary`.
+    pub async fn conv_corpora<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/atlas/conv/corpora".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/atlas/conv/{corpus}/conversations?filter=&offset=`
+    /// — one page of conversations, newest first. `T` is
+    /// `sovereign_tools::atlas_view::ConvListPage`.
+    ///
+    /// The page SIZE is the host's (200) and is not a parameter here —
+    /// one decider, and it is not this crate's. Follow
+    /// `next_offset` until it is `null`; the key is always present, so
+    /// an old host cannot read as "the end".
+    pub async fn conv_conversations<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        filter: Option<&str>,
+        offset: Option<u64>,
+    ) -> Result<T> {
+        let mut query: Vec<(&str, String)> = Vec::new();
+        if let Some(f) = filter {
+            query.push(("filter", f.to_string()));
+        }
+        if let Some(o) = offset {
+            query.push(("offset", o.to_string()));
+        }
+        self.internal_get(
+            format!("/internal/atlas/conv/{corpus_id}/conversations"),
+            &query,
+        )
+        .await
+    }
+
+    /// `GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid}` —
+    /// the RAPTOR tree and any active summary correction. `T` is
+    /// `sovereign_tools::atlas_view::ConvDetailView`.
+    ///
+    /// `Ok(None)` is the 404 and ONLY the 404: a conversation the store
+    /// does not have. A daemon with no reader is a 503 and stays an
+    /// `Err` — the two must not collapse into the same answer.
+    pub async fn conv_detail<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Option<T>> {
+        let url = format!(
+            "{}/internal/atlas/conv/{corpus_id}/conversations/{conv_uuid}",
+            self.base
+        );
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// `GET …/conversations/{conv_uuid}/entities` — the salience-ranked
+    /// chip row. `T` is `sovereign_tools::atlas_view::ConvEntityChip`.
+    pub async fn conv_entities<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Vec<T>> {
+        self.internal_get(
+            format!("/internal/atlas/conv/{corpus_id}/conversations/{conv_uuid}/entities"),
+            &[],
+        )
+        .await
+    }
+
+    /// `GET /internal/atlas/conv/{corpus}/entities/aggregate?text=` —
+    /// one entity's roll-up across the corpus. `T` is
+    /// `sovereign_core::conv_tiered::EntityAggregateRow`.
+    ///
+    /// The two drawer caps (20 co-occurring, 10 conversations) are the
+    /// host's, for the `conv_conversations` reason.
+    pub async fn conv_entity_aggregate<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        text: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/atlas/conv/{corpus_id}/entities/aggregate"),
+            &[("text", text.to_string())],
+        )
+        .await
+    }
+
+    /// `GET /internal/atlas/conv/{corpus}/chunk-entity-progress` — how
+    /// far chunk-level entity extraction has got. `T` is
+    /// `sovereign_core::conv_tiered::ChunkEntityProgressRow`.
+    ///
+    /// `Ok(None)` here is an explicit `null` BODY on a 200 — the corpus
+    /// exists and extraction never ran. It is not a 404, and a 404 from
+    /// this route is an `Err` (there is no such corpus-shaped absence
+    /// to report), so "never extracted" cannot arrive as "no route".
+    pub async fn conv_chunk_entity_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<T>> {
+        self.internal_get(
+            format!("/internal/atlas/conv/{corpus_id}/chunk-entity-progress"),
+            &[],
+        )
+        .await
+    }
+
     // ── The recipe-author project store (sv-surface D6) ──────────
     //
     // Answers are `sovereign_mesh::features_http::ProjectEntry`.
@@ -1431,6 +1583,255 @@ impl TurnClient {
     /// `query` is appended only when non-empty, so a path with no
     /// parameters is requested verbatim — a trailing `?` is a different
     /// URL to a router that matches on the whole thing.
+
+    // ── The local-corpus manager (sv-surface D5) ─────────────────
+    //
+    // Fourteen methods for `lc_http`'s fourteen routes over the
+    // daemon's OWN `LocalCorpusManager`. Generic for the family
+    // reason: this crate is Tier-0 and cannot name
+    // `sovereign_tools::local_corpus::*`. Each doc names the type.
+    //
+    // A 503 from any of these is "this daemon installed no local-corpus
+    // runtime" and arrives as an `Err`, never as an empty list — the
+    // pane would render an empty list as "you have no vaults".
+
+    /// `GET /internal/corpus/local` — every registered local corpus.
+    /// `T` is `sovereign_tools::local_corpus::config::LocalCorpusConfig`.
+    ///
+    /// An empty vec is a real answer (a fresh install), which is why an
+    /// absent runtime is an `Err` and not one.
+    pub async fn lc_list<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/corpus/local".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/local/ocr-available` — whether this daemon
+    /// can OCR a scanned PDF. `T` is
+    /// `sovereign_mesh::lc_http::OcrAvailability`.
+    ///
+    /// The command it replaces degraded a missing manager to `false`;
+    /// this does not, because "OCR unavailable" and "no runtime" want
+    /// different remedies from the pane.
+    pub async fn lc_ocr_available<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/internal/corpus/local/ocr-available".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/local/incomplete-jobs` — every ingest that
+    /// started and never finished. `T` is
+    /// `sovereign_tools::local_corpus::IncompleteJob`.
+    pub async fn lc_incomplete_jobs<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/corpus/local/incomplete-jobs".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/local/{corpus}` — one corpus's config.
+    /// `T` is `sovereign_tools::local_corpus::config::LocalCorpusConfig`.
+    ///
+    /// `Ok(None)` is the 404 and only the 404: this corpus is not
+    /// registered. An absent runtime stays an `Err`.
+    pub async fn lc_get<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<T>> {
+        let url = format!("{}/internal/corpus/local/{corpus_id}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// `DELETE /internal/corpus/local/{corpus}` — unregister and drop
+    /// the index. Answers `204` with no body.
+    pub async fn lc_remove(&self, corpus_id: &str) -> Result<()> {
+        let url = format!("{}/internal/corpus/local/{corpus_id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        Ok(())
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/cancel` — ask an in-flight
+    /// ingest to stop. `T` is `sovereign_mesh::lc_http::CancelAck`.
+    ///
+    /// `cancelled: false` on a 200 means there was nothing running —
+    /// a successful call, not a failure.
+    pub async fn lc_cancel<T: serde::de::DeserializeOwned>(&self, corpus_id: &str) -> Result<T> {
+        self.internal_post_empty(format!("/internal/corpus/local/{corpus_id}/cancel"))
+            .await
+    }
+
+    /// `GET /internal/corpus/local/{corpus}/git` — is the vault a git
+    /// worktree, and is it clean? `T` is
+    /// `sovereign_tools::local_corpus::git::GitStatus`; `Ok(None)` is
+    /// the route's explicit `null` — not a repository.
+    pub async fn lc_check_git<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<T>> {
+        self.internal_get(format!("/internal/corpus/local/{corpus_id}/git"), &[])
+            .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/write-tags` — write the
+    /// clustered tags into the vault's front-matter. `T` is
+    /// `sovereign_tools::local_corpus::writeback::WriteBackResult`.
+    ///
+    /// `git_commit` defaults to `false` at the HOST when omitted; this
+    /// method always sends it so the caller's intent is explicit on
+    /// the wire.
+    pub async fn lc_write_tags<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        git_commit: bool,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/internal/corpus/local/{corpus_id}/write-tags"),
+            &serde_json::json!({ "git_commit": git_commit }),
+        )
+        .await
+    }
+
+    /// `GET /internal/corpus/local/{corpus}/snapshots` — the
+    /// pre-write-back snapshots this daemon holds. `T` is
+    /// `sovereign_tools::local_corpus::writeback::SnapshotMeta`.
+    pub async fn lc_snapshots<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Vec<T>> {
+        self.internal_get(format!("/internal/corpus/local/{corpus_id}/snapshots"), &[])
+            .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/rollback` — restore one
+    /// snapshot. `T` is
+    /// `sovereign_tools::local_corpus::writeback::RollbackResult`.
+    ///
+    /// `snapshot_path` is a value from `lc_snapshots`, not a path the
+    /// caller composed.
+    pub async fn lc_rollback<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        snapshot_path: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/internal/corpus/local/{corpus_id}/rollback"),
+            &serde_json::json!({ "snapshot_path": snapshot_path }),
+        )
+        .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/clean` — strip
+    /// written-back tags from the vault. `T` is
+    /// `sovereign_tools::local_corpus::writeback::CleanResult`.
+    pub async fn lc_clean<T: serde::de::DeserializeOwned>(&self, corpus_id: &str) -> Result<T> {
+        self.internal_post_empty(format!("/internal/corpus/local/{corpus_id}/clean"))
+            .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/preview` — what write-back
+    /// WOULD do. `T` is
+    /// `sovereign_tools::local_corpus::preview::VaultPreview`;
+    /// `config` serialises to a `ClusterConfig`, and `None` leaves the
+    /// thresholds to the host's `ClusterConfig::default()` — one
+    /// decider, and it is not this crate's.
+    pub async fn lc_preview<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        config: Option<&B>,
+    ) -> Result<T> {
+        let body = match config {
+            Some(c) => serde_json::json!({ "config": c }),
+            None => serde_json::json!({}),
+        };
+        self.internal_post_json(format!("/internal/corpus/local/{corpus_id}/preview"), &body)
+            .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/search` — search one local
+    /// corpus. `T` is `sovereign_mesh::lc_http::LocalSearchHit`.
+    ///
+    /// `limit: None` is the host's 10.
+    pub async fn lc_search<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<T>> {
+        let mut body = serde_json::json!({ "query": query });
+        if let Some(n) = limit {
+            body["limit"] = serde_json::json!(n);
+        }
+        self.internal_post_json(format!("/internal/corpus/local/{corpus_id}/search"), &body)
+            .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/ingest` — submit the
+    /// ingest as a JOB. `T` is `sovereign_mesh::lc_http::IngestJobAck`.
+    ///
+    /// Answers `202` as soon as the job is spawned; the ack carries
+    /// `progress_route`, the EXISTING watch-status route that reports
+    /// it. There is no second job table to poll and this method
+    /// deliberately does not invent a wait loop — a caller that wants
+    /// one polls the route the ack names.
+    pub async fn lc_ingest<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        with_ocr: Option<bool>,
+    ) -> Result<T> {
+        let body = match with_ocr {
+            Some(v) => serde_json::json!({ "with_ocr": v }),
+            None => serde_json::json!({}),
+        };
+        self.internal_post_json(format!("/internal/corpus/local/{corpus_id}/ingest"), &body)
+            .await
+    }
+
+    /// `POST` with a JSON body, parsed answer. The POST twin of
+    /// [`Self::internal_get`].
+    async fn internal_post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("POST {url}")));
+        }
+        parse(&body, &format!("POST {url}"))
+    }
+
+    /// `POST` with no body — the shape for routes whose whole input is
+    /// the corpus id in the path.
+    async fn internal_post_empty<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
+        self.internal_post_json(path, &serde_json::json!({})).await
+    }
+
     async fn internal_get<T: serde::de::DeserializeOwned>(
         &self,
         path: String,

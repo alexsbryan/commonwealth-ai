@@ -36,24 +36,27 @@
 //! encoding. Same house style as `POST /v1/knowledge/search`: a read,
 //! asked with a body.
 //!
-//! NOT served, and named rather than quietly dropped (ARCH §18.3):
-//! the six conversation-tiered commands
-//! (`atlas_list_conv_corpora`, `atlas_list_conversations`,
-//! `atlas_get_conv_detail`, `atlas_get_entity_aggregate`,
-//! `atlas_get_chunk_entity_progress`, `atlas_get_conv_entities`).
-//! Their seven store calls —
-//! `list_conv_corpora_with_state_buckets`,
-//! `list_conversations_paginated`, `get_conv_skeleton`,
-//! `get_active_correction`, `aggregate_entity`,
-//! `list_conv_raptor_nodes`, `get_chunk_entity_progress` — are
-//! INHERENT methods on the concrete `sovereign_store::sqlite::
-//! SqliteStateStore`. `ServingCore` holds an `Arc<dyn StateStore>`,
-//! which is a supertrait of twelve sub-traits and names none of
-//! them, and `sovereign_core::conv_tiered::ConvTieredReader` (which
-//! the `Runtime` does carry) covers only two of the seven. Serving
-//! them therefore requires widening a trait in `sovereign-core` and
-//! `sovereign-contracts` and updating every implementor — a change
-//! outside this router, tracked as the remainder of D4.
+//! Served (6 more for the 6 conversation-tiered commands, added when
+//! `207b62b85` widened the reader):
+//!
+//! | Desktop command | Route |
+//! |---|---|
+//! | `atlas_list_conv_corpora` | `GET /internal/atlas/conv/corpora` |
+//! | `atlas_list_conversations` | `GET /internal/atlas/conv/{corpus}/conversations` |
+//! | `atlas_get_conv_detail` | `GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid}` |
+//! | `atlas_get_conv_entities` | `GET …/conversations/{conv_uuid}/entities` |
+//! | `atlas_get_entity_aggregate` | `GET /internal/atlas/conv/{corpus}/entities/aggregate?text=` |
+//! | `atlas_get_chunk_entity_progress` | `GET /internal/atlas/conv/{corpus}/chunk-entity-progress` |
+//!
+//! This paragraph said the opposite until 2026-09-10, and the reason
+//! it gave was real at the time: the seven store calls were INHERENT
+//! methods on the concrete `SqliteStateStore`, and the `dyn
+//! ConvTieredReader` the `Runtime` carries covered only two of them.
+//! `207b62b85` made `ConvBrowseReader` a supertrait of
+//! `ConvTieredReader` and moved the other five onto it, so the handle
+//! the daemon already held — `runtime.lane_sources.conv_tiered` —
+//! now reaches all seven. Nothing was added to `ServingCore` and no
+//! second accessor was minted.
 //!
 //! Also app-local by decision, not by omission: the two GLiNER model
 //! commands (`atlas_check_gliner_model`, `atlas_download_gliner_model`)
@@ -73,8 +76,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
+use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvTieredReader};
 use sovereign_tools::atlas_view::{
-    AtlasViewError, AtomFilter, AtomQueryError, FileAtlasReader, PageCursor, DEFAULT_MAX_NODES,
+    AtlasViewError, AtomFilter, AtomQueryError, ConvCorpusSummary, ConvDetailView, ConvEntityChip,
+    ConvListPage, ConvRaptorNodeView, ConvSummary, FileAtlasReader, PageCursor,
+    SummaryCorrectionView, DEFAULT_MAX_NODES,
 };
 
 use crate::daemon::EmbeddedDaemon;
@@ -121,6 +127,27 @@ pub fn atlas_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/internal/atlas/{corpus}/atoms", post(list_atoms))
         .route("/internal/atlas/{corpus}/subgraph", get(subgraph))
         .route("/internal/atlas/{corpus}/atoms/{atom_id}", get(atom_detail))
+        .route("/internal/atlas/conv/corpora", get(conv_list_corpora))
+        .route(
+            "/internal/atlas/conv/{corpus}/conversations",
+            get(conv_list_conversations),
+        )
+        .route(
+            "/internal/atlas/conv/{corpus}/conversations/{conv_uuid}",
+            get(conv_detail),
+        )
+        .route(
+            "/internal/atlas/conv/{corpus}/conversations/{conv_uuid}/entities",
+            get(conv_entities),
+        )
+        .route(
+            "/internal/atlas/conv/{corpus}/entities/aggregate",
+            get(conv_entity_aggregate),
+        )
+        .route(
+            "/internal/atlas/conv/{corpus}/chunk-entity-progress",
+            get(conv_chunk_entity_progress),
+        )
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -392,6 +419,456 @@ mod section_map {
 
 /// The reader over the DAEMON's indexes dir — one construction site,
 /// so no handler can accidentally point at a different root.
+// ─── D4 remainder: the conversation-tiered browse routes ───────
+//
+// Six routes for the six `atlas_*` conv commands, over the reader
+// `207b62b85` widened. `ConvBrowseReader` became a supertrait of
+// `ConvTieredReader`, so the ONE handle the daemon already holds —
+// `runtime.lane_sources.conv_tiered` — now reaches all seven store
+// calls these commands make. No second accessor was minted (§10.6);
+// no trait object was added to `ServingCore`.
+//
+// Absence has three distinct answers here and none of them is an
+// empty page (§18.3):
+//
+//   no `Runtime`, or `conv_tiered` is `None`  -> 503 naming which
+//   `Err(NotImplemented)` from the reader     -> 501 naming the method
+//   the conversation is not in the store      -> 404 naming the id
+//
+// Two silent substitutions the desktop makes do NOT cross:
+// `atlas_list_conversations` folds a failed `list_conv_raptor_nodes`
+// into `unwrap_or_default()` (an empty chip row reads as "this
+// conversation has no entities"), and `atlas_get_conv_detail` folds a
+// failed `get_active_correction` into `.ok().flatten()` (a missing
+// "revised by you" badge reads as "never revised"). Both are reported
+// here. That is a deliberate behaviour delta on the repoint, not an
+// accident, and it is the §18.3 rule the campaign exists to enforce.
+
+/// The page size `atlas_list_conversations` hard-codes today. It is
+/// not caller-tunable on the wire either — one decider, and the pane
+/// has never asked for a second.
+const CONV_PAGE_LIMIT: u64 = 200;
+/// `summarize_entities(&raptor, 6)` — the list row's chip budget.
+const CONV_LIST_TOP_ENTITIES: usize = 6;
+/// `rank_entity_chips(&nodes, 12)` — the detail pane's chip row.
+const CONV_CHIP_TOP_N: usize = 12;
+/// `aggregate_entity(.., 20, 10)` — co-occurring cap, then conv cap.
+const ENTITY_CO_LIMIT: usize = 20;
+const ENTITY_CONV_LIMIT: usize = 10;
+
+/// Query of `GET /internal/atlas/conv/{corpus}/conversations`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ConvListQuery {
+    /// Substring match on `overview`. Blank or whitespace-only is
+    /// `None`, exactly as the command trims it.
+    #[serde(default)]
+    pub filter: Option<String>,
+    #[serde(default)]
+    pub offset: Option<u64>,
+}
+
+/// Query of `GET /internal/atlas/conv/{corpus}/entities/aggregate`.
+#[derive(Debug, Deserialize)]
+pub struct EntityAggregateQuery {
+    pub text: String,
+}
+
+/// GET /internal/atlas/conv/corpora — every corpus with at least one
+/// `conv_skeletons` row, with its state buckets and its display
+/// metadata. Wire form of `atlas_list_conv_corpora`; answers
+/// `Vec<ConvCorpusSummary>`.
+///
+/// The display half is best-effort in exactly the desktop's sense: a
+/// corpus the engine does not know falls back to its own id. That is
+/// not a substitution — `display_name` has no other truth to report —
+/// and a corpus engine that will not answer at all leaves every row
+/// on that fallback rather than failing the list.
+async fn conv_list_corpora(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    let buckets = match reader.list_conv_corpora_with_state_buckets().await {
+        Ok(b) => b,
+        Err(e) => return conv_error("list_conv_corpora_with_state_buckets", &e),
+    };
+    let display = conv_display_index(&daemon).await;
+    let mut out = Vec::with_capacity(buckets.len());
+    for (corpus_id, total, max_ts, per_state) in buckets {
+        let (display_name, display_category, display_icon) = display
+            .get(&corpus_id)
+            .cloned()
+            .unwrap_or_else(|| (corpus_id.clone(), None, None));
+        let state_counts: std::collections::BTreeMap<String, u64> = per_state.into_iter().collect();
+        out.push(ConvCorpusSummary {
+            corpus_id,
+            display_name,
+            conv_count: total,
+            state_counts,
+            last_updated_unix: if max_ts > 0 { Some(max_ts) } else { None },
+            display_category,
+            display_icon,
+        });
+    }
+    tracing::debug!(corpora = out.len(), "atlas_http: conv corpora listed");
+    (StatusCode::OK, Json(out)).into_response()
+}
+
+/// GET /internal/atlas/conv/{corpus}/conversations?filter=&offset= —
+/// one page of conversations, newest first. Wire form of
+/// `atlas_list_conversations`; answers `ConvListPage`.
+async fn conv_list_conversations(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(q): Query<ConvListQuery>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    let offset = q.offset.unwrap_or(0);
+    let filter = q.filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let (rows, total) = match reader
+        .list_conversations_paginated(&corpus, filter, offset, CONV_PAGE_LIMIT)
+        .await
+    {
+        Ok(page) => page,
+        Err(e) => return conv_error("list_conversations_paginated", &e),
+    };
+    let mut conversations = Vec::with_capacity(rows.len());
+    for row in rows {
+        // The desktop's `unwrap_or_default()` here is the substitution
+        // named in the section header — a read failure would render as
+        // "no entities". Reported instead.
+        let nodes = match reader.list_conv_raptor_nodes(&corpus, &row.conv_uuid).await {
+            Ok(n) => n,
+            Err(e) => return conv_error("list_conv_raptor_nodes", &e),
+        };
+        let (top_entities, is_tiny) = summarize_entities(&nodes, CONV_LIST_TOP_ENTITIES);
+        conversations.push(ConvSummary {
+            conv_uuid: row.conv_uuid,
+            title: row
+                .overview
+                .clone()
+                .unwrap_or_else(|| "(untitled conversation)".to_string()),
+            state: row.state,
+            chunk_count: row.chunk_count,
+            top_entities,
+            updated_at: row.updated_at,
+            is_tiny,
+        });
+    }
+    let seen = offset + conversations.len() as u64;
+    let next_offset = if seen < total { Some(seen) } else { None };
+    (
+        StatusCode::OK,
+        Json(ConvListPage {
+            conversations,
+            total_matching: total,
+            next_offset,
+        }),
+    )
+        .into_response()
+}
+
+/// GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid} — the
+/// RAPTOR tree and the active correction for one conversation. Wire
+/// form of `atlas_get_conv_detail`; answers `ConvDetailView`.
+///
+/// The command answers `Ok(None)` for an absent conversation. On the
+/// wire that is a 404 that NAMES the id, not a 200 carrying `null`:
+/// the pane must be able to tell "no such conversation" from "the
+/// daemon has no reader".
+async fn conv_detail(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, conv_uuid)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    let skeleton = match reader.get_conv_skeleton(&corpus, &conv_uuid).await {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return not_found(&format!(
+                "conversation '{conv_uuid}' is not in corpus '{corpus}'"
+            ))
+        }
+        Err(e) => return conv_error("get_conv_skeleton", &e),
+    };
+    let nodes = match reader.list_conv_raptor_nodes(&corpus, &conv_uuid).await {
+        Ok(n) => n,
+        Err(e) => return conv_error("list_conv_raptor_nodes", &e),
+    };
+    let max_level = nodes.iter().map(|n| n.level as u8).max().unwrap_or(0);
+    let raptor_nodes: Vec<ConvRaptorNodeView> = nodes.into_iter().map(raptor_node_view).collect();
+    // The desktop's `.ok().flatten()` here is the second substitution
+    // named in the section header: a failed read renders as "never
+    // revised". Reported instead.
+    let correction = match reader.get_active_correction(&corpus, &conv_uuid).await {
+        Ok(c) => c.map(|c| SummaryCorrectionView {
+            status: c.status,
+            correction_hint: c.correction_hint,
+            created_at: c.created_at,
+        }),
+        Err(e) => return conv_error("get_active_correction", &e),
+    };
+    (
+        StatusCode::OK,
+        Json(ConvDetailView {
+            corpus_id: corpus,
+            conv_uuid,
+            title: skeleton
+                .overview
+                .clone()
+                .unwrap_or_else(|| "(untitled conversation)".to_string()),
+            state: skeleton.state,
+            chunk_count: skeleton.chunk_count,
+            updated_at: skeleton.updated_at,
+            raptor_nodes,
+            max_level,
+            correction,
+        }),
+    )
+        .into_response()
+}
+
+/// GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid}/entities
+/// — the salience-ranked chip row. Wire form of
+/// `atlas_get_conv_entities`; answers `Vec<ConvEntityChip>`.
+async fn conv_entities(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path((corpus, conv_uuid)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    match reader.list_conv_raptor_nodes(&corpus, &conv_uuid).await {
+        Ok(nodes) => (
+            StatusCode::OK,
+            Json(rank_entity_chips(&nodes, CONV_CHIP_TOP_N)),
+        )
+            .into_response(),
+        Err(e) => conv_error("list_conv_raptor_nodes", &e),
+    }
+}
+
+/// GET /internal/atlas/conv/{corpus}/entities/aggregate?text= — one
+/// entity's roll-up across the corpus. Wire form of
+/// `atlas_get_entity_aggregate`; answers `EntityAggregateRow`.
+async fn conv_entity_aggregate(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(q): Query<EntityAggregateQuery>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    match reader
+        .aggregate_entity(&corpus, &q.text, ENTITY_CO_LIMIT, ENTITY_CONV_LIMIT)
+        .await
+    {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        Err(e) => conv_error("aggregate_entity", &e),
+    }
+}
+
+/// GET /internal/atlas/conv/{corpus}/chunk-entity-progress — how far
+/// chunk-level entity extraction has got. Wire form of
+/// `atlas_get_chunk_entity_progress`; answers
+/// `Option<ChunkEntityProgressRow>`.
+///
+/// An explicit `null` is the answer when extraction never ran, and it
+/// ships as a body rather than as a 404: "never extracted" is a fact
+/// about the corpus, not an absent resource, and the two must not
+/// arrive as the same status (§18.3).
+async fn conv_chunk_entity_progress(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let reader = match conv_reader_for(&daemon) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    match reader.get_chunk_entity_progress(&corpus).await {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        Err(e) => conv_error("get_chunk_entity_progress", &e),
+    }
+}
+
+// ─── conv helpers ──────────────────────────────────────────────
+
+/// The one handle, reached the one way (`§10.6`).
+fn conv_reader_for(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> Result<Arc<dyn ConvTieredReader>, axum::response::Response> {
+    let runtime = match daemon.runtime() {
+        Some(r) => r,
+        None => {
+            return Err(service_unavailable(
+                "this daemon assembled no Runtime, so it wired no conversation-tiered reader",
+            ))
+        }
+    };
+    match runtime.lane_sources.conv_tiered.as_ref() {
+        Some(r) => Ok(Arc::clone(r)),
+        None => Err(service_unavailable(
+            "this daemon wired no conversation-tiered reader \
+             (runtime.lane_sources.conv_tiered is None)",
+        )),
+    }
+}
+
+/// A reader that declines a method by name is a 501, not a 500 and
+/// not an empty page: the store is reachable and this operation is
+/// the part it does not carry (`ConvBrowseReader::browse_unsupported`).
+fn conv_error(what: &str, e: &sovereign_core::error::Error) -> axum::response::Response {
+    match e {
+        sovereign_core::error::Error::NotImplemented(msg) => (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(ErrorBody {
+                error: format!("{what}: {msg}"),
+            }),
+        )
+            .into_response(),
+        other => internal_error(&format!("{what}: {other}")),
+    }
+}
+
+/// corpus_id -> (display_name, category, icon) for every installed
+/// index, built once per list rather than once per row (the desktop's
+/// `conv_display_metadata` re-walks `installed_indexes()` inside the
+/// loop). An engine that will not answer yields an empty index and
+/// every row falls back to its own id.
+async fn conv_display_index(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> std::collections::HashMap<String, (String, Option<String>, Option<String>)> {
+    let mut out = std::collections::HashMap::new();
+    let Some(engine) = daemon.corpus_engine() else {
+        return out;
+    };
+    let Ok(infos) = engine.installed_indexes().await else {
+        tracing::debug!("atlas_http: installed_indexes unavailable; conv rows keep their ids");
+        return out;
+    };
+    for info in infos {
+        let name = if info.corpus_name.is_empty() {
+            info.corpus_id.clone()
+        } else {
+            info.corpus_name.clone()
+        };
+        let (category, icon) = match &info.display {
+            Some(d) => (d.category.clone(), d.icon.clone()),
+            None => (None, None),
+        };
+        out.insert(info.corpus_id.clone(), (name, category, icon));
+    }
+    out
+}
+
+/// One stored RAPTOR row -> its view. The three JSON columns are
+/// parsed leniently (a malformed column is an empty list) because
+/// that is what the column means to the pane and what the desktop
+/// does today; the row itself is never dropped.
+fn raptor_node_view(n: ConvRaptorNodeRow) -> ConvRaptorNodeView {
+    let primary_entities: Vec<String> =
+        serde_json::from_str(&n.primary_entities_json).unwrap_or_default();
+    let direct_member_chunk_ids: Vec<u64> = n
+        .direct_member_chunk_ids_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    let evidence_chunk_ids: Vec<u64> =
+        serde_json::from_str(&n.evidence_chunk_ids_json).unwrap_or_default();
+    let is_synthetic_tiny = primary_entities.is_empty() && (n.cluster_coherence - 1.0).abs() < 1e-6;
+    ConvRaptorNodeView {
+        node_id: n.node_id,
+        level: n.level as u8,
+        summary: n.summary,
+        primary_entities,
+        direct_member_chunk_ids,
+        evidence_chunk_count: evidence_chunk_ids.len(),
+        cluster_coherence: n.cluster_coherence,
+        is_synthetic_tiny,
+    }
+}
+
+/// Top-N by salience = sum of `cluster_coherence` over the nodes that
+/// name the entity, ties broken by name. The desktop's
+/// `rank_entity_chips`, moved so there is one ranking.
+fn rank_entity_chips(nodes: &[ConvRaptorNodeRow], top_n: usize) -> Vec<ConvEntityChip> {
+    let mut acc: std::collections::HashMap<String, (f32, u32)> = std::collections::HashMap::new();
+    for node in nodes {
+        let entities: Vec<String> =
+            serde_json::from_str(&node.primary_entities_json).unwrap_or_default();
+        for ent in entities {
+            let trimmed = ent.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let entry = acc.entry(trimmed.to_string()).or_insert((0.0, 0));
+            entry.0 += node.cluster_coherence as f32;
+            entry.1 += 1;
+        }
+    }
+    let mut ranked: Vec<(String, f32, u32)> = acc
+        .into_iter()
+        .map(|(name, (sal, occ))| (name, sal, occ))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    ranked
+        .into_iter()
+        .take(top_n)
+        .map(|(name, salience, occurrence_count)| ConvEntityChip {
+            name,
+            salience,
+            occurrence_count,
+        })
+        .collect()
+}
+
+/// The list row's two derived fields. "Tiny" is one synthetic node
+/// with perfect coherence and no extracted entities.
+fn summarize_entities(nodes: &[ConvRaptorNodeRow], top_n: usize) -> (Vec<String>, bool) {
+    let chips = rank_entity_chips(nodes, top_n);
+    let is_tiny = nodes.len() == 1
+        && (nodes[0].cluster_coherence - 1.0).abs() < 1e-6
+        && nodes[0].primary_entities_json.trim() == "[]";
+    (chips.into_iter().map(|c| c.name).collect(), is_tiny)
+}
+
 fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, axum::response::Response> {
     match daemon.corpus_engine() {
         Some(engine) => Ok(FileAtlasReader::new(engine.index_dir().to_path_buf())),

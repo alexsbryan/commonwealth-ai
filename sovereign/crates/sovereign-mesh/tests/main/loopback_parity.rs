@@ -12,10 +12,39 @@
 //! `loopback_guard::loopback_only` middleware AND a per-handler
 //! `enforce_localhost` call (ARCH §5 defense in depth). The unit
 //! tests in `loopback_guard` pin the middleware in isolation; the
-//! per-router tests pin the helper. What's missing is a single
-//! test that walks **every** router and proves the wiring holds —
-//! a route added without the middleware (or with a misordered
-//! layer stack) would slip past the per-router tests but fail here.
+//! per-router tests pin the helper.
+//!
+//! # What this file proves, corrected (2026-09-10)
+//!
+//! Until now the paragraph above ended "a route added without the
+//! middleware (or with a misordered layer stack) would slip past the
+//! per-router tests but fail here." **That claim was false and a run
+//! falsified it** (`scripts/twin-census.py`, families
+//! `mesh-loopback-parity` and `mesh-loopback-spoof`, verdict
+//! NOT-A-GATE, commit f6a633519). Re-watched on this tree with
+//! `mesh_router`'s `.layer(from_fn(loopback_only))` deleted:
+//!
+//! ```text
+//! mesh_http_rejects_non_loopback_via_mesh_status      ok
+//! every_router_fails_closed_when_connect_info_absent  ok
+//! loopback_caller_reaches_mesh_status                 ok
+//! every_router_refuses_a_request_no_handler_…    FAILED  left: 405  right: 403
+//! ```
+//!
+//! Defence in depth is what blinds the first three: `mesh_status`
+//! extracts `ConnectInfo` and calls `enforce_localhost` itself, so the
+//! spoofed LAN caller is refused by the HANDLER and the
+//! ConnectInfo-less caller 500s in the extractor. Both assertions are
+//! over-determined, and the two guards deliberately answer with the
+//! same status AND the same body (`{"error":"local-only"}`, one
+//! decider), so no body assertion separates them either.
+//!
+//! `every_router_refuses_a_request_no_handler_of_ours_can_refuse` is
+//! the gate — it is the only test here whose red is evidence about the
+//! LAYER. Read it before adding a router to this file; the spoof and
+//! fail-closed families remain useful as the per-router and
+//! fail-closed contracts, but neither is evidence the middleware is
+//! mounted.
 //!
 //! Approach: build each router with minimal deps, wrap it with an
 //! `outer` middleware that **spoofs** `ConnectInfo` to a non-loopback
@@ -314,6 +343,22 @@ async fn corpus_watch_http_rejects_non_loopback_via_list() {
     );
 }
 
+#[tokio::test]
+async fn lc_http_rejects_non_loopback_via_local_list() {
+    let base = spawn_with_spoof(sovereign_mesh::lc_http::lc_router()).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/internal/corpus/local"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "lc_http loopback guard slipped — these routes ingest, write tags          into and roll back the OWNER's vault, and a non-loopback caller          got {}",
+        resp.status()
+    );
+}
+
 // ── Negative control: loopback callers still reach handlers ──────
 //
 // Without the spoof middleware, a real loopback caller should NOT
@@ -459,6 +504,181 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(
         sovereign_mesh::features_http::features_router(d10),
         "/v1/features/projects",
+    )
+    .await;
+
+    assert_500_on_bare_serve(
+        sovereign_mesh::lc_http::lc_router(),
+        "/internal/corpus/local",
+    )
+    .await;
+}
+
+// ── The gate the handler cannot satisfy alone ────────────────────
+//
+// The two families above are NOT gates, and the twin census proved
+// it mechanically (f6a633519). With `mesh_router`'s
+// `.layer(from_fn(loopback_only))` deleted the crate still compiles
+// and BOTH `mesh_http_rejects_non_loopback_via_mesh_status` and
+// `every_router_fails_closed_when_connect_info_absent` still pass:
+// `mesh_status` extracts `ConnectInfo` and calls `enforce_localhost`
+// itself, so the spoofed LAN caller is 403'd by the HANDLER and the
+// ConnectInfo-less caller 500s in the extractor before any handler
+// body runs. Both assertions are over-determined — satisfied with
+// or without the middleware — and neither can see the layer they
+// claim to pin. Defence in depth is exactly what makes them blind:
+// the second line of defence answers with the same status, and
+// `loopback_only` and `enforce_localhost` deliberately return the
+// SAME body (`{"error":"local-only"}`, one decider), so no body
+// assertion separates them either.
+//
+// What no handler can satisfy is a request that never reaches one.
+// Drive a method the path does not serve and the request lands on
+// axum's `MethodRouter` fallback — a 405 producer that is not any
+// of our handlers and never calls `enforce_localhost`. That
+// fallback is layered like every other endpoint (axum 0.8.9,
+// `routing/method_routing.rs`: `fallback: self.fallback.map(layer_fn)`
+// in `MethodRouter::layer`), so `loopback_only` still runs on it.
+//
+//   with the layer:     spoofed LAN caller -> 403 (the guard)
+//   without the layer:  spoofed LAN caller -> 405 (the method fallback)
+//
+// No route in this crate registers PUT (`git grep -n 'put(' src/*_http.rs`
+// -> nothing), so PUT is the method that reaches the fallback on every
+// router below. The loopback half of each pair asserts the 405 the
+// guard is hiding: it proves the 403 came from the middleware and not
+// from the route table, so a router that lost its path (rather than
+// its layer) cannot pass this test by 404'ing.
+
+/// Serve `router` with real ConnectInfo (no spoof) and return the URL
+/// prefix. The sibling of [`spawn_with_spoof`] for assertions that
+/// need the unguarded answer.
+async fn spawn_plain(router: Router) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await;
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    format!("http://{addr}")
+}
+
+/// One router's half of the gate. `path` must be a path the router
+/// really routes; PUT must not be one of its methods.
+async fn assert_the_guard_owns_the_method_fallback(name: &str, router: Router, path: &str) {
+    let spoofed = spawn_with_spoof(router.clone()).await;
+    let resp = reqwest::Client::new()
+        .put(format!("{spoofed}{path}"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "{name}: a non-loopback PUT {path} reaches no handler of ours — \
+         only the router's `loopback_only` layer can refuse it. Got {} \
+         (405 = the layer is missing or misordered on this router; the \
+         per-handler enforce_localhost cannot cover this request)",
+        resp.status()
+    );
+
+    let plain = spawn_plain(router).await;
+    let resp = reqwest::Client::new()
+        .put(format!("{plain}{path}"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::METHOD_NOT_ALLOWED,
+        "{name}: PUT {path} from loopback must fall through to the method \
+         fallback (405) — got {}. A 404 here means the path moved and the \
+         403 above proved nothing about THIS router",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
+    let (_t1, d1) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback("mesh_http", mesh_router(d1), "/v1/mesh/status")
+        .await;
+
+    let (_t2, d2) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback("admin_http", admin_router(d2), "/v1/admin/reload")
+        .await;
+
+    let (_t3, rex) = fresh_reindexer();
+    assert_the_guard_owns_the_method_fallback("project_http", project_router(rex), "/v1/projects")
+        .await;
+
+    let (_t4, d4) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "reading_http",
+        reading_router(d4),
+        "/internal/corpus/status",
+    )
+    .await;
+
+    assert_the_guard_owns_the_method_fallback(
+        "corpus_watch_http",
+        corpus_watch_router(),
+        "/internal/corpus/watch/list",
+    )
+    .await;
+
+    let (_t5, d5) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback("turn_http", turn_router(d5), "/v1/conversations")
+        .await;
+
+    let (_t6, d6) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "insight_http",
+        sovereign_mesh::insight_http::insight_router(d6),
+        "/v1/insights",
+    )
+    .await;
+
+    let (_t7, d7) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "atlas_http",
+        sovereign_mesh::atlas_http::atlas_router(d7),
+        "/internal/atlas/corpora",
+    )
+    .await;
+
+    let (_t8, d8) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "meshapp_http",
+        sovereign_mesh::meshapp_http::meshapp_router(d8),
+        "/internal/meshapp/anything/graph",
+    )
+    .await;
+
+    let (_t9, d9) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "notes_http",
+        sovereign_mesh::notes_http::notes_router(d9),
+        "/v1/notes/any-id",
+    )
+    .await;
+
+    let (_t10, d10) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "features_http",
+        sovereign_mesh::features_http::features_router(d10),
+        "/v1/features/projects",
+    )
+    .await;
+
+    assert_the_guard_owns_the_method_fallback(
+        "lc_http",
+        sovereign_mesh::lc_http::lc_router(),
+        "/internal/corpus/local",
     )
     .await;
 }

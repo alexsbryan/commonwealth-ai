@@ -1244,41 +1244,7 @@ async fn enrich_once_handler(
         tracing::warn!(corpus_id = %corpus_id, "enrich-once: could not stamp Scanning state: {e}");
     }
     let _ingest_heartbeat = EnrichmentHeartbeat::spawn(index_dir.clone());
-    let ingest_progress: sovereign_tools::local_corpus::manager::ProgressCallback = {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        let stamp_dir = index_dir.clone();
-        let stamp_corpus = corpus_id.clone();
-        // The callback fires per chunk/batch, but each write is a tmp-file +
-        // rename — throttle to ~50 writes across the whole embed pass.
-        let last_bucket = std::sync::Arc::new(AtomicU64::new(u64::MAX));
-        std::sync::Arc::new(
-            move |evt: sovereign_tools::local_corpus::LocalCorpusProgress| {
-                if let sovereign_tools::local_corpus::LocalCorpusProgress::Ingesting {
-                    done,
-                    total,
-                    ..
-                } = evt
-                {
-                    if total == 0 {
-                        return;
-                    }
-                    let bucket = done.saturating_mul(50) / total;
-                    if last_bucket.swap(bucket, Ordering::Relaxed) == bucket {
-                        return;
-                    }
-                    let _ = EnrichmentStateFile::stamp(
-                        &stamp_dir,
-                        &stamp_corpus,
-                        Some("folder_tiered"),
-                        EnrichmentPhase::Scanning,
-                        done,
-                        total,
-                        Some("Reading and embedding your notes"),
-                    );
-                }
-            },
-        )
-    };
+    let ingest_progress = ingest_progress_stamper(index_dir.clone(), corpus_id.clone());
 
     // Ingest in the daemon (blocking) so the SAME process that writes the index
     // is the one that reads it to enrich. Doing the ingest in the desktop and
@@ -1324,6 +1290,53 @@ async fn enrich_once_handler(
         already_running: false,
     })
     .into_response()
+}
+
+/// The throttled ingest-progress stamper: an `Ingesting` event becomes a
+/// `Scanning` phase stamp in the corpus's `EnrichmentStateFile`, which is
+/// what `GET /internal/corpus/watch/status/{corpus_id}` and commonwealth's
+/// `/internal/enrichment/status` already read.
+///
+/// ONE implementation, called from both ingest sites (`enrich-once` and
+/// `lc_http`'s ingest job). A second copy would be a second answer to "how
+/// often does a long embed pass write its phase file", which is the §10.6
+/// smell — and the throttle is load-bearing: each write is a tmp-file +
+/// rename, so an unthrottled callback fsyncs once per chunk.
+pub(crate) fn ingest_progress_stamper(
+    index_dir: std::path::PathBuf,
+    corpus_id: String,
+) -> sovereign_tools::local_corpus::manager::ProgressCallback {
+    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    // ~50 writes across the whole embed pass, however many chunks it has.
+    let last_bucket = std::sync::Arc::new(AtomicU64::new(u64::MAX));
+    std::sync::Arc::new(
+        move |evt: sovereign_tools::local_corpus::LocalCorpusProgress| {
+            if let sovereign_tools::local_corpus::LocalCorpusProgress::Ingesting {
+                done,
+                total,
+                ..
+            } = evt
+            {
+                if total == 0 {
+                    return;
+                }
+                let bucket = done.saturating_mul(50) / total;
+                if last_bucket.swap(bucket, Ordering::Relaxed) == bucket {
+                    return;
+                }
+                let _ = EnrichmentStateFile::stamp(
+                    &index_dir,
+                    &corpus_id,
+                    Some("folder_tiered"),
+                    EnrichmentPhase::Scanning,
+                    done,
+                    total,
+                    Some("Reading and embedding your notes"),
+                );
+            }
+        },
+    )
 }
 
 /// `POST /internal/corpus/enrich-reset` — body `{ "corpus_id": "…" }`.
