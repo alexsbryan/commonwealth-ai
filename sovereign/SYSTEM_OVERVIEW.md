@@ -2085,8 +2085,9 @@ it. Generic primitives:
 - **Recipe-author agent loop** — `sovereign-recipe-author/src/project.rs`
   (project model), `situated_context.rs` (per-turn renderer),
   `svrn recipe-agent {new,show,list,live-trial}` CLI. Skill
-  manifest at `sovereign/modes/recipe-author/skill.toml`
-  (privacy = `local_only`); its interview is the five
+  manifest at `sovereign/crates/sovereign-contracts/src/skills_data/recipe-author.toml`
+  (moved in-crate with inner-work when boundary-gate flagged the
+  out-of-tree embed, 2026-09-09; privacy = `local_only`); its interview is the five
   `ONTOLOGY_PRIMITIVES.md` §4 questions (shape, assertion, identity,
   change, derivation), asked only where the charter is silent, and it
   points at `recipe new --ontology <name>` rather than a blank block.
@@ -6738,7 +6739,7 @@ Default ports:
 | Add a corpus filter                              | `corpus-engine/src/filters/` (impl `DocumentFilter`) + `recipe.rs::FilterConfig` + `filters/loader.rs` |
 | Bundle a generated data file in corpus-engine    | Place in `sovereign-recipes/<corpus>/data/`, append filename to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!(concat!(env!("OUT_DIR"), …))` in `filters/assets.rs` |
 | Write a recipe                                   | `sovereign-recipes/<id>/recipe.toml` then add to `registry.toml` |
-| Author a recipe via the agent loop               | `studio/crates/sovereign-recipe-author/` + skill at `sovereign/modes/recipe-author/skill.toml` |
+| Author a recipe via the agent loop               | `studio/crates/sovereign-recipe-author/` + skill at `sovereign/crates/sovereign-contracts/src/skills_data/recipe-author.toml` |
 | Add an `http_api` recipe (REST source)           | See `corpus-engine/src/recipe.rs` round-trip tests                  |
 | Add an investigation recipe                      | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `svrn enrich investigation build <id>` |
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
