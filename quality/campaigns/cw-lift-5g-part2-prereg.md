@@ -164,6 +164,61 @@ The deletion does not start until B2 and B3 are green. Deleting a working
 path before its replacement is proven is what part 1 refused to do and the
 reason it split; part 2 inherits the rule.
 
+## B8 — added 2026-09-09, on operator direction, BEFORE the change
+
+**A merge produces a corpus someone can reach — for BOTH callers, not just
+the one that remembered.**
+
+`ShardManager::merge_participants` writes merged chunks and stops. The fold
+path was fixed by calling `finalize_canonical` after it (`2dc1bf160`); the
+queue-mode path was NOT, and has the identical gap: `coordinate_merge` returns
+to `corpus_queue.rs:210`, which logs and returns, and to `:550`, which goes
+straight to `verify_merge_sample`. Neither finalizes. Verified at the code
+level that an unfinalized canonical is skipped by `installed_indexes`
+(`corpus-engine/src/engine/mod.rs:~1621`, "skip indexes where ingestion was
+interrupted"), so it is neither searchable nor advertised.
+
+The operator directed the finalize into the shared function rather than a
+second call site. The argument is ARCH #10 rather than §10.6: "a merge
+produces a corpus someone can reach" is a POST-CONDITION, and two callers each
+REMEMBERING to satisfy it is exactly the shape that just failed once.
+`merge_participants`' own doc already claims it "either produces an index or
+fails", which an unfinalized index does not satisfy — so this is the function
+being made to keep a promise it already made.
+
+**The bar.** A queue-mode merge through `coordinate_merge` yields a corpus in
+`installed_indexes()` and `usable_indexes()`, reachable by query — measured at
+the user's altitude, never through `CorpusIndex::open`, which bypasses both
+gates and is what made B2's first reading wrong.
+
+**Watched red is required and is the point of writing this down.** This
+changes SHIPPED behaviour as a side effect of a rung whose subject is deletion
+(§10.2), so the queue-mode path must be seen failing this bar BEFORE the move
+and passing after. A move that was never watched failing on the caller it was
+made for is the §18.1 defect one layer up.
+
+**Ordering inside the finalize is load-bearing and must not be reshuffled.**
+`mark_indexes_built` before `mark_ingestion_complete`, because
+`installed_indexes` gates on the latter and `usable_indexes` on the former —
+reversed, there is a window where a corpus is advertised to peers before it is
+searchable. The fingerprint is stamped LAST, after `mark_ingestion_complete`,
+because a peer pulling against a fingerprint trusts the chunk set is stable.
+
+**A calibration this bar states rather than implies.** The gap is verified in
+the CODE; it is NOT established that users hit it. `auto_recover`'s disk path
+does finalize and is the fallback that has been carrying this, and the whole
+reason `auto_recover` exists is that the queue path deadlocks. So the honest
+claim is "the queue-mode merge cannot produce a usable corpus on its own",
+not "collaborative ingest is broken for users". Do not let the commit body
+inflate it.
+
+**Not in scope:** B5's corpus clause. The finalize made that miss SHARPER — a
+2-of-3 and a 2-of-2 corpus now carry the same non-null `canonical_fingerprint`
+(`48cecea9…`), so a peer choosing by fingerprint reads them as identical, a
+hazard previously masked by the very defect being fixed. That stays B5's, and
+B5 stays open.
+
+
 ## Measurements
 
 **B1 — MET (red for the right reason), 2026-09-09, commit `50238f364`.**
