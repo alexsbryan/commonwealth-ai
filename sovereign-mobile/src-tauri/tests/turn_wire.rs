@@ -154,6 +154,9 @@ fn provenance() -> Provenance {
             origin: "sep".into(),
             count: 3,
             from_peer: Some("mac-peer".into()),
+            // sv-surface D7/G9. `None` here: this fixture is a corpus,
+            // not a watched folder, so the surface renders `origin`.
+            display_name: None,
         }],
     }
 }

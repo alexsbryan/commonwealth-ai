@@ -176,6 +176,12 @@ pub use narration::{
 // one path is the §10.6 smell this crate is supposed to prevent. Callers
 // write `projection::Provenance`, which says which one they mean.
 pub mod projection;
+// The answer DOCUMENT — the presentation of a turn's result as a
+// self-contained document with its source ledger. Fed by `projection`
+// above and nothing else, which is what lets a wire-attached client
+// render the same export the desktop does (sv-surface D7/G9). The
+// binary-format encoders and the file write stay with the host.
+pub mod answer_doc;
 // The turn protocol — what a client and a serving host say to each other
 // while one turn runs. Moved out of the `sovereign-server` BINARY on
 // 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary

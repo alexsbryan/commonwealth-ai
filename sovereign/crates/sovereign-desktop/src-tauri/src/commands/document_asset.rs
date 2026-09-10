@@ -41,6 +41,19 @@ pub struct DocumentAskResponse {
     /// bubbles lacked the routing-meta bar their reloaded twins had.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// sv-surface D7/G9 — the TYPED projection of `metadata`, carried
+    /// BESIDE it rather than instead of it. `metadata` above stays the
+    /// verbatim blob because the frontend types it as `unknown` and
+    /// reads it with pointers; retyping that contract is a later rung.
+    /// These two are what a wire-attached client receives on a
+    /// `TurnFrame::Complete`, so anything built on them — the answer
+    /// export, the routing footer — renders identically in both boot
+    /// modes. Absent when the blob carries no provenance (the
+    /// documented graceful-degradation contract).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<sovereign_contracts::types::projection::Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<sovereign_contracts::types::projection::Citation>,
 }
 
 /// Upload and ingest a document. The command returns immediately with
@@ -439,11 +452,16 @@ pub async fn ask_document(
 
     let _ = app_handle.emit("conversations:changed", ());
 
+    let metadata = assistant_msg.metadata.clone();
+    let (provenance, citations) =
+        sovereign_contracts::types::projection::project_message_metadata(&metadata);
     Ok(DocumentAskResponse {
         response: final_content,
         operation: Some(operation),
         sources: sources_content,
-        metadata: assistant_msg.metadata.clone(),
+        metadata,
+        provenance,
+        citations,
     })
 }
 
@@ -541,17 +559,22 @@ async fn run_turn_via_runtime(
     // Emit the list-refresh event the normal send_message command emits.
     let _ = app_handle.emit("conversations:changed", ());
 
+    // The wire's TYPED projection (the Complete frame's provenance /
+    // epistemic metadata) where the in-process read returned the raw
+    // persisted blob — the same named G9 delta the chat one-shot
+    // carries.
+    let metadata = turn
+        .metadata
+        .map(|m| serde_json::to_value(&m).unwrap_or(serde_json::Value::Null));
+    let (provenance, citations) =
+        sovereign_contracts::types::projection::project_message_metadata(&metadata);
     Ok(DocumentAskResponse {
         response: turn.text,
         operation: None,
         sources: Vec::new(),
-        // The wire's TYPED projection (the Complete frame's provenance /
-        // epistemic metadata) where the in-process read returned the raw
-        // persisted blob — the same named G9 delta the chat one-shot
-        // carries.
-        metadata: turn
-            .metadata
-            .map(|m| serde_json::to_value(&m).unwrap_or(serde_json::Value::Null)),
+        metadata,
+        provenance,
+        citations,
     })
 }
 

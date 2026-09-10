@@ -156,6 +156,13 @@ pub async fn get_conversation(
             .into_iter()
             .map(|m| {
                 let role = m.role_str().to_string();
+                // sv-surface D7/G9: `metadata` stays the verbatim blob.
+                // The frontend types it as `unknown` and reads it with
+                // pointers, so retyping this contract is a later rung —
+                // and `MessageEntry` itself lives in `commands/mod.rs`,
+                // outside this rung's zone. `ask_document` carries the
+                // typed projection beside the blob (document_asset.rs)
+                // and `export_answer` below already renders from it.
                 MessageEntry {
                     id: m.id,
                     role,
@@ -901,256 +908,21 @@ pub async fn toggle_skill_impl(
     state::rebuild_runtime(state).await
 }
 
-/// Render an assistant answer + its provenance as a self-contained
-/// Markdown document — the "provenance survives the handoff" guarantee.
-/// Built entirely from the persisted message (content + metadata), so no
-/// re-fetch and no schema change: the metadata already carries
-/// `provenance` (model + per-corpus source summary) and `retrieved_chunks`
-/// (the actual grounding passages). Pure + unit-tested so the **source
-/// ledger** can't silently regress to dead text.
-fn render_answer_markdown(content: &str, metadata: Option<&serde_json::Value>) -> String {
-    let mut md = String::from("# svrnmesh answer\n\n");
-
-    // Provenance meta line: who answered + which corpora grounded it.
-    let mut meta_bits: Vec<String> = Vec::new();
-    if let Some(backend) = metadata
-        .and_then(|m| m.pointer("/provenance/inference_backend"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-    {
-        meta_bits.push(format!("answered by {backend}"));
-    }
-    if let Some(sources) = metadata
-        .and_then(|m| m.pointer("/provenance/sources"))
-        .and_then(|v| v.as_array())
-    {
-        let names: Vec<String> = sources
-            .iter()
-            .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
-            .filter_map(|s| {
-                s.get("display_name")
-                    .and_then(|v| v.as_str())
-                    .filter(|x| !x.is_empty())
-                    .or_else(|| s.get("origin").and_then(|v| v.as_str()))
-                    .map(str::to_string)
-            })
-            .collect();
-        if !names.is_empty() {
-            meta_bits.push(format!("searched {}", names.join(", ")));
-        }
-    }
-    if !meta_bits.is_empty() {
-        md.push_str(&format!("*{}*\n\n", meta_bits.join(" · ")));
-    }
-
-    md.push_str(content.trim());
-    md.push_str("\n\n");
-
-    // The source ledger — every grounding passage, traceable to its corpus.
-    let chunks = metadata
-        .and_then(|m| m.get("retrieved_chunks"))
-        .and_then(|v| v.as_array())
-        .filter(|c| !c.is_empty());
-    if let Some(chunks) = chunks {
-        md.push_str(
-            "---\n\n## Sources\n\nThis answer was grounded in the following passages \
-             from your indexed corpora:\n\n",
-        );
-        for (i, c) in chunks.iter().enumerate() {
-            let title = c
-                .get("title")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-                .unwrap_or("(untitled passage)");
-            let corpus = c.get("corpus_id").and_then(|v| v.as_str()).unwrap_or("");
-            md.push_str(&format!("{}. **{}** — `{}`\n", i + 1, title, corpus));
-            if let Some(snippet) = c
-                .get("snippet")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-            {
-                for line in snippet.lines() {
-                    md.push_str(&format!("   > {line}\n"));
-                }
-            }
-            if let Some(url) = c
-                .get("url")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-            {
-                md.push_str(&format!("   <{url}>\n"));
-            }
-            md.push('\n');
-        }
-    } else {
-        md.push_str(
-            "---\n\n*No corpus passages were cited for this answer — it came from the \
-             model's own knowledge or a non-retrieval path.*\n\n",
-        );
-    }
-
-    md.push_str("---\n*Exported from svrnmesh — provenance preserved.*\n");
-    md
-}
-
-/// Structured view of an answer + its provenance — the shared intermediate
-/// the docx and PDF renderers walk, so neither re-parses the metadata. (The
-/// Markdown renderer above predates this and extracts inline; left as-is to
-/// avoid churning a tested path.)
-struct SourceEntry {
-    title: String,
-    corpus_id: String,
-    snippet: Option<String>,
-    url: Option<String>,
-}
-
-struct AnswerDoc {
-    answered_by: Option<String>,
-    corpora: Vec<String>,
-    body: String,
-    sources: Vec<SourceEntry>,
-}
-
-impl AnswerDoc {
-    fn from_message(content: &str, metadata: Option<&serde_json::Value>) -> Self {
-        let answered_by = metadata
-            .and_then(|m| m.pointer("/provenance/inference_backend"))
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
-        let corpora = metadata
-            .and_then(|m| m.pointer("/provenance/sources"))
-            .and_then(|v| v.as_array())
-            .map(|srcs| {
-                srcs.iter()
-                    .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
-                    .filter_map(|s| {
-                        s.get("display_name")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .or_else(|| s.get("origin").and_then(|v| v.as_str()))
-                            .map(str::to_string)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let sources = metadata
-            .and_then(|m| m.get("retrieved_chunks"))
-            .and_then(|v| v.as_array())
-            .map(|chunks| {
-                chunks
-                    .iter()
-                    .map(|c| SourceEntry {
-                        title: c
-                            .get("title")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .unwrap_or("(untitled passage)")
-                            .to_string(),
-                        corpus_id: c
-                            .get("corpus_id")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        snippet: c
-                            .get("snippet")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .map(str::to_string),
-                        url: c
-                            .get("url")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .map(str::to_string),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        Self {
-            answered_by,
-            corpora,
-            body: content.trim().to_string(),
-            sources,
-        }
-    }
-
-    fn meta_line(&self) -> Option<String> {
-        let mut bits = Vec::new();
-        if let Some(b) = &self.answered_by {
-            bits.push(format!("answered by {b}"));
-        }
-        if !self.corpora.is_empty() {
-            bits.push(format!("searched {}", self.corpora.join(", ")));
-        }
-        (!bits.is_empty()).then(|| bits.join(" \u{00B7} "))
-    }
-}
-
-/// A flat, format-agnostic block sequence both renderers walk.
-enum Block {
-    Title(String),
-    Heading(String),
-    Meta(String),
-    Para(String),
-    SourceTitle(String),
-    Quote(String),
-    Url(String),
-    Footer(String),
-}
-
-fn doc_blocks(doc: &AnswerDoc) -> Vec<Block> {
-    let mut blocks = vec![Block::Title("svrnmesh answer".to_string())];
-    if let Some(meta) = doc.meta_line() {
-        blocks.push(Block::Meta(meta));
-    }
-    for para in doc.body.split("\n\n") {
-        let cleaned = strip_markdown_light(para);
-        if !cleaned.is_empty() {
-            blocks.push(Block::Para(cleaned));
-        }
-    }
-    if doc.sources.is_empty() {
-        blocks.push(Block::Para(
-            "No corpus passages were cited for this answer — it came from the model's own \
-             knowledge or a non-retrieval path."
-                .to_string(),
-        ));
-    } else {
-        blocks.push(Block::Heading("Sources".to_string()));
-        for (i, s) in doc.sources.iter().enumerate() {
-            blocks.push(Block::SourceTitle(format!(
-                "{}. {} \u{2014} {}",
-                i + 1,
-                s.title,
-                s.corpus_id
-            )));
-            if let Some(snippet) = &s.snippet {
-                blocks.push(Block::Quote(strip_markdown_light(snippet)));
-            }
-            if let Some(url) = &s.url {
-                blocks.push(Block::Url(url.clone()));
-            }
-        }
-    }
-    blocks.push(Block::Footer(
-        "Exported from svrnmesh — provenance preserved.".to_string(),
-    ));
-    blocks
-}
-
-/// Light Markdown de-noising so prose reads cleanly in PDF/Word (which don't
-/// interpret Markdown): drops `**`, leading `#`/`>`, and backticks. Not a
-/// parser — just enough to avoid stray markup in the exported document.
-fn strip_markdown_light(s: &str) -> String {
-    let mut lines = Vec::new();
-    for line in s.lines() {
-        let l = line.trim_start();
-        let l = l.trim_start_matches(['#', '>']).trim_start();
-        let cleaned = l.replace("**", "").replace("__", "").replace('`', "");
-        lines.push(cleaned.trim_end().to_string());
-    }
-    lines.join("\n").trim().to_string()
-}
+/// The answer document — its extraction, its block flattening and its
+/// Markdown rendering — moved to
+/// [`sovereign_contracts::types::answer_doc`] in sv-surface D7/G9. It
+/// only ever formatted a turn's result, so it was never desktop
+/// business; a wire-attached client renders the same export now.
+///
+/// What stayed here, and why: the `.docx` and `.pdf` encoders below
+/// (format-specific byte layout, host business) and `export_answer`'s
+/// write to the user's chosen path — a file write to a user-picked
+/// destination cannot cross a wire (sv-surface D7 "CANNOT CROSS"). Both
+/// walk [`Block`], which is why the shared module exposes it.
+use sovereign_contracts::types::answer_doc::{
+    doc_blocks, render_answer_markdown, AnswerDoc, Block,
+};
+use sovereign_contracts::types::projection::project_message_metadata;
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -1447,18 +1219,24 @@ pub async fn export_answer(
         .iter()
         .find(|m| m.id == message_id)
         .ok_or_else(|| format!("message {message_id} not found"))?;
-    let metadata = msg.metadata.as_ref();
     // Format follows the extension the user picked in the save dialog.
     let ext = std::path::Path::new(&dest_path)
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
+    // The document is built from the TYPED projection, not from the
+    // persisted blob — the same `(provenance, citations)` a client gets
+    // over the wire, so an attached desktop exports what a local one
+    // does. `project_message_metadata` is the single reader of the
+    // metadata shape.
+    let (provenance, citations) = project_message_metadata(&msg.metadata);
+    let doc = AnswerDoc::from_projection(&msg.content, provenance.as_ref(), &citations);
     let bytes: Vec<u8> = match ext.as_str() {
-        "pdf" => render_answer_pdf(&AnswerDoc::from_message(&msg.content, metadata))?,
-        "docx" => render_answer_docx(&AnswerDoc::from_message(&msg.content, metadata))?,
+        "pdf" => render_answer_pdf(&doc)?,
+        "docx" => render_answer_docx(&doc)?,
         // `.md` and anything else fall back to Markdown.
-        _ => render_answer_markdown(&msg.content, metadata).into_bytes(),
+        _ => render_answer_markdown(&doc).into_bytes(),
     };
     std::fs::write(&dest_path, bytes).map_err(|e| format!("write {dest_path}: {e}"))?;
     Ok(())
@@ -1466,34 +1244,82 @@ pub async fn export_answer(
 
 #[cfg(test)]
 mod export_tests {
-    use super::{render_answer_docx, render_answer_markdown, render_answer_pdf, AnswerDoc};
+    use super::{render_answer_docx, render_answer_pdf};
+    use sovereign_contracts::types::answer_doc::{render_answer_markdown, AnswerDoc};
+    use sovereign_contracts::types::projection::project_message_metadata;
 
-    #[test]
-    fn markdown_includes_source_ledger() {
-        let meta = serde_json::json!({
+    /// The persisted-metadata shape the export path actually reads.
+    fn fixture_blob() -> serde_json::Value {
+        serde_json::json!({
             "provenance": {
                 "inference_backend": "Qwen3-8B-Q4_K_M",
-                "sources": [{ "origin": "sep", "count": 3 }]
+                "sources": [
+                    {"origin": "case-files-7f2a", "count": 3, "display_name": "Case Files"},
+                    {"origin": "sep", "count": 2},
+                    {"origin": "wikipedia", "count": 0}
+                ]
             },
             "retrieved_chunks": [
-                { "title": "Free Will", "corpus_id": "sep", "snippet": "Compatibilism holds that..." }
+                {"title": "Free Will", "corpus_id": "sep", "chunk_id": "sep:fw:3",
+                 "snippet": "Compatibilism holds that...\nfreedom is not the absence of cause.",
+                 "score": 0.91, "url": "https://plato.stanford.edu/entries/free-will/"},
+                {"title": "", "corpus_id": "case-files-7f2a", "chunk_id": "cf:9",
+                 "snippet": "The deposition of 12 March.", "score": 0.6}
             ]
-        });
-        let md = render_answer_markdown("Free will is compatible with determinism.", Some(&meta));
-        assert!(md.contains("# svrnmesh answer"));
-        assert!(md.contains("Free will is compatible with determinism."));
-        assert!(md.contains("answered by Qwen3-8B-Q4_K_M"));
-        assert!(md.contains("searched sep"));
-        // The ledger: title, corpus handle, and the grounding quote.
-        assert!(md.contains("## Sources"));
-        assert!(md.contains("**Free Will**"));
-        assert!(md.contains("`sep`"));
-        assert!(md.contains("> Compatibilism holds that..."));
+        })
+    }
+
+    /// Exactly what `export_answer` does to reach a document, minus the
+    /// store fetch and the file write.
+    fn fixture_doc() -> AnswerDoc {
+        let (prov, cites) = project_message_metadata(&Some(fixture_blob()));
+        AnswerDoc::from_projection(
+            "Free will is compatible with determinism.",
+            prov.as_ref(),
+            &cites,
+        )
+    }
+
+    /// THE GOLDEN — sv-surface D7/G9. These bytes were produced by the
+    /// blob-reading renderer this file carried before the move, on
+    /// `fixture_blob()`; `markdown_golden_survived_the_move` asserted
+    /// old == new while both existed, and this pins the surviving half.
+    /// The twin lives at
+    /// `sovereign_contracts::types::answer_doc::tests::markdown_golden`.
+    /// A diff here is a diff in what a user's exported document says.
+    const GOLDEN_MD: &str = concat!(
+        "# svrnmesh answer\n",
+        "\n",
+        "*answered by Qwen3-8B-Q4_K_M \u{00B7} searched Case Files, sep*\n",
+        "\n",
+        "Free will is compatible with determinism.\n",
+        "\n",
+        "---\n",
+        "\n",
+        "## Sources\n",
+        "\n",
+        "This answer was grounded in the following passages from your indexed corpora:\n",
+        "\n",
+        "1. **Free Will** \u{2014} `sep`\n",
+        "   > Compatibilism holds that...\n",
+        "   > freedom is not the absence of cause.\n",
+        "   <https://plato.stanford.edu/entries/free-will/>\n",
+        "\n",
+        "2. **(untitled passage)** \u{2014} `case-files-7f2a`\n",
+        "   > The deposition of 12 March.\n",
+        "\n",
+        "---\n",
+        "*Exported from svrnmesh \u{2014} provenance preserved.*\n",
+    );
+
+    #[test]
+    fn markdown_golden_survived_the_move() {
+        assert_eq!(render_answer_markdown(&fixture_doc()), GOLDEN_MD);
     }
 
     #[test]
     fn markdown_without_sources_says_so() {
-        let md = render_answer_markdown("Hello.", None);
+        let md = render_answer_markdown(&AnswerDoc::from_projection("Hello.", None, &[]));
         assert!(md.contains("Hello."));
         assert!(md.contains("No corpus passages were cited"));
         // Never silently implies sources that aren't there.
@@ -1502,27 +1328,17 @@ mod export_tests {
 
     #[test]
     fn answerdoc_extracts_provenance() {
-        let meta = serde_json::json!({
-            "provenance": {
-                "inference_backend": "Darwin-36B",
-                "sources": [{ "origin": "sep", "count": 2 }, { "origin": "empty", "count": 0 }]
-            },
-            "retrieved_chunks": [{ "title": "T", "corpus_id": "sep", "snippet": "q" }]
-        });
-        let d = AnswerDoc::from_message("Body", Some(&meta));
-        assert_eq!(d.answered_by.as_deref(), Some("Darwin-36B"));
-        assert_eq!(d.corpora, vec!["sep".to_string()]); // count:0 dropped
-        assert_eq!(d.sources.len(), 1);
+        let d = fixture_doc();
+        assert_eq!(d.answered_by.as_deref(), Some("Qwen3-8B-Q4_K_M"));
+        // count:0 dropped; the folder's typed name beats its slug.
+        assert_eq!(d.corpora, vec!["Case Files".to_string(), "sep".to_string()]);
+        assert_eq!(d.sources.len(), 2);
         assert_eq!(d.sources[0].corpus_id, "sep");
     }
 
     #[test]
     fn docx_is_a_valid_zip_package() {
-        let meta = serde_json::json!({
-            "retrieved_chunks": [{ "title": "Free Will", "corpus_id": "sep", "snippet": "grounding quote" }]
-        });
-        let doc = AnswerDoc::from_message("The answer body.", Some(&meta));
-        let bytes = render_answer_docx(&doc).expect("docx renders");
+        let bytes = render_answer_docx(&fixture_doc()).expect("docx renders");
         // Real .docx is an OOXML zip — starts with the PK zip-local-header.
         assert_eq!(&bytes[..2], b"PK");
         assert!(bytes.len() > 300);
@@ -1530,7 +1346,7 @@ mod export_tests {
 
     #[test]
     fn pdf_has_pdf_header() {
-        let doc = AnswerDoc::from_message("A short answer.", None);
+        let doc = AnswerDoc::from_projection("A short answer.", None, &[]);
         let bytes = render_answer_pdf(&doc).expect("pdf renders");
         assert_eq!(&bytes[..5], b"%PDF-");
         assert!(bytes.len() > 300);
