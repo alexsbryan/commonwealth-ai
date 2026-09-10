@@ -235,10 +235,7 @@ fn commit_reached(
     // records the run.
     git(workdir, &["commit", "--allow-empty", "-m", &message])?;
     let sha = git(workdir, &["rev-parse", "--short", "HEAD"])?;
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let ts = sovereign_core::time::unix_now_u64();
     // Per-commit notes are the point: `git log --notes=bench` walks
     // one score per commit and the lineage IS the log — the note on
     // each landing commit carries that commit's job (the way a bench
@@ -307,10 +304,7 @@ impl SolveJob {
             workdir,
             goal,
             detected,
-            created_at_unix: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
+            created_at_unix: sovereign_core::time::unix_now_u64(),
             state: Mutex::new(JobState::Running),
             events: Mutex::new(VecDeque::new()),
             next_seq: AtomicU64::new(1),

@@ -8,7 +8,6 @@
 1	commonwealth/crates/commonwealth-api/src/middleware/artifact_surface.rs
 4	commonwealth/crates/commonwealth-api/src/middleware/session_briefing.rs
 3	commonwealth/crates/commonwealth-api/src/routes_inference.rs
-1	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs
 2	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
 3	commonwealth/crates/commonwealth-api/src/state.rs
 2	commonwealth/crates/commonwealth-api/src/yield_hook.rs
@@ -33,7 +32,6 @@
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 2	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
-1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_http.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs
 1	sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs

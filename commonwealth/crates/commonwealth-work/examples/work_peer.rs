@@ -46,8 +46,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
+use commonwealth_core::clock::unix_now_millis;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, SigningKey};
 use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecutorRegistry};
@@ -169,12 +170,6 @@ impl PeerArgs {
 /// second content-hash implementation here (ARCH §10.6).
 fn key_of(label: &str) -> SigningKey {
     SigningKey::from_bytes(ContentHash::of_str(label).as_bytes())
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// The host half of consent — the questions no signature over the rail can
@@ -309,7 +304,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     registry
         .register(Arc::new(ProcessExecutor::new()))
         .map_err(|e| e.to_string())?;
-    let started = SystemTime::now();
+    let started = Instant::now();
     loop {
         let proj = fold(&journal, &roster)?;
         if proj.gaps > 0 || proj.unreadable > 0 {
@@ -318,13 +313,13 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
                 proj.gaps, proj.unreadable
             ));
         }
-        let takeable = proj.takeable_at(now_ms());
+        let takeable = proj.takeable_at(unix_now_millis());
         if takeable.is_empty() {
             break;
         }
         let mut progressed = false;
         for unit_ref in takeable {
-            if may_take(&proj, &me, &offer, &unit_ref, now_ms()).is_err() {
+            if may_take(&proj, &me, &offer, &unit_ref, unix_now_millis()).is_err() {
                 continue;
             }
             let Some(unit) = proj.unit(&unit_ref).map(|p| p.unit.clone()) else {
@@ -359,7 +354,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         if !progressed {
             break;
         }
-        if started.elapsed().map(|e| e > DEADLINE).unwrap_or(false) {
+        if started.elapsed() > DEADLINE {
             return Err(format!("the run passed its {DEADLINE:?} deadline"));
         }
     }
@@ -400,7 +395,7 @@ async fn run_unit(
                     // forbids. `work_donor::LeaseState` draws exactly this
                     // split and `commonwealth-work` does not own it — the
                     // first version of this file collapsed it to a bool.
-                    match fold(journal, roster).map(|p| p.unit(unit_ref).map(|u| u.status_at(now_ms()))) {
+                    match fold(journal, roster).map(|p| p.unit(unit_ref).map(|u| u.status_at(unix_now_millis()))) {
                         Ok(Some(WorkUnitStatus::Leased { ref lessee, .. })) if lessee == me => {
                             if let Err(e) = append(journal, key, roster, &WorkAct::Renew(unit_ref.clone())) {
                                 eprintln!("work_peer: a renew could not be appended: {e}");
@@ -462,7 +457,7 @@ fn report(
         let (status, attempts, verdict) = match h
             .units
             .get(&p.unit.unit_hash)
-            .map(|u| u.status_at(now_ms()))
+            .map(|u| u.status_at(unix_now_millis()))
         {
             Some(WorkUnitStatus::Complete {
                 attempts, outcome, ..

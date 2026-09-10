@@ -10,6 +10,10 @@ description = "Daemon-runnable workflow host — assembles the standard tool reg
 sovereign-contracts = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-tools-base = { workspace = true }
+# The wall-clock decider for the sovereign island (clock-gate). A Tier-0 leaf
+# with zero dependencies, and already in this crate's closure via
+# sovereign-contracts — so asking it costs nothing the package did not carry.
+sovereign-time = { workspace = true }
 oicp-client = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
