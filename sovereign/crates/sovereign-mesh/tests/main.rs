@@ -44,6 +44,10 @@ mod embeddings_e2e;
 mod emitter_origin_concurrency;
 #[path = "main/finish_reason_streaming.rs"]
 mod finish_reason_streaming;
+#[path = "main/fold_ingest_abandoned_unit_e2e.rs"]
+mod fold_ingest_abandoned_unit_e2e;
+#[path = "main/fold_ingest_coverage_refusal_e2e.rs"]
+mod fold_ingest_coverage_refusal_e2e;
 #[path = "main/fold_ingest_cross_node_merge_e2e.rs"]
 mod fold_ingest_cross_node_merge_e2e;
 #[path = "main/gossip_auth.rs"]

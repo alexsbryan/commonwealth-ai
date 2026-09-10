@@ -147,5 +147,5 @@ asserts = 4
 requirement = "ST-9"
 test = "corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models"
 file = "corpus-engine/src/sharding.rs"
-line = 1904
+line = 1919
 asserts = 1

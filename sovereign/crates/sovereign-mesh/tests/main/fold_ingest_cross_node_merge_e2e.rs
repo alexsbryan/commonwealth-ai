@@ -118,10 +118,10 @@ use tempfile::TempDir;
 use crate::common;
 
 /// The two donor nodes. **The HIGH bytes must differ** — see the module docs.
-fn leader_node() -> NodeId {
+pub(crate) fn leader_node() -> NodeId {
     NodeId::from_u128(0x11 << 120)
 }
-fn peer_node() -> NodeId {
+pub(crate) fn peer_node() -> NodeId {
     NodeId::from_u128(0x22 << 120)
 }
 
@@ -134,32 +134,32 @@ const NOW_MS: u64 = 400_000;
 /// A term that appears ONLY in the leader donor's slice, and one that appears
 /// ONLY in the peer donor's. The whole verdict turns on whether the second is
 /// reachable in the leader's canonical index.
-const LEADER_ONLY_TERM: &str = "quokka";
-const PEER_ONLY_TERM: &str = "narwhal";
+pub(crate) const LEADER_ONLY_TERM: &str = "quokka";
+pub(crate) const PEER_ONLY_TERM: &str = "narwhal";
 
 // ─────────────────────────────────────────────────────────────────
 // The fold — real signed ops, real admission, real projection
 // ─────────────────────────────────────────────────────────────────
 
-fn key(seed: u8) -> SigningKey {
+pub(crate) fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-fn actor(seed: u8) -> ActorKey {
+pub(crate) fn actor(seed: u8) -> ActorKey {
     ActorKey::parse(actor_of(&key(seed))).expect("actor_of emits canonical hex")
 }
 
 /// Two donors in one ring. `leader` is also the submitter — which is what the
 /// pre-registration names as the merge leader (`WorkHandoff.submitter`,
 /// `projection.rs:274`), so the leader's node is where the collector runs.
-fn ring() -> Roster {
+pub(crate) fn ring() -> Roster {
     let mut m = BTreeMap::new();
     m.insert(Person::from("leader"), vec![actor_of(&key(1))]);
     m.insert(Person::from("peer"), vec![actor_of(&key(2))]);
     Roster::new(m)
 }
 
-fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
+pub(crate) fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
     let k = key(seed);
     let inner = RailAct::Record {
         payload: commonwealth_work::to_payload(act).expect("a well-formed work act"),
@@ -191,7 +191,7 @@ fn provenance(node: NodeId, name: &str) -> ComputeAttribution {
 
 /// One real `ingest:v1` unit — sealed by the plane's own sealer over a real
 /// [`IngestPayload`], so the unit hash is the one production would compute.
-fn ingest_unit(corpus: &str, unit_id: u32, start: u64, end: u64) -> JobUnit {
+pub(crate) fn ingest_unit(corpus: &str, unit_id: u32, start: u64, end: u64) -> JobUnit {
     let payload = serde_json::to_value(IngestPayload::slice(
         corpus,
         corpus,
@@ -208,14 +208,14 @@ fn ingest_unit(corpus: &str, unit_id: u32, start: u64, end: u64) -> JobUnit {
     .expect("seal")
 }
 
-fn unit_ref(handoff: HandoffId, unit: &JobUnit) -> UnitRef {
+pub(crate) fn unit_ref(handoff: HandoffId, unit: &JobUnit) -> UnitRef {
     UnitRef {
         handoff,
         unit_hash: unit.unit_hash.clone(),
     }
 }
 
-fn completion(
+pub(crate) fn completion(
     handoff: HandoffId,
     unit: &JobUnit,
     corpus: &str,
@@ -237,14 +237,14 @@ fn completion(
     })
 }
 
-/// The scenario every reading in this file shares: one handoff, two
-/// `ingest:v1` units for one corpus, leased and completed by two DIFFERENT
-/// actors, folded to terminal.
+/// The SIGNED OPS of the scenario below, before anything folds them.
 ///
-/// Asserts on the way out that the fold really did reach `Complete` with two
-/// distinct lessees — if that ever stops holding, everything below would be
-/// answering a question nobody asked.
-fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
+/// Split out because two readings need the same journal in two different
+/// shapes: this file folds it in memory, and
+/// `fold_ingest_coverage_refusal_e2e` writes it onto a real `RingRail` so
+/// `auto_ingest`'s own tick can fold it. One spelling of the acts, or the two
+/// readings are not about the same handoff (ARCH §10.6).
+pub(crate) fn terminal_handoff_ops(corpus: &str) -> (Vec<Op<SignedOp>>, HandoffId) {
     let handoff = HandoffId::from_u128(5_000_002); // stable, arbitrary
     let a = ingest_unit(corpus, 0, 0, 100);
     let b = ingest_unit(corpus, 1, 100, 200);
@@ -274,6 +274,20 @@ fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
             &completion(handoff, &b, corpus, peer_node(), "peer"),
         ),
     ];
+    (ops, handoff)
+}
+
+/// The scenario every reading in this file shares: one handoff, two
+/// `ingest:v1` units for one corpus, leased and completed by two DIFFERENT
+/// actors, folded to terminal.
+///
+/// Asserts on the way out that the fold really did reach `Complete` with two
+/// distinct lessees — if that ever stops holding, everything below would be
+/// answering a question nobody asked.
+pub(crate) fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
+    let (ops, handoff) = terminal_handoff_ops(corpus);
+    let a = ingest_unit(corpus, 0, 0, 100);
+    let b = ingest_unit(corpus, 1, 100, 200);
 
     let projection =
         WorkProjection::fold(&admit(&ops, &[], &ring(), WORK_NAMESPACE, &Ed25519Verifier));
@@ -319,7 +333,7 @@ fn embed_fn() -> EmbedFn {
 /// A `CorpusEngine` rooted at `index_dir` and told it is `node`. The node
 /// identity is what `partition_path` and `index_serve` both build the
 /// partition directory name from, so the two must be given the same one.
-fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
+pub(crate) fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
     let recipes = index_dir.join("..").join("recipes");
     std::fs::create_dir_all(&recipes).expect("recipes dir");
     Arc::new(
@@ -332,7 +346,7 @@ fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
 /// [`sovereign_mesh::ingest_executor::IngestExecutor`] would have chosen —
 /// `CorpusEngine::partition_path`, called here rather than re-spelled, so a
 /// change to the layout breaks this test rather than silently detaching it.
-async fn write_donor_partition(
+pub(crate) async fn write_donor_partition(
     index_dir: &std::path::Path,
     node: NodeId,
     corpus: &str,
@@ -389,7 +403,11 @@ async fn write_donor_partition(
 /// The mesh is what `peer_control_urls` reads to turn a `NodeId` from the fold
 /// into a base URL, so a donor that is not a member here is unreachable —
 /// which is the production behaviour, not a shortcut.
-fn node_state(self_id: NodeId, index_dir: &std::path::Path, others: &[(NodeId, &str)]) -> AppState {
+pub(crate) fn node_state(
+    self_id: NodeId,
+    index_dir: &std::path::Path,
+    others: &[(NodeId, &str)],
+) -> AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
@@ -423,14 +441,14 @@ fn node_state(self_id: NodeId, index_dir: &std::path::Path, others: &[(NodeId, &
 
 /// What the leader's canonical corpus actually holds after the merge.
 #[derive(Debug)]
-struct CanonicalProbe {
-    canonical_exists: bool,
-    chunk_count: u64,
-    leader_term_reachable: bool,
-    peer_term_reachable: bool,
+pub(crate) struct CanonicalProbe {
+    pub(crate) canonical_exists: bool,
+    pub(crate) chunk_count: u64,
+    pub(crate) leader_term_reachable: bool,
+    pub(crate) peer_term_reachable: bool,
 }
 
-async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -> CanonicalProbe {
+pub(crate) async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -> CanonicalProbe {
     let canonical = index_dir.join(corpus);
     let Ok(index) = CorpusIndex::open(&canonical).await else {
         return CanonicalProbe {

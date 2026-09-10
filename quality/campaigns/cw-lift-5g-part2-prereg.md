@@ -360,3 +360,187 @@ truncation leaves 64 random bits and a collision needs a birthday collision at
 that width: about `n²/2^65`, which is ~3e-14 at a thousand nodes. The hazard is
 real in FIXTURES, where ids are minted from small integers, and both test files
 say so at the point where the ids are chosen. Not fixed, and no fix is owed.
+
+---
+
+**B5 — the merge clause is MET; THE CORPUS CLAUSE IS MEASURED AND NOT MET.
+2026-09-09.** `sovereign-mesh/tests/main/fold_ingest_abandoned_unit_e2e.rs`.
+
+The bar has two clauses and only one of them holds. "The merge must proceed
+with what exists" — met. "AND the corpus must record that it is partial" — not
+met, and not by a small margin: the canonical's `_corpus_meta.json` is
+identical, field for field, to one built from a handoff that delivered
+everything.
+
+*The fixture.* One handoff, THREE `ingest:v1` units, real Ed25519 ops through
+`commonwealth_rail::admit` → `WorkProjection::fold`. Two units completed by two
+different lessees; the third leased three times by real `Lease` acts, each
+after the previous `LEASE_MS` window closed, and never reported at all. The
+`Failed { outcome: None }` is therefore DERIVED by `ProjectedUnit::status_at`
+(`projection.rs:237`) from a journal a mesh would actually accumulate, not
+hand-written. Asserted as a precondition, not assumed: `attempts ==
+MAX_UNIT_ATTEMPTS`, `outcome.is_none()`, handoff `Complete`.
+
+*Clause one — the fold names it.*
+`a_unit_whose_attempts_are_spent_is_named_in_the_coverage`.
+
+    handoff_id : the submitted handoff, asserted equal to it
+    expected   : 2                       (the two VERIFIED lessees; the
+                                           abandoned unit has no lessee and
+                                           does not inflate the denominator)
+    nodes      : [node-1100000000000000, node-2200000000000000]
+    abandoned  : ["01f4c6c1…e72dd"]      (is_partial() == true)
+
+Watched red by deleting the `WorkUnitStatus::Failed { .. } => abandoned.push(…)`
+arm — the `_ => {}` below it swallows the unit: `left: [], right: ["01f4c6c1…"]`.
+
+*Clause one — the merge proceeds.*
+`the_merge_proceeds_with_the_slices_that_exist`, over the same real socket B2
+uses. `Recovered { chunks: 4 }`, both donors' terms reachable. Watched red by
+counting the abandoned unit into `expected` (`actors.len() + abandoned.len()`):
+`PartitionsUnreachable { covered: 2, expected: 3 }`, no canonical, every tick,
+forever — an abandoned unit is work that never happened, not a missing
+partition, and conflating the two strands the corpus over a slice no retry can
+produce.
+
+*Clause two — NOT MET.*
+`a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so`, `#[ignore]`d
+with B5's number on it. Two corpora on one node, merged the same way from the
+same fold: one from the three-unit handoff above, one from B2's two-unit
+handoff. Both `_corpus_meta.json` files, with `corpus_id` / `corpus_name` /
+`created_at` / `last_updated` blanked, are EQUAL — and so is every `IndexInfo`
+field `build_hosted_corpora` (`capabilities.rs:285-310`) copies onto the wire:
+
+    partial : query_sharing=true is_shard=false chunk_range=None
+              chunk_count=4 total_shards=None processed_shards=[]
+    whole   : query_sharing=true is_shard=false chunk_range=None
+              chunk_count=4 total_shards=None processed_shards=[]
+
+**The chunk counts are equal and that is the sharpest form of it**: a
+three-unit handoff that delivered two slices is byte-identical to a two-unit
+handoff that delivered both of its own. A reading that compared 1-of-2 against
+2-of-2 would find different counts and could be talked into calling that a
+signal; it is not one, because no peer knows what the count should have been.
+
+The only record of the abandonment is the `tracing::warn!` in `auto_ingest`'s
+arm — process-local, gone on the next restart, invisible to every peer. The
+shape a signal would take already exists (`CorpusShardInfo.total_shards` /
+`processed_shards`, and `coverage_ratio()` over them) and is `None`/`[]` for
+every fold-sliced recipe, because the only production writer of `total_shards`
+is `ingest.rs:718` under `ExtractorConfig::WikipediaJsonl`.
+
+The test asserts the BAR and is ignored, rather than asserting today's
+behaviour: pinning the indistinguishability would pass forever and go red the
+day somebody fixes it. The ignore marks an OPEN bar, the way `50238f364`
+marked B1's.
+
+**A SEPARATE DEFECT FOUND WHILE MEASURING B5, NOT FIXED.** A canonical built by
+the fold path is not advertised at all. `merge_participants` →
+`CorpusEngine::merge_partitions` → `sharding::merge_shards` creates the output
+with `CorpusIndex::create` and never clears `ingestion_in_progress`; the DISK
+path's `merge_partitions_into_canonical` does (`sharding.rs:1424`). So the
+fold-built canonical carries `ingestion_in_progress: true, indexes_built:
+false`, and `CorpusEngine::installed_indexes` skips it — measured on the disk
+this test builds:
+
+    installed_indexes rows = 0 -> []
+    hosted_corpora         = []
+    canonical dirs on disk = ["cw-lift-5g-record-whole", "cw-lift-5g-record-partial"]
+
+That means B2's green overstates the end-user reading: the merged corpus is
+searchable through `CorpusIndex::open` (which is what the probe does) and NOT
+through `usable_indexes`, which requires `indexes_built`. It also means the
+"advertised indistinguishably" hazard is currently blocked by an unrelated bug
+rather than absent — the moment the canonical becomes advertisable, the two
+records above are what a peer receives. Same class as B4's `Table 'chunks'
+already exists`: the merge's post-conditions are corpus-engine's decision, and
+this lane records it rather than guessing at it. `coordinate_merge` shares
+`merge_participants` verbatim, so this is not new with the fold.
+
+Known not checked by B5: two real machines; the ingest pipeline; whether a peer
+would behave differently given a completeness signal (that is the fix's bar);
+and the actor-vs-host rule, which this fixture still cannot witness for B2's
+reason.
+
+---
+
+**B7 — MET, in all three of the parts that were open. 2026-09-09.**
+`sovereign-mesh/tests/main/fold_ingest_coverage_refusal_e2e.rs`.
+
+*1. The guard is armed on the FOLD path.*
+`a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical`. B2's
+scenario with the peer's socket never spawned — the peer is a mesh member at a
+port bound and released, so it is genuinely dead rather than guessed.
+
+    merge outcome  : PartitionsUnreachable { covered: 1, expected: 2 }
+    canonical      : ABSENT                      ← THE BAR
+    local partition: still on disk
+
+The last line is not cosmetic: `merge_participants` deletes every resolved
+shard dir after a successful merge, so a refusal that ran the cleanup would
+destroy the half of the corpus that does exist while reporting only that
+coverage was short.
+
+Watched red by disabling the `shard_dirs.len() < expected` arm in
+`merge_participants`: `Recovered { chunks: 2, shards_covered: 2 }` and a
+canonical holding half the corpus. The test also carries its own paired
+positive — the same disk and the same dead peer merged with `expected = 1`
+produces exactly that partial canonical — because a refusal that never merges
+anything is indistinguishable from a merge path that is simply broken.
+
+*2. THE `continue`, which was the point.*
+`the_folds_refusal_is_final_and_the_disk_path_never_runs`, driven through the
+REAL `sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop` — the claim is
+about the ORDER of that loop's arms and nothing smaller can see an order. The
+bar is asserted only after the arm's own REFUSED warning is observed, so
+"nothing happened" cannot pass as "the refusal held".
+
+Its control, `without_a_fold_the_same_tick_publishes_the_partial_canonical`, is
+the same disk and the same loop with no rail installed: `fold_now` returns
+`None`, the tick falls through, and a 1-of-2 canonical lands with the peer's
+term unreachable. Without it, "no canonical appeared" would also be what a loop
+that never reached the stranded scan looks like.
+
+Watched red by deleting the `continue` at the end of the fold arm. The trace is
+the bug verbatim, in order, in one tick:
+
+    WARN  merge_participants: refusing to merge — coverage is incomplete
+          covered=1 expected=2 missing=[node-2200000000000000]
+    WARN  auto_ingest: REFUSED — merging now would publish a partial canonical
+    INFO  auto_recover: attempting stranded-partition merge into canonical
+          partition_count=1
+    INFO  auto_recover: chunk-merge phase complete chunks_merged=2
+    INFO  auto_recover: canonical meta stamped
+    → canonical chunk_count 2, peer-only term unreachable
+
+*3. The `total_shards` premise.*
+`the_older_disk_guard_is_dark_without_a_total_shards_stamp`. Confirmed at HEAD:
+the only production caller of `CorpusIndex::set_total_shards` outside
+`sharding.rs`'s merge-replay is `corpus-engine/src/engine/ingest.rs:718`, inside
+`if let ExtractorConfig::WikipediaJsonl { .. }`. Measured rather than cited: a
+partition written the way a fold unit writes one carries no `total_shards`, and
+`try_recover_stranded_partitions` merges a 1-of-2 canonical without returning
+`IncompleteCoverage`. Stamp the field by hand on the same disk and the same
+call refuses (`IncompleteCoverage { total: 2 }`) with no canonical left behind.
+Watched red by disabling `shard_union.len() < n`: the armed half comes back
+`Recovered { chunks: 2 }`.
+
+**The useful finding either way:** for a FOLD-driven merge the `total_shards`
+gap is irrelevant, because `merge_from_fold_coverage` arms
+`expected_partitions` from the handoff's own verified-donor count and never
+consults `total_shards` at all. The gap stays open for every merge that still
+comes off local disk — which is where reading 3's first half lands, and which
+the `continue` in reading 2 is what keeps the fold path away from.
+
+**A mis-report found and not fixed.** `RecoveryOutcome::Recovered.shards_covered`
+is `participants.len()` — the number the merge was ASKED for, not the number it
+resolved. Visible in the watched red above: `Recovered { chunks: 2,
+shards_covered: 2 }` after one of the two participants was unreachable. It is
+only a log field today, and every caller that acts on coverage acts on
+`PartitionsUnreachable` instead, but it is a count derived from the request
+rather than from what happened (ARCH §18.1).
+
+Known not checked by B7: two real machines; the ingest pipeline; two nodes
+ticking concurrently (that is B3's decision, not a concurrency test); the
+peer-canonical pull arm between the two, which needs a gossip advertisement
+this fixture has none of; and any tick after the first.
