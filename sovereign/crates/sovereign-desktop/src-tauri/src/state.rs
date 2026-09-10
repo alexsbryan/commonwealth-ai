@@ -119,6 +119,12 @@ pub struct AppState {
     /// `has_pending_information` guard, so the search-now affordance can
     /// still fail fast on a stale card without spending a search budget.
     pub pending_prompts: RwLock<std::collections::HashSet<String>>,
+    /// QuerySession id -> conversation id, recorded as the wire delivers
+    /// the routing cards (their payloads carry both). `redirect_turn`
+    /// arrives with only a session id; the daemon owns the session store,
+    /// so this map is the surface's own knowledge of which conversation a
+    /// card belonged to.
+    pub session_conversations: RwLock<std::collections::HashMap<String, String>>,
     /// Background health monitor. Populated during bootstrap; None before first boot.
     pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
     /// CancellationToken to shut down the health monitor on exit.
@@ -334,6 +340,7 @@ impl AppState {
             insight_service: RwLock::new(None),
             turn_wire: RwLock::new(None),
             pending_prompts: RwLock::new(std::collections::HashSet::new()),
+            session_conversations: RwLock::new(std::collections::HashMap::new()),
             local_corpus: RwLock::new(None),
             watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),

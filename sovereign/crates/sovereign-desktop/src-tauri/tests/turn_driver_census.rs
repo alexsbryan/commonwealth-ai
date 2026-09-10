@@ -64,29 +64,36 @@ fn the_richer_acquires_go_through_the_one_drive() {
 #[test]
 fn every_turn_shaped_command_renders_through_the_one_renderer() {
     let src = read("src/commands/chat.rs");
+    // sv-surface R5: ALL FOUR turn-shaped commands (send_message_stream,
+    // send_message, redirect_turn, resume_session) drive the WIRE through
+    // `finish_wire_turn` — the daemon's turn socket via the client family,
+    // in BOTH boot modes ("Local" means the daemon happens to be
+    // in-process). The renderer spawns exactly once, inside the shared
+    // driver: a command spawning its own `render_turn_frames` is a second
+    // driver wearing a command's name.
     assert_eq!(
         src.match_indices("spawn(render_turn_frames(").count(),
-        3,
-        "sv-surface rung 0: expected send_message_stream, redirect_turn and \
-         resume_session each rendering through `render_turn_frames`. The \
-         renderer is the surface's half of the driver contract — a command \
-         that emits `message-chunk`/`message-complete` events any other way \
-         is a second renderer wearing a command's name."
+        1,
+        "the ONE renderer spawn lives in finish_wire_turn; per-command \
+         spawns are the rung-0 regression"
     );
-    // sv-surface R5: send_message_stream drives the WIRE now — the daemon's
-    // turn socket through the client family, in BOTH boot modes ("Local"
-    // means the daemon happens to be in-process). redirect_turn and
-    // resume_session still drive `serve_turn`'s post-acquire half
-    // in-process and convert on the same pattern; when they do, the
-    // `serve_turn` pin below retires with them.
+    assert_eq!(
+        src.match_indices("finish_wire_turn(").count(),
+        4,
+        "the definition plus three streaming callers (send_message_stream, \
+         redirect_turn, resume_session) — the one-shot send_message rides \
+         the REST turn and needs no stream"
+    );
+    assert!(
+        !src.contains("sovereign_core::runtime::serve_turn(")
+            && !src.contains("drive_stream_handle(")
+            && !src.contains("DesktopTurnSink"),
+        "the in-process drive is deleted from this surface; `cancel_stream`'s \
+         session cancel remains in-process until the wire grows a cancel \
+         (G2), and it is not a turn driver"
+    );
     assert!(
         src.contains("connect_with("),
-        "send_message_stream must open the turn socket through the client family"
-    );
-    assert!(
-        src.contains("sovereign_core::runtime::serve_turn(")
-            || src.contains("drive_stream_handle("),
-        "redirect_turn / resume_session keep the one in-process driver until \
-         they convert — a private drain here is the rung-0 regression"
+        "the streaming commands open the turn socket through the client family"
     );
 }
