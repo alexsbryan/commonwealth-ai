@@ -41,9 +41,10 @@ fn no_hand_drained_turn_streams_in_chat_commands() {
         src.match_indices("stream.next().await").count(),
         0,
         "sv-surface rung 0: a hand-drained turn stream is back in \
-         commands/chat.rs. The one driver owns the drain — `serve_turn` for a \
-         plain turn, `drive_stream_handle` for a richer acquire — and this \
-         surface renders through `render_turn_frames`. A private drain loop \
+         commands/chat.rs. The one driver owns the drain — since R5 the \
+         wire pump (`pump_wire_frames`) reading the daemon's socket \
+         through the client family's `next_frame` — and this surface \
+         renders through `render_turn_frames`. A private drain loop \
          re-derives the driver AND its gaps."
     );
 }
@@ -51,13 +52,25 @@ fn no_hand_drained_turn_streams_in_chat_commands() {
 #[test]
 fn the_richer_acquires_go_through_the_one_drive() {
     let src = read("src/commands/chat.rs");
+    // sv-surface R5: the richer acquires (redirect, resume) cross the WIRE
+    // now — one `send_redirect` and one `send_resume`, each through the
+    // shared `finish_wire_turn` driver. The in-process `drive_stream_handle`
+    // call sites are gone with the local drive; the daemon side of both
+    // acquires is pinned by sovereign-mesh's turn_surface tests.
+    assert_eq!(
+        src.match_indices("send_redirect(").count(),
+        1,
+        "exactly one redirect, through the wire"
+    );
+    assert_eq!(
+        src.match_indices("send_resume(").count(),
+        1,
+        "exactly one resume, through the wire"
+    );
     assert_eq!(
         src.match_indices("drive_stream_handle(").count(),
-        2,
-        "sv-surface rung 0: expected exactly the redirect + resume call \
-         sites driving through `drive_stream_handle`. More means a new \
-         richer-acquire flow landed without the campaign recording it; fewer \
-         means one of the two fell back to a private drain."
+        0,
+        "the in-process richer-acquire drive is deleted from this surface"
     );
 }
 
@@ -87,7 +100,8 @@ fn every_turn_shaped_command_renders_through_the_one_renderer() {
     assert!(
         !src.contains("sovereign_core::runtime::serve_turn(")
             && !src.contains("drive_stream_handle(")
-            && !src.contains("DesktopTurnSink"),
+            && !src.contains("struct DesktopTurnSink")
+            && !src.contains("DesktopTurnSink {"),
         "the in-process drive is deleted from this surface; `cancel_stream`'s \
          session cancel remains in-process until the wire grows a cancel \
          (G2), and it is not a turn driver"
