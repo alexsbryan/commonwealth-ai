@@ -438,15 +438,23 @@ pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusE
 ///     (`parent_corpus_id` set) fold under their parent notebook, exactly
 ///     as the catalog picker hides them — so the shelf lists top-level
 ///     notebooks only.
-///   - the `LocalCorpusManager` configs supply the source-kind
+///   - the local-corpus REGISTRY (`GET /internal/corpus/local`, over the
+///     daemon's own manager since sv-surface D8) supplies the source-kind
 ///     discriminator (folder / vault / watched), the user's chosen
 ///     display name, and scope for locally-ingested corpora.
 ///   - the atlas readers (`atoms.json` via `FileAtlasReader`, plus
 ///     conv-tiered enrichment in the SQLite store) decide `explorable`.
 ///
-/// Every secondary lookup degrades gracefully: a missing local-corpus
-/// manager, an absent atlas, or an uninitialised sqlite store narrows the
-/// metadata for the affected rows rather than failing the whole listing.
+/// The atlas and sqlite lookups degrade gracefully: an absent atlas or an
+/// uninitialised store narrows the metadata for the affected rows rather
+/// than failing the listing. The registry read does NOT — see its comment
+/// below.
+/// The client for the daemon's local-corpus registry — the same manager
+/// `local_corpus_commands` reads through, over loopback (sv-surface D8).
+fn local_corpus_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+}
+
 #[tauri::command]
 pub async fn notebook_list(
     state: State<'_, Arc<AppState>>,
@@ -466,20 +474,25 @@ pub async fn notebook_list(
         .map(|b| (b.id.as_str(), b.name.as_str()))
         .collect();
 
-    // Local-corpus configs: id → config. Clone the Arc and drop the guard
-    // before awaiting so we never hold the lock across `list()`. A missing
-    // manager (setup incomplete) just leaves rows unclassified-as-local —
-    // they fall through to "catalog"/"installed".
-    let local_mgr = state.local_corpus.read().await.as_ref().cloned();
-    let local_configs: HashMap<String, LocalCorpusConfig> = match local_mgr {
-        Some(mgr) => mgr
-            .list()
-            .await
-            .into_iter()
-            .map(|c| (c.id.clone(), c))
-            .collect(),
-        None => HashMap::new(),
-    };
+    // Local-corpus configs: id → config. A REGISTRY read, so it crosses
+    // (sv-surface D8, the rule local_corpus_commands.rs's header states):
+    // the answer is a function of the registry on disk, and on an attached
+    // boot the daemon's manager is the one the ingest wrote to.
+    //
+    // The `HashMap::new()` this replaces was a swallow. A daemon with no
+    // local-corpus runtime produced an EMPTY map that reads exactly like
+    // "no local corpora are registered", so every vault in the list
+    // silently lost its source-kind, its display name and its scope — and
+    // the pane rendered them as catalog rows with no error anywhere (ARCH
+    // §18.3). It is an `Err` now: a notebook list that cannot say which
+    // rows are yours is not a notebook list.
+    let local_configs: HashMap<String, LocalCorpusConfig> = local_corpus_client(&state)
+        .lc_list::<LocalCorpusConfig>()
+        .await
+        .map_err(|e| format!("notebook_list: reading the local-corpus registry: {e}"))?
+        .into_iter()
+        .map(|c| (c.id.clone(), c))
+        .collect();
 
     // Explorable set — union of three things, all best-effort:
     //

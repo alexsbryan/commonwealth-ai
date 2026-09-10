@@ -19,12 +19,18 @@
 //! landing (a planted `run_workflow_with_provider` call, watched red,
 //! reverted, green).
 //!
-//! Out of scope by measurement: `recipe_author_commands.rs` keeps
-//! `Workflow::parse` — authoring-time validation of a draft in the editor is
-//! a different question from catalog/run (the same distinction that struck
-//! the health-report row in rung 4), and `state.rs` mounts
-//! `WorkflowAuthoringTools` in the embedded daemon's MCP bundle plus the
-//! workflow router itself — serving-side, not a client twin.
+//! `recipe_author_commands.rs` joined the list on sv-surface D8. It was out
+//! of scope by measurement until then — authoring-time validation of a draft
+//! in the editor is a different question from catalog/run — and it crossed
+//! for a reason that is not "execution": the whole project composition moved
+//! to `/v1/recipe-projects`, and the host, which cannot link the studio
+//! parser, reports a workflow artifact as UNJUDGED rather than guessing. So
+//! the desktop holds no workflow parser on any path now, and the third file
+//! below pins that.
+//!
+//! Still out of scope: `state.rs` mounts `WorkflowAuthoringTools` in the
+//! embedded daemon's MCP bundle plus the workflow router itself —
+//! serving-side, not a client twin.
 
 use std::path::Path;
 
@@ -45,7 +51,11 @@ fn code_lines(src: &str) -> Vec<String> {
 
 #[test]
 fn workflow_execution_has_one_home_the_daemon_job_surface() {
-    for rel in ["src/workflow_commands.rs", "src/local_corpus_commands.rs"] {
+    for rel in [
+        "src/workflow_commands.rs",
+        "src/local_corpus_commands.rs",
+        "src/recipe_author_commands.rs",
+    ] {
         let code = code_lines(&source(rel));
         // Each needle names the exact retreat spelling it forbids.
         for needle in [

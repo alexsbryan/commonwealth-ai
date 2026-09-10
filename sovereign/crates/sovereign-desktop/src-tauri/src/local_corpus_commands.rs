@@ -9,16 +9,17 @@
 //! local-corpus calls and forward progress events via
 //! `AppHandle::emit`. All heavy lifting happens in `sovereign-tools`.
 //!
-//! # Where the manager lives (sv-surface D5)
+//! # Where the manager lives (sv-surface D5, completed in D8)
 //!
-//! Eight commands hold NO manager: `lc_list`, `lc_remove`,
+//! Eleven commands hold NO manager: `lc_list`, `lc_remove`,
 //! `lc_incomplete_jobs`, `lc_check_git`, `lc_list_snapshots`,
-//! `lc_rollback`, `lc_clean` and `lc_search` are one call each onto
+//! `lc_rollback`, `lc_clean`, `lc_search` (D5) and now `lc_ingest`,
+//! `lc_cancel` and `lc_ocr_available` (D8) are one call each onto
 //! `sovereign_mesh::lc_http`'s `/internal/corpus/local/` routes over
 //! [`lc_client`], and so are the config reads inside `lc_ingest` and
 //! `lc_enrich_now`. Return types are unchanged, so the webview sees the
-//! same bytes. Two defaults moved DOWN to the route: `lc_search`'s 10
-//! and `lc_get`'s absence semantics.
+//! same bytes. Two defaults moved DOWN to the route: `lc_search`'s 10 and
+//! `lc_get`'s absence semantics.
 //!
 //! THE RULE THAT DECIDED WHICH ONES CROSSED, because it is not the
 //! route list: a command crosses when its answer is a function of the
@@ -31,20 +32,33 @@
 //! there are two, and crossing a consumer while its producer stays is
 //! how a working pane starts answering "not found".
 //!
-//! Five stay, each paired with the producer that pins it:
+//! D8 crossed the PRODUCER the last three stays were pinned to — the
+//! bespoke ingest job — and took them with it:
 //!
-//! | Stays | In-memory state | Producer that has not crossed |
+//! | Crossed in D8 | In-memory state it read | Producer, now daemon-side |
 //! |---|---|---|
-//! | `lc_get_preview` | `cluster_results` cache | `lc_cluster` (app-local) |
-//! | `lc_write_tags` | same cache (via `get_preview`) | `lc_cluster` |
-//! | `lc_cancel` | the engine's cancellation registry | `lc_ingest`'s bespoke arm |
-//! | `lc_ocr_available` | this instance's `OcrCtx` | `lc_ingest`'s OCR arm |
-//! | `lc_ingest` (bespoke arm) | — | the 202 ack names no usable progress route |
+//! | `lc_cancel` | the engine's cancellation registry | the ingest job |
+//! | `lc_ocr_available` | an instance's `OcrCtx` | the ingest job's OCR arm |
 //!
-//! Plus the two the route commit already named app-local:
-//! `lc_validate_path` and `lc_pre_scan` (a user-picked path, pre-corpus;
-//! `pre_scan` also registers). The rung that moves `lc_cluster`,
-//! `lc_pre_scan` and the ingest job across takes all five with it.
+//! Two stay, still paired, and the census still fires on them:
+//! `lc_get_preview` and `lc_write_tags` read the `cluster_results` cache
+//! that `lc_cluster` — app-local — fills. Plus the two the route commit
+//! named app-local: `lc_validate_path` and `lc_pre_scan` (a user-picked
+//! path, pre-corpus; `pre_scan` also registers).
+//!
+//! # What crossing the ingest job changed for a user (ARCH §18.3)
+//!
+//! The OCR that runs is the HOST's. `install_ocr_ctx_for_app` still
+//! installs a resolved Tesseract/PDFium context on this process's
+//! manager, and in Local mode that manager IS the daemon's, so nothing
+//! moves. On an ATTACHED boot the daemon ingests with its own OCR
+//! context, and `lc_ocr_available` now reports that one — so the
+//! "Read them with OCR" affordance reflects the engine that would
+//! actually do the reading, instead of this app's sidecar answering for
+//! a job it no longer runs. `lc_ocr_available` is also an `Err` when the
+//! daemon has no local-corpus runtime, where it used to degrade to
+//! `false`: "OCR is unavailable" and "nobody could be asked" want
+//! different remedies from the pane.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -124,20 +138,22 @@ async fn require_manager(
 
 // ─── Command: lc_ocr_available ───────────────────────────────────────
 
-/// Whether the OCR pipeline is wired up for this build of the
-/// desktop app. Driven by the presence of a Tesseract sidecar that
-/// boot-time setup successfully resolved into the `LocalCorpusManager`.
+/// Whether the OCR pipeline is wired up on the daemon that would run
+/// the ingest — the one whose `OcrCtx` decides whether a scanned PDF
+/// can actually be read (sv-surface D8, paired with the ingest job it
+/// crossed with).
 ///
 /// The frontend hides the "Read them with OCR" affordance when this
-/// returns `false`, so users on a build without bundled binaries
-/// don't see a button that would error if clicked.
+/// returns `false`, so users on a build without bundled binaries don't
+/// see a button that would error if clicked. A daemon with no
+/// local-corpus runtime is an `Err`, not a `false`.
 #[tauri::command]
 pub async fn lc_ocr_available(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
-    let manager = match state.local_corpus.read().await.as_ref().cloned() {
-        Some(m) => m,
-        None => return Ok(false),
-    };
-    Ok(manager.ocr_available().await)
+    let avail = lc_client(&state)
+        .lc_ocr_available::<sovereign_mesh::lc_http::OcrAvailability>()
+        .await
+        .map_err(|e| format!("lc_ocr_available: {e}"))?;
+    Ok(avail.available)
 }
 
 /// Install an OCR runtime context onto the running
@@ -670,89 +686,216 @@ pub async fn lc_ingest(
         }
     }
 
-    // Bespoke path (default). Spawn so the command doesn't block; the UI drives the
-    // progress panel off the emit channel; failure propagates via
-    // `LocalCorpusProgress::Error`.
-    //
-    // Enrichment is daemon-side (tiered providers are wired only in the daemon),
-    // so a one-shot document folder is handed to the daemon after ingest — see
-    // the Ok branch below. The corpus-watch HTTP surface (incl. enrich-once) is
-    // mounted on the CLIENT port, same router the watched-folder commands hit.
-    // Capture it now; the Tauri `state` guard can't cross the spawn boundary.
+    // The daemon base, captured before the spawn: the Tauri `state` guard
+    // cannot cross that boundary.
     let daemon_url = state.client_base_url();
-    // THE ONE ARM THAT DID NOT CROSS, and why (§18.3 — named, not
-    // swallowed). `POST /internal/corpus/local/{c}/ingest` runs exactly
-    // this call on the daemon's manager, but it answers 202 with an
-    // `IngestJobAck` whose `progress_route` is
-    // `/internal/corpus/watch/status/{c}` — a reader of
-    // `WatchedFolderState`, which (a) 404s for the DocumentFolder and
-    // OCR corpora this arm serves (`require_reconcilable`) and (b)
-    // carries no `IngestStats`. This command's contract is the event
-    // channel `local-corpus://progress/{job_id}`, whose terminal frame
-    // is `Complete { result: Ingest(stats) }` and whose `files_indexed`
-    // the Folder-drop flow renders. Polling the named route would have
-    // to fabricate those counts. The wire form this arm needs is a
-    // progress route over the `_enrichment_state.json` the ingest job's
-    // stamper actually writes (`GET /internal/enrichment/status` reads
-    // it today) plus a terminal ack carrying the stats — until then,
-    // wire-first is not satisfied and the local path stays.
-    let manager = require_manager(&state).await?;
-    tokio::spawn(async move {
-        match manager
-            .ingest(&corpus_id, with_ocr, Some(progress.clone()))
+    // THE ARM THAT CROSSED IN D8. `POST /internal/corpus/local/{c}/ingest`
+    // runs exactly this call on the DAEMON's manager and answers 202 with
+    // an `IngestJobAck`. 069660fd9 could not consume it: the ack named
+    // `/internal/corpus/watch/status/{c}`, whose handler requires a
+    // reconcilable watched folder (a 404 for the DocumentFolder / OCR
+    // corpora this arm serves) and which carries no `IngestStats` — so a
+    // poller could only have finished by fabricating the counts the
+    // Folder-drop flow renders (ARCH §18.3). The route the ack names now is
+    // `.../ingest/progress`, over a terminal receipt written by ONE
+    // recorder from both ingest sites, carrying `IngestStats` verbatim.
+    //
+    // This command's contract is unchanged and is not the returned id: it
+    // is the Tauri channel `local-corpus://progress/{job_id}`, whose
+    // terminal frame is `Complete { result: Ingest(stats) }`. The frames
+    // below are that contract, filled from the route's own numbers.
+    //
+    // The id returned IS the host's job id (ARCH §7.5): the job is the
+    // daemon's, so minting a second id here for the same job would be two
+    // names for one thing.
+    let ack = lc_client(&state)
+        .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)
+        .await
+        .map_err(|e| format!("lc_ingest: {e}"))?;
+    tracing::info!(
+        %corpus_id,
+        job_id = %ack.job_id,
+        progress_route = %ack.progress_route,
+        "lc_ingest: daemon accepted the ingest job"
+    );
+    let job_id = ack.job_id;
+    let progress = make_emitter(app.clone(), job_id.clone());
+    tokio::spawn(follow_ingest_job(
+        daemon_url,
+        corpus_id,
+        job_id.clone(),
+        registered,
+        progress,
+    ));
+    Ok(job_id)
+}
+
+/// How often the ingest job is polled. The host's stamper throttles its
+/// phase writes to ~50 across a whole embed pass, so a tighter interval
+/// would re-read the same numbers; a looser one would visibly lag the
+/// progress bar.
+const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
+
+/// How many CONSECUTIVE poll failures end the follow with an error frame.
+/// One failure is a hiccup; ten in a row (~7.5s) is a daemon that is not
+/// coming back, and a progress panel that spins forever is worse than one
+/// that says so.
+const INGEST_POLL_MAX_FAILURES: u32 = 10;
+
+/// Follow a daemon-side ingest job to its terminal receipt, emitting the
+/// desktop's own progress frames as it goes.
+///
+/// Every number here is the host's. `Ingesting.current_file` is `None`
+/// because the phase file carries no filename — the local arm had one and
+/// this does not, and inventing one would be a fabricated detail on an
+/// otherwise honest frame (ARCH §18.3). The terminal frame is the
+/// route's `outcome`: `stats` verbatim into `Complete`, or `error` into
+/// `Error`. Exactly one of the two is set by the recorder, so the
+/// `finished`-with-neither branch is a host contradiction and says so
+/// rather than closing the panel on an invented success.
+async fn follow_ingest_job(
+    daemon_url: String,
+    corpus_id: String,
+    job_id: String,
+    registered: Option<LocalCorpusConfig>,
+    progress: ProgressCallback,
+) {
+    let client = sovereign_turn_client::TurnClient::new(daemon_url.clone());
+    let mut failures = 0u32;
+    let mut last_step: Option<(u64, u64)> = None;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .lc_ingest_progress::<sovereign_mesh::lc_http::IngestProgress>(&corpus_id)
             .await
         {
-            Ok(_stats) => {
-                // The manager already emits Complete. Enrichment follows
-                // ingest, but the tiered providers (RAPTOR + entity extraction)
-                // live only in the daemon — the desktop's own manager can't run
-                // them. So hand a one-shot document folder to the daemon:
-                // register-without-watch + tiered build ("a watched folder
-                // without the watching"). Watched folders and vaults already
-                // enrich via the reconciliation worker, so this is gated to
-                // DocumentFolder. Glassbox-logged for soak/chaos runs.
-                if let Some(cfg) = manager.get(&corpus_id).await {
-                    if matches!(
-                        cfg.source_type,
-                        sovereign_tools::local_corpus::config::LocalCorpusSourceType::DocumentFolder
-                    ) {
-                        let url = format!("{daemon_url}/internal/corpus/enrich-once");
-                        tracing::info!(
-                            %corpus_id,
-                            "lc_ingest: document folder — requesting daemon-side tiered enrichment"
-                        );
-                        let client = reqwest::Client::new();
-                        match client.post(&url).json(&cfg).send().await {
-                            Ok(r) if r.status().is_success() => tracing::info!(
-                                %corpus_id,
-                                "lc_ingest: daemon accepted one-shot enrichment"
-                            ),
-                            Ok(r) => {
-                                let status = r.status();
-                                let body = r.text().await.unwrap_or_default();
-                                tracing::warn!(
-                                    %corpus_id, %status, body,
-                                    "lc_ingest: daemon rejected one-shot enrichment"
-                                );
-                            }
-                            Err(e) => tracing::warn!(
-                                %corpus_id,
-                                "lc_ingest: could not reach daemon for enrichment: {e}"
-                            ),
-                        }
-                    }
-                }
+            Ok(p) => {
+                failures = 0;
+                p
             }
             Err(e) => {
-                let err = LocalCorpusProgress::Error {
-                    message: e.to_string(),
-                    recoverable: false,
-                };
-                progress(err);
+                failures += 1;
+                tracing::warn!(
+                    %corpus_id, %job_id, failures,
+                    "lc_ingest: progress poll failed: {e}"
+                );
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    progress(LocalCorpusProgress::Error {
+                        message: format!(
+                            "lost contact with the daemon while ingesting \
+                             '{corpus_id}' ({failures} consecutive failures): {e}"
+                        ),
+                        recoverable: false,
+                    });
+                    return;
+                }
+                continue;
+            }
+        };
+
+        // Phase frames, only when the numbers actually moved.
+        if let Some(st) = &p.state {
+            let step = (st.step_current, st.step_total);
+            if st.step_total > 0 && last_step != Some(step) {
+                last_step = Some(step);
+                progress(LocalCorpusProgress::Ingesting {
+                    done: st.step_current,
+                    total: st.step_total,
+                    phase_label: st
+                        .message
+                        .clone()
+                        .unwrap_or_else(|| "Reading and embedding your notes".to_string()),
+                    current_file: None,
+                });
             }
         }
-    });
-    Ok(job_id)
+
+        if !p.finished {
+            continue;
+        }
+        match p.outcome {
+            Some(o) => match (o.stats, o.error) {
+                (Some(stats), _) => {
+                    tracing::info!(
+                        %corpus_id, %job_id,
+                        files_indexed = stats.files_indexed,
+                        chunks_written = stats.chunks_written,
+                        "lc_ingest: job finished"
+                    );
+                    progress(LocalCorpusProgress::Complete {
+                        result: CompletionResult::Ingest(stats),
+                    });
+                    hand_one_shot_to_enrichment(&daemon_url, &corpus_id, registered.as_ref()).await;
+                }
+                (None, Some(err)) => progress(LocalCorpusProgress::Error {
+                    message: err,
+                    recoverable: false,
+                }),
+                (None, None) => progress(LocalCorpusProgress::Error {
+                    message: format!(
+                        "the daemon reported ingest of '{corpus_id}' finished with \
+                         neither counts nor an error — nothing can be said about \
+                         what it indexed"
+                    ),
+                    recoverable: false,
+                }),
+            },
+            // `finished` is defined as `outcome.is_some()` on the host, so
+            // this is unreachable unless the two disagree. Report the
+            // disagreement; do not paper it over with a zero-count Complete.
+            None => progress(LocalCorpusProgress::Error {
+                message: format!(
+                    "the daemon reported ingest of '{corpus_id}' finished with no receipt"
+                ),
+                recoverable: false,
+            }),
+        }
+        return;
+    }
+}
+
+/// Hand a one-shot DOCUMENT FOLDER to the daemon for tiered enrichment
+/// after its ingest ends — register-without-watch + tiered build ("a
+/// watched folder without the watching").
+///
+/// Reached only by the OCR path: the non-OCR document folders and vaults
+/// are served by the `enrich-once` arm above, which ingests AND enriches
+/// in one call. Watched folders and vaults enrich via the reconciliation
+/// worker, so this is gated to `DocumentFolder`. Best-effort and
+/// glassbox-logged: a failure here leaves an ingested-but-unenriched
+/// corpus, which the Explore pane reports on its own.
+async fn hand_one_shot_to_enrichment(
+    daemon_url: &str,
+    corpus_id: &str,
+    registered: Option<&LocalCorpusConfig>,
+) {
+    use sovereign_tools::local_corpus::config::LocalCorpusSourceType;
+    let Some(cfg) = registered else { return };
+    if !matches!(cfg.source_type, LocalCorpusSourceType::DocumentFolder) {
+        return;
+    }
+    let url = format!("{daemon_url}/internal/corpus/enrich-once");
+    tracing::info!(
+        %corpus_id,
+        "lc_ingest: document folder — requesting daemon-side tiered enrichment"
+    );
+    match reqwest::Client::new().post(&url).json(cfg).send().await {
+        Ok(r) if r.status().is_success() => {
+            tracing::info!(%corpus_id, "lc_ingest: daemon accepted one-shot enrichment")
+        }
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            tracing::warn!(
+                %corpus_id, %status, body,
+                "lc_ingest: daemon rejected one-shot enrichment"
+            );
+        }
+        Err(e) => tracing::warn!(
+            %corpus_id,
+            "lc_ingest: could not reach daemon for enrichment: {e}"
+        ),
+    }
 }
 
 /// Make an already-ingested local corpus explorable by building its atlas
@@ -1171,14 +1314,24 @@ pub async fn lc_incomplete_jobs(
 
 // ─── Command: lc_cancel ──────────────────────────────────────────────
 
-/// Signal a running ingest (or cluster) for `corpus_id` to stop
-/// cooperatively. Returns `true` when a flag was found and flipped.
-/// The progress channel emits its final `Error { recoverable: true }`
-/// once the engine loop exits.
+/// Signal a running ingest for `corpus_id` to stop cooperatively.
+/// Returns `true` when a flag was found and flipped.
+///
+/// Crossed with the ingest job it cancels (sv-surface D8): the flag lives
+/// in the cancellation registry of the engine RUNNING the job, so a
+/// cancel sent anywhere else cannot stop it. The progress channel emits
+/// its final frame once the engine loop exits.
 #[tauri::command]
 pub async fn lc_cancel(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<bool, String> {
-    let manager = require_manager(&state).await?;
-    Ok(manager.cancel(&corpus_id))
+    let ack = lc_client(&state)
+        .lc_cancel::<sovereign_mesh::lc_http::CancelAck>(&corpus_id)
+        .await
+        .map_err(|e| format!("lc_cancel: {e}"))?;
+    // `cancelled` is "there WAS a job and it is now cancelled", which the
+    // route keeps apart from "the call succeeded". Both are true for a
+    // cancel that found nothing, and collapsing them would tell the pane a
+    // job was stopped when none was running.
+    Ok(ack.cancelled)
 }
 
 // ─── Command: lc_check_git ───────────────────────────────────────────

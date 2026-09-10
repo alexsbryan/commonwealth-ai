@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! sv-surface D6 + D2: the lesson pane and the insight sink status read
-//! the DAEMON's stores, not this process's.
+//! sv-surface D6 + D2 + D8: the lesson pane, the insight sink status and
+//! the gather-to-conversation hop read the DAEMON's stores, not this
+//! process's.
 //!
 //! # The state this makes unrepresentable
 //!
@@ -16,11 +17,19 @@
 //!     `InsightService.sinks` registry, which in attach is empty however
 //!     many vaults the daemon has connected, and then hard-coded
 //!     `sinks: vec![]` in BOTH modes — a defaulted absence (ARCH §18.3).
+//!   * `insight_commands.rs::explore_insights` reached
+//!     `InsightService.store.list_by_ids` on THIS process's service — the
+//!     one `clip_insight` stopped writing to on D2, so on an attached
+//!     boot "Explore these together" gathered from a store nothing had
+//!     clipped into. `list_by_ids` also DROPS an id that names no live
+//!     row, so a deleted insight came back as a shorter preamble and no
+//!     word to the user (D8; `POST /v1/insights/by-id` answers
+//!     `{insights, missing}` and this reports `missing`).
 //!
 //! Both are now `TurnClient` calls over `client_base_url()`:
 //! `POST /v1/notes/query`, `POST /v1/notes`, `GET|DELETE /v1/notes/{id}`,
-//! `PATCH /v1/notes/{id}/payload`, `POST /v1/notes/{id}/retire`, and
-//! `GET /v1/insights/sinks`.
+//! `PATCH /v1/notes/{id}/payload`, `POST /v1/notes/{id}/retire`,
+//! `GET /v1/insights/sinks` and `POST /v1/insights/by-id`.
 //!
 //! # Calibration (ARCH §18.1 — name the failing input)
 //!
@@ -99,5 +108,41 @@ fn the_sink_status_reads_the_daemons_registry() {
          sink list again. An empty list is a REAL answer the route gives when \
          nobody configured a vault; substituting one for the registry it did \
          not read is a defaulted absence, not a placeholder."
+    );
+}
+
+/// The gather hop reads the daemon's insight store, and reports the ids it
+/// could not find.
+///
+/// Two needles, one per half. `get_insight_service` is the accessor every
+/// local read went through — with the two reads gone it has no callers, so
+/// its RETURN is what this pins: a file that names it again has a local
+/// `InsightService` in hand. `missing` is the §18.3 half: `list_by_ids`
+/// drops dead ids silently, so a caller that does not read `missing`
+/// cannot tell a five-insight gather from a three-insight one.
+#[test]
+fn the_gather_hop_reads_the_daemons_insight_store() {
+    let code = production_source("src/insight_commands.rs");
+    assert!(
+        !code.contains("get_insight_service("),
+        "sv-surface D8: insight_commands.rs takes an InsightService handle \
+         off AppState again. explore_insights is TurnClient::insights_by_id \
+         over POST /v1/insights/by-id — the daemon's store is the one \
+         clip_insight has written to since D2, and on an attached boot the \
+         local service holds none of those rows."
+    );
+    assert!(
+        !code.contains("list_by_ids("),
+        "sv-surface D8: insight_commands.rs calls list_by_ids on a local \
+         store again. That call also DROPS ids it cannot resolve, which is \
+         why the route answers {{insights, missing}} instead."
+    );
+    assert!(
+        code.contains("fetched.missing"),
+        "sv-surface D8 / ARCH §18.3: explore_insights no longer reads \
+         `missing`. The store omits an id that names no live row, so a \
+         short `insights` list alone seeds the conversation with fewer \
+         insights than the user picked and says nothing about it. Report \
+         the absence; do not infer it from a length."
     );
 }

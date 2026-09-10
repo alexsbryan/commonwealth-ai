@@ -37,16 +37,6 @@ pub struct SinkInfoDto {
     pub connected: bool,
 }
 
-// ─── Helper ──────────────────────────────────────────────────
-
-async fn get_insight_service(
-    state: &AppState,
-) -> Result<Arc<sovereign_core::insight::InsightService>, String> {
-    state.insight_service.read().await.clone().ok_or_else(|| {
-        "Insight service not initialized. Backend may still be starting.".to_string()
-    })
-}
-
 /// The client for the daemon's insight surface (rung 6): the SAME
 /// `InsightService` in both boot modes — commissioned into the in-process
 /// daemon on a Local boot, owned by the CLI daemon on an attached one — served
@@ -169,12 +159,22 @@ pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStat
     })
 }
 
+/// Start a conversation seeded with the text of the insights the user
+/// gathered. The NODE FETCH crosses (sv-surface D8): `POST
+/// /v1/insights/by-id` reads the daemon's own insight store — the one
+/// `clip_insight` has written to since D2, and on an attached boot not the
+/// one this process opened.
+///
+/// `missing` is reported, not dropped. `list_by_ids` silently omits an id
+/// that names no live row, so a short list alone would have seeded a
+/// conversation with fewer insights than the user selected and said nothing
+/// (ARCH §18.3). The conversation itself is still written to this process's
+/// store, which is where the chat surface reads it from.
 #[tauri::command]
 pub async fn explore_insights(
     node_ids: Vec<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let service = get_insight_service(&state).await?;
     let store = state
         .store
         .read()
@@ -182,20 +182,29 @@ pub async fn explore_insights(
         .clone()
         .ok_or_else(|| "Store not initialized".to_string())?;
 
-    let ids: Vec<uuid::Uuid> = node_ids
-        .iter()
-        .map(|s| uuid::Uuid::parse_str(s))
-        .collect::<Result<_, _>>()
-        .map_err(|e| format!("Invalid id: {e}"))?;
+    // Parse first: an id the store could never match is the caller's error,
+    // not an absence to report.
+    for s in &node_ids {
+        uuid::Uuid::parse_str(s).map_err(|e| format!("Invalid id: {e}"))?;
+    }
 
-    let nodes = service
-        .store
-        .list_by_ids(&ids)
+    let fetched = insight_client(&state)
+        .insights_by_id(&node_ids)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("explore_insights: {e}"))?;
+    if !fetched.missing.is_empty() {
+        return Err(format!(
+            "{} of the {} gathered insights no longer exist ({}). \
+             Refresh the gather tray and try again.",
+            fetched.missing.len(),
+            node_ids.len(),
+            fetched.missing.join(", ")
+        ));
+    }
 
     // Build context preamble from distillations.
-    let context_preamble = nodes
+    let context_preamble = fetched
+        .insights
         .iter()
         .map(|n| {
             format!(
