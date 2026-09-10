@@ -235,12 +235,23 @@ status    = "active"
 #       a number). task_id stamps from the conversation — a display
 #       label, not a correlation key; the same thing the server's
 #       set_task_id(&conversation) convention shows.
-#   G7  routing events               OPEN, and unlisted until 2026-09-09.
-#       The desktop's progress UI comes through a DIFFERENT DOOR:
-#       RoutingEventSink emits interpretation-proposed, clarification-request,
-#       turn-narration. TurnFrame::Narration exists but the daemon owns no
-#       per-connection narration subscription (stated in turn_http's module
-#       docs); the other two have no variant at all.
+#   G7  routing events               DONE 2026-09-09 (R3, 7e12f7006).
+#       The payloads already lived in contracts (narration.rs) — the
+#       move this row assumed never needed doing. What was missing was
+#       daemon-side reach, and the design is C1's, not the server's
+#       broadcast bridge: routing events ride the SECOND per-turn
+#       capability (scope_routing_events + Runtime::turn_routing_events,
+#       21 read sites in core swapped, commissioned-member fallback so
+#       every in-process host — the desktop's TauriRoutingEventSink
+#       included — is byte-identical). SocketRoutingEvents maps the
+#       banner and the card to Notice::InterpretationProposed /
+#       ClarificationRequest (byte-pinned; session ids preserved because
+#       Resume needs them) and keeps narration its OWN frame (E3).
+#       Installed unconditionally on all three turn arms — notices owe
+#       no answer, no claim needed. NAMED HAND-OFF: sovereign-server's
+#       BroadcastRoutingEventSink still drops the two cards by its own
+#       documented posture (no mobile consumer); converging it is that
+#       host's call.
 #   G8  ResolveAck                   DONE 2026-09-09 (R1 shape, R3 emit).
 #       turn_http's Answer arm now acknowledges a resolved answer with
 #       Notice::ResolveAck before anything else; the refusals stay
