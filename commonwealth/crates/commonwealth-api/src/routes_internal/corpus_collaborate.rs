@@ -430,6 +430,24 @@ pub async fn corpus_collaborate(
                              peer must re-trigger from a node that holds the handoff blob"
                         );
                     }
+                    crate::auto_recover::RecoveryOutcome::PartitionsUnreachable {
+                        covered,
+                        expected,
+                    } => {
+                        // `try_recover_stranded_partitions` cannot produce
+                        // this: it is `merge_from_fold_coverage`'s answer and
+                        // that function has no call site here. Traced rather
+                        // than folded into a catch-all so a future producer
+                        // that starts returning it is VISIBLE instead of
+                        // silently doing nothing (ARCH §18.3).
+                        tracing::warn!(
+                            corpus = %req.corpus_id,
+                            covered,
+                            expected,
+                            "corpus_collaborate: disk recovery reported unreachable \
+                             partitions, which this producer cannot return — defect"
+                        );
+                    }
                     crate::auto_recover::RecoveryOutcome::InCooldown => {
                         tracing::info!(
                             corpus = %req.corpus_id,

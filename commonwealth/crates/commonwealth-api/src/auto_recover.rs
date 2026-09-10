@@ -54,6 +54,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use commonwealth_knowledge::shard_manager::{MergePlan, ShardManager};
 use corpus_engine::Corpus;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -125,12 +126,112 @@ pub enum RecoveryOutcome {
         total: usize,
         missing: Vec<usize>,
     },
+    /// The `work` fold names contributing nodes this node could not pull a
+    /// partition from, so merging now would publish a canonical missing a
+    /// whole donor's slice.
+    ///
+    /// The same DECISION as [`RecoveryOutcome::IncompleteCoverage`] over a
+    /// different subject: that one counts SHARD INDICES a recipe expects and
+    /// carries `missing: Vec<usize>`, and a contributing node is not a shard
+    /// index. Kept as its own variant rather than reusing that one with an
+    /// empty `missing`, because an empty `missing` reads as "nothing is
+    /// missing" (ARCH §18.3).
+    ///
+    /// Transient by construction — a peer unreachable this tick. Does NOT
+    /// stamp the cooldown, for the reason `IncompleteCoverage` does not:
+    /// re-evaluating next tick is cheap and the peer may come back.
+    PartitionsUnreachable { covered: usize, expected: usize },
     /// Recovery merge produced a built canonical with the supplied
     /// chunk count and shard coverage.
     Recovered { chunks: u64, shards_covered: usize },
     /// Recovery attempted but failed; caller should fall back. The
     /// error is already logged at `error!` level.
     Failed(String),
+}
+
+/// Merge one corpus from the participant set the `work` fold reported
+/// (cw-lift 5g part 2).
+///
+/// # Why this sits beside `try_recover_stranded_partitions` and not inside it
+///
+/// That function answers "what is on this disk?". This one answers "who else
+/// worked on this corpus?", and only the `work` journal knows. A donor whose
+/// partition was never pulled here is invisible to every disk-and-gossip
+/// check, which is how two donors on two nodes produced a canonical holding
+/// half the data while recovery reported `Recovered` — watched red in
+/// `sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs`.
+///
+/// The caller (`sovereign-mesh::auto_ingest`) reads the fold, because the
+/// `ingest:v1` vocabulary lives on the sovereign side of the package
+/// boundary. What crosses is plain data: node ids and a count. This crate
+/// learns nothing about the fold and `commonwealth-work` learns nothing about
+/// ingest.
+///
+/// # `expected` is a count of VERIFIED contributors
+///
+/// The caller derives it from `WorkUnitStatus::Complete::lessee`, which
+/// admission verified — never from the self-reported `provenance.host` used
+/// to locate the partitions. Counting hosts would let one donor inflate
+/// coverage by naming extra nodes (ARCH §18.1, §7.5). This function takes the
+/// number on trust because the trust decision was made where the evidence is.
+///
+/// The pull, the merge, the `ShardTransferred` emit and the cleanup are
+/// [`ShardManager::merge_participants`], shared verbatim with
+/// `coordinate_merge` (ARCH §10.6). No merge mechanism is re-spelled here.
+pub async fn merge_from_fold_coverage(
+    state: &crate::state::AppState,
+    corpus_id: &str,
+    handoff_id: commonwealth_core::ids::HandoffId,
+    participants: &[commonwealth_core::ids::NodeId],
+    expected: usize,
+) -> RecoveryOutcome {
+    let Some(engine) = state.inner.corpus_engine.as_ref() else {
+        return RecoveryOutcome::Failed("no corpus engine on this node".to_string());
+    };
+    if corpus_id.trim().is_empty() {
+        return RecoveryOutcome::InvalidCorpusId;
+    }
+    if Corpus::meta_in(engine.index_dir().join(corpus_id)).exists() {
+        return RecoveryOutcome::AlreadyHasCanonical;
+    }
+
+    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+    let peer_urls =
+        crate::routes_internal::peer_control_urls(state, local_node_id).await;
+
+    let shard_mgr = ShardManager::new(
+        std::sync::Arc::clone(engine),
+        engine.index_dir().to_path_buf(),
+        std::sync::Arc::clone(&state.inner.mesh_store),
+    )
+    .with_emitter(state.inner.contribution_emitter.clone());
+
+    let plan = MergePlan {
+        handoff_id,
+        corpus_id,
+        local_node_id,
+        participants,
+        peer_shard_base_urls: &peer_urls,
+        // The fold carries no ephemeral flag. An ephemeral grant is the corpus
+        // OWNER's lifecycle and lives in `EphemeralGrantStore`, which cw-lift
+        // 5g part 1 established the consent pair does not speak for.
+        // Defaulting to `true` here would evict a donor's partition on a
+        // non-ephemeral ingest.
+        ephemeral: false,
+        expected_partitions: Some(expected),
+    };
+
+    match shard_mgr.merge_participants(plan).await {
+        Ok(Some(info)) => RecoveryOutcome::Recovered {
+            chunks: info.chunk_count,
+            shards_covered: participants.len(),
+        },
+        Ok(None) => RecoveryOutcome::NotEnoughPartitions,
+        Err(corpus_engine::Error::IncompleteCoverage {
+            covered, expected, ..
+        }) => RecoveryOutcome::PartitionsUnreachable { covered, expected },
+        Err(e) => RecoveryOutcome::Failed(e.to_string()),
+    }
 }
 
 /// Attempt to merge all `<corpus>-partition-*/` directories under

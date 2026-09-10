@@ -517,7 +517,9 @@ async fn take_round(
 /// `None` when this node has no rail, no `work` journal, an unreadable roster
 /// or a journal that will not admit — each traced, and each a condition that
 /// heals, so the round is skipped rather than the loop exiting.
-async fn fold_now(app_state: &AppState) -> Option<(Arc<RingRail>, WorkProjection, ActorKey, u64)> {
+pub(crate) async fn fold_now(
+    app_state: &AppState,
+) -> Option<(Arc<RingRail>, WorkProjection, ActorKey, u64)> {
     let rail = app_state.ring_rail()?;
     let journal = match rail.journal(WORK_NAMESPACE) {
         Ok(j) => j,

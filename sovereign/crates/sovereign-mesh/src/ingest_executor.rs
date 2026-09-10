@@ -77,7 +77,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::knowledge::{UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
+use std::collections::BTreeSet;
+
+use commonwealth_core::ids::HandoffId;
+use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
+use commonwealth_work::actor::ActorKey;
+use commonwealth_work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
+use kernel_types::{NodeId, Server};
 use commonwealth_work::executor::{
     subject_of, ExecuteFuture, JobContext, JobError, JobExecutor,
 };
@@ -222,7 +228,7 @@ impl IngestExecutor {
         IngestExecutor {
             kind: JobKind::parse(INGEST_KIND)
                 .expect("`ingest:v1` is a valid JobKind by construction"),
-        engine,
+            engine,
         }
     }
 
@@ -546,6 +552,157 @@ impl JobExecutor for IngestExecutor {
     fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a> {
         Box::pin(self.run(unit, ctx))
     }
+}
+
+// -----------------------------------------------------------------
+// Reading the fold for coverage — cw-lift 5g part 2
+// -----------------------------------------------------------------
+
+/// What the `work` fold knows about one corpus that local disk does not.
+///
+/// # Why this exists at all
+///
+/// `auto_ingest`'s tick loop already merges stranded partitions: it walks
+/// [`CorpusEngine::corpora_with_stranded_partitions`], gates against
+/// `active_ingests`, prefers a peer's healthier canonical via
+/// `find_best_peer_canonical`, and otherwise calls
+/// [`commonwealth_api::auto_recover::try_recover_stranded_partitions`] under a
+/// per-corpus cooldown. All of that is reused unchanged.
+///
+/// The ONE thing that loop cannot know is who else worked on the corpus. It
+/// derives participants from what is on local disk and from gossip, so a
+/// donor's partition that was never pulled here is not merged and is not even
+/// missed — which is how a two-donor ingest produced a canonical holding half
+/// the data while reporting `Recovered`
+/// (`tests/main/fold_ingest_cross_node_merge_e2e.rs`).
+///
+/// The fold knows. This is the read that tells it.
+///
+/// # The identity rule, which is the subtle part
+///
+/// Two fields on a completed unit name the donor and they are NOT
+/// interchangeable. [`WorkUnitStatus::Complete::lessee`] is an [`ActorKey`] —
+/// the Ed25519 key ADMISSION VERIFIED. `provenance.host` is a [`Server`]
+/// carrying a [`NodeId`] and is SELF-REPORTED by whoever ran the unit.
+/// `work_donor.rs:941-944` already draws exactly this line.
+///
+/// So: **the verified `lessee` decides whether a contribution counts, and the
+/// self-reported `host` only says where to look for it.** [`Self::expected`]
+/// counts distinct VERIFIED actors, never hosts — counting hosts would let one
+/// donor inflate coverage by naming extra nodes, which is the §18.1 smell "a
+/// guard asserting on a field the subject supplies".
+#[derive(Debug, PartialEq, Eq)]
+pub struct FoldCoverage {
+    /// The handoff this coverage is about. Carried because the merge is keyed
+    /// on it and re-deriving it at the call site would be a second lookup of
+    /// something already decided here.
+    pub handoff_id: HandoffId,
+    /// Distinct nodes to pull a partition from, in a stable order. Derived
+    /// from the self-reported half, so this locates work — it never decides
+    /// that work happened.
+    pub nodes: Vec<NodeId>,
+    /// Distinct VERIFIED contributors. The coverage denominator, and the
+    /// number `MergePlan::expected_partitions` is armed from.
+    pub expected: usize,
+    /// Units whose attempts are spent — nobody ingested that slice and nobody
+    /// will. Reported rather than defaulted (ARCH §18.3): a merge may still
+    /// run, but this corpus can never be called complete.
+    pub abandoned: Vec<String>,
+}
+
+impl FoldCoverage {
+    /// Whether some slice will never exist. A merge may proceed; the corpus
+    /// may not be called complete.
+    pub fn is_partial(&self) -> bool {
+        !self.abandoned.is_empty()
+    }
+}
+
+/// The fold's coverage for `corpus_id`, if this node LEADS a terminal
+/// `ingest:v1` handoff for it.
+///
+/// `None` means "the fold has nothing to say about this corpus" and the caller
+/// must fall through to its existing disk-and-gossip behaviour unchanged — a
+/// corpus ingested the legacy way, or one whose handoff another node leads,
+/// must not be affected by this read.
+///
+/// # Why the submitter is the leader
+///
+/// [`WorkHandoff::submitter`] is retained from ADMISSION and never from the
+/// payload (`projection.rs:274`), so every node folding the same journal
+/// derives the same leader and exactly one acts. That is the property the
+/// legacy path bought with `handoff.merge_leader`, for free and without a
+/// second decider (ARCH §10.6).
+///
+/// Pure: no I/O and no clock beyond the `now_ms` it is handed, so the whole of
+/// the "who counts" decision is testable without a rail or a corpus.
+pub fn fold_coverage_for(
+    proj: &WorkProjection,
+    self_key: &ActorKey,
+    corpus_id: &str,
+    now_ms: u64,
+) -> Option<FoldCoverage> {
+    // Parsed once per call, not per handoff. Fallible only if the literal this
+    // module owns stops parsing, which `the_kind_literal_this_module_owns_parses`
+    // goes red on first — the same reasoning, and the same call, as
+    // `IngestExecutor::new`.
+    #[allow(clippy::expect_used)]
+    let want = JobKind::parse(INGEST_KIND).expect("`ingest:v1` is a valid JobKind by construction");
+
+    for (handoff_id, handoff) in &proj.handoffs {
+        if handoff.kind != want || &handoff.submitter != self_key {
+            continue;
+        }
+        if !matches!(handoff.phase_at(now_ms), HandoffPhase::Complete) {
+            continue;
+        }
+        if corpus_of(handoff).as_deref() != Some(corpus_id) {
+            continue;
+        }
+
+        let mut actors: BTreeSet<ActorKey> = BTreeSet::new();
+        let mut nodes: BTreeSet<NodeId> = BTreeSet::new();
+        let mut abandoned: Vec<String> = Vec::new();
+        for (unit_hash, unit) in &handoff.units {
+            match unit.status_at(now_ms) {
+                WorkUnitStatus::Complete {
+                    lessee, provenance, ..
+                } => {
+                    actors.insert(lessee);
+                    // `Server::Local` is the donor describing ITS machine, not
+                    // ours, so the id is not resolvable from here. It still
+                    // counts toward `expected` — dropping it would let an
+                    // unlocatable contribution satisfy the coverage guard.
+                    if let Server::Peer { node, .. } = provenance.host {
+                        nodes.insert(node);
+                    }
+                }
+                WorkUnitStatus::Failed { .. } => abandoned.push(unit_hash.clone()),
+                // Queued and Leased cannot occur: the phase read `Complete`,
+                // which is exactly "none of either".
+                _ => {}
+            }
+        }
+        return Some(FoldCoverage {
+            handoff_id: *handoff_id,
+            nodes: nodes.into_iter().collect(),
+            expected: actors.len(),
+            abandoned,
+        });
+    }
+    None
+}
+
+/// The corpus every unit in `handoff` belongs to.
+///
+/// Read off the first unit's payload rather than carried on the handoff,
+/// because [`IngestPayload::corpus_id`] is already the one speller of it
+/// (ARCH §10.6). `None` when the handoff has no units or the first will not
+/// parse — reported by the caller, never defaulted to a corpus name that would
+/// then be merged into.
+fn corpus_of(handoff: &WorkHandoff) -> Option<String> {
+    let unit = handoff.units.values().next()?;
+    IngestPayload::parse(&unit.unit.payload).ok().map(|p| p.corpus_id)
 }
 
 #[cfg(test)]

@@ -213,6 +213,10 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         let active_for_recovery: HashSet<String> =
             { state.inner.active_ingests.read().await.clone() };
         let stranded = engine.corpora_with_stranded_partitions();
+        // Folded ONCE per tick rather than once per corpus: admitting a
+        // journal is not free, and every corpus in `stranded` asks the same
+        // projection a different question.
+        let fold = crate::work_donor::fold_now(&state).await;
         for corpus_id in &stranded {
             if active_for_recovery.contains(corpus_id) {
                 tracing::debug!(
@@ -221,6 +225,87 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                      (will produce canonical itself)"
                 );
                 continue;
+            }
+
+            // ── The fold's half of the coverage question (cw-lift 5g p2) ──
+            //
+            // Everything below this point derives participants from LOCAL
+            // DISK and from gossip. Neither can see a donor whose partition
+            // was never pulled here, which is how two donors on two nodes
+            // produced a canonical holding half the data while `auto_recover`
+            // reported `Recovered` — watched red in
+            // `tests/main/fold_ingest_cross_node_merge_e2e.rs`.
+            //
+            // The `work` fold does know: every `ingest:v1` completion names
+            // its lessee and its host on a replicated journal.
+            //
+            // THE `continue` IS LOAD-BEARING. When the fold has an answer for
+            // this corpus that answer is authoritative, including when the
+            // answer is a refusal. Falling through to the disk-derived path
+            // after a coverage refusal would merge the local half anyway,
+            // which is the bug verbatim.
+            if let Some((_, proj, self_key, now_ms)) = fold.as_ref() {
+                if let Some(cov) =
+                    crate::ingest_executor::fold_coverage_for(proj, self_key, corpus_id, *now_ms)
+                {
+                    if cov.is_partial() {
+                        // Per unit rather than as a count: "which slice is
+                        // missing" is the question an operator has (§18.3).
+                        // Distinct from the unreachable-peer case below — no
+                        // retry will ever fix this one.
+                        tracing::warn!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            units = ?cov.abandoned,
+                            "auto_ingest: units whose attempts are spent — this corpus \
+                             can never be complete"
+                        );
+                    }
+                    match commonwealth_api::auto_recover::merge_from_fold_coverage(
+                        &state,
+                        corpus_id,
+                        cov.handoff_id,
+                        &cov.nodes,
+                        cov.expected,
+                    )
+                    .await
+                    {
+                        commonwealth_api::auto_recover::RecoveryOutcome::Recovered {
+                            chunks,
+                            shards_covered,
+                        } => tracing::info!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            chunks,
+                            nodes = shards_covered,
+                            partial = cov.is_partial(),
+                            "auto_ingest: canonical built from the fold's participant set"
+                        ),
+                        commonwealth_api::auto_recover::RecoveryOutcome::PartitionsUnreachable {
+                            covered,
+                            expected,
+                        } => tracing::warn!(
+                            corpus = %corpus_id,
+                            handoff = %cov.handoff_id,
+                            covered,
+                            expected,
+                            "auto_ingest: REFUSED — merging now would publish a partial \
+                             canonical and gossip would advertise it; retrying next tick"
+                        ),
+                        commonwealth_api::auto_recover::RecoveryOutcome::Failed(err) => {
+                            tracing::warn!(
+                                corpus = %corpus_id,
+                                handoff = %cov.handoff_id,
+                                recovery_error = %err,
+                                "auto_ingest: fold-driven merge failed"
+                            )
+                        }
+                        // AlreadyHasCanonical / NotEnoughPartitions /
+                        // InvalidCorpusId — quiet, same as the block below.
+                        _ => {}
+                    }
+                    continue;
+                }
             }
             // Phase 6 canonical-sync: before falling through to a
             // local merge (which may produce an incomplete canonical

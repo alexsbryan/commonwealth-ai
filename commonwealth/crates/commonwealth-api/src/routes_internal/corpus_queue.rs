@@ -33,7 +33,7 @@ use super::{IngestPartitionRequest, IngestPartitionResponse};
 /// for `ShardManager::coordinate_merge`'s shard pulls. Resolved
 /// through the PeerTransport seam; contacts are snapshotted out of
 /// the mesh lock before resolving so the lock never spans an await.
-async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
+pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
     let contacts: Vec<commonwealth_transport::PeerContact> = {
         let mesh = state.inner.mesh.read().await;
         mesh.members
