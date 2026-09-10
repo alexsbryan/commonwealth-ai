@@ -1986,3 +1986,10 @@ sha    = ["9eb723b37", "4759e7b04", "99bfde104", "f22270fa2"]
 demo   = "none"
 
 # 35 rung(s) drafted. REVIEW EVERY ONE before appending — the parse is
+
+[[rung]]
+id     = "5i"
+title  = "the last two package-surface holes come home"
+status = "done"
+sha    = ["a2e745456", "264adbab7", "111d460ca", "d4bd2adfd"]
+demo   = "D3"
