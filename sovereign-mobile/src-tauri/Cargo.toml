@@ -1,10 +1,9 @@
-# Detached from the repo Cargo workspace on purpose: this crate's deps
-# (Tauri mobile + plugins) differ from the main workspace and cannot be
-# verified on a CI/Linux box without the mobile toolchain, so it must
-# not be able to red the workspace `cargo check`. Promote to a workspace
-# member once it builds cleanly on the pinned toolchain.
-[workspace]
-
+# A workspace member since 2026-09-10 (sv-surface R6). It was detached — "its
+# unverified mobile deps can't break the main build" — and the cost of that was
+# the thing this rung deleted: an unwatched crate grew a hand-copied mirror of
+# the turn protocol and nothing in the build could see it drift. `tauri` was
+# already in the workspace via sovereign-desktop, so membership costs one more
+# crate to compile and buys the gate that keeps the mirror gone.
 [package]
 name = "sovereign-mobile"
 version = "0.1.0"
@@ -21,18 +20,25 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# THE client family (sv-one-client). Every turn frame, prompt, notice and
+# answer this crate handles is one of THESE types — the phone holds no
+# protocol vocabulary of its own, which is what makes its parity with the
+# desktop and the CLI structural rather than maintained. `census.rs` is the
+# ratchet that keeps it that way.
+sovereign-turn-client = { workspace = true }
+sovereign-contracts = { workspace = true }
+
 tauri = { version = "2", features = [] }
 tauri-plugin-deep-link = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
-tokio-tungstenite = "0.29"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
-uuid = { version = "1", features = ["v4"] }
-tracing = "0.1"
+reqwest = { workspace = true }
+rusqlite = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
 # Shared transport plumbing from the monorepo (pure-Rust deps only).
 # The `iroh` feature brings HttpBridge + the pairing-string parser —
 # dial-by-key host access with no VPN (TRANSPORT_MIGRATION.md Track M).
@@ -44,3 +50,16 @@ commonwealth-transport = { path = "../../commonwealth/crates/commonwealth-transp
 # plugin (Swift SecItem / Kotlin KeyStore). Until chosen, keychain.rs
 # uses a clearly-marked dev-only file store.
 # tauri-plugin-keychain = "..."
+
+[dev-dependencies]
+# The FIXTURE HOST for `tests/turn_wire.rs`: a real listener speaking the real
+# protocol. A bare `TcpListener` + `accept_async` rather than `sovereign-mesh`'s
+# `EmbeddedDaemon`, because that fixture is private to that crate's test tree
+# (`tests/main/common`) and not a published item a dev-dependency can name —
+# see the test's header. Pinned at 0.29, the same version the turn client and
+# the server already resolve (two versions of one transport is ARCH §8.2).
+tokio-tungstenite = "0.29"
+futures = { workspace = true }
+
+[lints]
+workspace = true

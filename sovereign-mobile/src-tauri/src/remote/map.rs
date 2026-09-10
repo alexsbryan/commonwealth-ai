@@ -13,12 +13,12 @@
 
 use serde_json::{json, Value};
 
-use crate::remote::dto::{CitationDto, ProvenanceDto};
+use crate::remote::dto::{Citation, Provenance};
 
 /// Build the `metadata` object emitted on `message-complete` →
 /// rendered by `RoutingMeta` (provenance footer) + `SourceAttribution`
 /// (citation list / click-to-read).
-pub fn metadata_blob(provenance: Option<&ProvenanceDto>, citations: &[CitationDto]) -> Value {
+pub fn metadata_blob(provenance: Option<&Provenance>, citations: &[Citation]) -> Value {
     let provenance_json = provenance.map(|p| {
         json!({
             // RoutingMeta reads `intent` for the tier label.
@@ -50,7 +50,11 @@ pub fn metadata_blob(provenance: Option<&ProvenanceDto>, citations: &[CitationDt
                 "chunk_id": c.chunk_id,
                 "snippet": c.snippet,
                 "score": c.score,
-                "provenance_tier": "corpus",
+                "url": c.url,
+                // The host's own grounding tier when it stamped one. It was
+                // hardcoded `"corpus"` while the mirror had no field to carry
+                // it; adopting the contract type made the real value reachable.
+                "provenance_tier": c.provenance_tier.as_deref().unwrap_or("corpus"),
             })
         })
         .collect();

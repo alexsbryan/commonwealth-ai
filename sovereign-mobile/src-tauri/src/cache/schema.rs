@@ -133,10 +133,18 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         // Transport seam: pre-existing DBs gain the endpoint-kind tag;
         // every existing row is, by definition, a tailnet host.
         "ALTER TABLE host_connection ADD COLUMN endpoint_kind TEXT NOT NULL DEFAULT 'tailnet'",
+        // sv-surface R6: the phone now deserializes the CONTRACT's
+        // `Citation`, which carries two fields its local mirror never had.
+        // Persist them, rather than dropping them on the cache write and
+        // having an offline read quietly render less than a live one
+        // (ARCH §18.3 — absence is reported, never defaulted).
+        "ALTER TABLE citation ADD COLUMN url TEXT",
+        "ALTER TABLE citation ADD COLUMN provenance_tier TEXT",
     ] {
         match conn.execute(stmt, []) {
             Ok(_) => {}
-            Err(rusqlite::Error::SqliteFailure(_, Some(msg))) if msg.contains("duplicate column") => {}
+            Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+                if msg.contains("duplicate column") => {}
             Err(e) => return Err(e.into()),
         }
     }

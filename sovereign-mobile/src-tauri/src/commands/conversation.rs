@@ -51,7 +51,10 @@ pub async fn list_conversations(state: State<'_, AppState>) -> Result<Vec<Conver
         }
     }
     // Offline / host down → serve cache.
-    let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     cache::read_conversations(&conn, &host.id)
 }
 
@@ -78,16 +81,25 @@ pub async fn get_conversation(
             return Ok(Some(attach_metadata(remote)));
         }
     }
-    let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     Ok(cache::read_conversation(&conn, &conversation_id)?.map(attach_metadata))
 }
 
 #[tauri::command]
-pub async fn delete_conversation(state: State<'_, AppState>, conversation_id: String) -> Result<()> {
+pub async fn delete_conversation(
+    state: State<'_, AppState>,
+    conversation_id: String,
+) -> Result<()> {
     if let Ok(client) = state.active_client().await {
         let _ = client.delete_conversation(&conversation_id).await;
     }
-    let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     conn.execute(
         "DELETE FROM conversation WHERE id = ?1",
         rusqlite::params![conversation_id],

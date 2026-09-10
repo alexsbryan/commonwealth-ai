@@ -266,6 +266,7 @@ crates = [
     "sovereign-cli*",
     "sovereign-server",
     "sovereign-desktop",
+    "sovereign-mobile",
     "sovereign-pipeline",
     "sovereign-agent-bench",
     "sovereign-studio",

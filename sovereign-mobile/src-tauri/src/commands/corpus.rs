@@ -21,7 +21,10 @@ pub async fn list_corpora(state: State<'_, AppState>) -> Result<Vec<CorpusRefDto
         }
     }
     // Offline → cached corpus refs.
-    let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     let mut stmt = conn.prepare(
         "SELECT corpus_id, display_name, category, icon, chunk_count, scope, mesh_shared
          FROM corpus_ref WHERE host_connection_id = ?1 ORDER BY display_name ASC",
@@ -51,7 +54,10 @@ pub async fn resolve_citation(
     corpus_id: String,
     chunk_id: String,
 ) -> Result<Option<String>> {
-    let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     cache::citation_snippet(&conn, &corpus_id, &chunk_id)
 }
 
