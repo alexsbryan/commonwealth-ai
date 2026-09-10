@@ -36,6 +36,10 @@ pub use config::*;
 // Construction helpers for `bootstrap_with_progress` (§3.3).
 mod builders;
 
+// The live wire turns + the prompts they parked (sv-surface RB5).
+mod wire_turns;
+pub use wire_turns::{PendingPrompts, TurnWires};
+
 /// The ONE web-search registry for every desktop surface — chat tools, the
 /// conversation tool builder, and the deep-research loop.
 ///
@@ -106,19 +110,22 @@ pub struct AppState {
     /// How this process bootstrapped. Used by mesh_commands and the UI
     /// badge to decide whether to drive mesh via Rust or HTTP.
     pub bootstrap_mode: crate::bootstrap::BootstrapMode,
-    /// The write half of the ACTIVE wire turn (sv-surface R5): parked by
-    /// `send_message_stream` when it opens the turn socket, so the
-    /// `submit_*` commands can answer the daemon's prompts from any task
-    /// while the drain keeps reading (the split the client crate's G11
-    /// bought). `None` between turns — a submit then falls back to the
-    /// local desk, which still serves the in-process turn shapes that have
-    /// not converted yet.
-    pub turn_wire: RwLock<Option<sovereign_turn_client::TurnSender>>,
-    /// Prompt ids the active wire turn has put to this surface and that no
+    /// The write halves of the LIVE wire turns (sv-surface R5), keyed by
+    /// conversation (RB5): parked by the streaming commands when they open
+    /// a turn socket, so `cancel_stream` and the `submit_*` commands can
+    /// reach the right turn from any task while its drain keeps reading
+    /// (the split the client crate's G11 bought). Empty between turns — a
+    /// submit then falls back to the local desk, which still serves the
+    /// in-process turn shapes that have not converted yet.
+    pub turn_wire: TurnWires,
+    /// Prompts the live wire turns have put to this surface and that no
     /// answer has resolved yet — the wire-side form of the local desk's
     /// `has_pending_information` guard, so the search-now affordance can
     /// still fail fast on a stale card without spending a search budget.
-    pub pending_prompts: RwLock<std::collections::HashSet<String>>,
+    /// Each entry names its conversation (the `submit_*` commands arrive
+    /// with the card's `key` alone) and keeps the card, so a `WrongKind`
+    /// `ResolveAck` can re-raise it.
+    pub pending_prompts: PendingPrompts,
     /// QuerySession id -> conversation id, recorded as the wire delivers
     /// the routing cards (their payloads carry both). `redirect_turn`
     /// arrives with only a session id; the daemon owns the session store,
@@ -338,8 +345,8 @@ impl AppState {
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
-            turn_wire: RwLock::new(None),
-            pending_prompts: RwLock::new(std::collections::HashSet::new()),
+            turn_wire: TurnWires::default(),
+            pending_prompts: PendingPrompts::default(),
             session_conversations: RwLock::new(std::collections::HashMap::new()),
             local_corpus: RwLock::new(None),
             watched_subsystem: RwLock::new(None),

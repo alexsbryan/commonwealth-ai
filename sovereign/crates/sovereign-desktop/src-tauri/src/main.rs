@@ -504,6 +504,17 @@ fn main() -> ExitCode {
                         let probe_base = state_clone.client_base_url();
                         let probe_start = std::time::Instant::now();
                         let probe_handle = handle_clone.clone();
+                        // `first_ready_ms` is a COLD-BOOT measurement, so it
+                        // elapses from `boot_start` — the moment the app
+                        // started — not from the moment this probe began.
+                        // The probe starts after bootstrap has already
+                        // returned, so measuring from `probe_start` reported
+                        // the round-trip to a port that was usually already
+                        // answering (single-digit ms) and hid the whole boot
+                        // it was minted to measure. The probe's own 90s
+                        // deadline stays on `probe_start`: that one really is
+                        // "how long have I been asking".
+                        let probe_boot_start = boot_start;
                         tokio::spawn(async move {
                             let http = reqwest::Client::builder()
                                 .timeout(std::time::Duration::from_secs(2))
@@ -520,6 +531,8 @@ fn main() -> ExitCode {
                                     Ok(resp) if resp.status().is_success() => {
                                         tracing::info!(
                                             first_ready_ms =
+                                                probe_boot_start.elapsed().as_millis() as u64,
+                                            probe_ms =
                                                 probe_start.elapsed().as_millis() as u64,
                                             "backend ready — the port answered /v1/models"
                                         );

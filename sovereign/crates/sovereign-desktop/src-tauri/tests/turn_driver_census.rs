@@ -5,14 +5,15 @@
 //!
 //! # The state this makes unrepresentable
 //!
-//! A turn-shaped command that drains its own stream handle. The one driver
-//! owns the drain — `serve_turn` for a plain turn, `drive_stream_handle`
-//! for a caller that acquires through a richer path (redirect/resume) —
-//! and the desktop renders the resulting frames through the ONE renderer
-//! (`render_turn_frames`). A hand-rolled drain loop is how the desktop's
-//! `redirect_turn` and `resume_session` shipped WITHOUT `present_answer`
-//! envelope stripping and the graceful-guard render the plain path had:
-//! a re-derived loop reproduces the gaps of the loop it re-derives.
+//! A turn-shaped command that drains its own stream handle. Since R5 the
+//! drain is `pump_wire_frames` reading the daemon's turn socket through
+//! the client family, and the desktop renders the frames it forwards
+//! through the ONE renderer (`render_turn_frames`). A hand-rolled drain
+//! loop is how the desktop's `redirect_turn` and `resume_session` shipped
+//! WITHOUT `present_answer` envelope stripping and the graceful-guard
+//! render the plain path had: a re-derived loop reproduces the gaps of the
+//! loop it re-derives — and a drain that owns only PART of the frame
+//! stream drops the kinds it does not know about (RB3).
 //!
 //! # Named, not silently ignored
 //!
@@ -22,10 +23,9 @@
 //! (the models one-decider rung), where it is enumerated. This census
 //! scopes to turn streams in `commands/chat.rs`.
 //!
-//! Watched to fail: reintroduce a `stream.next().await` drain in chat.rs, or
-//! drop a `drive_stream_handle` call site, and this goes red naming the
-//! offender. Sabotage-verified at landing (a planted drain, watched red,
-//! reverted).
+//! Watched to fail: add a second reader of the turn socket in chat.rs, or
+//! drop a wire-drive call site, and this goes red naming the offender.
+//! Sabotage-verified at landing (a planted drain, watched red, reverted).
 
 use std::path::Path;
 
@@ -34,18 +34,44 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
+/// The census pinned `stream.next().await` — a spelling the WIRE client
+/// cannot produce (its reader is `TurnStream::next_frame`). So it stayed
+/// green while chat.rs held TWO readers of one socket: `finish_wire_turn`
+/// ran a private lead loop to `TurnStarted` and `pump_wire_frames` read
+/// everything after. That split is exactly what dropped a `Prompt`
+/// preceding `TurnStarted` (review RB3/T4). Pinning the reader the client
+/// actually has is what makes a planted second drain go red.
 #[test]
-fn no_hand_drained_turn_streams_in_chat_commands() {
+fn exactly_one_reader_of_the_turn_socket_in_chat_commands() {
     let src = read("src/commands/chat.rs");
+    assert_eq!(
+        src.match_indices("next_frame().await").count(),
+        1,
+        "sv-surface rung 0 / RB3: the turn socket has exactly ONE reader \
+         in commands/chat.rs — the loop in `pump_wire_frames`, which \
+         raises every card and decides the sync id in the same pass. A \
+         second reader splits the frame stream, and whichever half does \
+         not own a frame kind silently drops it: that is how a leading \
+         `Prompt` reached a renderer that ignores prompts and every \
+         agentic ask hung."
+    );
     assert_eq!(
         src.match_indices("stream.next().await").count(),
         0,
-        "sv-surface rung 0: a hand-drained turn stream is back in \
-         commands/chat.rs. The one driver owns the drain — since R5 the \
-         wire pump (`pump_wire_frames`) reading the daemon's socket \
-         through the client family's `next_frame` — and this surface \
-         renders through `render_turn_frames`. A private drain loop \
-         re-derives the driver AND its gaps."
+        "a raw futures drain is back in commands/chat.rs; the client \
+         family's `next_frame` is the reader"
+    );
+    // The one reader is inside the pump, not inside the command that
+    // waits for the id: `finish_wire_turn` learns the sync id over a
+    // channel, it does not read the socket itself.
+    let pump = src
+        .split_once("async fn pump_wire_frames(")
+        .expect("pump_wire_frames is the reader")
+        .1;
+    assert_eq!(
+        pump.match_indices("next_frame().await").count(),
+        1,
+        "the ONE reader lives in `pump_wire_frames`"
     );
 }
 

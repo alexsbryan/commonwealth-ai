@@ -279,26 +279,53 @@ pub async fn search_messages(
         .collect())
 }
 
-/// Answer a prompt from the ACTIVE WIRE TURN (sv-surface R5): the card's
-/// `key` is the daemon-minted prompt id, and the parked sender answers on
-/// the turn socket while the drain keeps reading. Falls back to the local
-/// desk when no wire turn is parked — the still-in-process turn shapes
-/// (redirect, resume) park there. Returns whether SOMETHING was answered;
-/// the authoritative after-the-fact word is the `ResolveAck` notice.
+/// Answer a prompt from a LIVE WIRE TURN (sv-surface R5): the card's
+/// `key` is the daemon-minted prompt id, and the sender parked for the
+/// conversation that prompt belongs to answers on the turn socket while
+/// the drain keeps reading.
+///
+/// `None` means "not a wire prompt" and the caller falls back to the
+/// local desk, which still serves the in-process turn shapes (redirect,
+/// resume). Two things used to be conflated with that (review C8): an
+/// answer for a key NOTHING is parked under went onto the wire anyway and
+/// came back `true`, and the sender it went to was whichever turn was
+/// most recent rather than this card's. Both are refusals now, by name.
+///
+/// `Some(true)` is still optimistic about the far end — a queued send is
+/// not a resolved question — but it is no longer optimistic about
+/// whether the card exists. The authoritative word is the `ResolveAck`
+/// notice, which `pump_wire_frames` renders (a `WrongKind` re-raises the
+/// card; a `NoSuchPending` drops it).
 async fn answer_wire_prompt(
     state: &AppState,
     key: &str,
     answer: sovereign_contracts::types::TurnAnswer,
 ) -> Option<bool> {
-    let guard = state.turn_wire.read().await;
-    let sender = guard.as_ref()?;
-    sender.send_answer(key, &answer).ok().map(|()| {
-        // Optimistic: the daemon's refusal (stale/wrong-kind) arrives as a
-        // StreamError the frontend surfaces; nothing here can know it
-        // synchronously over a socket, and pretending otherwise is the
-        // collapse §18.3 is about.
-        true
-    })
+    let parked = state.pending_prompts.get(key).await?;
+    let Some(sender) = state.turn_wire.sender_for(&parked.conversation_id).await else {
+        // The card is ours but its turn's socket is gone — the turn ended
+        // while the card was on screen. Refuse by name and forget the
+        // card; claiming it reached a question is the §18.3 substitution.
+        tracing::warn!(
+            prompt_id = %key,
+            conversation_id = %parked.conversation_id,
+            "answer_wire_prompt: the turn this card belongs to is no longer parked"
+        );
+        state.pending_prompts.resolve(key).await;
+        return Some(false);
+    };
+    match sender.send_answer(key, &answer) {
+        Ok(()) => Some(true),
+        Err(e) => {
+            tracing::warn!(
+                prompt_id = %key,
+                conversation_id = %parked.conversation_id,
+                error = %e,
+                "answer_wire_prompt: the turn socket's writer is gone"
+            );
+            Some(false)
+        }
+    }
 }
 
 #[tauri::command]
@@ -440,8 +467,8 @@ pub async fn submit_information_search(
         return Err("query must not be empty".to_string());
     }
 
-    let wire_parked = state.pending_prompts.read().await.contains(&key);
-    if wire_parked {
+    let parked = state.pending_prompts.get(&key).await;
+    if parked.is_some() {
         // The active wire turn put this card up; the guard below is the
         // LOCAL desk's and cannot see it. The Answer's own named refusal
         // covers staleness daemon-side.
@@ -628,17 +655,23 @@ pub async fn submit_information_search(
     // uses (sv-surface G3b; the inline copy this replaced was the second
     // spelling).
     //
-    // ATTACH (G3b): this write is the DAEMON's over the wire — the
-    // Answer carries its `sources` and the daemon folds them as part of
-    // resolving it. The local write below would hit a store the daemon
-    // never reads, so attach mode skips it.
+    // ONE predicate, not two (review C4, ARCH §10.6). This gate and the
+    // wire resolve below decide the SAME question — who folds these
+    // sources into the conversation — and they used to disagree: this one
+    // asked the boot-mode fork, the resolve asked whether a wire turn was
+    // parked. Since R5 a Local turn rides the wire too, so both were true
+    // at once and the sources were folded TWICE, once by this write and
+    // once by the daemon resolving the Answer. The wire turn's existence
+    // is the only fact either needs, and the daemon's fold is the atomic
+    // one (it stamps the conversation's REAL current turn), so the local
+    // write runs only when no wire turn will do it.
     //
     // Soft-fail: a missing conversation_id (legacy callers, tests
     // without a wired conversation) skips the registry update; the
     // search still feeds through to refinement so the bench's
     // `submit_information_response` path is unaffected.
     if let Some(ref cid) = conversation_id {
-        if !state.is_attach_mode() {
+        if !state.turn_wire.has(cid).await {
             let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
                 let guard = state.store.read().await;
                 guard.as_ref().map(Arc::clone)
@@ -684,7 +717,15 @@ pub async fn submit_information_search(
     // into the conversation as part of the resolve — one user action, one
     // atomic effect. The local desk fallback keeps the in-process turn
     // shapes working with the local registry write above.
-    if let Some(sender) = state.turn_wire.read().await.as_ref() {
+    // RB5: the socket is THIS card's turn's, found through the
+    // conversation the prompt was parked under — not whichever turn
+    // started most recently. A card whose turn ended between the click
+    // and the search finishing falls through to the local desk.
+    let wire_sender = match parked {
+        Some(ref p) => state.turn_wire.sender_for(&p.conversation_id).await,
+        None => None,
+    };
+    if let Some(sender) = wire_sender {
         let wire_sources: Vec<sovereign_core::types::SearchedSourceEntry> = sources
             .iter()
             .map(|s| {
@@ -709,7 +750,7 @@ pub async fn submit_information_search(
                 },
             )
             .is_ok();
-        state.pending_prompts.write().await.remove(&key);
+        state.pending_prompts.resolve(&key).await;
         return Ok(SearchAugmentation {
             query: query.to_string(),
             backend_id: out.backend_id,
