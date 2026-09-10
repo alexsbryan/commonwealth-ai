@@ -210,7 +210,7 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
     notify "NEEDS_HUMAN" "decision package in $NEEDS_HUMAN"; exit 2
   fi
 
-  if [ "$(commits_since_review)" -ge "$REVIEW_EVERY" ]; then
+  if [ "$REVIEW_EVERY" -gt 0 ] && [ "$(commits_since_review)" -ge "$REVIEW_EVERY" ]; then
     say "review iteration $iter ($(commits_since_review) commits since last review)"
     run_session "$REVIEW_PROMPT" "review-$iter"
     iter=$((iter-1))
