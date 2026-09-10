@@ -264,20 +264,34 @@ def section(name):
     return (m.group(1).strip() if m else None)
 problems, nudges = [], []
 obj = section("Objective")
+
+# TWO SPELLINGS, ONE QUESTION (fixed 2026-09-10). The template stacks
+# "Done when:" and "Not worth continuing if:" as inline labels inside
+# Objective; hand-written orders promote them to their own "## Done when"
+# section instead, and all four cw-lift orders do. Reading only the inline
+# form reported "it is not falsifiable yet" on every one of them — a gate
+# firing on an input that is correct, and co-role.py's G2 BLOCKS a draft on
+# it. Accept either, and say so here so a third spelling does not get added
+# without noticing this one.
+def stated(label, section_name):
+    if obj and re.search(rf"{label}:[ \t]*\S", obj):
+        return True
+    return bool((section(section_name) or "").strip())
+
 if not obj:
     problems.append("Objective section missing")
 else:
-    # [ \t]* not \s*: the template stacks the two labels on adjacent
-    # lines, and \s* walks across the newline into the next label —
-    # an empty 'Done when:' then reads as filled (watched failing).
-    if not re.search(r"Done when:[ \t]*\S", obj):
-        problems.append("Objective has an empty 'Done when:' — it is not falsifiable yet")
-    if not re.search(r"Not worth continuing if:[ \t]*\S", obj):
-        problems.append("Objective has an empty 'Not worth continuing if:'")
+    if not stated("Done when", "Done when"):
+        problems.append("no falsifiable 'Done when' — neither the Objective label nor a '## Done when' section says one")
+    if not stated("Not worth continuing if", "Not worth continuing if"):
+        problems.append("no 'Not worth continuing if' — neither the Objective label nor its own section")
     # A NUMERIC done-when with no derivation is the drafting defect that has
     # bitten three times, always caught by the worker and never by the drafter.
     # Advisory, like everything here — but never silent.
     dw = re.search(r"Done when:(.*?)(?:\nNot worth continuing if:|\Z)", obj, re.S)
+    # Same two spellings as `stated` above — a number in a "## Done when"
+    # section is a number that owes a derivation just as much.
+    _dw_sect = (section("Done when") or "").strip()
     # The number is as often in a "Pre-registered prediction" section as in the
     # Done-when line — nc-17 carried its 600-1,100 there and the first version of
     # this check sailed past it. Scan both (watched failing before this line was
@@ -287,9 +301,11 @@ else:
     # exact-name lookup sails straight past it (watched, on nc-17).
     _pre_m = re.search(r"^## Pre-registered prediction.*?\n(.*?)(?=^## |\Z)", body, re.M | re.S)
     pre = _pre_m.group(1) if _pre_m else ""
-    numeric = bool(dw and re.search(r"\d", dw.group(1))) or bool(re.search(r"\d", pre))
+    numeric = (bool(dw and re.search(r"\d", dw.group(1)))
+               or bool(re.search(r"\d", pre))
+               or bool(re.search(r"\d", _dw_sect)))
     if numeric:
-        if not re.search(r"Target derived from scope:[ \t]*\S", obj + pre):
+        if not re.search(r"Target derived from scope:[ \t]*\S", obj + pre + _dw_sect):
             nudges.append(
                 "Done-when names a NUMBER but no 'Target derived from scope:' line — "
                 "three orders in three waves stated a target their Scope could not reach, "
