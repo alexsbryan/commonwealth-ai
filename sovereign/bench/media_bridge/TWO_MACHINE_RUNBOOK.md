@@ -83,12 +83,22 @@ be unnecessary — verify rather than assume.
 
 ## THE GATE — this is the whole discipline
 
-Before AND after every single run, on RuggedFox:
+**Gate on the BENCH's own `path=` line, not on `sovereign mesh transport`.**
 
-    sovereign mesh transport
+The harness opens its OWN iroh endpoint and prints, from its own `remote_info`
+(`media_bridge_bench.rs:542`):
 
-The `Alexs-MacBoo` row must read `path=relayed`. It reads `mixed` with
-`direct=1` today.
+    path={class} direct=[…] relay=[…]
+
+`sovereign mesh transport` reports the DAEMON's paths to mesh peers — a
+different endpoint on a different connection. Reading the daemon's row and
+attributing it to the bench is the same contamination this bar exists to
+avoid, one layer along. (An earlier revision of this file said to use
+`mesh transport`. That was wrong.)
+
+`class` must read `relayed`. `mesh transport` is still worth a glance for
+context — it showed `Alexs-MacBoo` at `mixed`/`direct=1` while the Mac sat on
+the LAN — but it is not the gate.
 
 **DISCARD any run whose row reads `direct` or `mixed`. Do not average it in.
 Report the discard count beside the kept runs** — a bench that silently drops
