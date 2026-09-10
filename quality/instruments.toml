@@ -346,7 +346,12 @@ id = "deletion-manifest"
 kind = "gate"
 claim = "invariant"
 command = "python3 scripts/deletion-manifest.py --verify"
-cost_secs = 1.0
+# 4.4s, n=3 (4.36 / 4.29 / 4.19 wall), 2026-09-10, quiet host. Was 1.0 and
+# that was true before the citation guard: the manifest now reads every
+# tracked text file once to find candidates something cites by path, which is
+# what stops a lane pointing at a live file. The measurement moves with the
+# code that caused it.
+cost_secs = 4.4
 enforcement = "advisory"
 fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/deletion_manifest.tsv" }
@@ -422,7 +427,28 @@ id = "sovereign-lint-scoped"
 kind = "gate"
 claim = "invariant"
 command = "./scripts/sovereign-lint.sh --human"
-cost_secs = 22.0
+# 22.0 was measured on the macOS peer (see "Compilation and test feedback" in
+# AGENTS.md: "Warm on the macOS peer: ~22s plain, ~27s with test targets").
+# This host, warm and quiet, 2026-09-10: 44.6s ± 2.1 over a 33-file diff that
+# resolved to the whole workspace (44.2 / 42.7 / 46.8, n=3), 48s over a
+# 10-file diff resolving to 12 crates, 58s full workspace under memory
+# pressure (jobs 5).
+#
+# ONE SCALAR CANNOT DESCRIBE THIS INSTRUMENT and that is the finding, not the
+# number. `scripts/pre-push.sh`'s own header says so: "the compile's range is
+# the DIFF's, not this file's: 16s over 4 crates, 67s over the 34 a merge
+# touched. It is the only term that scales with what you are pushing, and on a
+# big merge it IS the budget." A reservation of 22 against a 60s budget makes
+# the runner start work it cannot finish — watched, on 2026-09-10, at "total
+# 68s of a 60s budget".
+#
+# Set to the median of what was actually measured here rather than the low
+# end, because `reservation_secs()` uses this when no `est_secs` is declared
+# and a reservation that rounds down is a reservation that starves. If this
+# proves wrong for the peer, declare `est_secs` on the row — it wins over the
+# measurement, and separating "what it costs" from "what to hold open" is
+# what that field is for.
+cost_secs = 44.6
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "none" }
