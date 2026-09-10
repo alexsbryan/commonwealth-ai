@@ -40,3 +40,36 @@ pathprobe viewer=0 status=206 clen=Some(33554432) crange=Some("bytes 0-33554431/
 #     the Mac pulls) so the sender is not the cellular leg.
 #   - or re-run relayed between two machines that both have real uplinks,
 #     forcing relay by blocking direct rather than by NAT topology.
+
+# ===========================================================================
+# REVERSED LEG, same session — RuggedFox (wired) SERVES, Mac (cellular) PULLS.
+# VERDICT: DISCARD. Not a relayed reading.
+#
+#   relay=[https://usw1-1.relay.n0.iroh.link./]
+#   path=mixed direct=[69.181.167.209:47800]
+#
+# reversed-probe viewer=0 status=206 bytes=33554432 secs=8.11 rate=33.1 Mbit/s
+#   ttfb=211.1ms gaps: n=6111 p50=0.4 p99=11.3 max=256.6ms
+#   stalls>500ms=0 >1s=0 >2s=0 worst_1s=26.1 Mbit/s
+#
+# iroh HOLE-PUNCHED to the public IP across cellular. `direct=[…]` is
+# non-empty, so by this bar's own rule the run is discarded, not averaged.
+#
+# WHAT IT DOES SETTLE: the 8.7 Mbit/s above WAS the phone's uplink, not the
+# relay — reversing the sender moved it to 33.1. Two readings, two different
+# bottlenecks, neither of them the relay.
+#
+# WHAT IT IS A REAL RESULT FOR, and it is not this bar: the DIRECT path
+# between two machines on genuinely different networks (cellular <-> home
+# broadband, different public IPs) sustains 33.1 Mbit/s with worst_1s 26.1
+# and no stall over 257 ms. That clears 25 Mbit/s — for the hole-punched
+# case, which WORK_PLANE.md explicitly calls "the best case, not the floor".
+#
+# DISCARD COUNT SO FAR: 2 (relay-leg-CONTAMINATED, and this one).
+# KEPT RELAYED RUNS: 1, and it is confounded. The bar remains COULD-NOT-JUDGE.
+#
+# NEXT, to isolate the relay with a non-cellular sender: keep RuggedFox
+# serving and BLOCK the direct path so iroh has only the relay — on the Mac,
+# block outbound UDP to 69.181.167.209:47800 (and to 100.115.12.21 /
+# 192.168.1.13 if Tailscale or the LAN is reachable). Then re-run and confirm
+# `direct=[]` BEFORE trusting the rate. Only then take 3 x 600 s.
