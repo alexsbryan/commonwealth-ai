@@ -85,6 +85,35 @@ Not worth continuing if:
      not a target. Enumerate the scope or state the number as an open question. -->
 Target derived from scope:
 
+## Demo
+
+<!-- WHAT A PERSON WATCHES to know this landed, and the first thing a worker
+     re-reads (scripts/co-journal.sh show). Operator direction 2026-09-10:
+     "get our demos humming perfectly with clean code and good architecture".
+     An objective stated as architecture is satisfiable by work nobody can
+     watch — which is how hours go into fixes for invented problems while the
+     demo the spec leads with goes unnamed for a week. Name the campaign demo
+     this order moves (campaign.md, Demos section) and the command or the
+     click the operator runs to see it.
+     A BUILD GATE IS NOT A DEMO: "cargo test green" belongs in Done-when.
+     If the order genuinely is not demo-visible, say so and name the demo it
+     unblocks — that is a legal answer, and it is the sentence that stops the
+     work drifting off one. -->
+
+(none)
+
+## Steps
+
+<!-- THE ORDERED PLAN: what the operator approves as a SEQUENCE and the worker
+     knocks down in order. Numbered, one line each, five to twelve of them.
+     scripts/co-journal.sh new <id> copies these into a cursor with state;
+     each transition stamps a log line and "check" warns when one step has
+     been in flight past a build-test cycle. Without this the order is a set
+     of conditions with no position in it, and every turn boundary looks like
+     a plausible place to stop and ask. -->
+
+(none)
+
 ## Lane
 
 <!-- The measurement that proves the work. "(none)" is honest for work
@@ -266,6 +295,24 @@ else:
                 "three orders in three waves stated a target their Scope could not reach, "
                 "each caught by the worker after approval. A citation is not a derivation."
             )
+# Demo and Steps get their own words rather than the generic line, because
+# the generic line reads as a shrug and these two are the ones that were
+# missing when the drift was diagnosed (operator, 2026-09-10). Still
+# NUDGES, never problems: co-role.py's G2 gates on the exit code, and an
+# order without a demo is still a legal order.
+if section("Demo") in (None, "", "(none)"):
+    nudges.append(
+        "Demo is (none) — nothing here says what a PERSON watches, so this order "
+        "can be fully satisfied by work no one can see. Name the campaign demo it "
+        "moves, or say it is not demo-visible and name the demo it unblocks."
+    )
+if section("Steps") in (None, "", "(none)"):
+    nudges.append(
+        "Steps is (none) — the order is a set of conditions with no position in it. "
+        "A worker has nothing to knock down in order, so every turn boundary looks "
+        "like a place to stop and ask. scripts/co-journal.sh derives its cursor from "
+        "this section."
+    )
 for name in ("Lane", "Scope", "Engine", "Budget", "Seams"):
     s = section(name)
     if s in (None, "", "(none)"):

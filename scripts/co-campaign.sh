@@ -57,6 +57,19 @@ budget: (none)           # sessions / wall-clock / spend
 
 # Campaign: $TITLE
 
+## Demos
+
+<!-- WHAT A PERSON WATCHES, in the order a person cares. Draft this FIRST and
+     let it outrank the Ladder (operator direction 2026-09-10): a campaign
+     whose demos are unnamed is one whose rungs can all be green while the
+     thing the spec leads with goes untouched. Per demo: the one-line thing
+     someone watches, the doc section it comes from, its GATE (a bar id, never
+     a restated threshold), and its current verdict. Then every rung below
+     names which demo it moves; a rung that moves none and unblocks none does
+     not get drafted, and neither does off-cursor work a worker finds. -->
+
+(none)
+
 ## Ladder
 
 <!-- Rungs in landing order, each naming the bar ids it moves. This is what
