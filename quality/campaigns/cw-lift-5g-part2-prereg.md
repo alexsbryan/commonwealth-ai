@@ -257,6 +257,54 @@ The alternative was `commonwealth-api` gaining `commonwealth-work` so
 (`ingest_executor.rs:26-31`), so commonwealth-api could not build a unit body
 without moving the type. Put the producer where the decision already is (§19).
 
+### D0 — EVERY BAR SO FAR IS FIXTURE-PROVEN, AND THAT IS THE FINDING
+
+Operator direction 2026-09-09, and it is the correction this rung most needed:
+**ground the work in real demos, not imagined constraints.**
+
+B1 through B8 are all green and every one of them was measured against an
+in-process test that HAND-BUILT the precondition — a `WorkProjection` folded
+from ops the fixture signed itself. Not one ran a real corpus through a real
+daemon. The proposition no fixture could ever falsify is the exact one that
+turned out to be false: that anything reaches the fold in production. A fixture
+that constructs the world it then asserts about cannot report that the world
+does not occur.
+
+This is 5d's lesson verbatim. Its own ladder row: "5d shipped green on every
+gate and its own demo did not work: a unit sat `queued` and nothing in 12,448
+tests said so." 5g part 1 DID run for real — two `JsonlRange` units through
+`svrn job submit`, leased, run, merged, answering queries from both ranges.
+Part 2 has not, and its bars read greener than part 1's because of it.
+
+**So no K bar below closes on a test alone.** Each names the RUN that closes
+it, and a bar with a passing test and no run is COULD-NOT-JUDGE, not met.
+
+### D1 — the collector runs for real, and this one is runnable TODAY
+
+Before any producer is built. Submit `ingest:v1` units the way part 1 did
+(`svrn job submit --kind ingest:v1 --units`), on a live daemon, and watch the
+COLLECTOR do what B2/B7/B8 assert: the fold reaches `HandoffPhase::Complete`,
+`auto_ingest`'s tick loop picks it up, the merge runs, `finalize_canonical`
+lands, and `svrn` answers a query against the merged corpus.
+
+This validates everything built today against a real daemon rather than a
+fixture, and it needs no new code. **Run it first.** If it fails, today's eight
+green bars were measuring the wrong thing and the re-scope below is premature.
+
+Instrument: `RUST_LOG=info,commonwealth_work=debug` INSIDE the toolbox, strip
+ANSI; the collector traces to `commonwealth_work`, the same target as the
+donor, deliberately. A detached daemon discards `eprintln`; confirm the trace
+lands before trusting an absence of one.
+
+### D2 — the producer runs for real
+
+`svrn corpus install` (or the desktop collaborate button — it POSTs the same
+route, `collaborate_commands.rs:126`) on a real corpus, and the fold picks it
+up with NO human typing `job submit`. That is K1's actual closure. A test
+asserting `fold_coverage_for` returns `Some` from a hand-built handoff closes
+nothing, because that is what already passes today while production returns
+`None`.
+
 ### K1 — the fold is reached without a human typing anything
 
 A corpus install that today triggers collaborative ingest instead produces an
