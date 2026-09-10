@@ -557,9 +557,19 @@ pub struct WorkOffer {
     /// The strongest isolation it can run a unit under. Compared against a
     /// unit's requirement with [`Isolation::covers`].
     pub isolation: Isolation,
-    /// The donor's operating system, in `std::env::consts::OS`'s spelling.
+    /// The operating system a unit RUNS on here, in `std::env::consts::OS`'s
+    /// spelling — which under an isolation boundary is the image's and not the
+    /// donor host's. Both said "the donor's" until 2026-09-10, and every donor
+    /// filled them from its own process: a macOS host running a Linux image
+    /// therefore advertised `macos` and had Linux work refused on
+    /// [`UnmetRequirement::Os`] while being entirely able to run it.
+    /// `commonwealth_work::sandbox::Sandbox::platform` is the one derivation.
     pub os: String,
-    /// The donor's architecture, in `std::env::consts::ARCH`'s spelling.
+    /// The architecture a unit RUNS on here, in `std::env::consts::ARCH`'s
+    /// spelling — see `os`. The spelling matters: a container runtime reports
+    /// OCI names (`amd64`, `arm64`) and [`JobRequirements::accepts_host`]
+    /// compares this with `==`, so the translation happens once, where the
+    /// image is read.
     pub arch: String,
     /// The repositories it has checked out and will run work against.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

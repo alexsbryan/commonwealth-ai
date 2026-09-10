@@ -299,7 +299,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     if let Some(reason) = &why {
         eprintln!("work_peer: no boundary — {reason}");
     }
-    let peer_provides = sandbox.provides();
+    let (peer_provides, platform) = (sandbox.provides(), sandbox.platform());
     let mut registry = JobExecutorRegistry::new();
     registry
         .register(Arc::new(ProcessExecutor::with_sandbox(sandbox)))
@@ -330,8 +330,8 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         max_concurrent: 1,
         yield_to_foreground: false,
         isolation: peer_provides,
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
+        os: platform.0,
+        arch: platform.1,
         repos: Vec::new(),
         accept_from: None,
     };

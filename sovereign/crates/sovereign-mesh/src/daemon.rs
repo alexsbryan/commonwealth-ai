@@ -2768,7 +2768,12 @@ impl EmbeddedDaemon {
                     "work donor: boundary ready"
                 ),
             }
-            let provides = sandbox.provides();
+            // BOTH read off the sandbox, before it moves into the registry.
+            // `platform` is the IMAGE's under a boundary and this host's
+            // without one — a donor advertises where a unit RUNS, and this
+            // said `std::env::consts` until 2026-09-10, which refused a
+            // macOS host's perfectly runnable Linux work on `Os`.
+            let (provides, (os, arch)) = (sandbox.provides(), sandbox.platform());
             work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
                 corpus_engine.clone(),
                 sandbox,
@@ -2776,8 +2781,8 @@ impl EmbeddedDaemon {
             crate::work_donor::resolve_offer(
                 &c.compute.work_offer,
                 &work_registry,
-                std::env::consts::OS,
-                std::env::consts::ARCH,
+                &os,
+                &arch,
                 provides,
             )
             .map_err(|e| MeshError::Config(e.to_string()))?

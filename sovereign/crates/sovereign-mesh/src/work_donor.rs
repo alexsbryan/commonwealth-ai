@@ -244,6 +244,11 @@ pub fn donor_registry(
 /// **The startup invariant:** every offered kind must resolve to a registered
 /// executor whose isolation this build covers. `startup_refuses_offer_of_
 /// unregistered_kind` is the gate, watched failing before the check existed.
+///
+/// `os` and `arch` are WHERE A UNIT RUNS, not who is hosting it — the caller
+/// reads them off `Sandbox::platform`, so under a boundary they are the
+/// image's. They were `std::env::consts` until 2026-09-10; see the field docs
+/// on [`WorkOffer::os`] for the machine that failure was found on.
 pub fn resolve_offer(
     section: &WorkOfferSection,
     registry: &JobExecutorRegistry,
