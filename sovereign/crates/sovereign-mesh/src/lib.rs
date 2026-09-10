@@ -18,6 +18,7 @@ pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
 pub mod commit_harvest;
+pub mod corpus_catalog_http;
 pub mod corpus_watch_http;
 pub mod daemon;
 pub mod daemon_services;
@@ -37,6 +38,7 @@ pub mod decision_replay;
 /// episode the Tier-1 simulator replays.
 pub mod decision_trace;
 pub mod deep_link;
+pub mod documents_http;
 #[cfg(feature = "dst")]
 pub mod dst;
 pub mod entry_endpoint;

@@ -602,9 +602,13 @@ async fn every_router_fails_closed_when_connect_info_absent() {
 //   with the layer:     spoofed LAN caller -> 403 (the guard)
 //   without the layer:  spoofed LAN caller -> 405 (the method fallback)
 //
-// No route in this crate registers PUT (`git grep -n 'put(' src/*_http.rs`
-// -> nothing), so PUT is the method that reaches the fallback on every
-// router below. The loopback half of each pair asserts the 405 the
+// PUT is the method that reaches the fallback on every path named
+// below. It is no longer true that NO route in this crate registers
+// PUT — `mcp_config_http`'s `/{name}/token`, `recipe_project_http`'s
+// `/{id}/toml` and, since sv-surface D9a, `turn_extras_http`'s
+// `/v1/skills/{id}/active` all do — which is why each call site below
+// names a path where PUT is NOT a method, and says so where the
+// choice is not obvious. The loopback half of each pair asserts the 405 the
 // guard is hiding: it proves the 403 came from the middleware and not
 // from the route table, so a router that lost its path (rather than
 // its layer) cannot pass this test by 404'ing.
@@ -699,6 +703,25 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
         "turn_extras_http",
         sovereign_mesh::turn_extras_http::turn_extras_router(d5b),
         "/v1/skills",
+    )
+    .await;
+
+    let (_t5c, d5c) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "documents_http",
+        sovereign_mesh::documents_http::documents_router(d5c),
+        // NOT `/v1/documents/{id}`: DELETE is a real method there, and
+        // `/v1/documents` registers GET only, so PUT reaches the
+        // method fallback.
+        "/v1/documents",
+    )
+    .await;
+
+    let (_t5d, d5d) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "corpus_catalog_http",
+        sovereign_mesh::corpus_catalog_http::corpus_catalog_router(d5d),
+        "/internal/corpus/catalog",
     )
     .await;
 

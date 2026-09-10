@@ -3307,6 +3307,24 @@ impl EmbeddedDaemon {
                 &self_arc,
             )));
             mount_names.push("turn_extras_http");
+            // sv-surface D9a — the document-asset family. Six of
+            // `commands/document_asset.rs`'s eight commands are CRUD over
+            // the store a turn writes to, and read the DESKTOP's handle.
+            // Unconditional for the reason the siblings give: a commission
+            // with no store answers a named 503, which is a different fact
+            // from an unmounted router's 404 (ARCH §18.3).
+            mounted.push(crate::documents_http::documents_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("documents_http");
+            // sv-surface D9a — the corpus catalogue and the notebook shelf,
+            // beside `reading_http`'s status route (rung 1) rather than
+            // inside it: that file is the READING surface and is within
+            // sight of the §3.1 split line.
+            mounted.push(crate::corpus_catalog_http::corpus_catalog_router(
+                Arc::clone(&self_arc),
+            ));
+            mount_names.push("corpus_catalog_http");
             // sv-surface rung 6 — the insight surface. Mounted
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these

@@ -43,6 +43,10 @@ mod d8_surface_e2e;
 
 #[path = "main/d9_turn_extras_e2e.rs"]
 mod d9_turn_extras_e2e;
+#[path = "main/d9a_corpus_catalog_e2e.rs"]
+mod d9a_corpus_catalog_e2e;
+#[path = "main/d9a_documents_e2e.rs"]
+mod d9a_documents_e2e;
 #[path = "main/daemon_variant_census.rs"]
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]

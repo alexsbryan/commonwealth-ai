@@ -320,6 +320,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
+    // state.rs: B4's identity probe (65b92cd15) — on a run-lock refusal the
+    // desktop asks the client port WHO holds it, reading /status.process.pid
+    // over loopback before attaching to the holder. Its own daemon's port;
+    // nothing leaves the machine.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),

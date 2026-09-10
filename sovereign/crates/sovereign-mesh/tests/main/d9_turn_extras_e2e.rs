@@ -27,12 +27,21 @@
 //! turn_extras_without_a_runtime_is_the_named_503          :254
 //! ```
 //!
-//! The first three go red on the BODY (`.json()` on a 404 has no
-//! `skills` / `provenance` key), which is the assertion that carries
-//! the claim. The fourth goes red on its status line (404 vs 503) and
-//! that alone would not be a gate (ARCH §18.1) — a routerless daemon
-//! 404s too — which is why the assertion under it requires the body to
-//! parse and to NAME the missing `Runtime`. Restored: 4/4 green.
+//! # Red-watch, D9a (2026-09-10, run)
+//!
+//! `PUT /v1/skills/{id}/active` and `GET /v1/ready` moved to planted
+//! paths the same way — and the four D9 cases above, whose paths were
+//! NOT moved, are the control: `pass: 4 fail: 3`.
+//!
+//! ```text
+//! toggling_a_skill_moves_the_serving_runtimes_own_active_set
+//! toggling_an_unregistered_skill_is_a_404_not_a_silent_no_op
+//! ready_is_true_on_a_serving_daemon_and_a_named_503_without_one
+//! ```
+//!
+//! The toggle case's gate is deliberately the GET, not the PUT's echo:
+//! an echo that agreed with its own request would prove nothing about
+//! the registry `serve_turn` reads. Restored: 7/7 for the file.
 
 use std::sync::Arc;
 
@@ -244,6 +253,162 @@ async fn provenance_route_serves_the_frame_that_runtime_captured() {
 }
 
 #[tokio::test]
+async fn toggling_a_skill_moves_the_serving_runtimes_own_active_set() {
+    // Registered, none active — the shape the desktop's toggle used to
+    // be unable to change through an `Arc<SkillRegistry>`.
+    let (_e, _r, daemon) = daemon_with_skills(
+        vec![
+            ("inner-work", "Inner Work", "the reflective surface"),
+            ("recipe-author", "Recipe Author", "authoring workspace"),
+        ],
+        &[],
+    );
+    let addr = spawn_router(turn_extras_router(daemon)).await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .put(format!("http://{addr}/v1/skills/inner-work/active"))
+        .json(&serde_json::json!({ "active": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let echoed: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        echoed["active"], true,
+        "the echo is the registry read BACK, not the request: {echoed}"
+    );
+    assert_eq!(echoed["id"], "inner-work");
+
+    // The GET is the gate: the toggle must have reached the registry
+    // the LIST reads, which is the registry `serve_turn` reads. An
+    // echo that agreed with itself would prove nothing.
+    let body: serde_json::Value = reqwest::get(format!("http://{addr}/v1/skills"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let skills = body["skills"].as_array().expect("a `skills` array");
+    let active: Vec<&str> = skills
+        .iter()
+        .filter(|s| s["active"] == true)
+        .map(|s| s["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        active,
+        vec!["inner-work"],
+        "GET /v1/skills reflects the PUT: {body}"
+    );
+
+    // And back off again — the switch is idempotent in both
+    // directions, which is why the body is a desired state and not a
+    // verb.
+    for _ in 0..2 {
+        let resp = client
+            .put(format!("http://{addr}/v1/skills/inner-work/active"))
+            .json(&serde_json::json!({ "active": false }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+    }
+    let body: serde_json::Value = reqwest::get(format!("http://{addr}/v1/skills"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        body["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s["active"] == false),
+        "a double-tapped 'off' leaves nothing active: {body}"
+    );
+}
+
+#[tokio::test]
+async fn toggling_an_unregistered_skill_is_a_404_not_a_silent_no_op() {
+    let (_e, _r, daemon) = daemon_with_skills(
+        vec![("inner-work", "Inner Work", "the reflective surface")],
+        &[],
+    );
+    let addr = spawn_router(turn_extras_router(daemon)).await;
+
+    let resp = reqwest::Client::new()
+        .put(format!("http://{addr}/v1/skills/no-such-skill/active"))
+        .json(&serde_json::json!({ "active": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        404,
+        "`activate` tolerates an unknown id by design; a SURFACE that \
+         rendered the switch as on over an answer nobody can give does not"
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no-such-skill"),
+        "the 404 names the id it could not find, got {body}"
+    );
+}
+
+#[tokio::test]
+async fn ready_is_true_on_a_serving_daemon_and_a_named_503_without_one() {
+    let (_e, _r, daemon) = daemon_with_skills(vec![], &[]);
+    let addr = spawn_router(turn_extras_router(daemon)).await;
+
+    let resp = reqwest::get(format!("http://{addr}/v1/ready"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        body["ready"], true,
+        "a commission carrying a Runtime can answer a turn: {body}"
+    );
+    assert!(
+        body["model_id"].is_string(),
+        "the model the Fast slot would answer with comes from the \
+         provider itself, never invented: {body}"
+    );
+    assert!(
+        body["reason"].is_null(),
+        "a ready daemon carries no reason: {body}"
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let admin = EmbeddedDaemon::new(
+        root.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
+    let addr = spawn_router(turn_extras_router(admin)).await;
+    let resp = reqwest::get(format!("http://{addr}/v1/ready"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 503);
+    // The status line and the body must AGREE — a caller that gates on
+    // one and a caller that reads the other cannot get different
+    // answers (ARCH §18.3).
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["ready"], false, "got {body}");
+    assert!(
+        body["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Runtime"),
+        "the refusal names WHICH object is absent, got {body}"
+    );
+}
+
+#[tokio::test]
 async fn turn_extras_without_a_runtime_is_the_named_503() {
     let root = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
@@ -253,6 +418,11 @@ async fn turn_extras_without_a_runtime_is_the_named_503() {
     );
     let addr = spawn_router(turn_extras_router(daemon)).await;
 
+    // `/v1/ready` is NOT swept here: its refusal names the object
+    // under `reason`, beside a `ready: false` its caller gates on, and
+    // `ready_is_true_on_a_serving_daemon_and_a_named_503_without_one`
+    // asserts that shape where it is known. A sweep loosened to accept
+    // either key would stop proving either.
     for path in ["/v1/skills", "/v1/conversations/conv-a/provenance"] {
         let resp = reqwest::get(format!("http://{addr}{path}")).await.unwrap();
         assert_eq!(

@@ -2271,6 +2271,302 @@ impl TurnClient {
         .await
     }
 
+    // ─── sv-surface D9a: the documents family ────────────────
+
+    /// `GET /v1/documents` — every ingested document asset. `T` is
+    /// `sovereign_core::types::DocumentAsset`.
+    ///
+    /// Generic on the caller's row type for the `list_skills` reason:
+    /// this crate does not depend on `sovereign-core`, and mirroring
+    /// `DocumentAsset` (a skeleton over four nested types) here would
+    /// mint a twin the campaign exists to delete.
+    pub async fn list_documents<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            documents: Vec<T>,
+        }
+        let wire: Wire<T> = self.internal_get("/v1/documents".to_string(), &[]).await?;
+        Ok(wire.documents)
+    }
+
+    /// `GET /v1/documents/{id}` — one asset record.
+    ///
+    /// `Ok(None)` is the 404 and ONLY the 404: this daemon stores no
+    /// such asset. Every other failure stays an `Err`, because "not
+    /// stored" and "the store would not answer" ask for different
+    /// remedies from the pane (ARCH §18.3).
+    pub async fn get_document<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+    ) -> Result<Option<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            document: T,
+        }
+        let url = format!("{}/v1/documents/{asset_id}", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: Wire<T> = parse(&body, &format!("GET {url}"))?;
+        Ok(Some(wire.document))
+    }
+
+    /// `DELETE /v1/documents/{id}` — remove an asset and its chunks.
+    pub async fn delete_document(&self, asset_id: &str) -> Result<()> {
+        let url = format!("{}/v1/documents/{asset_id}", self.base);
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("DELETE {url}")));
+        }
+        Ok(())
+    }
+
+    /// `POST /v1/documents/{id}/skeleton` — rebuild the structural
+    /// skeleton from stored chunks; answers the REFRESHED record.
+    /// `T` is `sovereign_core::types::DocumentAsset`.
+    pub async fn rebuild_document_skeleton<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+    ) -> Result<T> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            document: T,
+        }
+        let wire: Wire<T> = self
+            .internal_post_empty(format!("/v1/documents/{asset_id}/skeleton"))
+            .await?;
+        Ok(wire.document)
+    }
+
+    /// `GET /v1/documents/legacy` — documents in the old `documents`
+    /// table that no asset owns. `T` is
+    /// `sovereign_mesh::documents_http::LegacyDocumentEntry`.
+    pub async fn list_legacy_documents<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            documents: Vec<T>,
+        }
+        let wire: Wire<T> = self
+            .internal_get("/v1/documents/legacy".to_string(), &[])
+            .await?;
+        Ok(wire.documents)
+    }
+
+    /// `POST /v1/documents/legacy/promote` — mint an asset over chunks
+    /// already in the store. `T` is
+    /// `sovereign_core::types::DocumentAsset`.
+    pub async fn promote_legacy_document<T: serde::de::DeserializeOwned>(
+        &self,
+        source: &str,
+    ) -> Result<T> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            document: T,
+        }
+        let wire: Wire<T> = self
+            .internal_post_json(
+                "/v1/documents/legacy/promote".to_string(),
+                &serde_json::json!({ "source": source }),
+            )
+            .await?;
+        Ok(wire.document)
+    }
+
+    // ─── sv-surface D9a: the catalogue and the shelf ─────────
+
+    /// `GET /internal/corpus/catalog` — the built-in catalogue unioned
+    /// with every installed index it does not name. `T` is
+    /// `sovereign_mesh::corpus_catalog_http::CatalogEntry`.
+    ///
+    /// The `"installing"` state the picker also renders is NOT here —
+    /// the daemon's in-flight decider is `GET /internal/corpus/status`
+    /// (rung 1) and the caller composes the two.
+    pub async fn corpus_catalog<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            corpora: Vec<T>,
+        }
+        let wire: Wire<T> = self
+            .internal_get("/internal/corpus/catalog".to_string(), &[])
+            .await?;
+        Ok(wire.corpora)
+    }
+
+    /// `GET /internal/corpus/notebooks` — the unified Library shelf.
+    /// `T` is `sovereign_mesh::corpus_catalog_http::NotebookRow`.
+    ///
+    /// A 503 here means the daemon has no local-corpus registry, so it
+    /// cannot say which rows are the user's own. That is an `Err`, not
+    /// an empty shelf — the swallow this route was built to delete.
+    pub async fn corpus_notebooks<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            notebooks: Vec<T>,
+        }
+        let wire: Wire<T> = self
+            .internal_get("/internal/corpus/notebooks".to_string(), &[])
+            .await?;
+        Ok(wire.notebooks)
+    }
+
+    /// `GET /internal/corpus/diagnose` — the engine's indexes-dir
+    /// report, verbatim.
+    pub async fn corpus_diagnose(&self) -> Result<String> {
+        #[derive(Deserialize)]
+        struct Wire {
+            report: String,
+        }
+        let wire: Wire = self
+            .internal_get("/internal/corpus/diagnose".to_string(), &[])
+            .await?;
+        Ok(wire.report)
+    }
+
+    /// `GET /internal/corpus/{corpus}/health` — enrichment health for
+    /// one installed corpus. `T` is
+    /// `sovereign_mesh::corpus_catalog_http::CorpusHealth`.
+    ///
+    /// `Ok(None)` is the 404 and only the 404: no index for this
+    /// corpus opened. "Installed but never enriched" comes back as an
+    /// `Ok(Some(_))` with zeroes, which is a different fact.
+    pub async fn corpus_health<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<T>> {
+        let url = format!("{}/internal/corpus/{corpus_id}/health", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
+    }
+
+    /// `GET /internal/corpus/{corpus}/coverage-card` — the typed
+    /// authoritative-store card. `T` is
+    /// `corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard`.
+    ///
+    /// `Ok(None)` is a 200 with `card: null` — "this corpus declares
+    /// no typed store" is an answer, not an absence (ARCH §18.3).
+    pub async fn corpus_coverage_card<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            card: Option<T>,
+        }
+        let wire: Wire<T> = self
+            .internal_get(format!("/internal/corpus/{corpus_id}/coverage-card"), &[])
+            .await?;
+        Ok(wire.card)
+    }
+
+    /// `POST /internal/corpus/{corpus}/retry-enrichment` — re-parse
+    /// stored skeleton failures with the repair parser. No inference.
+    /// Answers `(salvaged, still_failed)`.
+    pub async fn corpus_retry_enrichment(&self, corpus_id: &str) -> Result<(u64, u64)> {
+        #[derive(Deserialize)]
+        struct Wire {
+            salvaged: u64,
+            still_failed: u64,
+        }
+        let wire: Wire = self
+            .internal_post_empty(format!("/internal/corpus/{corpus_id}/retry-enrichment"))
+            .await?;
+        Ok((wire.salvaged, wire.still_failed))
+    }
+
+    // ─── sv-surface D9a: the skill toggle and readiness ──────
+
+    /// `PUT /v1/skills/{id}/active` — put one skill in, or out of, the
+    /// SERVING runtime's active set. `T` is
+    /// `sovereign_mesh::turn_extras_http::SkillWireEntry`.
+    ///
+    /// Answers the registry's read-back, not the caller's request, so
+    /// a surface renders what the daemon holds rather than what it
+    /// asked for. `Ok(None)` is the 404 and only the 404: no such
+    /// skill is registered on this daemon.
+    pub async fn set_skill_active<T: serde::de::DeserializeOwned>(
+        &self,
+        skill_id: &str,
+        active: bool,
+    ) -> Result<Option<T>> {
+        let url = format!("{}/v1/skills/{skill_id}/active", self.base);
+        let resp = self
+            .http
+            .put(&url)
+            .json(&serde_json::json!({ "active": active }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("PUT {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("PUT {url}")));
+        }
+        parse(&body, &format!("PUT {url}")).map(Some)
+    }
+
+    /// `GET /v1/ready` — is the backend that will answer my turns up.
+    ///
+    /// `Ok(false)` for the 503: the daemon answered and said it serves
+    /// no turns, which is a fact a splash can act on. An `Err` means
+    /// nothing answered at all — a different fact, and the reason this
+    /// does not collapse both into a bool (ARCH §18.3).
+    ///
+    /// This is NOT an identity probe. WHO is on the port is
+    /// `/status.process.pid`'s single answer (3c7ad5933); compose the
+    /// two rather than asking this one to grow a second pid.
+    pub async fn backend_ready(&self) -> Result<bool> {
+        #[derive(Deserialize)]
+        struct Wire {
+            ready: bool,
+        }
+        let url = format!("{}/v1/ready", self.base);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+            return Ok(false);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        let wire: Wire = parse(&body, &format!("GET {url}"))?;
+        Ok(wire.ready)
+    }
+
     /// `POST` with a JSON body, parsed answer. The POST twin of
     /// [`Self::internal_get`].
     async fn internal_post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
