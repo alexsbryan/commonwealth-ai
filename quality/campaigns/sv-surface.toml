@@ -1218,8 +1218,26 @@ status       = "open"
 # every_sender_of_replicated_state_is_declared) - the total's history in git
 # is the audit, and rung 6's boot assertion is the stronger instrument that
 # replaces it at the end.
-floor        = 14.0
-floor_basis  = "attach_construction_census.rs, first run 2026-09-08: 14 needles, each pinned by name and count in the test"
+# MEASURED 2026-09-10 at c7e7d6a73 (D0): 14 -> 12, both by measurement, not by
+# a deletion — WatchedSubsystem::install sits inside the local_daemon_wiring arm
+# and was never attach-reachable (a census error, -1 with no code change), and
+# CompactionWorker::spawn was a real defect (an attached desktop ran a second
+# rolling-summary compaction over the daemon's own sovereign.db) now impossible
+# because the config is Option. Both guards pinned by
+# the_local_only_constructions_stay_local; floor re-added at 13 went red
+# (left 12, right 11), reverted. Unchanged by D3-D8 (1f7ea8745, 19946f99a,
+# 069660fd9, 502304f63): those rungs delete CONSUMERS, not constructions.
+# THE HONEST REMAINING TERM IS NOT THE FORKS. is_attach_mode forks went 15 -> 0
+# (c7e7d6a73), and 65b92cd15 measured what that did not buy: 49 needle READS
+# across 13 files run in attach today with no fork at all, because the spine
+# builds every needle in both modes — conversation.rs 12, document_asset.rs 12,
+# corpus.rs 8, chat.rs 3, then nine files at 1-2. is_backend_ready reads
+# state.runtime.is_some() (a null runtime hangs the splash); list_corpora and
+# notebook_list degrade to an empty vec, silently. attach_bootstrap() was NOT
+# written on that false premise; 49 is what D9b drives to zero and is
+# deliberately not minted as a ratchet while D5-D8 land in the same files.
+floor        = 12.0
+floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"
@@ -1261,6 +1279,13 @@ status       = "open"
 #                      stringify, mesh_cmd.rs:685's raw "online" compare.
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
+# HOLDING at 0 through the D1-D8 delete halves, 2026-09-10: the halves removed
+# re-derivations rather than adding families — conversation.rs's local
+# confidence halving (c7e7d6a73), the section->chunk cache and two defaults
+# (1f7ea8745), the salience formula and conv_display_metadata (069660fd9), the
+# recipe-project artifact path the desktop resolved two ways and the prelude's
+# second walk (502304f63) — and the two new deciders landed on the daemon side
+# only (trust_level lowercasing, 65b92cd15; the meshapp page clamps, 19946f99a).
 floor        = 0.0
 floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs, STRUCK the health row as not-a-twin (measured), and deleted the mesh-status enum-string twin (reshaped by measurement from the 'up-convert DTO' premise): 0 remain"
 target       = 0.0
@@ -1305,9 +1330,19 @@ floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
 # reading DTOs, mesh status). Was 6.0 over the naive enumeration; the GGUF
 # and health strikes (both measured) shrank the deletable set to 4. Moves
 # only through a rung row.
+# PROVEN MECHANICALLY 2026-09-09 (f6a633519, construction 3): scripts/
+# twin-census.py + quality/twin-plants.toml run the plant -> red -> restore loop
+# per family and report four verdicts. First run at 207b62b85: eight proved-red,
+# and TWO NOT-A-GATE — loopback_parity passed with mesh_router's guard middleware
+# deleted, because both its assertions were over-determined by the handler's own
+# enforce_localhost. Closed at 4c45a1fc9 by a PUT leg no handler can satisfy
+# (spoofed LAN -> 403 from the layer, loopback -> 405 from axum's fallback);
+# watched red with the layer deleted while the three old tests stayed green.
+# The registry carries 19 families as of 502304f63; the bar still counts one
+# control per REAL twin family, which is 4.
 target       = 4.0
 direction    = "higher_is_better"
-instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"
+instrument   = "scripts/twin-census.py over quality/twin-plants.toml (the runner refuses a dirty tree by its own rule, so a landing on an unclean tree records the by-hand plant -> red -> md5-verified restore instead)"
 kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
 
 [[bar]]
@@ -1320,9 +1355,19 @@ status       = "open"
 # remote/client.rs's inline Deserialize wrappers. M-1 deletes it by adoption.
 # svrn chat and the desktop-attach future both consume sovereign-turn-client;
 # the bar holds that no surface crate re-mints a private client or mirror.
-floor        = 1.0
-floor_basis  = "sovereign-mobile remote/dto.rs ServerEvent mirror + remote/client.rs inline DTOs, 2026-09-08"
+# DELETED BY ADOPTION 2026-09-09 (4e1f99f55): every frame, prompt, notice,
+# answer and request on the phone comes from sovereign-contracts through
+# sovereign-turn-client; the TurnFrame match is exhaustive with no catch-all, so
+# Prompt, Notice (ResolveAck, TurnSettled) and QueuePosition are handled — three
+# capabilities the mirror could not represent. The crate joined the workspace in
+# the same commit, because a census nobody can run is inventory. 4a83373f4 then
+# moved the seven contract imports onto the client crate's re-exports and banked
+# the fan-in cut (sovereign-contracts 27 -> 26, layer-gate --tighten).
+# Named ceiling, not a gap in the bar: the client has no auth seam, so the phone
+# reaches a daemon, not an api-key sovereign-server (daemon-first, as ordered).
+floor        = 0.0
+floor_basis  = "sovereign-mobile src-tauri/tests/census.rs, 2026-09-09: no wire mirror in the crate, with two permanent plants keeping the detector proven (a planted PlantedServerEvent was watched red naming 're-declares 3 of TurnFrame'); the 1.0 basis was remote/dto.rs's ServerEvent mirror + remote/client.rs's inline DTOs, both deleted at 4e1f99f55"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "the mirror stays deleted; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+instrument   = "cargo test -p sovereign-mobile --test census; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."

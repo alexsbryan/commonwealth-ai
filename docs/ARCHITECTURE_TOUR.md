@@ -177,9 +177,9 @@ answer-quality regression.**
 
 | Port | Surface | Default exposure |
 |---|---|---|
-| `:9741` | client API — OpenAI-compatible `/v1/*`, Ollama shim `/api/*`, MCP `/mcp`, mesh apps | **loopback**; any remote caller needs a bearer token (fail-closed); MCP is loopback-only |
+| `:9741` | client API — OpenAI-compatible `/v1/*`, Ollama shim `/api/*`, MCP `/mcp`, mesh apps, and the host families a surface reads instead of computing in-process (`/internal/{corpus,atlas,meshapp,governance}/*`, `/v1/{notes,insights,skills,recipe-projects,features}` — `SYSTEM_OVERVIEW.md` §5) | **loopback**; any remote caller needs a bearer token (fail-closed); MCP and the host families are loopback-only |
 | `:9742` | internal mesh — gossip, join, scheduling, knowledge fan-out | **perimeter-trusted** in trusted-network mode (encrypted-QUIC-first); loopback + iroh-only in encrypted mode |
-| `:8080` | `sovereign-server` — multi-tenant REST/WS, the phone's host | **loopback**; refuses to start non-loopback without auth keys (explicit opt-out exists) |
+| `:8080` | `sovereign-server` — multi-tenant REST/WS, the phone's host (the phone speaks `sovereign-turn-client` and reaches a DAEMON today: the client family has no auth seam) | **loopback**; refuses to start non-loopback without auth keys (explicit opt-out exists) |
 | `:50052` | tensor-split RPC (multi-host inference) | **raw TCP, no auth/TLS** — perimeter only, opt-in via env |
 
 *The full surface-by-surface posture, including the honest gap ledger:
