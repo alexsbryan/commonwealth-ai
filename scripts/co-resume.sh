@@ -248,6 +248,9 @@ w("   boundary. One build-test cycle per sub-problem; past that it is banked.")
 w("   When the last step is done, CLOSE — it is the only write path out, and")
 w("   the state the next session reads is only as good as this one:")
 w("     scripts/co-close.sh <order-id> --decision \"<what you decided and why>\"")
+w("   If you split: this brief is your objective — do NOT re-author it into a")
+w("   session frame. Under an order a frame carries invariants and dead ends")
+w("   only; state and next live in the cursor, which is maintained by working.")
 
 print("\n".join(out))
 PY

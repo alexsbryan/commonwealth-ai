@@ -443,6 +443,17 @@ else:
                          "describes work you are continuing — and if you know "
                          "which it is, `sovereign session attach <id>` makes "
                          "the next /clear in this window deterministic._\n")
+            # A frame is the wrong surface for campaign work, and this list is
+            # exactly where that goes wrong: N frames, none of them able to say
+            # which one you continue, while `co-resume.sh <campaign>` is
+            # unambiguous by construction. A cw-lift frame's hand-written
+            # Objective named two of three demos and dropped the third for a
+            # week (MAIN_SESSION_PROTOCOL §Session splitting).
+            lines.append(
+                "_Continuing a CAMPAIGN? Do not pick a frame — "
+                "`scripts/co-resume.sh <campaign-id>` is the surface, and it "
+                "reads the artifacts rather than a distillation of them. "
+                "Frames under an order carry only invariants and dead ends._\n")
             block = "\n".join(lines)
             prov["frame_bytes_injected"] = nbytes(block)
             emit(block)

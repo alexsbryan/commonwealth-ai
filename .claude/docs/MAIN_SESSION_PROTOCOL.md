@@ -89,7 +89,9 @@ manage. Everything below applies once you are actually past yellow.
   from the last frame ("item two's remaining half") is the specific failure
   this exists to stop** — audited 2026-07-29, 21 of 63 frames did exactly
   that, and one three-session chain lost the name of its own objective.
-  Contract: `SESSION_CONTINUITY.md §2.1`.
+  Contract: `SESSION_CONTINUITY.md §2.1`. **Under an order, you inherit it
+  from the CAMPAIGN, not from the predecessor frame — see the campaign rule
+  below.**
 - **Re-rank `Next` against the objective before you continue it.** The same
   audit found a lineage recopying four backlog items verbatim across three
   frames — carried forever, never done, never dropped. Inheriting an item is
@@ -100,6 +102,48 @@ manage. Everything below applies once you are actually past yellow.
   turn** — do the item, drop it, or say in `Objective` why it stays. It is
   advisory because carrying is often right; it is reported because carrying
   silently never is. Contract: `SESSION_CONTINUITY.md §2.2`.
+- **Under an order, the frame is NOT a second copy of the campaign**
+  (operator direction 2026-09-10: splitting state between the two tools "is
+  where context gets lost and reflected upon a reflection"). Once a session is
+  working an order under a campaign, seven of the frame's nine sections are
+  already owned — and owned more accurately — by artifacts that stay current
+  because doing the work maintains them:
+
+  | Frame section | Who owns it under a campaign |
+  |---|---|
+  | Objective | `campaign.md` §Demos + `quality/campaigns/<id>.toml` |
+  | Goal | the order's `## Objective` |
+  | State, Next, Working set | the journal cursor (`co-journal.sh show`) |
+  | Decisions | `campaign.md` §Decisions, written by `co-close.sh` |
+  | Verification | the commit bodies + `co-ladder.py check` |
+
+  So under an order: **`Objective` is inherited from the CAMPAIGN, copied
+  verbatim out of `scripts/co-resume.sh <campaign-id>`, never re-authored and
+  never inherited from the predecessor frame.** Drop `state`, `next`,
+  `working_set` and `verification` entirely — a distillation of the cursor is
+  strictly worse than the cursor, and the cursor is maintained by working
+  rather than by remembering. Put decisions in `campaign.md` via `co-close.sh`
+  where the close-out read is. **What stays is `invariants` and `dead_ends`,
+  and under a campaign they are the whole frame**: host and tree hazards ("many
+  lanes share this tree, commit with `--only`"; "`--workspace` silently drops
+  dev-tools") and diagnoses abandoned mid-flight, which no campaign artifact
+  holds. Budget it at a few hundred tokens, not 1,600.
+
+  **The evidence is a bug this cost.** On 2026-09-10 a cw-lift frame's
+  `Objective` was a hand-written copy of the campaign's and it named two of the
+  three demos, omitting the federated-media one `WORK_PLANE.md` leads its
+  customer section with. That copy was what the worker actually held, so
+  dropping the demo was correct behaviour against it, and the demo went unnamed
+  for a week. Two deciders for one fact and the derived one won (§10.6). A
+  second signal points the same way: 61 live frames, and the boot hook says it
+  cannot tell which one a session continues — while `co-resume.sh <campaign>`
+  is unambiguous by construction and is a plain script that still works with
+  the daemon down.
+
+  **Solo sessions are unchanged.** Most work is not under an order, and there
+  those sections have no other home. This narrows the frame only where a
+  campaign already owns the fact.
+
 - **Use the HARNESS session id, not the one `declare_scope` returns.** They are
   different namespaces. A frame banked under the daemon's session id is an
   orphan the boot hook can never find (hit live 2026-07-29). Your harness id is
