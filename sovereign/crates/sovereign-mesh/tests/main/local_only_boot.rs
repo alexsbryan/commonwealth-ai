@@ -166,27 +166,41 @@ async fn a_local_only_daemon_does_not_donate() {
     );
     daemon.shutdown().await.expect("shutdown");
 
-    // The control, and the half that makes the assertion above mean anything:
-    // the SAME offer on a networked daemon does spawn the loop.
-    let loud = tempfile::tempdir().unwrap();
-    let donor = EmbeddedDaemon::new(
-        loud.path().to_path_buf(),
-        cfg_donating(39661, 39662, false),
-        mesh_admin_services(),
+    // THE CONTROL, AND WHY IT CHANGED SHAPE ON 2026-09-10.
+    //
+    // It used to boot the SAME offer on a networked daemon and assert the
+    // loop came back, which is what made the absence above mean "local-only
+    // stopped it" rather than "nothing was offered". That control cannot run
+    // through `process:v1` any more: the isolation floor refuses that kind at
+    // boot on every build in this tree, so a networked daemon carrying this
+    // config also spawns no donor, and asserting the absence on both sides
+    // would be the exact vacuous pass this test's own doc warns about.
+    //
+    // So the control now proves the ALTERNATIVE explanation instead of the
+    // positive one: the networked boot's silence is fully accounted for by
+    // the floor, named, and therefore not evidence about local-only either
+    // way. The assertion above keeps its meaning because this one pins the
+    // only other reason the loop could be missing.
+    //
+    // RE-ARM THE POSITIVE CONTROL when a kind this build can isolate can be
+    // offered from this harness — a container-backed executor, or `ingest:v1`
+    // once these services carry a corpus engine. Tracked by the
+    // `process:v1` donation row in `sovereign/DEFAULTS_LEDGER.md`; that row
+    // graduating and this control staying in its negative form is the thing
+    // to catch.
+    let resolved = sovereign_mesh::work_donor::resolve_offer(
+        &cfg_donating(39661, 39662, false).compute.work_offer,
+        &sovereign_mesh::work_donor::donor_registry(None),
+        "linux",
+        "x86_64",
+    )
+    .expect("the floor drops the kind rather than taking the daemon down");
+    assert_eq!(
+        resolved, None,
+        "the networked boot's missing donor must be explained by the \
+         isolation floor dropping `process:v1` — otherwise the absence \
+         above proves nothing about local-only"
     );
-    donor.create_mesh("solo", "node").await.expect("create");
-    let (profile, services) = donor
-        .running_services()
-        .await
-        .expect("a started daemon reports its services census");
-    assert!(!profile.is_local_only(), "the control must be networked");
-    assert!(
-        services.contains(MeshService::WorkDonor),
-        "a networked daemon offering `process:v1` must spawn the donor loop — \
-         the census reads {:?}",
-        services.names()
-    );
-    donor.shutdown().await.expect("shutdown");
 }
 
 /// THE assertion. A local-only daemon boots, serves, holds a one-member mesh,

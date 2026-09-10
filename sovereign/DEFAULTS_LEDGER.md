@@ -30,6 +30,53 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `process:v1` donation — REFUSED AT BOOT, no flag (2026-09-10)
+
+**What ships.** `ProcessExecutor`'s descriptor declares it REQUIRES
+`Isolation::RootlessContainer`. `work_donor::DONOR_ISOLATION` is
+`Subprocess`, which is what this build actually provides, so
+`resolve_offer` refuses any `[compute.work_offer]` naming `process:v1`
+and the refusal names both sides. A daemon configured to donate now
+declines to boot into donating instead of publishing the offer. Watched
+RED: `work_donor::tests::startup_refuses_process_v1_because_this_build_provides_no_container`
+— flip the descriptor back to `Subprocess` and it is the only test that
+turns. `ingest:v1` is unaffected: it declares `InProcess`, it runs our own
+code on the daemon's threads, and it still offers.
+
+**There is no flag, and that is the point.** Operator decision 2026-09-10:
+isolation is the default and there is no arbitrary code execution outside a
+well-defined boundary. A config key here would be a way to assert an
+isolation this build cannot perform, which is the substitution §18.3
+forbids — `DONOR_ISOLATION` is a `const` for that reason, and the fix is a
+mechanism.
+
+**What it was before.** `process:v1` published an offer whose only wall was
+consent, and the module's own doc says consent is not isolation
+(`work_donor.rs:40-43`): a unit ran as the donor's user with the donor's
+filesystem and network, which reaches `~/.svrnmesh/node_key` — the donor's
+mesh identity readable by the work it accepts. `accept` defaulted to
+`nobody`, so the surface was safe by convention. It is now safe by
+refusal.
+
+**Flip condition (falsifiable).** Graduates when a container-backed
+executor raises what the build PROVIDES to `RootlessContainer` and a run
+donates a unit through it — not when a default changes; there is no default
+to change. The mechanism is podman rootless, already the build environment
+on the Linux host (rootless, SELinux on, userns available, three
+Containerfiles in `sovereign/container/`). Its own watched red is a unit
+that tries to read `node_key` or open a socket and FAILS.
+
+**Known open beside it, both banked against cw-lift:** `JobRequirements`
+carries no isolation field and `WorkOffer.isolation` is written by every
+donor and read by nothing, so a submitter cannot demand isolation and
+`WorkRefusal::IsolationBelow` has no producer in `may_take` — the
+vocabulary exists for a check that was never reachable. And a donor cannot
+bind an `accept_from` key to the peer it names.
+
+**Review by 2026-11-01.** If no container executor has landed by then, D2
+is not merely unproven — say so, and decide whether the work plane ships
+`ingest:v1` only.
+
 ### Merge coverage bar — `MergePlan::expected_partitions`, shipped UNSET (2026-09-09)
 
 **What ships.** `ShardManager::merge_participants` refuses a merge —

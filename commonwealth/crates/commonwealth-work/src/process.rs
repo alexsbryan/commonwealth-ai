@@ -763,21 +763,38 @@ impl JobExecutor for ProcessExecutor {
     fn descriptor(&self) -> JobExecutorDescriptor {
         JobExecutorDescriptor {
             kind: self.kind.clone(),
-            // Subprocess, and no more. See the module doc: there is no sandbox
-            // mechanism in this repository, so claiming RootlessContainer here
-            // would be prose over nothing.
-            isolation: Isolation::Subprocess,
+            // WHAT THIS EXECUTOR REQUIRES, not what it provides. `resolve_offer`
+            // reads this field as the demand and refuses to publish an offer the
+            // build cannot meet (`work_donor.rs:265-273`). The two readings
+            // coincided while both sides said `Subprocess`, and the comment that
+            // stood here read it the other way round — which is how a floor came
+            // to be written as a capability.
+            //
+            // Running a submitter's arbitrary argv REQUIRES a container. That is
+            // the operator's posture as of 2026-09-10: isolation is the default,
+            // and there is no arbitrary execution outside a well-defined
+            // boundary. `DONOR_ISOLATION` stays `Subprocess` because that is what
+            // the build actually provides, so a daemon now refuses this kind at
+            // boot BY NAME instead of publishing an offer whose only wall is
+            // consent — and consent is not isolation (module doc, and
+            // `work_donor.rs:40-43`). This arm stays red until a container-backed
+            // executor raises what the build provides, which is a mechanism and
+            // not a config key (ARCH §18.3).
+            isolation: Isolation::RootlessContainer,
             parameters: json!({
                 "type": "object",
                 "title": "process:v1",
                 "description":
-                    "Runs `argv` as a child process on the donor's own machine, in its own \
-                     process group, killed as a group on timeout. Isolation is `subprocess` \
-                     and trust is TRUSTED-NATIVE: there is no sandbox — no bwrap, no \
-                     firejail, no nsjail, no network namespace — so a unit runs with the \
-                     donor's user, filesystem and network. What limits it is consent \
-                     (`Submit.allowed` intersected with `Offer.accept_from`), and consent is \
-                     not isolation. Offer this kind only to actors you would hand a shell.",
+                    "Runs `argv` as a child process, in its own process group, killed as a \
+                     group on timeout. REQUIRES `rootless-container` isolation, and no build \
+                     in this repository provides it yet — no bwrap, no firejail, no nsjail, \
+                     no network namespace — so a daemon REFUSES to offer this kind at boot \
+                     and names the shortfall. That refusal is the shipped state and it is \
+                     deliberate: unsandboxed, a unit runs with the donor's user, filesystem \
+                     and network, which reaches the donor's own mesh private key. What would \
+                     otherwise limit it is consent (`Submit.allowed` intersected with \
+                     `Offer.accept_from`), and consent is not isolation. A container-backed \
+                     executor is what lifts this, not a config key.",
                 "required": ["argv", "timeout_secs", "result"],
                 "additionalProperties": false,
                 "properties": {

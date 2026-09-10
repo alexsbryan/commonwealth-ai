@@ -147,13 +147,11 @@ pub enum OfferRefused {
         kind: JobKind,
         registered: Vec<JobKind>,
     },
-    /// A registered executor needs stronger isolation than this build offers.
-    #[error("[compute.work_offer] offers `{kind}`, whose executor requires `{required:?}` isolation, and this build provides `{offered:?}`")]
-    IsolationBelow {
-        kind: JobKind,
-        required: Isolation,
-        offered: Isolation,
-    },
+    // An executor demanding more isolation than this build provides was a
+    // REFUSED BOOT until 2026-09-10 and is now a dropped kind with a `warn`
+    // — see the floor's comment in `resolve_offer`. The variant is gone
+    // rather than kept unreachable: an error nothing constructs is a claim
+    // that a path exists, and the next reader would look for it.
     /// An `accept_from` entry is not an actor key.
     #[error("[compute.work_offer] accept_from contains `{raw}`, which is not an actor key: {why}")]
     AcceptKey { raw: String, why: String },
@@ -252,6 +250,23 @@ pub fn resolve_offer(
     // `registry.kinds()` is the same set `registry.resolve` answers from, so
     // a kind that passes here cannot fail to resolve in the loop — one
     // decider, not two lists that agree today (ARCH §10.6).
+    // THE ISOLATION FLOOR IS A DROP, NOT A REFUSED BOOT (2026-09-10).
+    //
+    // The two failures below look alike and must not be treated alike. An
+    // UNREGISTERED kind is the operator's typo, and refusing the boot is the
+    // right answer: nothing they intended can happen and the sooner they read
+    // the sentence the better. An isolation shortfall is OURS — it is this
+    // build changing what a kind demands under a config that was valid when
+    // it was written. Every daemon on this mesh carries
+    // `kinds = ["process:v1"]` today, so refusing the boot would take those
+    // daemons DOWN on their next restart to enforce a rule about work they
+    // are not currently doing, which trades a security posture for an outage.
+    //
+    // So the kind is dropped from the published offer and the drop is NAMED
+    // at `warn` — never silently, which would be the §18.3 substitution. If
+    // that empties the offer, this node publishes none and donates nothing,
+    // which is exactly the shipped posture for a node that offers no kind.
+    let mut offerable: Vec<JobKind> = Vec::new();
     for kind in &offer.kinds {
         let Some(executor) = registry.resolve(kind) else {
             return Err(OfferRefused::UnregisteredKind {
@@ -262,17 +277,38 @@ pub fn resolve_offer(
         // The other half of the same question, and the refusal the predicate's
         // own docs say the REGISTRY decides: a unit does not carry its
         // isolation requirement, its executor's descriptor does. An executor
-        // this build cannot isolate as strongly as it demands must not be
-        // offered at all.
+        // this build cannot isolate as strongly as it demands is not offered.
         let required = executor.descriptor().isolation;
         if !DONOR_ISOLATION.covers(required) {
-            return Err(OfferRefused::IsolationBelow {
-                kind: kind.clone(),
-                required,
-                offered: DONOR_ISOLATION,
-            });
+            warn!(
+                target: TRACE_TARGET,
+                kind = %kind,
+                required = ?required,
+                provides = ?DONOR_ISOLATION,
+                "work donor: NOT offering this kind — its executor requires \
+                 isolation this build does not provide, so a unit of it would \
+                 run with this node's user, filesystem and network behind \
+                 nothing but consent. The config is left alone; the kind is \
+                 dropped from the offer. A container-backed executor is what \
+                 lifts this, not a config key"
+            );
+            continue;
         }
+        offerable.push(kind.clone());
     }
+    if offerable.is_empty() {
+        info!(
+            target: TRACE_TARGET,
+            configured = %registered_list(&offer.kinds),
+            "work donor: every configured kind was dropped by the isolation \
+             floor, so this node publishes no offer and donates nothing"
+        );
+        return Ok(None);
+    }
+    let offer = WorkOffer {
+        kinds: offerable,
+        ..offer
+    };
     if offer.max_concurrent == 0 {
         // Reported, not corrected. `may_take` will refuse every unit with
         // `Concurrency { held: 0, max: 0 }`, which is a working donor that

@@ -40,18 +40,120 @@ fn startup_refuses_offer_of_unregistered_kind() {
     );
 }
 
+/// An executor that asks only for what this build provides. It exists so the
+/// control below has a subject: `process:v1` now requires
+/// `RootlessContainer` and is refused here (see the watched red under it), so
+/// a control written against it would assert the very thing being gated.
+struct StubExecutor(JobKind);
+
+impl commonwealth_work::executor::JobExecutor for StubExecutor {
+    fn descriptor(&self) -> oicp_types::JobExecutorDescriptor {
+        oicp_types::JobExecutorDescriptor {
+            kind: self.0.clone(),
+            isolation: DONOR_ISOLATION,
+            parameters: serde_json::json!({"type": "object"}),
+            examples: Vec::new(),
+            idempotency: oicp_types::tool::Idempotency::Idempotent,
+            lease_interval_ms: 1_000,
+            est_secs: None,
+            could_not_judge_exits: Vec::new(),
+            verdict: kernel_types::quality::VerdictSource::ExitCode,
+        }
+    }
+    fn validate(&self, _unit: &JobUnit) -> Result<(), commonwealth_work::refusal::WorkRefusal> {
+        Ok(())
+    }
+    fn execute<'a>(
+        &'a self,
+        _unit: &'a JobUnit,
+        _ctx: &'a commonwealth_work::executor::JobContext,
+    ) -> commonwealth_work::executor::ExecuteFuture<'a> {
+        unreachable!("the boot decision never runs a unit")
+    }
+}
+
 /// The control. Without it the gate above passes the day `resolve_offer`
 /// starts refusing everything — "no unregistered kind is offered" is
-/// trivially true of a daemon that offers nothing.
+/// trivially true of a daemon that offers nothing. That day arrived when
+/// `process:v1` was raised to require a container, which is exactly why this
+/// control now stands on an executor whose demand the build MEETS.
 #[test]
-fn the_control_a_registered_kind_resolves_to_an_offer() {
-    let registry = donor_registry(None);
-    let offer = resolve_offer(&section(&["process:v1"]), &registry, "linux", "x86_64")
-        .expect("process:v1 is registered")
+fn the_control_a_registered_kind_this_build_can_isolate_resolves_to_an_offer() {
+    let kind = JobKind::parse("stub:v1").expect("kind");
+    let mut registry = JobExecutorRegistry::new();
+    registry
+        .register(Arc::new(StubExecutor(kind)))
+        .expect("one registration");
+    let offer = resolve_offer(&section(&["stub:v1"]), &registry, "linux", "x86_64")
+        .expect("stub:v1 asks for exactly what this build provides")
         .expect("kinds are set, so there is an offer");
     assert_eq!(offer.kinds.len(), 1);
     assert_eq!(offer.os, "linux");
     assert_eq!(offer.isolation, DONOR_ISOLATION);
+}
+
+/// **THE ISOLATION FLOOR (ARCH §18.1, §18.3), operator decision 2026-09-10:
+/// isolation is the default and there is no arbitrary execution outside a
+/// well-defined boundary.**
+///
+/// The failing input is the SHIPPED config — a daemon that offers
+/// `process:v1`. Running a submitter's argv unsandboxed reaches the donor's
+/// user, filesystem, network and, through them, `~/.svrnmesh/node_key`: the
+/// donor's own mesh identity is readable by the work it accepts. Consent was
+/// the only wall (`Offer.accept_from`), and consent is not isolation
+/// (`work_donor.rs:40-43`).
+///
+/// So `ProcessExecutor` declares it REQUIRES `RootlessContainer`, this build
+/// provides `Subprocess`, and the boot refuses by name through the check that
+/// already existed. This test must stay RED-on-removal: flip the descriptor
+/// back to `Subprocess` and it is the only thing that turns, which is what
+/// makes the floor structural rather than remembered (ARCH §7).
+///
+/// It goes green the day a container-backed executor raises `DONOR_ISOLATION`
+/// — a mechanism, never a config key. Until then a daemon offering this kind
+/// does not boot into donating, and that is deliberate.
+#[test]
+fn the_isolation_floor_drops_process_v1_and_publishes_no_offer() {
+    let registry = donor_registry(None);
+    let resolved = resolve_offer(&section(&["process:v1"]), &registry, "linux", "x86_64")
+        .expect("the floor drops the kind; it must NOT take the daemon down");
+    assert_eq!(
+        resolved, None,
+        "with every configured kind dropped there is nothing to publish, and \
+         an offer naming no kind would advertise a donor that refuses \
+         everything"
+    );
+}
+
+/// The other half, and the one that would catch a floor implemented as "give
+/// up on the whole offer": a config naming BOTH kinds keeps the one this
+/// build can isolate and loses only the one it cannot.
+///
+/// The failing input is a `continue` written as a `return Ok(None)` — a node
+/// with a corpus engine would then quietly stop donating ingest work because
+/// of a `process:v1` line it never used.
+#[test]
+fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
+    let kind = JobKind::parse("stub:v1").expect("kind");
+    let mut registry = donor_registry(None);
+    registry
+        .register(Arc::new(StubExecutor(kind)))
+        .expect("one registration");
+    let offer = resolve_offer(
+        &section(&["process:v1", "stub:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+    )
+    .expect("a mixed config still resolves")
+    .expect("one kind survives, so there is an offer");
+    let kinds: Vec<String> = offer.kinds.iter().map(|k| k.to_string()).collect();
+    assert_eq!(
+        kinds,
+        vec!["stub:v1".to_string()],
+        "the floor must drop `process:v1` and keep what this build can \
+         isolate, got: {kinds:?}"
+    );
 }
 
 /// The zero value donates nothing and is not an error — the shipped
