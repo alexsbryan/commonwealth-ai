@@ -1,0 +1,18 @@
+[
+  {
+    "payload": {
+      "corpus_id": "cw5g-d1",
+      "recipe_id": "cw5g-d1",
+      "unit_id": 0,
+      "unit": { "kind": "JsonlRange", "value": { "start": 0, "end": 30 } }
+    }
+  },
+  {
+    "payload": {
+      "corpus_id": "cw5g-d1",
+      "recipe_id": "cw5g-d1",
+      "unit_id": 1,
+      "unit": { "kind": "JsonlRange", "value": { "start": 30, "end": 60 } }
+    }
+  }
+]

@@ -1,0 +1,27 @@
+Sep 09 20:51:18 | 2026-09-10T03:51:18.646996Z DEBUG executor registered kind=process:v1
+Sep 09 20:51:18 | 2026-09-10T03:51:18.647088Z DEBUG executor registered kind=ingest:v1
+Sep 09 20:51:18 | 2026-09-10T03:51:18.647226Z  INFO work donor: this node offers work kinds=process:v1, ingest:v1 max_concurrent=1 yield_to_foreground=false repos=1 registered=ingest:v1, process:v1
+Sep 09 20:51:28 | 2026-09-10T03:51:28.680474Z  INFO auto_ingest: loop started check_interval_secs=30 cooldown_secs=1800
+Sep 09 20:52:18 | 2026-09-10T03:52:18.184218Z DEBUG ingest:v1 starting a slice unit_hash=8313303731db5323a037b1d7d07255ccd8c3a9ac470349f40d310f1a5e7aefbe corpus=cw5g-d1 recipe=cw5g-d1 unit_id=1 output=/home/alexbryan/.sovereign/indexes/cw5g-d1-partition-node-4
+Sep 09 20:52:18 | 2026-09-10T03:52:18.263806Z  WARN ingest: could not enumerate canonical shards — total_shards left unstamped corpus=cw5g-d1 error=Extraction error: Failed to read ZIP TOC at /home/alexbryan/.svrnmesh/corpora-staging/cw5g-proof.jsonl: invalid 
+Sep 09 20:52:18 | 2026-09-10T03:52:18.266962Z  INFO Starting embed+index pipeline corpus=cw5g-d1 embed_batch=256 index_flush=2000 batch_embed=true resuming=false resume_iter_pos=0
+Sep 09 20:52:18 | [cw5g-d1] Starting embed+index pipeline (embed_batch=256, index_flush=2000, batch_embed=true)
+Sep 09 20:52:31 | [cw5g-d1] Final flush — 422 chunks — 422 total committed from 215 docs (0 skipped)
+Sep 09 20:52:31 | [cw5g-d1] Unit-scoped run — deferring index build to merge leader
+Sep 09 20:52:31 | [cw5g-d1] Ingestion complete — 422 chunks in 0m13s
+Sep 09 20:52:34 | 2026-09-10T03:52:34.364724Z DEBUG ingest:v1 starting a slice unit_hash=d741cb6ebb6e631d514470fd9b7889279f0508eaaf790f8901001c102d417e5d corpus=cw5g-d1 recipe=cw5g-d1 unit_id=0 output=/home/alexbryan/.sovereign/indexes/cw5g-d1-partition-node-4
+Sep 09 20:52:34 | 2026-09-10T03:52:34.444595Z  WARN ingest: could not enumerate canonical shards — total_shards left unstamped corpus=cw5g-d1 error=Extraction error: Failed to read ZIP TOC at /home/alexbryan/.svrnmesh/corpora-staging/cw5g-proof.jsonl: invalid 
+Sep 09 20:52:34 | 2026-09-10T03:52:34.451509Z  INFO Starting embed+index pipeline corpus=cw5g-d1 embed_batch=256 index_flush=2000 batch_embed=true resuming=false resume_iter_pos=0
+Sep 09 20:52:34 | [cw5g-d1] Starting embed+index pipeline (embed_batch=256, index_flush=2000, batch_embed=true)
+Sep 09 20:52:47 | [cw5g-d1] Final flush — 391 chunks — 813 total committed from 206 docs (0 skipped)
+Sep 09 20:52:47 | [cw5g-d1] Unit-scoped run — deferring index build to merge leader
+Sep 09 20:52:47 | [cw5g-d1] Ingestion complete — 813 chunks in 0m13s
+Sep 09 20:53:00 | [cw5g-d1] Pre-build dedupe pass (0/3)...
+Sep 09 20:53:00 | [cw5g-d1] Building vector index (1/3)...
+Sep 09 20:53:06 | [cw5g-d1] Vector index done
+Sep 09 20:53:06 | [cw5g-d1] Building FTS content index (2/3)...
+Sep 09 20:53:06 | [cw5g-d1] FTS content index done
+Sep 09 20:53:06 | [cw5g-d1] Building FTS title index (3/3)...
+Sep 09 20:53:06 | [cw5g-d1] FTS title index done
+Sep 09 20:53:06 | 2026-09-10T03:53:06.567808Z  INFO auto_ingest: canonical built from the fold's participant set corpus=cw5g-d1 handoff=handoff-3755df0cf837499f chunks=813 nodes=0 partial=false
+Sep 09 20:53:06 | 2026-09-10T03:53:06.844690Z  INFO gossip: hosted_corpora set changed — re-publishing hosted_corpora={"alignment", "cw5g-d1", "cw5g-proof", "drift-target-arch-principles", "drift-target-system-overview", "enron-sample-multi-wide", "federalist-

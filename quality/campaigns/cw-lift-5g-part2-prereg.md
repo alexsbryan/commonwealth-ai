@@ -1016,6 +1016,172 @@ variant of their own.
 
 ---
 
+**D1 — MET, ON A LIVE DAEMON, 2026-09-09.** The full run is
+`sovereign/bench/cw_lift_5g_d1/` — `transcript.txt` (four steps, the binary
+check, the queries), `trace-excerpt.txt` (the journal window), plus the recipe
+and units file the run was actually given.
+
+This is the first reading in this rung taken against a real corpus on a real
+daemon rather than an in-process fixture, which is the whole of why D0 was
+written. **The collector was reached and it did the right thing**, so the eight
+bars resting on it are not resting on nothing.
+
+*What was running, because everything after it is worthless otherwise.* The
+daemon already up reported its own exe `(deleted)` and predated the tree by ~2
+hours, so it was thrown away. Full workspace rebuild, debug, in the toolbox
+(`cargo build --workspace --features corpus-engine/treesitter,sovereign-cli/
+dev-tools` — the first attempt omitted `dev-tools` and silently downgraded the
+dispatcher, which AGENTS.md names). Then, read off the live process:
+
+    PID 3654947
+    readlink -f /proc/3654947/exe  →  target/debug/sovereign-cli-daemon
+    that path's mtime             →  2026-09-09 20:47:52   (== the build)
+    process started               →  2026-09-09 20:50:43   (after the build)
+
+*The instrument was confirmed landing BEFORE anything was submitted*, since a
+detached daemon discards output and an absent trace would otherwise be
+unreadable. `daemon start` handed off to the service manager, so the env on
+that command line did NOT reach the daemon — named as a deviation rather than
+glossed. The unit's drop-in already carries a superset of D1's pre-registered
+filter, read back out of `/proc/<pid>/environ`, and it produced
+`commonwealth_work` events at once:
+
+    DEBUG executor registered kind=ingest:v1
+     INFO work donor: this node offers work kinds=process:v1, ingest:v1
+     INFO auto_ingest: loop started check_interval_secs=30 cooldown_secs=1800
+
+*The corpus is part 1's own*, 60 lines and 1.6 MB, with ONE field changed — the
+corpus id, because part 1's `cw5g-proof` already carries a finished canonical
+and the collector short-circuits on `AlreadyHasCanonical`, which would have made
+it decline for a reason unrelated to whether it works. (/home is at 99% here;
+part 1's first attempt died on `Disk quota exceeded`.)
+
+*Steps 1 and 2 — the fold.* `svrn job submit --kind ingest:v1 --units …` →
+handoff `3755df0cf837499f4b78b6fccb1e1643` at seq 61. Polled at 15s:
+
+    t+15s  open       unit 1 leased (attempt 1) · unit 0 queued
+    t+30s  draining   unit 1 passed on attempt 1, 13s, partition holds 422
+    t+45s  complete   unit 0 passed on attempt 1, 13s, partition holds 813
+
+Both units on ATTEMPT 1; no retry was needed and none is claimed. `813` is the
+partition's RUNNING TOTAL, the field part 1 renamed `partition_chunks_total`
+for exactly this reason.
+
+*Step 3 — the tick loop, which no test had ever exercised on a daemon.*
+
+    20:52:47  [cw5g-d1] Ingestion complete — 813 chunks in 0m13s
+    20:52:47  [cw5g-d1] Unit-scoped run — deferring index build to merge leader
+    20:53:00  [cw5g-d1] Pre-build dedupe pass / Building vector index (1/3)
+    20:53:06  [cw5g-d1] Vector index done · FTS content done · FTS title done
+    20:53:06   INFO auto_ingest: canonical built from the fold's participant set
+               corpus=cw5g-d1 handoff=handoff-3755df0cf837499f chunks=813
+               nodes=0 partial=false
+    20:53:06   INFO gossip: hosted_corpora set changed — re-publishing …"cw5g-d1"…
+
+All four collector steps: `fold_coverage_for` returned `Some`, the arm ran,
+`merge_from_fold_coverage` merged, and `finalize_canonical` landed — the three
+index builds between 20:53:00 and 20:53:06 ARE that finalize, in B8's pinned
+order.
+
+**That it was the COLLECTOR and not the disk path is checked, not inferred.**
+The success sentence has exactly one site in the workspace —
+`sovereign-mesh/src/auto_ingest.rs:282`, the `RecoveryOutcome::Recovered` arm of
+`merge_from_fold_coverage` — and the disk-derived sibling logged nothing at all
+for this corpus across the window (`auto_recover` / `stranded-partition` /
+`chunk-merge phase`: empty). The `continue` held on a live daemon, which is what
+B7's reading 2 pre-registered and could only assert in-process.
+
+*Step 4 — the end-user reading, at three altitudes, weakest first.* On disk:
+the partition dir is GONE and the canonical carries `ingestion_in_progress:
+false, indexes_built: true`, all three sub-indexes built, fingerprint stamped.
+At `installed_indexes()`: the gossip re-publish above IS that term, not a proxy
+for it — `build_hosted_corpora` is fed by `engine.installed_indexes()`
+(`capabilities.rs:103`), the same accessor B2's correction re-measured through.
+And the bar itself, through the product's own surface:
+
+    $ svrn chat ask --corpus cw5g-d1 \
+        "What was the population of Mount Molar, Queensland at the 2021
+         census, and which region is it in?"
+
+    Population at the 2021 census: 117
+    Region it is in: Toowoomba Region
+    Grounded in the source:
+      "In the 2021 census, Mount Molar had a population of 117 people."
+      "Mount Molar is a rural locality in the Toowoomba Region, Queensland…"
+    Searched cw5g-d1 · 37.5s · EMBED_ROUTER · Qwen3.5-4B-UD-MTP-Q6_K_XL
+
+Mount Molar is article 37, in unit 1's range (30..60). A second question was
+asked against unit 0's range (0..30) and answered from it — *Ameerega
+pulchripecta*: family Dendrobatidae, endemic to Brazil, threatened by habitat
+loss — with second-slice articles in the same source list. So one corpus holds
+both slices and both are reachable, which is the reading a chunk count cannot
+give.
+
+**What D1 does NOT add, stated rather than discovered.** This is ONE node.
+`expected` was 1 and `nodes` was empty, so the HTTP tarball pull inside
+`merge_participants` did not run here — B2's loopback-socket reading is still
+the only one that has driven it, and two real machines remain unmeasured. The
+PRODUCER is untouched: this run typed `job submit` by hand, which is exactly the
+gap D2 is about, so D1 does not move K1. Nor does it exercise any tick after the
+merge (the next one short-circuits on `AlreadyHasCanonical`).
+
+**And one thing that did not happen and is not explained.** At the 20:52:29
+tick the handoff was not yet `Complete`, so `fold_coverage_for` returned `None`
+and control fell through to the disk path — with one partition on disk holding
+422 chunks, i.e. exactly the half-canonical B7 exists to prevent. Nothing
+merged and nothing logged. This run does not establish WHICH guard held
+(`active_ingests`, the partition's own `ingestion_in_progress`, or the
+cooldown), and an unattributed absence is not a guard (§18.1, §18.2). It wants
+a bar of its own.
+
+**Found in passing, none of them fixed, none of them blocking.** Full text and
+citations in `transcript.txt`; the four that matter:
+
+- `svrn corpus list` never lists an installed corpus, for ANY corpus:
+  `cmd_corpus_list` (`corpus_cmd/inventory.rs:18-29`) is six hard-coded
+  `println!`s of built-in recipe ids and reads no index directory, while
+  `corpus --help` calls it "List installed and available corpora". D1's step-4
+  wording is unsatisfiable by that verb; the installed reading came from gossip
+  and from the query instead.
+- `nodes=0` on a merge that used one shard — B7's `shards_covered` mis-report
+  (`participants.len()`, the number ASKED for), seen LIVE for the first time. On
+  a single-node fold every completion carries `provenance.host: Server::Local`,
+  which `fold_coverage_for` deliberately keeps out of `nodes`, so `participants`
+  is empty by construction. The merge was right: `merge_participants` collects
+  the LOCAL shard first (`shard_manager.rs:494-516`), so `expected = 1` was met.
+- The `total_shards` guard was dark here too, for a NEW reason. This recipe IS
+  `wikipedia_jsonl` — B7 reading 3's one stamped extractor — and it still went
+  unstamped, twice: `WARN ingest: could not enumerate canonical shards …
+  Failed to read ZIP TOC at …/cw5g-proof.jsonl: invalid Zip archive`. The stamp
+  path assumes a ZIP even when the extractor is reading a plain `.jsonl`.
+  Irrelevant on the fold path (`expected_partitions` comes from the handoff) and
+  it widens B7 reading 3: dark not only for non-Wikipedia recipes but for a
+  Wikipedia recipe over a non-ZIP source.
+- The refusal text teaches a payload the parser rejects (§10.6). Same file, two
+  spellings: `ingest_executor.rs:189` says `"kind": "hf-file"|"jsonl-shard"|
+  "jsonl-range"`, `:463` says `["HfFile","JsonlShard","JsonlRange"]`. `WorkUnit`
+  is `#[serde(tag="kind", content="value")]` with no `rename_all`, so PascalCase
+  is what parses — and the wrong spelling is the one on the FAILURE path, where
+  a stuck submitter reads it and gets refused again, silently, at the donor.
+- B5's corpus clause, corroborated live: `cw5g-proof` and `cw5g-d1` — different
+  ids, separate merges, different days — carry the SAME
+  `canonical_fingerprint` `ebae85630ca70ab1…c994540`. Correct for a content
+  hash, and that is B5's point: the fingerprint says nothing about which handoff
+  produced the corpus or whether it is whole.
+
+**What D1's result does to B2, B7 and B8.** It corroborates all three and
+replaces none of them. B2's re-measured claim — that a fold-driven merge
+produces a corpus reachable at the user's altitude — now has a live reading
+behind it as well as a fixture one, taken through `chat ask` rather than through
+`usable_indexes()` directly, which is a rung ABOVE what B2 could reach. B7's
+`continue` was watched holding on a real tick loop. B8's finalize was watched
+running inside `merge_participants` on the fold caller, in its pinned order,
+against a real corpus. None of their KNOWN-NOT-CHECKED lists shrinks: two
+machines, the wire pull, and the producer are exactly as unmeasured as they
+were.
+
+---
+
 ## THE DELETION DID NOT RUN, AND THE REASON IS A MISSING PRODUCER
 
 **Surveyed 2026-09-09, before any deletion. Nothing was deleted. Every
