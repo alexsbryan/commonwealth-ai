@@ -142,6 +142,13 @@ impl Sandbox {
     /// **The hardening is here and not in a config**, so a donor cannot be
     /// talked into a weaker boundary while still claiming this one:
     ///
+    /// - `--entrypoint=""`. THE UNIT'S ARGV IS THE UNIT. An image with an
+    ///   `ENTRYPOINT` would otherwise run ITS program with the unit's argv
+    ///   handed over as arguments — so the donor would execute something the
+    ///   submitter never sealed and report a verdict about it. Measured
+    ///   2026-09-10 on the first sandboxed lift run: three units, three
+    ///   exit-127s, and a `failed` verdict for a program that never ran
+    ///   (§18.3 — the substitution has to be impossible, not documented).
     /// - `--network=none`. The posture that is verifiable rather than
     ///   asserted — a unit's failure to open a socket is a thing you can
     ///   watch. A kind that genuinely needs egress has to say so and does not
@@ -174,6 +181,10 @@ impl Sandbox {
                     "--cap-drop=ALL".into(),
                     "--security-opt=no-new-privileges".into(),
                     "--userns=keep-id".into(),
+                    // Empty, not absent: absent means "keep the image's",
+                    // and the image's is the one thing here the donor's
+                    // operator picked but did not write.
+                    "--entrypoint=".into(),
                 ];
                 // The workdir is the ONLY thing that crosses. `:Z` asks the
                 // runtime to relabel for SELinux; on a host without it the
@@ -291,6 +302,7 @@ mod tests {
         let line = s.command_line(&argv, Path::new("/tmp/unit-workdir"), [("NO_COLOR", "1")]);
 
         for flag in [
+            "--entrypoint=",
             "--network=none",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",

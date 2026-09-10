@@ -60,13 +60,27 @@ corrections come before the mechanism).
 | The three `WorkUnit`s are one type wearing costumes | Three types, three lifecycles, one name: `commonwealth-core/src/knowledge.rs:319` (a closed three-variant ingest enum), `worker_http.rs:81` (`kind: String`, read only by the `echo` stub runner `worker_daemon.rs:88` and a test runner `:1142`, never by the production `SubprocessRunner`; plus `JobManifest :92`, `CompletedUnit :105`), and `sovereign-pipeline/src/worklist.rs:47` (a sqlite row). |
 | `principal` is a new noun the job plane must mint | On the rail the actor **is** the signing key, and the roster binds it to a person. Nothing to mint. |
 | "the ledger credits the donor" | `LedgerEventKind` (`commonwealth-core/src/contributions.rs:59`) is a closed five-variant set with no compute variant. There is nothing to write today; 5h adds one and reuses the existing emitter (`commonwealth-state/src/contributions.rs:73`). |
-| Sandboxed script execution exists to build on | `bwrap`, `firejail`, `nsjail` and `--network=none` return **zero hits** workspace-wide; the only `podman` builds release artifacts and runs CI. `sovereign-tools/src/compute.rs:8` says "Sandboxed Python code execution tool" over an implementation (`:30-59`) that spawns `python3` with a 30-second timeout and no isolation of any kind. The word is aspirational. |
+| Sandboxed script execution exists to build on | TRUE WHEN AUDITED (2026-09-09), **superseded 2026-09-10** — see the note under this table. As audited: `bwrap`, `firejail`, `nsjail` and `--network=none` returned **zero hits** workspace-wide; the only `podman` built release artifacts and ran CI. `sovereign-tools/src/compute.rs:8` still says "Sandboxed Python code execution tool" over an implementation (`:30-59`) that spawns `python3` with a 30-second timeout and no isolation of any kind — that word is still aspirational, and it is a different subsystem from this one. |
 
 Two consequences the table forces, rather than leaves as taste. **`Placement` cannot copy the
 two neighbours it named** — one is `pub(crate)` behind a closed enum, the other implements a
 different rule under the cited name — so v0 ships no scorer at all. And the OCI payload
-contract has **no floor under it**: this repository contains no sandbox mechanism, so a design
-that leans on "rootless, digest-pinned, network-isolated" is leaning on prose.
+contract had **no floor under it**: at audit this repository contained no sandbox mechanism, so
+a design leaning on "rootless, digest-pinned, network-isolated" was leaning on prose.
+
+**Row 16 closed on 2026-09-10, and the shape of the fix is why the audit was right to refuse
+the design rather than the goal.** `commonwealth_work::sandbox` is a boundary in the PACKAGE:
+`Sandbox::probe` confirms a rootless runtime and a locally present image before a donor may
+claim `Isolation::RootlessContainer`, and `command_line` spawns the unit with `--entrypoint=`,
+`--network=none`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`,
+`--rm` and exactly one `-v` — the unit's workdir, so a donor's identity is out of reach by
+construction. No seatbelt profile was authored and no firewall DSL was invented: it shells out
+to a runtime the HOST provides, into an image the DONOR'S OPERATOR declares, and it knows
+nothing about a repository. Measured through the package's own donor —
+`scripts/cw-work-lift.sh --sandbox` reports `{"value": 1}`, three heterogeneous units, and its
+step 6 watches an escape probe fail on the bare host and be refused inside the boundary.
+Unmeasured: a donation through the DAEMON, which composes the same probe and the same executor
+but has not been run. Ledger row: `sovereign/DEFAULTS_LEDGER.md`, `process:v1` donation.
 
 ## Mission
 
@@ -189,9 +203,17 @@ truncated. `MeshStore` stays what it honestly is — a cache (PLAN.md rung 8, de
 
 ## The payload contract: a command, not an image
 
-The 2026-09-04 cut adopted OCI as the payload contract. The audit removed its floor: this
-repository ships **no sandbox mechanism at all** (row 16), so "rootless, digest-pinned,
-network-isolated" described intent, not a mechanism a donor could enforce.
+The 2026-09-04 cut adopted OCI as the payload contract. The audit removed its floor: at that
+point the repository shipped **no sandbox mechanism at all** (row 16), so "rootless,
+digest-pinned, network-isolated" described intent, not a mechanism a donor could enforce.
+
+**A floor exists as of 2026-09-10 and the contract below does not change** — which is the
+payoff of having refused the OCI payload. The unit is still `{argv, cwd, stdin?, env,
+timeout_secs, result}`; the image is the DONOR'S, declared beside the rest of their offer,
+never the submitter's. A unit that named its own image would choose the contents of its own
+sandbox and pull an arbitrary reference onto somebody else's machine. What changed is what a
+donor may CLAIM: `RootlessContainer` when a probe can confirm it, `Subprocess` otherwise, and
+`process:v1` is not offerable on the latter.
 
 - **v0 is `process:v1`, trusted-native, and the descriptor says so.** A unit is one command
   run from a source checkout at a pinned git rev: `{argv, cwd, stdin?, env, timeout_secs,
@@ -591,9 +613,10 @@ packaging constraint worth settling early rather than discovering at ship.
 
 ## What we will NOT do
 
-- **Invent sandboxing.** No seatbelt-profile authorship, no firewall DSL. v0 says
-  trusted-native and does not dress it up; the `isolation` claim is an ordered enum so a real
-  runtime can be added later without a seam change.
+- **Invent sandboxing.** No seatbelt-profile authorship, no firewall DSL. This held, and the
+  ordered `isolation` enum is what let a real runtime land on 2026-09-10 without a seam change:
+  `commonwealth_work::sandbox` drives a runtime the host already has. Trusted-native is no
+  longer v0's answer for `process:v1` — a boundary is — but nothing here was invented.
 - **Claim a sandbox we do not have.** The 2026-09-04 cut did, in the OCI section and in the
   ACE row; audit row 16 is why both are rewritten rather than softened.
 - **Add HTTP routes.** The rail replicates signed state with one declared sender, and a
