@@ -205,15 +205,23 @@ status    = "active"
 #       the GATEWAY to G4: the refinement path returns NotAttempted when
 #       request_information answers None, so G4 was unreachable until
 #       this landed.
-#   G3b submit_information_search    OPEN, and the tangled one (260 lines,
-#       commands/conversation.rs:374-638). SPLIT, measured: the web search
-#       stays CLIENT-side (it reads the desktop's own [search] config and
-#       crosses the desktop's egress boundary with user_formed:true — moving
-#       it changes which config is authoritative, a behaviour change not a
-#       refactor). The dossier write is ALREADY on the wire
-#       (POST /v1/notes/tool-outcome). The searched_sources registry write
-#       and the resolve are the daemon's — fold both into one Answer so a
-#       single user action is a single atomic effect.
+#   G3b submit_information_search    DONE 2026-09-09 (R3, 0f76bde5c).
+#       The split the row measured, kept: the web search stays
+#       CLIENT-side (the desktop's own [search] config and egress
+#       boundary, user_formed query — moving it changes which config is
+#       authoritative). The fold: TurnAnswer::Information carries its
+#       `sources` and the daemon merges them into the conversation's
+#       searched_sources AS PART OF the resolve — one user action, one
+#       atomic effect; the DAEMON stamps the real turn count (pinned by
+#       e2e store assertion). The merge is ONE implementation now
+#       (sovereign_core::searched_sources::merge_into) — the desktop's
+#       inline copy is deleted. WIRE NOTE: the struct variant moved the
+#       information answer's bytes ({"information":null} ->
+#       {"information":{"content":null}}) in the same free-now window
+#       R1 spent; nothing shipped answers it. The desktop's attach
+#       conversion of the command itself (TurnSender answer, daemon-side
+#       staleness via the Answer's named refusal instead of the local
+#       has_pending guard) is C2's — the wire it needs now exists.
 #   G4  message-refined              DONE 2026-09-09 (R3):
 #       SocketApprovalChannel emits Notice::MessageRefined. The plumbing
 #       was measured before building: the emit fires in a DETACHED spawn
