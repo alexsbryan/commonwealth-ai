@@ -14,6 +14,20 @@
 //! from host state. The numeric LVT ops (`read_corpus`, `parcel_analytics`)
 //! stay here — they fold corpus-engine's `compute_aggregates`, so the SF-LVT
 //! "no confabulated numbers" guarantee carries onto the desktop surface.
+//!
+//! # Where the atoms come from (sv-surface D3)
+//!
+//! The three atom readers — `meshapp_read_corpus`, `meshapp_search_parcels`,
+//! `meshapp_parcel_analytics` — no longer open `atlas/atoms.json`. They read
+//! `GET /internal/corpus/{corpus}/atoms` through [`wire_atoms`], which is ONE
+//! path in both boot modes. The FOLDS stay here: they are the projection, and
+//! the authorization gate above them cannot cross a socket (the webview label
+//! is host-assigned to THIS process's window).
+//!
+//! The other thirteen graph ops still read the on-disk index directly through
+//! [`resolve_index_path`] into `sovereign_meshapp::*`. There is no route for
+//! that primitive yet — one `meshapp_http` family over the daemon's own
+//! `index_dir` serves all thirteen, and it is the next rung.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -79,32 +93,27 @@ pub struct ParcelAnalyticsDto {
     pub derivation: Vec<String>,
 }
 
-/// Load a corpus's atlas atoms, propagating errors (the bridge surfaces a
-/// reason rather than silently returning empty). Mirrors the read path in
-/// `commands::reading`.
-async fn load_atoms(
+/// Every atom in a corpus's atlas, read over the daemon's
+/// `GET /internal/corpus/{corpus}/atoms` — ONE path in both boot modes,
+/// because Local means the daemon is in-process over this process's own
+/// `corpus_engine` (sv-surface D3).
+///
+/// Replaces the in-process `load_atoms`, which opened `atlas/atoms.json`
+/// itself and therefore answered nothing at all on an attached boot. The
+/// route serialises `corpus_engine_vocab::AtomsFile`'s vec verbatim, so
+/// `AtomEnvelope` is the same type the three folds below already matched
+/// on and none of them changes. Errors still propagate a reason rather
+/// than silently returning empty — `corpus_atoms_all` pages until the
+/// host says the read is finished and reports a host that would not
+/// advance rather than clipping (ARCH §18.3).
+async fn wire_atoms(
     state: &State<'_, Arc<AppState>>,
     corpus_id: &str,
 ) -> Result<Vec<AtomEnvelope>, String> {
-    let engine = state
-        .corpus_engine
-        .read()
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .corpus_atoms_all::<AtomEnvelope>(corpus_id)
         .await
-        .as_ref()
-        .map(Arc::clone)
-        .ok_or_else(|| "corpus engine not initialized".to_string())?;
-    let installed = engine
-        .installed_indexes()
-        .await
-        .map_err(|e| format!("installed_indexes: {e}"))?;
-    let entry = installed
-        .iter()
-        .find(|i| i.corpus_id == corpus_id)
-        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))?;
-    let atlas_dir = entry.path.join("atlas");
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms for `{corpus_id}`: {e}"))?;
-    Ok(file.atoms)
+        .map_err(|e| format!("read atoms for `{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.capabilities()` — ungated. Returns the permission
@@ -139,7 +148,7 @@ pub async fn meshapp_read_corpus(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
 
     let want: HashSet<&str> = atom_ids.iter().map(String::as_str).collect();
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let out = atoms
         .into_iter()
         .filter_map(|env| match env {
@@ -180,7 +189,7 @@ pub async fn meshapp_search_parcels(
         return Ok(Vec::new());
     }
     let cap = limit.unwrap_or(25).min(100);
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let mut out: Vec<ParcelDto> = atoms
         .into_iter()
         .filter_map(|env| match env {
@@ -226,7 +235,7 @@ pub async fn meshapp_parcel_analytics(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
 
     let target = business_tax_target.unwrap_or(DEFAULT_BUSINESS_TAX_TARGET);
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let parcels: Vec<_> = atoms
         .into_iter()
         .filter_map(|env| match env {

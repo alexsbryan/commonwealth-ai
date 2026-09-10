@@ -13,35 +13,43 @@
 //! sovereign/ARCH_PRINCIPLES.md), and atlas inspection is a distinct
 //! concern from the "reading from a citation" flow that owns the
 //! `read_*` commands.
+//!
+//! # Where the browse half is decided (sv-surface D4)
+//!
+//! The six browse commands hold NO reader. Each is one call onto
+//! `sovereign_mesh::atlas_http`'s routes over `client_base_url()` — ONE
+//! path in both boot modes, because Local means the daemon is in-process
+//! over this process's own `corpus_engine`. Their return types are
+//! unchanged and unwrapped: the routes answer the same
+//! `sovereign_tools::atlas_view` types the local `FileAtlasReader`
+//! returned, so the frontend contract is byte-identical — and the
+//! section→chunk map that makes `atlas_get_atom_detail`'s evidence rows
+//! clickable is now built and cached ONCE per host rather than once per
+//! surface.
+//!
+//! What is deliberately still local, and why: the two GLiNER commands
+//! download a model into this app's own data dir (app-local by the
+//! campaign's closed set), and the six conversation-tiered commands read
+//! `SqliteStateStore`'s INHERENT methods, which `dyn StateStore` does not
+//! name — they need a trait widening in core/contracts before a route
+//! can serve them, which is a rung of its own.
 
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
     AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
-    ConvSummary, FileAtlasReader, PageCursor, SummaryCorrectionView,
+    ConvSummary, PageCursor, SummaryCorrectionView,
 };
 use tauri::State;
 
 use crate::state::AppState;
 
-/// Per-corpus `section_id → chunk_id` map for atom-detail evidence
-/// deep-linking, built once and cached. Building it is a full
-/// chunks.lance scan (2.8 GB / ~90s on Wikipedia's 1.9M rows), so the
-/// atom-detail command NEVER builds it on the click path — it resolves
-/// from the cache when ready and otherwise kicks off a one-time
-/// background build. See `atlas_get_atom_detail`.
-enum SectionMapState {
-    Building,
-    Ready(Arc<std::collections::HashMap<String, u64>>),
-}
-
-fn section_map_cache(
-) -> &'static std::sync::Mutex<std::collections::HashMap<String, SectionMapState>> {
-    static CACHE: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<String, SectionMapState>>,
-    > = std::sync::OnceLock::new();
-    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+/// The client for the daemon's atlas-browse surface — the same
+/// `FileAtlasReader` over the same `index_dir` the desktop used to
+/// construct here, reached over loopback instead (sv-surface D4).
+fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
 /// List every installed corpus that has an atlas on disk. Drives the
@@ -52,13 +60,8 @@ fn section_map_cache(
 pub async fn atlas_list_corpora(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<AtlasCorpusSummary>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_corpora()
+    atlas_client(&state)
+        .atlas_corpora::<Vec<AtlasCorpusSummary>>()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
 }
@@ -75,13 +78,8 @@ pub async fn atlas_build_report(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<AtlasBuildReport, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .build_report(&corpus_id)
+    atlas_client(&state)
+        .atlas_build_report::<AtlasBuildReport>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_build_report: {e}"))
 }
@@ -100,13 +98,8 @@ pub async fn atlas_list_members(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Vec<AtlasMemberSummary>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_members(&corpus_id)
+    atlas_client(&state)
+        .atlas_members::<Vec<AtlasMemberSummary>>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_list_members: {e}"))
 }
@@ -126,17 +119,13 @@ pub async fn atlas_list_atoms(
     filter: Option<AtomFilter>,
     page: Option<PageCursor>,
 ) -> Result<AtomListPage, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_atoms(
-            &corpus_id,
-            filter.unwrap_or_default(),
-            page.unwrap_or_default(),
-        )
+    // `atlas_http::AtomBrowseRequest`'s two keys, carrying the SAME
+    // `Option` semantics this command already had — an absent value is the
+    // type's `Default`, now applied by the route so the default has one
+    // decider rather than two (ARCH §10.6).
+    let request = serde_json::json!({ "filter": filter, "page": page });
+    atlas_client(&state)
+        .atlas_atoms::<_, AtomListPage>(&corpus_id, &request)
         .await
         .map_err(|e| format!("atlas_list_atoms: {e}"))
 }
@@ -152,16 +141,11 @@ pub async fn atlas_subgraph(
     corpus_id: String,
     max_nodes: Option<usize>,
 ) -> Result<sovereign_tools::atlas_view::AtlasSubgraph, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .subgraph(
-            &corpus_id,
-            max_nodes.unwrap_or(sovereign_tools::atlas_view::DEFAULT_MAX_NODES),
-        )
+    // `None` travels as an absent `max_nodes` and the route applies
+    // `atlas_view::DEFAULT_MAX_NODES` — the cap keeps ONE decider, and it
+    // is not this file.
+    atlas_client(&state)
+        .atlas_subgraph::<sovereign_tools::atlas_view::AtlasSubgraph>(&corpus_id, max_nodes)
         .await
         .map_err(|e| format!("atlas_subgraph: {e}"))
 }
@@ -170,106 +154,29 @@ pub async fn atlas_subgraph(
 /// one-hop related atoms + cross-corpus bridges + evidence
 /// excerpts. Drives the desktop's `AtomDetail.svelte`.
 ///
-/// After `FileAtlasReader` produces the detail, this command
-/// resolves the section ids on every evidence excerpt to numeric
-/// chunk ids via `index.resolve_sections_to_chunks` — the same path
-/// `read_get_atom_elsewhere` uses. The frontend then renders
-/// evidence rows as clickable, opening the ReadingSurface centered
-/// on the chunk.
+/// The evidence excerpts arrive with their `section_id`s ALREADY
+/// resolved to numeric `chunk_id`s — the route does that half now, off
+/// the same per-corpus cache and the same never-build-on-the-click-path
+/// policy the desktop used to keep privately. A row whose section did
+/// not resolve stays `chunk_id: None` and renders non-clickable, exactly
+/// as before; the map fills in the background and later clicks resolve.
 ///
 /// Returns `Ok(None)` when the atom id isn't present in the corpus's
 /// atoms.json (stale UI link, or extraction renumbered atom_ids
-/// since the last list_atoms call).
+/// since the last list_atoms call) — the route's 404, which
+/// `atlas_atom_detail` maps to `None` while leaving every OTHER
+/// non-success an error, so "corpus will not open" cannot read as
+/// "atom absent".
 #[tauri::command]
 pub async fn atlas_get_atom_detail(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     atom_id: String,
 ) -> Result<Option<AtomDetail>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    let mut detail = match reader
-        .get_atom_detail(&corpus_id, &atom_id)
+    atlas_client(&state)
+        .atlas_atom_detail::<AtomDetail>(&corpus_id, &atom_id)
         .await
-        .map_err(|e| format!("atlas_get_atom_detail: {e}"))?
-    {
-        Some(d) => d,
-        None => return Ok(None),
-    };
-
-    // Resolve section_id → numeric chunk_id so evidence rows can
-    // deep-link to the ReadingSurface. Best-effort: a resolution
-    // failure on one section logs a warning but doesn't fail the
-    // whole detail — the row just stays non-clickable.
-    let unique_sections: Vec<String> = {
-        let mut seen = std::collections::HashSet::new();
-        detail
-            .evidence_excerpts
-            .iter()
-            .filter_map(|e| {
-                if seen.insert(e.section_id.clone()) {
-                    Some(e.section_id.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    };
-    if !unique_sections.is_empty() {
-        // Non-blocking, cached resolution. Building the section→chunk map
-        // is a full chunks.lance scan (2.8 GB / ~90s on Wikipedia), so we
-        // NEVER do it on the click path. If the per-corpus map is cached,
-        // resolve every evidence row from memory; otherwise leave
-        // chunk_id=None (the frontend renders the row non-clickable) and
-        // kick off a ONE-TIME background build so later clicks resolve.
-        // (On Wikipedia the atom section_id space doesn't even match chunk
-        // metadata, so resolution finds nothing regardless — all the more
-        // reason not to stall the load on it.)
-        let cached: Option<Arc<std::collections::HashMap<String, u64>>> = {
-            let mut cache = section_map_cache().lock().unwrap();
-            match cache.get(&corpus_id) {
-                Some(SectionMapState::Ready(m)) => Some(Arc::clone(m)),
-                Some(SectionMapState::Building) => None,
-                None => {
-                    cache.insert(corpus_id.clone(), SectionMapState::Building);
-                    let engine = Arc::clone(&engine);
-                    let corpus_bg = corpus_id.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let built = match engine.open_index_for_corpus(&corpus_bg).await {
-                            Ok(index) => index.section_chunk_index().await.ok(),
-                            Err(_) => None,
-                        };
-                        let mut cache = section_map_cache().lock().unwrap();
-                        match built {
-                            Some(map) => {
-                                tracing::info!(
-                                    corpus_id = %corpus_bg,
-                                    sections = map.len(),
-                                    "atlas: section→chunk map built + cached (background)",
-                                );
-                                cache.insert(corpus_bg, SectionMapState::Ready(Arc::new(map)));
-                            }
-                            None => {
-                                // Build failed — drop the marker so a later
-                                // click retries instead of wedging on Building.
-                                cache.remove(&corpus_bg);
-                            }
-                        }
-                    });
-                    None
-                }
-            }
-        };
-        if let Some(map) = cached {
-            for excerpt in &mut detail.evidence_excerpts {
-                excerpt.chunk_id = map.get(&excerpt.section_id).copied();
-            }
-        }
-    }
-    Ok(Some(detail))
+        .map_err(|e| format!("atlas_get_atom_detail: {e}"))
 }
 
 // ── Conversation tiered-retrieval commands (spec CONV_TIERED_PORT.md
@@ -659,10 +566,14 @@ fn rank_entity_chips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The browse commands no longer construct a reader (sv-surface D4);
+    // these two tests still drive `FileAtlasReader` DIRECTLY, because what
+    // they pin is the on-disk fixture the route will read, not the command.
     use corpus_engine::enrichment::atlas::atoms::{
         AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
     };
     use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+    use sovereign_tools::atlas_view::FileAtlasReader;
 
     fn write_atoms(atlas_dir: &std::path::Path, atoms: Vec<AtomEnvelope>) {
         std::fs::create_dir_all(atlas_dir).unwrap();
