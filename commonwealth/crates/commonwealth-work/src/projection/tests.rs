@@ -559,7 +559,10 @@ fn the_lease_decider_answers_held_for_the_holder_and_lost_for_everyone_else() {
     // silently renews a lease on a unit nobody is tracking.
     let empty = fold(&[]);
     assert!(
-        matches!(lease_state(&empty, &r, &holder, 200_000), LeaseState::Lost(_)),
+        matches!(
+            lease_state(&empty, &r, &holder, 200_000),
+            LeaseState::Lost(_)
+        ),
         "a unit absent from the fold is Lost, never Held"
     );
 }
