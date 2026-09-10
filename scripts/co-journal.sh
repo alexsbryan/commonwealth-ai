@@ -62,6 +62,9 @@ serves = (re.search(r"^serves: *(.+?) *(?:#.*)?$", order, re.M) or [None, "(unat
 campaign = (re.search(r"^campaign: *(.+?) *$", order, re.M) or [None, ""])[1]
 if serves.startswith("(unattributed") and campaign:
     serves = campaign   # the cw-lift orders key on `campaign:`, not `serves:`
+# `serves:` is "<campaign-id> [<bar-id> ...]" and --objective takes the
+# campaign alone; pasting the whole field builds a command that does not run.
+serves = serves.split()[0] if serves.split() else serves
 
 def section(name):
     m = re.search(rf"^## {name}\s*$\n(.*?)(?=^## |\Z)", order, re.S | re.M)
@@ -78,15 +81,19 @@ objective = "\n\n".join(paras[:2])[:1200]
 # in Objective (co-order.sh's template) and a `## Done when` section (the
 # cw-lift orders). Read both — a cursor that cannot state the finish line
 # is the artifact failing at its one job.
-done = " ".join(
-    l.strip() for l in obj.splitlines() if l.strip().lower().startswith("done when")
-)
+def _labelled(label):
+    # Through to the blank line or the next label, not just the first line.
+    m = re.search(rf"^{label}:(.*?)(?=\n\s*\n|\n(?:Done when|Not worth continuing if|Target derived from scope):|\Z)",
+                  obj, re.S | re.M | re.I)
+    return " ".join(m.group(1).split()) if m else ""
+
+_d = _labelled("Done when")
+done = f"Done when: {_d}" if _d else ""
 if len(done) < 13:
     dw = re.sub(r"<!--.*?-->", "", section("Done when"), flags=re.S).strip()
     done = "Done when: " + " ".join(dw.split()) if dw else "(the order names no Done-when)"
-stop = " ".join(
-    l.strip() for l in obj.splitlines() if l.strip().lower().startswith("not worth continuing")
-)
+_s = _labelled("Not worth continuing if")
+stop = f"Not worth continuing if: {_s}" if _s else ""
 
 # THE DEMO — operator direction 2026-09-10, "get our demos humming
 # perfectly". An objective stated as architecture can be satisfied by
@@ -108,8 +115,14 @@ demo = re.sub(r"<!--.*?-->", "", section("Demo"), flags=re.S).strip()
 steps = []
 body = section("Steps")
 if body:
-    steps = [re.sub(r"^\s*(?:[-*]|\d+[.)])\s*(?:\[.\]\s*)?", "", l).strip()
-             for l in body.splitlines() if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", l)]
+    # A step wraps across lines in every real order. Taking only the marker
+    # line truncates it mid-sentence, and a cursor that misquotes the step is
+    # worse than no cursor — join continuations into the step they belong to.
+    for _l in body.splitlines():
+        if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", _l):
+            steps.append(re.sub(r"^\s*(?:[-*]|\d+[.)])\s*(?:\[.\]\s*)?", "", _l).strip())
+        elif steps and _l.strip() and not _l.startswith("<!--"):
+            steps[-1] += " " + _l.strip()
 if not steps:
     # `### Wave 1 · Lane A — the crate, the codec, the seal`
     steps = [m.strip() for m in re.findall(r"^### +(.+?)\s*$", order, re.M)]
