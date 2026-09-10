@@ -170,8 +170,8 @@ pub use recipe::{
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use sharding::{
-    append_partition_to_canonical, merge_partitions_into_canonical, AppendReport,
-    MergePhaseProgress, PartitionMergeReport,
+    append_partition_to_canonical, finalize_canonical, merge_partitions_into_canonical,
+    AppendReport, MergePhaseProgress, PartitionMergeReport,
 };
 pub use snapshot::{
     default_snapshot_filename, prebuilt_toml_snippet, publish_snapshot, read_local_index_meta,

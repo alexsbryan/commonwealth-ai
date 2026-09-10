@@ -204,7 +204,11 @@ is now B7's subject.
 
 ---
 
-**B2 — MET, 2026-09-09, against the collector at `df2ffecb8`.**
+**B2 — first reading MET AT THE WRONG ALTITUDE (2026-09-09, `df2ffecb8`);
+re-measured and MET (2026-09-09). Read the correction below the first reading
+before citing it — the first reading proved the bytes landed, not that the
+corpus works.** The reading as originally recorded is kept verbatim, because a
+pre-registration whose measurements get quietly retrofitted is worth nothing.
 `sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs`. Both halves
 of the new path are measured, because the seam between them is thin glue and a
 test that drives only the glue proves little.
@@ -267,6 +271,144 @@ its arms — including the load-bearing `continue` after a coverage refusal — 
 still unmeasured; and the actor-vs-host distinction `FoldCoverage::expected`
 documents, which this fixture cannot see because one lessee reports one host,
 so 2 actors and 2 hosts are the same number here.
+
+**B2 — THE CORRECTION. The reading above was taken at the wrong altitude, and
+what it actually proved was that the bytes are on disk. 2026-09-09.**
+
+The bar says the merged canonical must answer "a QUERY that only the remote
+donor's slice can satisfy", and says why in its own words: "a count can be
+right for the wrong reason; the query is what proves the data is reachable."
+The reading above satisfied it with `probe_canonical`, which opens the
+canonical directory through `CorpusIndex::open`. That bypasses both gates
+between a merged chunk set and a corpus anyone can reach, so it answers a
+weaker question than the bar asked — and on `df2ffecb8` the two answers
+disagreed.
+
+*What the corpus actually was.* `merge_from_fold_coverage` →
+`ShardManager::merge_participants` → `CorpusEngine::merge_partitions`
+(`corpus-engine/src/engine/mod.rs:2771`) writes the merged chunks and stops. It
+never called `build_indexes`, `mark_indexes_built`, `mark_ingestion_complete`
+or `compute_and_stamp_fingerprint` — all four of which the disk-derived sibling
+does (`sharding.rs`, and the fingerprint stamp after them). So the canonical
+carried `ingestion_in_progress: true, indexes_built: false`;
+`CorpusEngine::installed_indexes` skips it on the first
+(`is_ingestion_complete`), `usable_indexes` on the second, and
+`hosted_corpora` gossip is built from `installed_indexes()`
+(`sovereign-mesh/src/capabilities.rs:103` → `:122`).
+
+This was already recorded in this file, under B5, as "A SEPARATE DEFECT FOUND
+WHILE MEASURING B5, NOT FIXED", together with the sentence "that means B2's
+green overstates the end-user reading". It was recorded and not acted on, and
+the row above went on saying MET. Recording a defect is not the same as
+correcting the measurement it invalidates.
+
+*The re-measurement.* `two_donors_on_two_nodes_land_both_slices_in_the_canonical`
+now reads the bar through `CorpusEngine::usable_indexes()` — opening the corpus
+by id through `CorpusEngine::open_index_for_corpus`, so the search runs on a
+handle the product's own accessor produced — and asserts the corpus is present
+in `installed_indexes()`, which is the gossip term. The disk-level probe is
+kept beside it as corroboration, so "the peer's chunks never arrived" and "the
+chunks arrived and nothing routes to them" print as different failures.
+
+Watched RED on the tree before the fix, with both probes side by side:
+
+    merge outcome               : Recovered { chunks: 4, shards_covered: 2 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..]
+    installed_indexes()         : []
+    usable_indexes()            : []
+    canonical dirs on disk      : ["cw-lift-5g-two-nodes"]
+    leader-only term (installed): None
+    peer-only term (installed)  : None      ← THE BAR, and it was never asked
+    --- through CorpusIndex::open, which bypasses both gates ---
+    canonical exists            : true
+    canonical chunk_count       : 4
+    leader-only term (on disk)  : true
+    peer-only term (on disk)    : true
+
+`None` rather than `false` is deliberate (§18.3): the search never RAN, because
+`usable_indexes()` had no row to run it against, and "asked and missed" is a
+different reading from "never asked".
+
+The red also settles which half was broken. The merge was fine — 4 chunks, both
+donors' terms retrievable from a handle that already existed. Only the finalize
+was missing, so the correction is about the bar's altitude and not about the
+collector.
+
+*The fix.* `merge_from_fold_coverage` calls `corpus_engine::finalize_canonical`
+after `merge_participants` returns `Ok(Some(_))`. That function is the disk
+path's own Phase 3, lifted out of `merge_partitions_into_canonical` and given
+one name (ARCH §10.6) rather than re-spelled: `build_indexes` →
+`mark_indexes_built` → `mark_ingestion_complete` → fingerprint LAST, with the
+ordering rationale — a peer pulling against a fingerprint trusts the chunk set
+is stable, and the ingestion-complete bit is the proxy for stable — living in
+that one place. `merge_partitions_into_canonical`'s behaviour is byte-for-byte
+what it was; the finalize is on the FOLD path only, and NOT inside
+`merge_participants`, which `coordinate_merge` shares (§10.2).
+
+GREEN after, same test, exit 0:
+
+    installed_indexes()         : ["cw-lift-5g-two-nodes"]
+    usable_indexes()            : ["cw-lift-5g-two-nodes"]
+    leader-only term (installed): Some(true)
+    peer-only term (installed)  : Some(true)    ← THE BAR
+    canonical chunk_count       : 4
+
+*Merge succeeds, finalize fails.* Reported as its own fact, not folded into
+either neighbour (§18.3): `RecoveryOutcome::MergedButNotInstalled { chunks,
+canonical_path, error }`, with an `error!` at the `auto_ingest` arm. `Recovered`
+would claim a built canonical, which is the defect above verbatim; `Failed`
+would claim nothing was produced, and `merge_participants` has by then deleted
+every source partition, so the chunks in that directory are the only copy. The
+canonical is deliberately left in place for that reason. The consequence,
+stated rather than discovered: the next tick short-circuits on
+`AlreadyHasCanonical` (it tests for the meta the merge already wrote), so
+nothing retries the finalize. Making the finalize a repair loop would have to
+tell "finalize failed here" apart from "another writer is mid-ingest", and that
+is a separate decision this rung does not make.
+
+*Not fixed, named:* `coordinate_merge` shares `merge_participants` and has the
+identical gap — a queue-mode merge produces the same unfinalized canonical.
+Left alone on purpose (§10.2): fixing it inside the shared function would move
+the legacy path's behaviour as a side effect of this rung.
+
+**B5 and B7 under the correction, checked.**
+
+*B5's merge clause — affected, same correction, no change to the verdict.*
+`the_merge_proceeds_with_the_slices_that_exist` asserts reachability through
+`probe_canonical`, the same `CorpusIndex::open` probe B2's first reading used,
+so its "both donors' terms reachable" was true on disk and overstated at the
+user's altitude for the same reason. The clause's own question — "does the
+merge proceed with the slices that exist" — is answered either way, and it
+still passes. Measured rather than reasoned: the corpora this fixture builds
+through `merge_from_fold_coverage` now carry `ingestion_in_progress: false,
+indexes_built: true` (printed by the corpus-clause reading below, on the same
+fixture). Its assertions are unchanged; its docs now name the altitude and
+point at B2 for the installed-altitude reading of the same merge path.
+
+*B5's corpus clause — STILL NOT MET, re-measured after the fix, and one field
+sharper.* Re-run with `--run-ignored`: both `_corpus_meta.json` files are still
+equal field for field, so the bar is unmoved and the `#[ignore]` stays. What
+changed is that the indistinguishability is now REACHABLE — previously it was
+blocked by this very defect, since neither corpus was advertised at all. Both
+now carry `indexes_built: true`, both reach `installed_indexes()`, and
+`canonical_fingerprint` — `None` on both before — is now the same non-null hash
+on both:
+
+    canonical_fingerprint : 48cecea964a5708290d88f724e33f9b96613d25587f157e25944944e2ad8b9d6
+    (identical on the 2-of-3 corpus and the 2-of-2 corpus)
+
+A peer choosing which canonical to pull by fingerprint now reads a corpus
+missing a slice and a whole one as the same corpus. That is the same bar, one
+notch sharper, and it argues for closing B5's corpus clause sooner rather than
+later.
+
+*B7 — untouched, checked.* Its refusal case writes no canonical (the merge
+returns `Err(IncompleteCoverage)` before `merge_partitions` is reached), so no
+finalize runs and the assertion "canonical: ABSENT" is unaffected. Its paired
+positive and reading 2's control DO merge, and now finalize as well; both
+assert on the `RecoveryOutcome` variant and the disk-level probe, neither of
+which moved. Reading 3 is about `total_shards` on the disk path and does not
+touch this. All ten tests across the three `fold_ingest_*` files pass, exit 0.
 
 **B3 — MET, 2026-09-09.** `only_the_submitter_reads_a_merge_out_of_the_fold`.
 The peer folds the SAME journal and asks the same question; `fold_coverage_for`
@@ -434,7 +576,10 @@ behaviour: pinning the indistinguishability would pass forever and go red the
 day somebody fixes it. The ignore marks an OPEN bar, the way `50238f364`
 marked B1's.
 
-**A SEPARATE DEFECT FOUND WHILE MEASURING B5, NOT FIXED.** A canonical built by
+**A SEPARATE DEFECT FOUND WHILE MEASURING B5, NOT FIXED — since fixed, see
+"B2 — THE CORRECTION" above; the reading below is kept as it was written,
+because it is also the record of B2's first green being taken at the wrong
+altitude and of that being noticed here and not acted on.** A canonical built by
 the fold path is not advertised at all. `merge_participants` →
 `CorpusEngine::merge_partitions` → `sharding::merge_shards` creates the output
 with `CorpusIndex::create` and never clears `ingestion_in_progress`; the DISK

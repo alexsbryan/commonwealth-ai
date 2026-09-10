@@ -292,6 +292,29 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                             "auto_ingest: REFUSED — merging now would publish a partial \
                              canonical and gossip would advertise it; retrying next tick"
                         ),
+                        commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled {
+                            chunks,
+                            canonical_path,
+                            error,
+                        } => {
+                            // Its own arm, not the quiet `_` below, because it
+                            // is its own fact: chunks on disk that no surface
+                            // can see, holding the only copy (the source
+                            // partitions are already cleaned up). ERROR rather
+                            // than WARN — unlike the refusal above, no later
+                            // tick retries this one.
+                            tracing::error!(
+                                corpus = %corpus_id,
+                                handoff = %cov.handoff_id,
+                                chunks,
+                                canonical = %canonical_path,
+                                recovery_error = %error,
+                                "auto_ingest: merged but NOT installed — the canonical holds \
+                                 {chunks} chunks and is invisible to installed_indexes(), \
+                                 usable_indexes() and hosted_corpora gossip. No retry: the \
+                                 next tick short-circuits on AlreadyHasCanonical"
+                            )
+                        }
                         commonwealth_api::auto_recover::RecoveryOutcome::Failed(err) => {
                             tracing::warn!(
                                 corpus = %corpus_id,

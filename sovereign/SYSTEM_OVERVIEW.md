@@ -5729,6 +5729,32 @@ absent and the guards fail closed for *every* caller.
   subset canonical that would advertise itself as complete on gossip;
   `None` keeps the legacy "merge whatever is present" behaviour, which
   is what `coordinate_merge` passes.
+- **The merge is not the whole job, and `merge_participants` does only
+  the merge.** It ends at `CorpusEngine::merge_partitions` →
+  `sharding::merge_shards`, which writes the merged chunks and stops:
+  the output still carries `ingestion_in_progress: true,
+  indexes_built: false`, so `installed_indexes()` skips it,
+  `usable_indexes()` cannot search it, and `hosted_corpora` gossip —
+  built from `installed_indexes()` in `sovereign-mesh::capabilities` —
+  advertises nothing. Finishing it is
+  `corpus_engine::finalize_canonical` (`corpus-engine/src/sharding.rs`):
+  `build_indexes` → `mark_indexes_built` → `mark_ingestion_complete`,
+  then the content fingerprint LAST, because a peer pulling against a
+  fingerprint trusts the chunk set is stable and the
+  ingestion-complete bit is the proxy for stable. One name for that
+  sequence, shared with `merge_partitions_into_canonical`, which is
+  where it was lifted from (ARCH §10.6). The FOLD-side caller
+  (`commonwealth_api::auto_recover::merge_from_fold_coverage`) calls
+  it; **`coordinate_merge` does NOT, and its canonical has the same
+  gap** — cw-lift 5g part 2 shipped without the finalize on the fold
+  path, which produced a canonical holding both donors' chunks that
+  `installed_indexes()` returned zero rows for. When the merge lands
+  and the finalize does not, the answer is
+  `RecoveryOutcome::MergedButNotInstalled` — its own fact, because
+  `Recovered` would claim a built canonical and `Failed` would claim
+  nothing was produced while the source partitions are already
+  deleted. Nothing retries it: the next tick short-circuits on
+  `AlreadyHasCanonical`.
 - `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` so a node
   without a local embed model still ingests via the engine.
 - `grounding.rs` — `GroundingConfig` + `search_for_grounding` +

@@ -269,6 +269,13 @@ fn a_unit_whose_attempts_are_spent_is_named_in_the_coverage() {
 /// `merge_participants` then wants 3 shards, resolves 2, and refuses with
 /// `PartitionsUnreachable { covered: 2, expected: 3 }` — no canonical at all,
 /// every tick, forever.
+///
+/// ALTITUDE. Reachability here is read through [`probe_canonical`], which
+/// opens the canonical by path. That answers "did both slices land", which is
+/// this clause's question. It does NOT answer "can anyone reach the corpus" —
+/// on `df2ffecb8` the two answers disagreed for every fold-built canonical,
+/// and the installed-altitude reading of this same merge path is B2's, in
+/// `fold_ingest_cross_node_merge_e2e`.
 #[tokio::test]
 async fn the_merge_proceeds_with_the_slices_that_exist() {
     const CORPUS: &str = "cw-lift-5g-abandoned-merge";
@@ -349,8 +356,15 @@ fn corpus_record(index_dir: &std::path::Path, corpus: &str) -> serde_json::Value
 /// The `IndexInfo` fields `build_hosted_corpora`
 /// (`sovereign-mesh/src/capabilities.rs:285-310`) copies onto the wire as a
 /// [`CorpusShardInfo`]. Read straight off the canonical rather than through
-/// `CorpusEngine::installed_indexes`, because that walk drops this canonical
-/// today — see the test's docs.
+/// `CorpusEngine::installed_indexes`, so the comparison of two corpora is
+/// independent of that walk's own filters and dedupe.
+///
+/// It USED to be read this way for a worse reason — the walk dropped this
+/// canonical entirely, because the fold-side merge never finalized what it
+/// built. That is fixed (`corpus_engine::finalize_canonical`, called from
+/// `merge_from_fold_coverage`), and both corpora below now reach
+/// `installed_indexes()` and `usable_indexes()`. It changed nothing about
+/// this bar: they still reach it carrying the same record.
 async fn advertisable(index_dir: &std::path::Path, corpus: &str) -> String {
     let info = CorpusIndex::open(&corpus_at(index_dir, corpus).root())
         .await
@@ -394,19 +408,27 @@ async fn advertisable(index_dir: &std::path::Path, corpus: &str) -> String {
 /// So for every fold-sliced recipe both are `None`/`[]` on the whole corpus
 /// and on the partial one alike.
 ///
-/// A SEPARATE DEFECT FOUND WHILE MEASURING THIS, NOT FIXED HERE, AND THE
-/// REASON THE ADVERTISEMENT IS READ OFF THE INDEX RATHER THAN OFF A GOSSIP
-/// ROUND. `merge_participants` builds its output through
+/// A SEPARATE DEFECT FOUND WHILE MEASURING THIS — **now fixed, and it did not
+/// move this bar.** `merge_participants` builds its output through
 /// `CorpusEngine::merge_partitions` → `sharding::merge_shards`, which creates
-/// the canonical with `CorpusIndex::create` and never clears
-/// `ingestion_in_progress` — unlike `merge_partitions_into_canonical`, which
-/// does (`sharding.rs:1424`) and is what the DISK path uses. So a canonical
-/// built by the fold path carries `ingestion_in_progress: true,
-/// indexes_built: false`, and `CorpusEngine::installed_indexes` skips it: it
-/// is advertised to nobody and `usable_indexes` will not search it either.
-/// Measured, not inferred — `installed_indexes()` returned zero rows on the
-/// disk this test builds. That is a bigger problem than the one this bar is
-/// about and it belongs to whoever owns the merge's post-conditions.
+/// the canonical with `CorpusIndex::create` and stops. So a canonical built by
+/// the fold path carried `ingestion_in_progress: true, indexes_built: false`,
+/// `CorpusEngine::installed_indexes` skipped it, and it was advertised to
+/// nobody and searched by nothing — measured, not inferred:
+/// `installed_indexes()` returned zero rows on the disk this test builds.
+/// `merge_from_fold_coverage` now finishes the job with
+/// `corpus_engine::finalize_canonical`, the same sequence in the same order as
+/// the disk path's.
+///
+/// Re-measured here afterwards, because a fix to the thing that was BLOCKING
+/// an advertisement is exactly the fix that could turn a dormant hazard live:
+/// both corpora now carry `ingestion_in_progress: false, indexes_built: true`
+/// and reach `installed_indexes()`. They are still indistinguishable, and one
+/// field sharper than before — the `canonical_fingerprint` is no longer
+/// `None` on either, and it is the SAME hash on both. A peer comparing
+/// fingerprints to decide which canonical to pull now reads a 2-of-3 corpus
+/// and a 2-of-2 corpus as the same corpus. The bar is unchanged and still
+/// open; what changed is that the hazard it describes is now reachable.
 ///
 /// IGNORED, not deleted, and not softened into a test of the current
 /// behaviour. Asserting the indistinguishability would pass forever and go red

@@ -415,6 +415,28 @@ pub async fn corpus_collaborate(
                             }),
                         ));
                     }
+                    crate::auto_recover::RecoveryOutcome::MergedButNotInstalled {
+                        chunks,
+                        ref canonical_path,
+                        ref error,
+                    } => {
+                        // Unreachable from THIS call: the variant is produced
+                        // only by `merge_from_fold_coverage`, and this site
+                        // calls `try_recover_stranded_partitions`, whose
+                        // finalize is inside `merge_partitions_into_canonical`
+                        // and fails the whole merge. Handled rather than
+                        // swept into a `_` arm so that the day some caller
+                        // here does reach it, an operator sees the state
+                        // instead of a 409 that says nothing happened.
+                        tracing::error!(
+                            corpus = %req.corpus_id,
+                            chunks,
+                            canonical = %canonical_path,
+                            recovery_error = %error,
+                            "corpus_collaborate: chunks merged but the canonical was not \
+                             finalized — it is on disk and no surface can see it"
+                        );
+                    }
                     crate::auto_recover::RecoveryOutcome::AlreadyHasCanonical => {
                         // Race: another request raced ahead and built
                         // canonical between our `canonical_exists` check

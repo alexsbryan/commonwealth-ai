@@ -1241,6 +1241,68 @@ pub struct PartitionMergeReport {
     pub embedding_dimensions: usize,
 }
 
+/// Turn a directory that merely HOLDS the merged chunks into a corpus the
+/// rest of the system can see: build the search indexes, mark them built,
+/// mark the ingest complete, then stamp the content fingerprint.
+///
+/// # Why this is a named function and not four lines at each merge site
+///
+/// The ORDER is the contract, and an order is exactly the kind of thing that
+/// gets re-derived slightly differently at a second call site (ARCH §10.6 —
+/// one implementation per rule). Two merge paths reach it:
+///
+/// * [`merge_partitions_into_canonical`], the disk-derived one, and
+/// * `commonwealth_api::auto_recover::merge_from_fold_coverage`, the
+///   fold-derived one added by cw-lift 5g part 2.
+///
+/// The second one shipped WITHOUT this sequence and the consequence was not
+/// subtle: `CorpusEngine::merge_partitions` writes the chunks and stops, so
+/// the canonical carried `ingestion_in_progress: true, indexes_built: false`.
+/// `installed_indexes()` skips it (`is_ingestion_complete` gate), which means
+/// `usable_indexes()` never sees it and `hosted_corpora` gossip
+/// (`sovereign-mesh::capabilities`, which feeds `build_hosted_corpora` from
+/// `installed_indexes()`) advertises nothing. Measured: two canonical
+/// directories on disk, `installed_indexes()` → 0 rows, `hosted_corpora` →
+/// `[]`. The bytes were there and nothing could reach them.
+///
+/// # The ordering rationale, which is the whole point
+///
+/// The fingerprint is the LAST write, after `mark_ingestion_complete`. A peer
+/// pulling against a fingerprint trusts that the chunk set is stable, and the
+/// ingestion-complete bit is the proxy for "stable" — so a fingerprint
+/// advertised for an index that is still mid-build is a peer pulling against
+/// a promise nothing kept. `mark_indexes_built` precedes
+/// `mark_ingestion_complete` for the same reason one step down: `installed`
+/// is the weaker claim and must not become true before `searchable` is.
+///
+/// A fingerprint failure is logged and NOT fatal: the canonical is valid for
+/// local queries either way, and mesh sync falls back to chunk-count-only
+/// comparisons until a later stamp succeeds. Every earlier step IS fatal —
+/// each one is a bit some other subsystem gates on.
+pub async fn finalize_canonical(
+    canonical: &CorpusIndex,
+    corpus_id: &str,
+    build_sub_phase: Option<&(dyn Fn(u64, u64) + Send + Sync)>,
+) -> Result<()> {
+    canonical.build_indexes(true, true, build_sub_phase).await?;
+    canonical.mark_indexes_built()?;
+    canonical.mark_ingestion_complete()?;
+
+    if let Err(e) = canonical.compute_and_stamp_fingerprint().await {
+        tracing::warn!(
+            corpus = corpus_id,
+            error = %e,
+            "finalize_canonical: fingerprint stamping failed; \
+             mesh sync will fall back to chunk-count comparisons"
+        );
+    }
+    tracing::debug!(
+        corpus = corpus_id,
+        "finalize_canonical: indexes built, ingest marked complete, fingerprint stamped"
+    );
+    Ok(())
+}
+
 /// Discover every `<corpus>-partition-*/` directory under `index_dir`,
 /// merge them into the canonical `<corpus>/` index, dedup during
 /// merge, stamp the canonical's metadata (scope, processed_shards,
@@ -1417,30 +1479,7 @@ pub async fn merge_partitions_into_canonical(
                 cb(MergePhaseProgress::BuildSubPhase { done, total });
             })
         });
-    canonical
-        .build_indexes(true, true, sub_phase_cb.as_deref())
-        .await?;
-    canonical.mark_indexes_built()?;
-    canonical.mark_ingestion_complete()?;
-
-    // Stamp the content fingerprint as the last write before
-    // returning. Order matters: fingerprint must be written *after*
-    // mark_ingestion_complete so an interrupted merge doesn't leave
-    // a fingerprint advertised for an in-progress index. A peer
-    // pulling against a fingerprint trusts that the chunk set is
-    // stable; the ingestion-complete bit is the proxy for "stable."
-    //
-    // Failures are logged but non-fatal — the canonical is still
-    // valid for local queries; mesh sync just falls back to chunk-
-    // count-only comparisons until the next stamp succeeds.
-    if let Err(e) = canonical.compute_and_stamp_fingerprint().await {
-        tracing::warn!(
-            corpus = corpus_id,
-            error = %e,
-            "merge_partitions_into_canonical: fingerprint stamping failed; \
-             mesh sync will fall back to chunk-count comparisons"
-        );
-    }
+    finalize_canonical(&canonical, corpus_id, sub_phase_cb.as_deref()).await?;
 
     if let Some(cb) = &progress {
         cb(MergePhaseProgress::Complete);

@@ -144,6 +144,39 @@ pub enum RecoveryOutcome {
     /// Recovery merge produced a built canonical with the supplied
     /// chunk count and shard coverage.
     Recovered { chunks: u64, shards_covered: usize },
+    /// The chunks merged into the canonical directory and the finalize that
+    /// makes the corpus VISIBLE did not — `build_indexes` /
+    /// `mark_indexes_built` / `mark_ingestion_complete` / the fingerprint
+    /// stamp, in `corpus_engine::finalize_canonical`.
+    ///
+    /// Its own variant because it is its own FACT, and the two neighbours it
+    /// would otherwise be filed under both lie about it (ARCH §18.3):
+    ///
+    /// * [`RecoveryOutcome::Recovered`] says a *built* canonical exists.
+    ///   Reporting this state as `Recovered` is precisely the defect this
+    ///   variant was minted alongside — a corpus that reads as recovered,
+    ///   is absent from `installed_indexes()` and `usable_indexes()`, and is
+    ///   advertised to no peer.
+    /// * [`RecoveryOutcome::Failed`] says nothing was produced and the caller
+    ///   should fall back. Here the chunks ARE on disk and every source
+    ///   partition has already been deleted by `merge_participants`' cleanup,
+    ///   so "nothing happened" is the more dangerous half of the lie: it
+    ///   invites a caller to re-derive the corpus from partitions that are
+    ///   gone.
+    ///
+    /// **The canonical is deliberately left in place.** It holds the only
+    /// copy of the merged chunks. The consequence, stated rather than
+    /// discovered: `merge_from_fold_coverage` short-circuits on
+    /// [`RecoveryOutcome::AlreadyHasCanonical`], which tests for the meta
+    /// file the merge already wrote — so the next tick will NOT retry the
+    /// finalize. Re-finalizing an existing canonical is a separate decision
+    /// (it would have to distinguish "finalize failed here" from "another
+    /// writer is mid-ingest") and is not made by this rung.
+    MergedButNotInstalled {
+        chunks: u64,
+        canonical_path: String,
+        error: String,
+    },
     /// Recovery attempted but failed; caller should fall back. The
     /// error is already logged at `error!` level.
     Failed(String),
@@ -178,6 +211,15 @@ pub enum RecoveryOutcome {
 /// The pull, the merge, the `ShardTransferred` emit and the cleanup are
 /// [`ShardManager::merge_participants`], shared verbatim with
 /// `coordinate_merge` (ARCH §10.6). No merge mechanism is re-spelled here.
+///
+/// # The merge is not the end of the job
+///
+/// A merged chunk set is not yet a corpus anyone can reach. This function
+/// finishes it with [`corpus_engine::finalize_canonical`] — the same sequence,
+/// in the same order, that the disk-derived `merge_partitions_into_canonical`
+/// runs. When the merge succeeds and that finalize does not, the answer is
+/// [`RecoveryOutcome::MergedButNotInstalled`], which is neither
+/// `Recovered` nor `Failed`; see that variant for why it is neither.
 pub async fn merge_from_fold_coverage(
     state: &crate::state::AppState,
     corpus_id: &str,
@@ -196,8 +238,7 @@ pub async fn merge_from_fold_coverage(
     }
 
     let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
-    let peer_urls =
-        crate::routes_internal::peer_control_urls(state, local_node_id).await;
+    let peer_urls = crate::routes_internal::peer_control_urls(state, local_node_id).await;
 
     let shard_mgr = ShardManager::new(
         std::sync::Arc::clone(engine),
@@ -222,10 +263,62 @@ pub async fn merge_from_fold_coverage(
     };
 
     match shard_mgr.merge_participants(plan).await {
-        Ok(Some(info)) => RecoveryOutcome::Recovered {
-            chunks: info.chunk_count,
-            shards_covered: participants.len(),
-        },
+        Ok(Some(info)) => {
+            // `merge_participants` → `CorpusEngine::merge_partitions` →
+            // `sharding::merge_shards` writes the merged chunks and STOPS.
+            // What it leaves behind carries `ingestion_in_progress: true,
+            // indexes_built: false`, and every surface that would show the
+            // corpus to anyone gates on those two bits:
+            // `installed_indexes()` skips it on `is_ingestion_complete`,
+            // `usable_indexes()` on `indexes_built`, and `hosted_corpora`
+            // gossip reads `installed_indexes()`
+            // (`sovereign-mesh::capabilities`). So the merge alone produces
+            // a canonical nothing can use.
+            //
+            // The sequence and its ordering rationale live in ONE place —
+            // `corpus_engine::finalize_canonical`, shared with the
+            // disk-derived `merge_partitions_into_canonical` (ARCH §10.6).
+            // No progress callback: the fold path has no progress stream to
+            // render into, unlike the CLI/daemon recovery path.
+            //
+            // Deliberately NOT inside `merge_participants`: `coordinate_merge`
+            // shares that function and has the identical gap, and changing
+            // shared code would move the legacy path's behaviour as a side
+            // effect of this rung (ARCH §10.2). The legacy gap is recorded,
+            // not silently fixed here.
+            let canonical_path = engine.index_dir().join(corpus_id);
+            let finalized = match corpus_engine::index::CorpusIndex::open(&canonical_path).await {
+                Ok(canonical) => {
+                    corpus_engine::finalize_canonical(&canonical, corpus_id, None).await
+                }
+                Err(e) => Err(e),
+            };
+            match finalized {
+                Ok(()) => RecoveryOutcome::Recovered {
+                    chunks: info.chunk_count,
+                    shards_covered: participants.len(),
+                },
+                Err(e) => {
+                    tracing::error!(
+                        corpus = %corpus_id,
+                        handoff = %handoff_id,
+                        chunks = info.chunk_count,
+                        canonical = %canonical_path.display(),
+                        error = %e,
+                        "merge_from_fold_coverage: the merge landed but the canonical \
+                         was NOT finalized — its chunks are on disk and no surface can \
+                         see them (installed_indexes, usable_indexes, hosted_corpora all \
+                         gate on the bits finalize writes). The source partitions were \
+                         already cleaned up, so this canonical holds the only copy."
+                    );
+                    RecoveryOutcome::MergedButNotInstalled {
+                        chunks: info.chunk_count,
+                        canonical_path: canonical_path.display().to_string(),
+                        error: e.to_string(),
+                    }
+                }
+            }
+        }
         Ok(None) => RecoveryOutcome::NotEnoughPartitions,
         Err(corpus_engine::Error::IncompleteCoverage {
             covered, expected, ..

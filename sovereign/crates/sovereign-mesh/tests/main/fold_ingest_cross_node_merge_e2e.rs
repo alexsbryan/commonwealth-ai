@@ -36,7 +36,16 @@
 //! The bar is a QUERY, not a chunk count. A count can be right for the wrong
 //! reason — two chunks merged twice is four. What is asserted is that a term
 //! appearing ONLY in the remote donor's slice comes back from a search against
-//! the merged canonical.
+//! the merged canonical — **reached through `CorpusEngine::usable_indexes()`**,
+//! with the corpus present in `installed_indexes()`, which is the list
+//! `hosted_corpora` gossip is built from.
+//!
+//! That altitude is not incidental. The first reading of B2 probed with
+//! `CorpusIndex::open` on the canonical path, which bypasses both of those
+//! gates, and passed over a corpus that `installed_indexes()` could not see at
+//! all. Both probes are read now and they print side by side, because
+//! "the peer's chunks never arrived" and "the chunks arrived and nothing can
+//! route to them" are different defects that a single reading conflates.
 //!
 //! What this file drives for real
 //! ------------------------------
@@ -433,7 +442,26 @@ pub(crate) fn node_state(
     )
 }
 
-/// What the leader's canonical corpus actually holds after the merge.
+/// Does a search of `index` return a chunk carrying `term`?
+///
+/// One spelling, used by both probes below, so that "reachable" cannot come
+/// to mean two slightly different things at two altitudes.
+pub(crate) async fn term_reachable(index: &CorpusIndex, term: &str) -> bool {
+    index
+        .search(&[0.25_f32; EMBED_DIM], term, 10)
+        .await
+        .map(|hits| hits.iter().any(|h| h.content.contains(term)))
+        .unwrap_or(false)
+}
+
+/// What the leader's canonical corpus DIRECTORY actually holds after the
+/// merge — opened by path, with `CorpusIndex::open`.
+///
+/// This answers "are the bytes on disk and are they retrievable from a handle
+/// that already exists". It deliberately does NOT answer "can anyone reach
+/// this corpus", which is [`InstalledProbe`]'s question; the two disagreed for
+/// the whole of `df2ffecb8`, and telling them apart is the point of having
+/// both.
 #[derive(Debug)]
 pub(crate) struct CanonicalProbe {
     pub(crate) canonical_exists: bool,
@@ -453,21 +481,99 @@ pub(crate) async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -
         };
     };
     let info = index.info().await.expect("canonical info");
-    let reachable = |term: &'static str| {
-        let index = &index;
-        async move {
-            index
-                .search(&[0.25_f32; EMBED_DIM], term, 10)
-                .await
-                .map(|hits| hits.iter().any(|h| h.content.contains(term)))
-                .unwrap_or(false)
-        }
-    };
     CanonicalProbe {
         canonical_exists: true,
         chunk_count: info.chunk_count,
-        leader_term_reachable: reachable(LEADER_ONLY_TERM).await,
-        peer_term_reachable: reachable(PEER_ONLY_TERM).await,
+        leader_term_reachable: term_reachable(&index, LEADER_ONLY_TERM).await,
+        peer_term_reachable: term_reachable(&index, PEER_ONLY_TERM).await,
+    }
+}
+
+/// The canonical as THE REST OF THE SYSTEM sees it, which is the altitude a
+/// user's query and a peer's gossip actually arrive at.
+///
+/// `CorpusIndex::open` on a path bypasses both gates a merged corpus has to
+/// pass, and a bar asserted through it proves the bytes landed, not that the
+/// corpus works. Measured on `df2ffecb8`, which passed B2 through that probe:
+/// two canonical directories on disk, `installed_indexes()` → 0 rows,
+/// `hosted_corpora` → `[]`.
+///
+/// The two accessors here are those gates, and they are the ones the product
+/// goes through:
+///
+/// * `CorpusEngine::installed_indexes()` gates on `is_ingestion_complete`
+///   (`engine/mod.rs`). It is the list
+///   `sovereign_mesh::capabilities::build_local_capabilities` walks and hands
+///   straight to `build_hosted_corpora` (`capabilities.rs:103` → `:122`), so a
+///   corpus missing from it is advertised to NO peer.
+/// * `CorpusEngine::usable_indexes()` gates additionally on `indexes_built`
+///   and is corpus-engine's own single decider for "can I search it".
+///
+/// `hosted_corpora` is asserted through its input rather than by calling
+/// `build_local_capabilities`: `build_hosted_corpora` is private, and the
+/// public entry point detects hardware and probes GPU VRAM — a lot of machine
+/// to drag into a merge test for a list it copies out of `installed_indexes()`
+/// unchanged apart from the `query_sharing` filter.
+#[derive(Debug)]
+pub(crate) struct InstalledProbe {
+    /// `corpus_id`s from `installed_indexes()` — the gossip term.
+    pub(crate) installed: Vec<String>,
+    /// `corpus_id`s from `usable_indexes()` — the searchable term.
+    pub(crate) usable: Vec<String>,
+    /// Every directory under the index dir carrying a corpus meta, so a
+    /// reading of "zero rows" can be told apart from "nothing was written".
+    pub(crate) dirs_on_disk: Vec<String>,
+    /// `Some` only when the corpus reached `usable_indexes()` and the search
+    /// therefore RAN, through the engine's own by-id accessor. `None` means
+    /// the question was never asked — a different reading from asked-and-
+    /// missed, and not defaulted into one (ARCH §18.3).
+    pub(crate) leader_term_reachable: Option<bool>,
+    pub(crate) peer_term_reachable: Option<bool>,
+}
+
+pub(crate) async fn probe_installed(index_dir: &std::path::Path, corpus: &str) -> InstalledProbe {
+    let engine = engine_at(index_dir, leader_node());
+    let ids = |rows: Vec<corpus_engine::IndexInfo>| -> Vec<String> {
+        rows.into_iter().map(|i| i.corpus_id).collect()
+    };
+    let installed = ids(engine
+        .installed_indexes()
+        .await
+        .expect("installed_indexes must not fail on a temp dir this test owns"));
+    let usable = ids(engine
+        .usable_indexes()
+        .await
+        .expect("usable_indexes must not fail on a temp dir this test owns"));
+
+    let mut dirs_on_disk: Vec<String> = std::fs::read_dir(index_dir)
+        .expect("index dir")
+        .flatten()
+        .filter(|e| corpus_engine::Corpus::meta_in(e.path()).exists())
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .collect();
+    dirs_on_disk.sort();
+
+    let (leader_term_reachable, peer_term_reachable) = if usable.iter().any(|c| c == corpus) {
+        // Through the engine's by-id accessor, not a hand-built path:
+        // "the surface a user reaches" is the whole claim.
+        let index = engine
+            .open_index_for_corpus(corpus)
+            .await
+            .expect("a corpus usable_indexes() listed must open");
+        (
+            Some(term_reachable(&index, LEADER_ONLY_TERM).await),
+            Some(term_reachable(&index, PEER_ONLY_TERM).await),
+        )
+    } else {
+        (None, None)
+    };
+
+    InstalledProbe {
+        installed,
+        usable,
+        dirs_on_disk,
+        leader_term_reachable,
+        peer_term_reachable,
     }
 }
 
@@ -632,16 +738,40 @@ fn only_the_submitter_reads_a_merge_out_of_the_fold() {
 
 /// **B2 (second half) — THE BAR.** Two donors, two nodes, one corpus, one
 /// handoff. The leader's canonical corpus contains BOTH donors' chunks, and
-/// the term that only the REMOTE donor's slice carries is reachable by search.
+/// the term that only the REMOTE donor's slice carries is reachable by search
+/// **through `usable_indexes()`** — the accessor a user's query goes through —
+/// with the corpus present in `installed_indexes()`, which is what
+/// `hosted_corpora` gossip advertises from.
 ///
 /// This is B1's scenario with the collector wired. B1 measured
 /// `Recovered { chunks: 2 }` here with `peer-only term reachable : false`.
 ///
-/// Failing input, named and watched (ARCH §18.1): truncate `coverage.nodes` to
-/// the local node before the merge — the shape of the original defect, where
-/// participants come from local disk instead of the fold. The merge then
-/// resolves one shard, `expected_partitions` is not armed against the missing
-/// donor, and the canonical comes back with 2 chunks and `narwhal` unreachable.
+/// # Why the altitude, and why this assertion changed
+///
+/// Until 2026-09-09 this test probed with `CorpusIndex::open` on the canonical
+/// path, which bypasses both gates a merged corpus must pass. It went green on
+/// `df2ffecb8` over a canonical that `installed_indexes()` returned zero rows
+/// for and that `hosted_corpora` gossip advertised as `[]` — the merge wrote
+/// the chunks and never called `build_indexes` / `mark_indexes_built` /
+/// `mark_ingestion_complete` / the fingerprint stamp. What that green proved
+/// was that the bytes were on disk, which is not the bar this
+/// pre-registration set. The bar says a query only the remote donor's slice
+/// can satisfy must be answerable, "because a count can be right for the wrong
+/// reason" — and a query nothing routes to is the same failure one level up.
+///
+/// Failing input, named and watched (ARCH §18.1): two of them, and they print
+/// differently, which is the reason [`InstalledProbe`] and [`CanonicalProbe`]
+/// are both read here.
+///
+/// 1. *The participant set.* Truncate `coverage.nodes` to the local node
+///    before the merge — the shape of the original defect, where participants
+///    come from local disk instead of the fold. The merge resolves one shard
+///    and the canonical comes back with 2 chunks and `narwhal` unreachable.
+/// 2. *The finalize.* Drop `corpus_engine::finalize_canonical` from
+///    `merge_from_fold_coverage`. Both donors' chunks are on disk and
+///    retrievable through `CorpusIndex::open`, and `peer-only term
+///    (installed)` is `None`: `installed_indexes()` and `usable_indexes()`
+///    both return zero rows beside two canonical directories.
 ///
 /// The count assertion is deliberately kept BELOW the query assertion: the
 /// query is the bar and the count is corroboration. A right count with an
@@ -691,24 +821,45 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     )
     .await;
 
+    // The BAR is read at the altitude a user reaches: the corpus has to be
+    // in `usable_indexes()` for the search to run at all, and in
+    // `installed_indexes()` for any peer to be told it exists.
+    let seen = probe_installed(&leader_dir, CORPUS).await;
+    // The disk-level reading is kept as CORROBORATION and as the thing that
+    // tells the two failure shapes apart: bytes-missing versus bytes-present-
+    // and-unreachable print differently below.
     let probe = probe_canonical(&leader_dir, CORPUS).await;
 
-    assert!(
-        probe.peer_term_reachable,
-        "the canonical corpus is missing the peer donor's chunks — this is B1's \
-         red, unchanged.\n\
+    assert_eq!(
+        seen.peer_term_reachable,
+        Some(true),
+        "the peer donor's slice is not reachable through the surface a user \
+         reaches.\n\
+         \n\
+         `peer-only term (installed)` is `None` when the corpus never reached \
+         `usable_indexes()` — the canonical exists on disk and NOTHING can see \
+         it: not local search, and not `hosted_corpora` gossip, which is built \
+         from `installed_indexes()` (`capabilities.rs:103` → `:122`). That is a \
+         different failure from the peer's chunks never arriving, and the \
+         disk-level rows below say which one this is.\n\
          \n\
          The peer donor's two chunks (searchable by `{PEER_ONLY_TERM}`) were \
          written to its own `{}/` on a different index dir and served from a \
          different socket. The fold named both donors; the merge was supposed \
-         to pull the second.\n\
+         to pull the second AND finish the canonical.\n\
          \n\
          merge outcome               : {outcome:?}\n\
          fold coverage               : expected={} nodes={:?}\n\
+         installed_indexes()         : {:?}\n\
+         usable_indexes()            : {:?}\n\
+         canonical dirs on disk      : {:?}\n\
+         leader-only term (installed): {:?}\n\
+         peer-only term (installed)  : {:?}\n\
+         --- through CorpusIndex::open, which bypasses both gates ---\n\
          canonical exists            : {}\n\
          canonical chunk_count       : {} (expected 4: 2 local + 2 peer)\n\
-         leader-only term reachable  : {}\n\
-         peer-only term reachable    : {}\n\
+         leader-only term (on disk)  : {}\n\
+         peer-only term (on disk)    : {}\n\
          \n\
          See `quality/campaigns/cw-lift-5g-part2-prereg.md` B2.",
         corpus_at("", CORPUS)
@@ -716,15 +867,33 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
             .display(),
         coverage.expected,
         coverage.nodes,
+        seen.installed,
+        seen.usable,
+        seen.dirs_on_disk,
+        seen.leader_term_reachable,
+        seen.peer_term_reachable,
         probe.canonical_exists,
         probe.chunk_count,
         probe.leader_term_reachable,
         probe.peer_term_reachable,
     );
+    assert_eq!(
+        seen.leader_term_reachable,
+        Some(true),
+        "the LOCAL donor's chunks are unreachable through `usable_indexes()`, \
+         which is a different defect than the one this bar is about and a worse \
+         one. outcome: {outcome:?} | installed: {:?} | usable: {:?}",
+        seen.installed,
+        seen.usable,
+    );
     assert!(
-        probe.leader_term_reachable,
-        "the LOCAL donor's chunks went missing, which is a different defect \
-         than the one this bar is about and a worse one. outcome: {outcome:?}",
+        seen.installed.iter().any(|c| c == CORPUS),
+        "the canonical is not in `installed_indexes()`, so \
+         `build_hosted_corpora` advertises it to no peer on the mesh \
+         (`capabilities.rs:103` → `:122`). installed: {:?} | dirs on disk: {:?} \
+         | outcome: {outcome:?}",
+        seen.installed,
+        seen.dirs_on_disk,
     );
     assert_eq!(
         probe.chunk_count, 4,
