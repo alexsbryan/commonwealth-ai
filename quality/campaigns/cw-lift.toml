@@ -446,10 +446,29 @@ status    = "active"
 #   5g  ingest rides the fold; the deletion payoff, gated on 5e
 #                                   1e5418f4b PARTIAL +958/-14
 #       PART 1 ONLY. Part 2 — the deletion this rung exists to collect — is
-#       OPEN and in flight in another lane, with its own pre-registration.
-#       This row is deliberately NOT `DONE`: cw-net-deletion's instrument
-#       reads this block with `grep DONE`, and counting a rung that has not
-#       paid would credit the phase with a deletion nobody has landed.
+#       OPEN and STAYS open, and as of the 2026-09-09 survey it is open for a
+#       reason nobody had written down. This row is deliberately NOT `DONE`:
+#       cw-net-deletion's instrument reads this block with `grep DONE`, and
+#       counting a rung that has not paid would credit the phase with a
+#       deletion nobody has landed.
+#       PART 2 SURVEYED AND REFUSED, 2026-09-09. Zero lines deleted. The
+#       fold-side MERGE is proven (B1-B4, B7, B8) and the fold-side SUBMITTER
+#       was never built, so the legacy path is still the ONLY automated
+#       collaborative ingest and every deletion candidate is reachable from
+#       `daemon.rs:3492` -> `spawn_auto_collaborate_loop`. `WorkAct::Submit`
+#       has ZERO automated production sites workspace-wide; `ingest:v1`
+#       reaches the fold only when a human types `svrn job submit`.
+#       `IngestPayload::slice`, the only unit-body constructor, has two call
+#       sites and both are tests. `commonwealth-api` takes no dep on
+#       `commonwealth-work`, so `corpus_collaborate` cannot name `WorkAct`
+#       even in principle. And `EphemeralGrantStore`'s teardown obligation —
+#       which part 1 ruled MUST survive — is implemented through
+#       `WorkQueueManager::retire` (`corpus_grant.rs:166`), so the hard rule
+#       and the deletion cannot both hold. The ~1,876-line estimate was
+#       arithmetic on a set that is not yet free. Full census, per candidate,
+#       in `quality/campaigns/cw-lift-5g-part2-prereg.md`. The remaining work
+#       is a BUILD (a fold-side kickoff) that ADDS before it subtracts, and
+#       it needs its own pre-registration.
 #       Two `ingest:v1` units went onto the `work` fold, were leased BY THE
 #       FOLD, ran, reported, and merged into a canonical corpus that answers
 #       from both ranges. NOTHING IS DELETED HERE, deliberately: deleting a
@@ -866,6 +885,35 @@ status       = "open"
 #
 #   PHASE 5 ENTIRE:  +14,142 / −425  =  +13,717
 #   −582 + 13,717 = +13,135  vs target −3,800  ->  BREACHED by 16,935.
+#
+# 5g PART 2 PAID ZERO, MEASURED 2026-09-09, AND THE TARGET IS NOT ADJUSTED TO
+# FIT. Part 2 was ordered as the deletion that collects this phase's payoff
+# (~1,876 lines by the corrected static estimate). Surveyed before deleting:
+# every candidate is reachable, the fold-side SUBMITTER was never built, and
+# the honest number available to the rung is 0. See the 5g ladder row and
+# `quality/campaigns/cw-lift-5g-part2-prereg.md` for the per-candidate census.
+#
+# The proof work itself ADDED, and that is recorded here rather than left for
+# the next reader to discover. Per commit, .rs-only, measured from git:
+#
+#     sha         +added  -deleted       net
+#     50238f364      524         0      +524   B1, watched red
+#     c001e3634      493       -41      +452   merge_participants split out
+#     df2ffecb8      370        -6      +364   the fold-side collector
+#     cfee892cb        0         0         0   B8 pre-registration (docs only)
+#     2dc1bf160      444       -76      +368   fold path finalizes
+#     afa512ccc      593       -77      +516   both callers finalize
+#     ------------------------------------------------
+#     subtotal      2,424      -200    +2,224
+#
+# None of those six is on the ladder as its own rung — they are all 5g part 2,
+# whose row reads PARTIAL — so the instrument does not see them and this bar's
+# stated position of +13,135 UNDER-REPORTS by a further 2,224. Recorded, not
+# folded in: writing them onto the ladder is a rung-marking decision of the
+# same class as the 5a/5b/5c one above, and the operator takes it. The honest
+# reading either way is that Phase 5 has moved AWAY from the target
+# throughout, and 5g part 2 — the rung that was supposed to reverse it — has
+# not yet been able to.
 #
 # The 8,018 gap between the two readings is not an accounting choice, it is a
 # LEDGER DEFECT: three rungs landed and were never marked. 5a df832d294, 5b

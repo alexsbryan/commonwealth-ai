@@ -867,3 +867,101 @@ fallback; two real machines; and the two `corpus_queue.rs` call sites
 themselves, which are unchanged and whose `Err` arms now surface
 `MergedNotFinalized` through their existing `error!` rather than through a
 variant of their own.
+
+---
+
+## THE DELETION DID NOT RUN, AND THE REASON IS A MISSING PRODUCER
+
+**Surveyed 2026-09-09, before any deletion. Nothing was deleted. Every
+candidate is reachable from a live entry point, and the blocker is upstream of
+the call graph the order argued about.**
+
+B1-B4, B7 and B8 measured the fold-side MERGE and it is proven. What was never
+built is the fold-side SUBMITTER. `IngestExecutor` and `fold_coverage_for` are
+a fully-wired consumer half with no automated producer half.
+
+**Census of `WorkAct::Submit` across the workspace — zero automated production
+sites.** Three manual-CLI sites: `sovereign-cli-llm/src/job_cmd.rs:195` (the
+only one that can carry `ingest:v1`, via `--kind`),
+`sovereign-cli/src/quality_check_cmd/distribute.rs:706` (hard-wired
+`process:v1` at `:142`), `commonwealth-work/examples/work_peer.rs:285`
+(`process:v1`). Ten test fixtures. The daemon appends only donor-side acts
+(`work_donor.rs` Offer/Lease/Renew/Complete/Fail); there is no `Submit`
+anywhere in `sovereign-mesh/src/`.
+
+**And no production code can build a unit body either.**
+`IngestPayload::slice` (`ingest_executor.rs:165`) is the only constructor and
+has exactly two call sites, both tests (`ingest_executor/tests.rs:42`,
+`fold_ingest_cross_node_merge_e2e.rs:200`).
+
+**The two paths are disjoint types on disjoint substrates.**
+`fold_coverage_for` matches `handoff.kind == ingest:v1` over a
+`commonwealth_work::WorkHandoff` on the rail journal. A corpus installed the
+shipped way produces a `commonwealth_core::knowledge::IngestionHandoff` written
+to `mesh_store` under `handoff:<id>` (`corpus_collaborate.rs:585`) — a KV row on
+the `corpus-engine` namespace, routed by `Projector::Kv` and never
+`Projector::Work` (`rail_kv_pump.rs:849-874`). Same word, different mechanism.
+So on a real corpus install `fold_coverage_for` returns `None` at
+`auto_ingest.rs:249` and control falls through to the disk-derived legacy path
+every time. B7's control `without_a_fold_the_same_tick_publishes_the_partial
+_canonical` is that case, and it is the NORMAL case, not the control.
+
+**`corpus_collaborate` structurally cannot be the producer today.**
+`commonwealth-api` takes no dependency on `commonwealth-work`, so the route
+cannot name `WorkAct` or `Submission` even in principle. The edge would be
+LEGAL if added — `mesh-api` → `mesh-foundation` is downward, and
+`commonwealth-work`'s only `[[forbid]]` is outbound (`-> sovereign-*`) — but
+adding it is a design decision, not a patch.
+
+### Reachability, per candidate — all KEPT, none deletable
+
+The live chain, compiler-resolved via `callers()`: `daemon.rs:3492` →
+`spawn_auto_collaborate_loop` → `auto_collaborate_loop` (`auto_ingest.rs:102`),
+which every tick calls `discover_and_spawn_pull_loops` (`:179`) and POSTs
+`/internal/corpus/collaborate` (`:567`). `use_pull_queue()` defaults TRUE —
+the pull queue is the shipped default and `SOVEREIGN_USE_LEGACY_PARTITION=1`
+is the opt-OUT. It is user-facing too:
+`sovereign-desktop/src-tauri/src/collaborate_commands.rs:126` and `:169`.
+
+| Candidate | Verdict | Reached from |
+|---|---|---|
+| `commonwealth-knowledge/src/work_queue.rs` (511 non-test lines) | KEPT | `corpus_collaborate.rs:557` register · `corpus_grant.rs:166` retire · `corpus_queue.rs` 267/294/346/422/777 · `state.rs:939`+`:1904` · `shard_manager.rs:87` |
+| `corpus_queue.rs` lease half (~614 lines) | KEPT | routes live at `server.rs:376/382/386/390`, driven by `pull_loop` and by peers |
+| `auto_ingest.rs` pull half (~575 lines) | KEPT | `auto_ingest.rs:179` |
+| the four route registrations | KEPT | `server.rs:376/382/386/390` |
+| `AppState.work_queue` | KEPT | `state.rs:939`, reaper at `:1904` |
+| `coordinate_merge` / `spawn_queue_merge` | KEPT | TWO triggers — `corpus_queue.rs:445` AND `corpus_collaborate.rs:377` |
+
+B8's `commonwealth-knowledge/tests/main/coordinate_merge_installs_the_canonical.rs`
+stays LIVE: its subject survives.
+
+Two the pre-registration above expected to fall survive for the opposite
+reason — they are part of the REPLACEMENT, not of the legacy path:
+`peer_control_urls` (`corpus_queue.rs:36`) is called by
+`merge_from_fold_coverage` (`auto_recover.rs:240`), and
+`corpus_partition_evict` is POSTed by `merge_participants`
+(`shard_manager.rs:572`).
+
+### A hard rule and the deletion are in direct conflict
+
+`EphemeralGrantStore`'s teardown obligation — the fourth of the four things
+part 1 established the consent pair structurally cannot carry — **is
+implemented through `WorkQueueManager`**. `corpus_grant.rs:166`:
+`state.inner.work_queue.retire(&handoff_id).await`, the revoke path that stops
+the in-flight job so peers get 404 on `next_unit` and exit their pull loops.
+There is no fold-side `retire`. "The grant store survives" and "delete
+`WorkQueueManager`" cannot both hold on this tree.
+
+### What the order got wrong, and it was written down in the code
+
+`sovereign-mesh/src/ingest_executor.rs:17-23` says "Replaced, not yet deleted,
+and the tense is load-bearing … Part 2 is the deletion and is a separate,
+explicitly-authorised step." That sentence is half right. Part 2 *is* the
+deletion, and the deletion has an unmet precondition nobody wrote down. The
+corrected estimate of ~1,876 lines was arithmetic on a set that is not yet
+free; the honest number available to this rung is **0**.
+
+The remaining work is a BUILD — a fold-side kickoff that submits an `ingest:v1`
+handoff where `corpus_collaborate` today calls `work_queue.register` — and it
+ADDS lines before it can subtract. It needs its own pre-registration and its
+own bars. `cw-net-deletion` takes no payment here and is not adjusted to fit.
