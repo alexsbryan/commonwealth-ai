@@ -22,7 +22,7 @@
 //!
 //! # What it deliberately does NOT flag
 //!
-//! Re-exports (`pub use sovereign_contracts::…`) and imports. Naming a
+//! Re-exports (`pub use sovereign_turn_client::…`) and imports. Naming a
 //! contract type is the whole point; DECLARING one beside it is the defect.
 
 use std::path::{Path, PathBuf};
@@ -208,7 +208,7 @@ fn no_wire_mirror_in_this_crate() {
         offences.is_empty(),
         "sv-one-client: the client family must be the only consumer of the \
          wire, but this crate re-declares part of it. Use the type from \
-         `sovereign_contracts::types` instead of copying its variants.\n  {}",
+         `sovereign_turn_client` instead of copying its variants.\n  {}",
         offences.join("\n  ")
     );
 }
@@ -279,8 +279,8 @@ pub enum ClientMessage {
 #[test]
 fn importing_the_contract_is_not_a_twin() {
     let adopted = r#"
-use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnNotice, TurnPrompt};
-pub use sovereign_contracts::types::projection::{Citation, Provenance};
+use sovereign_turn_client::{TurnAnswer, TurnFrame, TurnNotice, TurnPrompt};
+pub use sovereign_turn_client::{Citation, Provenance};
 
 fn handle(f: TurnFrame) {
     match f {

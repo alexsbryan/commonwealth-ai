@@ -19,7 +19,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use sovereign_contracts::types::{TurnAnswer, TurnMode};
+use sovereign_turn_client::{TurnAnswer, TurnMode};
 
 use crate::error::{Error, Result};
 use crate::remote::stream::{self, TurnRun};

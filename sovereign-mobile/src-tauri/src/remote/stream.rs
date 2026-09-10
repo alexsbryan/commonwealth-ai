@@ -43,8 +43,10 @@ use rusqlite::Connection;
 use serde_json::json;
 use tauri::{AppHandle, Emitter};
 
-use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt};
-use sovereign_turn_client::{StreamOptions, TurnClient, TurnObserver, TurnSender, TurnStream};
+use sovereign_turn_client::{
+    StreamOptions, TurnAnswer, TurnClient, TurnFrame, TurnMode, TurnNotice, TurnObserver,
+    TurnPrompt, TurnSender, TurnStream,
+};
 
 use crate::cache::store;
 use crate::error::{Error, Result};

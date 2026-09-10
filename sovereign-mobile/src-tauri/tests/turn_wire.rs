@@ -42,9 +42,10 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-use sovereign_contracts::types::approval::ResolveOutcome;
-use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
-use sovereign_contracts::types::{ActionPreview, TurnFrame, TurnMode, TurnNotice, TurnPrompt};
+use sovereign_turn_client::{
+    ActionPreview, Citation, Provenance, ProvenanceSource, ResolveOutcome, TurnFrame, TurnMode,
+    TurnNotice, TurnPrompt,
+};
 
 use sovereign_mobile_lib::cache::schema;
 use sovereign_mobile_lib::remote::stream::{self, SenderRegistry, TurnEvents, TurnRun};
@@ -490,7 +491,7 @@ async fn a_prompt_is_answered_from_the_command_thread() {
                         &senders,
                         CONV,
                         &id,
-                        &sovereign_contracts::types::TurnAnswer::Approved(true),
+                        &sovereign_turn_client::TurnAnswer::Approved(true),
                     );
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;

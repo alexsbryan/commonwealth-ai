@@ -25,8 +25,12 @@ tauri-build = { version = "2", features = [] }
 # protocol vocabulary of its own, which is what makes its parity with the
 # desktop and the CLI structural rather than maintained. `census.rs` is the
 # ratchet that keeps it that way.
+#
+# ONE dependency, not two: the client re-exports the contract types it hands
+# out (`TurnFrame`, `TurnPrompt`, `Citation`, …), so the phone never declares
+# `sovereign-contracts` to spell a type it only ever receives from here. That
+# declaration is what `quality/baselines/fan_in.tsv` counts against contracts.
 sovereign-turn-client = { workspace = true }
-sovereign-contracts = { workspace = true }
 
 tauri = { version = "2", features = [] }
 tauri-plugin-deep-link = "2"

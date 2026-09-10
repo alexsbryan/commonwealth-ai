@@ -76,7 +76,7 @@ pub struct MessageDto {
 /// Re-exported rather than imported at each site so the `remote::dto` path
 /// every caller already spells keeps working, and so the ONE line that says
 /// where these types come from is here.
-pub use sovereign_contracts::types::projection::{Citation, Provenance};
+pub use sovereign_turn_client::{Citation, Provenance};
 
 /// One chunk in a reading window — the full passage text (not the
 /// truncated citation snippet) served by the host's corpus engine.
@@ -138,9 +138,10 @@ pub struct CorpusRefDto {
 // makes every frame the phone does not understand look exactly like a frame
 // that does not exist.
 //
-// The wire vocabulary is `sovereign_contracts::types::{TurnFrame, TurnPrompt,
-// TurnAnswer, TurnNotice, TurnRequest}` and the client that speaks it is
-// `sovereign-turn-client`. `remote::stream` consumes both directly, so the
+// The wire vocabulary is `sovereign_turn_client::{TurnFrame, TurnPrompt,
+// TurnAnswer, TurnNotice, TurnRequest}` — the contract's own types, re-exported
+// by the client that speaks them, so the phone declares ONE dependency for the
+// whole family. `remote::stream` consumes it directly, so the
 // phone gains `Prompt`, `Notice::ResolveAck` and `Notice::TurnSettled` by
 // construction rather than by someone remembering to copy them across.
 //
