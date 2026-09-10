@@ -70,7 +70,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use sovereign_meshapp::Graph;
+use sovereign_meshapp::{Graph, MeshAppError};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::enforce_localhost;
@@ -93,28 +93,6 @@ const SUBGRAPH_LIMIT_MAX: usize = 80;
 const FEED_DOCS_DEFAULT: usize = 14;
 const FEED_DOCS_MIN: usize = 1;
 const FEED_DOCS_MAX: usize = 90;
-
-/// The phrases `sovereign-meshapp` uses for a genuine ABSENCE, as
-/// opposed to a read that failed.
-///
-/// The library reports every failure as a `String`, so the three
-/// "asked for something that is not there" cases — an unknown entity
-/// id, an unknown chunk id, a corpus with no graph to explore — are
-/// not separable from an unreadable index by TYPE. They are separable
-/// by fact, and a UI deep-link to a renumbered atom must not read as
-/// "the daemon is broken" (ARCH §18.3), so the mapping is made here,
-/// once, as DATA rather than as a `match` on error text scattered
-/// across five handlers (ARCH §2.1, §6).
-///
-/// The structural fix is a typed error in `sovereign-meshapp`. It is
-/// owed, and it is not free here: changing those signatures changes the
-/// desktop's thirteen call sites, so it belongs in the commit that
-/// repoints them, not in the one that opens the door.
-const ABSENCE_PHRASES: &[&str] = &[
-    "no entity ",
-    "no chunk ",
-    "corpus has neither an investigation graph nor an atlas",
-];
 
 // ─── Query shapes ──────────────────────────────────────────────
 
@@ -546,7 +524,16 @@ async fn wrapped(
             );
             (StatusCode::OK, Json(artifact)).into_response()
         }
-        Err(e) => absent_or_internal(&corpus, &e),
+        // `wrapped::wrapped_artifact` still answers a `String`, and it
+        // is the one read here with NO absence case: every way it fails
+        // (unopenable index, unreadable `_corpus_meta.json`, a rejected
+        // verbatim audit) is a failure, never "you asked for something
+        // that is not there". So it is a 500 unconditionally — which is
+        // exactly what the phrase table decided for it.
+        Err(e) => {
+            tracing::warn!(corpus = %corpus, error = %e, "meshapp_http: wrapped failed");
+            internal_error(&format!("`{corpus}`: {e}"))
+        }
     }
 }
 
@@ -587,12 +574,15 @@ fn clamp(requested: Option<usize>, default: usize, max: usize) -> usize {
     requested.unwrap_or(default).min(max)
 }
 
-/// A `sovereign-meshapp` error string → a status. See
-/// [`ABSENCE_PHRASES`] for why the mapping is here and what would
-/// replace it.
-fn absent_or_internal(corpus_id: &str, err: &str) -> Response {
+/// A `sovereign-meshapp` failure → a status. The library answers
+/// [`MeshAppError`] since 2026-09-10, so an ABSENCE — an unknown entity
+/// id, an unknown chunk id, a corpus with no graph to explore — is
+/// separated from a failed read BY TYPE, at the site that knows.
+/// Until then this read a table of error phrases; the table is gone
+/// (ARCH §2.1, §18.3).
+fn absent_or_internal(corpus_id: &str, err: &MeshAppError) -> Response {
     let msg = format!("`{corpus_id}`: {err}");
-    if ABSENCE_PHRASES.iter().any(|p| err.contains(p)) {
+    if err.is_absence() {
         tracing::debug!(corpus = %corpus_id, error = %err, "meshapp_http: absent");
         not_found(&msg)
     } else {

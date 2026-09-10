@@ -294,42 +294,40 @@ async fn op_handler(
 ) -> Response {
     let idx = ctx.index_path.as_path();
     let result: Result<serde_json::Value, String> = match op.as_str() {
-        "graph" => sovereign_meshapp::load_graph(idx).map(|g| {
-            to_val(sovereign_meshapp::graph_nodes(
+        "graph" => text(sovereign_meshapp::load_graph(idx).map(|g| {
+            sovereign_meshapp::graph_nodes(
                 &g,
                 a.node_type.as_deref(),
                 a.limit.unwrap_or(50).min(500),
-            ))
-        }),
-        "subgraph" => sovereign_meshapp::load_graph(idx).map(|g| {
-            to_val(sovereign_meshapp::subgraph(
-                &g,
-                a.node_type.as_deref(),
-                a.limit.unwrap_or(30).min(80),
-            ))
-        }),
-        "node" => sovereign_meshapp::load_graph(idx).and_then(|g| {
-            sovereign_meshapp::node_detail(&g, a.id.as_deref().unwrap_or_default()).map(to_val)
-        }),
-        "findings" => sovereign_meshapp::load_graph(idx)
-            .map(|g| to_val(sovereign_meshapp::findings(&g, a.pattern.as_deref()))),
-        "search" => sovereign_meshapp::load_graph(idx).map(|g| {
-            to_val(sovereign_meshapp::search_entities(
+            )
+        })),
+        "subgraph" => text(sovereign_meshapp::load_graph(idx).map(|g| {
+            sovereign_meshapp::subgraph(&g, a.node_type.as_deref(), a.limit.unwrap_or(30).min(80))
+        })),
+        "node" => {
+            text(sovereign_meshapp::load_graph(idx).and_then(|g| {
+                sovereign_meshapp::node_detail(&g, a.id.as_deref().unwrap_or_default())
+            }))
+        }
+        "findings" => text(
+            sovereign_meshapp::load_graph(idx)
+                .map(|g| sovereign_meshapp::findings(&g, a.pattern.as_deref())),
+        ),
+        "search" => text(sovereign_meshapp::load_graph(idx).map(|g| {
+            sovereign_meshapp::search_entities(
                 &g,
                 a.query.as_deref().unwrap_or_default(),
                 a.node_type.as_deref(),
                 a.limit.unwrap_or(25).min(100),
-            ))
-        }),
+            )
+        })),
         "document_feed" => {
             let limit = a.limit.unwrap_or(14).clamp(1, 90);
-            sovereign_meshapp::document_feed(idx, limit)
-                .await
-                .map(to_val)
+            text(sovereign_meshapp::document_feed(idx, limit).await)
         }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
         "corpus_stats" => Ok(to_val(sovereign_meshapp::corpus_stats(idx))),
-        "timeline" => sovereign_meshapp::timeline(idx).await.map(to_val),
+        "timeline" => text(sovereign_meshapp::timeline(idx).await),
         "read_chunk" => match a
             .chunk_id
             .as_deref()
@@ -337,7 +335,7 @@ async fn op_handler(
             .trim()
             .parse::<u64>()
         {
-            Ok(id) => sovereign_meshapp::read_chunk(idx, id).await.map(to_val),
+            Ok(id) => text(sovereign_meshapp::read_chunk(idx, id).await),
             Err(_) => Err(format!("chunk id is not numeric: {:?}", a.chunk_id)),
         },
         // Same load-or-build-and-cache path the desktop host runs, so the
@@ -359,6 +357,17 @@ async fn op_handler(
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
+}
+
+/// A `sovereign-meshapp` answer rendered for this dev server's JSON
+/// envelope, which reports every op failure as one string. The library
+/// answers [`sovereign_meshapp::MeshAppError`]; the dev server has no
+/// status codes to spend on the absence/failure split the desktop's
+/// daemon routes make, so it flattens here, once.
+fn text<T: serde::Serialize>(
+    r: Result<T, sovereign_meshapp::MeshAppError>,
+) -> Result<serde_json::Value, String> {
+    r.map(to_val).map_err(|e| e.to_string())
 }
 
 fn to_val<T: serde::Serialize>(v: T) -> serde_json::Value {

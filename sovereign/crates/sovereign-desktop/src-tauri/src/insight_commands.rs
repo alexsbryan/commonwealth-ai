@@ -141,20 +141,31 @@ pub async fn delete_insight(id: String, state: State<'_, Arc<AppState>>) -> Resu
         .map_err(|e| e.to_string())
 }
 
-/// THE ONE INSIGHT COMMAND STILL READ IN-PROCESS (sv-surface D2, named
-/// rather than quietly kept): `insight_http` serves clip/list/search/delete
-/// and has no sink-status route, so there is nothing to cross to. Wire first,
-/// delete second — this local read comes out the commit a
-/// `GET /v1/insights/sinks` over `ServingCore.insights` lands, not before.
-/// On an attached boot it reads THIS process's sink registry, which is empty,
-/// so `any_connected` is false there regardless of the daemon's sinks.
+/// `GET /v1/insights/sinks` — the daemon's OWN sink registry, in both
+/// boot modes (sv-surface D2's owed route, landed in 710a0326e).
+///
+/// This read THIS process's registry until now, which on an attached boot
+/// is empty however many vaults the daemon has connected — `any_connected`
+/// was false there regardless — and it hard-coded `sinks: vec![]` in every
+/// mode. Both are gone: the route answers the real registry, and the DTO
+/// carries whatever it holds.
 #[tauri::command]
 pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStatusDto, String> {
-    let service = get_insight_service(&state).await?;
-    let any_connected = service.sinks.any_connected().await;
+    let status = insight_client(&state)
+        .insight_sinks()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(SinkStatusDto {
-        any_connected,
-        sinks: vec![], // populated when Obsidian sink is added
+        any_connected: status.any_connected,
+        sinks: status
+            .sinks
+            .into_iter()
+            .map(|s| SinkInfoDto {
+                id: s.id,
+                display_name: s.display_name,
+                connected: s.connected,
+            })
+            .collect(),
     })
 }
 

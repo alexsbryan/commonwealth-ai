@@ -25,6 +25,77 @@ use corpus_engine::enrichment::investigation::graph::{
 };
 use corpus_engine::index::CorpusIndex;
 
+// ─── The failure type ────────────────────────────────────────────────
+
+/// Why a read of a corpus index did not answer.
+///
+/// The distinction this type exists to carry is [`Self::NotFound`] vs.
+/// everything else: an unknown entity id, an unknown chunk id, or a
+/// corpus with no graph to explore are ABSENCES — the caller asked for
+/// something that is not there — while an unreadable file, an
+/// unopenable index or malformed JSON are FAILURES. Both were `String`
+/// until 2026-09-10, so `sovereign-mesh`'s HTTP surface separated them
+/// by matching on error TEXT (an `ABSENCE_PHRASES` table); the
+/// separation is now by type, decided at the site that knows (ARCH §2,
+/// §18.3). A UI deep-link to a renumbered atom must read as 404, not
+/// as "the daemon is broken".
+///
+/// `Display` renders exactly the strings the `String` errors carried,
+/// so every message the desktop and the `meshapp dev` server already
+/// showed is byte-identical.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MeshAppError {
+    /// The corpus is readable; the thing asked for is not in it.
+    NotFound { what: String },
+    /// A file, Lance table or index could not be read.
+    Io { what: String, detail: String },
+    /// Bytes were read but are not the shape they must be.
+    Parse { what: String, detail: String },
+}
+
+impl MeshAppError {
+    /// An absence: `what` is the whole message (`"no chunk 42"`).
+    pub fn not_found(what: impl Into<String>) -> Self {
+        Self::NotFound { what: what.into() }
+    }
+
+    /// A failed read: `what` names the read (`"open index"`), `detail`
+    /// is the underlying error.
+    pub fn io(what: impl Into<String>, detail: impl std::fmt::Display) -> Self {
+        Self::Io {
+            what: what.into(),
+            detail: detail.to_string(),
+        }
+    }
+
+    /// Bytes that would not parse: same shape as [`Self::io`].
+    pub fn parse(what: impl Into<String>, detail: impl std::fmt::Display) -> Self {
+        Self::Parse {
+            what: what.into(),
+            detail: detail.to_string(),
+        }
+    }
+
+    /// True when the caller asked for something absent — the one bit an
+    /// HTTP surface needs to choose 404 over 500.
+    pub fn is_absence(&self) -> bool {
+        matches!(self, Self::NotFound { .. })
+    }
+}
+
+impl std::fmt::Display for MeshAppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound { what } => write!(f, "{what}"),
+            Self::Io { what, detail } | Self::Parse { what, detail } => {
+                write!(f, "{what}: {detail}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MeshAppError {}
+
 // ─── DTOs (the bundle contract) ──────────────────────────────────────
 
 /// A degree-ranked node. `degree` = incident relationships; `alias_count` =
@@ -216,10 +287,10 @@ pub struct Graph {
 /// Load a corpus's graph, dispatching on what the index carries: a
 /// deterministic `investigation/` graph (UAP) or an `atlas/` enrichment
 /// (Enron). Both project into the same shapes.
-pub fn load_graph(index_path: &Path) -> Result<Graph, String> {
+pub fn load_graph(index_path: &Path) -> Result<Graph, MeshAppError> {
     if index_path.join(INVESTIGATION_DIRNAME).is_dir() {
         let (entities, rels, findings) = read_investigation_graph(index_path)
-            .map_err(|e| format!("read investigation graph: {e}"))?;
+            .map_err(|e| MeshAppError::io("read investigation graph", e))?;
         return Ok(Graph {
             entities,
             rels,
@@ -234,7 +305,9 @@ pub fn load_graph(index_path: &Path) -> Result<Graph, String> {
             findings,
         });
     }
-    Err("corpus has neither an investigation graph nor an atlas to explore".to_string())
+    Err(MeshAppError::not_found(
+        "corpus has neither an investigation graph nor an atlas to explore",
+    ))
 }
 
 // ─── Atlas → graph adapter ───────────────────────────────────────────
@@ -274,10 +347,10 @@ struct MergedEntityRow {
 /// empty (the atlas identity story is [`reconciliation`], not findings).
 fn load_atlas_as_investigation(
     index_path: &Path,
-) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), String> {
+) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), MeshAppError> {
     let atlas_dir = index_path.join("atlas");
     let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms: {e}"))?;
+        .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let recon = read_reconciliation_index(&atlas_dir);
 
@@ -480,9 +553,11 @@ pub fn graph_nodes(g: &Graph, node_type: Option<&str>, limit: usize) -> Vec<Grap
 
 /// One entity's full detail + every incident edge, each resolved to its other
 /// endpoint and quoting its evidence excerpt + source chunk.
-pub fn node_detail(g: &Graph, id: &str) -> Result<NodeDetailDto, String> {
+pub fn node_detail(g: &Graph, id: &str) -> Result<NodeDetailDto, MeshAppError> {
     let by_id: HashMap<&str, &InvEntity> = g.entities.iter().map(|e| (e.id.as_str(), e)).collect();
-    let me = by_id.get(id).ok_or_else(|| format!("no entity `{id}`"))?;
+    let me = by_id
+        .get(id)
+        .ok_or_else(|| MeshAppError::not_found(format!("no entity `{id}`")))?;
     let mut edges = Vec::new();
     for r in &g.rels {
         let (direction, other_id) = if r.from_entity_id == id {
@@ -637,13 +712,13 @@ fn enum_label<T: Serialize>(v: &T, fallback: &str) -> String {
 
 /// Claim atoms → cited DTOs (empty for non-atlas corpora). Reuses the same
 /// `atoms.json` read + `sec_NNNNN → chunk` resolution as the graph adapter.
-pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, String> {
+pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, MeshAppError> {
     let atlas_dir = index_path.join("atlas");
     if !atlas_dir.is_dir() {
         return Ok(Vec::new());
     }
     let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms: {e}"))?;
+        .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let names = entity_name_map(&file.atoms);
     let mut out = Vec::new();
@@ -672,13 +747,13 @@ pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, Str
 }
 
 /// Question atoms → DTOs (empty for non-atlas corpora).
-pub fn load_questions(index_path: &Path, limit: usize) -> Result<Vec<QuestionDto>, String> {
+pub fn load_questions(index_path: &Path, limit: usize) -> Result<Vec<QuestionDto>, MeshAppError> {
     let atlas_dir = index_path.join("atlas");
     if !atlas_dir.is_dir() {
         return Ok(Vec::new());
     }
     let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms: {e}"))?;
+        .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let mut out = Vec::new();
     for env in &file.atoms {
@@ -710,7 +785,7 @@ struct ChapterRow {
     chunk_ids: Vec<u64>,
 }
 
-fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, String> {
+fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, MeshAppError> {
     #[derive(Deserialize)]
     struct ChaptersFile {
         #[serde(default)]
@@ -720,14 +795,15 @@ fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, String> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let file: ChaptersFile =
-        serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| MeshAppError::io(format!("read {}", path.display()), e))?;
+    let file: ChaptersFile = serde_json::from_slice(&bytes)
+        .map_err(|e| MeshAppError::parse(format!("parse {}", path.display()), e))?;
     Ok(file.chapters)
 }
 
 /// `sec_NNNNN` → first numeric `chunks.lance` row id (as a string).
-fn read_chapter_chunk_map(index_path: &Path) -> Result<HashMap<String, String>, String> {
+fn read_chapter_chunk_map(index_path: &Path) -> Result<HashMap<String, String>, MeshAppError> {
     let chapters = read_chapters(index_path)?;
     let mut map = HashMap::with_capacity(chapters.len());
     for c in chapters {
@@ -823,7 +899,7 @@ pub fn corpus_stats(index_path: &Path) -> CorpusStatsDto {
 
 /// Bucket the corpus's documents by month, parsed from the `Date:` header every
 /// email chunk carries. Empty when the corpus has no `chapters.json`.
-pub async fn timeline(index_path: &Path) -> Result<TimelineDto, String> {
+pub async fn timeline(index_path: &Path) -> Result<TimelineDto, MeshAppError> {
     let chapters = read_chapters(index_path)?;
     let first_ids: Vec<u64> = chapters
         .iter()
@@ -839,11 +915,11 @@ pub async fn timeline(index_path: &Path) -> Result<TimelineDto, String> {
     }
     let index = CorpusIndex::open(index_path)
         .await
-        .map_err(|e| format!("open index: {e}"))?;
+        .map_err(|e| MeshAppError::io("open index", e))?;
     let chunks = index
         .get_chunks(&first_ids)
         .await
-        .map_err(|e| format!("read chunks: {e}"))?;
+        .map_err(|e| MeshAppError::io("read chunks", e))?;
 
     let mut by_ym: std::collections::BTreeMap<String, (usize, Vec<u64>)> =
         std::collections::BTreeMap::new();
@@ -874,18 +950,18 @@ pub async fn timeline(index_path: &Path) -> Result<TimelineDto, String> {
 }
 
 /// One chunk's full text by its numeric id.
-pub async fn read_chunk(index_path: &Path, chunk_id: u64) -> Result<ChunkDto, String> {
+pub async fn read_chunk(index_path: &Path, chunk_id: u64) -> Result<ChunkDto, MeshAppError> {
     let index = CorpusIndex::open(index_path)
         .await
-        .map_err(|e| format!("open index: {e}"))?;
+        .map_err(|e| MeshAppError::io("open index", e))?;
     let chunks = index
         .get_chunks(&[chunk_id])
         .await
-        .map_err(|e| format!("read chunk {chunk_id}: {e}"))?;
+        .map_err(|e| MeshAppError::io(format!("read chunk {chunk_id}"), e))?;
     let c = chunks
         .into_iter()
         .next()
-        .ok_or_else(|| format!("no chunk {chunk_id}"))?;
+        .ok_or_else(|| MeshAppError::not_found(format!("no chunk {chunk_id}")))?;
     Ok(ChunkDto {
         chunk_id: chunk_id.to_string(),
         content: c.content,
@@ -903,15 +979,15 @@ pub async fn read_chunk(index_path: &Path, chunk_id: u64) -> Result<ChunkDto, St
 pub async fn document_feed(
     index_path: &Path,
     limit_docs: usize,
-) -> Result<DocumentFeedDto, String> {
+) -> Result<DocumentFeedDto, MeshAppError> {
     let index = CorpusIndex::open(index_path)
         .await
-        .map_err(|e| format!("open index: {e}"))?;
+        .map_err(|e| MeshAppError::io("open index", e))?;
 
     let by_doc = index
         .group_chunks_by_source_doc()
         .await
-        .map_err(|e| format!("group by source doc: {e}"))?;
+        .map_err(|e| MeshAppError::io("group by source doc", e))?;
     let mut doc_ids: Vec<String> = by_doc.keys().cloned().collect();
     doc_ids.sort();
     doc_ids.reverse();
@@ -922,7 +998,7 @@ pub async fn document_feed(
     let metadata_by_id: HashMap<u64, String> = index
         .all_chunks_with_raw_metadata()
         .await
-        .map_err(|e| format!("read chunk metadata: {e}"))?
+        .map_err(|e| MeshAppError::io("read chunk metadata", e))?
         .into_iter()
         .filter_map(|c| c.metadata_raw.map(|m| (c.id, m)))
         .collect();
@@ -934,7 +1010,7 @@ pub async fn document_feed(
         let chunks = index
             .get_chunks(&ids)
             .await
-            .map_err(|e| format!("read chunks for {doc_id}: {e}"))?;
+            .map_err(|e| MeshAppError::io(format!("read chunks for {doc_id}"), e))?;
         let feed_chunks = chunks
             .into_iter()
             .map(|c| FeedChunkDto {

@@ -18,10 +18,17 @@
 //!     it answered NOTHING on an attached boot: the atlas belongs to the
 //!     daemon's index dir, not this process's.
 //!
-//! Both are now one call each onto `sovereign_mesh::{atlas_http,
-//! reading_http}` over `client_base_url()`. Bring either back — a
-//! `FileAtlasReader` in a browse command, a `read_atlas_atoms` in the
-//! MeshApp bridge — and this goes red naming the rule.
+//!   * the same file's THIRTEEN explorer ops resolved the corpus's index
+//!     directory from this process's `CorpusEngine::installed_indexes()`
+//!     and called `sovereign_meshapp::*` on it — thirteen more reads that
+//!     answer nothing on an attached boot, each re-applying its own page
+//!     default and clamp beside the route's.
+//!
+//! All three are now one call each onto `sovereign_mesh::{atlas_http,
+//! reading_http, meshapp_http}` over `client_base_url()`. Bring any back —
+//! a `FileAtlasReader` in a browse command, a `read_atlas_atoms` or a
+//! `sovereign_meshapp::load_graph` in the MeshApp bridge — and this goes
+//! red naming the rule.
 //!
 //! # Calibration (ARCH §18.1 — name the failing input)
 //!
@@ -113,4 +120,80 @@ fn the_meshapp_atom_readers_read_the_wire() {
          THIS process and is the only unspoofable caller identity the bridge \
          has. A repoint that drops it is an authorization hole, not a cleanup."
     );
+}
+
+/// The thirteen explorer ops (sv-surface D3's delete half). Each one is
+/// now `TurnClient::meshapp_*` over `GET /internal/meshapp/{corpus}/...`,
+/// which runs THIS projection on the daemon's index dir.
+///
+/// The names are checked as CALLS (`sovereign_meshapp::load_graph(`), not
+/// as bare identifiers: the commands still name `sovereign_meshapp`'s DTOs
+/// as their return types, and must — a repoint that changed the type the
+/// frontend receives would be feature loss dressed as cleanup. What may
+/// not come back is the projection running HERE.
+const LOCAL_PROJECTIONS: &[&str] = &[
+    "sovereign_meshapp::load_graph(",
+    "sovereign_meshapp::graph_nodes(",
+    "sovereign_meshapp::node_detail(",
+    "sovereign_meshapp::findings(",
+    "sovereign_meshapp::search_entities(",
+    "sovereign_meshapp::load_claims(",
+    "sovereign_meshapp::load_questions(",
+    "sovereign_meshapp::reconciliation(",
+    "sovereign_meshapp::subgraph(",
+    "sovereign_meshapp::corpus_stats(",
+    "sovereign_meshapp::timeline(",
+    "sovereign_meshapp::read_chunk(",
+    "sovereign_meshapp::document_feed(",
+    "sovereign_meshapp::wrapped::wrapped_artifact(",
+];
+
+#[test]
+fn the_meshapp_explorer_ops_read_the_wire() {
+    let code = production_source("src/commands/meshapp.rs");
+    for call in LOCAL_PROJECTIONS {
+        assert!(
+            !code.contains(call),
+            "sv-surface D3: commands/meshapp.rs runs the projection `{call}` \
+             in-process again. The thirteen explorer ops are one \
+             TurnClient::meshapp_* call each onto GET /internal/meshapp/\
+             {{corpus}}/... — the daemon runs the very same sovereign-meshapp \
+             function over ITS index dir, which is the only one an attached \
+             boot can see. Keep the DTO, lose the read."
+        );
+    }
+    assert!(
+        !code.contains("resolve_index_path") && !code.contains("installed_indexes"),
+        "sv-surface D3: commands/meshapp.rs resolves a corpus's on-disk index \
+         directory again. The bridge does not know where an index lives — the \
+         route does, and it resolves it against the DAEMON's corpus engine. A \
+         local resolve is how thirteen commands came to answer `corpus is not \
+         installed` on a boot where it was installed all along."
+    );
+    // One decider for the page defaults (ARCH §10.6): the route applies
+    // them and says what it applied. A command that re-derives one is a
+    // second decider whose answer silently wins over the host's.
+    //
+    // Scoped to the EXPLORER commands — everything from `meshapp_graph`
+    // down. The three parcel folds above it (read_corpus, search_parcels,
+    // parcel_analytics) page their own fold over `corpus_atoms_all`, which
+    // serves every atom; their caps are this file's to decide and stay.
+    let explorer = &code[code
+        .find("pub async fn meshapp_graph(")
+        .expect("meshapp_graph is the first explorer command; the section marker moved")..];
+    for clamp in [
+        ".unwrap_or(50).min(500)",
+        ".unwrap_or(25).min(100)",
+        ".unwrap_or(100).min(500)",
+        ".unwrap_or(30).min(80)",
+        ".unwrap_or(14).clamp(1, 90)",
+    ] {
+        assert!(
+            !explorer.contains(clamp),
+            "sv-surface D3: commands/meshapp.rs re-applies the page clamp \
+             `{clamp}`. The defaults and maxima live in meshapp_http's \
+             GRAPH_/ENTITY_/ATOM_/SUBGRAPH_/FEED_ constants; passing Option \
+             through is what makes the host the one decider."
+        );
+    }
 }

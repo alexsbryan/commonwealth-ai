@@ -128,6 +128,63 @@ fn planted_local_atoms(atlas_dir: &std::path::Path) -> bool {
 async fn wire_atoms('''
 
 [[family]]
+id          = "meshapp-explorer"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
+mustFail    = ["the_meshapp_explorer_ops_read_the_wire"]
+breaks      = "the sovereign_meshapp projection running in the desktop again — the thirteen explorer reads that answer nothing on an attached boot"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs"
+expect_red  = "runs the projection"
+find        = '''async fn wire_atoms('''
+replace     = '''#[allow(dead_code)]
+fn planted_local_graph(path: &std::path::Path) -> bool {
+    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the projection, here again.
+    sovereign_meshapp::load_graph(path).is_ok()
+}
+
+async fn wire_atoms('''
+
+[[family]]
+id          = "lessons-notes-wire"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/notes_sink_wire_census.rs"
+mustFail    = ["the_lesson_pane_holds_no_note_store"]
+breaks      = "a second NoteStore for the same lessons — the desktop's own notes.db beside the one the turn enforces from"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/lessons.rs"
+expect_red  = "takes a NoteStore handle off AppState again"
+find        = '''fn notes(state: &Arc<AppState>)'''
+replace     = '''#[allow(dead_code)]
+async fn planted_local_notes(state: &Arc<AppState>) -> bool {
+    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the AppState handle, back.
+    let Some(store) = state.notes.read().await.as_ref().map(Arc::clone) else {
+        return false;
+    };
+    store.read_notes(None, &[], &[], &[], 1, false).await.is_ok()
+}
+
+fn notes(state: &Arc<AppState>)'''
+
+[[family]]
+id          = "insight-sink-wire"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/notes_sink_wire_census.rs"
+mustFail    = ["the_sink_status_reads_the_daemons_registry"]
+breaks      = "the desktop's own insight sink registry — empty on an attached boot, and reported as the answer"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
+expect_red  = "reads this process's insight sink registry again"
+find        = '''    let status = insight_client(&state)'''
+replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local registry, back.
+    if let Ok(service) = get_insight_service(&state).await {
+        if service.sinks.any_connected().await {
+            return Ok(SinkStatusDto {
+                any_connected: true,
+                sinks: vec![],
+            });
+        }
+    }
+    let status = insight_client(&state)'''
+
+[[family]]
 id          = "attach-floor"
 crate       = "sovereign-desktop"
 census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/attach_construction_census.rs"
