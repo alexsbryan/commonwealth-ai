@@ -30,9 +30,12 @@
 //! folds, so the submitter can name those refusals exactly as the donor would.
 //! It does NOT answer the donor's host-side half: whether a checkout can
 //! resolve the pinned `repo_rev`, whether the host meets a precondition,
-//! whether an executor is registered. Those are decided donor-side
-//! (`sovereign-mesh/src/work_donor.rs`, `resolve_workdir` / `host_satisfies`)
-//! and a refusal there is a `continue`, not an act — nothing reaches the rail.
+//! whether an executor is registered. Those are decided ON THE DONOR — the
+//! precondition half by `commonwealth_work::refusal::host_satisfies` (which
+//! moved out of `work_donor` at cw-lift 5f's last hole, so both donors ask one
+//! decider), the checkout and registry halves still by
+//! `sovereign-mesh/src/work_donor.rs`'s `resolve_workdir` and `resolve_offer`
+//! — and a refusal there is a `continue`, not an act: nothing reaches the rail.
 //! So a unit that every offer accepts on the rail and nobody leases is
 //! reported as exactly that, and the three host-side checks are NAMED as the
 //! ones this node cannot see. Guessing which of them fired would be a
