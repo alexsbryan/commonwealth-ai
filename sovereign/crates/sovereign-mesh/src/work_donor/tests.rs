@@ -453,7 +453,9 @@ fn a_node_with_a_corpus_engine_registers_the_ingest_kind_and_can_offer_it() {
     let registry = donor_registry(Some(engine));
     let kinds: Vec<String> = registry.kinds().iter().map(|k| k.to_string()).collect();
     assert!(
-        kinds.iter().any(|k| k == crate::ingest_executor::INGEST_KIND),
+        kinds
+            .iter()
+            .any(|k| k == crate::ingest_executor::INGEST_KIND),
         "a node with an engine must register `ingest:v1`, got {kinds:?}"
     );
     let offer = resolve_offer(&section(&["ingest:v1"]), &registry, "linux", "x86_64")

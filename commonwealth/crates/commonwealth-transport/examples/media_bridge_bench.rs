@@ -423,7 +423,9 @@ mod real_main {
         let target = loop {
             let addr = server.addr();
             if relay_only {
-                if let Some(dial) = format_dial_string(&addr).as_deref().and_then(relay_targets_only)
+                if let Some(dial) = format_dial_string(&addr)
+                    .as_deref()
+                    .and_then(relay_targets_only)
                 {
                     println!("relay-only: seeding relay target only ({dial})");
                     break parse_dial_string(&dial).expect("relay-only dial string");
@@ -437,7 +439,10 @@ mod real_main {
         let bridge = HttpBridge::spawn(client.clone(), target, BENCH_ALPN)
             .await
             .expect("bridge spawn");
-        println!("bridge={} origin={origin} peer={server_id}", bridge.local_addr());
+        println!(
+            "bridge={} origin={origin} peer={server_id}",
+            bridge.local_addr()
+        );
         println!("ready");
         loop {
             tokio::time::sleep(Duration::from_secs(10)).await;
@@ -485,8 +490,14 @@ mod real_main {
                 .map(str::trim)
                 .filter(|t| !t.is_empty() && t.parse::<SocketAddr>().is_err())
                 .collect();
-            assert!(!relays.is_empty(), "--relay-only: no relay URL in dial string");
-            println!("relay-only: seeding relay target(s) only ({})", relays.join(","));
+            assert!(
+                !relays.is_empty(),
+                "--relay-only: no relay URL in dial string"
+            );
+            println!(
+                "relay-only: seeding relay target(s) only ({})",
+                relays.join(",")
+            );
             dial_str = format!("{id}@{}", relays.join(","));
         }
         let target = parse_dial_string(&dial_str).expect("bad dial string");
@@ -558,9 +569,8 @@ mod real_main {
     ) -> std::io::Result<Reading> {
         let mut sock = TcpStream::connect(addr).await?;
         sock.set_nodelay(true).ok();
-        let mut req = format!(
-            "GET {path} HTTP/1.1\r\nHost: bench\r\nUser-Agent: media_bridge_bench\r\n"
-        );
+        let mut req =
+            format!("GET {path} HTTP/1.1\r\nHost: bench\r\nUser-Agent: media_bridge_bench\r\n");
         if let Some((a, b)) = range {
             req.push_str(&format!("Range: bytes={a}-{b}\r\n"));
         }
@@ -676,7 +686,10 @@ mod real_main {
         let path = flag(args, "--path").unwrap_or_else(|| "/".to_string());
         let range = flag(args, "--range").map(|r| {
             let (a, b) = r.split_once('-').expect("--range a-b");
-            (a.parse().expect("range start"), b.parse().expect("range end"))
+            (
+                a.parse().expect("range start"),
+                b.parse().expect("range end"),
+            )
         });
         let viewers: usize = flag_num(args, "--viewers").unwrap_or(1);
         let verify = has(args, "--verify");

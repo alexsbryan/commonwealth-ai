@@ -2718,9 +2718,8 @@ impl EmbeddedDaemon {
             .services
             .serving()
             .map(|s| Arc::clone(&s.core.corpus_engine));
-        let work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
-            corpus_engine.clone(),
-        ));
+        let work_registry =
+            std::sync::Arc::new(crate::work_donor::donor_registry(corpus_engine.clone()));
         let work_offer = {
             let c = self.setup_config.read().await;
             crate::work_donor::resolve_offer(

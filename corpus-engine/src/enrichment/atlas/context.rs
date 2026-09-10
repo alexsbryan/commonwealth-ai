@@ -33,11 +33,11 @@ use crate::enrichment::atlas::inventory::AtlasInventory;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::provider::NavigationSource;
 use crate::enrichment::atlas::store::LancePreload;
-use corpus_engine_vocab::ontology::NavigationPolicy;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
 use crate::ScoredChunk;
+use corpus_engine_vocab::ontology::NavigationPolicy;
 
 /// One pre-embedded atlas atom available to retrieval as a virtual
 /// chunk. Built by a loader, immutable after that.

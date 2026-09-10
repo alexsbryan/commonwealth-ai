@@ -21,7 +21,9 @@ use super::kind::{inventory_for, policy_for};
 fn usage() -> i32 {
     eprintln!("usage: svrn atlas map-check <corpus> [--json]");
     eprintln!("  rows of the corpus's navigation map × what its atlases carry: fits / inert:seeds / inert:edges,");
-    eprintln!("  and no-map when nothing on disk declares the rows (with what the walk falls back to).");
+    eprintln!(
+        "  and no-map when nothing on disk declares the rows (with what the walk falls back to)."
+    );
     2
 }
 
@@ -109,7 +111,9 @@ pub async fn run(args: &[String]) -> i32 {
         );
     }
     if atlases == 0 || inventory.is_empty() {
-        println!("census:  none — no atlas census could be read for `{corpus}`; rows cannot be judged");
+        println!(
+            "census:  none — no atlas census could be read for `{corpus}`; rows cannot be judged"
+        );
     } else {
         println!(
             "census:  {atlases} atlas(es); atoms {}; edges {}",

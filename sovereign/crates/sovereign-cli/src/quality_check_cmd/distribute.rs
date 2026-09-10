@@ -45,12 +45,12 @@ use std::time::{Duration, Instant};
 // Through `commonwealth-work`'s re-export, not a direct dep on the crate that
 // defines it: one constructor is not worth an edge onto `commonwealth-core`
 // (ARCH §8.3, and the fan-in cap `layer-gate` holds).
-use commonwealth_work::HandoffId;
 use commonwealth_rail::RailAct;
 use commonwealth_work::act::{Submission, WorkAct, MAX_TTL_SECS, MIN_TTL_SECS};
 use commonwealth_work::process::{ProcessPayload, ResultSource};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::{may_take, WorkRefusal};
+use commonwealth_work::HandoffId;
 use commonwealth_work::{seal, ActorKey, UnitRef, WORK_NAMESPACE};
 use kernel_types::attribution::ComputeAttribution;
 use kernel_types::quality::{Instrument, Overrun, Trigger, VerdictSource};
@@ -508,12 +508,7 @@ pub(super) fn survey(
 ) -> Vec<(ActorKey, Result<(), WorkRefusal>)> {
     proj.offers
         .iter()
-        .map(|(actor, offer)| {
-            (
-                actor.clone(),
-                may_take(proj, actor, offer, unit, now_ms),
-            )
-        })
+        .map(|(actor, offer)| (actor.clone(), may_take(proj, actor, offer, unit, now_ms)))
         .collect()
 }
 

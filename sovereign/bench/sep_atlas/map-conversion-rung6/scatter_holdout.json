@@ -1,0 +1,506 @@
+[
+ {
+  "id": "cov_coverage_factor",
+  "q": "How does corpus search compose the final chunk set instead of plain top-k truncation?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 1.0
+ },
+ {
+  "id": "cov_reranker_reject",
+  "q": "Why was the cross-encoder reranker slot rejected and what would re-open it?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "cov_refinement_surface",
+  "q": "What does the Refinement gate surface do about retries?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.25,
+  "n_titles": 24,
+  "model": 1.0
+ },
+ {
+  "id": "cov_zero_test",
+  "q": "What happens when a filtered test run matches no tests?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "cov_verification_enum",
+  "q": "What verification states can a claim hold in the epistemic ledger?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.35714285714285715,
+  "n_titles": 20,
+  "model": 1.0
+ },
+ {
+  "id": "cov_dev_tools",
+  "q": "What breaks if sovereign-cli is built without the dev-tools feature?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.32142857142857145,
+  "n_titles": 22,
+  "model": 1.0
+ },
+ {
+  "id": "cov_watchers_off",
+  "q": "Why are the watchers disabled in this workspace?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "cov_toolbox",
+  "q": "Why must builds run inside the sovereign-vulkan toolbox on this host?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.25,
+  "n_titles": 24,
+  "model": 0.0
+ },
+ {
+  "id": "cov_work_atlas",
+  "q": "How does an agent declare and release work scope on the mesh?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 1.0
+ },
+ {
+  "id": "cov_tombstone",
+  "q": "What did the longform repair ladder tombstone stop executing?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.25,
+  "n_titles": 24,
+  "model": 0.0
+ },
+ {
+  "id": "cov_env_gate",
+  "q": "What must a new environment variable read carry to pass the gate?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "cov_size_gate",
+  "q": "How is per-crate code size ratcheted?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "cov_prepush",
+  "q": "What is the time budget for the pre-push gate?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.21428571428571427,
+  "n_titles": 25,
+  "model": 0.0
+ },
+ {
+  "id": "cov_scip",
+  "q": "What populates the SCIP call graph and what happens when the export fails?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 1.0
+ },
+ {
+  "id": "cov_drift",
+  "q": "What does a drift finding anchor against?",
+  "label": 1,
+  "src": "repo",
+  "t3": 0.21428571428571427,
+  "n_titles": 25,
+  "model": 0.0
+ },
+ {
+  "id": "argument_consequence_against_compatibilism",
+  "q": "Reconstruct van Inwagen's consequence argument and explain the strongest\ncompatibilist response to it.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "concept_modality_necessary_aposteriori",
+  "q": "What is the distinction between epistemic and metaphysical possibility,\nand why does Kripke think there are necessary a posteriori truths like\n'water is H2O'?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "comparative_locke_reid_personal_identity",
+  "q": "Reconstruct Locke's memory criterion of personal identity and explain\nReid's brave-officer objection. What does the objection show about the\ntransitivity of identity?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "dialectical_gettier_lottery",
+  "q": "How do reliabilist analyses of knowledge handle Gettier cases, and what\ndoes the lottery paradox suggest about whether reliability is enough?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "argument_internalism_externalism_justification",
+  "q": "Reconstruct the new evil demon problem and explain why it is taken as a\nserious challenge to externalist accounts of epistemic justification.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "concept_qualia_physicalism",
+  "q": "What is the distinction between phenomenal and access consciousness, and\nwhy does it matter for the knowledge argument against physicalism?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "position_summary_hard_problem_illusionism",
+  "q": "What is Chalmers's hard problem of consciousness, and how does\nillusionism propose to dissolve rather than solve it?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "dialectical_content_narrow_wide_burge",
+  "q": "Compare narrow and wide content, and explain how Burge's arthritis\nthought experiment is supposed to show that mental content is partly\nconstituted by social and linguistic facts external to the individual.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "contested_trolley_doctrine_double_effect",
+  "q": "What are the main positions on whether the doctrine of double effect can\njustify the asymmetry between the trolley and footbridge cases?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "position_summary_virtue_ethics_function",
+  "q": "Reconstruct Aristotle's function argument for virtue ethics in\nNicomachean Ethics I, and explain MacIntyre's communitarian update of it\nin After Virtue.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 0.0
+ },
+ {
+  "id": "position_summary_kripke_reference_causal_historical",
+  "q": "Reconstruct Kripke's causal-historical theory of reference and explain\nhow it handles names whose initial baptism is uncertain or whose\nreference may shift over time.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "dialectical_putnam_twin_earth_meaning",
+  "q": "What is Putnam's twin earth thought experiment, and what does the\nslogan 'meanings just ain't in the head' commit one to about the\nlocation of mental content?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.25,
+  "n_titles": 24,
+  "model": 0.0
+ },
+ {
+  "id": "argument_godel_incompleteness",
+  "q": "State G\u00f6del's two incompleteness theorems and explain what philosophical\nlessons they have been taken to draw, separately, against logicism and\nagainst Hilbert's program.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "argument_rawls_original_position",
+  "q": "Reconstruct Rawls's original-position argument for the two principles of\njustice, and explain Nozick's entitlement-theory objection that the\nargument illegitimately privileges patterned over historical\nconceptions of justice.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "comparative_berlin_liberty",
+  "q": "Compare Berlin's negative and positive conceptions of liberty, and\nexplain why Berlin thinks positive liberty is historically liable to\nauthoritarian inversion.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "contested_no_miracles_scientific_realism",
+  "q": "Reconstruct the no-miracles argument for scientific realism, and explain\nthe pessimistic meta-induction response. Which other contemporary\npositions (constructive empiricism, structural realism) try to thread\nbetween them?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "comparative_kant_hume_causation",
+  "q": "Compare Hume's and Kant's accounts of causation, and explain why Kant\ntook Hume to have shown a problem that demanded a transcendental\nsolution.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "argument_aristotle_hylomorphism",
+  "q": "Reconstruct Aristotle's hylomorphic account of substance, and explain\nwhy some commentators read De Anima's account of the soul as\nnon-reductive form-of-the-body and others as a kind of property\ndualism.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "position_summary_husserl_heidegger",
+  "q": "What is Husserl's transcendental reduction (the epoch\u00e9), and how does\nHeidegger's analysis of being-in-the-world in Being and Time depart\nfrom the methodological commitments of Husserlian phenomenology?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "comparative_mencius_xunzi_human_nature",
+  "q": "Compare Mencius's and Xunzi's accounts of human nature (xing), and\nexplain how their different starting points lead to different views on\nthe role of ritual (li) in moral cultivation.\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "contested_bioethics_principlism",
+  "q": "What are the four principles of biomedical ethics in the Beauchamp-\nChildress framework, and what are the main lines of objection\n(particularist, virtue-ethical, casuist) to principlism as a\nmethodology in bioethics?\n",
+  "label": 0,
+  "src": "sep",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 0.0
+ },
+ {
+  "id": "factual_einstein_1905",
+  "q": "What were Einstein's four 1905 'Annus Mirabilis' papers about?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 0.0
+ },
+ {
+  "id": "factual_yalta_leaders",
+  "q": "Who were the three Allied leaders at the Yalta Conference?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.21428571428571427,
+  "n_titles": 25,
+  "model": 0.0
+ },
+ {
+  "id": "factual_special_vs_general_relativity",
+  "q": "What is the core difference between special relativity and general relativity?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "synth_manhattan_emigre_physicists",
+  "q": "How did the Manhattan Project draw on European physicists who fled Nazi Germany?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "synth_einstein_bohr_debate",
+  "q": "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "synth_industrial_revolution_origins",
+  "q": "What conditions in 18th-century Britain enabled the Industrial Revolution to begin there first?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.21428571428571427,
+  "n_titles": 25,
+  "model": 0.0
+ },
+ {
+  "id": "synth_evolution_natural_selection",
+  "q": "How does Darwin's theory of natural selection account for the diversity of species?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "causal_roman_empire_fall",
+  "q": "What caused the fall of the Western Roman Empire?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "causal_french_revolution",
+  "q": "What were the main causes of the French Revolution?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 0.0
+ },
+ {
+  "id": "causal_great_depression_to_fascism",
+  "q": "How did the Great Depression contribute to the rise of fascism in Europe?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "compare_buddhism_christianity",
+  "q": "How do Buddhism and Christianity differ in their conceptions of salvation and the afterlife?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.17857142857142858,
+  "n_titles": 26,
+  "model": 0.0
+ },
+ {
+  "id": "compare_einstein_newton_gravity",
+  "q": "How do Einstein's and Newton's conceptions of gravity differ?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.32142857142857145,
+  "n_titles": 22,
+  "model": 0.0
+ },
+ {
+  "id": "compare_curie_meitner",
+  "q": "Compare the scientific contributions of Marie Curie and Lise Meitner.",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.2857142857142857,
+  "n_titles": 23,
+  "model": 0.0
+ },
+ {
+  "id": "boundary_ada_lovelace",
+  "q": "What was Ada Lovelace's contribution to computing, and how did it relate to Babbage's Analytical Engine?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.21428571428571427,
+  "n_titles": 25,
+  "model": 0.0
+ },
+ {
+  "id": "boundary_emmy_noether",
+  "q": "Who was Emmy Noether and what is the significance of Noether's theorem?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "boundary_copenhagen_interpretation",
+  "q": "What is the Copenhagen interpretation of quantum mechanics?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "contested_atomic_bombings_morality",
+  "q": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.14285714285714285,
+  "n_titles": 27,
+  "model": 0.0
+ },
+ {
+  "id": "contested_colonialism_legacy",
+  "q": "How is the legacy of European colonialism in Africa contested today?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.25,
+  "n_titles": 24,
+  "model": 0.0
+ },
+ {
+  "id": "contested_globalization_effects",
+  "q": "What are the major arguments for and against globalization's economic effects?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ },
+ {
+  "id": "contested_quantum_determinism",
+  "q": "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?",
+  "label": 0,
+  "src": "wikipedia",
+  "t3": 0.10714285714285714,
+  "n_titles": 28,
+  "model": 0.0
+ }
+]

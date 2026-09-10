@@ -333,8 +333,19 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("qc-summary-null-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("tmp dir");
         let path = dir.join("summary.json");
-        write_summary(&path, "s", "prepush", &fp(), &[lane], &results, 0, 60, 0, None)
-            .expect("writes");
+        write_summary(
+            &path,
+            "s",
+            "prepush",
+            &fp(),
+            &[lane],
+            &results,
+            0,
+            60,
+            0,
+            None,
+        )
+        .expect("writes");
         let doc: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).expect("reads")).expect("json");
         let row = &doc["lanes"][0];
