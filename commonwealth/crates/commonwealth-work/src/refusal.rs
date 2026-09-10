@@ -260,8 +260,14 @@ impl WorkRefusal {
 ///
 /// Run donor-side before appending a `Lease`, and by `svrn job status` to say
 /// why a unit is sitting still. `Ok(())` means every rail-side condition is
-/// met; the host-side ones the signature cannot see are named in the module
-/// docs and are the caller's to check with this same type.
+/// met — the questions a signature over the rail CAN answer.
+///
+/// The host-side half is [`host_satisfies`], in this file behind the `process`
+/// feature. It used to be "the caller's to check with this same type", which
+/// shared the vocabulary and left the DECIDER to each donor; cw-lift 5f showed
+/// what that costs, because the second donor to exist re-derived it and
+/// checked one precondition of the three this build can evaluate. Sharing the
+/// type was never the hard part.
 ///
 /// Nothing here reads a clock: `now_ms` is a parameter, so two nodes asking
 /// about the same journal at the same instant get the same answer.
@@ -401,6 +407,79 @@ fn decide(
     }
 
     Ok(())
+}
+
+// -----------------------------------------------------------------
+// The host's half of the same predicate
+// -----------------------------------------------------------------
+
+/// The requirements only this HOST can answer — the other half of
+/// [`may_take`].
+///
+/// `may_take` decides everything a signature over the rail can see: kind,
+/// both sides of the grant, os, arch, the queue, the lease budget. What is
+/// left is the precondition list, and no act carries the answer — whether
+/// `python3` is on this machine's `PATH` is not a fact the submitter can
+/// sign.
+///
+/// **A precondition this build cannot EVALUATE is refused, never assumed
+/// met** (ARCH §18.3). A donor that read "I cannot check this" as "it is
+/// fine" would lease the unit, run it, and return a verdict about a machine
+/// that did not meet the unit's terms — which is worse than not taking it,
+/// because the submitter gets a green.
+///
+/// # Why it lives here and not in each donor
+///
+/// It was sovereign-side until cw-lift 5f, and the vocabulary
+/// ([`UnmetRequirement::Precondition`]) was shared while the decider was not.
+/// The second donor to exist — the lifted peer — then re-derived it and
+/// checked exactly one of the three kinds this build can evaluate, silently
+/// refusing every containerised unit it could in fact have run. Behind the
+/// `process` feature with the executor, because it reads `PATH` and a file,
+/// so a lifter of the fold alone still links no I/O.
+#[cfg(feature = "process")]
+pub fn host_satisfies(unit: &oicp_types::JobUnit) -> Result<(), WorkRefusal> {
+    for precondition in &unit.requirements.preconditions {
+        let met = match precondition {
+            Precondition::Binary(name) => binary_on_path(name),
+            Precondition::Container(name) => in_container(name),
+            // Not evaluable from a package crate: a listening port is a
+            // socket probe, and slots and corpora are an agent runtime's
+            // state, which this closure deliberately cannot reach. Refused
+            // and NAMED rather than assumed — the caller sees which
+            // precondition stopped it, not a bare false.
+            Precondition::PortListening(_)
+            | Precondition::SlotDecodes(_)
+            | Precondition::CorpusInstalled(_) => false,
+        };
+        if !met {
+            return Err(WorkRefusal::RequirementUnmet(
+                UnmetRequirement::Precondition(precondition.clone()),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Is `name` an executable on this host's `PATH`?
+#[cfg(feature = "process")]
+fn binary_on_path(name: &str) -> bool {
+    let Ok(path) = std::env::var("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
+}
+
+/// Is this process inside the named toolbox/container?
+///
+/// `/run/.containerenv` names the container and its absence means the host —
+/// the same read `AGENTS.md` documents for a person checking by hand, so
+/// there is one answer to "which side am I on" (ARCH §10.6).
+#[cfg(feature = "process")]
+fn in_container(name: &str) -> bool {
+    std::fs::read_to_string("/run/.containerenv")
+        .map(|text| text.contains(&format!("name=\"{name}\"")))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -914,5 +993,137 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.id(), "payload-not-canonical");
         assert!(err.to_string().contains("seals as"), "{err}");
+    }
+}
+
+// -----------------------------------------------------------------
+// The host half's own tests
+// -----------------------------------------------------------------
+
+/// Separate from the module above because these are the only tests here that
+/// TOUCH THE MACHINE — `PATH` and `/run/.containerenv` — and they exist only
+/// under the feature that admits that I/O.
+#[cfg(all(test, feature = "process"))]
+mod host_tests {
+    use super::*;
+    use oicp_types::{JobKind, JobRequirements, JobUnit};
+
+    fn unit_needing(preconditions: Vec<Precondition>) -> JobUnit {
+        let payload = serde_json::json!({ "argv": ["true"] });
+        JobUnit {
+            unit_hash: crate::seal::unit_hash(
+                &JobKind::parse("process:v1").expect("a kind"),
+                &payload,
+            )
+            .expect("canonical"),
+            kind: JobKind::parse("process:v1").expect("a kind"),
+            payload,
+            requirements: JobRequirements {
+                preconditions,
+                ..JobRequirements::any()
+            },
+            tenant: None,
+        }
+    }
+
+    /// No preconditions is not a refusal.
+    ///
+    /// The accept case, so a decider that returned `Err` unconditionally — or
+    /// one whose loop body never ran — cannot pass the tests below for free.
+    #[test]
+    fn a_unit_asking_nothing_of_the_host_is_admitted() {
+        assert_eq!(host_satisfies(&unit_needing(vec![])), Ok(()));
+    }
+
+    /// A binary that is present passes; one that is absent is REFUSED BY NAME.
+    ///
+    /// Failing input: `Precondition::Binary("definitely-not-a-real-binary…")`.
+    /// A decider that assumed an unfound binary was fine would lease the unit,
+    /// run an argv whose interpreter does not exist, and report a failure
+    /// about the SUBMITTER's code that is really a fact about this machine.
+    #[test]
+    fn an_absent_binary_is_refused_and_the_refusal_names_it() {
+        // `sh` is the one binary a POSIX host running this test must have.
+        assert_eq!(
+            host_satisfies(&unit_needing(vec![Precondition::Binary("sh".into())])),
+            Ok(()),
+            "a binary that IS on PATH must not refuse, or the test below is vacuous"
+        );
+
+        let missing = Precondition::Binary("definitely-not-a-real-binary-9f2c".into());
+        let err = host_satisfies(&unit_needing(vec![missing.clone()])).unwrap_err();
+        assert_eq!(
+            err,
+            WorkRefusal::RequirementUnmet(UnmetRequirement::Precondition(missing))
+        );
+        assert!(
+            err.to_string()
+                .contains("definitely-not-a-real-binary-9f2c"),
+            "the refusal must name the precondition, not just its kind: {err}"
+        );
+    }
+
+    /// **The rule this function exists for (ARCH §18.3).** A precondition this
+    /// build cannot EVALUATE is refused, never assumed met.
+    ///
+    /// Failing input: any of the three below. Each is a question about an
+    /// agent runtime's state that a package crate deliberately cannot reach,
+    /// and the tempting wrong answer is `true` — "I cannot check it, so it is
+    /// probably fine". That donor returns a green about a machine that never
+    /// met the unit's terms, which is the whole failure mode the four-verdict
+    /// vocabulary exists to prevent.
+    #[test]
+    fn a_precondition_this_build_cannot_evaluate_is_refused_not_assumed() {
+        for p in [
+            Precondition::PortListening(9741),
+            Precondition::SlotDecodes("primary".into()),
+            Precondition::CorpusInstalled("sep".into()),
+        ] {
+            assert_eq!(
+                host_satisfies(&unit_needing(vec![p.clone()])),
+                Err(WorkRefusal::RequirementUnmet(
+                    UnmetRequirement::Precondition(p.clone())
+                )),
+                "{p:?} is not evaluable here and must refuse, never pass"
+            );
+        }
+    }
+
+    /// A container precondition is answered from `/run/.containerenv`, and a
+    /// name that is not this container's refuses.
+    ///
+    /// Deliberately asserts only the direction that holds on EITHER side of
+    /// the boundary: a container nobody is in cannot be satisfied. Asserting
+    /// the positive would pin the test to the toolbox and make it a fact about
+    /// the runner rather than about the decider.
+    #[test]
+    fn a_container_this_process_is_not_in_refuses() {
+        let p = Precondition::Container("not-a-container-that-exists-4b1a".into());
+        assert_eq!(
+            host_satisfies(&unit_needing(vec![p.clone()])),
+            Err(WorkRefusal::RequirementUnmet(
+                UnmetRequirement::Precondition(p)
+            ))
+        );
+    }
+
+    /// The FIRST unmet precondition is the one reported, and a later met one
+    /// does not rescue it.
+    ///
+    /// Failing input: a loop that ORs instead of ANDs. `sh` is present, so an
+    /// any-of decider would admit this unit and run it on a host missing the
+    /// thing it actually asked for.
+    #[test]
+    fn one_unmet_precondition_refuses_the_whole_unit() {
+        let missing = Precondition::Binary("definitely-not-a-real-binary-9f2c".into());
+        let err = host_satisfies(&unit_needing(vec![
+            Precondition::Binary("sh".into()),
+            missing.clone(),
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            WorkRefusal::RequirementUnmet(UnmetRequirement::Precondition(missing))
+        );
     }
 }

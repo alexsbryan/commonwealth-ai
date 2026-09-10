@@ -78,7 +78,7 @@ use commonwealth_work::actor::ActorKey;
 use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
 use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::{may_take, UnmetRequirement, WorkRefusal};
+use commonwealth_work::refusal::{host_satisfies, may_take, UnmetRequirement, WorkRefusal};
 use commonwealth_work::WORK_NAMESPACE;
 use kernel_types::attribution::ComputeAttribution;
 use kernel_types::quality::Precondition;
@@ -571,54 +571,6 @@ fn trace_refusal(unit_ref: &UnitRef, refusal: &WorkRefusal) {
 // -----------------------------------------------------------------
 // The host's half of the predicate
 // -----------------------------------------------------------------
-
-/// The requirements only this host can answer.
-///
-/// `may_take` has already decided os and arch from the offer; what is left is
-/// the precondition list, and the rule is the one ARCH §18.3 states: a
-/// precondition this build cannot EVALUATE is refused, never assumed met. A
-/// donor that treated "I cannot check this" as "it is fine" would return a
-/// verdict about a machine that did not meet the unit's terms.
-fn host_satisfies(unit: &JobUnit) -> Result<(), WorkRefusal> {
-    for precondition in &unit.requirements.preconditions {
-        let met = match precondition {
-            Precondition::Binary(name) => binary_on_path(name),
-            Precondition::Container(name) => in_container(name),
-            // Not evaluable from this crate: a listening port is a socket
-            // probe, and slots and corpora are the agent runtime's state,
-            // which the mesh crate deliberately cannot reach. Refused and
-            // named rather than assumed.
-            Precondition::PortListening(_)
-            | Precondition::SlotDecodes(_)
-            | Precondition::CorpusInstalled(_) => false,
-        };
-        if !met {
-            return Err(WorkRefusal::RequirementUnmet(
-                UnmetRequirement::Precondition(precondition.clone()),
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// Is `name` an executable on this host's `PATH`?
-fn binary_on_path(name: &str) -> bool {
-    let Ok(path) = std::env::var("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
-}
-
-/// Is this process inside the named toolbox/container?
-///
-/// `/run/.containerenv` names the container and its absence means the host —
-/// the same read `AGENTS.md` documents for a person checking by hand, so
-/// there is one answer to "which side am I on" (ARCH §10.6).
-fn in_container(name: &str) -> bool {
-    std::fs::read_to_string("/run/.containerenv")
-        .map(|text| text.contains(&format!("name=\"{name}\"")))
-        .unwrap_or(false)
-}
 
 // -----------------------------------------------------------------
 // Checkouts

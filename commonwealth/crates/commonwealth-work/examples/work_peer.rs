@@ -53,7 +53,7 @@ use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, S
 use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecutorRegistry};
 use commonwealth_work::process::{ProcessExecutor, ProcessPayload, ResultSource, PROCESS_KIND};
 use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::may_take;
+use commonwealth_work::refusal::{host_satisfies, may_take};
 use commonwealth_work::{
     act, seal, ActorKey, Completion, Failure, Submission, UnitRef, WorkAct, WORK_NAMESPACE,
 };
@@ -177,28 +177,11 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
-/// The host half of consent — the questions no signature over the rail can
-/// answer. `work_donor::host_satisfies`'s shape, in the same closed
-/// vocabulary, so a unit this host cannot run is never leased rather than
-/// leased and burnt.
-fn host_satisfies(unit: &JobUnit) -> Result<(), String> {
-    for p in &unit.requirements.preconditions {
-        match p {
-            Precondition::Binary(name) => {
-                if !on_path(name) {
-                    return Err(format!("`{name}` is not on this donor's PATH"));
-                }
-            }
-            other => return Err(format!("this peer cannot check `{other:?}`")),
-        }
-    }
-    Ok(())
-}
-
-fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(name).is_file()))
-}
+// The host half of consent is `commonwealth_work::refusal::host_satisfies`
+// now, not a copy here. cw-lift 5f shipped this peer with its own twelve-line
+// version that checked `Binary` and refused `Container` outright — so a unit
+// this machine could in fact have run was declined, silently, by a second
+// decider nobody compared against the first.
 
 fn plan(cfg: &PeerArgs) -> Result<Vec<PlannedUnit>, String> {
     let kind = JobKind::parse(PROCESS_KIND).map_err(|e| e.to_string())?;
