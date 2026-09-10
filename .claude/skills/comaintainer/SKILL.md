@@ -254,7 +254,20 @@ OVERDUE rendering carries the review pressure.
    declare_scope at start; release at end" + the near-miss protocol +
    the MARCH clause + the banking clause + the escalation clause, all
    verbatim. Run `./scripts/co-journal.sh new <id>` before the spawn so
-   the worker's cursor exists on its first prompt. Under a
+   the worker's cursor exists on its first prompt.
+
+   **Under a campaign, do not assemble the context by hand — spawn from
+   `./scripts/co-resume.sh <campaign-id>`** (operator direction
+   2026-09-10: "point an agent to a campaign and they pick up exactly
+   where the last one left off"). Its output IS the pickup brief:
+   objective from the committed toml, demos and live frontier verbatim
+   from `campaign.md`, the open order's cursor and next step computed
+   from the journal, what landed from `git log`, stop conditions and
+   ambiguity policy verbatim, peer claims, and the standing contract. It
+   invents nothing and summarizes nothing — every line is computed or
+   printed verbatim from the one file that owns it, because a summary in
+   the middle is where the drift gets in. Paste it whole, then add only
+   what this spawn changes. Under a
    campaign, add its ambiguity policy and tuning block — a worker that
    cannot see the policy can only guess or ask. Cap: 3 concurrent.
    Narrate every spawn. When the Engine calls for a full session

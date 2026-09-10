@@ -529,6 +529,27 @@ if not os.environ.get("SOVEREIGN_NO_ORDERS"):
                     _bits.append(f"{_nj} have no cursor "
                                  "(`co-journal.sh new <order-id>`)")
                 _lines.append("\n_Process ratchet: " + "; ".join(_bits) + "._")
+            # Dedup on the STRING, not the match object — a set of match
+            # objects is never equal and printed `deep-research` twice.
+            _camps = set()
+            for _o, _, _ in _orders:
+                try:
+                    _oh = open(os.path.join(_repo, ".sovereign", "features",
+                                            _o, "order.md"),
+                               encoding="utf-8", errors="replace").read(4096)
+                except OSError:
+                    continue
+                _m = re.search(r"^(?:campaign|serves):\s*(\S+)", _oh, re.M)
+                if _m and not _m.group(1).startswith("("):
+                    _camps.add(_m.group(1))
+            if _camps:
+                _cs = sorted(_camps)
+                _lines.append(
+                    "\n_Picking up a campaign? `scripts/co-resume.sh <id>` is the "
+                    "whole brief — demos, live frontier, the cursor and the next "
+                    "step, computed. Open here: "
+                    + ", ".join(f"`{c}`" for c in _cs[:4])
+                    + (f" (+{len(_cs) - 4})" if len(_cs) > 4 else "") + "._")
             _lines.append("\n_If this session is picking one up, Read it "
                           "whole first — it carries objective, scope to "
                           "claim, lane, budget, seams. If not, ignore this "
