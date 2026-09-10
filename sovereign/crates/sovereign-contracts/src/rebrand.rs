@@ -9,10 +9,12 @@
 //! a site we miss still resolves correctly.
 //!
 //!   * **Path resolution falls back to the legacy name.** The data-dir
-//!     getters ([`svrnmesh_root`], [`data_dir`], and the duplicate in
-//!     `setup_config::default_data_dir`) prefer the rebranded dir but
-//!     transparently use a *populated* legacy dir when the new one doesn't
-//!     exist yet, so correctness never depends on migration having run.
+//!     getter ([`svrnmesh_root`]; [`data_dir`] and
+//!     `setup_config::default_data_dir` delegate to it) honours the
+//!     `SVRNMESH_DATA_DIR` override first, then prefers the rebranded dir
+//!     but transparently uses a *populated* legacy dir when the new one
+//!     doesn't exist yet, so correctness never depends on migration having
+//!     run.
 //!
 //!   * **Env vars are mirrored both ways.** [`promote_legacy_env`] copies any
 //!     `SOVEREIGN_*` var to the matching `SVRNMESH_*` (and vice-versa) when the
@@ -112,6 +114,11 @@ pub fn svrnmesh_root() -> PathBuf {
 /// (ARCH_PRINCIPLES §9: a decision invisible at debug isn't finished).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RootChoice {
+    /// `SVRNMESH_DATA_DIR` / `SOVEREIGN_DATA_DIR` is set and non-blank; the
+    /// home-dir derivation was never consulted. Applied here, at the bottom,
+    /// so every accessor above inherits it (2026-09-10 — before that only
+    /// `data_dir()` honoured the override and the root did not).
+    Override,
     /// The rebranded dir exists and holds data — the steady state.
     Branded,
     /// The rebranded dir is absent or empty and a legacy dir exists; the
@@ -127,6 +134,7 @@ impl RootChoice {
     /// One-line human explanation, for `--explain` and diagnostics.
     pub fn reason(self) -> &'static str {
         match self {
+            Self::Override => "SVRNMESH_DATA_DIR / SOVEREIGN_DATA_DIR override is set",
             Self::Branded => "rebranded dir exists and is populated",
             Self::LegacyFallback => {
                 "rebranded dir absent or empty, populated legacy dir found — not yet migrated"
@@ -138,8 +146,21 @@ impl RootChoice {
 }
 
 /// [`svrnmesh_root`] plus the reason it chose that directory.
+///
+/// The `SVRNMESH_DATA_DIR` / `SOVEREIGN_DATA_DIR` override is applied HERE,
+/// before the home-dir derivation, and nowhere else. It used to live one
+/// layer up in [`data_dir`] only, which left this function — and through it
+/// `SetupConfig::load`, the ring journal, the roster and the notes db —
+/// on `$HOME` while 32 sites moved: a process pointed at a second node's
+/// root read that node's data with the FIRST node's config, so `mesh join`
+/// reached the primary's port and `ring roster add` wrote the primary's
+/// roster (827f4f6ab's "third instance"). A blank value is "not set", the
+/// rule [`sessions_root`] already applies to its own override.
 #[allow(clippy::disallowed_methods)] // SSOT: the one legal home-dir derivation
 pub fn svrnmesh_root_explained() -> (PathBuf, RootChoice) {
+    if let Some(v) = svrnmesh_env("DATA_DIR").filter(|v| !v.is_empty()) {
+        return (PathBuf::from(v), RootChoice::Override);
+    }
     match dirs::home_dir() {
         Some(home) => resolve_branded_dir_explained(
             home.join(format!(".{BRAND}")),
@@ -201,20 +222,15 @@ fn dir_is_populated(p: &Path) -> bool {
 
 // ─── Canonical per-user paths (SSOT accessors) ─────────────────────
 
-/// The per-user data root, honoring the `SVRNMESH_DATA_DIR` /
-/// `SOVEREIGN_DATA_DIR` override and falling back to [`svrnmesh_root`].
-/// This is THE derivation for "where does per-user state live" — read
-/// sites must not re-derive it. Behavior note (2026-07-30): the previous
-/// hand-rolled chains fell back to a bare relative `.sovereign` when both
-/// the override and HOME were unset, silently writing into the process
-/// CWD; this accessor never returns a relative path on that edge (it
-/// returns [`svrnmesh_root`]'s `.` only when home resolution itself
-/// fails, matching every other getter here).
+/// The per-user data root — an alias of [`svrnmesh_root`], kept because 32
+/// read sites and `quality/env-flags.toml` name it. Until 2026-09-10 this
+/// was the ONLY accessor that honoured `SVRNMESH_DATA_DIR`; the override now
+/// sits inside [`svrnmesh_root_explained`], so the two cannot disagree.
+/// Behavior note (2026-07-30) still holds: never a bare relative
+/// `.sovereign` when the override and HOME are both unset — `.` only when
+/// home resolution itself fails, matching every other getter here.
 pub fn data_dir() -> PathBuf {
-    match svrnmesh_env("DATA_DIR") {
-        Some(v) => PathBuf::from(v),
-        None => svrnmesh_root(),
-    }
+    svrnmesh_root()
 }
 
 /// The session-frame store, honoring the `SVRNMESH_SESSIONS_DIR` /
@@ -532,6 +548,49 @@ mod tests {
         let d = data_dir();
         assert_ne!(d, PathBuf::from(".sovereign"));
         assert!(d.is_absolute() || d == PathBuf::from("."));
+    }
+
+    /// The override is applied in ONE place — the bottom of the root
+    /// derivation — so every accessor above it moves together. Before
+    /// 2026-09-10 only `data_dir()` honoured it while `svrnmesh_root()` (and
+    /// through it `SetupConfig::load`, the ring journal, the roster, the
+    /// notes db — 266 sites) stayed on `$HOME`, so a process pointed at a
+    /// second node's root read that node's data and the FIRST node's
+    /// config: `mesh join` reached the primary's port, `ring roster add`
+    /// wrote the primary's roster. Two accessors, one question (§10.6).
+    #[test]
+    fn svrnmesh_root_honours_the_data_dir_override_like_data_dir() {
+        let _home_guard = crate::test_support::home_env_lock();
+        let saved = (
+            std::env::var_os("SVRNMESH_DATA_DIR"),
+            std::env::var_os("SOVEREIGN_DATA_DIR"),
+        );
+        std::env::remove_var("SOVEREIGN_DATA_DIR");
+        std::env::set_var("SVRNMESH_DATA_DIR", "/tmp/svrnmesh-root-override-test");
+
+        let (root, choice) = svrnmesh_root_explained();
+        assert_eq!(root, PathBuf::from("/tmp/svrnmesh-root-override-test"));
+        assert_eq!(choice, RootChoice::Override);
+        assert_eq!(svrnmesh_root(), data_dir(), "one derivation, two names");
+        // The derived paths inherit it — no getter re-derives the root.
+        assert!(projects_json().starts_with(&root));
+        assert!(work_atlas_toml().starts_with(&root));
+
+        // A blank value is "not set", the same rule `sessions_root` applies:
+        // an empty override must not relocate the root to the CWD.
+        std::env::set_var("SVRNMESH_DATA_DIR", "");
+        let (root, choice) = svrnmesh_root_explained();
+        assert_ne!(choice, RootChoice::Override);
+        assert_ne!(root, PathBuf::from(""));
+
+        match saved.0 {
+            Some(v) => std::env::set_var("SVRNMESH_DATA_DIR", v),
+            None => std::env::remove_var("SVRNMESH_DATA_DIR"),
+        }
+        match saved.1 {
+            Some(v) => std::env::set_var("SOVEREIGN_DATA_DIR", v),
+            None => std::env::remove_var("SOVEREIGN_DATA_DIR"),
+        }
     }
 
     #[test]

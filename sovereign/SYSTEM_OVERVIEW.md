@@ -6907,9 +6907,16 @@ The system's configuration and mutable state live on four roots. The rule that
 holds them together (center-of-mass program, 2026-07-30): **path derivations
 come from the SSOT accessors** — `sovereign_contracts::rebrand`
 (`svrnmesh_root` / `data_dir` / `projects_json` / `work_atlas_toml` /
-`drift_dir` / `state_db_path` / `mesh_data_dir` / `sessions_root`) or their
+`drift_dir` / `state_db_path` / `sessions_root`; `mesh_data_dir` was deleted
+2026-08-24 as a second data-root derivation) or their
 `sovereign_cli_shared::dirs` wrappers — enforced by a `clippy.toml`
-`disallowed-methods` ban on hand-rolled `dirs::home_dir` joins. **Env-var
+`disallowed-methods` ban on hand-rolled `dirs::home_dir` joins. Since
+2026-09-10 the `SVRNMESH_DATA_DIR` override is applied INSIDE
+`svrnmesh_root` (`RootChoice::Override`), so every accessor above it moves
+together and `data_dir` is an alias; before that only `data_dir` honoured
+it while the 266 `svrnmesh_root` sites — `SetupConfig::load`, the ring
+journal, the roster — stayed on `$HOME`, which is why a second node on one
+host could be booted (827f4f6ab) but not addressed by any CLI verb. **Env-var
 overrides are declared** in `quality/env-flags.toml` (enforced by `cargo run
 -p xtask -- env-gate`; human view generated at `docs/ENV_FLAGS.md`), and ~25
 of them shadow `SetupConfig` fields — declared debt via the registry's
