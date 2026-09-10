@@ -1,75 +1,66 @@
-# ralph-loop — a supervised agent loop
+# ralph-loop — a commit-driven campaign loop
 
-`scripts/ralph-loop.sh` runs an ordered queue of work units, one coding-agent
-session per unit, until each is accepted. It is repo-agnostic: the repo supplies
-a queue, a unit path, and an accept command; the loop supplies the supervision.
+`scripts/ralph-loop.sh` runs a coding-agent campaign over a repo until it is
+done. It is the shape that actually moves — svrnmesh-cln's loop (49 build
+orders in four days) — with the supervision hand-rolled loops kept failing to
+include.
 
-It exists because hand-rolled loops kept failing the same way, silently:
+## The model
 
-| failure | what the loop does now |
-|---|---|
-| a crash sat dead for hours | heartbeat + status file; `launchd` `KeepAlive={SuccessfulExit:false}` restarts a crash and stops on a clean finish; a `halt` marker stops a deliberate pause |
-| a hung session ate hours | per-session wall-clock timeout **and** a staleness killer (no log growth for `--stale-after` seconds) |
-| a SIGKILL lost the session's work | the prompt carries an incremental-commit contract: commit every distinct step, never hold >10 min uncommitted |
-| "it looked fine" | `--self-test` runs a fake hung session and asserts the watchdog kills it |
+- **The queue is a file in the repo** (`ralph/STATE.md`): the plan is memory, so
+  a fresh session knows where it is without a per-order DONE the loop waits on.
+- **One small unit per iteration.** A session does one unit, commits, updates
+  the queue. The unit is sized to one iteration (Ersilia: one lane).
+- **Progress is a commit.** The loop advances when HEAD advances. `--max-stall`
+  consecutive iterations with no commit halts it and notifies.
+- **Reviews are keyed to commits.** Every `--review-every` commits, the review
+  prompt runs (read-only, writes findings) and does not consume a work slot; the
+  next work iteration resolves the MUST-FIX items first.
+
+## The supervision (why a crash is never silent)
+
+- heartbeat `status.json` + `loop.log`, written throughout;
+- `launchd` `KeepAlive={SuccessfulExit:false}` — a crash auto-restarts, a clean
+  finish stops;
+- a per-session wall-clock timeout **and** a staleness killer (no output growth
+  for `--stale-after` seconds);
+- permission auto-rejections detected and reported;
+- `--self-test` runs a fake hung session and asserts the watchdog kills it.
 
 ## Use
 
 ```sh
-ralph-loop.sh --workdir DIR --label NAME (--queue FILE | --queue-cmd CMD) \
-  [--unit-path 'orders/{id}'] [--prompt-file order.md] [--done-file DONE.md] \
-  [--accept-cmd CMD] [--max-attempts N] [--session-timeout S] \
-  [--stale-after S] [--review-every N] [--principles PATH] \
-  [--review-path 'orders/reviews/review-{n}'] [--notify] [--plan] [--self-test]
+ralph-loop.sh --workdir DIR --label NAME \
+  --prompt ralph/PROMPT.md --review-prompt ralph/REVIEW_PROMPT.md \
+  [--review-every 3] [--max-stall 3] [--max-iter 200] \
+  [--session-timeout 3600] [--stale-after 1800] \
+  [--done-file ralph/DONE] [--stop-file ralph/STOP] \
+  [--needs-human-file ralph/NEEDS_HUMAN.md] [--last-review ralph/.last_review] \
+  [--notify] [--install-launchd] [--plan] [--self-test]
 ```
 
-- **queue** — unit ids, one per line, in the order to run. `--queue-cmd` runs a
-  command whose stdout is that list (e.g. a topological sort of a ring's
-  orders). A unit whose `DONE.md` is already committed, with a clean tree and a
-  green accept command, is **auto-accepted** — so a restart or a switch onto an
-  in-progress queue never re-runs finished work, and the review cadence still
-  counts it.
-- **accept** — a unit is accepted when its `DONE.md` exists, `git status` is
-  clean, and `--accept-cmd` exits 0. Omit `--accept-cmd` to accept on the first
-  two only.
-- **review** — every `--review-every` accepted units, a review unit runs over
-  the code they landed against `--principles`, and fixes and consolidates what
-  violates them. Behaviour-preserving: the accept command must stay green.
-- **`--self-test`** — proves the watchdog fires. Run it before trusting a new
-  queue; a loop you have not watched fail is not a loop.
-- **`--plan`** — print the resolved queue and exit.
+Markers are written where the repo asks (`ralph/DONE`, `ralph/STOP`,
+`ralph/NEEDS_HUMAN.md`, `ralph/.last_review`) and added to `.git/info/exclude`
+so they never dirty the tree the loop commits into. State and logs live outside
+the tree in `~/.svrnmesh/ralph/<repo>-<label>/`.
+
+- `ralph/DONE` — campaign complete; the loop stops.
+- `ralph/STOP` — a halt (or a manual stop); remove it to resume.
+- `ralph/NEEDS_HUMAN.md` — a decision package; the loop notifies and stops.
 
 ## Install as a launchd job
 
 ```sh
 OPENCODE_CONFIG=/path/to/ralph.json ralph-loop.sh ... --install-launchd
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/<label>.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.ralph.<repo>-<label>.plist
 ```
 
-`--install-launchd` writes a plist with `KeepAlive={SuccessfulExit:false}`
-(restart on crash, stop on clean finish), `RunAtLoad`, and a 30 s throttle, and
-prints the load/stop/watch commands. It does not load the job.
-
-## State (outside the repo tree)
-
-`~/.svrnmesh/ralph/<repo>-<label>/`:
-
-- `status.json` — the live heartbeat: unit, attempt, phase, detail.
-- `loop.log` — every transition.
-- `accepted/<unit>` — one marker per accepted unit.
-- `logs/<unit>-<n>.out` — each session's output.
-- `done` / `halt` — the terminal markers. Remove `halt` to resume.
-- `launchd.log` — the job's stdout/stderr.
+`--install-launchd` writes the plist and prints load/stop/watch. It does not
+load it.
 
 ## What the repo supplies
 
-Ersilia's ring loop is the worked example:
-
-- `scripts/ring-queue.sh <ring>` — the ring's orders in dependency order.
-- `scripts/accept-no-failed.sh` — run the gate, fail only on a `failed` row.
-- Invocation: `--queue-cmd 'scripts/ring-queue.sh 1' --unit-path 'orders/{id}'
-  --accept-cmd 'scripts/accept-no-failed.sh' --review-every 3
-  --principles .../ARCH_PRINCIPLES.md`.
-
-A repo whose units are not `orders/<id>/order.md` sets `--unit-path` and
-`--prompt-file` instead; nothing else changes.
+Ersilia is the worked example: `ralph/PROMPT.md` (the iteration work order),
+`ralph/STATE.md` (the lane queue), `ralph/REVIEW_PROMPT.md` (the principles
+audit against `commonwealth-ai/sovereign/ARCH_PRINCIPLES.md`). A new repo
+writes those three files and points the loop at them; nothing else changes.
