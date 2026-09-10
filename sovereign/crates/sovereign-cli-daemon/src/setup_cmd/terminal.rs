@@ -35,7 +35,7 @@ use std::time::Duration;
 
 use sovereign_core::setup_config::{DataSection, NodeSection, SetupConfig};
 
-use super::Opts;
+use super::{run_config_path, run_data_dir, Opts};
 
 /// How long to wait on each probe. Generous: an entry node may be loading a
 /// large model when the terminal first reaches it.
@@ -250,9 +250,12 @@ async fn run_terminal_join(
     println!("  member holds the weights.");
     println!();
 
-    if SetupConfig::exists() && !opts.reset {
-        let path = SetupConfig::default_path();
-        println!("  Already set up. Config at {}", path.display());
+    // The config this run configures, not the one this PROCESS resolved —
+    // they differ exactly when `--data-dir` is given, which is the second-node
+    // case `--client-port` exists for (`super::run_data_dir`).
+    let cfg_path = run_config_path(opts);
+    if cfg_path.exists() && !opts.reset {
+        println!("  Already set up. Config at {}", cfg_path.display());
         println!("  Run `svrn setup --reset --terminal <join-link>` to reconfigure.");
         return 0;
     }
@@ -290,7 +293,7 @@ async fn run_terminal_join(
     }
 
     if opts.reset {
-        if let Err(e) = SetupConfig::remove() {
+        if let Err(e) = SetupConfig::remove_at(&cfg_path) {
             eprintln!("  warning: could not remove config: {e}");
         }
     }
@@ -312,10 +315,7 @@ async fn run_terminal_join(
     // mesh the entry node had never seen; with `--client-port` the collision
     // guard checked the requested port and the bind then failed on 9741,
     // reported as an expired invite.
-    let data_dir = opts
-        .data_dir
-        .clone()
-        .unwrap_or_else(sovereign_core::rebrand::data_dir);
+    let data_dir = run_data_dir(opts);
     let daemon = std::sync::Arc::new(sovereign_mesh::daemon::EmbeddedDaemon::new(
         data_dir.clone(),
         SetupConfig {
@@ -477,7 +477,7 @@ async fn run_terminal_join(
         discovery: Default::default(),
         mcp_servers: Vec::new(),
     };
-    let config_path = match cfg.save() {
+    let config_path = match cfg.save_to(&cfg_path).map(|()| cfg_path.clone()) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("error: {e}");
@@ -625,15 +625,15 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
         }
     };
 
-    if SetupConfig::exists() && !opts.reset {
-        let path = SetupConfig::default_path();
+    let cfg_path = run_config_path(opts);
+    if cfg_path.exists() && !opts.reset {
         println!();
-        println!("  Already set up. Config at {}", path.display());
+        println!("  Already set up. Config at {}", cfg_path.display());
         println!("  Run `svrn setup --reset --terminal <entry>` to reconfigure.");
         return 0;
     }
     if opts.reset {
-        if let Err(e) = SetupConfig::remove() {
+        if let Err(e) = SetupConfig::remove_at(&cfg_path) {
             eprintln!("  warning: could not remove config: {e}");
         }
     }
@@ -688,10 +688,7 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
     }
 
     // ── 2. Write the config ───────────────────────────────────────
-    let data_dir = opts
-        .data_dir
-        .clone()
-        .unwrap_or_else(sovereign_core::rebrand::data_dir);
+    let data_dir = run_data_dir(opts);
     let cfg = SetupConfig {
         // The whole point: no `[models]`. `node_class()` reads this plus the
         // entry below and answers `Terminal`.
@@ -731,7 +728,7 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
         discovery: Default::default(),
         mcp_servers: Vec::new(),
     };
-    let config_path = match cfg.save() {
+    let config_path = match cfg.save_to(&cfg_path).map(|()| cfg_path.clone()) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("error: {e}");

@@ -20,10 +20,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // spelling ignored the `~/.svrnmesh` rebrand, so on a fresh install
     // setup wrote a `data.dir` no other surface resolves to. Same
     // path-SSOT rule the registration below follows (`clippy.toml`).
-    let data_dir = opts
-        .data_dir
-        .clone()
-        .unwrap_or_else(sovereign_core::rebrand::data_dir);
+    let data_dir = super::run_data_dir(opts);
 
     let cfg = SetupConfig {
         engine: Default::default(),
@@ -58,7 +55,8 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         mcp_servers: Vec::new(),
     };
 
-    let config_path = match cfg.save() {
+    let cfg_path = SetupConfig::path_in(&data_dir);
+    let config_path = match cfg.save_to(&cfg_path).map(|()| cfg_path.clone()) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("error: {e}");

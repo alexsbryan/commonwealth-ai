@@ -166,7 +166,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // "file missing" error, both of which are strictly better
     // than "null result from llama cpp" at inference time.
     if opts.repair {
-        return run_repair().await;
+        return run_repair(&opts).await;
     }
 
     // ── --reset: tear down existing setup ─────────────────────────
@@ -177,18 +177,20 @@ pub async fn run_setup(args: &[String]) -> i32 {
         } else {
             eprintln!("    \u{2713} Service uninstalled");
         }
-        if let Err(e) = SetupConfig::remove() {
+        if let Err(e) = SetupConfig::remove_at(&run_config_path(&opts)) {
             eprintln!("  warning: could not remove config: {e}");
         } else {
             eprintln!("    \u{2713} Config removed");
         }
         eprintln!();
-    } else if SetupConfig::exists() {
-        let path = SetupConfig::default_path();
-        println!();
-        println!("  Already set up. Config at {}", path.display());
-        println!("  Run `svrn status` to check or `svrn setup --reset` to reconfigure.");
-        return 0;
+    } else {
+        let cfg_path = run_config_path(&opts);
+        if cfg_path.exists() {
+            println!();
+            println!("  Already set up. Config at {}", cfg_path.display());
+            println!("  Run `svrn status` to check or `svrn setup --reset` to reconfigure.");
+            return 0;
+        }
     }
 
     println!();
@@ -327,6 +329,31 @@ pub async fn run_setup(args: &[String]) -> i32 {
     .await
 }
 
+// ─── Which root is this run configuring? ──────────────────────────
+
+/// The data root this setup run writes, and the config file inside it.
+///
+/// `--data-dir <p>` moves the whole root, so it moves `config.toml` with it.
+/// This was three copies of one resolution — `terminal.rs` twice and
+/// `finish.rs` once — each of which fed only the config's CONTENTS, while the
+/// existence probe, the `--reset` removal and the write all read the process's
+/// DEFAULT root. On a host that already runs a node that made
+/// `svrn setup --terminal --data-dir <p> --client-port <n>` exit 0 having done
+/// nothing ("Already set up"), which is the second-node onboarding
+/// `--client-port` exists for; and had the probe passed, the save would have
+/// overwritten the FIRST node's config. One resolution, read by every site
+/// (ARCH §10.6, §18.3).
+pub(super) fn run_data_dir(opts: &Opts) -> PathBuf {
+    opts.data_dir
+        .clone()
+        .unwrap_or_else(sovereign_core::rebrand::data_dir)
+}
+
+/// The config file [`run_data_dir`] names.
+pub(super) fn run_config_path(opts: &Opts) -> PathBuf {
+    SetupConfig::path_in(&run_data_dir(opts))
+}
+
 // ─── Arg parsing ──────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -423,14 +450,15 @@ struct ModelPaths {
 /// issues a chat — while deleting it lets the operator just
 /// re-run `svrn setup` (which is now idempotent: it'll skip
 /// good files and re-download missing ones).
-async fn run_repair() -> i32 {
-    let cfg = match SetupConfig::load() {
+async fn run_repair(opts: &Opts) -> i32 {
+    // Repairs the node `--data-dir` names, like every other verb here. It read
+    // the process default before, so `--repair --data-dir <p>` reported on the
+    // wrong node's config while naming the right one nowhere.
+    let cfg_path = run_config_path(opts);
+    let cfg = match SetupConfig::load_from(&cfg_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!(
-                "error: could not read {}: {e}",
-                SetupConfig::default_path().display()
-            );
+            eprintln!("error: could not read {}: {e}", cfg_path.display());
             eprintln!("hint: run `svrn setup` to set up from scratch.");
             return 1;
         }
@@ -704,6 +732,78 @@ mod tests {
         assert!(opts.reset);
         assert!(opts.yes);
         assert_eq!(opts.data_dir.as_deref(), Some(Path::new("/tmp/sv")));
+    }
+
+    // ── --data-dir moves the config FILE, not just its contents ────
+    //
+    // The defect these pin: `--data-dir <p>` was threaded into `[data] dir`
+    // and nowhere else, so setup probed, removed and wrote the config at the
+    // DEFAULT root. On a host that already runs a node that made
+    // `svrn setup --terminal --data-dir <p> --client-port <n>` print
+    // "Already set up" and exit 0 having configured nothing — the exact
+    // second-node onboarding `--client-port` was added for — and had the
+    // probe passed, the write would have landed on the FIRST node's config.
+
+    #[test]
+    fn the_data_dir_flag_moves_the_config_path() {
+        let opts = parse_args(&s(&["--data-dir", "/tmp/second-node"])).unwrap();
+        assert_eq!(run_data_dir(&opts), Path::new("/tmp/second-node"));
+        assert_eq!(
+            run_config_path(&opts),
+            Path::new("/tmp/second-node/config.toml")
+        );
+    }
+
+    #[test]
+    fn without_the_flag_the_config_path_is_unchanged() {
+        let opts = parse_args(&[]).unwrap();
+        assert_eq!(run_config_path(&opts), SetupConfig::default_path());
+    }
+
+    /// The structural half (ARCH §7): a test on the helper cannot stop a
+    /// FOURTH site reaching for the root-blind accessor, and three sites
+    /// reaching for it is what this defect was. `setup_cmd` resolves the root
+    /// once and every read and write goes through it, so the root-blind
+    /// spellings must not appear in this module at all.
+    ///
+    /// Watched red: restoring `SetupConfig::exists()` at either terminal
+    /// probe turns this test, naming the file.
+    #[test]
+    fn setup_never_reads_or_writes_the_process_default_config() {
+        const BLIND: &[&str] = &[
+            "SetupConfig::exists()",
+            "SetupConfig::default_path()",
+            "SetupConfig::remove()",
+            "cfg.save()",
+        ];
+        for (file, src) in [
+            ("mod.rs", include_str!("mod.rs")),
+            ("terminal.rs", include_str!("terminal.rs")),
+            ("finish.rs", include_str!("finish.rs")),
+        ] {
+            // Production half only: a test may NAME the blind accessor (the
+            // one just above does, to pin the no-flag case), and a census that
+            // counted those would be measuring itself.
+            let prod = src.split("\n#[cfg(test)]\nmod ").next().unwrap();
+            assert!(
+                prod.len() > 2000,
+                "{file}: the cfg(test) cut left {} bytes — the census would pass \
+                 vacuously",
+                prod.len()
+            );
+            for needle in BLIND {
+                let hits = prod
+                    .lines()
+                    .filter(|l| l.contains(needle))
+                    .filter(|l| !l.trim_start().starts_with("//"))
+                    .count();
+                assert_eq!(
+                    hits, 0,
+                    "{file} still reaches for `{needle}` — setup must read and write \
+                     the config in the root `--data-dir` names, via run_config_path"
+                );
+            }
+        }
     }
 
     #[test]

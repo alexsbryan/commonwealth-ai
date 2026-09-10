@@ -2013,7 +2013,18 @@ impl SetupConfig {
     /// to remember. Falls back to `./.sovereign/config.toml` if the home
     /// directory can't be resolved — matches `default_data_dir()`.
     pub fn default_path() -> PathBuf {
-        default_data_dir().join("config.toml")
+        Self::path_in(&default_data_dir())
+    }
+
+    /// The config file inside a GIVEN data root.
+    ///
+    /// [`Self::default_path`] is this over the root the process resolved;
+    /// `svrn setup --data-dir <p>` needs it over the root it is configuring.
+    /// One join, so the two answers cannot drift — before this, setup wrote
+    /// `[data] dir = <p>` into a file it saved at the DEFAULT root, which is
+    /// a config that names one universe and lives in another (ARCH §10.6).
+    pub fn path_in(root: &Path) -> PathBuf {
+        root.join("config.toml")
     }
 
     /// The pre-consolidation location: `dirs::config_dir()/sovereign/
@@ -2096,9 +2107,16 @@ impl SetupConfig {
 
     /// Remove the config file. Used by `sovereign setup --reset`.
     pub fn remove() -> Result<(), String> {
-        let path = Self::default_path();
+        Self::remove_at(&Self::default_path())
+    }
+
+    /// Remove the config at an explicit path — the `--reset` half of
+    /// [`Self::path_in`]. A reset that removed the DEFAULT config while
+    /// setup went on to configure another root would delete the wrong
+    /// machine's config, so both halves read one path.
+    pub fn remove_at(path: &Path) -> Result<(), String> {
         if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
+            std::fs::remove_file(path).map_err(|e| format!("remove {}: {e}", path.display()))?;
         }
         Ok(())
     }
