@@ -480,3 +480,39 @@ fn the_tail_cap_never_slices_a_codepoint_in_half() {
     assert!(capped.starts_with("... (truncated"));
     assert!(capped.ends_with('é'));
 }
+
+/// **THE OVERRIDE ITSELF, which the `of_sandbox` test does not reach.**
+///
+/// `JobExecutor::attribution` defaults to this host, and that default is right
+/// for an executor that runs work in the donor's own process. If
+/// `ProcessExecutor` ever stops overriding it — a refactor deleting four lines,
+/// nothing else failing — every sandboxed verdict silently goes back to being
+/// attributed to the donor's kernel and compiler, and
+/// `ComputeAttribution::comparable_to` starts refusing correct verdicts again.
+/// So the failing input is the absent override, and this is what makes it red.
+///
+/// The runtime name cannot exist, so no container is started and the compiler
+/// read lands on the named absence — hermetic, and the assertion that carries
+/// the test is the os and arch disagreeing with this host on purpose.
+#[test]
+fn a_sandboxed_executor_attributes_work_to_the_image_and_not_to_this_host() {
+    use crate::executor::JobExecutor;
+
+    let contained = ProcessExecutor::with_sandbox(crate::sandbox::Sandbox::Container {
+        runtime: "no-such-container-runtime".into(),
+        image: "example:latest".into(),
+        os: "plan9".into(),
+        arch: "sparc64".into(),
+    });
+    let a = contained.attribution("deadbeef");
+    assert_eq!(a.os, "plan9", "the image's OS, not this host's");
+    assert_eq!(a.arch, "sparc64");
+    assert_ne!(a.os, std::env::consts::OS, "the default would have leaked the host in");
+    assert_eq!(a.repo_rev, "deadbeef");
+
+    // The control: no boundary, and the executor's answer IS this host — so a
+    // pass above cannot come from `attribution` ignoring the sandbox entirely.
+    let direct = ProcessExecutor::new().attribution("deadbeef");
+    assert_eq!(direct.os, std::env::consts::OS);
+    assert_eq!(direct.arch, std::env::consts::ARCH);
+}

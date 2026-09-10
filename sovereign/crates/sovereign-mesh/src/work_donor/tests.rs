@@ -343,27 +343,21 @@ fn an_unpinned_unit_reports_the_rev_the_donor_actually_ran_at() {
         tenant: None,
     };
     // This test runs inside the repo's own checkout.
-    let here = attribution(&unit, Path::new(env!("CARGO_MANIFEST_DIR")));
-    assert_eq!(
-        here.repo_rev.len(),
-        40,
-        "a resolved sha, got {:?}",
-        here.repo_rev
-    );
-    assert!(!kernel_types::is_absent_marker(&here.repo_rev));
+    let here = repo_rev_of(&unit, Path::new(env!("CARGO_MANIFEST_DIR")));
+    assert_eq!(here.len(), 40, "a resolved sha, got {here:?}");
+    assert!(!kernel_types::is_absent_marker(&here));
 
     let empty = tempfile::tempdir().expect("tempdir");
-    let nowhere = attribution(&unit, empty.path());
+    let nowhere = repo_rev_of(&unit, empty.path());
     assert!(
-        kernel_types::is_absent_marker(&nowhere.repo_rev),
-        "a workdir that is not a checkout must NAME the absence, got {:?}",
-        nowhere.repo_rev
+        kernel_types::is_absent_marker(&nowhere),
+        "a workdir that is not a checkout must NAME the absence, got {nowhere:?}"
     );
 
     let mut pinned = unit.clone();
     pinned.requirements.repo_rev = Some("deadbeef".to_string());
     assert_eq!(
-        attribution(&pinned, empty.path()).repo_rev,
+        repo_rev_of(&pinned, empty.path()),
         "deadbeef",
         "a pinned unit ran in a worktree checked forward to its pin"
     );

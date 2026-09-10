@@ -109,6 +109,31 @@ pub trait JobExecutor: Send + Sync {
     /// [`JobContext::cancel_requested`] is polled by the implementation,
     /// because only the implementation knows what it has to tear down.
     fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a>;
+
+    /// How work THIS executor ran must be attributed — the environment it ran
+    /// in, at `repo_rev`.
+    ///
+    /// **The executor answers because it is the only thing that knows.** On
+    /// one node an `ingest:v1` unit runs in the daemon's own process and a
+    /// `process:v1` unit runs inside a container image; attributing both to
+    /// the node would be a fresh lie in place of the one this fixes. The
+    /// default is this host, which is right for anything that runs here;
+    /// `ProcessExecutor` overrides it, because under a boundary the os, arch
+    /// and compiler that matter are the image's.
+    ///
+    /// Getting it wrong is not cosmetic:
+    /// `kernel_types::ComputeAttribution::comparable_to` refuses a verdict
+    /// whose environment differs from the reader's, so a donor describing the
+    /// wrong machine has its CORRECT verdicts thrown away. Measured
+    /// 2026-09-10 on a macOS host running a Linux image.
+    ///
+    /// Behind `process` for the same reason the reader it calls is: describing
+    /// an environment means reading one, and a lifter of the fold alone links
+    /// no I/O (cw-lift 5i).
+    #[cfg(feature = "process")]
+    fn attribution(&self, repo_rev: &str) -> kernel_types::ComputeAttribution {
+        crate::attribution::of_this_host(repo_rev)
+    }
 }
 
 // -----------------------------------------------------------------

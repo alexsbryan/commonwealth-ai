@@ -965,6 +965,13 @@ impl JobExecutor for ProcessExecutor {
         Ok(())
     }
 
+    /// The IMAGE's os, arch and compiler when this executor has a boundary —
+    /// see the trait method. A `Direct` executor falls through to this host,
+    /// which `of_sandbox` decides rather than a second `matches!` here.
+    fn attribution(&self, repo_rev: &str) -> kernel_types::ComputeAttribution {
+        crate::attribution::of_sandbox(repo_rev, &self.sandbox)
+    }
+
     fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a> {
         Box::pin(self.run(unit, ctx))
     }

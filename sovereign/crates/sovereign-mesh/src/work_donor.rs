@@ -845,7 +845,7 @@ async fn run_unit(
         return;
     }
 
-    let provenance = attribution(&unit, &workdir);
+    let provenance = executor.attribution(&repo_rev_of(&unit, &workdir));
     let act = match outcome {
         Ok((outcome, result)) => WorkAct::Complete(Completion {
             handoff: unit_ref.handoff,
@@ -1038,17 +1038,15 @@ async fn still_ours(app_state: &AppState, unit_ref: &UnitRef, self_key: &ActorKe
 /// the comparison `ComputeAttribution::comparable_to` exists to fail (the
 /// plan's 5e bar iii: a stale donor's unpinned verdict must be flaggable).
 ///
-/// THE REV IS THE ONLY PART THIS FUNCTION STILL DECIDES. Resolving it needs a
-/// workdir, which is a donor's own business; os, arch and toolchain are "what
-/// host am I", and that had three implementations — here, the submitter's
-/// `distribute::local_attribution`, and the lifted peer's — which cw-lift 5f
-/// recorded as a hole in the package's surface. One reader now
-/// (`commonwealth_work::attribution`), called independently by each side, so
-/// the METHOD is shared and the VALUE is still each host's own (ARCH §10.6,
-/// and §18.1 on why the two readings must stay independent).
-fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
-    let repo_rev = unit
-        .requirements
+/// THE REV IS THE ONLY PART THIS FUNCTION DECIDES, and since 2026-09-10 it is
+/// the only part it returns. Resolving it needs a workdir, which is a donor's
+/// own business. The other three fields are "where did this run", and this
+/// function answered "on my host" — true for a subprocess and false for a
+/// unit inside a container image. `JobExecutor::attribution` answers it now,
+/// because the executor that ran the unit is the only thing that knows which
+/// of the two it was.
+fn repo_rev_of(unit: &JobUnit, workdir: &Path) -> String {
+    unit.requirements
         .repo_rev
         .clone()
         .or_else(|| {
@@ -1057,8 +1055,7 @@ fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
                 .map(|s| s.trim().to_string())
         })
         .filter(|rev| !rev.is_empty())
-        .unwrap_or_else(|| ABSENT_REV.to_string());
-    commonwealth_work::attribution::of_this_host(repo_rev)
+        .unwrap_or_else(|| ABSENT_REV.to_string())
 }
 
 /// Append one act to the local `work` journal, then nudge the ring round.

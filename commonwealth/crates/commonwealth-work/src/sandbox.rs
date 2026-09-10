@@ -277,6 +277,40 @@ impl Sandbox {
     }
 }
 
+impl Sandbox {
+    /// Run `argv` IN this environment and hand back its stdout, or `None` if
+    /// it could not be read.
+    ///
+    /// For asking the environment about ITSELF — what compiler is in here,
+    /// what libc — which a donor needs because a verdict is attributed to
+    /// where the work ran and under a boundary that is not this host.
+    ///
+    /// **No workdir crosses.** A unit's mount is about the unit; this is about
+    /// the place. The hardening that does not depend on a workdir still
+    /// applies, because a probe that ran with more privilege than a unit would
+    /// be describing somewhere units never go.
+    pub fn capture(&self, argv: &[&str]) -> Option<String> {
+        let (bin, rest) = argv.split_first()?;
+        match self {
+            Sandbox::Direct => run_ok(bin, rest.iter().copied()),
+            Sandbox::Container { runtime, image, .. } => {
+                let mut args = vec![
+                    "run",
+                    "--rm",
+                    "--entrypoint=",
+                    "--network=none",
+                    "--cap-drop=ALL",
+                    "--security-opt=no-new-privileges",
+                    image.as_str(),
+                    bin,
+                ];
+                args.extend(rest.iter().copied());
+                run_ok(runtime, args)
+            }
+        }
+    }
+}
+
 fn on_path(bin: &str) -> bool {
     std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).any(|d| d.join(bin).is_file()))

@@ -462,9 +462,8 @@ async fn run_unit(
     // answer is this peer's actual compiler — a lifted peer runs the unit, so
     // its rustc is the one that matters. One reader now, in the crate the peer
     // already links.
-    let provenance = commonwealth_work::attribution::of_this_host(
-        unit.requirements.repo_rev.clone().unwrap_or_default(),
-    );
+    let provenance =
+        executor.attribution(&unit.requirements.repo_rev.clone().unwrap_or_default());
     match outcome {
         Ok((outcome, result)) => WorkAct::Complete(Completion {
             handoff: unit_ref.handoff,
