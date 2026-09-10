@@ -61,6 +61,11 @@ pub mod executor;
 pub mod process;
 pub mod projection;
 pub mod refusal;
+/// The boundary a unit runs inside. Behind `process` with the executor,
+/// because probing for a container runtime is I/O and this crate's core is
+/// zero-I/O by manifest rather than by memory.
+#[cfg(feature = "process")]
+pub mod sandbox;
 pub mod seal;
 
 pub use act::{

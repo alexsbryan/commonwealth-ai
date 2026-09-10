@@ -2741,15 +2741,44 @@ impl EmbeddedDaemon {
             .services
             .serving()
             .map(|s| Arc::clone(&s.core.corpus_engine));
-        let work_registry =
-            std::sync::Arc::new(crate::work_donor::donor_registry(corpus_engine.clone()));
+        let work_registry;
+        // THE BOUNDARY IS PROBED ONCE, HERE, before anything is published.
+        // What comes back is both how a unit will be run and what this node
+        // may say about itself — one value, so the two cannot disagree
+        // (ARCH §10.6). A host with no runtime or no declared image gets
+        // `Direct`, which provides `Subprocess`, which offers no kind that
+        // runs a stranger's argv.
         let work_offer = {
             let c = self.setup_config.read().await;
+            let (sandbox, why) =
+                commonwealth_work::sandbox::Sandbox::probe(c.compute.work_offer.image.as_deref());
+            // Named at `info` when it worked and `warn` when it did not,
+            // because "this node donates nothing" with no reason is the shape
+            // of a misconfiguration nobody finds (ARCH §18.3, §9.1).
+            match &why {
+                Some(reason) => tracing::warn!(
+                    target: crate::work_donor::TRACE_TARGET,
+                    provides = ?sandbox.provides(),
+                    why = %reason,
+                    "work donor: no boundary on this host, so it will offer no kind that needs one"
+                ),
+                None => tracing::info!(
+                    target: crate::work_donor::TRACE_TARGET,
+                    provides = ?sandbox.provides(),
+                    "work donor: boundary ready"
+                ),
+            }
+            let provides = sandbox.provides();
+            work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
+                corpus_engine.clone(),
+                sandbox,
+            ));
             crate::work_donor::resolve_offer(
                 &c.compute.work_offer,
                 &work_registry,
                 std::env::consts::OS,
                 std::env::consts::ARCH,
+                provides,
             )
             .map_err(|e| MeshError::Config(e.to_string()))?
         };

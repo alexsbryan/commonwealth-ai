@@ -2,7 +2,8 @@
 //! A **package-only work peer** — cw-lift 5f, the campaign's second lift.
 //!
 //! ```text
-//! work_peer --root <rail-dir> [--workdir <dir>] [--label <name>] [-- <shard argv...>]
+//! work_peer --root <rail-dir> [--workdir <dir>] [--label <name>]
+//!            [--image <container-image>] [-- <shard argv...>]
 //! ```
 //!
 //! The campaign's CLAIM block asks for a second application composing on the
@@ -54,6 +55,7 @@ use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecut
 use commonwealth_work::process::{ProcessExecutor, ProcessPayload, ResultSource, PROCESS_KIND};
 use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::{host_satisfies, may_take};
+use commonwealth_work::sandbox::Sandbox;
 use commonwealth_work::{
     act, seal, ActorKey, Completion, Failure, Submission, UnitRef, WorkAct, WORK_NAMESPACE,
 };
@@ -123,6 +125,12 @@ struct PeerArgs {
     root: PathBuf,
     workdir: PathBuf,
     label: String,
+    /// The image a unit runs inside, on THIS host. Absent means this peer has
+    /// no boundary and therefore offers nothing — which is a working peer
+    /// that declines, not a broken one. It is a flag rather than a constant
+    /// because the package ships no image and must not pretend to: a third
+    /// party naming their own is the whole point of the lift.
+    image: Option<String>,
     shard: Vec<String>,
 }
 
@@ -132,6 +140,7 @@ impl PeerArgs {
             root: PathBuf::new(),
             workdir: std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?,
             label: "cw-work-lift peer".to_string(),
+            image: std::env::var("CW_WORK_IMAGE").ok(),
             shard: SHARD.split_whitespace().map(str::to_string).collect(),
         };
         let mut it = args.iter().skip(1);
@@ -141,6 +150,7 @@ impl PeerArgs {
                 "--root" => cfg.root = PathBuf::from(value()?),
                 "--workdir" => cfg.workdir = PathBuf::from(value()?),
                 "--label" => cfg.label = value()?,
+                "--image" => cfg.image = Some(value()?),
                 // Everything past `--` is the test shard's argv, so the
                 // instrument can point the shard at the tree it just built
                 // without this file knowing where that is.
@@ -280,17 +290,22 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     // advertise `process:v1` with nothing in front of a stranger's argv. The
     // decider is `commonwealth-work`'s, so a donor built from this crate
     // cannot get it wrong by forgetting to write it.
+    // PROBE, then register with what the probe found — the same order and the
+    // same decider the daemon uses. What this peer PROVIDES is never asserted
+    // here: it is whatever `Sandbox::probe` could actually confirm on this
+    // host, which is the §18.3 rule that keeps a config from claiming a
+    // boundary a machine does not have.
+    let (sandbox, why) = Sandbox::probe(cfg.image.as_deref());
+    if let Some(reason) = &why {
+        eprintln!("work_peer: no boundary — {reason}");
+    }
+    let peer_provides = sandbox.provides();
     let mut registry = JobExecutorRegistry::new();
     registry
-        .register(Arc::new(ProcessExecutor::new()))
+        .register(Arc::new(ProcessExecutor::with_sandbox(sandbox)))
         .map_err(|e| e.to_string())?;
 
-    // `Subprocess` is what THIS peer provides: a child in its own process
-    // group, killed on timeout, and nothing else. It is stated here rather
-    // than assumed, and it is what the floor measures the executor's demand
-    // against.
-    const PEER_PROVIDES: Isolation = Isolation::Subprocess;
-    let partition = registry.offerable(std::slice::from_ref(&kind), PEER_PROVIDES);
+    let partition = registry.offerable(std::slice::from_ref(&kind), peer_provides);
     for dropped in &partition.dropped {
         eprintln!("work_peer: NOT offering {dropped}");
     }
@@ -301,10 +316,11 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         // closure as a broken one (ARCH §18.3). Exit 3 is the lift
         // instrument's could-not-judge.
         eprintln!(
-            "work_peer: this build provides `{PEER_PROVIDES:?}` isolation and every \
+            "work_peer: this host provides `{peer_provides:?}` isolation and every \
              offered kind demands more, so it publishes no offer and donates \
              nothing. The package lifted and ran; it declined to execute a \
-             stranger's argv without a boundary."
+             stranger's argv without a boundary. Give it `--image <ref>` on a \
+             host with a rootless runtime and it donates."
         );
         std::process::exit(3);
     }
@@ -313,7 +329,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         kinds: partition.offerable,
         max_concurrent: 1,
         yield_to_foreground: false,
-        isolation: PEER_PROVIDES,
+        isolation: peer_provides,
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         repos: Vec::new(),

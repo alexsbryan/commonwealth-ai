@@ -26,9 +26,15 @@ fn section(kinds: &[&str]) -> WorkOfferSection {
 /// needed.
 #[test]
 fn startup_refuses_offer_of_unregistered_kind() {
-    let registry = donor_registry(None);
-    let err = resolve_offer(&section(&["ingest:v1"]), &registry, "linux", "x86_64")
-        .expect_err("a kind with no executor must refuse the boot");
+    let registry = donor_registry(None, Sandbox::Direct);
+    let err = resolve_offer(
+        &section(&["ingest:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+        DONOR_ISOLATION,
+    )
+    .expect_err("a kind with no executor must refuse the boot");
     let msg = err.to_string();
     assert!(
         msg.contains("ingest:v1"),
@@ -84,9 +90,15 @@ fn the_control_a_registered_kind_this_build_can_isolate_resolves_to_an_offer() {
     registry
         .register(Arc::new(StubExecutor(kind)))
         .expect("one registration");
-    let offer = resolve_offer(&section(&["stub:v1"]), &registry, "linux", "x86_64")
-        .expect("stub:v1 asks for exactly what this build provides")
-        .expect("kinds are set, so there is an offer");
+    let offer = resolve_offer(
+        &section(&["stub:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+        DONOR_ISOLATION,
+    )
+    .expect("stub:v1 asks for exactly what this build provides")
+    .expect("kinds are set, so there is an offer");
     assert_eq!(offer.kinds.len(), 1);
     assert_eq!(offer.os, "linux");
     assert_eq!(offer.isolation, DONOR_ISOLATION);
@@ -114,9 +126,15 @@ fn the_control_a_registered_kind_this_build_can_isolate_resolves_to_an_offer() {
 /// does not boot into donating, and that is deliberate.
 #[test]
 fn the_isolation_floor_drops_process_v1_and_publishes_no_offer() {
-    let registry = donor_registry(None);
-    let resolved = resolve_offer(&section(&["process:v1"]), &registry, "linux", "x86_64")
-        .expect("the floor drops the kind; it must NOT take the daemon down");
+    let registry = donor_registry(None, Sandbox::Direct);
+    let resolved = resolve_offer(
+        &section(&["process:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+        DONOR_ISOLATION,
+    )
+    .expect("the floor drops the kind; it must NOT take the daemon down");
     assert_eq!(
         resolved, None,
         "with every configured kind dropped there is nothing to publish, and \
@@ -135,7 +153,7 @@ fn the_isolation_floor_drops_process_v1_and_publishes_no_offer() {
 #[test]
 fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
     let kind = JobKind::parse("stub:v1").expect("kind");
-    let mut registry = donor_registry(None);
+    let mut registry = donor_registry(None, Sandbox::Direct);
     registry
         .register(Arc::new(StubExecutor(kind)))
         .expect("one registration");
@@ -144,6 +162,7 @@ fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
         &registry,
         "linux",
         "x86_64",
+        DONOR_ISOLATION,
     )
     .expect("a mixed config still resolves")
     .expect("one kind survives, so there is an offer");
@@ -160,10 +179,16 @@ fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
 /// posture, and what makes the section safe to write into every config.
 #[test]
 fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
-    let registry = donor_registry(None);
+    let registry = donor_registry(None, Sandbox::Direct);
     assert_eq!(
-        resolve_offer(&WorkOfferSection::default(), &registry, "linux", "x86_64")
-            .expect("inert is not an error"),
+        resolve_offer(
+            &WorkOfferSection::default(),
+            &registry,
+            "linux",
+            "x86_64",
+            DONOR_ISOLATION
+        )
+        .expect("inert is not an error"),
         None
     );
 }
@@ -173,11 +198,11 @@ fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
 /// at boot instead.
 #[test]
 fn an_accept_key_that_is_not_a_key_refuses_the_boot_naming_it() {
-    let registry = donor_registry(None);
+    let registry = donor_registry(None, Sandbox::Direct);
     let mut s = section(&["process:v1"]);
     s.accept = sovereign_contracts::setup_config::WorkAcceptFrom::Listed;
     s.accept_from = vec!["BEEFYMAC".to_string()];
-    let err = resolve_offer(&s, &registry, "linux", "x86_64")
+    let err = resolve_offer(&s, &registry, "linux", "x86_64", DONOR_ISOLATION)
         .expect_err("an unparseable accept key must refuse the boot");
     assert!(
         err.to_string().contains("BEEFYMAC"),
@@ -552,7 +577,7 @@ fn an_engine() -> (tempfile::TempDir, Arc<corpus_engine::CorpusEngine>) {
 #[test]
 fn a_node_with_a_corpus_engine_registers_the_ingest_kind_and_can_offer_it() {
     let (_dir, engine) = an_engine();
-    let registry = donor_registry(Some(engine));
+    let registry = donor_registry(Some(engine), Sandbox::Direct);
     let kinds: Vec<String> = registry.kinds().iter().map(|k| k.to_string()).collect();
     assert!(
         kinds
@@ -560,9 +585,15 @@ fn a_node_with_a_corpus_engine_registers_the_ingest_kind_and_can_offer_it() {
             .any(|k| k == crate::ingest_executor::INGEST_KIND),
         "a node with an engine must register `ingest:v1`, got {kinds:?}"
     );
-    let offer = resolve_offer(&section(&["ingest:v1"]), &registry, "linux", "x86_64")
-        .expect("ingest:v1 is registered on a node with an engine")
-        .expect("kinds are set, so there is an offer");
+    let offer = resolve_offer(
+        &section(&["ingest:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+        DONOR_ISOLATION,
+    )
+    .expect("ingest:v1 is registered on a node with an engine")
+    .expect("kinds are set, so there is an offer");
     assert_eq!(offer.kinds.len(), 1);
     assert_eq!(offer.isolation, DONOR_ISOLATION);
 }

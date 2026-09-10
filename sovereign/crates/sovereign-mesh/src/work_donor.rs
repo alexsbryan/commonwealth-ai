@@ -37,10 +37,17 @@
 //!    constructs those refusals ([`UnmetRequirement`]) in the same enum.
 //! 4. The operator is not at the keyboard, when the offer says to yield.
 //!
-//! **Consent is not isolation.** `process:v1` runs the submitter's argv as
-//! this node's user with this node's filesystem and network; there is no
-//! sandbox in this repository. That is why [`DONOR_ISOLATION`] is
-//! `Subprocess` and why `[compute.work_offer] accept` defaults to `nobody`.
+//! **Consent is not isolation, and the boundary is now a thing rather than a
+//! warning.** Until 2026-09-10 `process:v1` ran the submitter's argv as this
+//! node's user with this node's filesystem and network, and the only wall was
+//! `accept_from`. A unit now runs inside `commonwealth_work::sandbox` —
+//! rootless container, no network, no capabilities, nothing mounted but its
+//! own workdir — and what this node PROVIDES is whatever
+//! [`Sandbox::probe`](commonwealth_work::sandbox::Sandbox::probe) could
+//! actually find. A host with no runtime, or no declared image, provides
+//! [`DONOR_ISOLATION`] and therefore offers no kind that demands more, which
+//! is every kind that runs a stranger's argv. `accept` still defaults to
+//! `nobody`; it is no longer the only thing standing there.
 //!
 //! # A lost lease cancels the unit
 //!
@@ -79,6 +86,7 @@ use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
 use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::{host_satisfies, may_take, UnmetRequirement, WorkRefusal};
+use commonwealth_work::sandbox::Sandbox;
 use commonwealth_work::WORK_NAMESPACE;
 use kernel_types::attribution::ComputeAttribution;
 use kernel_types::quality::Precondition;
@@ -102,17 +110,21 @@ use crate::supervised_task::SupervisedTask;
 /// be dark for anybody who typed the obvious one.
 pub const TRACE_TARGET: &str = commonwealth_work::TRACE_TARGET;
 
-/// The isolation this build actually provides, and therefore the only one it
-/// may offer.
+/// What a donor provides when it has NO boundary — a child in its own process
+/// group, killed on timeout, and the donor's own user, filesystem and network.
 ///
-/// `ProcessExecutor` runs a child in its own process group and kills the
-/// group on timeout. That is `Subprocess` and nothing above it: there is no
-/// bwrap, no firejail, no nsjail and no network namespace anywhere in this
-/// repository, so `RootlessContainer` would be a claim with no mechanism
-/// behind it. It is a constant rather than a config key for the reason
-/// `oicp_types::Isolation` refuses a `Default` — a donor that does not answer
-/// how it isolates has not answered, and the honest answer here is a fact
-/// about the build (ARCH §18.3).
+/// It is the floor of the ladder rather than the answer: since 2026-09-10 the
+/// answer is `Sandbox::provides()`, derived from a probe that has to find a
+/// rootless runtime and a locally-present image before it will report
+/// anything above this. The constant remains because it is the value that
+/// probe FALLS BACK to, and because `ingest:v1` — which runs this daemon's own
+/// code in-process — is covered by it.
+///
+/// It stays a constant and not a config key for the reason
+/// `oicp_types::Isolation` refuses a `Default`: a donor that does not answer
+/// how it isolates has not answered, and a config that could assert an
+/// isolation the host cannot perform is §18.3's substitution in the one place
+/// it would be least visible.
 pub const DONOR_ISOLATION: Isolation = Isolation::Subprocess;
 
 /// How often the fold is re-read for takeable units.
@@ -189,14 +201,21 @@ fn registered_list(kinds: &[JobKind]) -> String {
 /// failure the boot check exists to prevent (ARCH §18.3).
 pub fn donor_registry(
     corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    sandbox: Sandbox,
 ) -> JobExecutorRegistry {
     let mut registry = JobExecutorRegistry::new();
     // `register` refuses a duplicate kind rather than overwriting, and each
     // kind is registered once here, so neither `Result` can be an error — both
     // are still surfaced rather than unwrapped, because a future second
     // registration must not be able to vanish (ARCH §18.3).
-    if let Err(e) = registry.register(Arc::new(commonwealth_work::process::ProcessExecutor::new()))
-    {
+    //
+    // The sandbox goes INTO the executor rather than being consulted beside
+    // it, so the boundary a unit actually runs in and the isolation this node
+    // advertises are one value read twice — a node cannot run units one way
+    // and describe itself another (ARCH §10.6).
+    if let Err(e) = registry.register(Arc::new(
+        commonwealth_work::process::ProcessExecutor::with_sandbox(sandbox),
+    )) {
         warn!(target: TRACE_TARGET, error = %e, "work donor: an executor could not be registered");
     }
     match corpus_engine {
@@ -230,8 +249,9 @@ pub fn resolve_offer(
     registry: &JobExecutorRegistry,
     os: &str,
     arch: &str,
+    provides: Isolation,
 ) -> Result<Option<WorkOffer>, OfferRefused> {
-    let Some(offer) = section.to_offer(os, arch, DONOR_ISOLATION)? else {
+    let Some(offer) = section.to_offer(os, arch, provides)? else {
         debug!(
             target: TRACE_TARGET,
             "work donor: [compute.work_offer] names no kinds, so this node donates nothing"
@@ -269,7 +289,7 @@ pub fn resolve_offer(
     // The partition is `commonwealth-work`'s, not this module's — the floor
     // has to reach a donor built from the package alone, and a second copy
     // here is the §10.6 twin this campaign has now closed three times.
-    let partition = registry.offerable(&offer.kinds, DONOR_ISOLATION);
+    let partition = registry.offerable(&offer.kinds, provides);
     if let Some(kind) = partition.unregistered.first() {
         return Err(OfferRefused::UnregisteredKind {
             kind: kind.clone(),

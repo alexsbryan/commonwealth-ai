@@ -946,6 +946,24 @@ pub struct WorkOfferSection {
     /// which is worse for the submitter than a node that never offered.
     #[serde(default)]
     pub kinds: Vec<String>,
+    /// The container image a unit runs INSIDE, on this host.
+    ///
+    /// Absent — the default — means this node has no boundary and therefore
+    /// offers no kind that demands one, which today is every kind that runs a
+    /// submitter's argv. Naming one is not permission: `Sandbox::probe` still
+    /// has to find a rootless runtime and find the image present LOCALLY
+    /// before the node will describe itself as isolating anything, and a
+    /// config naming an image on a host without podman gets `Subprocess` with
+    /// the reason on the boot trace (ARCH §18.3).
+    ///
+    /// It is the donor's operator who names it, and deliberately not the
+    /// package (which ships no image and has no registry to fetch from) and
+    /// not the submitter (whose unit would then choose the contents of its
+    /// own sandbox, and pull an arbitrary reference onto somebody else's
+    /// machine). Pull it yourself once; a donor does not fetch on your
+    /// behalf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
     /// How many units this node holds leases on at once. `0` — the default —
     /// takes nothing. Raising it is the throughput knob; the donor never
     /// exceeds it because the fold counts its own live leases.
@@ -996,6 +1014,7 @@ impl Default for WorkOfferSection {
     fn default() -> Self {
         Self {
             kinds: Vec::new(),
+            image: None,
             max_concurrent: 0,
             yield_to_foreground: DEFAULT_YIELD_TO_FOREGROUND,
             accept: WorkAcceptFrom::default(),
