@@ -52,6 +52,8 @@ BACKLOG="$BACKLOG" "$PY" - <<'PY'
 import os, re, glob, sys
 
 ID = os.environ["ID"]
+import shlex
+repo_q = shlex.quote(os.environ["REPO"])
 FEAT = os.environ["FEATURES"]
 BRIEF = os.environ["BRIEF"] == "1"
 out = []
@@ -227,6 +229,12 @@ w("   " + (cl.replace("\n", "\n   ") if cl else
            "work_in_flight unreachable (daemon down?) — check before editing hot files"))
 w()
 
+_stale = os.popen(f"cd {repo_q} && ./scripts/co-close.sh --audit 2>/dev/null").read().strip()
+if _stale and "no finished-but-open" not in _stale:
+    w("── UNCLOSED")
+    w("   " + _stale.replace("\n", "\n   "))
+    w()
+
 w("── STANDING (the contract you are picking up under)")
 w("   Work the cursor IN ORDER. Stamp every transition:")
 w("     scripts/co-journal.sh step <order-id> <n> done|wip|blocked [note]")
@@ -237,6 +245,9 @@ w("     scripts/co-backlog-producer.sh --key <what went wrong> --title <one line
 w("   Return to the operator on exactly three things: every step done, a stop")
 w("   condition above, budget out. Not a finding, not a green gate, not a step")
 w("   boundary. One build-test cycle per sub-problem; past that it is banked.")
+w("   When the last step is done, CLOSE — it is the only write path out, and")
+w("   the state the next session reads is only as good as this one:")
+w("     scripts/co-close.sh <order-id> --decision \"<what you decided and why>\"")
 
 print("\n".join(out))
 PY

@@ -529,6 +529,27 @@ if not os.environ.get("SOVEREIGN_NO_ORDERS"):
                     _bits.append(f"{_nj} have no cursor "
                                  "(`co-journal.sh new <order-id>`)")
                 _lines.append("\n_Process ratchet: " + "; ".join(_bits) + "._")
+            # An order the cursor says is finished and the file still calls
+            # open is the write-side failure: the next session picks up work
+            # that already landed. Cheap enough to ask every boot.
+            _fin = []
+            for _o, _, _ in _orders:
+                _j = os.path.join(_repo, ".sovereign", "features", _o, "journal.md")
+                if not os.path.exists(_j):
+                    continue
+                try:
+                    _jb = open(_j, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                _bx = re.findall(r"^- \[(.)\] \d+\.", _jb, re.M)
+                if _bx and all(_b == "x" for _b in _bx):
+                    _fin.append(_o)
+            if _fin:
+                _lines.append(
+                    f"\n_UNCLOSED: {len(_fin)} order(s) whose cursor says every step is "
+                    "done and which still read `open` — the next session picks up work "
+                    "that already landed. `scripts/co-close.sh <id> --decision \"…\"`: "
+                    + ", ".join(f"`{o}`" for o in _fin[:3]) + "._")
             # Dedup on the STRING, not the match object — a set of match
             # objects is never equal and printed `deep-research` twice.
             _camps = set()
