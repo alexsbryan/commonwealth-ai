@@ -24,11 +24,20 @@
 //!     answer nothing on an attached boot, each re-applying its own page
 //!     default and clamp beside the route's.
 //!
-//! All three are now one call each onto `sovereign_mesh::{atlas_http,
+//!   * the same file's SIX conversation-tiered commands read
+//!     `SqliteStateStore`'s inherent `conv_*` methods off the handle
+//!     stashed at desktop bootstrap — a store that, on an attached boot,
+//!     is not the one the daemon enriched into. Two of those six folded a
+//!     reader FAILURE into a plausible empty (`list_conv_raptor_nodes(..)
+//!     .unwrap_or_default()` -> "no entities"; `get_active_correction(..)
+//!     .ok().flatten()` -> "not revised by you"), which is §18.3's
+//!     silent substitution with a UI in front of it.
+//!
+//! All four are now one call each onto `sovereign_mesh::{atlas_http,
 //! reading_http, meshapp_http}` over `client_base_url()`. Bring any back —
 //! a `FileAtlasReader` in a browse command, a `read_atlas_atoms` or a
-//! `sovereign_meshapp::load_graph` in the MeshApp bridge — and this goes
-//! red naming the rule.
+//! `sovereign_meshapp::load_graph` in the MeshApp bridge, a `sqlite_store`
+//! read in a conv command — and this goes red naming the rule.
 //!
 //! # Calibration (ARCH §18.1 — name the failing input)
 //!
@@ -196,4 +205,79 @@ fn the_meshapp_explorer_ops_read_the_wire() {
              through is what makes the host the one decider."
         );
     }
+}
+
+/// The six conversation-tiered browse commands (sv-surface D4 remainder).
+/// Each is one `TurnClient::conv_*` call onto
+/// `GET /internal/atlas/conv/...`, which reads the daemon's
+/// `runtime.lane_sources.conv_tiered`.
+///
+/// Checked as CALLS with their receiver, not as bare identifiers: the
+/// commands still name `atlas_view`'s `Conv*` types as their return types
+/// and must — a repoint that changed the bytes the frontend receives
+/// would be feature loss dressed as cleanup. What may not come back is
+/// the READ running here.
+/// Each is spelled with the leading receiver dot: `atlas_get_chunk_entity
+/// _progress` is a COMMAND name that ends in one of these method names, so
+/// a bare-identifier needle matches the very function it is guarding and
+/// the gate can never go green. (Watched: it did exactly that on first
+/// run, naming `get_chunk_entity_progress(` against its own command.)
+const LOCAL_CONV_READS: &[&str] = &[
+    ".list_conv_corpora_with_state_buckets(",
+    ".list_conversations_paginated(",
+    ".get_conv_skeleton(",
+    ".list_conv_raptor_nodes(",
+    ".get_active_correction(",
+    ".aggregate_entity(",
+    ".get_chunk_entity_progress(",
+];
+
+#[test]
+fn the_conv_browse_surface_holds_no_store() {
+    let code = production_source("src/atlas_commands.rs");
+    assert!(
+        !code.contains("sqlite_store"),
+        "sv-surface D4: atlas_commands.rs holds the SqliteStateStore again. \
+         The six conv commands are one TurnClient::conv_* call each onto \
+         GET /internal/atlas/conv/... — the daemon reads its OWN \
+         conv_tiered lane source, which is the only one an attached boot \
+         shares with the enrichment that wrote it."
+    );
+    for read in LOCAL_CONV_READS {
+        assert!(
+            !code.contains(read),
+            "sv-surface D4: atlas_commands.rs runs the conv read `{read}` \
+             in-process again. The route runs the very same reader method \
+             over the daemon's store. Keep the type, lose the read."
+        );
+    }
+    // The two swallows, by name (ARCH §18.3). These are the reason the
+    // repoint is not merely a move: the route REPORTS both failures, so
+    // the commands surface an Err where they used to answer a plausible
+    // empty. Re-introducing either here would put the wrong answer back
+    // in front of the user with the wire still underneath it.
+    assert!(
+        !code.contains("unwrap_or_default()"),
+        "sv-surface D4: atlas_commands.rs swallows a conv read failure into \
+         an empty again. `list_conv_raptor_nodes(..).unwrap_or_default()` \
+         rendered a reader error as `this conversation has no entities` on \
+         every row of the list. Absence is reported, never defaulted."
+    );
+    assert!(
+        !code.contains(".ok()"),
+        "sv-surface D4: atlas_commands.rs swallows a conv read failure with \
+         `.ok()` again. `get_active_correction(..).ok().flatten()` rendered \
+         a reader error as `not revised by you` — the provenance badge \
+         saying the opposite of what happened."
+    );
+    // The salience formula moved DOWN with the read: the route ranks for
+    // both `top_entities` and the chip row. Two copies of one formula is
+    // the §10.6 smell, and the copy here was the one that could disagree.
+    assert!(
+        !code.contains("cluster_coherence"),
+        "sv-surface D4/§10.6: atlas_commands.rs re-derives the entity \
+         salience rank. One scorer, and it is the route's — it feeds both \
+         atlas_list_conversations' top_entities and atlas_get_conv_entities' \
+         chips from the same fold."
+    );
 }

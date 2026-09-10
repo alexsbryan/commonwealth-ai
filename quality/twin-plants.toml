@@ -128,6 +128,47 @@ fn planted_local_atoms(atlas_dir: &std::path::Path) -> bool {
 async fn wire_atoms('''
 
 [[family]]
+id          = "conv-browse"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
+mustFail    = ["the_conv_browse_surface_holds_no_store"]
+breaks      = "a conversation-tiered read running in the desktop again — the SqliteStateStore handle whose store, on an attached boot, is not the one the daemon enriched into"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/atlas_commands.rs"
+expect_red  = "runs the conv read"
+find        = '''fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
+replace     = '''#[allow(dead_code)]
+async fn planted_local_conv_corpora(
+    store: &std::sync::Arc<sovereign_store::sqlite::SqliteStateStore>,
+) -> usize {
+    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the conv store read D4 deleted.
+    store
+        .list_conv_corpora_with_state_buckets()
+        .await
+        .unwrap_or_default()
+        .len()
+}
+
+fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
+
+[[family]]
+id          = "local-corpus-registry"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/local_corpus_wire_census.rs"
+mustFail    = ["the_registry_reads_read_the_wire"]
+breaks      = "a second LocalCorpusManager answering a registry question in the desktop — the one an attached boot's daemon cannot see"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
+expect_red  = "on a local LocalCorpusManager again"
+find        = '''    lc_client(&state)
+        .lc_list::<LocalCorpusConfig>()
+        .await
+        .map_err(|e| format!("lc_list: {e}"))
+}'''
+replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local list D5 deleted.
+    let manager = require_manager(&state).await?;
+    Ok(manager.list().await)
+}'''
+
+[[family]]
 id          = "meshapp-explorer"
 crate       = "sovereign-desktop"
 census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"

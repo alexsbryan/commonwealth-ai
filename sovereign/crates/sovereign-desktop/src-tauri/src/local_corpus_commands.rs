@@ -6,8 +6,45 @@
 //! `listen<LocalCorpusProgress>(channel, handler)`.
 //!
 //! Commands are thin — they translate TS-friendly shapes into
-//! `LocalCorpusManager` calls and forward progress events via
+//! local-corpus calls and forward progress events via
 //! `AppHandle::emit`. All heavy lifting happens in `sovereign-tools`.
+//!
+//! # Where the manager lives (sv-surface D5)
+//!
+//! Eight commands hold NO manager: `lc_list`, `lc_remove`,
+//! `lc_incomplete_jobs`, `lc_check_git`, `lc_list_snapshots`,
+//! `lc_rollback`, `lc_clean` and `lc_search` are one call each onto
+//! `sovereign_mesh::lc_http`'s `/internal/corpus/local/` routes over
+//! [`lc_client`], and so are the config reads inside `lc_ingest` and
+//! `lc_enrich_now`. Return types are unchanged, so the webview sees the
+//! same bytes. Two defaults moved DOWN to the route: `lc_search`'s 10
+//! and `lc_get`'s absence semantics.
+//!
+//! THE RULE THAT DECIDED WHICH ONES CROSSED, because it is not the
+//! route list: a command crosses when its answer is a function of the
+//! REGISTRY ON DISK — state both managers see. A command stays when its
+//! answer is a function of ONE manager instance's in-memory state and
+//! the producer of that state has not crossed. In Local mode there is
+//! only one instance (`state.rs` hands its manager to
+//! `WatchedSubsystem::install`, so `watched_folder_runtime::manager()`
+//! IS this manager) and the distinction is invisible; in attach mode
+//! there are two, and crossing a consumer while its producer stays is
+//! how a working pane starts answering "not found".
+//!
+//! Five stay, each paired with the producer that pins it:
+//!
+//! | Stays | In-memory state | Producer that has not crossed |
+//! |---|---|---|
+//! | `lc_get_preview` | `cluster_results` cache | `lc_cluster` (app-local) |
+//! | `lc_write_tags` | same cache (via `get_preview`) | `lc_cluster` |
+//! | `lc_cancel` | the engine's cancellation registry | `lc_ingest`'s bespoke arm |
+//! | `lc_ocr_available` | this instance's `OcrCtx` | `lc_ingest`'s OCR arm |
+//! | `lc_ingest` (bespoke arm) | — | the 202 ack names no usable progress route |
+//!
+//! Plus the two the route commit already named app-local:
+//! `lc_validate_path` and `lc_pre_scan` (a user-picked path, pre-corpus;
+//! `pre_scan` also registers). The rung that moves `lc_cluster`,
+//! `lc_pre_scan` and the ingest job across takes all five with it.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -27,8 +64,6 @@ use sovereign_tools::local_corpus::{
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
     LocalCorpusConfig, LocalCorpusManager,
 };
-use std::path::PathBuf as StdPathBuf;
-
 use sovereign_workflow_host::workflow_http::{
     JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
 };
@@ -59,6 +94,19 @@ fn new_job_id() -> String {
 
 // ─── Shared guards ───────────────────────────────────────────────────
 
+/// The client for the daemon's local-corpus surface — the SAME
+/// `LocalCorpusManager` this file used to reach through
+/// `state.local_corpus`, reached over loopback instead (sv-surface D5).
+/// ONE path in both boot modes: Local means the daemon is in-process and
+/// `watched_folder_runtime::manager()` holds the very Arc `state.rs`
+/// handed to `WatchedSubsystem::install`.
+fn lc_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+}
+
+/// The desktop's OWN manager. Still required by the five surfaces whose
+/// answer is a function of ONE manager instance's in-memory state rather
+/// than of the registry on disk — see the module header.
 async fn require_manager(
     state: &State<'_, Arc<AppState>>,
 ) -> Result<Arc<LocalCorpusManager>, String> {
@@ -516,10 +564,17 @@ pub async fn lc_ingest(
     corpus_id: String,
     with_ocr: Option<bool>,
 ) -> Result<String, String> {
-    let manager = require_manager(&state).await?;
     let job_id = new_job_id();
     let progress = make_emitter(app.clone(), job_id.clone());
     let daemon_url = state.client_base_url();
+    // The corpus's config is a REGISTRY read and crosses (sv-surface D5).
+    // Both dispatch arms below branch on it, and neither needs a local
+    // manager to do so — which is why `require_manager` is now taken
+    // inside the bespoke arm only.
+    let registered = lc_client(&state)
+        .lc_get::<LocalCorpusConfig>(&corpus_id)
+        .await
+        .map_err(|e| format!("lc_ingest: {e}"))?;
 
     // One-shot document folder OR Obsidian vault → the daemon owns ingest AND
     // enrich (it holds the tiered providers; the desktop's manager doesn't).
@@ -529,7 +584,7 @@ pub async fn lc_ingest(
     // scheduler ⇒ no ongoing watch — "a watched folder without the watching".
     // WatchedFolder is excluded (its reconciliation worker owns enrichment).
     if with_ocr != Some(true) {
-        if let Some(cfg) = manager.get(&corpus_id).await {
+        if let Some(cfg) = registered.clone() {
             use sovereign_tools::local_corpus::config::LocalCorpusSourceType;
             if matches!(
                 cfg.source_type,
@@ -597,8 +652,7 @@ pub async fn lc_ingest(
     // `SOVEREIGN_RUNNER_INGEST` is set and the corpus needs no OCR (`tool:extract`
     // has none). Bespoke stays the default and still owns OCR + enrichment.
     if std::env::var("SOVEREIGN_RUNNER_INGEST").is_ok() && with_ocr != Some(true) {
-        let cfg = manager.list().await.into_iter().find(|c| c.id == corpus_id);
-        match cfg {
+        match registered.clone() {
             // A non-OCR corpus -> the daemon's notebook job.
             Some(cfg) if !cfg.ocr_pdfs => {
                 let progress = progress.clone();
@@ -626,6 +680,23 @@ pub async fn lc_ingest(
     // mounted on the CLIENT port, same router the watched-folder commands hit.
     // Capture it now; the Tauri `state` guard can't cross the spawn boundary.
     let daemon_url = state.client_base_url();
+    // THE ONE ARM THAT DID NOT CROSS, and why (§18.3 — named, not
+    // swallowed). `POST /internal/corpus/local/{c}/ingest` runs exactly
+    // this call on the daemon's manager, but it answers 202 with an
+    // `IngestJobAck` whose `progress_route` is
+    // `/internal/corpus/watch/status/{c}` — a reader of
+    // `WatchedFolderState`, which (a) 404s for the DocumentFolder and
+    // OCR corpora this arm serves (`require_reconcilable`) and (b)
+    // carries no `IngestStats`. This command's contract is the event
+    // channel `local-corpus://progress/{job_id}`, whose terminal frame
+    // is `Complete { result: Ingest(stats) }` and whose `files_indexed`
+    // the Folder-drop flow renders. Polling the named route would have
+    // to fabricate those counts. The wire form this arm needs is a
+    // progress route over the `_enrichment_state.json` the ingest job's
+    // stamper actually writes (`GET /internal/enrichment/status` reads
+    // it today) plus a terminal ack carrying the stats — until then,
+    // wire-first is not satisfied and the local path stays.
+    let manager = require_manager(&state).await?;
     tokio::spawn(async move {
         match manager
             .ingest(&corpus_id, with_ocr, Some(progress.clone()))
@@ -702,10 +773,10 @@ pub async fn lc_enrich_now(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<(), String> {
-    let manager = require_manager(&state).await?;
-    let cfg = manager
-        .get(&corpus_id)
+    let cfg = lc_client(&state)
+        .lc_get::<LocalCorpusConfig>(&corpus_id)
         .await
+        .map_err(|e| format!("lc_enrich_now: {e}"))?
         .ok_or_else(|| format!("corpus '{corpus_id}' is not registered locally"))?;
     let daemon_url = state.client_base_url();
     let cid = corpus_id.clone();
@@ -1065,19 +1136,23 @@ fn workflow_progress_to_local(
 
 // ─── Command: lc_list ────────────────────────────────────────────────
 
+/// Every registered local corpus. An empty vec is a real answer (a
+/// fresh install); a daemon with no local-corpus runtime is an `Err`,
+/// because the pane renders an empty list as "you have no vaults".
 #[tauri::command]
 pub async fn lc_list(state: State<'_, Arc<AppState>>) -> Result<Vec<LocalCorpusConfig>, String> {
-    let manager = require_manager(&state).await?;
-    Ok(manager.list().await)
+    lc_client(&state)
+        .lc_list::<LocalCorpusConfig>()
+        .await
+        .map_err(|e| format!("lc_list: {e}"))
 }
 
 // ─── Command: lc_remove ──────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn lc_remove(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<(), String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .remove(&corpus_id)
+    lc_client(&state)
+        .lc_remove(&corpus_id)
         .await
         .map_err(|e| format!("remove: {e}"))
 }
@@ -1088,8 +1163,10 @@ pub async fn lc_remove(state: State<'_, Arc<AppState>>, corpus_id: String) -> Re
 pub async fn lc_incomplete_jobs(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<IncompleteJob>, String> {
-    let manager = require_manager(&state).await?;
-    Ok(manager.incomplete_jobs().await)
+    lc_client(&state)
+        .lc_incomplete_jobs::<IncompleteJob>()
+        .await
+        .map_err(|e| format!("lc_incomplete_jobs: {e}"))
 }
 
 // ─── Command: lc_cancel ──────────────────────────────────────────────
@@ -1111,9 +1188,8 @@ pub async fn lc_check_git(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Option<GitStatus>, String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .check_git(&corpus_id)
+    lc_client(&state)
+        .lc_check_git::<GitStatus>(&corpus_id)
         .await
         .map_err(|e| format!("check_git: {e}"))
 }
@@ -1140,9 +1216,8 @@ pub async fn lc_list_snapshots(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Vec<SnapshotMeta>, String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .list_snapshots(&corpus_id)
+    lc_client(&state)
+        .lc_snapshots::<SnapshotMeta>(&corpus_id)
         .await
         .map_err(|e| format!("list_snapshots: {e}"))
 }
@@ -1155,10 +1230,8 @@ pub async fn lc_rollback(
     corpus_id: String,
     snapshot_path: String,
 ) -> Result<RollbackResult, String> {
-    let manager = require_manager(&state).await?;
-    let path = StdPathBuf::from(snapshot_path);
-    manager
-        .rollback(&corpus_id, &path)
+    lc_client(&state)
+        .lc_rollback::<RollbackResult>(&corpus_id, &snapshot_path)
         .await
         .map_err(|e| format!("rollback: {e}"))
 }
@@ -1170,16 +1243,19 @@ pub async fn lc_clean(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<CleanResult, String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .clean(&corpus_id)
+    lc_client(&state)
+        .lc_clean::<CleanResult>(&corpus_id)
         .await
         .map_err(|e| format!("clean: {e}"))
 }
 
 // ─── Command: lc_search ──────────────────────────────────────────────
 
-#[derive(Serialize)]
+/// The hit shape the frontend already matches. Field-for-field the
+/// route's `sovereign_mesh::lc_http::LocalSearchHit`, so the bytes the
+/// webview receives are unchanged; `Deserialize` is here to parse the
+/// route's answer, not to widen the contract.
+#[derive(Serialize, serde::Deserialize)]
 pub struct LocalSearchHit {
     pub content: String,
     pub title: Option<String>,
@@ -1263,20 +1339,12 @@ pub async fn lc_search(
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<LocalSearchHit>, String> {
-    let manager = require_manager(&state).await?;
-    let hits = manager
-        .search(&corpus_id, &query, limit.unwrap_or(10))
+    // `limit: None` is the HOST's 10 now — the same 10 this command
+    // defaulted to, moved down to the one decider (ARCH §10.6).
+    lc_client(&state)
+        .lc_search::<LocalSearchHit>(&corpus_id, &query, limit)
         .await
-        .map_err(|e| format!("search: {e}"))?;
-    Ok(hits
-        .into_iter()
-        .map(|c| LocalSearchHit {
-            content: c.content,
-            title: c.title,
-            corpus_id: c.corpus_id,
-            score: c.score,
-        })
-        .collect())
+        .map_err(|e| format!("search: {e}"))
 }
 
 #[cfg(test)]
