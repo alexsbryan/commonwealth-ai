@@ -391,6 +391,10 @@ pub async fn submit_information_search(
     if !state.approval.has_pending_information(&key) {
         // Stale submission — the request was already resolved
         // (paste / skip / timed out). Don't spend a search budget.
+        // ATTACH (sv-surface G3b): the parked request lives daemon-side
+        // and this local check cannot see it — C2's conversion replaces
+        // it with the Answer's own refusal (NoSuchPending, by name),
+        // which is the honest after-the-fact form G8 already named.
         return Err("no pending information request for this key".to_string());
     }
 
@@ -566,63 +570,57 @@ pub async fn submit_information_search(
         .collect();
 
     // Marathon-graceful M3 — fold the new URLs into the conversation's
-    // cumulative `searched_sources` registry. Dedupe by URL: existing
-    // entries get their `last_referenced_turn` bumped to the current
-    // turn; new entries are appended with
-    // `first_seen_turn = last_referenced_turn = current_turn`. The
-    // synthesis system message later renders this as a "Web sources
-    // gathered so far" block so the model has stable awareness of
-    // which URLs the user has already been shown.
+    // cumulative `searched_sources` registry, through the ONE merge
+    // (`sovereign_core::searched_sources`) the daemon's Answer path also
+    // uses (sv-surface G3b; the inline copy this replaced was the second
+    // spelling).
+    //
+    // ATTACH (G3b): this write is the DAEMON's over the wire — the
+    // Answer carries its `sources` and the daemon folds them as part of
+    // resolving it. The local write below would hit a store the daemon
+    // never reads, so attach mode skips it.
     //
     // Soft-fail: a missing conversation_id (legacy callers, tests
     // without a wired conversation) skips the registry update; the
     // search still feeds through to refinement so the bench's
     // `submit_information_response` path is unaffected.
     if let Some(ref cid) = conversation_id {
-        let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
-            let guard = state.store.read().await;
-            guard.as_ref().map(Arc::clone)
-        };
-        if let Some(store) = store_arc {
-            match store.get_conversation(cid).await {
-                Ok(conv) => {
-                    let current_turn = conv.messages.len();
-                    let mut entries = conv.searched_sources.unwrap_or_default();
-                    let mut url_seen: std::collections::HashSet<String> =
-                        entries.iter().map(|e| e.url.clone()).collect();
-                    for r in &out.results {
-                        if url_seen.contains(&r.url) {
-                            if let Some(existing) = entries.iter_mut().find(|e| e.url == r.url) {
-                                existing.last_referenced_turn = current_turn;
-                            }
-                        } else {
-                            entries.push(sovereign_core::types::SearchedSourceEntry {
-                                url: r.url.clone(),
-                                title: r.title.clone(),
-                                first_seen_turn: current_turn,
-                                last_referenced_turn: current_turn,
-                                search_query: query.to_string(),
-                            });
-                            url_seen.insert(r.url.clone());
+        if !state.is_attach_mode() {
+            let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
+                let guard = state.store.read().await;
+                guard.as_ref().map(Arc::clone)
+            };
+            if let Some(store) = store_arc {
+                match store.get_conversation(cid).await {
+                    Ok(conv) => {
+                        let current_turn = conv.messages.len();
+                        let fresh = out
+                            .results
+                            .iter()
+                            .map(|r| (r.url.clone(), r.title.clone(), query.to_string()));
+                        let merged = sovereign_core::searched_sources::merge_into(
+                            conv.searched_sources,
+                            fresh,
+                            current_turn,
+                        );
+                        if let Err(e) = store
+                            .set_conversation_searched_sources(cid, Some(merged))
+                            .await
+                        {
+                            tracing::warn!(
+                                conversation_id = %cid,
+                                error = %e,
+                                "submit_information_search: failed to persist searched_sources — search proceeds, model loses cumulative-URL awareness this turn"
+                            );
                         }
                     }
-                    if let Err(e) = store
-                        .set_conversation_searched_sources(cid, Some(entries))
-                        .await
-                    {
-                        tracing::warn!(
+                    Err(e) => {
+                        tracing::debug!(
                             conversation_id = %cid,
                             error = %e,
-                            "submit_information_search: failed to persist searched_sources — search proceeds, model loses cumulative-URL awareness this turn"
+                            "submit_information_search: could not load conversation for searched_sources update — skipping"
                         );
                     }
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        conversation_id = %cid,
-                        error = %e,
-                        "submit_information_search: could not load conversation for searched_sources update — skipping"
-                    );
                 }
             }
         }

@@ -970,3 +970,177 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
         "the refusal names what resolved nothing; got {refused:?}"
     );
 }
+
+/// sv-surface G3b, end to end: a turn pauses on an INFORMATION request,
+/// the client's answer carries its web-search registry rows, and the
+/// daemon folds them into the conversation AS PART OF the resolve — one
+/// user action (picking a search result), one atomic effect. The store
+/// assertion is the point: the registry write landed daemon-side, where
+/// the turn's synthesis reads it.
+#[tokio::test]
+async fn a_search_built_information_answer_folds_its_sources_into_the_conversation() {
+    use sovereign_contracts::types::{InformationRequest, SearchedSourceEntry};
+
+    struct AskInfoPlanner;
+    #[async_trait::async_trait]
+    impl sovereign_core::traits::Planner for AskInfoPlanner {
+        async fn plan(
+            &self,
+            goal: &str,
+            _context: &sovereign_contracts::types::ConversationContext,
+            _tools: &[sovereign_contracts::types::ToolDescriptor],
+        ) -> sovereign_core::error::Result<sovereign_contracts::types::Plan> {
+            Ok(sovereign_contracts::types::Plan {
+                id: "plan-info".into(),
+                goal: goal.to_string(),
+                steps: vec![sovereign_contracts::types::Step {
+                    id: 0,
+                    description: "Ask for the missing figure".into(),
+                    kind: sovereign_contracts::types::StepKind::AwaitUserInfo {
+                        request: InformationRequest {
+                            current_understanding: "The answer needs one figure".into(),
+                            gap: "The 2024 adoption rate".into(),
+                            relevance: "It decides the trend".into(),
+                            satisfying_source: "A statistics agency".into(),
+                            search_hints: Vec::new(),
+                            task_id: String::new(),
+                            step_id: 0,
+                            kind: Default::default(),
+                            task_title: String::new(),
+                            routes: Vec::new(),
+                        },
+                    },
+                    requires_approval: false,
+                    inputs: Vec::new(),
+                    sampling: None,
+                    evaluation: None,
+                }],
+                edges: Vec::new(),
+            })
+        }
+
+        async fn replan(
+            &self,
+            original: &sovereign_contracts::types::Plan,
+            _completed: &[(usize, sovereign_core::types::StepOutput)],
+            _failure: &sovereign_core::types::StepError,
+            _tools: &[sovereign_contracts::types::ToolDescriptor],
+        ) -> sovereign_core::error::Result<sovereign_contracts::types::Plan> {
+            Ok(original.clone())
+        }
+    }
+
+    let tmp = tempfile::tempdir().unwrap();
+    let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let provider = TestProvider::new().with_complete_text("answered.");
+    let services = common::desktop_services_with_planner(
+        engine(tmp.path()),
+        Arc::clone(&store),
+        Arc::new(provider),
+        Box::new(AskInfoPlanner),
+    );
+    let daemon = Arc::new(EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        services,
+    ));
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{addr}/v1/conversations/{conv}/stream?approvals=true"
+    ))
+    .await
+    .unwrap();
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&TurnRequest::Message {
+            content: "what is the adoption rate?".to_string(),
+            mode: TurnMode::Grounded,
+            intent: Some(sovereign_contracts::types::Intent::ComplexTask),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    // Read to the information prompt (bounded — a hang is the failure).
+    let prompt_id = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let Some(Ok(msg)) = ws.next().await else {
+                panic!("socket closed before the information request");
+            };
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).unwrap();
+            if let TurnFrame::Prompt { id, .. } = frame {
+                return id;
+            }
+        }
+    })
+    .await
+    .expect("the turn parks on its information request");
+    assert_eq!(prompt_id, "info:0");
+
+    // The client's search-produced answer, carrying its registry rows.
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        serde_json::to_string(&TurnRequest::Answer {
+            id: prompt_id,
+            answer: TurnAnswer::Information {
+                content: Some("Web search results for \"adoption rate\" (via duckduckgo):\n[1] 12.4%".into()),
+                sources: vec![SearchedSourceEntry {
+                    url: "https://example.org/adoption".into(),
+                    title: "Adoption rates 2024".into(),
+                    first_seen_turn: 0,
+                    last_referenced_turn: 0,
+                    search_query: "adoption rate".into(),
+                }],
+            },
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    // ResolveAck arrives, then the turn completes.
+    let saw_ack = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        use sovereign_contracts::types::TurnNotice;
+        loop {
+            let Some(Ok(msg)) = ws.next().await else {
+                panic!("socket closed early");
+            };
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).unwrap();
+            match frame {
+                TurnFrame::Notice {
+                    notice: TurnNotice::ResolveAck { outcome, .. },
+                } => return outcome,
+                TurnFrame::Complete { .. } => panic!("Complete before the ResolveAck"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("the answer is acknowledged");
+    assert_eq!(
+        saw_ack,
+        sovereign_contracts::types::ResolveOutcome::Resolved,
+        "the acknowledgement says the answer landed"
+    );
+
+    // THE assertion: the registry row landed in the daemon's store, part
+    // of the same effect that resolved the answer.
+    let conv_row = store.get_conversation(&conv).await.expect("the conversation");
+    let sources = conv_row.searched_sources.expect("the registry was written");
+    assert_eq!(sources.len(), 1, "one row folded; got {sources:?}");
+    assert_eq!(sources[0].url, "https://example.org/adoption");
+    assert!(
+        sources[0].first_seen_turn >= 1,
+        "the daemon stamped the conversation's real turn count ({}), not the client's placeholder",
+        sources[0].first_seen_turn
+    );
+}

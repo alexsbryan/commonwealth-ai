@@ -79,7 +79,9 @@ use crate::types::epistemic::EpistemicState;
 use crate::types::narration::{ClarificationRequest, InterpretationProposed, NarrationPhase};
 use crate::types::projection::{Citation, Provenance, TaskSummary, TurnMetadata};
 use crate::types::ui::ActionPreview;
-use crate::types::{InformationRequest, LessonProposedPayload, MessageRefinedPayload};
+use crate::types::{
+    InformationRequest, LessonProposedPayload, MessageRefinedPayload, SearchedSourceEntry,
+};
 
 /// Host → client, for ONE turn, down the ONE connection that asked for it.
 ///
@@ -279,11 +281,27 @@ pub enum TurnAnswer {
     Approved(bool),
     /// Reply to [`TurnPrompt::UserInput`]: the user's words.
     Text(String),
-    /// Reply to [`TurnPrompt::Information`]. `None` IS the skip — a
-    /// real answer, not an absence: the executor resumes with
+    /// Reply to [`TurnPrompt::Information`]. `content: None` IS the skip —
+    /// a real answer, not an absence: the executor resumes with
     /// corpus-only synthesis rather than waiting on a card nobody is
     /// looking at.
-    Information(Option<String>),
+    ///
+    /// `sources` carries the web-search registry rows when the content was
+    /// produced by the CLIENT's own search (sv-surface G3b): the daemon
+    /// folds them into the conversation's cumulative `searched_sources`
+    /// as part of resolving this answer, so one user action — picking a
+    /// search result — is one atomic effect on the host. Empty for paste
+    /// and skip, and omitted from the bytes when empty (a plain answer is
+    /// byte-identical to the pre-G3b shape, modulo the content key the
+    /// struct variant introduced while nothing shipped answered this).
+    Information {
+        /// What the user pasted, or `None` when they pressed skip.
+        content: Option<String>,
+        /// Registry rows the content was built from — resolved AND
+        /// persisted by the host in one effect.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        sources: Vec<SearchedSourceEntry>,
+    },
 }
 
 /// What the host says that no answer is owed — the NOTICE half of the

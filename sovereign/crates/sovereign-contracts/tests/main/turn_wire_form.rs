@@ -25,8 +25,8 @@ use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSou
 use sovereign_contracts::types::{
     ActionPreview, ClarificationOption, ClarificationRequest, InformationRequest,
     InterpretationProposed, LessonProposedPayload, MessageRefinedPayload, NarrationPhase,
-    ProposedAlternative, StepStatus, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt,
-    TurnRequest,
+    ProposedAlternative, SearchedSourceEntry, StepStatus, TurnAnswer, TurnFrame, TurnMode,
+    TurnNotice, TurnPrompt, TurnRequest,
 };
 
 /// Serialise, compare against the bytes a client actually reads, then parse
@@ -444,13 +444,42 @@ fn turn_request_wire_form() {
             },
         ),
         (
-            // The skip: `information: null` IS the answer, not an absent
+            // The skip: `content: null` IS the answer, not an absent
             // one — the executor resumes corpus-only, same as a pressed
-            // skip.
-            r#"{"type":"answer","data":{"id":"t1:info:3","answer":{"information":null}}}"#,
+            // skip. `sources` is omitted when empty (G3b).
+            r#"{"type":"answer","data":{"id":"t1:info:3","answer":{"information":{"content":null}}}}"#,
             TurnRequest::Answer {
                 id: "t1:info:3".into(),
-                answer: TurnAnswer::Information(None),
+                answer: TurnAnswer::Information {
+                    content: None,
+                    sources: Vec::new(),
+                },
+            },
+        ),
+        (
+            // G3b: a search-built answer carries its registry rows, and
+            // the host folds them into the conversation's cumulative
+            // searched_sources as part of the resolve — one user action,
+            // one atomic effect.
+            concat!(
+                r#"{"type":"answer","data":{"id":"info:0","answer":{"information":"#,
+                r#"{"content":"Web search results for \"q\" (via duckduckgo):","#,
+                r#""sources":[{"url":"https://example.org/a","title":"A","#,
+                r#""first_seen_turn":4,"last_referenced_turn":4,"#,
+                r#""search_query":"q"}]}}}}"#,
+            ),
+            TurnRequest::Answer {
+                id: "info:0".into(),
+                answer: TurnAnswer::Information {
+                    content: Some("Web search results for \"q\" (via duckduckgo):".into()),
+                    sources: vec![SearchedSourceEntry {
+                        url: "https://example.org/a".into(),
+                        title: "A".into(),
+                        first_seen_turn: 4,
+                        last_referenced_turn: 4,
+                        search_query: "q".into(),
+                    }],
+                },
             },
         ),
         (

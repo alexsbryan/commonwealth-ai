@@ -221,7 +221,7 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
             sovereign_contracts::types::TurnAnswer::Text(content) => {
                 self.resolve_input(key, content.clone())
             }
-            sovereign_contracts::types::TurnAnswer::Information(content) => {
+            sovereign_contracts::types::TurnAnswer::Information { content, .. } => {
                 self.resolve_information(key, content.clone())
             }
         }

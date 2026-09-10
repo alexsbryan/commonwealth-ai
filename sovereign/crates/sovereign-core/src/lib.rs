@@ -51,6 +51,7 @@ pub mod router_instruction;
 pub mod run_identity;
 pub mod runtime;
 pub mod scope_classifier;
+pub mod searched_sources;
 pub mod stubs;
 pub mod time;
 pub mod title;

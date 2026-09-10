@@ -1027,6 +1027,20 @@ async fn handle_ws(
                 let outcome = approvals.as_ref().map(|a| a.submit(&id, &answer));
                 match outcome {
                     Some(ResolveOutcome::Resolved) => {
+                        // G3b: a search-built information answer carries
+                        // its registry rows; the host folds them into the
+                        // conversation's cumulative searched_sources as
+                        // part of THIS resolve — one user action, one
+                        // atomic effect. Soft-fail like the desktop's
+                        // in-process copy did: a registry miss costs the
+                        // model cumulative-URL awareness for the turn,
+                        // never the answer itself.
+                        if let TurnAnswer::Information { ref sources, .. } = answer {
+                            if !sources.is_empty() {
+                                fold_searched_sources(store.as_ref(), &conversation_id, sources)
+                                    .await;
+                            }
+                        }
                         // G8: the positive acknowledgement. A client that
                         // answered and heard nothing cannot tell "accepted"
                         // from "never arrived" — the bool this replaced
@@ -1196,7 +1210,49 @@ fn answer_kind(answer: &TurnAnswer) -> &'static str {
     match answer {
         TurnAnswer::Approved(_) => "approval",
         TurnAnswer::Text(_) => "user reply",
-        TurnAnswer::Information(_) => "information response",
+        TurnAnswer::Information { .. } => "information response",
+    }
+}
+
+/// G3b's daemon half: fold an answer's search-registry rows into the
+/// conversation, through the ONE merge (`sovereign_core::searched_sources`)
+/// the desktop's in-process path also uses. Soft-fail by the same bargain
+/// as the desktop copy — the registry is model awareness, never
+/// correctness.
+async fn fold_searched_sources(
+    store: &dyn sovereign_core::traits::StateStore,
+    conversation_id: &str,
+    sources: &[sovereign_contracts::types::SearchedSourceEntry],
+) {
+    let fresh = sources
+        .iter()
+        .map(|s| (s.url.clone(), s.title.clone(), s.search_query.clone()));
+    match store.get_conversation(conversation_id).await {
+        Ok(conv) => {
+            let current_turn = conv.messages.len();
+            let merged = sovereign_core::searched_sources::merge_into(
+                conv.searched_sources,
+                fresh,
+                current_turn,
+            );
+            if let Err(e) = store
+                .set_conversation_searched_sources(conversation_id, Some(merged))
+                .await
+            {
+                tracing::warn!(
+                    conversation_id = %conversation_id,
+                    error = %e,
+                    "turn_http: failed to persist searched_sources — the answer resolved, the model loses cumulative-URL awareness this turn"
+                );
+            }
+        }
+        Err(e) => {
+            tracing::debug!(
+                conversation_id = %conversation_id,
+                error = %e,
+                "turn_http: could not load the conversation for searched_sources — skipping"
+            );
+        }
     }
 }
 

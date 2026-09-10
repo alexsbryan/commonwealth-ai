@@ -438,7 +438,10 @@ mod r3_producer_tests {
         assert_eq!(
             chan.submit(
                 "info:3",
-                &TurnAnswer::Information(Some("12.4% (Eurostat, 2024)".into()))
+                &TurnAnswer::Information {
+                    content: Some("12.4% (Eurostat, 2024)".into()),
+                    sources: Vec::new(),
+                }
             ),
             ResolveOutcome::Resolved
         );
