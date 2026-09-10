@@ -422,7 +422,9 @@ status    = "active"
 #
 #   B0  SCOPE + B1's ANSWER (operator, 2026-09-09): "Just align the cli +
 #       desktop; ensure initial user can get a snappy experience -- not too
-#       complicated of a decision."
+#       complicated of a decision." REAFFIRMED 2026-09-09 as the standing
+#       directive: thin clients, seamless+snappy first-time UX, seamless
+#       mesh join after. It guides the architectural calls.
 #
 #       TWO SURFACES, NOT THREE, for this pass. Mobile (M-1/M-2) rides the
 #       wire-compat it already gets and is not gated on this work; it stays on
@@ -433,6 +435,10 @@ status    = "active"
 #       `daemon_cmd.rs` already auto-creates a solo mesh for the CLI — that is
 #       the existing answer, in-tree, and it is the one to copy. `start_daemon`
 #       stops being gated on a mesh existing.
+#       LANDED 2026-09-09 (R4, c1de83d8a): the Ok(false) arm of the desktop's
+#       try_resume creates the silent solo mesh (create_mesh binds inside);
+#       loopback profile by default, expose_client_api stays the explicit
+#       create's opt-in. Mesh join after first boot is unchanged.
 #
 #       "SNAPPY" IS THE ACCEPTANCE TEST and it is a real bar, not a vibe: a
 #       first-run user must not sit behind the measured 5.9-7.7s bind. So the
@@ -440,10 +446,22 @@ status    = "active"
 #       GET /v1/models, the shape supervisor_setup already uses), `backend-ready`
 #       fires on the first successful probe rather than on bootstrap returning,
 #       and the client retries a connect into that window instead of erroring.
+#       LANDED 2026-09-09 (R4, c1de83d8a): the probe loop (250ms interval, 90s
+#       deadline) gates backend-ready on the port ANSWERING and logs
+#       first_ready_ms — the cold-boot measurement this pass owed, minted.
+#       Happy path costs nothing: the bind happens inside bootstrap, so the
+#       probe lands milliseconds after it returns. The WIRE-side retry (a turn
+#       issued into the window queues) lands with C2's TurnClient conversion —
+#       in-process turns don't need the port yet, and the row does not
+#       regress the in-process UX to fake the post-R5 world.
 #       The UI must never block on the bind, and a bind FAILURE must surface
-#       rather than warn-and-return (B3). Measure first-turn latency on a cold
-#       first run before and after — there is no existing in-process-vs-loopback
-#       measurement (see §6 of the investigation), so this pass mints it.
+#       rather than warn-and-return (B3).
+#       B3 LANDED 2026-09-09 (R4, c1de83d8a): at the deadline the probe emits
+#       backend-error (the payload the frontend already listens for) instead
+#       of a ready event about a port that never answers. FATALITY is
+#       deliberately NOT landed: today the in-process surfaces keep working
+#       through a bind failure; the refusal becomes fatal when R5 makes chat
+#       need the port — noted, not silently half-done.
 #
 #   B1  A FRESH-INSTALL DESKTOP BINDS NO PORT. This is the largest item in the
 #       whole collapse and nobody had costed it. start_daemon is the only
@@ -468,6 +486,13 @@ status    = "active"
 #   B4  RUN-LOCK REFUSAL commissions NO daemon, deliberately, and state.rs
 #       says so: "Every desktop surface that does not need the mesh keeps
 #       working." Chat is one of those surfaces today. It will not be.
+#       R4 NOTE (2026-09-09): unchanged by the B1-B3 batch, by design —
+#       while chat is in-process a lock refusal degrades to exactly what
+#       state.rs says. At R5 the seamless answer is ATTACH TO THE HOLDER:
+#       a lock on the data root means another sovereign on THIS machine,
+#       and the boot's early :9741 probe already prefers attach when a
+#       daemon answers. The refusal-becomes-fatal work rides R5, not a
+#       speculative branch now.
 #
 # ── DEFECTS FOUND ON THE WAY (verified 2026-09-09, independent of this work) ─
 #
