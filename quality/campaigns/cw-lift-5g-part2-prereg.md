@@ -219,6 +219,104 @@ hazard previously masked by the very defect being fixed. That stays B5's, and
 B5 stays open.
 
 
+## RE-SCOPE 2026-09-09 — part 2 is a BUILD before it is a deletion
+
+The survey at `4e5534b5e` established that no candidate is deletable, for a
+reason upstream of the call graph: **the fold has no producer.**
+
+`WorkAct::Submit` has ZERO automated production sites workspace-wide. Three
+manual-CLI sites (`job_cmd.rs:195`, the only one that can carry `ingest:v1`;
+`distribute.rs:706`, hard-wired `process:v1`; `work_peer.rs:285`, an example)
+and ten test fixtures. `IngestPayload::slice` — the only constructor of an
+`ingest:v1` unit body — has two call sites, both tests. So a corpus installed
+the shipped way writes a `commonwealth_core::knowledge::IngestionHandoff` into
+`mesh_store`, `fold_coverage_for` returns `None` at `auto_ingest.rs:249`, and
+the legacy path runs. **B7's control `without_a_fold_the_same_tick_publishes_
+the_partial_canonical` is the NORMAL case, not the control.**
+
+`IngestExecutor` + `fold_coverage_for` + `merge_from_fold_coverage` are a
+fully-wired consumer half. Nobody built the producer half. Operator direction
+2026-09-09: finish the scope of work.
+
+**This rung ADDS lines before it subtracts, and that is stated up front rather
+than discovered in the arithmetic.** `cw-net-deletion` is +13,135 against a
+−3,800 target and takes no payment until the deletion lands.
+
+### Where the producer goes, and why it needs no new crate edge
+
+`sovereign-mesh` already depends on BOTH `commonwealth-api` and
+`commonwealth-work` (`Cargo.toml:48,76`), already owns `IngestPayload`, already
+holds the rail, and its tick loop already decides a corpus needs collaborative
+ingest — `auto_ingest.rs:567` POSTs `/internal/corpus/collaborate` at exactly
+that moment. The producer goes there.
+
+The alternative was `commonwealth-api` gaining `commonwealth-work` so
+`corpus_collaborate` could mint the `Submit` where it calls
+`work_queue.register`. That edge would be legal, and it is still the wrong one:
+`IngestPayload` is deliberately on the sovereign side of the package boundary
+(`ingest_executor.rs:26-31`), so commonwealth-api could not build a unit body
+without moving the type. Put the producer where the decision already is (§19).
+
+### K1 — the fold is reached without a human typing anything
+
+A corpus install that today triggers collaborative ingest instead produces an
+`ingest:v1` handoff on the rail, and `fold_coverage_for` returns `Some` for it.
+**Watched red first:** on the current tree that call returns `None` for every
+real install, which is the whole finding — so the red is free and must be shown
+anyway, because a producer test that passes without ever having failed proves
+only that the fixture built a handoff by hand.
+
+### K2 — ONE kickoff, never two
+
+The tick loop must not both submit to the fold AND register the legacy queue
+for the same corpus. Two lease deciders running concurrently on one corpus is
+precisely what this rung exists to remove, and shipping both at once would be
+the §10.6 defect wearing the fix's clothes. Whatever selects between them is
+ONE decider with one name, and a test asserts that for any corpus exactly one
+path runs.
+
+`use_pull_queue()` defaults TRUE today and `SOVEREIGN_USE_LEGACY_PARTITION=1`
+is the opt-out, so there is already a selector; prefer extending it to minting
+a second. A new env read must be declared in `quality/env-flags.toml` or
+`cargo xtask env-gate` fails.
+
+### K3 — the grant's teardown survives without `WorkQueueManager`
+
+`EphemeralGrantStore`'s teardown obligation — the fourth of the four properties
+5g part 1 ruled the consent pair cannot carry — is implemented as
+`state.inner.work_queue.retire(&handoff_id)` (`corpus_grant.rs:166`), and
+`retire` exists only on `WorkQueueManager`. So "the grant store must survive"
+and "delete `WorkQueueManager`" cannot both hold today.
+
+The fold's equivalent is `WorkAct::Revoke` by the submitter: `WorkHandoff.
+revoked` makes `phase_at` return `Failed`, and `may_take` already refuses a
+revoked handoff (`refusal.rs:60`, pinned by
+`a_revoked_or_expired_handoff_refuses_the_submitter_side`). Strictly better
+than `retire` — durable, replicated, and signed by an actor admission verified.
+
+The bar: revoking a grant stops an in-flight FOLD ingest. Measured, not
+reasoned — a running unit must actually stop, not merely fail to be re-leased.
+If it only prevents new leases and lets the running one finish, say so; that is
+a different guarantee from what `retire` gives and the difference must be
+recorded, not glossed.
+
+### K4 — and THEN the deletion pays
+
+With K1-K3 met, re-run the survey. Candidates go only if proven unreachable.
+Report the real number against `cw-net-deletion` and let a miss leave the bar
+open.
+
+### K5 — the audit: lean and clean
+
+Operator direction, and it is a bar rather than a mood. After K4, audit the
+whole 5g surface for duplication and missed reuse and report what was cut:
+every noun defined twice, every predicate spelled twice, every helper that
+duplicates one already in the workspace. `sovereign code converge noun` on
+every type this rung minted. The day already produced three cases where a
+second speller hid a defect — the boundary-gate allowlist, `sharding.rs`'s
+false dedupe comment, and the finalize that two callers each had to remember.
+
+
 ## Measurements
 
 **B1 — MET (red for the right reason), 2026-09-09, commit `50238f364`.**
