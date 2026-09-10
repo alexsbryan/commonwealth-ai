@@ -3,8 +3,8 @@
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
-17949	commonwealth/crates/commonwealth-api
-16271	commonwealth/crates/commonwealth-api::tests
+17953	commonwealth/crates/commonwealth-api
+16275	commonwealth/crates/commonwealth-api::tests
 114	commonwealth/crates/commonwealth-app
 56	commonwealth/crates/commonwealth-app::tests
 2615	commonwealth/crates/commonwealth-core
@@ -87,7 +87,7 @@
 569	sovereign/crates/sovereign-authoring-harness
 50	sovereign/crates/sovereign-authoring-harness::tests
 17648	sovereign/crates/sovereign-cli
-12705	sovereign/crates/sovereign-cli-daemon
+12723	sovereign/crates/sovereign-cli-daemon
 3666	sovereign/crates/sovereign-cli-daemon::tests
 27631	sovereign/crates/sovereign-cli-dev
 6197	sovereign/crates/sovereign-cli-dev::tests
@@ -102,7 +102,7 @@
 5502	sovereign/crates/sovereign-contracts::tests
 57439	sovereign/crates/sovereign-core
 41617	sovereign/crates/sovereign-core::tests
-18961	sovereign/crates/sovereign-desktop/src-tauri
+18992	sovereign/crates/sovereign-desktop/src-tauri
 5437	sovereign/crates/sovereign-desktop/src-tauri::tests
 9235	sovereign/crates/sovereign-desktop/tests/e2e/scripts
 6659	sovereign/crates/sovereign-enrichment-build
@@ -115,7 +115,7 @@
 1196	sovereign/crates/sovereign-gliner::tests
 8592	sovereign/crates/sovereign-inference
 20218	sovereign/crates/sovereign-inference::tests
-29827	sovereign/crates/sovereign-mesh
+29850	sovereign/crates/sovereign-mesh
 36182	sovereign/crates/sovereign-mesh::tests
 4387	sovereign/crates/sovereign-meshapp
 172	sovereign/crates/sovereign-meshapp::tests

@@ -52,7 +52,7 @@
 2053	sovereign/crates/sovereign-agent-tools/src/executor.rs
 2810	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1253	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
-1553	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
+1581	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
 1343	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
 1287	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/mod.rs
 1240	sovereign/crates/sovereign-cli-dev/src/amend.rs
@@ -131,7 +131,7 @@
 1557	sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs
 1211	sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.rs
 1367	sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs
-1901	sovereign/crates/sovereign-desktop/src-tauri/src/state.rs
+1939	sovereign/crates/sovereign-desktop/src-tauri/src/state.rs
 1914	sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs
 1364	sovereign/crates/sovereign-eval/src/flywheel/generators/adversarial.rs
 4243	sovereign/crates/sovereign-inference/src/embedded/engine.rs
@@ -143,7 +143,7 @@
 1952	sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 1459	sovereign/crates/sovereign-mesh/src/auto_ingest.rs
 1584	sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs
-5301	sovereign/crates/sovereign-mesh/src/daemon.rs
+5353	sovereign/crates/sovereign-mesh/src/daemon.rs
 1527	sovereign/crates/sovereign-mesh/src/decision_log.rs
 1488	sovereign/crates/sovereign-mesh/src/gossip.rs
 2086	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
