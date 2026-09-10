@@ -73,3 +73,32 @@ pathprobe viewer=0 status=206 clen=Some(33554432) crange=Some("bytes 0-33554431/
 # block outbound UDP to 69.181.167.209:47800 (and to 100.115.12.21 /
 # 192.168.1.13 if Tailscale or the LAN is reachable). Then re-run and confirm
 # `direct=[]` BEFORE trusting the rate. Only then take 3 x 600 s.
+
+# ===========================================================================
+# RE-READ, operator direction, same session: THE BAR WAS A PROXY AND THE
+# THING IT PROXIED FOR PASSED.
+#
+# The pre-registered bar asked for >= 25 Mbit/s RELAYED because the relay is
+# the floor WHEN HOLE-PUNCHING FAILS. Today it did not fail. Leg 2 punched
+# through between a laptop on carrier CGNAT and a machine behind home NAT —
+# different public IPs, no VPN, no port forward, no manual config — and
+# carried 33.1 Mbit/s, ttfb 211 ms, worst_1s 26.1, no stall over 257 ms.
+#
+# 1080p wants roughly 8-15 Mbit/s. So the end-user claim the bar stood in for
+# — "direct playback of a remote 1080p title is honest" — IS DEMONSTRATED, on
+# the path most users get, in about the most hostile common NAT pairing there
+# is.
+#
+# THE RELAY NUMBER IS NOT RETIRED, ITS JOB CHANGES. It sizes the RESIDUAL
+# population whose hole-punch genuinely fails. That is a smaller question than
+# the one the NO-GO was written to gate, and it should not hold the demo.
+#
+# WHAT IS STILL NOT SHOWN, and it is not the bar: this was 8.1 s and 32 MiB.
+# "It connects and streams fast" is demonstrated. "It sustains a two-hour
+# film" is not. The 3 x 600 s soak still earns its keep — now on the DIRECT
+# path, which is the one that matters.
+#
+# The discipline that produced the discards is kept: every reading still
+# states its own path= class, discards are still counted, and this re-read
+# does not reclassify leg 2 as relayed. It says the relayed question was the
+# wrong gate, not that the reading was something other than direct.
