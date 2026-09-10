@@ -1009,6 +1009,37 @@ async fn handle_ws(
                     .await;
                 }));
             }
+            // G2 (sv-surface): the cancel runs the SAME pair the
+            // in-process host ran — trip the conversation's session
+            // token AND the preparing token — because a task abort would
+            // kill the turn without the terminal frame, and a cancel is a
+            // fact about how the turn ENDED: the sampler notices the
+            // token, stops, and the ordinary Complete carries
+            // finish_reason=cancelled down this socket. Both deciders
+            // live on the runtime this daemon owns.
+            TurnRequest::Cancel {} => {
+                let hit_session = runtime
+                    .sessions
+                    .latest_for_conversation(&conversation_id)
+                    .map(|session| {
+                        session.cancel.cancel();
+                        session.id.clone()
+                    });
+                let hit_preparing = runtime.sessions.cancel_preparing(&conversation_id);
+                if hit_session.is_some() || hit_preparing {
+                    tracing::info!(
+                        conversation_id = %conversation_id,
+                        session = ?hit_session,
+                        preparing = hit_preparing,
+                        "turn_http: turn cancelled by the client"
+                    );
+                } else {
+                    tracing::debug!(
+                        conversation_id = %conversation_id,
+                        "turn_http: cancel with nothing in flight — a satisfied no-op"
+                    );
+                }
+            }
             // Rung 6 commit C1 made the refusal a resolve; R1 folded the
             // two reply variants into `Answer { id, answer }` — the id the
             // Prompt arrived under, which is the desk key. Every outcome

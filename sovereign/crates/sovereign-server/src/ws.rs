@@ -278,6 +278,23 @@ async fn handle_ws(
                     retry_after_secs: None,
                 });
             }
+            // G2 cancel, same tenant shape: the cancel targets "this
+            // conversation's" session, and the session store here is
+            // unscoped — cancelling by an unscoped key could trip ANOTHER
+            // tenant's token. Same named debt as above; the local daemon
+            // serves the cancel.
+            TurnRequest::Cancel {} => {
+                tracing::warn!(
+                    conversation_id = %conversation_id,
+                    "ws: cancel refused — tenant host serves no unscoped sessions"
+                );
+                let _ = out_tx.send(TurnFrame::StreamError {
+                    message: "this host does not serve turn cancellation — cancel is \
+                              served by the local daemon, whose sessions are not tenant-scoped"
+                        .to_string(),
+                    retry_after_secs: None,
+                });
+            }
         }
     }
 

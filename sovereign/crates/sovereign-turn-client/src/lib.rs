@@ -1136,6 +1136,14 @@ impl TurnSender {
             .map_err(|_| Error::Inference("turn socket writer is gone".to_string()))
     }
 
+    /// Cancel the in-flight turn (G2). The host trips the turn's own
+    /// cancellation, so the turn ends the way a cancelled turn always
+    /// ended — its `Complete` carries `finish_reason: "cancelled"` —
+    /// rather than dying to a task abort with no terminal frame.
+    pub fn send_cancel(&self) -> Result<()> {
+        self.send(TurnRequest::Cancel {})
+    }
+
     /// Answer a parked [`TurnFrame::Prompt`] — the reply carrying the same
     /// `id` the question arrived with (G12's second half: a claimed socket
     /// now has something to answer WITH).

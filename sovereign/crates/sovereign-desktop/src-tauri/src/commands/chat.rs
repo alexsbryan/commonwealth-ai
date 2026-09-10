@@ -773,6 +773,21 @@ pub async fn cancel_stream(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
+    // sv-surface R5/G2: wire-first — the daemon trips the turn's own
+    // cancellation (session token + preparing token, the same pair this
+    // command used to trip in-process), and the ordinary Complete with
+    // finish_reason=cancelled closes the stream. The local pair remains
+    // the fallback for unconverted shapes.
+    if let Some(sender) = state.turn_wire.read().await.as_ref() {
+        if sender.send_cancel().is_ok() {
+            tracing::info!(
+                conversation_id,
+                "cancel_stream: wire cancel sent — the turn's Complete will say cancelled"
+            );
+            return Ok(());
+        }
+    }
+
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap();
     // Cancel the registered session if one exists…

@@ -504,4 +504,17 @@ pub enum TurnRequest {
         /// `Resume`'s hint has.
         intent_hint: String,
     },
+    /// Cancel the in-flight turn (sv-surface G2). The host aborts the
+    /// turn task and the turn ends the way a sampler-cancelled turn
+    /// always ended — its terminal `Complete` carries
+    /// `finish_reason: "cancelled"` — so the reply is the ordinary
+    /// terminal frame, not a new one. No-op when nothing is in flight:
+    /// a user's "stop" on an already-finished turn is satisfied, not an
+    /// error.
+    ///
+    /// This also reaches the PRE-REGISTRATION window the in-process host
+    /// called `cancel_preparing`: over the wire the preparing window is
+    /// inside the host's turn task, so the abort lands either way —
+    /// there is no separate race to win.
+    Cancel {},
 }

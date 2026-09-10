@@ -506,6 +506,13 @@ fn turn_request_wire_form() {
                 intent_hint: "Comparison".into(),
             },
         ),
+        (
+            // G2: the cancel carries NOTHING — the host aborts whatever is
+            // in flight on this socket, and the turn's own terminal frame
+            // says how it ended.
+            r#"{"type":"cancel","data":{}}"#,
+            TurnRequest::Cancel {},
+        ),
     ];
     for (wire, expected) in cases {
         let parsed: TurnRequest = serde_json::from_str(wire).expect("client message parses");
