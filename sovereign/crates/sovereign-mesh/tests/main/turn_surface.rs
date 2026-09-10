@@ -1088,7 +1088,9 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
         serde_json::to_string(&TurnRequest::Answer {
             id: prompt_id,
             answer: TurnAnswer::Information {
-                content: Some("Web search results for \"adoption rate\" (via duckduckgo):\n[1] 12.4%".into()),
+                content: Some(
+                    "Web search results for \"adoption rate\" (via duckduckgo):\n[1] 12.4%".into(),
+                ),
                 sources: vec![SearchedSourceEntry {
                     url: "https://example.org/adoption".into(),
                     title: "Adoption rates 2024".into(),
@@ -1134,7 +1136,10 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
 
     // THE assertion: the registry row landed in the daemon's store, part
     // of the same effect that resolved the answer.
-    let conv_row = store.get_conversation(&conv).await.expect("the conversation");
+    let conv_row = store
+        .get_conversation(&conv)
+        .await
+        .expect("the conversation");
     let sources = conv_row.searched_sources.expect("the registry was written");
     assert_eq!(sources.len(), 1, "one row folded; got {sources:?}");
     assert_eq!(sources[0].url, "https://example.org/adoption");
