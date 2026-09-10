@@ -756,9 +756,19 @@ async fn try_candidate(
     // 5.1-minilang B-arm 2026-07-06). Edits apply in order as ONE
     // transaction; the first failure aborts (workdir is a snapshot,
     // so partial application is discarded with the candidate).
+    //
+    // Artifact-only workdirs (prompt overlays, configs, data files)
+    // have NO code sources: falling through to the "_unspecified.py"
+    // placeholder killed every pathless patch_lines with a phantom
+    // read error while whole-file rewrites survived but tied — the
+    // v0 prompt climb stalled on exactly this (2026-09-09). Code
+    // sources keep priority in code workdirs (a stray README must
+    // never hijack the default target — wall-1 family); artifacts
+    // only serve when nothing code-shaped exists.
     let default_target = source_files
         .first()
         .cloned()
+        .or_else(|| discover_artifact_files(&candidate_workdir).first().cloned())
         .unwrap_or_else(|| "_unspecified.py".to_string());
     let mut ctx = ExecCtx::new(candidate_workdir.clone());
     if let Some(v) = syntax_validator {
