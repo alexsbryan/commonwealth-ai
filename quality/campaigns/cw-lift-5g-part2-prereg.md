@@ -201,3 +201,162 @@ green because this is hidden. The ignore comes off with the collector.
 Known not checked by B1: the HTTP tarball pull, the ingest pipeline itself (no
 recipe, no acquirer, no embedder), and the `total_shards` coverage gate — which
 is now B7's subject.
+
+---
+
+**B2 — MET, 2026-09-09, against the collector at `df2ffecb8`.**
+`sovereign-mesh/tests/main/fold_ingest_cross_node_merge_e2e.rs`. Both halves
+of the new path are measured, because the seam between them is thin glue and a
+test that drives only the glue proves little.
+
+*First half — `ingest_executor::fold_coverage_for`, a pure read.*
+`the_fold_names_both_verified_donors_and_where_to_find_them`. Same fold as B1
+(real Ed25519-signed ops through `commonwealth_rail::admit` → `WorkProjection::
+fold`, two units, two lessees), asked for coverage:
+
+    handoff_id : handoff-0000000000000000   (the submitted handoff)
+    expected   : 2                          (distinct VERIFIED lessees)
+    nodes      : [node-1100000000000000, node-2200000000000000]
+    abandoned  : []                         (is_partial() == false)
+
+Watched red by gating the collection loop on `&lessee == self_key` — the
+local-donor-only defect moved down to the fold: `expected: left 1, right 2`.
+
+*Second half — the merge, over a real socket.*
+`two_donors_on_two_nodes_land_both_slices_in_the_canonical`, driving
+`commonwealth_api::auto_recover::merge_from_fold_coverage` → `ShardManager::
+merge_participants`. The peer donor's partition is served by the peer's OWN
+`commonwealth_api::server::internal_router` on a loopback socket and reaches
+the leader through `GET /internal/index/serve` → `tar xf`; the leader resolves
+the peer's address through `peer_control_urls` → `PeerTransport::endpoints`
+over a `MemberRecord`, the same as production. B1 could say nothing about any
+of that, because B1 pulled nothing.
+
+    merge outcome               : Recovered { chunks: 4, shards_covered: 2 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..] abandoned=[]
+    canonical exists            : true
+    canonical chunk_count       : 4
+    leader-only term reachable  : true
+    peer-only term reachable    : true      ← THE BAR
+
+`peer-only term reachable` is the bar and the chunk count is corroboration,
+in that order, exactly as this pre-registration specified: a count can be
+right for the wrong reason.
+
+Watched red by truncating the participant list to the local node — the
+original defect, where participants come from local disk rather than from the
+fold. It reproduces B1's reading exactly:
+
+    merge outcome               : Recovered { chunks: 2, shards_covered: 1 }
+    fold coverage               : expected=2 nodes=[node-11.., node-22..]
+    canonical chunk_count       : 2 (expected 4)
+    peer-only term reachable    : false
+
+The fold names both donors in the red as in the green, so the red is about the
+participant set the merge was handed and not about the fold.
+
+Both `#[ignore]`s from `50238f364` are GONE. B1's negative control
+(`two_donors_on_one_node_do_land_both_slices_in_the_canonical`) is retained
+unignored and still runs the DISK-derived path, because it controls for the
+fixture rather than for the collector.
+
+Known not checked by B2: two real machines (this is two index dirs, two
+`AppState`s and two sockets in one process); the ingest pipeline itself (no
+recipe, no acquirer, no embedder); `auto_ingest`'s tick loop, so the ORDER of
+its arms — including the load-bearing `continue` after a coverage refusal — is
+still unmeasured; and the actor-vs-host distinction `FoldCoverage::expected`
+documents, which this fixture cannot see because one lessee reports one host,
+so 2 actors and 2 hosts are the same number here.
+
+**B3 — MET, 2026-09-09.** `only_the_submitter_reads_a_merge_out_of_the_fold`.
+The peer folds the SAME journal and asks the same question; `fold_coverage_for`
+returns `None`. The paired positive control in the same test — the submitter
+DOES get an answer from that same projection — is what stops the refusal being
+"a function that always declines".
+
+The pre-registered instrument is in place and asserted, not merely present.
+`fold_coverage_for` now emits a `debug` event on the decline naming the
+decision and BOTH keys it compared:
+
+    fold_coverage_for: declining — this node is not the submitter of this
+    ingest handoff, so another node leads its merge
+      handoff=… submitter=<leader actor> self_key=<peer actor>
+
+Watched red by disabling the `&handoff.submitter != self_key` arm: the peer
+comes back with `Some(FoldCoverage { nodes: [node-11.., node-22..], expected:
+2, abandoned: [] })` — the leader's coverage, verbatim. Two nodes, one output
+directory.
+
+Known not checked by B3: that two nodes running the real `auto_ingest` loop
+concurrently do not race. This is the leader DECISION, which is where the race
+is prevented; it is not a concurrency test.
+
+**B4 — the bar is MET and the mechanism this pre-registration named is NOT the
+one that holds it. 2026-09-09.**
+`commonwealth-knowledge/tests/main/merge_participants_idempotence.rs`, driving
+`ShardManager::merge_participants` directly — going through
+`merge_from_fold_coverage` would have measured its `AlreadyHasCanonical`
+short-circuit, which says the second run declined, not that a second run would
+have been safe.
+
+*The bar.* `a_second_merge_of_the_same_handoff_leaves_the_canonical_untouched`.
+Two merges of the same participant set. The second run is not a no-op: the
+local partition dir was cleaned up by run one, so `merge_participants` resolves
+this node's shard through its `original_path` fallback — the canonical itself —
+and re-pulls the peer's shard down the socket. Chunk count 2 → 2, both rows
+still reachable. **Met.**
+
+*How it is met.* Not by dedupe. The second run returns
+
+    Err(Database("Table 'chunks' already exists"))
+
+and leaves the canonical exactly as it was. `merge_shards` builds its output
+with `CorpusIndex::create` → `create_empty_table`, which refuses a directory
+already holding a `chunks` table, so the merge never reaches the dedupe at all.
+This falsifies `corpus-engine/src/sharding.rs`'s own comment on the
+single-shard fast path — "callers that actually do want to fold a partition
+into an existing canonical fall through to the full merge below (which dedupes
+via `content_hash`)". The fall-through errors first.
+`CorpusIndex::create_or_resume` documents this exact LanceDB failure and works
+around it; `merge_shards` does not. NOT FIXED HERE: whether folding into a live
+canonical is a capability or a refusal is corpus-engine's decision, and the
+refusal is the safe half.
+
+Watched red by making `CorpusIndex::create_with_sharing` clear an existing
+directory first — the obvious "fix" for that error. Run two then deletes the
+canonical it had just named as its own local shard, and reports success over
+the wreckage:
+
+    the second delivery changed the canonical's chunk count: 2 → 0
+    Second run returned: Ok(Some(IndexInfo { chunk_count: 1, … }))
+
+That is why the bar is asserted on the CORPUS and not on the return value.
+
+*The dedupe, measured where it is reachable.*
+`the_merge_dedupes_a_row_two_donors_both_contributed`. One merge, three shards,
+four input rows, two of them the same `content_hash` from two different donors.
+Canonical holds three, all reachable. This is the mechanism
+`IngestExecutor`'s `Idempotency::Idempotent` is declared on and it is real —
+it just cannot be reached by running the merge twice. Watched red by deleting
+the `seen_hashes.contains(h)` early return: `left 4, right 3`.
+
+Known not checked by B4: the fold (no journal — the handoff is an id); the
+SECONDARY `(unit_id, source_doc_id)` dedupe key, since these rows carry a
+populated `content_hash`; concurrent merges; and whether the refused second run
+leaves its re-pulled shard directory on disk (it does — `merge_participants`
+cleans up only after a successful merge — which is why the caller's
+`AlreadyHasCanonical` short-circuit is load-bearing rather than an
+optimisation).
+
+**A hazard confirmed NOT live in production, 2026-09-09.** `NodeId`'s `Display`
+is `node-<hex of the first EIGHT bytes>` and every partition directory name is
+built from it, so two nodes sharing a 64-bit prefix would collide on one
+directory and the merge would silently see fewer shards. Every production
+`NodeId` comes from `NodeId::generate()` — 16 CSPRNG bytes via `getrandom`
+(`kernel-types/src/ids.rs`) — reached through
+`persist::load_or_generate_self_node_id` and `membership::init_mesh*`; every
+`NodeId::from_u128` call site in the workspace is inside a `mod tests`. So the
+truncation leaves 64 random bits and a collision needs a birthday collision at
+that width: about `n²/2^65`, which is ~3e-14 at a thousand nodes. The hazard is
+real in FIXTURES, where ids are minted from small integers, and both test files
+say so at the point where the ids are chosen. Not fixed, and no fix is owed.

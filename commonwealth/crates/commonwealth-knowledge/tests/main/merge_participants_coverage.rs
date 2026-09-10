@@ -36,8 +36,8 @@ use corpus_engine::index::{InsertChunk, InsertCodeMeta};
 use corpus_engine::{Corpus, CorpusEngine, CorpusIndex, EmbedFn};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-const EMBED_DIM: usize = 8;
-const CORPUS: &str = "coverage";
+pub(crate) const EMBED_DIM: usize = 8;
+pub(crate) const CORPUS: &str = "coverage";
 
 /// Never called: `merge_participants` merges vectors that already exist.
 /// Present only because `CorpusEngine::new` requires one.
@@ -45,11 +45,11 @@ fn unused_embed_fn() -> EmbedFn {
     Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIM]) }))
 }
 
-fn embedding(seed: f32) -> Vec<f32> {
+pub(crate) fn embedding(seed: f32) -> Vec<f32> {
     (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
 }
 
-async fn build_partition(path: &Path, content: &str, hash: &str) {
+pub(crate) async fn build_partition(path: &Path, content: &str, hash: &str) {
     let index = CorpusIndex::create(
         path,
         CORPUS,
@@ -83,7 +83,7 @@ async fn build_partition(path: &Path, content: &str, hash: &str) {
 /// straight into its `<corpus>-partition-<peer>/` dest, so a top-level
 /// wrapper entry would produce a nested dir that `merge_partitions`
 /// does not recognise as a shard.
-fn tar_contents_of(dir: &Path, tar_path: &Path) -> Vec<u8> {
+pub(crate) fn tar_contents_of(dir: &Path, tar_path: &Path) -> Vec<u8> {
     let status = std::process::Command::new("tar")
         .args([
             "cf",
@@ -104,7 +104,7 @@ fn tar_contents_of(dir: &Path, tar_path: &Path) -> Vec<u8> {
 /// request with `200` + the tarball. Using a real socket rather than a
 /// mocked HTTP client keeps the pull path — reqwest, `tar xf`, the dest
 /// dir — inside the test rather than stubbed around it.
-async fn serve_tarball(tar: Vec<u8>) -> String {
+pub(crate) async fn serve_tarball(tar: Vec<u8>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind ephemeral port");
@@ -142,14 +142,14 @@ async fn serve_tarball(tar: Vec<u8>) -> String {
     format!("http://{addr}")
 }
 
-struct Fixture {
+pub(crate) struct Fixture {
     _tmp: tempfile::TempDir,
-    index_dir: PathBuf,
-    manager: ShardManager,
-    local: NodeId,
-    reachable_peer: NodeId,
-    silent_peer: NodeId,
-    peer_urls: Vec<(NodeId, String)>,
+    pub(crate) index_dir: PathBuf,
+    pub(crate) manager: ShardManager,
+    pub(crate) local: NodeId,
+    pub(crate) reachable_peer: NodeId,
+    pub(crate) silent_peer: NodeId,
+    pub(crate) peer_urls: Vec<(NodeId, String)>,
 }
 
 /// Three participants, two of whom can be resolved:
@@ -158,7 +158,7 @@ struct Fixture {
 /// * `reachable_peer` — served by a live socket, so the pull lands.
 /// * `silent_peer` — no entry in `peer_shard_base_urls`, so it is
 ///   skipped exactly as an unaddressable peer is in production.
-async fn fixture() -> Fixture {
+pub(crate) async fn fixture() -> Fixture {
     let tmp = tempfile::tempdir().expect("tempdir");
     let index_dir = tmp.path().join("indexes");
     std::fs::create_dir_all(&index_dir).expect("mkdir index_dir");
@@ -201,7 +201,11 @@ async fn fixture() -> Fixture {
     }
 }
 
-fn plan<'a>(f: &'a Fixture, participants: &'a [NodeId], expected: Option<usize>) -> MergePlan<'a> {
+pub(crate) fn plan<'a>(
+    f: &'a Fixture,
+    participants: &'a [NodeId],
+    expected: Option<usize>,
+) -> MergePlan<'a> {
     MergePlan {
         handoff_id: HandoffId::from_u128(0xC0FFEE),
         corpus_id: CORPUS,

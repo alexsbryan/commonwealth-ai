@@ -1,41 +1,42 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! **B1 of `quality/campaigns/cw-lift-5g-part2-prereg.md`: the cross-node
-//! merge gap, watched red.**
+//! **B2 and B3 of `quality/campaigns/cw-lift-5g-part2-prereg.md`: the
+//! fold-side collector closes the cross-node merge gap, and exactly one node
+//! acts on it.**
 //!
-//! cw-lift 5g part 1 (`1e5418f4b`) put corpus ingest onto the
-//! `commonwealth-work` fold as kind `ingest:v1`
-//! (`sovereign-mesh/src/ingest_executor.rs`). Part 1's proof was single-node:
-//! two units, one machine, one partition directory. This file is the n=2
-//! reading part 1 could not take.
+//! This file was born at `50238f364` as B1 — the *watched red*. Two donors on
+//! two nodes, one handoff, both units `Complete`, and the leader's canonical
+//! corpus holding half the data while `auto_recover` returned `Recovered`.
+//! That reading is preserved verbatim in the pre-registration's
+//! `## Measurements` section and is not re-run here: the path it measured
+//! (`commonwealth_api::auto_recover::try_recover_stranded_partitions`, which
+//! merges `<corpus>-partition-*/` **on this node** and fetches nothing) still
+//! exists and still behaves that way. What changed at `df2ffecb8` is that
+//! `auto_ingest` no longer reaches it for a corpus the `work` fold can speak
+//! for.
 //!
-//! What is claimed to be broken, stated precisely
-//! ----------------------------------------------
-//! It is NOT that the fold cannot express "the work is done". It can, and this
-//! test drives it: every act names a handoff (`WorkAct::handoff`,
-//! `commonwealth-work/src/act.rs:136-146`), `WorkHandoff::phase_at` returns
-//! `HandoffPhase::Complete` once `queued == 0 && leased == 0`
-//! (`projection.rs:306-317`), and each terminal `WorkUnitStatus::Complete`
-//! names its `lessee: ActorKey` (`projection.rs:170-181`). The union of those
-//! lessees IS the participating-peer set, on a durable replicated journal.
+//! What the collector added, and what each half is measured by
+//! -----------------------------------------------------------
+//! The new path has two halves and a thin piece of glue, and a test that
+//! drives only the glue proves little. So both halves are driven, and the
+//! glue is driven too:
 //!
-//! The gap is that **nothing reads it for ingest.** `IngestPayload`
-//! (`ingest_executor.rs:141-153`) carries no `HandoffId`, so no
-//! `IngestionHandoff` blob is ever written to `MeshStore` for
-//! `ShardManager::coordinate_merge`'s `load_handoff` to find
-//! (`commonwealth-knowledge/src/shard_manager.rs:183`), and
-//! `coordinate_merge` — the only code path in the workspace that pulls a
-//! peer's shard tarball — has exactly two production call sites, both in
-//! `commonwealth-api/src/routes_internal/corpus_queue.rs` (`:210`, `:550`),
-//! neither reachable from the fold. So on the fold path the only merge a
-//! donor node can reach is the local-only one: `auto_ingest`'s proactive
-//! stranded-partition sweep calling
-//! `commonwealth_api::auto_recover::try_recover_stranded_partitions`
-//! (`sovereign-mesh/src/auto_ingest.rs:297`), which merges every
-//! `<corpus>-partition-*/` directory **on this node** and fetches nothing.
+//! * [`sovereign_mesh::ingest_executor::fold_coverage_for`] — a pure read.
+//!   Given a folded journal it answers "who worked on this corpus, where do
+//!   their partitions live, and do I lead this handoff?". Measured by
+//!   [`the_fold_names_both_verified_donors_and_where_to_find_them`] (B2, first
+//!   half) and [`only_the_submitter_reads_a_merge_out_of_the_fold`] (B3). No
+//!   corpus, no disk, no clock beyond the `now_ms` it is handed.
 //!
-//! The predicted failure is this workspace's characteristic one: exit 0,
-//! wrong answer. Both units `Complete`, the handoff terminal, every signal
-//! green — and the canonical corpus holding only the local donor's chunks.
+//! * [`commonwealth_api::auto_recover::merge_from_fold_coverage`] → the
+//!   `ShardManager::merge_participants` the fold's answer is handed to.
+//!   Measured by
+//!   [`two_donors_on_two_nodes_land_both_slices_in_the_canonical`] (B2, second
+//!   half), which is the same scenario as B1's red with the collector wired.
+//!
+//! The bar is a QUERY, not a chunk count. A count can be right for the wrong
+//! reason — two chunks merged twice is four. What is asserted is that a term
+//! appearing ONLY in the remote donor's slice comes back from a search against
+//! the merged canonical.
 //!
 //! What this file drives for real
 //! ------------------------------
@@ -46,41 +47,63 @@
 //!   `sovereign_mesh::ingest_executor::IngestPayload` bodies.
 //! * The real partition layout: `CorpusEngine::partition_path`, the same call
 //!   `IngestExecutor::run` makes to choose where a slice lands
-//!   (`ingest_executor.rs:245`).
-//! * The real merge decider: `auto_recover::try_recover_stranded_partitions`.
+//!   (`ingest_executor.rs`).
+//! * **The real wire.** The peer donor's partition is served by the peer's own
+//!   `commonwealth_api::server::internal_router` on a real loopback socket,
+//!   and reaches the leader through `ShardManager::fetch_remote_shard`'s
+//!   `GET /internal/index/serve` → `tar xf`. B1 could not say this: it stubbed
+//!   nothing because it pulled nothing.
+//! * The real peer resolution: `peer_control_urls` → `PeerTransport::endpoints`
+//!   over a `MemberRecord`, so the leader learns the peer's address the way
+//!   production does rather than being handed a URL.
 //!
 //! What this file does NOT check — said here rather than discovered later
 //! ---------------------------------------------------------------------
-//! * **The network half.** `coordinate_merge` pulls tarballs over HTTP via
-//!   `fetch_remote_shard`. This is an in-process simulation of two nodes as
-//!   two index directories; it proves nothing about that transfer. A real
-//!   two-machine run is a separate, later reading.
+//! * **Two machines.** Two nodes are two index dirs, two `AppState`s and two
+//!   sockets in one process. Cross-machine clocks, real network loss, and
+//!   partial transfers are not exercised. That is the pre-registration's own
+//!   caveat and it survives this file.
 //! * **The ingest pipeline.** No recipe, no acquirer, no embedder. Partitions
 //!   are written directly through `CorpusIndex` at the path the executor
 //!   computes. What is under test is the merge, not the extract.
-//! * **The `total_shards` coverage gate.** `auto_recover` refuses with
-//!   `IncompleteCoverage` when a partition meta stamps `total_shards` and the
-//!   local union does not cover it — but only `ExtractorConfig::WikipediaJsonl`
-//!   stamps that field (`corpus-engine/src/engine/ingest.rs:718-737`), so for
-//!   every other recipe the gate is dark. These partitions do not stamp it,
-//!   matching the common case. On a Wikipedia recipe the same gap surfaces as
-//!   a permanent stall instead of a wrong canonical; both are "the corpus is
-//!   missing the peer donor's chunks".
+//! * **`auto_ingest`'s tick loop.** The arm that calls all of this
+//!   (`auto_ingest.rs`) is driven by a live daemon loop with an
+//!   `active_ingests` gate and a per-corpus cooldown. This file calls the
+//!   collector directly, so the ORDER of the arms — in particular the
+//!   load-bearing `continue` that stops a coverage refusal falling through to
+//!   the disk-derived merge — is not measured here.
+//! * **Idempotence.** B4 is measured at the merge level in
+//!   `commonwealth-knowledge/tests/main/merge_participants_idempotence.rs`,
+//!   because `merge_from_fold_coverage` short-circuits on
+//!   `AlreadyHasCanonical` and would answer a different question.
+//! * **B5 and B7.** An abandoned unit's effect on the corpus, and the
+//!   `total_shards` coverage gate, are their own bars.
 //!
-//! `#[ignore]`d, with the reason naming cw-lift 5g part 2. That is a
-//! **temporary marker, not a verdict**: a suite made green by hiding a known
-//! red is no greener than a zero-test run. Remove the attribute when the
-//! collector lands; until then this test is owed, not passing.
+//! A hazard this file steps around on purpose
+//! ------------------------------------------
+//! `NodeId`'s `Display` is `node-<hex of the first EIGHT bytes>`, and every
+//! partition directory name is built from it. `NodeId::from_u128(0x11)` and
+//! `from_u128(0x22)` therefore print IDENTICALLY, and two fixture peers whose
+//! ids share a 64-bit prefix collide on one partition directory — the merge
+//! then sees fewer shards and says nothing. The ids below differ in their HIGH
+//! bytes for that reason. Same reasoning, same words, as
+//! `commonwealth-knowledge/tests/main/merge_participants_coverage.rs`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use commonwealth_core::ids::HandoffId;
+use commonwealth_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
+use commonwealth_api::server::internal_router;
+use commonwealth_api::state::AppState;
+use commonwealth_app::AppRegistry;
+use commonwealth_core::ids::{HandoffId, MeshId};
 use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
+use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{
     actor_of, admit, body_json, sign_ring_op, Ed25519Verifier, Op, Person, RailAct, Roster,
     SignedOp, SigningKey,
 };
+use commonwealth_state::MeshStore;
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, Completion, Submission, UnitRef, WorkAct, WORK_NAMESPACE};
 use corpus_engine::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
@@ -89,15 +112,24 @@ use kernel_types::judgement::Reason;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
 use serde_json::json;
-use sovereign_mesh::ingest_executor::{IngestPayload, INGEST_KIND};
+use sovereign_mesh::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
 use tempfile::TempDir;
 
-/// The `<corpus>-partition-<node>` suffix each simulated donor writes under.
-/// Real values are node-id hex; the shape is all that is load-bearing here.
-const LEADER_NODE: &str = "node-leader";
-const PEER_NODE: &str = "node-peer";
+use crate::common;
+
+/// The two donor nodes. **The HIGH bytes must differ** — see the module docs.
+fn leader_node() -> NodeId {
+    NodeId::from_u128(0x11 << 120)
+}
+fn peer_node() -> NodeId {
+    NodeId::from_u128(0x22 << 120)
+}
 
 const EMBED_DIM: usize = 4;
+
+/// The instant every reading in this file asks the fold about. Well past the
+/// last act's timestamp, so nothing is still leased.
+const NOW_MS: u64 = 400_000;
 
 /// A term that appears ONLY in the leader donor's slice, and one that appears
 /// ONLY in the peer donor's. The whole verdict turns on whether the second is
@@ -119,7 +151,7 @@ fn actor(seed: u8) -> ActorKey {
 
 /// Two donors in one ring. `leader` is also the submitter — which is what the
 /// pre-registration names as the merge leader (`WorkHandoff.submitter`,
-/// `projection.rs:274`), so the leader's node is where a collector would run.
+/// `projection.rs:274`), so the leader's node is where the collector runs.
 fn ring() -> Roster {
     let mut m = BTreeMap::new();
     m.insert(Person::from("leader"), vec![actor_of(&key(1))]);
@@ -144,14 +176,14 @@ fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
     )
 }
 
-fn provenance(node: u128, name: &str) -> ComputeAttribution {
+fn provenance(node: NodeId, name: &str) -> ComputeAttribution {
     ComputeAttribution {
         repo_rev: "cw-lift-5g".into(),
         os: "linux".into(),
         arch: "x86_64".into(),
         toolchain: "rustc 1.90.0".into(),
         host: Server::Peer {
-            node: NodeId::from_u128(node),
+            node,
             name: name.into(),
         },
     }
@@ -187,8 +219,7 @@ fn completion(
     handoff: HandoffId,
     unit: &JobUnit,
     corpus: &str,
-    partition: &str,
-    node: u128,
+    node: NodeId,
     name: &str,
 ) -> WorkAct {
     WorkAct::Complete(Completion {
@@ -200,7 +231,7 @@ fn completion(
         ),
         result: json!({
             "corpus_id": corpus,
-            "partition_path": partition,
+            "partition_path": format!("{corpus}-partition-{node}"),
         }),
         provenance: provenance(node, name),
     })
@@ -210,11 +241,10 @@ fn completion(
 /// `ingest:v1` units for one corpus, leased and completed by two DIFFERENT
 /// actors, folded to terminal.
 ///
-/// Returns the projection and the handoff id. Asserts on the way out that the
-/// fold really did reach `Complete` with two distinct lessees — if that ever
-/// stops holding, the disk assertions below would be answering a question
-/// nobody asked.
-fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId, [JobUnit; 2]) {
+/// Asserts on the way out that the fold really did reach `Complete` with two
+/// distinct lessees — if that ever stops holding, everything below would be
+/// answering a question nobody asked.
+fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
     let handoff = HandoffId::from_u128(5_000_002); // stable, arbitrary
     let a = ingest_unit(corpus, 0, 0, 100);
     let b = ingest_unit(corpus, 1, 100, 200);
@@ -235,36 +265,35 @@ fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId, [JobUnit; 2]) {
             1,
             300,
             2,
-            &completion(handoff, &a, corpus, LEADER_NODE, 1, "leader"),
+            &completion(handoff, &a, corpus, leader_node(), "leader"),
         ),
         sign(
             2,
             310,
             1,
-            &completion(handoff, &b, corpus, PEER_NODE, 2, "peer"),
+            &completion(handoff, &b, corpus, peer_node(), "peer"),
         ),
     ];
 
     let projection =
         WorkProjection::fold(&admit(&ops, &[], &ring(), WORK_NAMESPACE, &Ed25519Verifier));
 
-    let now_ms = 400_000u64;
     let h = projection
         .handoffs
         .get(&handoff)
         .expect("the submission was admitted");
 
     assert_eq!(
-        h.phase_at(now_ms),
+        h.phase_at(NOW_MS),
         HandoffPhase::Complete,
         "the scenario requires a TERMINAL handoff — every signal green — before \
          anything is asked of the corpus. Got {:?}",
-        h.phase_at(now_ms),
+        h.phase_at(NOW_MS),
     );
 
     let lessees: Vec<ActorKey> = [&a, &b]
         .iter()
-        .map(|u| match h.units[&u.unit_hash].status_at(now_ms) {
+        .map(|u| match h.units[&u.unit_hash].status_at(NOW_MS) {
             WorkUnitStatus::Complete { lessee, .. } => lessee,
             other => panic!("unit {} is {other:?}, not Complete", u.unit_hash),
         })
@@ -276,18 +305,27 @@ fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId, [JobUnit; 2]) {
          actor ran both units is part 1's n=1 proof, not this one",
     );
 
-    (projection, handoff, [a, b])
+    (projection, handoff)
 }
 
 // ─────────────────────────────────────────────────────────────────
-// The disk — two nodes are two index dirs
+// The disk and the wire — two nodes are two index dirs and two sockets
 // ─────────────────────────────────────────────────────────────────
 
-fn engine_at(index_dir: &std::path::Path, node: &str) -> Arc<CorpusEngine> {
+fn embed_fn() -> EmbedFn {
+    Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.25_f32; EMBED_DIM]) }))
+}
+
+/// A `CorpusEngine` rooted at `index_dir` and told it is `node`. The node
+/// identity is what `partition_path` and `index_serve` both build the
+/// partition directory name from, so the two must be given the same one.
+fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
     let recipes = index_dir.join("..").join("recipes");
     std::fs::create_dir_all(&recipes).expect("recipes dir");
-    let embed: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.25_f32; EMBED_DIM]) }));
-    Arc::new(CorpusEngine::new(recipes, index_dir.to_path_buf(), embed).with_self_node_id(node))
+    Arc::new(
+        CorpusEngine::new(recipes, index_dir.to_path_buf(), embed_fn())
+            .with_self_node_id(node.to_string()),
+    )
 }
 
 /// Write one donor's finished slice into the partition directory the real
@@ -296,7 +334,7 @@ fn engine_at(index_dir: &std::path::Path, node: &str) -> Arc<CorpusEngine> {
 /// change to the layout breaks this test rather than silently detaching it.
 async fn write_donor_partition(
     index_dir: &std::path::Path,
-    node: &str,
+    node: NodeId,
     corpus: &str,
     unit_id: u32,
     term: &str,
@@ -337,45 +375,65 @@ async fn write_donor_partition(
     index.insert_batch(&rows).await.expect("insert_batch");
 
     // The engine clears this when the full pipeline finishes; `auto_recover`
-    // refuses to merge a partition still flagged in-progress
-    // (`auto_recover.rs:207-218`), so a simulated donor that skipped it would
-    // fail this test for a setup reason rather than for the gap.
+    // refuses to merge a partition still flagged in-progress, so a simulated
+    // donor that skipped it would fail this test for a setup reason rather
+    // than for the gap.
     index
         .mark_ingestion_complete()
         .expect("mark the slice finished");
 }
 
-/// What the leader's canonical corpus actually holds, after whatever merge the
-/// fold path could reach has run.
+/// An `AppState` for one node: its own id, its own index dir, and a mesh
+/// holding whatever `others` are reachable from it.
+///
+/// The mesh is what `peer_control_urls` reads to turn a `NodeId` from the fold
+/// into a base URL, so a donor that is not a member here is unreachable —
+/// which is the production behaviour, not a shortcut.
+fn node_state(self_id: NodeId, index_dir: &std::path::Path, others: &[(NodeId, &str)]) -> AppState {
+    let mut members = HashMap::new();
+    members.insert(
+        self_id,
+        common::member(self_id, "self", "127.0.0.1:9742".parse().expect("addr")),
+    );
+    for (id, addr) in others {
+        members.insert(
+            *id,
+            common::member(*id, "donor", addr.parse().expect("peer addr")),
+        );
+    }
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "cw-lift 5g part 2".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption: false,
+        members,
+        peers: vec![],
+    };
+    AppState::new_with_platform_and_engine(
+        self_id,
+        mesh,
+        Arc::new(MeshStore::in_memory().expect("in-memory mesh store")),
+        Arc::new(AppRegistry::new()),
+        Some(engine_at(index_dir, self_id)),
+    )
+}
+
+/// What the leader's canonical corpus actually holds after the merge.
 #[derive(Debug)]
 struct CanonicalProbe {
-    outcome: String,
     canonical_exists: bool,
     chunk_count: u64,
     leader_term_reachable: bool,
     peer_term_reachable: bool,
 }
 
-/// Run the ONLY merge a donor node can reach on the fold path, then read the
-/// canonical back.
-///
-/// `try_recover_stranded_partitions` is not chosen for convenience: it is the
-/// single merge call in `auto_ingest`'s sweep (`auto_ingest.rs:297`), and the
-/// fold path reaches no other. `coordinate_merge` is unreachable — see the
-/// module docs.
-async fn merge_as_the_fold_path_can_and_probe(
-    index_dir: &std::path::Path,
-    corpus: &str,
-) -> CanonicalProbe {
-    let outcome = format!(
-        "{:?}",
-        commonwealth_api::auto_recover::try_recover_stranded_partitions(index_dir, corpus).await
-    );
-
+async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -> CanonicalProbe {
     let canonical = index_dir.join(corpus);
     let Ok(index) = CorpusIndex::open(&canonical).await else {
         return CanonicalProbe {
-            outcome,
             canonical_exists: false,
             chunk_count: 0,
             leader_term_reachable: false,
@@ -394,7 +452,6 @@ async fn merge_as_the_fold_path_can_and_probe(
         }
     };
     CanonicalProbe {
-        outcome,
         canonical_exists: true,
         chunk_count: info.chunk_count,
         leader_term_reachable: reachable(LEADER_ONLY_TERM).await,
@@ -403,35 +460,188 @@ async fn merge_as_the_fold_path_can_and_probe(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// The reading
+// B2, first half — the pure read
 // ─────────────────────────────────────────────────────────────────
 
-/// **THE GAP.** Two donors, one corpus, one handoff, both units `Complete` —
-/// and the leader's canonical corpus is missing the peer donor's chunks.
+/// **B2 (first half).** The fold names both VERIFIED donors, both hosts to
+/// pull from, and the handoff the merge is keyed on — with nothing abandoned.
 ///
-/// Failing input, named (ARCH §18.1): the current tree. Nothing turns a
-/// terminal handoff and its two lessees into a shard collection, so the peer's
-/// partition stays on the peer's disk and the merge the leader CAN reach —
-/// `auto_recover`, which walks `<corpus>-partition-*/` under one index dir —
-/// never sees it.
+/// No corpus and no disk: `fold_coverage_for` is a pure function of a folded
+/// journal, this node's key, a corpus id and a clock reading. Everything the
+/// merge below is handed comes from here, so if this is wrong the merge is
+/// merging the wrong set and a green canonical would mean nothing.
 ///
-/// The negative control below is what makes this failure mean something: it
-/// runs the same harness with both partitions on ONE node and must PASS. Read
-/// them as a pair or read neither.
+/// Failing input, named and watched (ARCH §18.1): gate the collection loop on
+/// `&lessee == self_key`, so only this node's own contributions count. That is
+/// the local-donor-only defect moved down to the fold — the same shape the
+/// disk-derived path has — and it takes `expected` from 2 to 1.
+///
+/// WHAT THIS DOES NOT DISTINGUISH, and it is the subtle one: in this fixture
+/// each donor completes exactly one unit from exactly one host, so counting
+/// distinct VERIFIED actors and counting distinct SELF-REPORTED hosts both give
+/// 2. The rule `FoldCoverage` documents — `expected` counts actors, never hosts
+/// — is therefore NOT witnessed here. Witnessing it needs a donor that names
+/// two hosts for one lessee, which is B5's fixture shape, not this one.
+#[test]
+fn the_fold_names_both_verified_donors_and_where_to_find_them() {
+    const CORPUS: &str = "cw-lift-5g-coverage";
+    let (projection, handoff) = terminal_handoff(CORPUS);
+
+    let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
+        .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
+
+    assert_eq!(
+        coverage.handoff_id, handoff,
+        "the coverage must name the handoff the merge will be keyed on",
+    );
+
+    // `expected` counts distinct VERIFIED actors — the `lessee` admission
+    // checked — never the self-reported `provenance.host`. Two donors, two
+    // actors. Counting hosts would let one donor inflate coverage by naming
+    // extra nodes (ARCH §18.1: a guard asserting on a field the subject
+    // supplies).
+    assert_eq!(
+        coverage.expected, 2,
+        "two distinct lessees completed this handoff",
+    );
+
+    let mut nodes = coverage.nodes.clone();
+    nodes.sort();
+    let mut want = vec![leader_node(), peer_node()];
+    want.sort();
+    assert_eq!(
+        nodes, want,
+        "both donors' hosts must be named, or the merge cannot know where to \
+         pull the second partition from",
+    );
+
+    assert!(
+        coverage.abandoned.is_empty() && !coverage.is_partial(),
+        "no unit failed in this scenario, so nothing may be reported abandoned; \
+         got {:?}",
+        coverage.abandoned,
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// B3 — exactly one node merges
+// ─────────────────────────────────────────────────────────────────
+
+/// **B3.** Both donors fold the SAME journal. Only the submitter gets an
+/// answer; the other declines, and says so at `debug`.
+///
+/// Two nodes racing one output directory is its own failure and a passing B2
+/// does not imply it: B2 only ever asks the leader. This test asks the peer.
+///
+/// Failing input, named (ARCH §18.1): drop the `&handoff.submitter != self_key`
+/// arm from `fold_coverage_for` and the second assertion goes red — the peer
+/// gets the same coverage the leader does and both merge.
+///
+/// The paired positive is deliberate. `None` is also what a bug that never
+/// matches anything returns, so a test asserting only `None` passes just as
+/// happily against a function that always declines.
+#[test]
+fn only_the_submitter_reads_a_merge_out_of_the_fold() {
+    use std::io::Write;
+    use std::sync::Mutex;
+
+    const CORPUS: &str = "cw-lift-5g-leader";
+    let (projection, _handoff) = terminal_handoff(CORPUS);
+
+    // The positive control: the submitter DOES get an answer from this exact
+    // projection, so a `None` below is about the actor and not about the fold.
+    assert!(
+        fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS).is_some(),
+        "control: the submitter must lead this handoff, or the refusal below \
+         proves nothing",
+    );
+
+    /// A `MakeWriter` over a shared buffer, so the decline event can be read
+    /// back. Same shape as `tests/main/injection_order.rs`'s capture.
+    #[derive(Clone)]
+    struct BufWriter(Arc<Mutex<Vec<u8>>>);
+    impl Write for BufWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .expect("capture buffer")
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
+        type Writer = BufWriter;
+        fn make_writer(&self) -> BufWriter {
+            self.clone()
+        }
+    }
+
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let coverage = {
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(BufWriter(Arc::clone(&buf)))
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        fold_coverage_for(&projection, &actor(2), CORPUS, NOW_MS)
+    };
+
+    assert!(
+        coverage.is_none(),
+        "the non-submitter must decline. It folded the SAME journal and reached \
+         the same terminal handoff; if it also gets a coverage answer then two \
+         nodes merge into one output directory. Got {coverage:?}",
+    );
+
+    // Pre-registered instrument (B3): the decision must be visible at debug,
+    // naming the submitter it compared against — "nobody merged" and "two
+    // nodes merged" are indistinguishable after the fact otherwise.
+    let captured = String::from_utf8(buf.lock().expect("capture buffer").clone())
+        .expect("tracing output is utf-8");
+    assert!(
+        captured.contains("not the submitter"),
+        "the decline must be traced, not silent (ARCH §9.1). Captured:\n{captured}",
+    );
+    assert!(
+        captured.contains(&actor(1).to_string()) && captured.contains(&actor(2).to_string()),
+        "the trace must name BOTH the submitter it compared against and this \
+         node's own key, or an operator cannot tell which node should have \
+         acted. Captured:\n{captured}",
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// B2, second half — the merge, over a real socket
+// ─────────────────────────────────────────────────────────────────
+
+/// **B2 (second half) — THE BAR.** Two donors, two nodes, one corpus, one
+/// handoff. The leader's canonical corpus contains BOTH donors' chunks, and
+/// the term that only the REMOTE donor's slice carries is reachable by search.
+///
+/// This is B1's scenario with the collector wired. B1 measured
+/// `Recovered { chunks: 2 }` here with `peer-only term reachable : false`.
+///
+/// Failing input, named and watched (ARCH §18.1): truncate `coverage.nodes` to
+/// the local node before the merge — the shape of the original defect, where
+/// participants come from local disk instead of the fold. The merge then
+/// resolves one shard, `expected_partitions` is not armed against the missing
+/// donor, and the canonical comes back with 2 chunks and `narwhal` unreachable.
+///
+/// The count assertion is deliberately kept BELOW the query assertion: the
+/// query is the bar and the count is corroboration. A right count with an
+/// unreachable term would be a merge that wrote rows nothing can retrieve.
 #[tokio::test]
-#[ignore = "cw-lift 5g part 2: the fold-path shard collector does not exist yet — \
-            this is a WATCHED RED, not a passing test. Remove the ignore with the fix."]
-async fn two_donors_on_two_nodes_leave_the_canonical_missing_the_peers_chunks() {
-    // A corpus id unique to this test: `auto_recover` keeps a process-global
-    // 5-minute per-corpus cooldown (`auto_recover.rs:70-75`), so sharing an id
-    // with the control below would make whichever ran second return
-    // `InCooldown` and prove nothing.
+async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     const CORPUS: &str = "cw-lift-5g-two-nodes";
 
-    let (_projection, _handoff, _units) = terminal_handoff(CORPUS);
+    let (projection, _handoff) = terminal_handoff(CORPUS);
 
-    // Two nodes are two index directories. Nothing in the fold path copies
-    // between them.
+    // Two nodes are two index directories. Nothing copies between them except
+    // the HTTP pull below.
     let leader_home = TempDir::new().expect("leader tempdir");
     let peer_home = TempDir::new().expect("peer tempdir");
     let leader_dir = leader_home.path().join("indexes");
@@ -439,61 +649,110 @@ async fn two_donors_on_two_nodes_leave_the_canonical_missing_the_peers_chunks() 
     std::fs::create_dir_all(&leader_dir).expect("leader index dir");
     std::fs::create_dir_all(&peer_dir).expect("peer index dir");
 
-    write_donor_partition(&leader_dir, LEADER_NODE, CORPUS, 0, LEADER_ONLY_TERM).await;
-    write_donor_partition(&peer_dir, PEER_NODE, CORPUS, 1, PEER_ONLY_TERM).await;
+    write_donor_partition(&leader_dir, leader_node(), CORPUS, 0, LEADER_ONLY_TERM).await;
+    write_donor_partition(&peer_dir, peer_node(), CORPUS, 1, PEER_ONLY_TERM).await;
 
-    let probe = merge_as_the_fold_path_can_and_probe(&leader_dir, CORPUS).await;
+    // The peer serves its own partition from its own `internal_router`, so
+    // `GET /internal/index/serve` → `tar cf` → the wire → `tar xf` is inside
+    // this test rather than stubbed around it.
+    let peer_state = node_state(peer_node(), &peer_dir, &[]);
+    let peer_addr = common::spawn_router(internal_router(peer_state)).await;
+
+    // The leader knows the peer only as a mesh member with an address, which
+    // is what `peer_control_urls` resolves through `PeerTransport::endpoints`.
+    let leader_state = node_state(
+        leader_node(),
+        &leader_dir,
+        &[(peer_node(), &peer_addr.to_string())],
+    );
+
+    // ── The collector: the fold's answer, handed to the merge ──
+    let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
+        .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
+
+    let outcome = merge_from_fold_coverage(
+        &leader_state,
+        CORPUS,
+        coverage.handoff_id,
+        &coverage.nodes,
+        coverage.expected,
+    )
+    .await;
+
+    let probe = probe_canonical(&leader_dir, CORPUS).await;
 
     assert!(
         probe.peer_term_reachable,
-        "the canonical corpus is missing the peer donor's chunks.\n\
+        "the canonical corpus is missing the peer donor's chunks — this is B1's \
+         red, unchanged.\n\
          \n\
-         The handoff is TERMINAL and both units are `Complete`, reported by two \
-         different lessees — every signal on the work plane is green. The peer \
-         donor's two chunks (searchable by `{PEER_ONLY_TERM}`) were written to its \
-         own `{CORPUS}-partition-{PEER_NODE}/` and nothing on the fold path \
-         fetched them.\n\
+         The peer donor's two chunks (searchable by `{PEER_ONLY_TERM}`) were \
+         written to its own `{CORPUS}-partition-{}/` on a different index dir \
+         and served from a different socket. The fold named both donors; the \
+         merge was supposed to pull the second.\n\
          \n\
-         merge outcome on the leader : {}\n\
+         merge outcome               : {outcome:?}\n\
+         fold coverage               : expected={} nodes={:?}\n\
          canonical exists            : {}\n\
          canonical chunk_count       : {} (expected 4: 2 local + 2 peer)\n\
          leader-only term reachable  : {}\n\
          peer-only term reachable    : {}\n\
          \n\
-         `leader-only term reachable = true` says the harness DID merge and \
-         missed the peer; `false` with no canonical says the only merge the fold \
-         path can reach declined outright. Both are this gap. See \
-         `quality/campaigns/cw-lift-5g-part2-prereg.md` B1.",
-        probe.outcome,
+         See `quality/campaigns/cw-lift-5g-part2-prereg.md` B2.",
+        peer_node(),
+        coverage.expected,
+        coverage.nodes,
         probe.canonical_exists,
         probe.chunk_count,
         probe.leader_term_reachable,
         probe.peer_term_reachable,
     );
-
+    assert!(
+        probe.leader_term_reachable,
+        "the LOCAL donor's chunks went missing, which is a different defect \
+         than the one this bar is about and a worse one. outcome: {outcome:?}",
+    );
     assert_eq!(
         probe.chunk_count, 4,
-        "both donors' slices must land: 2 chunks each. Got {} — a reachable \
-         peer term with the wrong count is a partial merge, which is the same \
-         defect wearing a passing search.",
+        "both donors' slices must land whole: 2 chunks each. Got {} — a \
+         reachable peer term with the wrong count is a partial merge, which is \
+         the same defect wearing a passing search. outcome: {outcome:?}",
         probe.chunk_count,
     );
+
+    match outcome {
+        RecoveryOutcome::Recovered {
+            chunks,
+            shards_covered,
+        } => {
+            assert_eq!(chunks, 4, "the reported chunk count must be the real one");
+            assert_eq!(
+                shards_covered, 2,
+                "both donors' partitions were covered by this merge",
+            );
+        }
+        other => panic!(
+            "the merge must report the canonical it actually built; got {other:?}. \
+             A canonical holding both slices under a non-`Recovered` outcome would \
+             mean the caller is told nothing happened while the corpus changed."
+        ),
+    }
 }
 
-/// **THE NEGATIVE CONTROL.** The same scenario at n=1 — part 1's proof shape:
-/// two units, one machine, one partition directory per unit but both under one
-/// index dir. This MUST pass.
+/// **THE NEGATIVE CONTROL, retained from B1.** The same scenario at n=1 —
+/// part 1's proof shape: two units, one machine, both partition directories
+/// under one index dir, merged by the DISK-derived path this rung does not
+/// change (`try_recover_stranded_partitions`).
 ///
-/// Without it, the red above could be a harness that never merges anything at
-/// all and nobody would know (ARCH §18.1: a check with no failing input you
-/// can name, inverted — a red with no green you can name).
+/// It is kept because it controls for the fixture, not for the collector: if
+/// two partitions written by `write_donor_partition` cannot merge into a
+/// searchable canonical at all, then B2's green above would be about a
+/// different corpus shape than the one the reds were measured on. It also
+/// pins that the legacy path still works, which the collector's `continue`
+/// arm still falls through to for every corpus the fold cannot speak for.
 #[tokio::test]
-#[ignore = "cw-lift 5g part 2: paired negative control for the watched red above; \
-            run it with the same filter so the pair is read together."]
 async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
     const CORPUS: &str = "cw-lift-5g-one-node";
-
-    let (_projection, _handoff, _units) = terminal_handoff(CORPUS);
 
     let home = TempDir::new().expect("tempdir");
     let index_dir = home.path().join("indexes");
@@ -501,18 +760,21 @@ async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
 
     // The ONLY difference from the reading above: both partitions are under
     // one index dir, which is what a single machine running two units produces.
-    write_donor_partition(&index_dir, LEADER_NODE, CORPUS, 0, LEADER_ONLY_TERM).await;
-    write_donor_partition(&index_dir, PEER_NODE, CORPUS, 1, PEER_ONLY_TERM).await;
+    write_donor_partition(&index_dir, leader_node(), CORPUS, 0, LEADER_ONLY_TERM).await;
+    write_donor_partition(&index_dir, peer_node(), CORPUS, 1, PEER_ONLY_TERM).await;
 
-    let probe = merge_as_the_fold_path_can_and_probe(&index_dir, CORPUS).await;
+    let outcome = format!(
+        "{:?}",
+        commonwealth_api::auto_recover::try_recover_stranded_partitions(&index_dir, CORPUS).await
+    );
+    let probe = probe_canonical(&index_dir, CORPUS).await;
 
     assert!(
         probe.canonical_exists && probe.leader_term_reachable && probe.peer_term_reachable,
-        "the negative control failed, so the red above proves NOTHING — this \
-         harness does not merge even when both partitions are on one node. \
-         merge outcome: {} | canonical: {} | chunks: {} | leader term: {} | \
-         peer term: {}",
-        probe.outcome,
+        "the negative control failed, so B2's green proves LESS than it looks — \
+         this fixture cannot merge two partitions into a searchable canonical \
+         even when both are on one node. merge outcome: {outcome} | canonical: \
+         {} | chunks: {} | leader term: {} | peer term: {}",
         probe.canonical_exists,
         probe.chunk_count,
         probe.leader_term_reachable,

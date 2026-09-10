@@ -82,15 +82,13 @@ use std::collections::BTreeSet;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use commonwealth_work::actor::ActorKey;
+use commonwealth_work::executor::{subject_of, ExecuteFuture, JobContext, JobError, JobExecutor};
 use commonwealth_work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
-use kernel_types::{NodeId, Server};
-use commonwealth_work::executor::{
-    subject_of, ExecuteFuture, JobContext, JobError, JobExecutor,
-};
 use commonwealth_work::refusal::WorkRefusal;
 use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
 use kernel_types::quality::VerdictSource;
 use kernel_types::{Judgement, Reason};
+use kernel_types::{NodeId, Server};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 // Through `sovereign_contracts`' re-export, not a direct dep on `oicp-types`
@@ -197,9 +195,11 @@ impl IngestPayload {
                 .to_string());
         }
         if parsed.recipe_id.trim().is_empty() {
-            return Err("`recipe_id` is empty — a slice with no recipe cannot say how to \
+            return Err(
+                "`recipe_id` is empty — a slice with no recipe cannot say how to \
                         acquire, extract or embed anything"
-                .to_string());
+                    .to_string(),
+            );
         }
         Ok(parsed)
     }
@@ -650,7 +650,25 @@ pub fn fold_coverage_for(
     let want = JobKind::parse(INGEST_KIND).expect("`ingest:v1` is a valid JobKind by construction");
 
     for (handoff_id, handoff) in &proj.handoffs {
-        if handoff.kind != want || &handoff.submitter != self_key {
+        if handoff.kind != want {
+            continue;
+        }
+        // The leader decision, made visible. Every node folds this same
+        // journal and all but one of them take this branch, so a silent
+        // `continue` here is the single most load-bearing invisible decision
+        // in the collector (ARCH §9.1) — and "two nodes both merged" and
+        // "no node merged" are indistinguishable after the fact without it.
+        // Pre-registered as B3's instrument in
+        // `quality/campaigns/cw-lift-5g-part2-prereg.md`: it names the
+        // decision AND the submitter it compared against.
+        if &handoff.submitter != self_key {
+            tracing::debug!(
+                handoff = %handoff_id,
+                submitter = %handoff.submitter,
+                self_key = %self_key,
+                "fold_coverage_for: declining — this node is not the submitter of this \
+                 ingest handoff, so another node leads its merge"
+            );
             continue;
         }
         if !matches!(handoff.phase_at(now_ms), HandoffPhase::Complete) {
@@ -702,7 +720,9 @@ pub fn fold_coverage_for(
 /// then be merged into.
 fn corpus_of(handoff: &WorkHandoff) -> Option<String> {
     let unit = handoff.units.values().next()?;
-    IngestPayload::parse(&unit.unit.payload).ok().map(|p| p.corpus_id)
+    IngestPayload::parse(&unit.unit.payload)
+        .ok()
+        .map(|p| p.corpus_id)
 }
 
 #[cfg(test)]

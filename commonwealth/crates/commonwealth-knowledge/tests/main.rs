@@ -9,3 +9,5 @@
 
 #[path = "main/merge_participants_coverage.rs"]
 mod merge_participants_coverage;
+#[path = "main/merge_participants_idempotence.rs"]
+mod merge_participants_idempotence;
