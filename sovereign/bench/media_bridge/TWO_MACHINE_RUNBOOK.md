@@ -134,3 +134,59 @@ could-not-judge since 5e (`2a3437399`).
 
 Do the manual run FIRST and keep the measurement clean. Dogfood it as a second
 pass, where a harness bug cannot be mistaken for a transport result.
+
+---
+
+# LIVE RUN, 2026-09-10 — the reversed leg
+
+## Where this stands
+
+The first honest relayed reading was taken and it is **8.7 Mbit/s against a
+25 Mbit/s bar** (`relay-leg-TWO-MACHINE-probe.stdout`). The gate passed —
+`path=relayed direct=[]`, different public IPs — so it is a real relayed
+number, unlike `relay-leg-CONTAMINATED.stdout`.
+
+**It does not close the bar, because the SENDER was a laptop tethered to a
+phone.** Cellular uplink is typically 5-20 Mbit/s, so 8.7 may be the phone's
+upstream rather than the n0 relay.
+
+This section reverses the roles so the sender is NOT the cellular leg:
+RuggedFox serves from home broadband, the Mac pulls over cellular (whose
+DOWNlink is far faster than its uplink). If the reversed number also lands
+near 8.7, the relay is the ceiling and the bar fires cleanly. If it comes back
+materially higher, the first reading was the phone and the relay question is
+still open.
+
+## RuggedFox — already running
+
+    ./target/release/examples/media_bridge_bench gen    --file /tmp/media.bin --size-mb 1024
+    ./target/release/examples/media_bridge_bench origin --port 9810 --file /tmp/media.bin
+    ./target/release/examples/media_bridge_bench serve  --origin 127.0.0.1:9810
+
+## Mac — run these two, stay on the hotspot
+
+Copy the dial string whole, quotes included.
+
+    ./target/release/examples/media_bridge_bench bridge --iroh '7b8a0d81ca94eb77df3f044ace6c11d8bf4d37bd75bf027d4923545cb162e33a@https://usw1-1.relay.n0.iroh.link./,69.181.167.209:47800,100.115.12.21:47800,192.168.1.13:47800'
+
+It prints `bridge=127.0.0.1:NNNNN`. Put that port in the next line:
+
+    ./target/release/examples/media_bridge_bench pull --addr 127.0.0.1:NNNNN --path /media.bin --range 0-33554431 --label reversed-probe
+
+## WATCH FOR THIS — it would silently invalidate the run
+
+`100.115.12.21` is RuggedFox's Tailscale address and `192.168.1.13` is its LAN
+one. **If Tailscale is up on the Mac it may reach RuggedFox DIRECTLY over that
+address**, and the bench will report `path=direct` or `path=mixed` with a
+non-empty `direct=[…]`.
+
+That is a DISCARD, not a result. Drop Tailscale on the Mac and re-run. The
+bench's own `path=` line is the gate — the empty `direct=[]` is what makes a
+reading count.
+
+## If the reversed probe reads relayed and looks sane
+
+Then take the actual bar: three or more runs, 600 s each, full file rather than
+a 32 MiB range, reported as a distribution.
+
+    ./target/release/examples/media_bridge_bench pull --addr 127.0.0.1:NNNNN --path /media.bin --verify --label soak1
