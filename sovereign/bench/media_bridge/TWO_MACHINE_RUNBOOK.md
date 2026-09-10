@@ -42,16 +42,37 @@ One of the genuine `--release` exceptions.
     cargo build --release -p commonwealth-transport --features iroh \
       --example media_bridge_bench
 
+**Then invoke the built binary DIRECTLY.** Do not write the commands below as
+`cargo run …` with the subcommand bare: cargo consumes it and you get
+`unexpected argument 'gen'`. Going through cargo needs `--` between cargo's
+arguments and the example's, and the placeholder that used to stand here hid
+exactly that. The binary lands at:
+
+    ./target/release/examples/media_bridge_bench
+
 ## Mac — the holder
 
-    … --example media_bridge_bench -- gen --file /tmp/media.bin --size-mb 1024
-    … -- origin --port 9810 --file /tmp/media.bin
-    … -- serve --origin 127.0.0.1:9810          # prints  dial=…
+Three terminals: `origin` and `serve` both stay running.
+
+    ./target/release/examples/media_bridge_bench gen    --file /tmp/media.bin --size-mb 1024
+    ./target/release/examples/media_bridge_bench origin --port 9810 --file /tmp/media.bin
+    ./target/release/examples/media_bridge_bench serve  --origin 127.0.0.1:9810
+
+`serve` prints `dial=…`. That string goes to RuggedFox.
 
 ## RuggedFox — the viewer
 
-    … -- bridge --iroh '<dial string from the Mac>'   # prints bridge=127.0.0.1:NNNNN
-    … -- pull --addr 127.0.0.1:NNNNN --path /media.bin --verify --label run1
+`bridge` stays running; `pull` is the one that measures.
+
+    ./target/release/examples/media_bridge_bench bridge --iroh '<dial string from the Mac>'
+    # prints  bridge=127.0.0.1:NNNNN
+    ./target/release/examples/media_bridge_bench pull --addr 127.0.0.1:NNNNN \
+      --path /media.bin --verify --label run1
+
+Through cargo instead, if you prefer, the separator is not optional:
+
+    cargo run --release -p commonwealth-transport --features iroh \
+      --example media_bridge_bench -- gen --file /tmp/media.bin --size-mb 1024
 
 ## Forcing the relay — ONLY for the LAN fallback
 
