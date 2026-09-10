@@ -1550,3 +1550,286 @@ async fn sqlite_mem_raptor_scope_isolation() {
         1
     );
 }
+
+// ─── ConvBrowseReader — the Atlas browse surface (sv-surface D4) ───────
+//
+// Seven store reads power the desktop's six conversation-tiered atlas
+// commands. Two were already on `ConvTieredReader`; the other five were
+// INHERENT on `SqliteStateStore`, so the daemon — which holds
+// `Arc<dyn StateStore>` and `Arc<dyn ConvTieredReader>`, never the concrete
+// type — could not serve them. These tests exercise all seven THROUGH the
+// dyn object a route would hold. Calling the inherent methods here would
+// prove nothing the pre-existing tests do not already prove.
+
+fn mk_skeleton(
+    corpus_id: &str,
+    conv_uuid: &str,
+    state: &str,
+    overview: &str,
+    updated_at: i64,
+) -> sovereign_core::conv_tiered::ConvSkeletonRow {
+    sovereign_core::conv_tiered::ConvSkeletonRow {
+        corpus_id: corpus_id.to_string(),
+        conv_uuid: conv_uuid.to_string(),
+        state: state.to_string(),
+        skeleton_json: None,
+        overview: Some(overview.to_string()),
+        segments_json: None,
+        chunk_count: 3,
+        updated_at,
+    }
+}
+
+fn mk_raptor_node(
+    corpus_id: &str,
+    conv_uuid: &str,
+    node_id: &str,
+    level: i64,
+    entities: &str,
+) -> sovereign_core::conv_tiered::ConvRaptorNodeRow {
+    sovereign_core::conv_tiered::ConvRaptorNodeRow {
+        node_id: node_id.to_string(),
+        corpus_id: corpus_id.to_string(),
+        conv_uuid: conv_uuid.to_string(),
+        level,
+        summary: "a summary".to_string(),
+        summary_embedding: vec![0.1, 0.2],
+        centroid_embedding: vec![0.1, 0.2],
+        children_node_ids_json: "[]".to_string(),
+        direct_member_chunk_ids_json: Some("[10,11]".to_string()),
+        evidence_chunk_ids_json: "[10,11]".to_string(),
+        quote_spans_json: "[]".to_string(),
+        primary_entities_json: entities.to_string(),
+        cluster_coherence: 0.75,
+        created_at: 100,
+        prompt_version: "v1".to_string(),
+        summarizer_model: "test-model".to_string(),
+    }
+}
+
+/// One seeded conversation corpus: two convs in `vault-a` (one Ready with a
+/// RAPTOR tree, entities, a correction and extraction progress; one Pending),
+/// plus a sibling `vault-b` so every scoping assertion has something to
+/// exclude.
+async fn seeded_conv_store() -> SqliteStateStore {
+    let store = sqlite_store();
+    store
+        .save_conv_skeleton(&mk_skeleton(
+            "vault-a",
+            "conv-1",
+            "Ready",
+            "Borges on labyrinths",
+            300,
+        ))
+        .await
+        .unwrap();
+    store
+        .save_conv_skeleton(&mk_skeleton(
+            "vault-a",
+            "conv-2",
+            "Pending",
+            "Bach and counterpoint",
+            200,
+        ))
+        .await
+        .unwrap();
+    store
+        .save_conv_skeleton(&mk_skeleton("vault-b", "conv-9", "Ready", "unrelated", 100))
+        .await
+        .unwrap();
+    store
+        .save_conv_raptor_nodes(
+            "vault-a",
+            "conv-1",
+            &[
+                mk_raptor_node("vault-a", "conv-1", "n-root", 1, r#"["Borges","Calvino"]"#),
+                mk_raptor_node("vault-a", "conv-1", "n-leaf", 0, r#"["Borges"]"#),
+            ],
+        )
+        .await
+        .unwrap();
+    store
+        .upsert_summary_correction(
+            "vault-a",
+            "conv-1",
+            Some("call them mirrors, not labyrinths"),
+            Some("the old summary"),
+            "pending",
+            500,
+        )
+        .await
+        .unwrap();
+    store
+        .save_chunk_entities_for_conv(
+            "vault-a",
+            "conv-1",
+            &[
+                mk_entity_row("vault-a", 10, "Borges"),
+                mk_entity_row("vault-a", 10, "Calvino"),
+                mk_entity_row("vault-a", 11, "Borges"),
+            ],
+        )
+        .await
+        .unwrap();
+    store
+        .upsert_chunk_entity_progress(&sovereign_core::conv_tiered::ChunkEntityProgressRow {
+            corpus_id: "vault-a".to_string(),
+            chunks_processed: 11,
+            chunks_total: 42,
+            mentions_extracted: 3,
+            last_chunk_id: Some(11),
+            started_at: 1,
+            updated_at: 2,
+            finished_at: None,
+            state: "running".to_string(),
+            model_id: Some("gliner_small-v2.1".to_string()),
+            threshold: Some(0.5),
+            labels_json: Some(r#"["Person"]"#.to_string()),
+            error_msg: None,
+        })
+        .await
+        .unwrap();
+    store
+}
+
+/// The object a daemon route actually holds. Everything below goes through
+/// this, not through `SqliteStateStore`.
+async fn seeded_reader() -> std::sync::Arc<dyn sovereign_core::conv_tiered::ConvTieredReader> {
+    std::sync::Arc::new(seeded_conv_store().await)
+}
+
+#[tokio::test]
+async fn browse_lists_conv_corpora_with_state_buckets_through_the_dyn_reader() {
+    let reader = seeded_reader().await;
+    let corpora = reader.list_conv_corpora_with_state_buckets().await.unwrap();
+    assert_eq!(corpora.len(), 2, "both seeded corpora, got {corpora:?}");
+    let (id, total, max_updated, per_state) = corpora
+        .iter()
+        .find(|(id, ..)| id == "vault-a")
+        .expect("vault-a missing from the rollup")
+        .clone();
+    assert_eq!(id, "vault-a");
+    assert_eq!(total, 2, "vault-a holds two convs");
+    assert_eq!(max_updated, 300, "newest updated_at across the corpus");
+    assert_eq!(
+        per_state.len(),
+        2,
+        "Ready + Pending are separate buckets, got {per_state:?}"
+    );
+}
+
+#[tokio::test]
+async fn browse_pages_and_filters_conversations_through_the_dyn_reader() {
+    let reader = seeded_reader().await;
+
+    // Unfiltered page: total is the MATCHING count, not the page length.
+    let (page, total) = reader
+        .list_conversations_paginated("vault-a", None, 0, 1)
+        .await
+        .unwrap();
+    assert_eq!(page.len(), 1, "limit 1 returns one row");
+    assert_eq!(total, 2, "total counts every match, not the page");
+
+    // Substring filter on `overview`, case-insensitive.
+    let (hits, filtered_total) = reader
+        .list_conversations_paginated("vault-a", Some("LABYRINTH"), 0, 20)
+        .await
+        .unwrap();
+    assert_eq!(filtered_total, 1, "one overview matches, got {hits:?}");
+    assert_eq!(hits[0].conv_uuid, "conv-1");
+
+    // Scoping: the sibling corpus never leaks in.
+    let (_, other) = reader
+        .list_conversations_paginated("vault-b", None, 0, 20)
+        .await
+        .unwrap();
+    assert_eq!(other, 1, "vault-b holds exactly its own one conv");
+}
+
+#[tokio::test]
+async fn browse_gets_conv_skeleton_through_the_dyn_reader() {
+    let reader = seeded_reader().await;
+    let row = reader
+        .get_conv_skeleton("vault-a", "conv-1")
+        .await
+        .unwrap()
+        .expect("seeded conv must be readable through the trait");
+    assert_eq!(row.state, "Ready");
+    assert_eq!(row.overview.as_deref(), Some("Borges on labyrinths"));
+
+    // Absent conv is `None` — a fact about the conversation, and a
+    // different answer from the store refusing (see the core-side test).
+    assert!(reader
+        .get_conv_skeleton("vault-a", "never-enriched")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn browse_gets_active_correction_through_the_dyn_reader() {
+    let reader = seeded_reader().await;
+    let c = reader
+        .get_active_correction("vault-a", "conv-1")
+        .await
+        .unwrap()
+        .expect("the seeded correction must be readable through the trait");
+    assert_eq!(c.status, "pending");
+    assert_eq!(
+        c.correction_hint.as_deref(),
+        Some("call them mirrors, not labyrinths")
+    );
+    assert!(reader
+        .get_active_correction("vault-a", "conv-2")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn browse_aggregates_an_entity_through_the_dyn_reader() {
+    let reader = seeded_reader().await;
+    let agg = reader
+        .aggregate_entity("vault-a", "borges", 20, 10)
+        .await
+        .unwrap();
+    assert_eq!(agg.text, "Borges", "canonical surface form, case folded");
+    assert_eq!(agg.mention_count, 2, "chunks 10 and 11 both mention it");
+    assert_eq!(agg.chunk_count, 2);
+    assert_eq!(agg.conv_count, 1);
+    assert!(
+        agg.co_occurring.iter().any(|c| c.text == "Calvino"),
+        "Calvino shares chunk 10, got {:?}",
+        agg.co_occurring
+    );
+}
+
+#[tokio::test]
+async fn browse_reads_raptor_nodes_and_extraction_progress_through_the_dyn_reader() {
+    // The two of the seven that `ConvTieredReader` already carried. Kept
+    // here so one test file proves ALL SEVEN reach a route through one
+    // object, which is the claim the D4 route depends on.
+    let reader = seeded_reader().await;
+
+    let nodes = reader
+        .list_conv_raptor_nodes("vault-a", "conv-1")
+        .await
+        .unwrap();
+    assert_eq!(nodes.len(), 2);
+    assert_eq!(nodes[0].level, 1, "root first — level DESC");
+
+    let progress = reader
+        .get_chunk_entity_progress("vault-a")
+        .await
+        .unwrap()
+        .expect("seeded progress row");
+    assert_eq!(progress.chunks_processed, 11);
+    assert_eq!(progress.chunks_total, 42);
+
+    // A corpus that never ran extraction is `None`, not a zeroed row.
+    assert!(reader
+        .get_chunk_entity_progress("vault-b")
+        .await
+        .unwrap()
+        .is_none());
+}

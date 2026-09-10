@@ -219,6 +219,106 @@ pub struct VaultThemeRow {
     pub created_at: i64,
 }
 
+/// The one error every unimplemented [`ConvBrowseReader`] method returns.
+/// A single decider for the text (§10.6) so a route mapping it to 501 can
+/// match one shape, and so the method that refused always names itself.
+fn browse_unsupported(method: &str) -> crate::error::Error {
+    crate::error::Error::NotImplemented(format!(
+        "ConvBrowseReader::{method}: this store carries no conversation-tiered \
+         browse surface"
+    ))
+}
+
+/// The Atlas **browse** reads — the five conversation-tiered queries that
+/// exist to render a list, a detail pane or an entity drawer, and that no
+/// turn ever runs.
+///
+/// Split out rather than folded into [`ConvTieredReader`] (ARCH §5.1: a
+/// trait past ~8 methods wants a sub-trait shape; the retrieval trait is at
+/// seven). The two are different concerns with different callers:
+/// `ConvTieredReader` is what the briefing layer reads *while answering a
+/// question* — whole-conversation reads, one conv at a time.
+/// `ConvBrowseReader` is what a human staring at the corpus needs — paging,
+/// substring filtering, cross-corpus rollups, entity aggregation. A store
+/// can honestly serve one and not the other.
+///
+/// It is declared a **supertrait of `ConvTieredReader`** on purpose. That is
+/// the whole point of the split: `Runtime::lane_sources` already carries an
+/// `Option<Arc<dyn ConvTieredReader>>`, and every serving daemon already
+/// builds a `Runtime` — so a route reaches all seven atlas store reads
+/// through an object `ServingCore` already holds, with no upcast, no second
+/// field on `ServingCore`, and no widening of `StateStore` (which lives in
+/// `sovereign-contracts`, *below* this crate, and could not name these row
+/// types without dragging eleven of them down with it).
+///
+/// Every method defaults to [`crate::error::Error::NotImplemented`] naming
+/// itself. It never defaults to an empty page: a browse UI renders an empty
+/// page as "this corpus has no conversations", which is a different claim
+/// from "this store cannot answer that" (ARCH §18.3 — absence is reported,
+/// never defaulted).
+#[async_trait::async_trait]
+pub trait ConvBrowseReader: Send + Sync {
+    /// Every corpus that has ever been conv-tiered, with its state
+    /// histogram. One tuple per corpus: `(corpus_id, total,
+    /// max_updated_at, per_state)`.
+    ///
+    /// The tuple is the shape `SqliteStateStore` already returns and the
+    /// desktop already destructures; naming it is a separate change, not
+    /// this one's to smuggle in.
+    async fn list_conv_corpora_with_state_buckets(
+        &self,
+    ) -> crate::error::Result<Vec<(String, u64, i64, Vec<(String, u64)>)>> {
+        Err(browse_unsupported("list_conv_corpora_with_state_buckets"))
+    }
+
+    /// One page of a corpus's conversations, optionally filtered by
+    /// case-insensitive substring on `overview`. Returns the page slice
+    /// plus the total matching count (not the page length).
+    async fn list_conversations_paginated(
+        &self,
+        _corpus_id: &str,
+        _filter: Option<&str>,
+        _offset: u64,
+        _limit: u64,
+    ) -> crate::error::Result<(Vec<ConvSkeletonRow>, u64)> {
+        Err(browse_unsupported("list_conversations_paginated"))
+    }
+
+    /// One conversation's skeleton row. `None` = the tiered pass has never
+    /// run for this `(corpus_id, conv_uuid)`, which is a fact, not a
+    /// refusal.
+    async fn get_conv_skeleton(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+    ) -> crate::error::Result<Option<ConvSkeletonRow>> {
+        Err(browse_unsupported("get_conv_skeleton"))
+    }
+
+    /// The active user-authored summary correction for one conversation,
+    /// or `None` when the user has never flagged it.
+    async fn get_active_correction(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+    ) -> crate::error::Result<Option<SummaryCorrectionRow>> {
+        Err(browse_unsupported("get_active_correction"))
+    }
+
+    /// One entity's footprint inside a corpus — mention/conv/chunk counts,
+    /// label breakdown, top convs, co-occurring entities. `co_limit` and
+    /// `conv_limit` cap the two tail lists.
+    async fn aggregate_entity(
+        &self,
+        _corpus_id: &str,
+        _text: &str,
+        _co_limit: usize,
+        _conv_limit: usize,
+    ) -> crate::error::Result<EntityAggregateRow> {
+        Err(browse_unsupported("aggregate_entity"))
+    }
+}
+
 /// `SqliteStateStore` ships in `sovereign-store::sqlite`.
 ///
 /// Future ports (vault, SEP, corpus-wide RAPTOR) either impl this
@@ -226,7 +326,7 @@ pub struct VaultThemeRow {
 /// `TieredRetrievalSurface` per the spec's §"Retrieval surface —
 /// next session's trait" planning section.
 #[async_trait::async_trait]
-pub trait ConvTieredReader: Send + Sync {
+pub trait ConvTieredReader: ConvBrowseReader {
     async fn list_conv_skeletons_for_corpus(
         &self,
         corpus_id: &str,
@@ -293,4 +393,94 @@ pub trait ConvTieredReader: Send + Sync {
         &self,
         corpus_id: &str,
     ) -> crate::error::Result<Vec<VaultThemeRow>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A store with no conversation-tiered tables at all. It takes every
+    /// `ConvBrowseReader` default — which is the whole point of the test.
+    struct NoBrowseStore;
+    impl ConvBrowseReader for NoBrowseStore {}
+
+    /// The default path REFUSES, and says which method refused.
+    ///
+    /// The failure this pins is the one that reads as a feature: a default
+    /// of `Ok(vec![])` / `Ok(None)` compiles, satisfies every caller, and
+    /// renders in the Atlas browser as "this corpus has no conversations"
+    /// — a store's inability to answer, laundered into a claim about the
+    /// user's data (ARCH §18.3). Watched red on 2026-09-10 by replacing
+    /// each default body with the empty value: all four assertions below
+    /// fail, and nothing else in the workspace does.
+    #[tokio::test]
+    async fn browse_defaults_refuse_by_name_rather_than_returning_empty() {
+        let store = NoBrowseStore;
+
+        // A list read: not an empty page.
+        let err = store
+            .list_conv_corpora_with_state_buckets()
+            .await
+            .expect_err("a store with no conv-tiered tables must refuse, not report zero corpora");
+        assert!(
+            matches!(err, crate::error::Error::NotImplemented(_)),
+            "refusal must be the named NotImplemented variant so a route can map it to 501, got: {err:?}"
+        );
+        assert!(
+            err.to_string()
+                .contains("ConvBrowseReader::list_conv_corpora_with_state_buckets"),
+            "the refusal must name the method that refused, got: {err}"
+        );
+
+        // A paged read: not `(vec![], 0)`, which renders as "no matches".
+        let err = store
+            .list_conversations_paginated("c", None, 0, 20)
+            .await
+            .expect_err("paging an unsupported store must refuse, not report an empty page");
+        assert!(err
+            .to_string()
+            .contains("ConvBrowseReader::list_conversations_paginated"));
+
+        // An Option read: `None` here would mean "never enriched", which is
+        // a claim about the conversation, not about the store.
+        let err = store
+            .get_conv_skeleton("c", "conv-1")
+            .await
+            .expect_err("an unsupported store must refuse, not answer None");
+        assert!(err
+            .to_string()
+            .contains("ConvBrowseReader::get_conv_skeleton"));
+
+        let err = store
+            .get_active_correction("c", "conv-1")
+            .await
+            .expect_err("an unsupported store must refuse, not answer None");
+        assert!(err
+            .to_string()
+            .contains("ConvBrowseReader::get_active_correction"));
+
+        // An aggregate: a zero-count row is the most dangerous default of
+        // the five — it looks like a real measurement of an absent entity.
+        let err = store
+            .aggregate_entity("c", "Borges", 20, 10)
+            .await
+            .expect_err("an unsupported store must refuse, not report a zero-mention entity");
+        assert!(err
+            .to_string()
+            .contains("ConvBrowseReader::aggregate_entity"));
+    }
+
+    /// The supertrait edge is what makes the widening reach a route: a
+    /// holder of `Arc<dyn ConvTieredReader>` — which is exactly what
+    /// `Runtime::lane_sources.conv_tiered` carries — can call the browse
+    /// methods with no upcast. If this stops compiling, the daemon route
+    /// has lost its door.
+    #[test]
+    fn conv_tiered_reader_is_also_a_browse_reader() {
+        fn assert_browse<T: ConvTieredReader + ?Sized>() {}
+        fn _reaches_browse(r: &dyn ConvTieredReader) -> &dyn ConvBrowseReader {
+            r
+        }
+        assert_browse::<dyn ConvTieredReader>();
+    }
 }

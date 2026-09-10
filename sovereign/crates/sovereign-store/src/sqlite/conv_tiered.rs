@@ -5,6 +5,55 @@
 
 use super::*;
 
+// The browse half (sv-surface D4). Every method here delegates to the
+// inherent method of the same name — `SqliteStateStore::foo(self, ..)`
+// resolves to the inherent impl, which is what makes this a door and not a
+// second decider. The computation did not move; only who may call it did.
+#[async_trait::async_trait]
+impl ConvBrowseReader for SqliteStateStore {
+    async fn list_conv_corpora_with_state_buckets(
+        &self,
+    ) -> sovereign_core::error::Result<Vec<(String, u64, i64, Vec<(String, u64)>)>> {
+        SqliteStateStore::list_conv_corpora_with_state_buckets(self).await
+    }
+
+    async fn list_conversations_paginated(
+        &self,
+        corpus_id: &str,
+        filter: Option<&str>,
+        offset: u64,
+        limit: u64,
+    ) -> sovereign_core::error::Result<(Vec<ConvSkeletonRow>, u64)> {
+        SqliteStateStore::list_conversations_paginated(self, corpus_id, filter, offset, limit).await
+    }
+
+    async fn get_conv_skeleton(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> sovereign_core::error::Result<Option<ConvSkeletonRow>> {
+        SqliteStateStore::get_conv_skeleton(self, corpus_id, conv_uuid).await
+    }
+
+    async fn get_active_correction(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> sovereign_core::error::Result<Option<SummaryCorrectionRow>> {
+        SqliteStateStore::get_active_correction(self, corpus_id, conv_uuid).await
+    }
+
+    async fn aggregate_entity(
+        &self,
+        corpus_id: &str,
+        text: &str,
+        co_limit: usize,
+        conv_limit: usize,
+    ) -> sovereign_core::error::Result<sovereign_core::conv_tiered::EntityAggregateRow> {
+        SqliteStateStore::aggregate_entity(self, corpus_id, text, co_limit, conv_limit).await
+    }
+}
+
 #[async_trait::async_trait]
 impl ConvTieredReader for SqliteStateStore {
     async fn list_conv_skeletons_for_corpus(
