@@ -274,11 +274,46 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         )),
     )?;
 
+    // THE REGISTRY COMES FIRST, because the floor is asked BEFORE anything is
+    // published. This peer used to build its offer, append it, and only then
+    // register an executor — which is how a third-party donor came to
+    // advertise `process:v1` with nothing in front of a stranger's argv. The
+    // decider is `commonwealth-work`'s, so a donor built from this crate
+    // cannot get it wrong by forgetting to write it.
+    let mut registry = JobExecutorRegistry::new();
+    registry
+        .register(Arc::new(ProcessExecutor::new()))
+        .map_err(|e| e.to_string())?;
+
+    // `Subprocess` is what THIS peer provides: a child in its own process
+    // group, killed on timeout, and nothing else. It is stated here rather
+    // than assumed, and it is what the floor measures the executor's demand
+    // against.
+    const PEER_PROVIDES: Isolation = Isolation::Subprocess;
+    let partition = registry.offerable(std::slice::from_ref(&kind), PEER_PROVIDES);
+    for dropped in &partition.dropped {
+        eprintln!("work_peer: NOT offering {dropped}");
+    }
+    if partition.offerable.is_empty() {
+        // ABSTAIN, and say which — never a silent exit and never a failure.
+        // This peer lifting and building is one question; whether this build
+        // may donate is another, and collapsing them would report a working
+        // closure as a broken one (ARCH §18.3). Exit 3 is the lift
+        // instrument's could-not-judge.
+        eprintln!(
+            "work_peer: this build provides `{PEER_PROVIDES:?}` isolation and every \
+             offered kind demands more, so it publishes no offer and donates \
+             nothing. The package lifted and ran; it declined to execute a \
+             stranger's argv without a boundary."
+        );
+        std::process::exit(3);
+    }
+
     let offer = WorkOffer {
-        kinds: vec![kind],
+        kinds: partition.offerable,
         max_concurrent: 1,
         yield_to_foreground: false,
-        isolation: Isolation::Subprocess,
+        isolation: PEER_PROVIDES,
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         repos: Vec::new(),
@@ -287,11 +322,6 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     append(&journal, &key, &roster, &WorkAct::Offer(offer.clone()))?;
     let (os, arch, root) = (&offer.os, &offer.arch, cfg.root.display());
     eprintln!("work_peer: {me} offers {PROCESS_KIND} on {os}/{arch}, rail at {root}");
-
-    let mut registry = JobExecutorRegistry::new();
-    registry
-        .register(Arc::new(ProcessExecutor::new()))
-        .map_err(|e| e.to_string())?;
     let started = SystemTime::now();
     loop {
         let proj = fold(&journal, &roster)?;

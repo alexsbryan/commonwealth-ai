@@ -66,6 +66,21 @@ on the Linux host (rootless, SELinux on, userns available, three
 Containerfiles in `sovereign/container/`). Its own watched red is a unit
 that tries to read `node_key` or open a socket and FAILS.
 
+**IT COST D3, AND THE COST IS THE POINT.** The floor is
+`JobExecutorRegistry::offerable` in `commonwealth-work` — the package both
+donors link — rather than only in `sovereign-mesh`'s boot path, because a
+donor built from the package alone had no floor at all and the lifted peer
+(`examples/work_peer.rs`) was exactly that donor: it published `process:v1`
+and ran a stranger's argv with consent in front of it. With the floor
+reaching it, the peer publishes nothing and exits 3, so
+`scripts/cw-work-lift.sh --sandbox` reads **could-not-judge** where it read
+a measured 1. That is the honest verdict, not a regression: steps 1-4 still
+measure — the closure resolves, builds and passes its own tests outside the
+monorepo in ~10s — and only the donation abstains. Scoring it `{"value": 0}`
+would say the lift failed when a donor declined to do something unsafe.
+`cw-work-package-lift` therefore goes from `met` 1.0 to could-not-judge and
+comes back when this row graduates.
+
 **Known open beside it, both banked against cw-lift:** `JobRequirements`
 carries no isolation field and `WorkOffer.isolation` is written by every
 donor and read by nothing, so a submitter cannot demand isolation and
@@ -74,8 +89,8 @@ vocabulary exists for a check that was never reachable. And a donor cannot
 bind an `accept_from` key to the peer it names.
 
 **Review by 2026-11-01.** If no container executor has landed by then, D2
-is not merely unproven — say so, and decide whether the work plane ships
-`ingest:v1` only.
+and D3 are not merely unproven — say so, and decide whether the work plane
+ships `ingest:v1` only.
 
 ### Merge coverage bar — `MergePlan::expected_partitions`, shipped UNSET (2026-09-09)
 

@@ -266,36 +266,30 @@ pub fn resolve_offer(
     // at `warn` — never silently, which would be the §18.3 substitution. If
     // that empties the offer, this node publishes none and donates nothing,
     // which is exactly the shipped posture for a node that offers no kind.
-    let mut offerable: Vec<JobKind> = Vec::new();
-    for kind in &offer.kinds {
-        let Some(executor) = registry.resolve(kind) else {
-            return Err(OfferRefused::UnregisteredKind {
-                kind: kind.clone(),
-                registered: registry.kinds(),
-            });
-        };
-        // The other half of the same question, and the refusal the predicate's
-        // own docs say the REGISTRY decides: a unit does not carry its
-        // isolation requirement, its executor's descriptor does. An executor
-        // this build cannot isolate as strongly as it demands is not offered.
-        let required = executor.descriptor().isolation;
-        if !DONOR_ISOLATION.covers(required) {
-            warn!(
-                target: TRACE_TARGET,
-                kind = %kind,
-                required = ?required,
-                provides = ?DONOR_ISOLATION,
-                "work donor: NOT offering this kind — its executor requires \
-                 isolation this build does not provide, so a unit of it would \
-                 run with this node's user, filesystem and network behind \
-                 nothing but consent. The config is left alone; the kind is \
-                 dropped from the offer. A container-backed executor is what \
-                 lifts this, not a config key"
-            );
-            continue;
-        }
-        offerable.push(kind.clone());
+    // The partition is `commonwealth-work`'s, not this module's — the floor
+    // has to reach a donor built from the package alone, and a second copy
+    // here is the §10.6 twin this campaign has now closed three times.
+    let partition = registry.offerable(&offer.kinds, DONOR_ISOLATION);
+    if let Some(kind) = partition.unregistered.first() {
+        return Err(OfferRefused::UnregisteredKind {
+            kind: kind.clone(),
+            registered: registry.kinds(),
+        });
     }
+    for dropped in &partition.dropped {
+        warn!(
+            target: TRACE_TARGET,
+            kind = %dropped.kind,
+            required = ?dropped.required,
+            provides = ?dropped.provides,
+            "work donor: NOT offering this kind — {dropped}, so a unit of it \
+             would run with this node's user, filesystem and network behind \
+             nothing but consent. The config is left alone; the kind is \
+             dropped from the offer. A container-backed executor is what \
+             lifts this, not a config key"
+        );
+    }
+    let offerable = partition.offerable;
     if offerable.is_empty() {
         info!(
             target: TRACE_TARGET,

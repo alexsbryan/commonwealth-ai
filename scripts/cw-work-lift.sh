@@ -26,6 +26,21 @@
 #   rc 3                        could-not-judge: a precondition of the RUN is
 #                               absent (no cargo, no python3, dependencies
 #                               unresolvable). Nothing was measured.
+#                               SINCE 2026-09-10 there is a second cause and it
+#                               is the shipped one: the peer applies
+#                               `commonwealth-work`'s isolation floor, and no
+#                               build in this tree provides the container
+#                               `process:v1` demands, so it publishes no offer
+#                               and exits 3 naming that. Steps 1-4 still MEASURE
+#                               — the closure resolves, builds and passes its
+#                               own tests outside the monorepo — and only step 5
+#                               abstains. Reporting that as `{"value": 0}` would
+#                               say the lift failed when what happened is that a
+#                               donor declined to run a stranger's argv without a
+#                               boundary (ARCH §18.3). It goes back to a measured
+#                               1 when a container-backed executor exists; see
+#                               the `process:v1` row in
+#                               `sovereign/DEFAULTS_LEDGER.md`.
 #   rc 2                        usage
 #   rc 127                      instrument-missing (the runner's own reading
 #                               when this file does not exist)

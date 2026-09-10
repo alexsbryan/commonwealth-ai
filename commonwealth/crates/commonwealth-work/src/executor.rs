@@ -58,7 +58,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use kernel_types::{Judgement, Reason, Verdict};
-use oicp_types::{JobExecutorDescriptor, JobKind, JobUnit};
+use oicp_types::{Isolation, JobExecutorDescriptor, JobKind, JobUnit};
 use serde_json::Value;
 
 use crate::refusal::WorkRefusal;
@@ -334,6 +334,42 @@ pub struct JobExecutorRegistry {
     by_kind: BTreeMap<JobKind, Arc<dyn JobExecutor>>,
 }
 
+/// A kind this build declines to offer, and the demand it could not meet.
+///
+/// Carries `provides` alongside `required` so the sentence a caller writes
+/// names BOTH ends — an operator told only what was required cannot tell
+/// whether to change the config or the build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DroppedKind {
+    /// The kind that will not be offered.
+    pub kind: JobKind,
+    /// What its executor demands.
+    pub required: Isolation,
+    /// What this build actually provides.
+    pub provides: Isolation,
+}
+
+impl std::fmt::Display for DroppedKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "`{}` requires `{:?}` isolation and this build provides `{:?}`",
+            self.kind, self.required, self.provides
+        )
+    }
+}
+
+/// The partition [`JobExecutorRegistry::offerable`] returns.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct OfferableKinds {
+    /// Kinds this node may publish.
+    pub offerable: Vec<JobKind>,
+    /// Kinds the isolation floor declined, each naming both ends.
+    pub dropped: Vec<DroppedKind>,
+    /// Kinds with no executor at all — the operator's typo, not a floor.
+    pub unregistered: Vec<JobKind>,
+}
+
 impl JobExecutorRegistry {
     pub fn new() -> JobExecutorRegistry {
         JobExecutorRegistry {
@@ -377,6 +413,49 @@ impl JobExecutorRegistry {
     /// Every descriptor, for a node publishing what it can do.
     pub fn descriptors(&self) -> Vec<JobExecutorDescriptor> {
         self.by_kind.values().map(|e| e.descriptor()).collect()
+    }
+
+    /// **THE ISOLATION FLOOR — one decider, every donor** (ARCH §10.6).
+    ///
+    /// Which of `wanted` this node may OFFER, given the isolation its build
+    /// actually `provides`. A kind whose executor demands more is DROPPED,
+    /// with what it demanded, so the caller can name the drop rather than
+    /// swallow it (ARCH §18.3).
+    ///
+    /// It lives here, in the package both donors link, because it was in
+    /// `sovereign-mesh`'s boot decision alone until 2026-09-10 and a donor
+    /// built from this crate therefore had no floor at all — the lifted peer
+    /// (`examples/work_peer.rs`) published `process:v1` and ran a stranger's
+    /// argv with nothing in front of it. That is the same hole, in the same
+    /// shape, as `lease_state` and `host_satisfies` before they came home:
+    /// a decision a second donor has to re-derive is a decision a second
+    /// donor gets WRONG, and this one is the security-relevant member of the
+    /// set. A caller may not skip it and still be a donor.
+    ///
+    /// `unregistered` is kept apart from `dropped` because the two are not
+    /// the same failure: an unregistered kind is the operator's typo and the
+    /// daemon refuses to boot on it, while a dropped kind is this build
+    /// declining to do something unsafe under a config that was valid when it
+    /// was written.
+    pub fn offerable(&self, wanted: &[JobKind], provides: Isolation) -> OfferableKinds {
+        let mut out = OfferableKinds::default();
+        for kind in wanted {
+            let Some(executor) = self.resolve(kind) else {
+                out.unregistered.push(kind.clone());
+                continue;
+            };
+            let required = executor.descriptor().isolation;
+            if provides.covers(required) {
+                out.offerable.push(kind.clone());
+            } else {
+                out.dropped.push(DroppedKind {
+                    kind: kind.clone(),
+                    required,
+                    provides,
+                });
+            }
+        }
+        out
     }
 
     pub fn is_empty(&self) -> bool {
@@ -579,5 +658,96 @@ mod tests {
         assert_eq!(j.verdict(), Verdict::Failed);
         assert_eq!(result, json!({"stub": true}));
         assert_eq!(reg.kinds(), vec![kind("process:v1")]);
+    }
+
+    // ───── the isolation floor ─────
+
+    /// A registry holding one executor that demands `required`.
+    fn reg_demanding(k: &str, required: Isolation) -> JobExecutorRegistry {
+        let mut reg = JobExecutorRegistry::new();
+        reg.register(Arc::new(DemandingExecutor {
+            kind: kind(k),
+            required,
+        }))
+        .expect("register");
+        reg
+    }
+
+    struct DemandingExecutor {
+        kind: JobKind,
+        required: Isolation,
+    }
+
+    impl JobExecutor for DemandingExecutor {
+        fn descriptor(&self) -> JobExecutorDescriptor {
+            JobExecutorDescriptor {
+                kind: self.kind.clone(),
+                isolation: self.required,
+                parameters: json!({"type": "object"}),
+                examples: Vec::new(),
+                idempotency: oicp_types::tool::Idempotency::Idempotent,
+                lease_interval_ms: 1_000,
+                est_secs: None,
+                could_not_judge_exits: Vec::new(),
+                verdict: kernel_types::quality::VerdictSource::ExitCode,
+            }
+        }
+        fn validate(&self, _unit: &JobUnit) -> Result<(), WorkRefusal> {
+            Ok(())
+        }
+        fn execute<'a>(&'a self, _u: &'a JobUnit, _c: &'a JobContext) -> ExecuteFuture<'a> {
+            unreachable!("the floor never runs a unit")
+        }
+    }
+
+    /// **THE FLOOR (ARCH §18.1).** The failing input is the shipped shape: an
+    /// executor that demands a container on a build that provides a bare
+    /// subprocess. Before this decider lived here, `sovereign-mesh`'s boot
+    /// path had it and a donor built from this crate alone had NOTHING —
+    /// which is how the lifted peer came to publish `process:v1` and run a
+    /// stranger's argv with only consent in front of it.
+    #[test]
+    fn a_kind_demanding_more_than_this_build_provides_is_dropped_naming_both_ends() {
+        let reg = reg_demanding("risky:v1", Isolation::RootlessContainer);
+        let p = reg.offerable(&[kind("risky:v1")], Isolation::Subprocess);
+        assert!(p.offerable.is_empty(), "a demand unmet is not offerable");
+        assert!(
+            p.unregistered.is_empty(),
+            "it IS registered — that is not the failure"
+        );
+        assert_eq!(p.dropped.len(), 1);
+        let said = p.dropped[0].to_string();
+        assert!(
+            said.contains("risky:v1")
+                && said.contains("RootlessContainer")
+                && said.contains("Subprocess"),
+            "the drop must name the kind, the demand AND what this build \
+             provides — told only the demand, an operator cannot tell whether \
+             to change the config or the build: {said}"
+        );
+    }
+
+    /// The control, and the direction that must not over-refuse: a demand this
+    /// build MEETS is offered. `covers` is upward-only, so a stronger build
+    /// running a weaker demand is fine and must not be dropped.
+    #[test]
+    fn a_demand_this_build_meets_or_exceeds_is_offered() {
+        let reg = reg_demanding("safe:v1", Isolation::InProcess);
+        let p = reg.offerable(&[kind("safe:v1")], Isolation::Subprocess);
+        assert_eq!(p.offerable, vec![kind("safe:v1")]);
+        assert!(p.dropped.is_empty(), "Subprocess covers InProcess");
+    }
+
+    /// An unregistered kind is the operator's typo and stays a SEPARATE
+    /// answer. Collapsing the two would let a caller refuse a boot over a
+    /// safety drop, or shrug off a typo as a safety drop — the two need
+    /// different sentences and different consequences.
+    #[test]
+    fn an_unregistered_kind_is_not_reported_as_an_isolation_drop() {
+        let reg = reg_demanding("safe:v1", Isolation::InProcess);
+        let p = reg.offerable(&[kind("ghost:v1")], Isolation::Subprocess);
+        assert_eq!(p.unregistered, vec![kind("ghost:v1")]);
+        assert!(p.dropped.is_empty());
+        assert!(p.offerable.is_empty());
     }
 }
