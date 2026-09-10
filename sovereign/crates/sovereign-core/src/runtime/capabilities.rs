@@ -157,6 +157,12 @@ mod tests {
         Arc::new(AutoApprovalChannel)
     }
 
+    /// Two calls give two distinct allocations, so `Arc::ptr_eq` can tell an
+    /// installed sink from any other.
+    fn sink() -> Arc<dyn RoutingEventSink> {
+        Arc::new(crate::traits::NoOpRoutingEventSink)
+    }
+
     #[tokio::test]
     async fn a_scoped_turn_sees_its_channel_and_an_unscoped_one_sees_none() {
         assert!(current().is_none(), "no scope, no ambient channel");
@@ -194,5 +200,163 @@ mod tests {
             "a spawned child inherits NO scope — reading inside it would \
              silently fall back to the host's channel"
         );
+    }
+
+    /// The G7 twin of the test above. Written because `scope_routing_events`
+    /// shipped untested: the sink is the half that is SILENT when it is
+    /// wrong — a lost clarification card looks like a model that had nothing
+    /// to ask, not like a dropped event.
+    #[tokio::test]
+    async fn a_routing_scoped_turn_sees_its_sink_and_an_unscoped_one_sees_none() {
+        assert!(
+            current_routing_events().is_none(),
+            "no scope, no ambient sink"
+        );
+        let installed = sink();
+        let seen = scope_routing_events(Some(Arc::clone(&installed)), async {
+            current_routing_events()
+        })
+        .await;
+        assert!(
+            Arc::ptr_eq(&seen.expect("inside the scope"), &installed),
+            "the turn reads the sink its host installed, not another"
+        );
+        assert!(
+            current_routing_events().is_none(),
+            "the scope ends with the turn"
+        );
+    }
+
+    /// The read-before-spawn property for the sink. `Runtime::turn_routing_events`
+    /// is called at ~20 sites that hand the result to a `tokio::spawn`ed
+    /// child — `streaming.rs`'s gate-progress reader, `conation.rs`'s
+    /// lesson capture. Every one of them is only correct because the read
+    /// happens in the turn's own task; reading inside the child would fall
+    /// back to the commissioned member, which on the daemon is the no-op sink.
+    #[tokio::test]
+    async fn the_ambient_sink_must_be_read_before_the_spawn_not_inside_it() {
+        let installed = sink();
+        let (carried, found_inside) = scope_routing_events(Some(Arc::clone(&installed)), async {
+            let carried = current_routing_events().expect("ambient in the turn's own task");
+            let found_inside = tokio::spawn(async { current_routing_events().is_some() })
+                .await
+                .unwrap();
+            (carried, found_inside)
+        })
+        .await;
+
+        assert!(
+            Arc::ptr_eq(&carried, &installed),
+            "the value read before the spawn is the turn's own"
+        );
+        assert!(
+            !found_inside,
+            "a spawned child inherits NO scope — reading inside it would \
+             silently fall back to the host's sink, which on the daemon \
+             drops every event"
+        );
+    }
+
+    /// `scope_turn` is not "install both or install neither": the daemon's
+    /// three turn arms pass whatever the socket actually has, and a host with
+    /// one capability and not the other must get exactly that. All four arms,
+    /// because the match in `scope_turn` has four and an untested arm is an
+    /// arm that can be typed wrong.
+    #[tokio::test]
+    async fn scope_turn_installs_each_capability_independently() {
+        let a = channel();
+        let r = sink();
+        let read = || async { (current(), current_routing_events()) };
+
+        let (ca, cr) = scope_turn(Some(Arc::clone(&a)), Some(Arc::clone(&r)), read()).await;
+        assert!(
+            ca.is_some_and(|c| Arc::ptr_eq(&c, &a)) && cr.is_some_and(|c| Arc::ptr_eq(&c, &r)),
+            "both installed: the turn must see both"
+        );
+
+        let (ca, cr) = scope_turn(Some(Arc::clone(&a)), None, read()).await;
+        assert!(
+            ca.is_some() && cr.is_none(),
+            "approval only: the sink must fall through to the commissioned member"
+        );
+
+        let (ca, cr) = scope_turn(None, Some(Arc::clone(&r)), read()).await;
+        assert!(
+            ca.is_none() && cr.is_some(),
+            "sink only: the channel must fall through to the commissioned member"
+        );
+
+        let (ca, cr) = scope_turn(None, None, read()).await;
+        assert!(
+            ca.is_none() && cr.is_none(),
+            "neither installed: an in-process host reads exactly what it always did"
+        );
+    }
+
+    /// Regression for ce3e6e4a2 — the stack overflow that landed with the
+    /// second scope and shipped with no test.
+    ///
+    /// A `task_local` scope stores the inner future INLINE. Nesting the two
+    /// helpers therefore builds the turn's state machine once for the inner
+    /// scope and again for the outer, on the caller's stack, before anything
+    /// is boxed — and a debug-built `serve_turn` is large enough that the
+    /// doubling aborts the process (observed as two `turn_surface` tests
+    /// SIGABRTing). `scope_turn`'s fix is ONE `Box::pin` with both
+    /// task-locals around it.
+    ///
+    /// The bar is asserted as a SIZE and not as a literal overflow: a test
+    /// that overflowed on regression would abort the whole test binary
+    /// instead of failing one case, which is a worse signal than the bug.
+    /// Both shapes are constructed here, so the assertion names its own
+    /// failing input — swap `Box::pin(turn())` for `turn()` in `scope_turn`
+    /// and the second number becomes the first.
+    #[tokio::test]
+    async fn scope_turn_boxes_the_turn_once_for_both_scopes() {
+        /// Stands in for a turn: a state machine big enough that carrying it
+        /// twice is the difference between fitting on the stack and not.
+        fn turn() -> impl Future<Output = usize> {
+            async {
+                let pad = [0u8; 32 * 1024];
+                tokio::task::yield_now().await;
+                std::hint::black_box(&pad).len()
+            }
+        }
+
+        let raw = std::mem::size_of_val(&turn());
+        assert!(
+            raw >= 32 * 1024,
+            "instrument check: the probe future is only {raw} bytes, so it \
+             cannot show the difference this test exists to measure"
+        );
+
+        // What `scope_turn` does today: box once, then both task-locals
+        // around the pointer.
+        let boxed_once = TURN_APPROVAL.scope(
+            channel(),
+            TURN_ROUTING_EVENTS.scope(sink(), Box::pin(turn())),
+        );
+        // What nesting the two public helpers does: each scope holds the
+        // thing below it inline, so the turn is built on the stack twice.
+        let nested_inline =
+            TURN_APPROVAL.scope(channel(), TURN_ROUTING_EVENTS.scope(sink(), turn()));
+
+        let one = std::mem::size_of_val(&boxed_once);
+        let two = std::mem::size_of_val(&nested_inline);
+        assert!(
+            one < raw / 8,
+            "scope_turn no longer boxes before scoping: the scoped future is \
+             {one} bytes against a {raw}-byte turn, so the turn is inline in \
+             the task-local scope again and a debug-built serve_turn will \
+             overflow the stack (ce3e6e4a2)"
+        );
+        assert!(
+            two >= raw,
+            "instrument check: the un-boxed shape measured {two} bytes for a \
+             {raw}-byte turn, so this test is not measuring inline storage \
+             and its verdict above means nothing"
+        );
+
+        drop(nested_inline);
+        assert_eq!(boxed_once.await, 32 * 1024, "the scoped turn still runs");
     }
 }

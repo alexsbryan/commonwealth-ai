@@ -572,6 +572,45 @@ status    = "active"
 #       document_op.rs:233,268 and attached_doc.rs:278,373,670,718. The card
 #       fires in-process and vanishes on the wire. Boundary test owed.
 #
+#   PRE-REGISTERED 2026-09-10, BEFORE the RB1-RB6 commits land (18.6): the
+#   fixes change the turn socket's LIFECYCLE (a TurnSettled notice + idle
+#   close), cancel's reach (the parked desk), refusal FRAMING (ResolveAck,
+#   not StreamError), the desktop's lead-frame handling and its per-
+#   conversation wire slot, and which sink the clarification card reaches.
+#   None of them touches retrieval, routing, prompt assembly or synthesis;
+#   token order inside a turn is unchanged by construction. Expected on
+#   `svrn quality check` (chat-ask, routing, retrieval-prod, synth,
+#   throughput, enrichment-f1, knowledge-gym, chaos-monkey): NEUTRAL on
+#   every lane vs the committed baseline within RUNBOOK §6's noise band.
+#   A reddened lane indicts the FACTOR (a frame the client now treats
+#   differently — TurnSettled, ResolveAck — or a socket closed under a
+#   lane's own harness), not the answers; a chaos-monkey improvement is
+#   plausible (leaked sockets no longer accumulate) and is reported, not
+#   claimed. Run after the three RB commits; table persisted under
+#   target/quality-check/<stamp>/summary.json; verdict lands on this row.
+#
+#   NET-DELETION ACCOUNTING, measured 2026-09-10 (`git show --shortstat
+#   -- '*.rs'` over the 15 sv-surface commits R1..3c7ad5933, Rust only):
+#   +3,427 / -892 = NET +2,535. The deletion targets it must pay against:
+#   state.rs + state/builders/ = 3,098 lines, commands/ = 10,998 lines,
+#   16 is_attach_mode forks. Nothing on the ledger is negative yet; the
+#   RB fixes above will ADD (a notice variant, a map, tests) before the
+#   deletion half subtracts. No number reported as a result until then.
+#
+#   LANDED 2026-09-10, each watched red on a real socket or a real turn:
+#     RB1+RB2+RB4  188a9e4e4 (mesh, contracts, turn-client, server ws)
+#     RB3+RB5+C4   759ea5133 (desktop; forks 16 -> 15; census re-pinned
+#                  on next_frame().await == 1)
+#     RB6+C6+T3    the core commit below this row's sha (handlers off
+#                  the no-op sink 13 -> 1 read sites; boundary census
+#                  turn_capability_census.rs; capabilities tests)
+#   Gate for the batch: workspace lint --full clean, sovereign-test full
+#   12716/12716, real-mode journeys 5/5 against the settled-socket daemon.
+#   Open from the batch: the agentic (non-streaming) path persists no
+#   finish_reason, so a cancelled agentic Complete carries None (core);
+#   narration sites in document_op/attached_doc are census-covered but
+#   have no behavioural test (needs a document fixture).
+#
 #   ALSO COUNTED: 16 is_attach_mode decision points at HEAD vs the 15 above —
 #   conversation.rs:641, added by 0f76bde5c (G3b), and it double-folds the
 #   searched sources now that Local rides the wire. Plus four new

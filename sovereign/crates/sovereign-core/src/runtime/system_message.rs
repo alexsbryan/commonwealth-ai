@@ -749,9 +749,14 @@ impl Runtime {
         // was introduced to fix only affects the streaming
         // post-stream refinement path, which dispatches the
         // typed outcome via `run_post_stream_refinement` below.
+        // C6: the TURN's channel, not the commissioned member. On the
+        // daemon's non-streaming turn the member is the auto-granting
+        // host channel, so MessageRefined / LessonProposed never reached
+        // the socket and the UI stuck on "Refining your answer".
+        let approval = self.turn_approval();
         match run_collaboration(
             self.inference.as_ref(),
-            self.approval.as_ref(),
+            approval.as_ref(),
             &self.inference_config,
             conversation_id,
             question,
@@ -799,9 +804,14 @@ impl Runtime {
         evidence: &str,
         original_metadata: Option<serde_json::Value>,
     ) -> Option<String> {
+        // C6: the TURN's channel, not the commissioned member. On the
+        // daemon's non-streaming turn the member is the auto-granting
+        // host channel, so MessageRefined / LessonProposed never reached
+        // the socket and the UI stuck on "Refining your answer".
+        let approval = self.turn_approval();
         run_post_stream_refinement(
             self.inference.as_ref(),
-            self.approval.as_ref(),
+            approval.as_ref(),
             self.store.as_ref(),
             &self.inference_config,
             conversation_id,

@@ -896,3 +896,279 @@ async fn ask_path_emits_deliberation_chip_before_clarification() {
     // sleeping past the linger and checking the chip is visible
     // before the card metadata reaches the placeholder message.
 }
+
+// ─── sv-surface G7 / C6: the per-turn capability wins ────────
+//
+// `runtime/capabilities.rs` installs an approval channel and a routing-event
+// sink around the turn, and every handler is supposed to read them through
+// `turn_approval()` / `turn_routing_events()` rather than off the `Runtime`
+// member. The failure is SILENT and only on the wire: the daemon commissions
+// its `Runtime` with `NoOpRoutingEventSink` and an auto-granting channel, so a
+// handler reading the member drops the event on the floor while the identical
+// in-process turn raises the card. Commit 7e12f7006 claimed every core read
+// site had moved; twelve had not.
+//
+// `turn_capability_census` pins the source shape. These two prove the
+// behaviour at the surface RB6 named.
+
+/// Recording approval channel. Only three methods are required; the two the
+/// C6 sites care about (`emit_message_refined`, `request_information`) have
+/// no-op defaults, which is exactly why passing the wrong channel is silent.
+#[derive(Default)]
+struct RecordedApprovals {
+    refined: Vec<MessageRefinedPayload>,
+    information_requests: usize,
+    /// `Arc::strong_count` of THIS channel at the instant each
+    /// `MessageRefined` was emitted — the E1 ordering instrument. Read from
+    /// inside the emission, because that is the only moment at which "is a
+    /// producer still holding the socket's channel?" has an answer, and no
+    /// observer on another task can sample it without racing.
+    live_holders_at_refined: Vec<usize>,
+}
+
+struct RecordingApprovalChannel {
+    seen: Arc<std::sync::Mutex<RecordedApprovals>>,
+    /// A `Weak` to our own allocation, so the emission can count the strong
+    /// references alive at that instant. Set once, immediately after
+    /// construction.
+    me: std::sync::OnceLock<std::sync::Weak<RecordingApprovalChannel>>,
+}
+
+impl RecordingApprovalChannel {
+    fn new() -> (Arc<Self>, Arc<std::sync::Mutex<RecordedApprovals>>) {
+        let seen = Arc::new(std::sync::Mutex::new(RecordedApprovals::default()));
+        let me = Arc::new(Self {
+            seen: Arc::clone(&seen),
+            me: std::sync::OnceLock::new(),
+        });
+        let weak = Arc::downgrade(&me);
+        me.me.set(weak).ok().expect("self-weak set once");
+        (me, seen)
+    }
+
+    /// Strong references to this channel alive right now.
+    fn live_holders(&self) -> usize {
+        self.me
+            .get()
+            .map(std::sync::Weak::strong_count)
+            .unwrap_or(0)
+    }
+}
+
+#[async_trait]
+impl ApprovalChannel for RecordingApprovalChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(true)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok(String::new())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+    async fn request_information(&self, _request: &InformationRequest) -> Option<String> {
+        self.seen.lock().unwrap().information_requests += 1;
+        Some("a source the user pasted in".to_string())
+    }
+    fn emit_message_refined(&self, payload: MessageRefinedPayload) {
+        let live = self.live_holders();
+        let mut seen = self.seen.lock().unwrap();
+        seen.live_holders_at_refined.push(live);
+        seen.refined.push(payload);
+    }
+}
+
+/// G7 (RB6). The daemon's shape: a `Runtime` commissioned with the no-op sink,
+/// a live sink installed for the turn. The Ask-path clarification must reach
+/// the TURN's sink. Before the handlers moved to `turn_routing_events()` this
+/// recorded zero clarifications and the wire user saw an empty answer with no
+/// card — while `ask_path_suppresses_synthesis_and_emits_clarification` above,
+/// which commissions the recorder directly, stayed green throughout.
+#[tokio::test]
+async fn the_ask_clarification_reaches_the_turn_scoped_sink_not_the_commissioned_one() {
+    let (commissioned, commissioned_events) = RecordingRoutingEventSink::new();
+    let (turn_sink, turn_events) = RecordingRoutingEventSink::new();
+    let alternatives = vec![
+        IntentCandidate {
+            intent: Intent::DeepQuery,
+            confidence: 0.5,
+        },
+        IntentCandidate {
+            intent: Intent::KnowledgeQuery,
+            confidence: 0.45,
+        },
+    ];
+    let router = Box::new(FixedRouter {
+        classification: classification_with(0.30, alternatives),
+    });
+    let runtime = build_runtime(router, commissioned as Arc<dyn RoutingEventSink>).await;
+
+    let conv = uuid::Uuid::new_v4().to_string();
+    sovereign_core::runtime::capabilities::scope_turn(
+        None,
+        Some(turn_sink as Arc<dyn RoutingEventSink>),
+        async {
+            runtime
+                .handle_message("help me think through this thing", &conv)
+                .await
+                .expect("ask path returns a placeholder Response")
+        },
+    )
+    .await;
+
+    assert_eq!(
+        turn_events.lock().await.clarifications.len(),
+        1,
+        "the clarification must reach the sink the HOST installed for this \
+         turn — a handler reading `self.routing_events` drops it into the \
+         daemon's NoOpRoutingEventSink and the wire user sees no card"
+    );
+    assert!(
+        commissioned_events.lock().await.clarifications.is_empty(),
+        "the commissioned member must NOT also see it — one turn, one sink"
+    );
+}
+
+/// C6. `apply_post_stream_refinement` reached `self.approval`, so on the
+/// daemon's non-streaming document-attached turn the gap card and the
+/// `MessageRefined` event went to the host's auto-granting channel instead of
+/// the socket, and the UI stuck on "Refining your answer" forever.
+#[tokio::test]
+async fn post_stream_refinement_reaches_the_turn_scoped_approval_channel() {
+    let (sink, _events) = RecordingRoutingEventSink::new();
+    let router = Box::new(FixedRouter {
+        classification: classification_with(0.95, vec![]),
+    });
+    let runtime = build_runtime(router, sink as Arc<dyn RoutingEventSink>).await;
+    let (turn_channel, seen) = RecordingApprovalChannel::new();
+
+    // `abstained` is read off the persisted gate metadata; without it the gap
+    // check never fires and the call returns before touching the channel.
+    let metadata = serde_json::json!({
+        "grounding_gate": { "action": "abstained_no_retry" }
+    });
+    let conv = uuid::Uuid::new_v4().to_string();
+    sovereign_core::runtime::capabilities::scope_turn(
+        Some(turn_channel as Arc<dyn ApprovalChannel>),
+        None,
+        runtime.apply_post_stream_refinement(
+            &conv,
+            "msg-1",
+            "what does the attached document say about the budget?",
+            "I could not find that in the attached document.",
+            "",
+            Some(metadata),
+        ),
+    )
+    .await;
+
+    let seen = seen.lock().unwrap();
+    assert!(
+        seen.information_requests > 0 || !seen.refined.is_empty(),
+        "the post-stream refinement must reach the TURN's approval channel \
+         (asked {} time(s), emitted {} MessageRefined). Reading \
+         `self.approval` here sends the gap card and the refined-message \
+         event to the host's auto-granting channel, and the wire client's \
+         bubble never leaves \"Refining your answer\"",
+        seen.information_requests,
+        seen.refined.len()
+    );
+}
+
+/// sv-surface E1, core half. Worker A's `producers_outstanding` counts the
+/// live holders of a socket's approval channel and its routing sink, and only
+/// emits `Notice::TurnSettled` once every one of them has let go. That count
+/// is only a safe settle signal if the core actually HOLDS an `Arc` clone of
+/// the turn's channel for as long as it can still speak on it — a producer
+/// that emitted through a borrow, or that dropped its clone before the
+/// emission, would be invisible to the socket and `TurnSettled` would race
+/// ahead of the `MessageRefined` the client is still waiting for.
+///
+/// So this pins the ORDER, from the inside: the count of live strong
+/// references is sampled *during* `emit_message_refined`, which is the only
+/// instant the question has an answer — an observer on another task cannot
+/// sample it without racing the emission it is trying to order against.
+///
+/// Worker A's `a_detached_holder_of_the_approval_channel_is_outstanding`
+/// pins the socket side; together the two are the E1 proof. The detachment
+/// itself — that a `tokio::spawn`ed child inherits no scope and must
+/// therefore carry the `Arc` in by value — is pinned by
+/// `capabilities::the_ambient_channel_must_be_read_before_the_spawn_not_inside_it`.
+#[tokio::test]
+async fn the_refined_message_is_emitted_while_a_producer_still_holds_the_channel() {
+    let (sink, _events) = RecordingRoutingEventSink::new();
+    let router = Box::new(FixedRouter {
+        classification: classification_with(0.95, vec![]),
+    });
+    let runtime = build_runtime(router, sink as Arc<dyn RoutingEventSink>).await;
+
+    let (channel, seen) = RecordingApprovalChannel::new();
+    // The test's own handle is the RESTING holder: one strong reference that
+    // outlives the turn and belongs to nobody on the socket.
+    let resting = Arc::strong_count(&channel);
+    assert_eq!(
+        resting, 1,
+        "the test holds the only reference before the turn"
+    );
+
+    let scoped: Arc<dyn ApprovalChannel> = Arc::clone(&channel) as Arc<dyn ApprovalChannel>;
+    let metadata = serde_json::json!({
+        "grounding_gate": { "action": "abstained_no_retry" }
+    });
+    let conv = uuid::Uuid::new_v4().to_string();
+
+    // Detached: the refinement runs on a task that is NOT the turn's own, which
+    // is what makes it a producer the socket has to wait for.
+    let runtime = Arc::new(runtime);
+    let spawned = tokio::spawn({
+        let runtime = Arc::clone(&runtime);
+        let conv = conv.clone();
+        async move {
+            sovereign_core::runtime::capabilities::scope_turn(
+                Some(scoped),
+                None,
+                runtime.apply_post_stream_refinement(
+                    &conv,
+                    "msg-1",
+                    "what does the attached document say about the budget?",
+                    "I could not find that in the attached document.",
+                    "",
+                    Some(metadata),
+                ),
+            )
+            .await
+        }
+    });
+    spawned.await.expect("the refinement task must not panic");
+
+    let seen = seen.lock().unwrap();
+    assert!(
+        !seen.refined.is_empty(),
+        "no MessageRefined reached the turn's channel at all — the ordering \
+         question does not arise until C6 holds (the post-stream refinement \
+         must read `turn_approval()`, not `self.approval`)"
+    );
+
+    // The bar. Every emission happened while at least one holder BEYOND the
+    // test's resting handle was alive: the core had not let go of the turn's
+    // channel yet, so `producers_outstanding` was non-zero and TurnSettled
+    // could not have been sent.
+    for (i, live) in seen.live_holders_at_refined.iter().enumerate() {
+        assert!(
+            *live > resting,
+            "MessageRefined #{i} was emitted with {live} live holder(s) against \
+             a resting {resting}: the producer had already released the turn's \
+             approval channel, so the socket's producers_outstanding could \
+             reach zero and Notice::TurnSettled could overtake this emission"
+        );
+    }
+
+    // ...and the holders are gone once the task is joined, so the socket does
+    // settle rather than hanging. A count that never falls back would make the
+    // assertion above true for the wrong reason.
+    drop(seen);
+    assert_eq!(
+        Arc::strong_count(&channel),
+        resting,
+        "the refinement task must release the turn's approval channel when it \
+         finishes — a holder that never drops means TurnSettled never fires"
+    );
+}

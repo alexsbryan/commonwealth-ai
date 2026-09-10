@@ -26,8 +26,11 @@ impl Runtime {
         // emitting the clarification. Same rationale: the Ask path
         // is too fast to surface its "let me ask first" moment
         // unless we deliberately make it visible.
+        // Read the per-turn sink HERE, in the turn's own task — on the
+        // daemon it is the wire sink; the commissioned member is a no-op.
+        let routing_events = self.turn_routing_events();
         emit_ask_deliberation_chip(
-            self.routing_events.as_ref(),
+            routing_events.as_ref(),
             session_id,
             conversation_id,
             classification,
@@ -87,7 +90,7 @@ impl Runtime {
         self.store.save_message(&assistant_msg).await?;
         let response_msg = assistant_msg.clone();
 
-        self.routing_events
+        self.turn_routing_events()
             .emit_clarification_request(clarification_payload)
             .await;
 
@@ -132,8 +135,11 @@ impl Runtime {
         // bypass `try_emit_narration` and build the event directly.
         // The whole point of the chip here is to fire fast; gating
         // would defeat it.
+        // Read the per-turn sink HERE, in the turn's own task — on the
+        // daemon it is the wire sink; the commissioned member is a no-op.
+        let routing_events = self.turn_routing_events();
         emit_ask_deliberation_chip(
-            self.routing_events.as_ref(),
+            routing_events.as_ref(),
             session_id,
             conversation_id,
             classification,
@@ -206,7 +212,7 @@ impl Runtime {
 
         // Emit the clarification event (no-op for NoOpRoutingEventSink,
         // Tauri emit in desktop builds).
-        self.routing_events
+        self.turn_routing_events()
             .emit_clarification_request(clarification_payload)
             .await;
 

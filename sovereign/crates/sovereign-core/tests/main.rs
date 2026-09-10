@@ -85,8 +85,12 @@ mod router_cache_fresh;
 mod routing_moves;
 #[path = "main/runtime_commission_census.rs"]
 mod runtime_commission_census;
+#[path = "main/runtime_source_scan.rs"]
+mod runtime_source_scan;
 #[path = "main/serialization.rs"]
 mod serialization;
+#[path = "main/turn_capability_census.rs"]
+mod turn_capability_census;
 #[path = "main/turn_tool_census.rs"]
 mod turn_tool_census;
 #[path = "main/voice_prompt_shape.rs"]
