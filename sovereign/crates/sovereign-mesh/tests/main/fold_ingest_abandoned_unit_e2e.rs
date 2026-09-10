@@ -62,6 +62,7 @@ use sovereign_mesh::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KI
 use tempfile::TempDir;
 
 use crate::common;
+use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
     actor, completion, ingest_unit, leader_node, node_state, peer_node, probe_canonical, ring,
     sign, unit_ref, write_donor_partition, LEADER_ONLY_TERM, PEER_ONLY_TERM,
@@ -336,7 +337,7 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
 /// when it was written. What is left is everything the corpus says about
 /// ITSELF.
 fn corpus_record(index_dir: &std::path::Path, corpus: &str) -> serde_json::Value {
-    let raw = std::fs::read_to_string(index_dir.join(corpus).join("_corpus_meta.json"))
+    let raw = std::fs::read_to_string(corpus_at(index_dir, corpus).meta_path())
         .unwrap_or_else(|e| panic!("{corpus} has no canonical meta: {e}"));
     let mut v: serde_json::Value = serde_json::from_str(&raw).expect("meta is json");
     for k in ["corpus_id", "corpus_name", "created_at", "last_updated"] {
@@ -351,7 +352,7 @@ fn corpus_record(index_dir: &std::path::Path, corpus: &str) -> serde_json::Value
 /// `CorpusEngine::installed_indexes`, because that walk drops this canonical
 /// today — see the test's docs.
 async fn advertisable(index_dir: &std::path::Path, corpus: &str) -> String {
-    let info = CorpusIndex::open(&index_dir.join(corpus))
+    let info = CorpusIndex::open(&corpus_at(index_dir, corpus).root())
         .await
         .expect("open the canonical")
         .info()

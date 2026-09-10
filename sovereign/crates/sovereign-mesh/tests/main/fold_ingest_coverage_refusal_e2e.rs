@@ -57,9 +57,11 @@ use commonwealth_api::state::AppState;
 use commonwealth_rail::{RingRail, SigningKey};
 use commonwealth_work::WORK_NAMESPACE;
 use corpus_engine::index::CorpusIndex;
+use corpus_engine::Corpus;
 use sovereign_mesh::ingest_executor::fold_coverage_for;
 use tempfile::TempDir;
 
+use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
     actor, key, leader_node, node_state, peer_node, probe_canonical, ring, terminal_handoff,
     terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
@@ -168,7 +170,8 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
          something failed (ARCH §18.3). Got {outcome:?}",
     );
     assert!(
-        dir.join(format!("{CORPUS}-partition-{}", leader_node()))
+        corpus_at(&dir, CORPUS)
+            .partition(&leader_node().to_string())
             .exists(),
         "the refusal must leave this node's own partition on disk — a cleanup \
          that ran anyway would delete the half of the corpus that does exist",
@@ -239,10 +242,9 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
 
     // Half one: a partition as a fold unit writes it — no `total_shards`.
     write_donor_partition(&dir, leader_node(), DARK, 0, LEADER_ONLY_TERM).await;
-    let dark_meta = std::fs::read_to_string(
-        dir.join(format!("{DARK}-partition-{}", leader_node()))
-            .join("_corpus_meta.json"),
-    )
+    let dark_meta = std::fs::read_to_string(Corpus::meta_in(
+        corpus_at(&dir, DARK).partition(&leader_node().to_string()),
+    ))
     .expect("the partition meta");
     let dark_json: serde_json::Value = serde_json::from_str(&dark_meta).expect("meta is json");
     assert!(
@@ -268,7 +270,7 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
 
     // Half two: the SAME shape with the field stamped. The guard is real.
     write_donor_partition(&dir, leader_node(), ARMED, 0, LEADER_ONLY_TERM).await;
-    let armed_partition = dir.join(format!("{ARMED}-partition-{}", leader_node()));
+    let armed_partition = corpus_at(&dir, ARMED).partition(&leader_node().to_string());
     CorpusIndex::open(&armed_partition)
         .await
         .expect("open the partition")
@@ -428,7 +430,7 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     // The arm has run and refused. Give the fall-through every chance to
     // happen anyway before claiming it did not.
     let leaked = within(std::time::Duration::from_secs(5), || {
-        dir.join(CORPUS).exists()
+        corpus_at(&dir, CORPUS).is_installed()
     })
     .await;
     let probe = probe_canonical(&dir, CORPUS).await;
@@ -474,7 +476,7 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
     let _loop_handle = sovereign_mesh::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let appeared = within(std::time::Duration::from_secs(60), || {
-        dir.join(CORPUS).join("_corpus_meta.json").exists()
+        corpus_at(&dir, CORPUS).is_installed()
     })
     .await;
     let probe = probe_canonical(&dir, CORPUS).await;

@@ -41,10 +41,9 @@
 //! What this file drives for real
 //! ------------------------------
 //! * The real fold. Ed25519-signed ops through `commonwealth_rail::admit` and
-//!   `WorkProjection::fold`, not a hand-built `WorkProjection`. Two units,
-//!   two DIFFERENT lessees, one handoff.
-//! * Real `ingest:v1` units: `commonwealth_work::seal::seal` over real
-//!   `sovereign_mesh::ingest_executor::IngestPayload` bodies.
+//!   `WorkProjection::fold`, not a hand-built one — two units, two DIFFERENT
+//!   lessees, one handoff — over real `ingest:v1` units sealed by
+//!   `commonwealth_work::seal::seal` over real `IngestPayload` bodies.
 //! * The real partition layout: `CorpusEngine::partition_path`, the same call
 //!   `IngestExecutor::run` makes to choose where a slice lands
 //!   (`ingest_executor.rs`).
@@ -60,24 +59,21 @@
 //! What this file does NOT check — said here rather than discovered later
 //! ---------------------------------------------------------------------
 //! * **Two machines.** Two nodes are two index dirs, two `AppState`s and two
-//!   sockets in one process. Cross-machine clocks, real network loss, and
-//!   partial transfers are not exercised. That is the pre-registration's own
-//!   caveat and it survives this file.
+//!   sockets in one process. Cross-machine clocks, real network loss and
+//!   partial transfers are not exercised — the pre-registration's own caveat.
 //! * **The ingest pipeline.** No recipe, no acquirer, no embedder. Partitions
-//!   are written directly through `CorpusIndex` at the path the executor
-//!   computes. What is under test is the merge, not the extract.
-//! * **`auto_ingest`'s tick loop.** The arm that calls all of this
-//!   (`auto_ingest.rs`) is driven by a live daemon loop with an
-//!   `active_ingests` gate and a per-corpus cooldown. This file calls the
-//!   collector directly, so the ORDER of the arms — in particular the
-//!   load-bearing `continue` that stops a coverage refusal falling through to
-//!   the disk-derived merge — is not measured here.
+//!   are written through `CorpusIndex` at the path the executor computes: what
+//!   is under test is the merge, not the extract.
+//! * **`auto_ingest`'s tick loop.** This file calls the collector directly, so
+//!   the ORDER of the arms — in particular the load-bearing `continue` that
+//!   stops a coverage refusal falling through to the disk-derived merge — is
+//!   B7's subject, in `fold_ingest_coverage_refusal_e2e`, not this file's.
 //! * **Idempotence.** B4 is measured at the merge level in
 //!   `commonwealth-knowledge/tests/main/merge_participants_idempotence.rs`,
 //!   because `merge_from_fold_coverage` short-circuits on
 //!   `AlreadyHasCanonical` and would answer a different question.
-//! * **B5 and B7.** An abandoned unit's effect on the corpus, and the
-//!   `total_shards` coverage gate, are their own bars.
+//! * **B5 and B7.** Their own files — `fold_ingest_abandoned_unit_e2e` and
+//!   `fold_ingest_coverage_refusal_e2e`, which share this file's fixture.
 //!
 //! A hazard this file steps around on purpose
 //! ------------------------------------------
@@ -86,8 +82,7 @@
 //! `from_u128(0x22)` therefore print IDENTICALLY, and two fixture peers whose
 //! ids share a 64-bit prefix collide on one partition directory — the merge
 //! then sees fewer shards and says nothing. The ids below differ in their HIGH
-//! bytes for that reason. Same reasoning, same words, as
-//! `commonwealth-knowledge/tests/main/merge_participants_coverage.rs`.
+//! bytes for that reason, as in `merge_participants_coverage.rs`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -116,6 +111,7 @@ use sovereign_mesh::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_K
 use tempfile::TempDir;
 
 use crate::common;
+use crate::common::corpus_at;
 
 /// The two donor nodes. **The HIGH bytes must differ** — see the module docs.
 pub(crate) fn leader_node() -> NodeId {
@@ -231,19 +227,18 @@ pub(crate) fn completion(
         ),
         result: json!({
             "corpus_id": corpus,
-            "partition_path": format!("{corpus}-partition-{node}"),
+            // Where the donor says its slice landed. Nothing under test reads
+            // it; spelled through `Corpus` anyway so the layout has one owner.
+            "partition_path": corpus_at("", corpus).partition(&node.to_string()),
         }),
         provenance: provenance(node, name),
     })
 }
 
-/// The SIGNED OPS of the scenario below, before anything folds them.
-///
-/// Split out because two readings need the same journal in two different
-/// shapes: this file folds it in memory, and
-/// `fold_ingest_coverage_refusal_e2e` writes it onto a real `RingRail` so
-/// `auto_ingest`'s own tick can fold it. One spelling of the acts, or the two
-/// readings are not about the same handoff (ARCH §10.6).
+/// The SIGNED OPS of the scenario below, before anything folds them. Split out
+/// because two readings need the same journal in two shapes: this file folds it
+/// in memory, and `fold_ingest_coverage_refusal_e2e` writes it onto a real
+/// `RingRail` so `auto_ingest`'s own tick folds it. One spelling (ARCH §10.6).
 pub(crate) fn terminal_handoff_ops(corpus: &str) -> (Vec<Op<SignedOp>>, HandoffId) {
     let handoff = HandoffId::from_u128(5_000_002); // stable, arbitrary
     let a = ingest_unit(corpus, 0, 0, 100);
@@ -330,9 +325,8 @@ fn embed_fn() -> EmbedFn {
     Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.25_f32; EMBED_DIM]) }))
 }
 
-/// A `CorpusEngine` rooted at `index_dir` and told it is `node`. The node
-/// identity is what `partition_path` and `index_serve` both build the
-/// partition directory name from, so the two must be given the same one.
+/// A `CorpusEngine` rooted at `index_dir` and told it is `node` — the identity
+/// `partition_path` and `index_serve` both name the partition dir from.
 pub(crate) fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
     let recipes = index_dir.join("..").join("recipes");
     std::fs::create_dir_all(&recipes).expect("recipes dir");
@@ -449,7 +443,7 @@ pub(crate) struct CanonicalProbe {
 }
 
 pub(crate) async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -> CanonicalProbe {
-    let canonical = index_dir.join(corpus);
+    let canonical = corpus_at(index_dir, corpus).root();
     let Ok(index) = CorpusIndex::open(&canonical).await else {
         return CanonicalProbe {
             canonical_exists: false,
@@ -705,9 +699,9 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
          red, unchanged.\n\
          \n\
          The peer donor's two chunks (searchable by `{PEER_ONLY_TERM}`) were \
-         written to its own `{CORPUS}-partition-{}/` on a different index dir \
-         and served from a different socket. The fold named both donors; the \
-         merge was supposed to pull the second.\n\
+         written to its own `{}/` on a different index dir and served from a \
+         different socket. The fold named both donors; the merge was supposed \
+         to pull the second.\n\
          \n\
          merge outcome               : {outcome:?}\n\
          fold coverage               : expected={} nodes={:?}\n\
@@ -717,7 +711,9 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
          peer-only term reachable    : {}\n\
          \n\
          See `quality/campaigns/cw-lift-5g-part2-prereg.md` B2.",
-        peer_node(),
+        corpus_at("", CORPUS)
+            .partition(&peer_node().to_string())
+            .display(),
         coverage.expected,
         coverage.nodes,
         probe.canonical_exists,
