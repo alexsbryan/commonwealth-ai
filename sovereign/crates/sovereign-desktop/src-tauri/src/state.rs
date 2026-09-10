@@ -995,11 +995,19 @@ pub async fn bootstrap_with_progress(
     // the only mode where this state.rs codepath builds a Runtime
     // with a load-bearing memory store; attach-mode leaves the
     // worker `None` (the daemon at the other end runs its own).
-    let compaction_config_for_runtime: sovereign_core::memory_compaction::CompactionConfig =
+    //
+    // `Option`, not `unwrap_or_default()` (sv-surface D0). The comment above
+    // has claimed the attach-leaves-it-None behaviour since it was written and
+    // the code did the opposite: a default config still spawned a worker, so
+    // an attached desktop ran a SECOND rolling-summary compaction pass over
+    // the same `sovereign.db` the daemon was already compacting — two writers
+    // deriving summaries from each other's rows. The absence is carried in the
+    // type now, so the worker cannot be spawned without the local config that
+    // authorises it (§7: structural, not remembered).
+    let compaction_config_for_runtime: Option<sovereign_core::memory_compaction::CompactionConfig> =
         local_daemon_wiring
             .as_ref()
-            .map(|(_, cfg)| cfg.memory.compaction.clone())
-            .unwrap_or_default();
+            .map(|(_, cfg)| cfg.memory.compaction.clone());
     // What the daemon will be commissioned with, once this block has built it.
     let mut daemon_services: Option<(
         Arc<sovereign_mesh::DeferredDaemon>,
@@ -1595,16 +1603,18 @@ pub async fn bootstrap_with_progress(
     // and serialises passes across conversations via a single mpsc
     // consumer. Pre-2026-05-23 behaviour is preserved when the
     // operator sets `[memory.compaction] mode = "disabled"`.
-    let compaction_worker = {
+    // `None` in attach: the daemon at the other end owns that db and runs its
+    // own worker (sv-surface D0).
+    let compaction_worker = compaction_config_for_runtime.map(|cfg| {
         sovereign_core::memory_compaction::CompactionWorker::spawn(
             Arc::clone(&store) as Arc<dyn sovereign_core::traits::MemoryStore>,
             // Was `Arc::clone(&runtime.inference)` — the same handle, read
             // from the local rather than back out of a Runtime that does not
             // exist yet at this point.
             Arc::clone(&inference),
-            compaction_config_for_runtime.clone(),
+            cfg,
         )
-    };
+    });
     // ── Commission ───────────────────────────────────────────────────────
     // Every provider this host enriches with exists by now, so the Runtime is
     // built ONCE, total. Nothing below this line can add one.
@@ -1673,7 +1683,7 @@ pub async fn bootstrap_with_progress(
     // capabilities that are DESKTOP-shaped — which is what makes this file
     // diffable against the daemon's commission and the server's.
     let runtime_arc = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
-        compaction: Some(compaction_worker),
+        compaction: compaction_worker,
         landscape_digests,
         mesh_knowledge,
         sensitive_corpora: local_corpus_mgr

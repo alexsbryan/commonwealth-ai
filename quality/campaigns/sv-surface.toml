@@ -588,6 +588,28 @@ status    = "active"
 #   plausible (leaked sockets no longer accumulate) and is reported, not
 #   claimed. Run after the three RB commits; table persisted under
 #   target/quality-check/<stamp>/summary.json; verdict lands on this row.
+#   VERDICT 2026-09-10 (runs 20260910-091032 full check + 093056 lane
+#   re-sample; daemon rebuilt at d51cd2b4c; box under peer load 3.6-8.2):
+#   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED.
+#   throughput COULD-NOT-JUDGE: first `check` run for stack 4dd212fbca5f,
+#   baseline MINTED (sovereign/bench/quality-check/baselines/throughput/);
+#   the two earlier runs today were prepush gates with no banks. So the
+#   RB delta itself is UNJUDGED by construction — no pre-change reading on
+#   this stack exists; this run is the pre-deletion baseline instead.
+#   chat-ask FAILED once on `per-stage calls [q2]` (audit 16 > 12 on run 2
+#   of 3; the audit pass's retry ladder re-extracts and re-judges when a
+#   claim is judged unsupported) and PASSED every stage-call check on both
+#   questions in the re-sample — one run is not a measurement (§18.5);
+#   P(useful) 0.996-1.000 both runs. chaos-monkey FAILED 2 of 2 on
+#   `ungrounded assertion: distract-bomb-maker` — PRE-EXISTING: f4b13a68c
+#   (2026-09-08) added that row and records the same probe ungrounded on
+#   all three of its own live runs; the answer ("The Professor") is the
+#   gold keyword and 7 of 19 retrieved chunks carry it, but the released
+#   quote does not, so the citation gate grounds a correct answer on a
+#   quote that does not support it — a grounding-gate finding for its
+#   owner, not this campaign. Net: nothing reddened that the RB factor
+#   explains; the pre-registered NEUTRAL stands as far as this instrument
+#   can see, and the next run has a baseline to compare against.
 #
 #   NET-DELETION ACCOUNTING, measured 2026-09-10 (`git show --shortstat
 #   -- '*.rs'` over the 15 sv-surface commits R1..3c7ad5933, Rust only):
@@ -719,6 +741,83 @@ status    = "active"
 #       15 is_attach_mode forks in non-turn commands, and the seven object
 #       migrations (the census's bulk-retire plan).
 #   R6  MOBILE (M-1/M-2). By construction once it consumes the client family.
+#
+# ── THE DELETION LADDER (surveyed 2026-09-10 at d51cd2b4c; every claim cited) ─
+#
+# SURVEY FINDING THAT RESIZES THE HALF: all 15 is_attach_mode forks already
+# have their wire form. reading.rs:226,272,363,404 -> reading_http.rs:266-282
+# (the file's own daemon_reading_get); insight_commands.rs:114,145,166,184
+# -> insight_http.rs + TurnClient::{clip,list,search,delete}_insight;
+# conversation.rs:250 -> /v1/conversations/search; :488 ->
+# /v1/notes/tool-outcome; :819,845 -> /v1/memories/{id}[/weaken] (and
+# :849-861 re-derives the halving formula, §10.6); state.rs:854/1634 are
+# params, not forks. The ledger's wire-first gate is ALREADY satisfied for
+# the whole fork population: D1+D2 are pure deletions.
+# The seven objects: LocalCorpusManager has a daemon twin already serving 17
+# watch routes (corpus_watch_http.rs over watched_folder_runtime::manager());
+# MeshApp's 17 reads funnel through ONE primitive (meshapp.rs:85-108
+# load_atoms) so one route serves all 17; governance and deep-research read
+# the FILESYSTEM and cost zero needles; ServingCore already holds
+# corpus_engine/state_store/runtime/insights, so every missing route is a
+# door over an object the daemon has. Attach floor: 13 needles in state.rs
+# (D2 confirmed: WatchedSubsystem::install at :1173 is inside the Local arm)
+# + build_attach_provider = 14 counted; none is in the closed app-local set.
+# G9's one named byte of feature loss: ProvenanceSource has no display_name
+# (projection.rs:81-90). Three degradations with NO fork at all:
+# get_last_turn_provenance (conversation.rs:884), list_skills (:891), the
+# session->conversation map (chat.rs:1150) read the DESKTOP's Runtime,
+# which in attach never ran the turn — broken today.
+#
+#   D1  reading fork family — delete the four forks + nine private DTO
+#       helpers; daemon_reading_get the only path. ~ -500. Parity:
+#       read_get_atom_card desktop vs /internal/corpus/{c}/atoms/{a}.
+#   D2  the eight single-line forks (insights x4, conversation x4) — wire
+#       unconditional; delete get_insight_service, the halving twin, the
+#       require_store! twins; add GET sink status (~40). FORKS 15 -> 0.
+#       ~ +60/-260. Parity: clip -> list -> search -> delete, both surfaces.
+#   D0  census correction: WatchedSubsystem out of the needle list (D2);
+#       CompactionWorker::spawn + compaction: Some gated on
+#       local_daemon_wiring (D1 defect). Floor 14 -> 12. ~ +5/-10.
+#   D3  MeshApp reads: GET /internal/corpus/{c}/atoms over
+#       ServingCore.corpus_engine (+~90) + TurnClient::corpus_atoms; the 17
+#       projections fold over wire atoms; authorize(webview.label()) stays
+#       (X2). ~ +150/-430.
+#   D4  Atlas browse: atlas_http (+~230) for the 12 data commands; the two
+#       GLiNER downloads stay app-local. ~ +230/-620.
+#   D5  LocalCorpusManager: lc_http over the daemon's own manager; lc_ingest
+#       submits as a job (64dfedb33's pattern); lc_validate_path/lc_pre_scan
+#       stay app-local. ~ +320/-950. Needle 8 out -> floor 11. DIRECTIVE 3
+#       BECOMES TRUE HERE, not before.
+#   D6  notes + features: /v1/notes CRUD + /v1/features/projects (+~200);
+#       lessons.rs (4) + recipe_author_commands.rs (7). ~ +200/-600.
+#       Needles 2,3 out -> floor 9.
+#   D7  store CRUD + document assets + G9: /v1/documents (+~180) and
+#       display_name on ProvenanceSource; AnswerDoc render shared; the
+#       fs::write to a user path stays app-local. ~ +230/-500. Needle 1
+#       out -> floor 8.
+#   D8  governance (9) + MCP config (6): route families over the daemon's
+#       own atlas dir (+~330). ~ +330/-1,000. Zero needles.
+#   D9  THE BOOT SPLIT + B4: attach_bootstrap() (~130 ln) replaces the
+#       1,450-line bootstrap_with_progress on the attach path; /v1/skills +
+#       /v1/conversations/{id}/provenance close the three no-fork
+#       degradations; RunLockError::Held -> re-probe -> Attach, fatal when
+#       the holder does not answer (identity: /status.process pid);
+#       build_attach_provider dies. Floor 12 -> 0; assert_attach_purity
+#       replaces the census. ~ +250/-700.
+#   DEFERRED, not promised: deep-research (1,648 ln, filesystem run dirs,
+#   no needle).
+#   CANNOT CROSS: MeshApp authorization (webview.label() is the token, X2);
+#   detect_bootstrap (X1); supervisor/app.exit/app.restart (X3); file
+#   writes to user-picked paths (renderers move, the write does not);
+#   state.mcp_servers live status (a twin to delete, not proxy); the closed
+#   app-local set.
+#   TOTALS (estimates from the survey, to be replaced by measurement per
+#   rung): wire +~1,750, local -~5,570, net ~ -3,820; campaign then
+#   ~ +5,180/-6,460 = net ~ -1,280 Rust. Floor 14 -> 12 (D0) -> 11 (D5)
+#   -> 9 (D6) -> 8 (D7) -> 0 (D9); D1-D4 delete consumers, not needles —
+#   the needle count is a LAGGING indicator and this row says so.
+#   ORDER: D1, D2, D0 first (no new wire, all forks gone, ~ -770 for ~0
+#   risk); then D3/D4 wire can be built beside them.
 #
 # ── WHERE TO PICK THIS UP ───────────────────────────────────────────────────
 #

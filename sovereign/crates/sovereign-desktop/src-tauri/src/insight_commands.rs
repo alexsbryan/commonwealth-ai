@@ -37,22 +37,6 @@ pub struct SinkInfoDto {
     pub connected: bool,
 }
 
-impl From<sovereign_core::types::InsightNode> for InsightNodeDto {
-    fn from(n: sovereign_core::types::InsightNode) -> Self {
-        Self {
-            id: n.id.to_string(),
-            clipped_text: n.clipped_text,
-            message_id: n.message_id.to_string(),
-            paragraph_index: n.paragraph_index,
-            source: n.source,
-            position: n.position,
-            adjacent: n.adjacent,
-            created_at: n.created_at.to_rfc3339(),
-            sink_state: n.sink_state,
-        }
-    }
-}
-
 // ─── Helper ──────────────────────────────────────────────────
 
 async fn get_insight_service(
@@ -63,12 +47,14 @@ async fn get_insight_service(
     })
 }
 
-/// The attach-mode client for the daemon's insight surface (rung 6): the
-/// SAME `InsightService` the desktop builds, served on loopback. The wire
-/// projection (`sovereign_turn_client::InsightEntry`) maps 1:1 onto the
-/// DTO below — same fields, embedding already stripped — so the frontend
-/// contract is unchanged between boot modes.
-fn attach_insight_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+/// The client for the daemon's insight surface (rung 6): the SAME
+/// `InsightService` in both boot modes — commissioned into the in-process
+/// daemon on a Local boot, owned by the CLI daemon on an attached one — served
+/// on loopback either way. The wire projection
+/// (`sovereign_turn_client::InsightEntry`) maps 1:1 onto the DTO below (same
+/// fields, embedding already stripped), so the frontend contract does not
+/// depend on which boot answered (sv-surface D2).
+fn insight_client(state: &AppState) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
@@ -108,33 +94,19 @@ pub async fn clip_insight(
         .transpose()
         .map_err(|e| format!("Invalid position: {e}"))?;
 
-    // Attach: the clip crosses the wire — the daemon's service embeds and
-    // persists (one clip decider, the same `InsightService` this command
-    // drives in Local mode).
-    if state.is_attach_mode() {
-        let entry = attach_insight_client(&state)
-            .clip_insight(sovereign_turn_client::ClipInsight {
-                clipped_text: &clipped_text,
-                message_id: &message_id,
-                paragraph_index,
-                source,
-                position,
-            })
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(InsightNodeDto::from(entry));
-    }
-
-    let service = get_insight_service(&state).await?;
-    let message_id =
-        uuid::Uuid::parse_str(&message_id).map_err(|e| format!("Invalid message_id: {e}"))?;
-
-    let node = service
-        .clip(&clipped_text, message_id, paragraph_index, source, position)
+    // The clip crosses the wire in BOTH modes — the daemon's service embeds
+    // and persists. One clip decider (sv-surface D2).
+    let entry = insight_client(&state)
+        .clip_insight(sovereign_turn_client::ClipInsight {
+            clipped_text: &clipped_text,
+            message_id: &message_id,
+            paragraph_index,
+            source,
+            position,
+        })
         .await
         .map_err(|e| e.to_string())?;
-
-    Ok(InsightNodeDto::from(node))
+    Ok(InsightNodeDto::from(entry))
 }
 
 #[tauri::command]
@@ -142,20 +114,11 @@ pub async fn list_insights(
     limit: Option<usize>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
-    if state.is_attach_mode() {
-        let entries = attach_insight_client(&state)
-            .list_insights(limit)
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
-    }
-    let service = get_insight_service(&state).await?;
-    let nodes = service
-        .store
-        .list(limit.unwrap_or(50))
+    let entries = insight_client(&state)
+        .list_insights(limit)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(nodes.into_iter().map(InsightNodeDto::from).collect())
+    Ok(entries.into_iter().map(InsightNodeDto::from).collect())
 }
 
 #[tauri::command]
@@ -163,35 +126,28 @@ pub async fn search_insights(
     query: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
-    if state.is_attach_mode() {
-        let entries = attach_insight_client(&state)
-            .search_insights(&query)
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
-    }
-    let service = get_insight_service(&state).await?;
-    let nodes = service
-        .store
-        .search_text(&query, 20)
+    let entries = insight_client(&state)
+        .search_insights(&query)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(nodes.into_iter().map(InsightNodeDto::from).collect())
+    Ok(entries.into_iter().map(InsightNodeDto::from).collect())
 }
 
 #[tauri::command]
 pub async fn delete_insight(id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    if state.is_attach_mode() {
-        return attach_insight_client(&state)
-            .delete_insight(&id)
-            .await
-            .map_err(|e| e.to_string());
-    }
-    let service = get_insight_service(&state).await?;
-    let id = uuid::Uuid::parse_str(&id).map_err(|e| format!("Invalid id: {e}"))?;
-    service.store.delete(id).await.map_err(|e| e.to_string())
+    insight_client(&state)
+        .delete_insight(&id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
+/// THE ONE INSIGHT COMMAND STILL READ IN-PROCESS (sv-surface D2, named
+/// rather than quietly kept): `insight_http` serves clip/list/search/delete
+/// and has no sink-status route, so there is nothing to cross to. Wire first,
+/// delete second — this local read comes out the commit a
+/// `GET /v1/insights/sinks` over `ServingCore.insights` lands, not before.
+/// On an attached boot it reads THIS process's sink registry, which is empty,
+/// so `any_connected` is false there regardless of the daemon's sinks.
 #[tauri::command]
 pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStatusDto, String> {
     let service = get_insight_service(&state).await?;
