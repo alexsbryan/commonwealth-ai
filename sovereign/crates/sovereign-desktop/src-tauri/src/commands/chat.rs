@@ -207,19 +207,41 @@ async fn finish_wire_turn(
     *state.turn_wire.write().await = Some(stream.sender());
 
     let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
-    let first = stream.next_frame().await;
-    let message_id = match first {
-        Ok(Some(TurnFrame::Notice {
-            notice: sovereign_contracts::types::TurnNotice::TurnStarted { message_id },
-        })) => message_id,
-        Ok(Some(other)) => {
-            // Unexpected order — keep the frame for the renderer and use
-            // the fallback id rather than dropping evidence.
-            let _ = frame_tx.send(other);
-            fallback_id
+    // The sync id: read TO the `TurnStarted` frame. Retrieval narration
+    // legitimately PRECEDES it (the runtime narrates before the stream
+    // handle is acquired; a cold turn's retrieval is exactly when
+    // narration fires) — those lead frames are forwarded, not mistaken
+    // for disorder. e2e-caught as the first-turn hang: taking the
+    // fallback id on a leading narration returned a placeholder uuid
+    // while the tokens carried the real one, and the frontend queued
+    // chunks for a message it had never registered — stuck `preparing`
+    // until the socket died.
+    let message_id = loop {
+        match stream.next_frame().await {
+            Ok(Some(TurnFrame::Notice {
+                notice: sovereign_contracts::types::TurnNotice::TurnStarted { message_id },
+            })) => break message_id,
+            Ok(Some(lead @ (TurnFrame::Narration { .. } | TurnFrame::Notice { .. }))) => {
+                let _ = frame_tx.send(lead);
+                continue;
+            }
+            // By protocol nothing else may precede TurnStarted — keep the
+            // frame as evidence and fall back to the pending id, the
+            // graceful-guard contract.
+            Ok(Some(other)) => {
+                let _ = frame_tx.send(other);
+                break fallback_id.clone();
+            }
+            _ => break fallback_id.clone(),
         }
-        _ => fallback_id,
     };
+    tracing::info!(
+        conversation_id = %conversation_id,
+        // Glassbox for the first-turn hang this loop closes: the id's
+        // provenance, said once per turn.
+        id_from = if message_id != fallback_id { "turn_started" } else { "fallback" },
+        "finish_wire_turn: sync id taken"
+    );
 
     tauri::async_runtime::spawn(pump_wire_frames(
         app_handle.clone(),
@@ -255,11 +277,21 @@ async fn pump_wire_frames(
     conversation_id: String,
     frames: tokio::sync::mpsc::UnboundedSender<TurnFrame>,
 ) {
+    let mut frames_seen = 0u32;
     loop {
         let frame = match stream.next_frame().await {
             Ok(Some(f)) => f,
-            _ => break, // socket closed; the renderer speaks next
+            ended => {
+                tracing::info!(
+                    conversation_id = %conversation_id,
+                    frames_seen,
+                    ended_cleanly = matches!(ended, Ok(None)),
+                    "pump_wire_frames: socket ended"
+                );
+                break; // socket closed; the renderer speaks next
+            }
         };
+        frames_seen += 1;
         match &frame {
             TurnFrame::Prompt { id, prompt } => {
                 state.pending_prompts.write().await.insert(id.clone());
@@ -503,6 +535,9 @@ async fn render_turn_frames(
                         full_text,
                         metadata,
                     },
+                    // Glassbox (first-turn hang): the terminal render —
+                    // its absence beside a pump "socket ended" line
+                    // localizes any frame loss.
                 );
                 // Sidebar: updated_at bumped; title may auto-update.
                 let _ = app.emit("conversations:changed", ());
