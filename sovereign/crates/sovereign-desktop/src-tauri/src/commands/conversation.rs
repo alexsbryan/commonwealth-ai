@@ -352,7 +352,7 @@ pub async fn submit_information_response(
         &state,
         &key,
         sovereign_contracts::types::TurnAnswer::Information {
-            content,
+            content: content.clone(),
             sources: Vec::new(),
         },
     )
@@ -440,7 +440,7 @@ pub async fn submit_information_search(
         return Err("query must not be empty".to_string());
     }
 
-    let wire_parked = state.pending_prompts.read().await.contains(key);
+    let wire_parked = state.pending_prompts.read().await.contains(&key);
     if wire_parked {
         // The active wire turn put this card up; the guard below is the
         // LOCAL desk's and cannot see it. The Answer's own named refusal
