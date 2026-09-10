@@ -346,7 +346,11 @@ weekly via `--tighten`; `concepts.txt` is the concept-duplication ratchet
 (`cargo xtask concept-gate`, minted through `svrn code converge status
 --mint`); it was re-minted on 2026-08-21 when the census stopped counting
 collisions no other crate can reach, and a baseline stamped before that
-commit is not comparable to one stamped after it. `cargo xtask quality` runs every fast local gate with one
+commit is not comparable to one stamped after it. Since 2026-09-10 it holds
+the NAME SET beside the count — first non-comment line the count, one name
+per line after it — so a red names what crossed instead of only how many
+(§10.1q); a bare-scalar file still reads as a count, and the gate says it
+cannot name the offender rather than reporting an empty list. `cargo xtask quality` runs every fast local gate with one
 summary table, and since 2026-08-20 that table carries FOUR verdicts —
 PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — with per-gate enforcement:
 concept-gate is ADVISORY there because it counts type definitions in the
@@ -7901,6 +7905,10 @@ collects.
 
 ### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
 
+> **CLOSED 2026-09-10 — see §10.1q.** The defect this row names as "the finding
+> as much as the number is" is fixed: `concepts.txt` now stores the name SET
+> beside the count, and a red names what crossed.
+
 `concept-gate` reports **35 duplicated names against a baseline of 33**. The
 baseline is a bare COUNT, pinned at `27c0fe031` (Noun convergence, #47), and
 `quality/baselines/concepts.txt` holds the single line `33`. That is the
@@ -7934,6 +7942,60 @@ pass. Recorded here so the next reader starts from the blocker rather than
 rediscovering the copies.
 
 Re-pinned to 35. `--tighten` first, as always; it had nothing to bank.
+
+### 10.1q Concept ratchet — the baseline names its offenders now, and was re-pinned once more — 2026-09-10
+
+§10.1j recorded a finding rather than a fix: *"the gate can tell you a noun
+crossed and cannot tell you which, because it stores no name list to diff
+against."* That is closed. `quality/baselines/concepts.txt` was a bare scalar
+— `35`, one line — while every sibling ratchet already stored per-key rows:
+`clock_reads.txt` names the file, `oversized.txt` names the file, `lines.tsv`
+names the crate. It now carries the count on its first non-comment line
+(`instruments.toml` declares it `kind = "count"`) and one name per line after
+it, and `svrn code converge status --json` publishes `duplicated`, `added` and
+`removed` beside the counts.
+
+The set was free: `census()` already ranks the rows the count is drawn from,
+and `duplicate_count` is `census(..).reachable_names` — so the names are the
+same expression the number is. `cmd_status` called `census` TWICE (once
+through `duplicate_count`, once for `colliding_names`), rebuilding the by-name
+map over all 5,796 first-party type defs each time; it calls it once now.
+
+**Both arms watched before the change landed** (§18.1). A synthetic baseline
+with `Admission` and `WorkUnit` removed makes the gate print
+
+```
+added since the baseline:
+  Admission   ->  sovereign code converge noun Admission
+  WorkUnit   ->  sovereign code converge noun WorkUnit
+```
+
+and exit 1; the real bare-scalar baseline makes it print *"this baseline
+predates the name list, so it cannot say WHICH"* and name the re-mint. `added`
+and `removed` are **null**, not empty, on an unnamed baseline — the relay must
+be able to tell "nothing was added" from "this file cannot say" (§18.3), and a
+regression test pins each of the three shapes: named round-trip, bare scalar,
+missing file.
+
+**What was re-pinned, and what could not be dispositioned.** 39 against a
+baseline of 35, pinned 2026-09-02 at `9d6969852`, with 210 commits landed on
+`origin/main` since. Not this branch's rise: `git diff origin/main..HEAD --
+'*.rs'` adds no types at all. Of the four crossers, exactly one is
+recoverable after the fact — **`Admission`** went from one defining crate to
+two (`commonwealth-rail-core/src/admit.rs:237` and
+`corpus-engine/src/enrichment/atlas/ground/select.rs:177`), which a `git grep`
+at both commits can see. The other three crossed the REACHABILITY threshold,
+not the definition count, and that is only visible in a SCIP graph built at
+`9d6969852` — an hour of re-index at a commit nobody is on. So they are
+absorbed, once, and named as absorbed. This is the last time that sentence can
+be written about this ratchet.
+
+`Admission` reads as two different concepts under one name — a rail admission
+decision and an atlas ground-selection admission — so the disposition is
+"rename apart", not "converge". Not done here: it has 31 reference sites
+across 8 crates and belongs to whoever owns those subsystems, not to a
+gate-greening pass. Recorded so the next reader starts from the disposition
+rather than rediscovering the collision.
 
 ### 10.1k Size RE-PINNED on main — 2026-09-03 (the 34-commit branch meets §10.1i's fresh pin)
 

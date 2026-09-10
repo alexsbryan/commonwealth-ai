@@ -5,17 +5,27 @@
 //! type in more than one first-party crate, WHERE at least two of those crates'
 //! definitions are already referenced across a crate boundary", frozen in
 //! `quality/baselines/concepts.txt`; the gate is red when that number RISES,
-//! which is a duplicate ADDED. It fires on additions by construction and never
-//! on pre-existing code — the whole register is already inside the baseline.
+//! which is a duplicate ADDED.
+//!
+//! Since 2026-09-10 that baseline holds the NAME SET beside the count, so a
+//! red names what crossed. Before it, this arm could send the reader to a
+//! census and no further — and a census prints every duplicated name in the
+//! workspace, not the ones that just arrived. Naming them is the whole
+//! disposition, and every sibling ratchet already did it: `clock_reads` names
+//! the file, `oversized` names the file, `lines.tsv` names the crate.
+//!
+//! It fires on additions by construction and never on pre-existing code — the
+//! whole register is already inside the baseline.
 //!
 //! The reachability clause landed 2026-08-21 and re-minted the baseline in the
 //! same commit. Before it, 87% of the rows named a collision between two local
 //! helpers that no amount of adoption could retire; see
 //! `corpus_engine_scip::converge::cross_crate_reached`. A baseline stamped
-//! before that commit is not comparable to one stamped after it (279 -> 33). The relayed
-//! `--json` body carries `colliding_names` (every collision) beside
-//! `duplicated_names` (the countable ones), so the narrowing is visible here
-//! rather than only in the tool that applies it.
+//! before that commit is not comparable to one stamped after it (279 -> 33).
+//! The relayed `--json` body carries `colliding_names` (every collision)
+//! beside `duplicated_names` (the countable ones), so the narrowing is visible
+//! here rather than only in the tool that applies it — and `duplicated` /
+//! `added` / `removed` carry the sets themselves.
 //!
 //! This gate does NOT recount. `svrn code converge status` owns the number and
 //! this is a relay (§10.6, one decider): the count comes from the SCIP graph
@@ -149,10 +159,33 @@ pub fn run(args: &[String]) -> i32 {
         ADDED => {
             eprintln!(
                 "\nRATCHET BROKEN — a concept name is now defined as a type in one more crate\n\
-                 than the baseline allows. Find it and decide:\n  \
-                 sovereign code converge census --limit 0\n  \
-                 sovereign code converge noun <Name>\n\
-                 Converge it onto one owner, or rename it apart and say which in the\n\
+                 than the baseline allows."
+            );
+            // WHICH name. The baseline recorded only a scalar until
+            // 2026-09-10, so this arm could send the reader to a census and no
+            // further — the census prints every duplicated name, not the ones
+            // that just crossed, and the difference is the whole disposition.
+            // `added` is null (not empty) when the baseline predates the set,
+            // which is a different fact and says so (ARCH §18.3).
+            match body.get("added") {
+                Some(serde_json::Value::Array(added)) if !added.is_empty() => {
+                    eprintln!("added since the baseline:");
+                    for nm in added.iter().filter_map(|v| v.as_str()) {
+                        eprintln!("  {nm}   ->  sovereign code converge noun {nm}");
+                    }
+                }
+                Some(serde_json::Value::Array(_)) => eprintln!(
+                    "the count rose but the name set did not — a name left as another \n\
+                     arrived. `sovereign code converge census --limit 0` for the whole set."
+                ),
+                _ => eprintln!(
+                    "this baseline predates the name list, so it cannot say WHICH.\n  \
+                     Re-mint once and the next rise will name itself:\n  \
+                     cargo run -p xtask -- concept-gate --update-baseline"
+                ),
+            }
+            eprintln!(
+                "\nConverge it onto one owner, or rename it apart and say which in the\n\
                  landing verdict. Only if the rise is intentional:\n  \
                  cargo run -p xtask -- concept-gate --update-baseline"
             );

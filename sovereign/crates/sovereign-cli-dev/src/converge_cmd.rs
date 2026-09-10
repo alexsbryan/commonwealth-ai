@@ -22,8 +22,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use corpus_engine_scip::converge::{
-    census, crate_dag, cross_crate_reached, dossier, duplicate_count, render_census,
-    render_dossier, type_defs, SourceScope,
+    census, crate_dag, cross_crate_reached, dossier, render_census, render_dossier, type_defs,
+    SourceScope,
 };
 use corpus_engine_scip::roles::{reach_index, render_roles, roles, type_fields};
 use corpus_engine_scip::shape::{field_signatures, render_shape, shape_census, ShapeOptions};
@@ -795,6 +795,89 @@ pub(crate) fn assess_lag(
     }
 }
 
+/// The header every ratchet baseline in `quality/baselines/` carries: what the
+/// file is, and the exact command that regenerates it.
+const BASELINE_HEADER: &str = "\
+# concept-gate baseline — the reachable duplicate-name SET, and its size.
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- concept-gate --update-baseline
+# The first non-comment line is the COUNT; every line after it is one name.
+";
+
+/// What `quality/baselines/concepts.txt` holds.
+///
+/// It held a bare scalar until 2026-09-10, and that is why a rise could never
+/// be dispositioned: every sibling ratchet stores per-key rows — `clock_reads`
+/// names the file, `oversized` names the file, `lines.tsv` names the crate —
+/// so a red tells you WHICH. This one could only say that four somethings
+/// crossed. Recording the set closes that, and the set is free: `census`
+/// already computes the rows the count is drawn from.
+struct ConceptBaseline {
+    count: Option<usize>,
+    names: BTreeSet<String>,
+    /// False for a file minted before the names were recorded. That is a
+    /// DIFFERENT fact from "no names" and must not be collapsed into it
+    /// (ARCH §18.3) — an unnamed baseline cannot name an addition, and the
+    /// relay says so rather than reporting an empty list as "nothing added".
+    named: bool,
+    /// Set when the file EXISTS but no count could be read from it. `count:
+    /// None` alone cannot tell a missing baseline from a corrupt one, and the
+    /// two want different repairs — mint, versus look at what is in the file.
+    /// Both are NEVER-RAN; only one of them is normal.
+    unreadable: Option<String>,
+}
+
+fn read_baseline(path: &std::path::Path) -> ConceptBaseline {
+    let absent = |unreadable| ConceptBaseline {
+        count: None,
+        names: BTreeSet::new(),
+        named: false,
+        unreadable,
+    };
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        // A missing file is "not minted yet". Anything else — a permission
+        // error, a directory, invalid UTF-8 — is a file this gate could not
+        // read, and reporting that as "no baseline" would send the reader to
+        // `--mint` for a problem minting cannot fix.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return absent(None),
+        Err(e) => return absent(Some(format!("{}: {e}", path.display()))),
+    };
+    let mut rows = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'));
+    let Some(first) = rows.next() else {
+        return absent(Some(format!(
+            "{}: no non-comment line — the count is the first one",
+            path.display()
+        )));
+    };
+    let Ok(count) = first.parse::<usize>() else {
+        return absent(Some(format!(
+            "{}: first non-comment line is {first:?}, which is not a count",
+            path.display()
+        )));
+    };
+    let names: BTreeSet<String> = rows.map(String::from).collect();
+    ConceptBaseline {
+        count: Some(count),
+        named: !names.is_empty(),
+        names,
+        unreadable: None,
+    }
+}
+
+fn write_baseline(path: &std::path::Path, n: usize, names: &[&str]) -> std::io::Result<()> {
+    let mut out = String::from(BASELINE_HEADER);
+    out.push_str(&format!("{n}\n"));
+    for name in names {
+        out.push_str(name);
+        out.push('\n');
+    }
+    std::fs::write(path, out)
+}
+
 /// The ratchet. Exits 1 when the count rises — a duplicate was ADDED, which is
 /// the failure the line-count arch-gate cannot catch.
 #[allow(clippy::too_many_arguments)]
@@ -808,14 +891,43 @@ fn cmd_status(
     lag: &Lag,
     corpus_id: &str,
 ) -> i32 {
-    let n = duplicate_count(defs, reached, scope);
+    // ONE census. This called it twice — once through `duplicate_count`, once
+    // for `colliding_names` — and each call rebuilds the by-name map over
+    // every first-party type def in the workspace (5,796 of them here).
+    let c = census(defs, reached, scope, false);
+    let n = c.reachable_names;
     // The wider number travels with the narrow one, always. The ratchet counts
     // only collisions another crate can reach; a reader who sees `34` without
     // `265` beside it cannot tell a narrowing from an improvement (§18.6).
-    let colliding = census(defs, reached, scope, false).colliding_names;
-    let prior: Option<usize> = std::fs::read_to_string(baseline)
-        .ok()
-        .and_then(|s| s.split_whitespace().next()?.parse().ok());
+    let colliding = c.colliding_names;
+    // The rows behind the count, which the census already ranked. `n` is
+    // `reachable_names`, so this filter selects exactly the counted set —
+    // `duplicate_count` is that same expression and stays for other callers.
+    let names: Vec<&str> = c
+        .rows
+        .iter()
+        .filter(|r| r.is_reachable())
+        .map(|r| r.name.as_str())
+        .collect();
+
+    let base = read_baseline(baseline);
+    let prior = base.count;
+    // What a rise actually added, when the baseline can say. `None` means the
+    // baseline predates the name list — reported as that, never as "nothing".
+    let added: Option<Vec<&str>> = base.named.then(|| {
+        names
+            .iter()
+            .copied()
+            .filter(|nm| !base.names.contains(*nm))
+            .collect()
+    });
+    let removed: Option<Vec<&str>> = base.named.then(|| {
+        base.names
+            .iter()
+            .map(String::as_str)
+            .filter(|nm| !names.contains(nm))
+            .collect()
+    });
 
     if mint {
         // Minting from a graph that cannot speak for this commit freezes the
@@ -831,7 +943,7 @@ fn cmd_status(
         if let Some(parent) = baseline.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if let Err(e) = std::fs::write(baseline, format!("{n}\n")) {
+        if let Err(e) = write_baseline(baseline, n, &names) {
             eprintln!("error: writing {}: {e}", baseline.display());
             return 1;
         }
@@ -849,7 +961,15 @@ fn cmd_status(
             // Every colliding name, reachable or not — the population the
             // ratchet number is drawn from.
             ("colliding_names", serde_json::json!(colliding)),
+            // The counted SET, and what a rise added relative to the baseline's
+            // set. `added`/`removed` are null when the baseline predates the
+            // name list, which is why the relay can distinguish "nothing was
+            // added" from "this file cannot say".
+            ("duplicated", serde_json::json!(names)),
+            ("added", serde_json::json!(added)),
+            ("removed", serde_json::json!(removed)),
             ("baseline", serde_json::json!(prior)),
+            ("baseline_unreadable", serde_json::json!(base.unreadable)),
             (
                 "delta",
                 serde_json::json!(prior.map(|p| n as i64 - p as i64)),
@@ -877,10 +997,18 @@ fn cmd_status(
                           unreachable from any other crate)"
                 );
                 print!("{}", lag.render(corpus_id));
-                println!(
-                    "baseline: none — mint one with `svrn code converge status --mint`\n\
-                     (four verdicts, not two: this is NEVER-RAN, not a pass)"
-                );
+                match base.unreadable.as_deref() {
+                    // The file is THERE and this gate could not read a count
+                    // out of it. `--mint` does not fix that, so do not name it.
+                    Some(why) => println!(
+                        "baseline: UNREADABLE — {why}\n\
+                         (four verdicts, not two: this is NEVER-RAN, not a pass)"
+                    ),
+                    None => println!(
+                        "baseline: none — mint one with `svrn code converge status --mint`\n\
+                         (four verdicts, not two: this is NEVER-RAN, not a pass)"
+                    ),
+                }
             }
             // No baseline is not a pass. ARCH §18.2.
             4
@@ -903,6 +1031,21 @@ fn cmd_status(
                         "\nRATCHET BROKEN — {delta} concept(s) added. Either converge the new \
                          duplicate,\nor rename it apart and say which in the landing verdict."
                     );
+                    // Which ones. Before the baseline recorded its set this
+                    // line could not exist, and a red said only that some
+                    // number of somethings crossed.
+                    match added.as_deref() {
+                        Some([]) | None => println!(
+                            "  (this baseline predates the name list, so it cannot say WHICH.\n\
+                             \x20  `--mint` once to record the set; the next rise will name itself.)"
+                        ),
+                        Some(added) => {
+                            println!("\nadded since the baseline:");
+                            for nm in added {
+                                println!("  {nm}   ->  svrn code converge noun {nm}");
+                            }
+                        }
+                    }
                 }
                 1
             } else if lag.can_judge() {
@@ -1123,6 +1266,95 @@ mod tests {
         assert!(
             err.contains("no code corpus") && err.contains("project init"),
             "{err}"
+        );
+    }
+
+    // ── the baseline is a SET, and one shape of it predates that ───────────
+
+    #[test]
+    fn a_minted_baseline_round_trips_its_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("concepts.txt");
+        write_baseline(&f, 3, &["Admission", "Verdict", "WorkUnit"]).unwrap();
+
+        let b = read_baseline(&f);
+        assert_eq!(b.count, Some(3));
+        assert!(b.named, "a file written with names reads back as named");
+        assert_eq!(
+            b.names,
+            ["Admission", "Verdict", "WorkUnit"]
+                .into_iter()
+                .map(String::from)
+                .collect::<BTreeSet<_>>()
+        );
+
+        // The header must not be mistaken for the count, and the count must
+        // still be the first non-comment line — `instruments.toml` declares
+        // this file `kind = "count"`.
+        let text = std::fs::read_to_string(&f).unwrap();
+        assert!(text.starts_with("# concept-gate baseline"), "{text}");
+        let first = text
+            .lines()
+            .find(|l| !l.starts_with('#') && !l.trim().is_empty())
+            .unwrap();
+        assert_eq!(first, "3");
+    }
+
+    /// Every baseline on every peer clone is the bare scalar this file held
+    /// until 2026-09-10. Reading one must still yield the COUNT — a gate that
+    /// refuses on the old shape is a gate that fails on every machine that has
+    /// not re-minted yet.
+    #[test]
+    fn the_bare_scalar_baseline_still_reads_as_a_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("concepts.txt");
+        std::fs::write(&f, "35\n").unwrap();
+
+        let b = read_baseline(&f);
+        assert_eq!(b.count, Some(35));
+        assert!(
+            !b.named,
+            "an unnamed baseline must report itself as unnamed, so the relay \
+             says `cannot say WHICH` instead of `nothing was added`"
+        );
+        assert!(b.names.is_empty());
+    }
+
+    #[test]
+    fn a_missing_baseline_is_no_count_and_not_a_zero() {
+        let b = read_baseline(std::path::Path::new("/nonexistent/concepts.txt"));
+        assert_eq!(b.count, None, "absence is reported, never defaulted");
+        assert!(!b.named);
+        assert_eq!(
+            b.unreadable, None,
+            "a file that is not there is `none yet`, which --mint does fix"
+        );
+    }
+
+    /// `count: None` alone cannot tell "not minted yet" from "the file is
+    /// there and says something else". Both are NEVER-RAN, and only one of
+    /// them is repaired by `--mint`, so the two must not collapse (§18.3).
+    #[test]
+    fn a_baseline_that_is_present_but_unparseable_says_so_instead_of_none() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let junk = dir.path().join("junk.txt");
+        std::fs::write(&junk, "# header only\nthirty-five\n").unwrap();
+        let b = read_baseline(&junk);
+        assert_eq!(b.count, None);
+        let why = b.unreadable.expect("a present-but-bad file is UNREADABLE");
+        assert!(why.contains("thirty-five"), "quotes what it found: {why}");
+
+        let empty = dir.path().join("empty.txt");
+        std::fs::write(&empty, "# nothing but a header\n").unwrap();
+        let b = read_baseline(&empty);
+        assert_eq!(b.count, None);
+        assert!(
+            b.unreadable
+                .as_deref()
+                .is_some_and(|w| w.contains("no non-comment line")),
+            "a header-only file is unreadable, not absent: {:?}",
+            b.unreadable
         );
     }
 }

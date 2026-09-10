@@ -1,1 +1,44 @@
-35
+# concept-gate baseline — the reachable duplicate-name SET, and its size.
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- concept-gate --update-baseline
+# The first non-comment line is the COUNT; every line after it is one name.
+39
+Result
+Verdict
+Error
+Registry
+Role
+Gap
+Source
+Scope
+StepKind
+ProgressCallback
+ScipGraphHandle
+Admission
+AtomSpan
+CancellationFlag
+ChunkRange
+ChunkRecord
+Citation
+ClaimRecord
+ComputeChildStatus
+CorpusState
+DepKind
+EmbedFn
+EnrichProgressFn
+FinishReason
+HardwareProfile
+IngestProgress
+Note
+NoteScope
+NoteSource
+Recipe
+ResidentSlot
+ScopeFilter
+ScoredChunk
+SlotPlacement
+StreamFrame
+StreamUsage
+SymbolRef
+WorkUnit
+WorkerPlacement
