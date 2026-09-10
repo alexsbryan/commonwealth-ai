@@ -33,13 +33,20 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::traits::ApprovalChannel;
+use crate::traits::{ApprovalChannel, RoutingEventSink};
 
 tokio::task_local! {
     /// The approval channel of the turn running on this task, installed by
     /// [`scope`]. Absent outside a scoped turn — which is every in-process
     /// host, deliberately.
     static TURN_APPROVAL: Arc<dyn ApprovalChannel>;
+    /// The routing-event sink of the turn running on this task, installed
+    /// by [`scope_routing_events`] (sv-surface G7). Same bargain as
+    /// approval: the process-wide `routing_events` member cannot tell
+    /// which socket's conversation a banner or a narration belongs to, and
+    /// a broadcast bridge would need a conversation→socket registry to
+    /// work out what the turn already knows.
+    static TURN_ROUTING_EVENTS: Arc<dyn RoutingEventSink>;
 }
 
 /// Run `fut` as a turn whose consent questions go to `approval`.
@@ -63,10 +70,28 @@ pub async fn scope<F: Future>(approval: Option<Arc<dyn ApprovalChannel>>, fut: F
     }
 }
 
+/// Run `fut` as a turn whose routing events go to `sink` — the G7 twin of
+/// [`scope`]. Same boxing reason, same "wrap the WHOLE turn" requirement:
+/// the router's interpretation banner and clarification card fire during
+/// the acquire, before any stream handle exists.
+pub async fn scope_routing_events<F: Future>(
+    sink: Option<Arc<dyn RoutingEventSink>>,
+    fut: F,
+) -> F::Output {
+    match sink {
+        Some(s) => TURN_ROUTING_EVENTS.scope(s, Box::pin(fut)).await,
+        None => fut.await,
+    }
+}
+
 /// The ambient turn approval channel, if this task is running inside a scoped
 /// turn.
 fn current() -> Option<Arc<dyn ApprovalChannel>> {
     TURN_APPROVAL.try_with(Arc::clone).ok()
+}
+
+fn current_routing_events() -> Option<Arc<dyn RoutingEventSink>> {
+    TURN_ROUTING_EVENTS.try_with(Arc::clone).ok()
 }
 
 impl super::Runtime {
@@ -83,6 +108,15 @@ impl super::Runtime {
     /// result — see the module docs.
     pub(crate) fn turn_approval(&self) -> Arc<dyn ApprovalChannel> {
         current().unwrap_or_else(|| Arc::clone(&self.approval))
+    }
+
+    /// The sink THIS turn's routing events go to — the G7 twin of
+    /// [`Self::turn_approval`]. Same fallback (the commissioned member),
+    /// same read-before-spawn contract; `conation.rs`'s detached
+    /// lesson-capture reads it beside its approval read so the
+    /// post-turn narration survives the spawn.
+    pub(crate) fn turn_routing_events(&self) -> Arc<dyn RoutingEventSink> {
+        current_routing_events().unwrap_or_else(|| Arc::clone(&self.routing_events))
     }
 }
 

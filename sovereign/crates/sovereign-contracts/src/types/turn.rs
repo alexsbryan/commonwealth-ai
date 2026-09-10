@@ -76,7 +76,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::approval::{ResolveOutcome, StepStatus};
 use crate::types::epistemic::EpistemicState;
-use crate::types::narration::NarrationPhase;
+use crate::types::narration::{ClarificationRequest, InterpretationProposed, NarrationPhase};
 use crate::types::projection::{Citation, Provenance, TaskSummary, TurnMetadata};
 use crate::types::ui::ActionPreview;
 use crate::types::{InformationRequest, LessonProposedPayload, MessageRefinedPayload};
@@ -292,10 +292,10 @@ pub enum TurnAnswer {
 ///
 /// [`TurnFrame::Narration`] deliberately stays a frame of its own
 /// (sv-surface E3): it is the one variant with real readers today, and
-/// folding it would be a wire break for no gain. The desktop's other
-/// two routing events (interpretation-proposed, clarification-request)
-/// join this enum when their payloads move to contracts — sv-surface
-/// G7, scheduled with its producer rather than speculated here.
+/// folding it would be a wire break for no gain. The desktop's OTHER
+/// two routing events joined as variants with their producer (sv-surface
+/// G7): the payloads already lived in this crate — only the daemon-side
+/// per-socket sink was missing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnNotice {
@@ -348,6 +348,15 @@ pub enum TurnNotice {
         /// What the answer found there.
         outcome: ResolveOutcome,
     },
+    /// The router read the input a moderate-confidence way: the banner
+    /// with its interpretation and redirect chips (sv-surface G7). The
+    /// session the chips resume against is retained ~30s, the same
+    /// window `TurnRequest::Resume` names.
+    InterpretationProposed(InterpretationProposed),
+    /// The router could not decide: synthesis is suppressed and the card
+    /// asks the user to pick or type (sv-surface G7). Answered with
+    /// [`TurnRequest::Resume`] against the session the options carry.
+    ClarificationRequest(ClarificationRequest),
 }
 
 /// How much of the Sovereign pipeline a turn runs through.

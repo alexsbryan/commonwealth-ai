@@ -46,7 +46,7 @@ impl Runtime {
                 .map(|s| s.id.clone());
             let inference = std::sync::Arc::clone(&self.inference);
             let approval = self.turn_approval();
-            let routing_events = std::sync::Arc::clone(&self.routing_events);
+            let routing_events = self.turn_routing_events();
             let cid = conversation_id.to_string();
             let msg = message.to_string();
             tokio::spawn(async move {

@@ -1101,7 +1101,7 @@ impl Runtime {
             size_bytes = ?slot.size_bytes,
             "primary slot cold at synthesis — narrating the load wait"
         );
-        self.routing_events
+        self.turn_routing_events()
             .emit_turn_narration(TurnNarration {
                 session_id: session_id.to_string(),
                 conversation_id: conversation_id.to_string(),
@@ -1147,7 +1147,7 @@ impl Runtime {
         // and needs to see activity within 200ms. RetrievalComplete
         // below remains gated by the suppression rules.
         let retrieval_start_at = std::time::Instant::now();
-        self.routing_events
+        self.turn_routing_events()
             .emit_turn_narration(TurnNarration {
                 session_id: _session_id.clone(),
                 conversation_id: conversation_id.to_string(),
@@ -1224,7 +1224,7 @@ impl Runtime {
                     ),
                 }
             };
-            self.routing_events
+            self.turn_routing_events()
                 .emit_turn_narration(TurnNarration {
                     session_id: _session_id.clone(),
                     conversation_id: conversation_id.to_string(),
@@ -1310,7 +1310,7 @@ impl Runtime {
                 },
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -1344,7 +1344,7 @@ impl Runtime {
         // for the streaming path. See `run_collaboration` for
         // how they're consumed.
         let collab_routing_events: Option<Arc<dyn RoutingEventSink>> =
-            Some(Arc::clone(&self.routing_events));
+            Some(self.turn_routing_events());
         let collab_session_id: Option<String> = Some(_session_id.clone());
         // Post-stream preemption token for THIS turn's housekeeping —
         // cancelled by the next user turn on the conversation.
@@ -1632,7 +1632,7 @@ impl Runtime {
                 NarrationPhase::GroundingVerifyStart,
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -1662,7 +1662,7 @@ impl Runtime {
                 NarrationPhase::PrimarySynthesisStart,
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -2726,7 +2726,7 @@ impl Runtime {
         // the chip is on screen before `prepare_knowledge_context`
         // returns.
         if !matches!(intent, Intent::SimpleQuery) {
-            self.routing_events
+            self.turn_routing_events()
                 .emit_turn_narration(TurnNarration {
                     session_id: _session_id.clone(),
                     conversation_id: conversation_id.to_string(),
@@ -2784,7 +2784,7 @@ impl Runtime {
                 },
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -2818,7 +2818,7 @@ impl Runtime {
                     shape.count, shape.distinct_sources
                 ),
             };
-            self.routing_events
+            self.turn_routing_events()
                 .emit_turn_narration(TurnNarration {
                     session_id: _session_id.clone(),
                     conversation_id: conversation_id.to_string(),
@@ -3004,7 +3004,7 @@ impl Runtime {
                 NarrationPhase::PrimarySynthesisStart,
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -3036,7 +3036,7 @@ impl Runtime {
         // cancelled by the next user turn on the conversation.
         let preempt_for_spawn = self.post_stream_preemption.current(conversation_id);
         let routing_events_for_spawn: Option<Arc<dyn RoutingEventSink>> =
-            Some(Arc::clone(&self.routing_events));
+            Some(self.turn_routing_events());
         let session_id_for_spawn: Option<String> = Some(_session_id.clone());
         let conversation_id_owned = conversation_id.to_string();
         let message_id_owned = message_id.clone();
@@ -3227,7 +3227,7 @@ impl Runtime {
                 NarrationPhase::GroundingVerifyStart,
                 txt,
             ) {
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: _session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -4288,7 +4288,7 @@ impl Runtime {
                     intent_hint: intent_hint(&a.intent),
                 })
                 .collect();
-            self.routing_events
+            self.turn_routing_events()
                 .emit_interpretation_proposed(InterpretationProposed {
                     session_id: _session_id.clone(),
                     conversation_id: conversation_id.to_string(),
@@ -4371,7 +4371,7 @@ impl Runtime {
             };
             let sink: Arc<dyn crate::pipeline::NarrationSink> =
                 Arc::new(crate::pipeline::RoutingEventNarrationSink {
-                    inner: Arc::clone(&self.routing_events),
+                    inner: self.turn_routing_events(),
                 });
             let output = crate::pipeline::run_team_pipeline(
                 inputs,

@@ -23,8 +23,9 @@
 
 use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
 use sovereign_contracts::types::{
-    ActionPreview, InformationRequest, LessonProposedPayload, MessageRefinedPayload,
-    NarrationPhase, StepStatus, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt,
+    ActionPreview, ClarificationOption, ClarificationRequest, InformationRequest,
+    InterpretationProposed, LessonProposedPayload, MessageRefinedPayload, NarrationPhase,
+    ProposedAlternative, StepStatus, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt,
     TurnRequest,
 };
 
@@ -347,6 +348,51 @@ fn notice_frame_wire_form() {
             },
         },
         r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"resolved"}}}}"#,
+    );
+    // G7's two routing events — payloads that already lived in contracts;
+    // these pins are their first wire form.
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::InterpretationProposed(InterpretationProposed {
+                session_id: "s1".into(),
+                conversation_id: "c1".into(),
+                interpretation: "I'm reading this as a quick overview.".into(),
+                alternatives: vec![ProposedAlternative {
+                    label: "Walk me through the scoring".into(),
+                    intent_hint: "deep_query".into(),
+                }],
+                confidence: 0.55,
+            }),
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"interpretation_proposed":"#,
+            r#"{"session_id":"s1","conversation_id":"c1","#,
+            r#""interpretation":"I'm reading this as a quick overview.","#,
+            r#""alternatives":[{"label":"Walk me through the scoring","#,
+            r#""intent_hint":"deep_query"}],"confidence":0.55}}}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ClarificationRequest(ClarificationRequest {
+                session_id: "s1".into(),
+                conversation_id: "c1".into(),
+                question: "Understand it, change it, or debug it?".into(),
+                options: vec![ClarificationOption {
+                    label: "Understand how it works".into(),
+                    follow_up: "Explain how the scheduler picks peers".into(),
+                    intent_hint: "knowledge_query".into(),
+                }],
+            }),
+        },
+        concat!(
+            r#"{"type":"notice","data":{"notice":{"clarification_request":"#,
+            r#"{"session_id":"s1","conversation_id":"c1","#,
+            r#""question":"Understand it, change it, or debug it?","#,
+            r#""options":[{"label":"Understand how it works","#,
+            r#""follow_up":"Explain how the scheduler picks peers","#,
+            r#""intent_hint":"knowledge_query"}]}}}}"#,
+        ),
     );
 }
 

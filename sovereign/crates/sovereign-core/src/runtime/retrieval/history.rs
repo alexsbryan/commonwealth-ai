@@ -268,7 +268,7 @@ impl Runtime {
                 let folded_count = window.len();
                 if folded_count >= crate::runtime::COMPACTION_CHIP_MIN_DROPPED {
                     if let Some(sid) = session_id {
-                        self.routing_events
+                        self.turn_routing_events()
                             .emit_turn_narration(crate::types::TurnNarration {
                                 session_id: sid.to_string(),
                                 conversation_id: conversation_id.to_string(),
@@ -756,7 +756,7 @@ impl Runtime {
             } else {
                 format!("Recalled {turns} earlier exchanges from this conversation.")
             };
-            self.routing_events
+            self.turn_routing_events()
                 .emit_turn_narration(crate::types::TurnNarration {
                     session_id: sid.to_string(),
                     conversation_id: conversation_id.to_string(),

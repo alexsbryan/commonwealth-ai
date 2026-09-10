@@ -556,7 +556,7 @@ impl Runtime {
                     intent_hint: intent_hint(&a.intent),
                 })
                 .collect();
-            self.routing_events
+            self.turn_routing_events()
                 .emit_interpretation_proposed(InterpretationProposed {
                     session_id: _session_id.clone(),
                     conversation_id: conversation_id.to_string(),
@@ -733,7 +733,7 @@ impl Runtime {
             };
             let sink: Arc<dyn crate::pipeline::NarrationSink> =
                 Arc::new(crate::pipeline::RoutingEventNarrationSink {
-                    inner: Arc::clone(&self.routing_events),
+                    inner: self.turn_routing_events(),
                 });
             let mut output = crate::pipeline::run_team_pipeline(
                 inputs,

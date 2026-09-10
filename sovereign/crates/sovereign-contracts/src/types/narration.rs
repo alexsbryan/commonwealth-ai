@@ -520,7 +520,7 @@ pub struct NarrationEvent {
 /// The banner persists through the turn; redirect stays cheap while
 /// tokens are flowing (sampler cancels) and remains valid afterward
 /// (full session retained for 30s).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InterpretationProposed {
     /// Live `QuerySession` id — redirect chips resume against it.
     pub session_id: String,
@@ -537,7 +537,7 @@ pub struct InterpretationProposed {
 }
 
 /// One redirect option on an `InterpretationProposed` banner.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProposedAlternative {
     /// UI-facing label, e.g. "Walk me through the scoring function".
     pub label: String,
@@ -552,7 +552,7 @@ pub struct ProposedAlternative {
 /// The UI renders a ClarificationCard with `options` as clickable
 /// chips plus a free-text fallback. Synthesis is suppressed —
 /// nothing streams until the user responds.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClarificationRequest {
     /// Live `QuerySession` id the chosen option resumes against.
     pub session_id: String,
@@ -567,7 +567,7 @@ pub struct ClarificationRequest {
 }
 
 /// One clickable disambiguation on a `ClarificationRequest` card.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClarificationOption {
     /// UI chip text.
     pub label: String,

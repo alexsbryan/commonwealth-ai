@@ -87,7 +87,8 @@ use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance, TaskSummary,
 };
 use sovereign_contracts::types::{
-    ResumeSession, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnRequest,
+    ClarificationRequest, InterpretationProposed, ResumeSession, TurnAnswer, TurnFrame, TurnMode,
+    TurnNarration, TurnNotice, TurnRequest,
 };
 use sovereign_core::runtime::Runtime;
 use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
@@ -730,6 +731,21 @@ async fn handle_ws(
     let approvals = claim_approvals
         .then(|| Arc::new(SocketApprovalChannel::new(out_tx.clone(), &conversation_id)));
 
+    // This socket's routing-event sink (sv-surface G7) — narration, the
+    // interpretation banner and the clarification card all leave as frames
+    // on THIS socket, installed per turn via `scope_routing_events`: the
+    // same per-turn capability shape approval took in C1. A process-wide
+    // sink (the runtime's commissioned member) cannot tell which socket's
+    // conversation a banner belongs to, and the broadcast bridge the
+    // server uses would need a conversation→socket registry to work out
+    // what the turn already knows. Unlike approvals this is UNCONDITIONAL
+    // — routing events are notices, owed no answer, so there is no claim
+    // to forget to make.
+    let routing_events: Arc<dyn sovereign_core::traits::RoutingEventSink> =
+        Arc::new(SocketRoutingEvents {
+            frames: out_tx.clone(),
+        });
+
     // The turn's own approval capability, read once per turn and installed
     // around the WHOLE call by each arm that starts one: the executor is built
     // during the ACQUIRE, and a scope that began at the stream handle would
@@ -814,20 +830,28 @@ async fn handle_ws(
                     out_tx.clone(),
                 );
                 let turn_approval = claimed_channel();
+                let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
                     sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        serve_turn(
-                            &rt,
-                            st.as_ref(),
-                            &cid,
-                            &content,
-                            mode,
-                            intent,
-                            // See the module docs — the daemon has no narration
-                            // broadcast yet, and a `None` here is that fact
-                            // rather than a dropped channel.
-                            None,
-                            &tx,
+                        sovereign_core::runtime::capabilities::scope_routing_events(
+                            Some(routing),
+                            async {
+                                serve_turn(
+                                    &rt,
+                                    st.as_ref(),
+                                    &cid,
+                                    &content,
+                                    mode,
+                                    intent,
+                                    // See the module docs — the daemon has no
+                                    // narration broadcast yet, and a `None`
+                                    // here is that fact rather than a dropped
+                                    // channel.
+                                    None,
+                                    &tx,
+                                )
+                                .await;
+                            },
                         )
                         .await;
                     })
@@ -887,17 +911,24 @@ async fn handle_ws(
                     out_tx.clone(),
                 );
                 let turn_approval = claimed_channel();
+                let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
                     sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        let resume = ResumeSession {
-                            session_id,
-                            intent_hint,
-                        };
-                        drive_acquired(
-                            rt.resume_session_stream(&content, &cid, resume).await,
-                            st.as_ref(),
-                            &cid,
-                            &tx,
+                        sovereign_core::runtime::capabilities::scope_routing_events(
+                            Some(routing),
+                            async {
+                                let resume = ResumeSession {
+                                    session_id,
+                                    intent_hint,
+                                };
+                                drive_acquired(
+                                    rt.resume_session_stream(&content, &cid, resume).await,
+                                    st.as_ref(),
+                                    &cid,
+                                    &tx,
+                                )
+                                .await;
+                            },
                         )
                         .await;
                     })
@@ -960,16 +991,24 @@ async fn handle_ws(
                     out_tx.clone(),
                 );
                 let turn_approval = claimed_channel();
+                let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
                     sovereign_core::runtime::capabilities::scope(turn_approval, async {
-                        drive_acquired(
-                            rt.redirect_turn_stream(&session_id, &intent_hint).await,
-                            st.as_ref(),
-                            // The socket's conversation, which the guard above
-                            // proved is also the session's — so the terminal
-                            // metadata is read from the row the turn wrote.
-                            &cid,
-                            &tx,
+                        sovereign_core::runtime::capabilities::scope_routing_events(
+                            Some(routing),
+                            async {
+                                drive_acquired(
+                                    rt.redirect_turn_stream(&session_id, &intent_hint).await,
+                                    st.as_ref(),
+                                    // The socket's conversation, which the guard
+                                    // above proved is also the session's — so the
+                                    // terminal metadata is read from the row the
+                                    // turn wrote.
+                                    &cid,
+                                    &tx,
+                                )
+                                .await;
+                            },
                         )
                         .await;
                     })
@@ -1196,4 +1235,137 @@ fn service_unavailable(reason: &str) -> Response {
         Json(serde_json::json!({ "error": reason })),
     )
         .into_response()
+}
+
+// ─── The socket's routing-event sink (sv-surface G7) ──────────────────────
+//
+// Narration, the interpretation banner and the clarification card all leave
+// as frames on THIS socket. Installed per turn via
+// `capabilities::scope_routing_events` — the per-turn capability shape
+// approval took in C1 — because the process-wide `routing_events` member
+// cannot tell which socket's conversation a banner belongs to, and the
+// broadcast bridge `sovereign-server` uses (narration.rs) would need a
+// conversation→socket registry to work out what the turn already knows.
+
+/// The routing-event sink of ONE turn socket: one frame channel, three
+/// frame shapes, no answer owed.
+struct SocketRoutingEvents {
+    frames: mpsc::UnboundedSender<TurnFrame>,
+}
+
+impl SocketRoutingEvents {
+    /// Say a Notice. Owed no answer, so a closed socket costs a trace.
+    fn notice(&self, notice: TurnNotice) {
+        if self.frames.send(TurnFrame::Notice { notice }).is_err() {
+            tracing::debug!("turn_http: routing event dropped — the socket is closed");
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl sovereign_core::traits::RoutingEventSink for SocketRoutingEvents {
+    async fn emit_interpretation_proposed(&self, payload: InterpretationProposed) {
+        self.notice(TurnNotice::InterpretationProposed(payload));
+    }
+
+    async fn emit_clarification_request(&self, payload: ClarificationRequest) {
+        self.notice(TurnNotice::ClarificationRequest(payload));
+    }
+
+    /// E3 (sv-surface): narration keeps its OWN frame — it has real readers
+    /// today, and folding it into Notice would be a wire break for no gain.
+    /// `message_id` is empty: routing narration emits before a stream handle
+    /// exists (same as the `TurnFrame::Narration` doc's "before the stream
+    /// handle is acquired" case), and the socket already knows which
+    /// conversation it serves — the payload's session/conversation ids are
+    /// addressing for a broadcast, which this is not.
+    async fn emit_turn_narration(&self, payload: TurnNarration) {
+        let _ = self.frames.send(TurnFrame::Narration {
+            message_id: String::new(),
+            phase: payload.event.phase,
+            text: payload.event.text,
+            elapsed_ms: payload.event.elapsed_ms,
+        });
+    }
+}
+
+#[cfg(test)]
+mod routing_event_sink_tests {
+    use super::*;
+    use sovereign_contracts::types::{NarrationEvent, NarrationPhase};
+    use sovereign_core::traits::RoutingEventSink;
+
+    fn sink() -> (SocketRoutingEvents, mpsc::UnboundedReceiver<TurnFrame>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (SocketRoutingEvents { frames: tx }, rx)
+    }
+
+    /// The banner and the card ride Notice with their payloads intact; the
+    /// id fields survive because Resume needs them — the client's redirect
+    /// click names the session the payload carried.
+    #[tokio::test]
+    async fn the_two_cards_ride_notice_with_payloads_intact() {
+        let (sink, mut rx) = sink();
+        sink.emit_interpretation_proposed(InterpretationProposed {
+            session_id: "s1".into(),
+            conversation_id: "c1".into(),
+            interpretation: "reading as an overview".into(),
+            alternatives: Vec::new(),
+            confidence: 0.55,
+        })
+        .await;
+        sink.emit_clarification_request(ClarificationRequest {
+            session_id: "s1".into(),
+            conversation_id: "c1".into(),
+            question: "which way?".into(),
+            options: Vec::new(),
+        })
+        .await;
+
+        let first = rx.try_recv().unwrap();
+        let TurnFrame::Notice {
+            notice: TurnNotice::InterpretationProposed(p),
+        } = &first
+        else {
+            panic!("the banner rides Notice; got {first:?}")
+        };
+        assert_eq!((p.session_id.as_str(), p.confidence), ("s1", 0.55));
+
+        let second = rx.try_recv().unwrap();
+        let TurnFrame::Notice {
+            notice: TurnNotice::ClarificationRequest(c),
+        } = &second
+        else {
+            panic!("the card rides Notice; got {second:?}")
+        };
+        assert_eq!(c.session_id, "s1", "the resume key crosses intact");
+    }
+
+    /// Narration stays the Narration frame (E3) — its phase/text/elapsed
+    /// map one-to-one, and its message_id is honestly empty.
+    #[tokio::test]
+    async fn narration_keeps_its_own_frame() {
+        let (sink, mut rx) = sink();
+        sink.emit_turn_narration(TurnNarration {
+            session_id: "s1".into(),
+            conversation_id: "c1".into(),
+            event: NarrationEvent {
+                phase: NarrationPhase::RetrievalStart,
+                text: "Reading 12 chunks".into(),
+                elapsed_ms: 340,
+            },
+        })
+        .await;
+
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            TurnFrame::Narration {
+                message_id: String::new(),
+                phase: NarrationPhase::RetrievalStart,
+                text: "Reading 12 chunks".into(),
+                elapsed_ms: 340,
+            },
+            "not a Notice — folding narration would break its real readers"
+        );
+    }
 }
