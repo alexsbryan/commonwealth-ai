@@ -606,10 +606,25 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
     // Wikipedia. Atomic-rename the shard directory into place instead
     // and rewrite `_corpus_meta.json` to shed its is_shard/partition
     // metadata. The fast path refuses when the output path already
-    // holds data so we never clobber a prior canonical index; callers
-    // that actually do want to fold a partition into an existing
-    // canonical fall through to the full merge below (which dedupes
-    // via `content_hash`).
+    // holds data so we never clobber a prior canonical index.
+    //
+    // CORRECTED 2026-09-09 (cw-lift 5g part 2, measured). This comment used
+    // to promise that "callers that actually do want to fold a partition into
+    // an existing canonical fall through to the full merge below (which
+    // dedupes via `content_hash`)". THEY CANNOT. The full merge builds its
+    // output with `CorpusIndex::create` (line ~735), which refuses a
+    // directory already holding a `chunks` table — so a second merge into a
+    // live canonical returns `Database("Table 'chunks' already exists")` and
+    // never reaches the dedupe at all. Watched, at
+    // `commonwealth-knowledge/tests/main/merge_participants_idempotence.rs`.
+    //
+    // The dedupe is real; it just only applies WITHIN one merge, across the
+    // shards handed to that call. Folding into an existing canonical would
+    // need `CorpusIndex::create_or_resume` (line ~1506 documents this exact
+    // LanceDB failure and works around it), which this path does not use.
+    // Left as-is deliberately: refusing is the safe half, and callers relying
+    // on it — `auto_recover::merge_from_fold_coverage`'s `AlreadyHasCanonical`
+    // short-circuit — are relying on a refusal, not on an optimisation.
     if shard_paths.len() == 1 {
         let source = &shard_paths[0];
         let output_has_data = crate::corpus::Corpus::meta_in(&output_path).exists();
