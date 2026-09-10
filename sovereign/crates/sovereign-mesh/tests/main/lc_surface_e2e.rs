@@ -135,6 +135,32 @@ async fn register_folder(manager: &Arc<LocalCorpusManager>, tag: &str) -> (Strin
     (id, folder)
 }
 
+/// Register a document folder holding `files` named documents, so a
+/// terminal `files_indexed` is a number a hard-coded `1` cannot fake.
+#[allow(clippy::unwrap_used)]
+async fn register_folder_with_files(
+    manager: &Arc<LocalCorpusManager>,
+    tag: &str,
+    files: usize,
+) -> (String, PathBuf) {
+    let root = manager.index_dir_root();
+    let folder = root
+        .parent()
+        .unwrap_or(&root)
+        .join(format!("lc-fixture-{tag}"));
+    std::fs::create_dir_all(&folder).unwrap();
+    for n in 0..files {
+        std::fs::write(
+            folder.join(format!("doc-{n}.txt")),
+            format!("document {n}: quiet hours begin at 11 PM"),
+        )
+        .unwrap();
+    }
+    let cfg = LocalCorpusConfig::document_folder(folder.clone(), format!("Fixture {tag}"));
+    let id = manager.register(cfg).await.expect("register");
+    (id, folder)
+}
+
 async fn get(addr: SocketAddr, path: &str) -> (u16, serde_json::Value) {
     let resp = reqwest::Client::new()
         .get(format!("http://{addr}{path}"))
@@ -331,9 +357,10 @@ async fn the_vault_routes_reach_the_manager_and_name_what_refused() {
 /// document becomes searchable through `search` on the same manager.
 ///
 /// The `progress_route` field is the load-bearing half. A job id with
-/// no named reporter is how a caller ends up inventing a poll loop, and
-/// there is deliberately no second job table here — the ack points at
-/// the watch-status route that already exists.
+/// no named reporter is how a caller ends up inventing a poll loop.
+/// CORRECTED 2026-09-10: it named `/internal/corpus/watch/status/{id}`,
+/// a route that cannot serve this arm — see the test below, which
+/// demonstrates the 404 rather than asserting the correction on trust.
 #[tokio::test]
 async fn ingest_is_a_job_that_names_its_progress_route_and_then_runs() {
     let (manager, addr) = harness().await;
@@ -356,9 +383,10 @@ async fn ingest_is_a_job_that_names_its_progress_route_and_then_runs() {
     );
     assert_eq!(
         ack["progress_route"],
-        serde_json::json!(format!("/internal/corpus/watch/status/{id}")),
-        "the ack NAMES the existing route that reports this job — no second \
-         job table: {ack:#?}"
+        serde_json::json!(format!("/internal/corpus/local/{id}/ingest/progress")),
+        "the ack NAMES the route that reports THIS job — and it is the one \
+         that works for this corpus kind, not the watch-status route that \
+         404s for it: {ack:#?}"
     );
 
     // The job is real: poll the search route until the folder's one
@@ -397,4 +425,143 @@ async fn ingest_is_a_job_that_names_its_progress_route_and_then_runs() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     }
+}
+
+/// The ingest progress route follows a **DocumentFolder** corpus from
+/// submission to its terminal counts — the contract the desktop's ingest
+/// arm could not cross without them.
+///
+/// Three assertions, in the order the finding (069660fd9) put them:
+///
+/// 1. The route the ack USED to name, `GET /internal/corpus/watch/
+///    status/{id}`, **404s for this very corpus**. That is not incidental
+///    colour: it is the measured reason the old ack could not be polled,
+///    reproduced here so a future edit that points the ack back at it
+///    reddens instead of shipping. Its handler wants a RECONCILABLE
+///    watched folder and a document folder is not one.
+/// 2. The new route serves the same corpus while the job is live and
+///    keeps `finished: false` — a caller cannot mistake "running" for
+///    "done and indexed nothing".
+/// 3. The terminal frame carries `IngestStats`. `files_indexed` is
+///    asserted against the THREE files the fixture wrote, so a handler
+///    answering a plausible `1`, or defaulting the struct, fails.
+///
+/// The corpus is registered but never ingested at the top, which is the
+/// fourth case: `200` with both halves null, NOT a 404 — "no such corpus"
+/// and "this corpus has not started" are different answers (ARCH §18.3).
+///
+/// # Red-watch (2026-09-10, run, not asserted)
+///
+/// Watched red TWICE, because one sabotage would only have covered the
+/// route's existence and the counts are the half that was owed:
+///
+/// ```text
+/// route removed from lc_router (handler left)  :460  left: 404 right: 200
+/// record_ingest_outcome writes stats: None     :536  files_indexed
+///                                                    3 vs null
+/// ```
+///
+/// The second is the one that matters: with the route mounted and the
+/// receipt still written, dropping only the STATS leaves `finished: true`
+/// and a well-formed answer — the exact shape a caller would have had to
+/// fabricate counts from — and the test reddens on the count itself.
+#[tokio::test]
+async fn ingest_progress_follows_a_document_folder_to_its_terminal_stats() {
+    let (manager, addr) = harness().await;
+    let (id, _folder) = register_folder_with_files(&manager, "progress", 3).await;
+    let progress_path = format!("/internal/corpus/local/{id}/ingest/progress");
+
+    // (0) Registered, never ingested: a 200 that says so.
+    let (status, body) = get(addr, &progress_path).await;
+    assert_eq!(
+        status, 200,
+        "a registered corpus has a progress answer: {body:#?}"
+    );
+    assert_eq!(body["corpus_id"], serde_json::json!(id));
+    assert_eq!(
+        body["finished"],
+        serde_json::json!(false),
+        "nothing has finished because nothing has started: {body:#?}"
+    );
+    assert!(
+        body["outcome"].is_null(),
+        "no receipt before there is a job: {body:#?}"
+    );
+
+    // (1) The route the ack used to name cannot serve this corpus kind.
+    let watch_addr = spawn_router(sovereign_mesh::corpus_watch_http::corpus_watch_router()).await;
+    let (watch_status, watch_body) =
+        get(watch_addr, &format!("/internal/corpus/watch/status/{id}")).await;
+    assert_eq!(
+        watch_status, 404,
+        "the watch-status route requires a RECONCILABLE watched folder, and a \
+         document folder is not one — this is why the ack could not name it, \
+         and asserting it here is what stops the ack drifting back: {watch_body:#?}"
+    );
+
+    // (2) Submit, and read progress while it is live.
+    let (status, ack) = post(
+        addr,
+        &format!("/internal/corpus/local/{id}/ingest"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 202, "ingest: {ack:#?}");
+    let job_id = ack["job_id"].as_str().expect("a job id").to_string();
+    assert_eq!(
+        ack["progress_route"],
+        serde_json::json!(progress_path),
+        "the ack names THIS route: {ack:#?}"
+    );
+
+    // (3) Poll to the terminal frame. 30s is generous for three small
+    // files under a mock embedder; a timeout is a broken ingest, not a
+    // slow one.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut last = serde_json::Value::Null;
+    loop {
+        let (status, body) = get(addr, &progress_path).await;
+        assert_eq!(status, 200, "the progress route stays reachable: {body:#?}");
+        if body["finished"] == serde_json::json!(true) {
+            last = body;
+            break;
+        }
+        // While it is live, `finished` and the receipt agree with each
+        // other — a route that set one without the other would let a
+        // caller finish early on a half-written answer.
+        assert!(
+            body["outcome"].is_null(),
+            "an unfinished job has no receipt: {body:#?}"
+        );
+        last = body;
+        if std::time::Instant::now() > deadline {
+            panic!("the ingest job never reached its terminal frame; last answer: {last:#?}");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+
+    let outcome = &last["outcome"];
+    assert_eq!(
+        outcome["job_id"],
+        serde_json::json!(job_id),
+        "the receipt names the job the ack handed back, so two runs are \
+         tellable apart: {last:#?}"
+    );
+    assert!(
+        outcome["error"].is_null(),
+        "the fixture ingest succeeds; an error here is a real failure: {last:#?}"
+    );
+    let stats = &outcome["stats"];
+    assert_eq!(
+        stats["files_indexed"],
+        serde_json::json!(3),
+        "the terminal frame carries the count the desktop renders — three \
+         files in, three files reported: {last:#?}"
+    );
+    assert_eq!(stats["corpus_id"], serde_json::json!(id));
+    assert!(
+        stats["chunks_written"].as_u64().unwrap_or(0) > 0,
+        "three documents produce chunks; a zero here means the counts are \
+         defaulted rather than measured: {last:#?}"
+    );
 }

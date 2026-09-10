@@ -344,6 +344,65 @@ async fn corpus_watch_http_rejects_non_loopback_via_list() {
 }
 
 #[tokio::test]
+async fn governance_http_rejects_non_loopback_via_view() {
+    let (_t, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::governance_http::governance_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/internal/governance/any/view"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "governance_http loopback guard slipped — these routes APPEND to the \
+         owner's governance oplog with an actor stamped on each act, and a \
+         non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn mcp_config_http_rejects_non_loopback_via_server_list() {
+    let (_t, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::mcp_config_http::mcp_config_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/mcp/servers"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "mcp_config_http loopback guard slipped — this family reads the \
+         owner's server config and WRITES bearer secrets, and a non-loopback \
+         caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn recipe_project_http_rejects_non_loopback_via_project_list() {
+    let (_t, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(sovereign_mesh::recipe_project_http::recipe_project_router(
+        daemon,
+    ))
+    .await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/v1/recipe-projects"))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "recipe_project_http loopback guard slipped — these routes write the \
+         owner's artifact tree, and a non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
 async fn lc_http_rejects_non_loopback_via_local_list() {
     let base = spawn_with_spoof(sovereign_mesh::lc_http::lc_router()).await;
     let resp = reqwest::Client::new()
@@ -679,6 +738,33 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
         "lc_http",
         sovereign_mesh::lc_http::lc_router(),
         "/internal/corpus/local",
+    )
+    .await;
+
+    let (_t11, d11) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "governance_http",
+        sovereign_mesh::governance_http::governance_router(d11),
+        "/internal/governance/any/view",
+    )
+    .await;
+
+    let (_t12, d12) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "mcp_config_http",
+        sovereign_mesh::mcp_config_http::mcp_config_router(d12),
+        // NOT `.../{name}/token`: PUT is a real method there, so that path
+        // could not distinguish the layer from a handler.
+        "/v1/mcp/servers",
+    )
+    .await;
+
+    let (_t13, d13) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "recipe_project_http",
+        sovereign_mesh::recipe_project_http::recipe_project_router(d13),
+        // Same reason: `/{id}/toml` registers PUT.
+        "/v1/recipe-projects",
     )
     .await;
 }
@@ -1685,5 +1771,123 @@ async fn insight_routes_without_a_service_answer_the_named_503() {
             .unwrap()
             .contains("no insight service"),
         "the 503 names the absence: {body}"
+    );
+}
+
+/// `POST /v1/insights/by-id` — the read `explore_insights` still does
+/// in-process (sv-surface D8). Beside its five siblings rather than in
+/// `d8_surface_e2e`, because the `InsightService` fixture lives here and a
+/// second copy of it would be the twin this campaign deletes.
+///
+/// The MISSING array is the assertion that earns this route its shape: the
+/// store drops ids that name no live row, so a caller comparing lengths
+/// learns only that something vanished.
+///
+/// Watched red 2026-09-10 with ONLY the `/v1/insights/by-id` route removed
+/// (the handler and its DTOs left in place, the other five routes still
+/// mounted): `loopback_parity.rs:1831` — "the answer decodes", decode EOF
+/// at column 0, the empty body of the 404 the method fallback produced.
+///
+/// The first draft of this watch did not count and is recorded so nobody
+/// re-runs it: the clip body omitted `source.conversation_id`, which is a
+/// required field, so every clip 422'd and the test could not have passed
+/// green either. A red that a correct implementation also produces is not
+/// evidence (ARCH §18.1). Fixed, watched green, then re-watched red.
+#[tokio::test]
+async fn insights_by_id_returns_the_nodes_and_names_the_ones_that_are_gone() {
+    let (_tmp, daemon, _service) = insight_fixture().await;
+    let addr =
+        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let base = format!("http://{addr}");
+    let client = reqwest::Client::new();
+
+    // Two real clips.
+    let mut ids = Vec::new();
+    for text in ["Determinism, first passage.", "Compatibilism, second."] {
+        let clipped: serde_json::Value = client
+            .post(format!("{base}/v1/insights/clip"))
+            .json(&serde_json::json!({
+                "clipped_text": text,
+                "message_id": uuid::Uuid::new_v4().to_string(),
+                "paragraph_index": 1,
+                "source": {
+                    "corpus_id": "sep",
+                    "article_title": "Free Will",
+                    "conversation_id": uuid::Uuid::new_v4().to_string(),
+                },
+            }))
+            .send()
+            .await
+            .expect("server reachable")
+            .json()
+            .await
+            .unwrap();
+        ids.push(clipped["insight"]["id"].as_str().unwrap().to_string());
+    }
+    let ghost = uuid::Uuid::new_v4().to_string();
+
+    let body: serde_json::Value = client
+        .post(format!("{base}/v1/insights/by-id"))
+        .json(&serde_json::json!({ "ids": [ids[0], ghost, ids[1]] }))
+        .send()
+        .await
+        .expect("server reachable")
+        .json()
+        .await
+        .expect("the answer decodes");
+
+    let got = body["insights"].as_array().expect("an insights array");
+    assert_eq!(got.len(), 2, "both live rows come back: {body}");
+    let returned: std::collections::HashSet<&str> =
+        got.iter().filter_map(|n| n["id"].as_str()).collect();
+    assert!(
+        returned.contains(ids[0].as_str()) && returned.contains(ids[1].as_str()),
+        "the two clipped ids are the two returned: {body}"
+    );
+    assert!(
+        got.iter().all(|n| n["embedding"].is_null()),
+        "the projection strips the embedding here as it does on list: {body}"
+    );
+    assert_eq!(
+        body["missing"].as_array().map(Vec::len),
+        Some(1),
+        "the id that named no live row is REPORTED, not silently dropped: {body}"
+    );
+    assert_eq!(
+        body["missing"][0].as_str(),
+        Some(ghost.as_str()),
+        "and the caller is told WHICH one: {body}"
+    );
+
+    // An empty request is a successful empty answer, and both arrays are
+    // present — an absent key is indistinguishable from an old host.
+    let body: serde_json::Value = client
+        .post(format!("{base}/v1/insights/by-id"))
+        .json(&serde_json::json!({ "ids": [] }))
+        .send()
+        .await
+        .expect("server reachable")
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["insights"].as_array().map(Vec::len), Some(0));
+    assert_eq!(body["missing"].as_array().map(Vec::len), Some(0));
+
+    // A malformed id is a 400 naming it — one bad id in a batch of thirty
+    // is otherwise a mystery.
+    let resp = client
+        .post(format!("{base}/v1/insights/by-id"))
+        .json(&serde_json::json!({ "ids": ["not-a-uuid"] }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 400);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not-a-uuid"),
+        "the 400 names the id it could not parse: {body}"
     );
 }

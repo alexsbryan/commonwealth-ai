@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The daemon serves the insight surface — `GET /v1/insights`,
 //! `GET /v1/insights/search`, `DELETE /v1/insights/{id}`,
-//! `POST /v1/insights/clip` (sv-surface rung 6, commit A).
+//! `POST /v1/insights/clip` (sv-surface rung 6, commit A),
+//! `GET /v1/insights/sinks` (D2's owed route) and
+//! `POST /v1/insights/by-id` (sv-surface D8 — the read `explore_insights`
+//! still does locally).
 //!
 //! # Why this exists
 //!
@@ -63,6 +66,7 @@ pub fn insight_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/insights/{id}", delete(delete_insight))
         .route("/v1/insights/clip", post(clip_insight))
         .route("/v1/insights/sinks", get(sink_status))
+        .route("/v1/insights/by-id", post(insights_by_id))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -107,6 +111,31 @@ impl From<sovereign_contracts::types::InsightNode> for InsightEntry {
 #[derive(Debug, Serialize)]
 pub struct InsightListResponse {
     pub insights: Vec<InsightEntry>,
+}
+
+/// `POST /v1/insights/by-id` — the ids to fetch.
+///
+/// A POST because the input is a LIST, and `serde_urlencoded` cannot take
+/// a sequence — the same call `atlas_http`'s atom filter and
+/// `notes_http`'s query already make, rather than inventing a second
+/// comma-joining encoding for one route (ARCH §10.6).
+#[derive(Debug, Deserialize)]
+pub struct ByIdRequest {
+    pub ids: Vec<String>,
+}
+
+/// The nodes that resolved, and the ids that did not.
+///
+/// `missing` is the point of the shape. `InsightStore::list_by_ids`
+/// silently drops ids that name no live row — deleted, or never
+/// existed — so a caller comparing lengths learns only that something
+/// went missing, not which. A short list with no `missing` array would be
+/// an absence the caller has to infer (ARCH §18.3). Empty on the happy
+/// path, and an explicit empty array, never an absent key.
+#[derive(Debug, Serialize)]
+pub struct ByIdResponse {
+    pub insights: Vec<InsightEntry>,
+    pub missing: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -303,6 +332,62 @@ async fn sink_status(
         sinks,
     })
     .into_response()
+}
+
+/// POST `/v1/insights/by-id` — the read `explore_insights` still does
+/// in-process (`insight_commands.rs:191`, `service.store.list_by_ids`),
+/// which 19946f99a named as the one insight read with no route.
+///
+/// The ORDER of `insights` is the store's, not the request's: the query
+/// is one `WHERE id IN (...)` and sqlite owes no ordering. A caller that
+/// needs its own order has the ids and can index by them; a route that
+/// re-sorted here would be inventing a guarantee the store does not make.
+///
+/// An unparseable uuid is a 400 naming WHICH one — one bad id in a batch
+/// of thirty is otherwise a mystery.
+async fn insights_by_id(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(body): Json<ByIdRequest>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(service) = daemon.insight_service() else {
+        return service_unavailable("this daemon serves no insight surface (no insight service)");
+    };
+    let mut ids = Vec::with_capacity(body.ids.len());
+    for raw in &body.ids {
+        match uuid::Uuid::parse_str(raw) {
+            Ok(id) => ids.push(id),
+            Err(e) => return bad_request(&format!("`{raw}` is not an insight id: {e}")),
+        }
+    }
+    // An empty request is a successful empty answer, not an error: a
+    // selection of zero passages is a state a UI reaches by deselecting.
+    match service.store.list_by_ids(&ids).await {
+        Ok(nodes) => {
+            let found: std::collections::HashSet<String> =
+                nodes.iter().map(|n| n.id.to_string()).collect();
+            let missing: Vec<String> = ids
+                .iter()
+                .map(|i| i.to_string())
+                .filter(|i| !found.contains(i))
+                .collect();
+            tracing::debug!(
+                requested = ids.len(),
+                returned = nodes.len(),
+                missing = missing.len(),
+                "insight_http: nodes fetched by id",
+            );
+            Json(ByIdResponse {
+                insights: nodes.into_iter().map(InsightEntry::from).collect(),
+                missing,
+            })
+            .into_response()
+        }
+        Err(e) => internal_error(&e.to_string()),
+    }
 }
 
 fn bad_request(reason: &str) -> Response {

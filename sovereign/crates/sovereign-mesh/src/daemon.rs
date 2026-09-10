@@ -748,6 +748,35 @@ impl EmbeddedDaemon {
             .map(|m| &m.notes)
     }
 
+    /// The `[[mcp_servers]]` this daemon actually loaded — its IN-MEMORY
+    /// `SetupConfig`, not a fresh `SetupConfig::load()` (sv-surface D8).
+    ///
+    /// The in-memory copy is the truthful one for the question "what is
+    /// this daemon serving?": it is what the boot-time MCP loader read,
+    /// and it advances on `POST /v1/admin/reload`. A `config.toml` edited
+    /// since boot describes a daemon that does not exist yet, which is the
+    /// state `reload` exists to end — reporting the file here would
+    /// silently answer a different question than the caller asked.
+    pub async fn configured_mcp_servers(
+        &self,
+    ) -> Vec<sovereign_contracts::mcp_config::McpServerConfig> {
+        self.setup_config.read().await.mcp_servers.clone()
+    }
+
+    /// Every tool id in the registry behind this daemon's `/mcp` mount, or
+    /// `None` when no mount was commissioned (sv-surface D8).
+    ///
+    /// `None` and `Some(vec![])` are different facts and both occur: no
+    /// tool surface at all, versus a mounted surface with nothing in it.
+    /// `mcp_config_http` renders the distinction rather than folding it
+    /// into a zero count (ARCH §18.3).
+    pub fn mcp_tool_ids(&self) -> Option<Vec<String>> {
+        self.services
+            .serving()
+            .and_then(|s| s.capability.mcp.mount())
+            .map(|m| m.tools.descriptors().into_iter().map(|d| d.id).collect())
+    }
+
     /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
     /// caller is `reload_from_setup_config`, which is itself reachable only
     /// on the variant that carries a `ProviderFactory`. A host cannot install
@@ -3297,8 +3326,34 @@ impl EmbeddedDaemon {
             // again: `features.db` failing to open was a warn-and-skip the
             // daemon only wrote to a log, and this makes it a 503 a caller
             // can read.
-            mounted.push(crate::features_http::features_router(self_arc));
+            mounted.push(crate::features_http::features_router(Arc::clone(&self_arc)));
             mount_names.push("features_http");
+            // sv-surface D8 — the living-governance surface over the
+            // daemon's OWN atlas dir. Nine desktop commands opened that
+            // directory's oplog from a second process, each holding its own
+            // append mutex; this makes the daemon the writer. Unconditional
+            // for the reason above it: no corpus engine is a named 503.
+            mounted.push(crate::governance_http::governance_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("governance_http");
+            // sv-surface D8 — the daemon's own external-MCP configuration
+            // and the live tool counts behind its `/mcp` mount. A daemon
+            // with no mount answers 200 with `mount.mounted: false`, which
+            // is an ANSWER to the question rather than a failure to answer
+            // it — the two config WRITE commands stay app-local, and the
+            // module header records that this daemon owns no config-write
+            // path to serve them over.
+            mounted.push(crate::mcp_config_http::mcp_config_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("mcp_config_http");
+            // sv-surface D8 — the recipe-author project COMPOSITION over
+            // notes + features + the daemon's own artifact tree, the rung
+            // `features_http` named and declined in D6. Unconditional; a
+            // commission missing either store answers 503 naming which.
+            mounted.push(crate::recipe_project_http::recipe_project_router(self_arc));
+            mount_names.push("recipe_project_http");
             // sv-surface D5 — the non-watch half of `LocalCorpusManager`,
             // beside the seventeen watch routes that already serve the SAME
             // singleton. Takes no `Arc<Self>`: the manager is process state

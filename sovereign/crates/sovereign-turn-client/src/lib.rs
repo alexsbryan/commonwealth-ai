@@ -1804,6 +1804,421 @@ impl TurnClient {
             .await
     }
 
+    // ── Governance (sv-surface D8) ───────────────────────────────
+    //
+    // The read is generic for the atlas family's reason: its payload
+    // carries `corpus_engine::enrichment::GovernanceView` — rules,
+    // tensions, dispositions, integrity issues, nine structs deep — and
+    // this crate is Tier-0 and cannot name it. Mirroring it would be the
+    // §10.6 smell wearing a client's clothes. The WRITES answer op ids
+    // and counts, which need no type from anywhere.
+
+    /// `GET /internal/governance/{corpus}/view` — everything a Conflicts
+    /// panel renders, in one call. `T` is
+    /// `sovereign_mesh::governance_http::GovernanceViewPayload`.
+    ///
+    /// A corpus with no atlas is an `Err` carrying the host's 404 words,
+    /// never an empty view: "not enriched yet" and "no conflicts" are
+    /// different banners.
+    pub async fn governance_view<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/governance/{corpus_id}/view"), &[])
+            .await
+    }
+
+    /// `POST .../tensions/{tension}/resolve` — keep one rule; the other
+    /// is superseded. Answers the two appended op ids, in append order.
+    ///
+    /// `keep_rule_id` must be one of the conflict's own two rules; the
+    /// host answers 400 naming it when it is not, rather than picking one.
+    pub async fn governance_resolve(
+        &self,
+        corpus_id: &str,
+        tension_id: &str,
+        keep_rule_id: &str,
+        rationale: &str,
+    ) -> Result<Vec<String>> {
+        let wire: OpIdsWire = self
+            .internal_post_json(
+                format!("/internal/governance/{corpus_id}/tensions/{tension_id}/resolve"),
+                &serde_json::json!({
+                    "keep_rule_id": keep_rule_id,
+                    "rationale": rationale,
+                }),
+            )
+            .await?;
+        Ok(wire.op_ids)
+    }
+
+    /// `POST .../tensions/{tension}/accept` — both rules stay in force.
+    /// An empty rationale is refused by the host (400): an accepted
+    /// conflict that records no reason is the one decision a later reader
+    /// cannot act on.
+    pub async fn governance_accept(
+        &self,
+        corpus_id: &str,
+        tension_id: &str,
+        rationale: &str,
+    ) -> Result<Vec<String>> {
+        let wire: OpIdsWire = self
+            .internal_post_json(
+                format!("/internal/governance/{corpus_id}/tensions/{tension_id}/accept"),
+                &serde_json::json!({ "rationale": rationale }),
+            )
+            .await?;
+        Ok(wire.op_ids)
+    }
+
+    /// `POST .../tensions/{tension}/dismiss` — detector noise. The note is
+    /// optional, which is exactly what separates a dismissal from an
+    /// acceptance; `None` sends an absent key, not an empty string.
+    pub async fn governance_dismiss(
+        &self,
+        corpus_id: &str,
+        tension_id: &str,
+        rationale: Option<&str>,
+    ) -> Result<Vec<String>> {
+        let body = match rationale {
+            Some(r) => serde_json::json!({ "rationale": r }),
+            None => serde_json::json!({}),
+        };
+        let wire: OpIdsWire = self
+            .internal_post_json(
+                format!("/internal/governance/{corpus_id}/tensions/{tension_id}/dismiss"),
+                &body,
+            )
+            .await?;
+        Ok(wire.op_ids)
+    }
+
+    /// `POST .../tensions/{tension}/undo` — revert the adjudication
+    /// bundle atomically. Answers the appended revert op id.
+    ///
+    /// An OPEN conflict is a 400, not a silent no-op: "there was nothing
+    /// to undo" is a fact the caller's button state depends on.
+    pub async fn governance_undo(&self, corpus_id: &str, tension_id: &str) -> Result<String> {
+        let wire: OpIdWire = self
+            .internal_post_empty(format!(
+                "/internal/governance/{corpus_id}/tensions/{tension_id}/undo"
+            ))
+            .await?;
+        Ok(wire.op_id)
+    }
+
+    /// `POST /internal/governance/{corpus}/seed` — establish or refresh
+    /// the governed rule baseline. Answers how many rules were NEWLY
+    /// asserted; `0` is the steady state and a success.
+    pub async fn governance_seed(&self, corpus_id: &str) -> Result<u32> {
+        let wire: SeededWire = self
+            .internal_post_empty(format!("/internal/governance/{corpus_id}/seed"))
+            .await?;
+        Ok(wire.seeded)
+    }
+
+    /// `POST /internal/governance/{corpus}/post-build-seed` — migrate atom
+    /// ids to content-hash THEN seed, in that order.
+    ///
+    /// Call this after an atlas build, unconditionally: a non-governance
+    /// corpus answers `0` and touches nothing. Do NOT compose it out of
+    /// [`Self::governance_seed`] plus a migrate — the order is what keeps
+    /// every past decision resolving across a rebuild, and the host owns it.
+    pub async fn governance_post_build_seed(&self, corpus_id: &str) -> Result<u32> {
+        let wire: SeededWire = self
+            .internal_post_empty(format!("/internal/governance/{corpus_id}/post-build-seed"))
+            .await?;
+        Ok(wire.seeded)
+    }
+
+    /// `POST /internal/governance/{corpus}/recipe` — lay down the
+    /// governance recipe for a freshly-added folder corpus. Answers the
+    /// path it wrote, ON THE HOST.
+    ///
+    /// The path is the daemon's `recipes_dir()`, which is the point: a
+    /// caller writing this itself would put it where the daemon never
+    /// looks and the corpus would enrich down the wrong pipeline.
+    pub async fn governance_write_recipe(
+        &self,
+        corpus_id: &str,
+        display_name: &str,
+        source_path: &str,
+    ) -> Result<String> {
+        let wire: RecipePathWire = self
+            .internal_post_json(
+                format!("/internal/governance/{corpus_id}/recipe"),
+                &serde_json::json!({
+                    "display_name": display_name,
+                    "source_path": source_path,
+                }),
+            )
+            .await?;
+        Ok(wire.path)
+    }
+
+    // ── MCP configuration (sv-surface D8) ────────────────────────
+
+    /// `GET /v1/mcp/servers` — the host's configured MCP servers and what
+    /// its live tool registry holds for each. `T` is
+    /// `sovereign_mesh::mcp_config_http::McpServersResponse`.
+    ///
+    /// Read `mount.reason` before rendering any connection affordance:
+    /// the host reports `live_tool_count` and deliberately reports NO
+    /// connect flag, because it keeps no connection manager to ask. A
+    /// caller drawing a green dot from a non-zero count would be
+    /// inventing the fact the host declined to invent.
+    ///
+    /// The two config WRITES (`add`/`remove` a server) have no route:
+    /// this daemon owns no config-write path. They are not missing from
+    /// this client by oversight.
+    pub async fn mcp_servers<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/mcp/servers".to_string(), &[]).await
+    }
+
+    /// `POST /v1/mcp/servers/test` — probe a server WITHOUT persisting
+    /// it, answering its tool count. `token` is the one the operator just
+    /// typed and has not saved; `None` falls back to the stored secret.
+    ///
+    /// A reachable server exporting zero tools answers `0` — a success.
+    /// An unreachable one is an `Err` carrying the host's 502 words.
+    pub async fn mcp_test_connection(
+        &self,
+        name: &str,
+        url: &str,
+        bearer: bool,
+        token: Option<&str>,
+    ) -> Result<usize> {
+        let mut body = serde_json::json!({ "name": name, "url": url, "bearer": bearer });
+        if let Some(t) = token {
+            body["token"] = serde_json::Value::String(t.to_string());
+        }
+        let wire: ToolCountWire = self
+            .internal_post_json("/v1/mcp/servers/test".to_string(), &body)
+            .await?;
+        Ok(wire.tool_count)
+    }
+
+    /// `PUT /v1/mcp/servers/{name}/token` — store the bearer token. A
+    /// BLANK token clears it, which is the secret store's own contract
+    /// and not a second rule invented here.
+    pub async fn mcp_set_token(&self, name: &str, token: &str) -> Result<()> {
+        self.no_content(
+            reqwest::Method::PUT,
+            format!("/v1/mcp/servers/{name}/token"),
+            Some(&serde_json::json!({ "token": token })),
+        )
+        .await
+    }
+
+    /// `DELETE /v1/mcp/servers/{name}/token` — clear a stored token. A
+    /// no-op when none is set, and `Ok` either way: nothing to delete is
+    /// not a failed delete.
+    pub async fn mcp_clear_token(&self, name: &str) -> Result<()> {
+        self.no_content(
+            reqwest::Method::DELETE,
+            format!("/v1/mcp/servers/{name}/token"),
+            None,
+        )
+        .await
+    }
+
+    // ── Recipe-author projects (sv-surface D8) ───────────────────
+    //
+    // Generic for the family reason above: these payloads carry
+    // `ArtifactKind`, `ProjectSummary` and `CheckpointMeta` from
+    // `sovereign-recipe-author`, a crate this one does not and should not
+    // link. The two that answer a bare string or a nullable id are
+    // concrete.
+
+    /// `GET /v1/recipe-projects` — every project with its sidecar
+    /// summary, newest-updated first. `T` is
+    /// `sovereign_mesh::recipe_project_http::RecipeProjectListEntry`.
+    ///
+    /// An empty vec is a real answer: a fresh install has no projects and
+    /// a Welcome pane branches on exactly that.
+    pub async fn recipe_projects<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/v1/recipe-projects".to_string(), &[])
+            .await
+    }
+
+    /// `POST /v1/recipe-projects` — provision the row AND the artifact
+    /// tree. `T` is `RecipeProjectListEntry`.
+    ///
+    /// The feature id is MINTED BY THE HOST from the project's essence,
+    /// so `body` is `{title, charter_md, artifact_kind?}` and carries no
+    /// id. `feature_project_create` is the other door — that one takes
+    /// an id because it is the STORE's route and this is the
+    /// composition's (ARCH §7.5).
+    pub async fn recipe_project_create<
+        B: serde::Serialize + ?Sized,
+        T: serde::de::DeserializeOwned,
+    >(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/v1/recipe-projects".to_string(), body)
+            .await
+    }
+
+    /// `GET /v1/recipe-projects/{id}/dashboard` — the one big read. `T` is
+    /// `sovereign_mesh::recipe_project_http::RecipeAuthorDashboardState`.
+    ///
+    /// Its `validation` is an OPTION and `validation_unavailable` says
+    /// why when it is `None`. A host that cannot judge an artifact
+    /// reports that it did not judge — it does not answer `ok: false`.
+    pub async fn recipe_project_dashboard<T: serde::de::DeserializeOwned>(
+        &self,
+        feature_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/v1/recipe-projects/{feature_id}/dashboard"), &[])
+            .await
+    }
+
+    /// `PUT /v1/recipe-projects/{id}/toml` — validate, then write only if
+    /// valid. `T` is
+    /// `sovereign_mesh::recipe_project_http::RecipeValidationReport`.
+    ///
+    /// A recipe that does not parse comes back `Ok` with `ok: false` and
+    /// the errors, and NOTHING was written — that is a successful
+    /// validation with a negative verdict, and a caller keeps its
+    /// in-flight text and re-saves. An `Err` means the request itself
+    /// failed; a 501 in particular means this host does not link the
+    /// parser for that artifact kind and refused to write unjudged bytes.
+    pub async fn recipe_project_save_toml<T: serde::de::DeserializeOwned>(
+        &self,
+        feature_id: &str,
+        edited_toml: &str,
+    ) -> Result<T> {
+        let url = format!("{}/v1/recipe-projects/{feature_id}/toml", self.base);
+        let resp = self
+            .http
+            .put(&url)
+            .json(&serde_json::json!({ "edited_toml": edited_toml }))
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("PUT {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("PUT {url}")));
+        }
+        parse(&body, &format!("PUT {url}"))
+    }
+
+    /// `POST /v1/recipe-projects/{id}/link-recent-artifact` — register the
+    /// artifact the agent wrote THIS turn onto the project's summary.
+    ///
+    /// `since_unix` is the turn's start time, so a chat-only turn links
+    /// nothing and answers `None`. Idempotent and cheap; call it on every
+    /// turn-complete.
+    pub async fn recipe_project_link_recent(
+        &self,
+        feature_id: &str,
+        since_unix: i64,
+    ) -> Result<Option<String>> {
+        let wire: LinkRecentWire = self
+            .internal_post_json(
+                format!("/v1/recipe-projects/{feature_id}/link-recent-artifact"),
+                &serde_json::json!({ "since_unix": since_unix }),
+            )
+            .await?;
+        Ok(wire.artifact_id)
+    }
+
+    /// `POST /v1/recipe-projects/{id}/checkpoints/{checkpoint}/restore` —
+    /// restore a snapshot and lay down the restore anchor. `T` is
+    /// `sovereign_mesh::recipe_project_http::RestoreCheckpointOutcome`.
+    pub async fn recipe_project_restore_checkpoint<T: serde::de::DeserializeOwned>(
+        &self,
+        feature_id: &str,
+        checkpoint_id: &str,
+    ) -> Result<T> {
+        self.internal_post_empty(format!(
+            "/v1/recipe-projects/{feature_id}/checkpoints/{checkpoint_id}/restore"
+        ))
+        .await
+    }
+
+    /// `GET /v1/recipe-projects/{id}/prelude` — the per-turn situated
+    /// context block to prepend to the partner's message.
+    ///
+    /// The block ends with `[Partner says]\n`; concatenate the user's text
+    /// straight onto it. Cheap enough to re-render every turn, which is
+    /// what keeps the agent's view of project state fresh.
+    pub async fn recipe_project_prelude(&self, feature_id: &str) -> Result<String> {
+        let wire: PreludeWire = self
+            .internal_get(format!("/v1/recipe-projects/{feature_id}/prelude"), &[])
+            .await?;
+        Ok(wire.prelude)
+    }
+
+    // ── Insights by id (sv-surface D8) ───────────────────────────
+
+    /// `POST /v1/insights/by-id` — fetch insight nodes by id.
+    ///
+    /// A POST because the input is a LIST and no flat query string
+    /// carries one without a second encoding — the call `atlas_atoms` and
+    /// `notes_list` already make.
+    ///
+    /// Read [`InsightsById::missing`]: the store drops ids that name no
+    /// live row, so a short `insights` alone would not say WHICH went
+    /// missing. The ORDER of `insights` is the store's, not the request's.
+    pub async fn insights_by_id(&self, ids: &[String]) -> Result<InsightsById> {
+        self.internal_post_json(
+            "/v1/insights/by-id".to_string(),
+            &serde_json::json!({ "ids": ids }),
+        )
+        .await
+    }
+
+    /// A write that answers `204 No Content`: nothing to parse, and a
+    /// non-success carries the host's words. Spelled once for the two
+    /// secret routes rather than twice with one of them drifting.
+    async fn no_content(
+        &self,
+        method: reqwest::Method,
+        path: String,
+        body: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        let url = format!("{}{path}", self.base);
+        let ctx = format!("{method} {url}");
+        let mut req = self.http.request(method, &url);
+        if let Some(b) = body {
+            req = req.json(b);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("{ctx}: {e}")))?;
+        let (status, resp_body) = read_body(resp, &url).await?;
+        if !status.is_success() {
+            return Err(host_words(status, &resp_body, &ctx));
+        }
+        Ok(())
+    }
+
+    /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
+    /// along an ingest is, and what it INDEXED once it is done. `T` is
+    /// `sovereign_mesh::lc_http::IngestProgress`.
+    ///
+    /// This is the route [`Self::lc_ingest`]'s ack names, and the one to
+    /// poll. Read `finished`, not the phase: the phase file describes the
+    /// atlas build on one path and stops at `Scanning` forever on the
+    /// other, and only the terminal receipt answers "is the ingest done".
+    /// The counts live on `outcome.stats` and exist only once `finished`.
+    ///
+    /// A registered corpus that has never ingested answers `200` with
+    /// both halves null — not a 404, which means no such corpus.
+    pub async fn lc_ingest_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/local/{corpus_id}/ingest/progress"),
+            &[],
+        )
+        .await
+    }
+
     /// `POST` with a JSON body, parsed answer. The POST twin of
     /// [`Self::internal_get`].
     async fn internal_post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
@@ -2093,6 +2508,53 @@ fn host_words(status: reqwest::StatusCode, body: &str, ctx: &str) -> Error {
 
 /// `{"projects": [...]}` — the envelope `GET /v1/features/projects`
 /// answers in.
+/// The nodes `POST /v1/insights/by-id` resolved, and the ids it could
+/// not. Mirrored (not generic) because [`InsightEntry`] already is:
+/// the same bytes, one more field.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InsightsById {
+    pub insights: Vec<InsightEntry>,
+    /// Ids that named no live insight — deleted, or never there. Empty on
+    /// the happy path, and always present so a caller never has to infer
+    /// an absence from a short list.
+    pub missing: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct OpIdsWire {
+    op_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct OpIdWire {
+    op_id: String,
+}
+
+#[derive(Deserialize)]
+struct SeededWire {
+    seeded: u32,
+}
+
+#[derive(Deserialize)]
+struct RecipePathWire {
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct ToolCountWire {
+    tool_count: usize,
+}
+
+#[derive(Deserialize)]
+struct LinkRecentWire {
+    artifact_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PreludeWire {
+    prelude: String,
+}
+
 #[derive(Deserialize)]
 struct ProjectListWire<T> {
     projects: Vec<T>,

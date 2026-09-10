@@ -575,6 +575,54 @@ pub fn desktop_services_with_note_and_feature_stores(
     .expect("Launch::Desktop assembles a serving profile with no rails")
 }
 
+/// A serving desktop commission carrying real note + feature stores AND a
+/// caller-supplied `ToolRegistry` behind the `/mcp` mount (sv-surface D8).
+///
+/// [`desktop_services_with_note_and_feature_stores`] mounts an EMPTY
+/// registry, which is the right shape for the notes routes and the wrong
+/// one for `mcp_config_http`: its whole answer is a fold over the tool ids
+/// that mount actually holds, and a fixture that could only ever fold over
+/// zero would pass whatever the fold did.
+///
+/// Assembled through THE assembler like every production site.
+pub fn desktop_services_with_tool_registry(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    notes: Arc<corpus_engine_notes::NoteStore>,
+    features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    tools: Arc<sovereign_core::ToolRegistry>,
+) -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::new(TestProvider::new()),
+                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
+                    insights: None,
+                    features,
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+                        tools,
+                        notes,
+                        session_id: "test-fixture".into(),
+                    }),
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
 /// The cheapest `Runtime` that is still a real one — core's stub router and
 /// planner, an empty tool registry, no enrichment lane. It loads no model and
 /// touches no disk, which is the point: a fixture that had to run the

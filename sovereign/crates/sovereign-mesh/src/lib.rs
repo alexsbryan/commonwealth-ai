@@ -43,6 +43,7 @@ pub mod entry_endpoint;
 pub mod features_http;
 pub mod fim_adapter;
 pub mod gossip;
+pub mod governance_http;
 pub mod guest_lender;
 pub mod guest_tunnel;
 pub mod http_response;
@@ -65,6 +66,7 @@ pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
 pub mod lsp_tier;
+pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod measurements_rail;
 pub mod mesh_discovery;
@@ -99,6 +101,7 @@ pub mod rail_bind;
 pub mod rail_kv_pump;
 pub mod reading_formatters;
 pub mod reading_http;
+pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod ring_roster;

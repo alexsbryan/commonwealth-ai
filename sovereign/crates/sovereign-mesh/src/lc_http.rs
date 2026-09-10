@@ -38,8 +38,9 @@
 //!
 //! Grouped by input shape, not by verb: everything that takes only a
 //! corpus id is a GET or a bodyless POST on `{corpus}`; everything
-//! that takes options carries them in a body. Two response types are
-//! new (`OcrAvailability`, `CancelAck`, `IngestJobAck`) and one is a
+//! that takes options carries them in a body. Four response types are
+//! new (`OcrAvailability`, `CancelAck`, `IngestJobAck`,
+//! `IngestProgress`) and one is a
 //! wire twin by necessity (`LocalSearchHit` — see below); every other
 //! answer is `sovereign_tools::local_corpus`'s own type, already
 //! `Serialize + Deserialize`, so the desktop rung is a repoint.
@@ -54,11 +55,26 @@
 //!
 //! **No new job table.** Progress is stamped into the corpus's
 //! `EnrichmentStateFile` by `corpus_watch_http::ingest_progress_stamper`
-//! — ONE implementation, shared with `enrich-once` — and reported by
-//! the EXISTING `GET /internal/corpus/watch/status/{corpus}` route
-//! (and by commonwealth's `/internal/enrichment/status`). A second job
-//! table beside that would be a second answer to "how far along is
-//! this corpus", which is exactly the smell this campaign is deleting.
+//! — ONE implementation, shared with `enrich-once` — and the terminal
+//! counts into `_ingest_result.json` by
+//! `corpus_watch_http::record_ingest_outcome`, one implementation shared
+//! with the same site. `GET …/{corpus}/ingest/progress` joins the two.
+//! Neither file is a job table: both are per-corpus, both are written by
+//! the ingest itself, and both already existed in spirit — the receipt
+//! is the half that did not.
+//!
+//! CORRECTION, 2026-09-10 (069660fd9's finding). Until this rung the ack
+//! named `GET /internal/corpus/watch/status/{corpus}` as its progress
+//! route, and that route CANNOT serve this arm. Two measured reasons:
+//! its handler requires a RECONCILABLE watched folder, so it 404s for
+//! precisely the `DocumentFolder` / OCR corpora the ingest arm exists to
+//! serve; and it answers `WatchedFolderStatus`, which carries no
+//! `IngestStats`, while the desktop's ingest contract is a progress
+//! channel whose TERMINAL frame carries `files_indexed`
+//! (`FolderDropFlow.svelte:313`, `OrganizerPanel.svelte:147`). A caller
+//! polling it could only have finished by fabricating the counts
+//! (ARCH §18.3), which is why the desktop's ingest arm did not cross on
+//! that batch and stayed named as owed.
 //!
 //! # NOT served, named rather than dropped (ARCH §18.3)
 //!
@@ -135,6 +151,37 @@ pub struct IngestJobAck {
     pub ok: bool,
     /// The route that reports this job. Always populated.
     pub progress_route: String,
+}
+
+/// What `GET …/{corpus}/ingest/progress` answers.
+///
+/// Joins the two files an ingest writes without collapsing them. `state`
+/// is the phase file the shared stamper throttles into
+/// (`_enrichment_state.json`) — how far along, live. `outcome` is the
+/// terminal receipt (`_ingest_result.json`) — what the job INDEXED, or
+/// why it did not, written once when the ingest half ends.
+///
+/// `finished` reads off `outcome`, NOT off the phase. On the
+/// `enrich-once` path the phase file goes on to describe the atlas build
+/// long after the ingest is done, and on the `lc_http` job path it stops
+/// at `Scanning` forever because no enrichment follows. Either way
+/// "has the ingest finished" is a question only the receipt answers.
+///
+/// Both fields are `Option` and neither substitutes for the other: no
+/// phase file means no ingest has run in this index dir, and no outcome
+/// means none has FINISHED — a running job has the first and not the
+/// second (ARCH §18.3).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IngestProgress {
+    pub corpus_id: String,
+    /// The live phase stamp, when one exists.
+    pub state: Option<corpus_engine::enrichment::state::EnrichmentState>,
+    /// The terminal receipt, when the ingest half has ended.
+    pub outcome: Option<crate::corpus_watch_http::IngestOutcome>,
+    /// `true` iff `outcome` is present. Spelled out rather than left to
+    /// the caller so two clients cannot disagree about what terminal
+    /// means.
+    pub finished: bool,
 }
 
 /// Body of `POST …/{corpus}/ingest`.
@@ -234,6 +281,10 @@ pub fn lc_router() -> Router {
         .route("/internal/corpus/local/{corpus_id}/preview", post(preview))
         .route("/internal/corpus/local/{corpus_id}/search", post(search))
         .route("/internal/corpus/local/{corpus_id}/ingest", post(ingest))
+        .route(
+            "/internal/corpus/local/{corpus_id}/ingest/progress",
+            get(ingest_progress),
+        )
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -560,10 +611,10 @@ async fn ingest(
     let spawn_corpus = corpus_id.clone();
     let spawn_job = job_id.clone();
     tokio::spawn(async move {
-        match manager
+        let outcome = manager
             .ingest(&spawn_corpus, with_ocr, Some(progress))
-            .await
-        {
+            .await;
+        match &outcome {
             Ok(stats) => tracing::info!(
                 corpus_id = %spawn_corpus,
                 job_id = %spawn_job,
@@ -571,34 +622,92 @@ async fn ingest(
                 chunks_written = stats.chunks_written,
                 "lc_http: ingest job finished"
             ),
-            Err(e) => {
-                tracing::warn!(
-                    corpus_id = %spawn_corpus,
-                    job_id = %spawn_job,
-                    "lc_http: ingest job failed: {e}"
-                );
-                // Don't strand the phase file mid-Scanning — a pane
-                // polling the status route would spin forever on a
-                // job that is already dead.
-                let _ = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
-                    &index_dir,
-                    &spawn_corpus,
-                    &format!("ingest: {e}"),
-                );
-            }
+            Err(e) => tracing::warn!(
+                corpus_id = %spawn_corpus,
+                job_id = %spawn_job,
+                "lc_http: ingest job failed: {e}"
+            ),
         }
+        // ONE recorder for both arms and both ingest sites: it writes the
+        // terminal receipt the progress route serves, and stamps the
+        // phase file Failed on the error arm so a poller stops spinning.
+        crate::corpus_watch_http::record_ingest_outcome(
+            &index_dir,
+            &spawn_corpus,
+            &spawn_job,
+            outcome.as_ref().map_err(|e| format!("ingest: {e}")),
+        );
     });
 
     (
         StatusCode::ACCEPTED,
         Json(IngestJobAck {
-            progress_route: format!("/internal/corpus/watch/status/{corpus_id}"),
+            progress_route: format!("/internal/corpus/local/{corpus_id}/ingest/progress"),
             corpus_id,
             job_id,
             ok: true,
         }),
     )
         .into_response()
+}
+
+/// GET /internal/corpus/local/{corpus}/ingest/progress — how far along
+/// the ingest is, and what it indexed when it is done.
+///
+/// # Why this route exists rather than the watch-status one
+///
+/// The ack used to name `GET /internal/corpus/watch/status/{corpus}`, and
+/// 069660fd9 measured that it cannot serve this arm on two counts. Its
+/// handler requires a RECONCILABLE watched folder, so it 404s for exactly
+/// the `DocumentFolder` / OCR corpora this ingest arm exists to serve.
+/// And it answers `WatchedFolderStatus`, which carries no `IngestStats`,
+/// while the contract the desktop's progress channel closes on is a
+/// terminal frame carrying `files_indexed`. A caller polling it could
+/// only have finished by fabricating counts (ARCH §18.3), which is why
+/// the desktop arm did not cross on that batch.
+///
+/// This route requires only that the corpus be REGISTERED — the same
+/// check `ingest` itself makes, and the widest one that is still true —
+/// so every corpus kind the ingest accepts can be followed to the end.
+///
+/// A registered corpus that has never ingested answers `200` with both
+/// fields null and `finished: false`. That is not a 404: the corpus
+/// exists and the answer to "how far along" is "it has not started",
+/// which a caller renders differently from "no such corpus".
+async fn ingest_progress(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(corpus_id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let manager = match manager_or_503() {
+        Ok(m) => m,
+        Err(resp) => return resp,
+    };
+    if manager.get(&corpus_id).await.is_none() {
+        return not_registered(&corpus_id);
+    }
+    let index_dir = manager.index_dir_root().join(&corpus_id);
+    let state = corpus_engine::enrichment::state::EnrichmentStateFile::read(&index_dir)
+        .ok()
+        .flatten();
+    let outcome = crate::corpus_watch_http::IngestOutcome::read(&index_dir);
+    let finished = outcome.is_some();
+    tracing::debug!(
+        corpus_id = %corpus_id,
+        finished,
+        phase = ?state.as_ref().map(|s| s.phase),
+        files_indexed = ?outcome.as_ref().and_then(|o| o.stats.as_ref()).map(|s| s.files_indexed),
+        "lc_http: ingest progress served",
+    );
+    Json(IngestProgress {
+        corpus_id,
+        state,
+        outcome,
+        finished,
+    })
+    .into_response()
 }
 
 // ─── Helpers ───────────────────────────────────────────────────

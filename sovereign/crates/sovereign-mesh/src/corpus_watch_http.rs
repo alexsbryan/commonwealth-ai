@@ -1256,13 +1256,29 @@ async fn enrich_once_handler(
     {
         Ok(s) => s,
         Err(e) => {
-            // Don't strand the state file at Starting — surface Failed so the
-            // UI stops spinning and can re-offer the build.
-            let _ = EnrichmentStateFile::fail(&index_dir, &corpus_id, &format!("ingest: {e}"));
+            // The shared recorder stamps Failed (so the UI stops spinning
+            // and can re-offer the build) AND writes the outcome file, so
+            // `…/ingest/progress` reports this run the same way it
+            // reports an `lc_http` job's.
+            let job_id = format!("enrich-once-{corpus_id}");
+            crate::corpus_watch_http::record_ingest_outcome(
+                &index_dir,
+                &corpus_id,
+                &job_id,
+                Err(format!("ingest: {e}")),
+            );
             return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
                 .into_response();
         }
     };
+    // The ingest half is over: record what it indexed, whichever route
+    // the caller reads it back through.
+    record_ingest_outcome(
+        &index_dir,
+        &corpus_id,
+        &format!("enrich-once-{corpus_id}"),
+        Ok(&stats),
+    );
     // Enrich in the background — RAPTOR is slow and reads the index we just
     // wrote (in-process, no handoff). Fire-and-forget; the atlas status is
     // pollable via /internal/enrichment/status.
@@ -1337,6 +1353,118 @@ pub(crate) fn ingest_progress_stamper(
             }
         },
     )
+}
+
+/// The name of the per-corpus ingest-outcome file, beside the phase file
+/// in the corpus's index dir.
+pub(crate) const INGEST_RESULT_FILENAME: &str = "_ingest_result.json";
+
+/// What an ingest job indexed — the TERMINAL frame the desktop's ingest
+/// contract has always been about.
+///
+/// The phase file (`_enrichment_state.json`) answers "how far along", and
+/// it carries no counts: `EnrichmentState` has `step_current`/`step_total`
+/// and no `files_indexed`. The desktop's progress channel closes with a
+/// frame carrying `IngestStats` (`FolderDropFlow.svelte:313` and
+/// `OrganizerPanel.svelte:147` read `files_indexed`), so a wire form with
+/// no terminal counts could only be consumed by fabricating them — the
+/// §18.3 substitution 069660fd9 refused to make and named as owed.
+///
+/// It is a SEPARATE file from the phase file on purpose. Stamping
+/// `EnrichmentPhase::Complete` at the end of an ingest would tell
+/// `/internal/enrichment/status` that the MAP is built, which it is not:
+/// on the `enrich-once` path the atlas build has not started yet, and on
+/// the `lc_http` job path it never will. Two questions, two files, and
+/// `GET …/ingest/progress` joins them without collapsing either.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IngestOutcome {
+    pub corpus_id: String,
+    /// The job that produced it. `enrich-once` writes its own synthetic
+    /// id so a reader can tell two runs apart; `lc_http` writes the id it
+    /// handed back in the ack.
+    pub job_id: String,
+    /// Unix seconds when the ingest half finished, either way.
+    pub finished_at: i64,
+    /// `Some` on success — the counts, verbatim from the manager.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stats: Option<sovereign_tools::local_corpus::manager::IngestStats>,
+    /// `Some` on failure, naming it. Exactly one of these two is set;
+    /// both absent would be a file written before the job ended, which
+    /// nothing writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl IngestOutcome {
+    pub(crate) fn path(index_dir: &std::path::Path) -> std::path::PathBuf {
+        index_dir.join(INGEST_RESULT_FILENAME)
+    }
+
+    /// Read a corpus's last ingest outcome. `None` when no ingest has
+    /// finished in this index dir — which is a different fact from "it
+    /// finished with zero files", and the reason this is an `Option`
+    /// rather than a default-constructed zero.
+    pub(crate) fn read(index_dir: &std::path::Path) -> Option<Self> {
+        let bytes = std::fs::read(Self::path(index_dir)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+}
+
+/// Record the end of an ingest: the outcome file always, and the phase
+/// file's `Failed` stamp when it failed.
+///
+/// ONE implementation, called from both ingest sites for
+/// `ingest_progress_stamper`'s reason. Before this the two sites each
+/// spelled the failure half themselves and NEITHER wrote the counts, so
+/// "what did this job index" had two half-answers and no whole one
+/// (ARCH §10.6).
+///
+/// Best-effort by construction: a job that indexed a vault and then could
+/// not write a 200-byte JSON file has still indexed the vault, and
+/// failing the job over the receipt would be worse than reporting the
+/// receipt is missing. Every failure to write is logged at `warn` with
+/// the path, so the absence attributes itself.
+pub(crate) fn record_ingest_outcome(
+    index_dir: &std::path::Path,
+    corpus_id: &str,
+    job_id: &str,
+    result: Result<&sovereign_tools::local_corpus::manager::IngestStats, String>,
+) {
+    let outcome = match result {
+        Ok(stats) => IngestOutcome {
+            corpus_id: corpus_id.to_string(),
+            job_id: job_id.to_string(),
+            finished_at: sovereign_core::time::unix_now(),
+            stats: Some(stats.clone()),
+            error: None,
+        },
+        Err(e) => {
+            // Don't strand the phase file mid-Scanning — a pane polling
+            // the status route would spin forever on a job already dead.
+            let _ = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+                index_dir, corpus_id, &e,
+            );
+            IngestOutcome {
+                corpus_id: corpus_id.to_string(),
+                job_id: job_id.to_string(),
+                finished_at: sovereign_core::time::unix_now(),
+                stats: None,
+                error: Some(e),
+            }
+        }
+    };
+    let path = IngestOutcome::path(index_dir);
+    match serde_json::to_vec_pretty(&outcome) {
+        Ok(bytes) => {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                tracing::warn!(
+                    corpus_id, job_id, path = %path.display(),
+                    "ingest outcome not recorded: {e}"
+                );
+            }
+        }
+        Err(e) => tracing::warn!(corpus_id, job_id, "ingest outcome not serialisable: {e}"),
+    }
 }
 
 /// `POST /internal/corpus/enrich-reset` — body `{ "corpus_id": "…" }`.

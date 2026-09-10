@@ -38,6 +38,8 @@ mod corpus_sharing_over_iroh_e2e;
 mod corpus_watch_http_e2e;
 #[path = "main/d6_surface_e2e.rs"]
 mod d6_surface_e2e;
+#[path = "main/d8_surface_e2e.rs"]
+mod d8_surface_e2e;
 #[path = "main/daemon_variant_census.rs"]
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
