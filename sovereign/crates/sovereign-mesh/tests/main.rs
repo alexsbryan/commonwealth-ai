@@ -40,6 +40,9 @@ mod corpus_watch_http_e2e;
 mod d6_surface_e2e;
 #[path = "main/d8_surface_e2e.rs"]
 mod d8_surface_e2e;
+
+#[path = "main/d9_turn_extras_e2e.rs"]
+mod d9_turn_extras_e2e;
 #[path = "main/daemon_variant_census.rs"]
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]

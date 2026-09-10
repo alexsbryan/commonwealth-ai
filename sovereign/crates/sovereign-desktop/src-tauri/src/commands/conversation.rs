@@ -823,39 +823,38 @@ pub async fn weaken_memory(
 /// conversation hasn't received a streaming witness response yet, or
 /// because it ran on the non-streaming path (we don't capture there
 /// today; mirror the capture in `handle_expressive_query` if needed).
+///
+/// sv-surface D9 — reads the DAEMON's register, in BOTH boot modes.
+/// This command used to ask THIS process's `Runtime`, which since R5
+/// never runs the turn: in attach the register was structurally empty
+/// and the pane rendered "no provenance yet" forever. One of the three
+/// no-fork degradations the ladder names — broken with no
+/// `is_attach_mode()` branch to point at, because nobody wrote one.
 #[tauri::command]
 pub async fn get_last_turn_provenance(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<Option<sovereign_core::runtime::TurnProvenance>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    Ok(runtime.get_last_turn_provenance(&conversation_id))
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .last_turn_provenance::<sovereign_core::runtime::TurnProvenance>(&conversation_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
+/// The skills the SERVING runtime registered, and which of them it has
+/// active.
+///
+/// sv-surface D9, and the same correction as the command above: the
+/// registry that matters is the one the turn is answered against. In
+/// attach that is the daemon's, and this process's copy — built from
+/// the same manifests but activated from the DESKTOP's config — could
+/// disagree with it about the active set with nothing to say so.
 #[tauri::command]
 pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEntry>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-
-    let all_skills = runtime.skills.list();
-    let active_ids: Vec<String> = runtime
-        .skills
-        .active_skills()
-        .iter()
-        .map(|s| s.id.clone())
-        .collect();
-
-    Ok(all_skills
-        .iter()
-        .map(|s| SkillEntry {
-            active: active_ids.contains(&s.id),
-            id: s.id.clone(),
-            name: s.name.clone(),
-            description: s.description.clone(),
-            trust_level: format!("{:?}", s.trust_level).to_lowercase(),
-        })
-        .collect())
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_skills::<SkillEntry>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

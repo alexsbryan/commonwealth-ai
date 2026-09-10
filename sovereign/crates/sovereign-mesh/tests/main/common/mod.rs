@@ -529,6 +529,70 @@ pub fn desktop_services_with_engine(
     .expect("Launch::Desktop assembles a serving profile with no rails")
 }
 
+/// A serving desktop commission whose `Runtime` is the caller's — the
+/// fixture for the two routes that READ that runtime's own registers
+/// (`turn_extras_http`: the skill registry, the last turn's provenance
+/// frame). The three fixtures above all mint their own `stub_runtime`,
+/// which cannot carry a registered skill or a captured frame.
+///
+/// Assembled through THE assembler for the reason the siblings give
+/// (Falsifier 3): a fixture that composed a variant directly would be
+/// the one place able to build a shape no launch can produce.
+pub fn desktop_services_with_runtime(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    runtime: Arc<sovereign_core::runtime::Runtime>,
+) -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::new(TestProvider::new()),
+                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                    runtime,
+                    insights: None,
+                    features: None,
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Unavailable {
+                        reason: "test fixture: no tool registry".into(),
+                    },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                    workflow_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
+/// [`stub_runtime`] carrying the caller's `SkillRegistry` instead of an
+/// empty one — the registry `/v1/skills` serves.
+pub fn stub_runtime_with_skills(
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    skills: Arc<sovereign_core::SkillRegistry>,
+) -> Arc<sovereign_core::runtime::Runtime> {
+    Arc::new(sovereign_core::runtime::Runtime::new(
+        sovereign_core::RuntimeParts::new(
+            provider,
+            Box::new(sovereign_core::stubs::PassthroughRouter),
+            Box::new(sovereign_core::stubs::NoOpPlanner),
+            Arc::new(sovereign_core::ToolRegistry::new()),
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            skills,
+            Arc::new(sovereign_core::executor::AutoApprovalChannel),
+            sovereign_core::types::InferenceConfig::default(),
+            sovereign_core::runtime::lane::LaneSources::none(),
+        ),
+    ))
+}
+
 /// A serving desktop commission carrying a real `NoteStore` (behind a
 /// mounted `/mcp` surface, which is where `EmbeddedDaemon::notes_store`
 /// reads it from) and a real `RecipeProjectStore`.

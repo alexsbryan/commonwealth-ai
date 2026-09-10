@@ -847,6 +847,41 @@ status    = "active"
 #   writes to user-picked paths (renderers move, the write does not);
 #   state.mcp_servers live status (a twin to delete, not proxy); the closed
 #   app-local set.
+#   D9 CORRECTION, measured 2026-09-10 (note 1ee37b89): the boot split's
+#   premise — "every attach-time consumer already reads the wire" — is
+#   FALSE. The forks were never the population that matters. Counted
+#   over src/ (cfg(test) cut, comments dropped): 49 needle READS across
+#   13 files, none behind a mode fork, every one live in attach because
+#   the spine builds all needles in both modes: conversation.rs 12,
+#   document_asset.rs 12, corpus.rs 8, chat.rs 3, budget.rs 2,
+#   models.rs 2, recipe_testing.rs 2, local_corpus_commands.rs 2,
+#   commands/mod.rs 2 (macro defs), config_setup / contribution /
+#   corpus_install / insight_commands 1 each. Sharpest: is_backend_ready
+#   reads state.runtime.is_some() and a null runtime hangs the splash;
+#   list_corpora and notebook_list return Ok(vec![]) on None — silent.
+#   Hoisting attach out today deletes 49 answers. So D9 splits in two:
+#   D9a WIRE: /v1/documents family (skeleton, ask, list — the 12
+#        document_asset reads; 748ffbdb5 was AnswerDoc only), the corpus
+#        catalogue + notebooks over /internal/corpus (corpus.rs, budget.rs,
+#        corpus_install.rs), PUT /v1/skills/{id}/active (needs an ArcSwap
+#        on SkillRegistry first), a readiness fact for is_backend_ready
+#        that is not a needle (3c7ad5933's identity probe is it).
+#   D9b CONSUME + SPLIT: conversation.rs's 5 CRUD commands onto
+#        turn_http's existing CRUD, the rest of the 49 onto the routes
+#        above; then attach_bootstrap() and the purity assertion, which
+#        cannot be written as a tests/*.rs today (bin-only crate, real
+#        AppHandle, a real GGUF at slots.fast) — it is a structural
+#        census over the attach code path plus a runtime probe.
+#   LANDED from D9 (partial): GET /v1/skills + GET /v1/conversations/{id}
+#   /provenance (turn_extras_http.rs; trust_level lowercased on the daemon,
+#   §10.6; provenance null is a 200); the desktop reads both in both
+#   modes; B4 attach-to-the-holder (RunLockError::Held -> re-probe ->
+#   /status.process.pid identity -> attach, or FATAL naming root, lock
+#   reason and port); the session->conversation map soft-reads. Floor
+#   stays 12; the consumer count (49) is the number D9b drives to zero,
+#   not minted as a ratchet while D5-D8 delete halves are landing in the
+#   same files.
+#
 #   TOTALS (estimates from the survey, to be replaced by measurement per
 #   rung): wire +~1,750, local -~5,570, net ~ -3,820; campaign then
 #   ~ +5,180/-6,460 = net ~ -1,280 Rust. Floor 14 -> 12 (D0) -> 11 (D5)

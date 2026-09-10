@@ -694,6 +694,14 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     assert_the_guard_owns_the_method_fallback("turn_http", turn_router(d5), "/v1/conversations")
         .await;
 
+    let (_t5b, d5b) = fresh_daemon();
+    assert_the_guard_owns_the_method_fallback(
+        "turn_extras_http",
+        sovereign_mesh::turn_extras_http::turn_extras_router(d5b),
+        "/v1/skills",
+    )
+    .await;
+
     let (_t6, d6) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "insight_http",

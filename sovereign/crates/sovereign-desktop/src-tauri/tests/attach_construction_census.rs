@@ -42,6 +42,38 @@
 //! zero of these constructed — is the stronger instrument that replaces
 //! this census when the floor reaches zero.
 //!
+//! # Why D9 did not replace this census (measured 2026-09-10)
+//!
+//! The ladder's D9 row hoists attach out of `bootstrap_with_progress`
+//! and takes the floor to zero, on the survey's premise that every
+//! attach-time consumer already reads the wire because "all 15
+//! `is_attach_mode` forks already have their wire form". The forks ARE
+//! retired — `is_attach_mode()` appears twice in the whole command
+//! surface. But the forks were never the population that matters.
+//!
+//! Counted over `src/` with `#[cfg(test)]` cut and comment lines
+//! dropped, `require_runtime!` + `require_store!` +
+//! `state.<needle>.read()` + the two typed accessors: **49 reads across
+//! 13 files**, none behind a mode fork, every one of them live in
+//! attach today because this spine builds all ten needles in BOTH
+//! modes. Deleting the constructions deletes those 49 answers. The
+//! sharpest is `commands/config_setup.rs`'s `is_backend_ready`, whose
+//! own doc comment is written ABOUT attach mode: it reads
+//! `state.runtime.is_some()` as the pull-based recovery for a missed
+//! `backend-ready` event, so a null runtime hangs the splash forever.
+//! Two more fail SILENTLY — `list_corpora` and `notebook_list` return
+//! `Ok(Vec::new())` on `None`, rendering an empty picker rather than an
+//! error.
+//!
+//! So the needle count is a LAGGING indicator in a second way the D-row
+//! did not name: a floor of 12 says nothing about how many CONSUMERS
+//! still need those 12. The consumer count is the number D9 has to
+//! drive to zero, and it is not this test's number. Minting it as its
+//! own ratchet is deferred only because the D5-D8 delete halves are in
+//! flight in the same files as this is written, and a gate with a
+//! guaranteed false positive is how people learn to reach for
+//! `--no-verify`.
+//!
 //! Watched to fail: add or remove a construction site in `state.rs`'s
 //! bootstrap spine (or edit an expected count here) and this goes red
 //! naming the needle. Sabotage-verified at landing: one count edited,

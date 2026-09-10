@@ -1147,13 +1147,26 @@ pub async fn redirect_turn(
     let conversation_id = match conversation_id {
         Some(cid) => cid,
         None => {
-            let guard = require_runtime!(state);
-            let runtime = guard.as_ref().unwrap();
-            runtime
-                .sessions
-                .get(&session_id)
-                .map(|s| s.conversation_id.clone())
-                .ok_or_else(|| format!("session {session_id} not found"))?
+            // sv-surface D9 — the third no-fork degradation, named
+            // rather than left to read an empty register. The fallback
+            // asks whichever `Runtime` THIS process happens to host: in
+            // Local that is the same object the embedded daemon serves
+            // the turn from, so it answers; in attach this process has
+            // never seen the session and `require_runtime!` reported
+            // that as "Backend is still loading", which is a different
+            // and wrong fact (ARCH §18.3). A soft read, so the mode is
+            // not branched on — "Local" is just the boot where the
+            // daemon happens to be in-process — and a named refusal
+            // when nobody here knows the pairing.
+            let hosted = state.runtime.read().await;
+            hosted
+                .as_ref()
+                .and_then(|rt| rt.sessions.get(&session_id).map(|s| s.conversation_id.clone()))
+                .ok_or_else(|| {
+                    format!(
+                        "session {session_id} is not paired with a conversation on this surface                          — the routing card that would have recorded it never arrived, and this                          process does not host the session store that owns the pairing"
+                    )
+                })?
         }
     };
 

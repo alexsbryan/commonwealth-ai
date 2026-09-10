@@ -3296,6 +3296,17 @@ impl EmbeddedDaemon {
             // cannot come up unable to serve a turn.
             mounted.push(crate::turn_http::turn_router(Arc::clone(&self_arc)));
             mount_names.push("turn_http");
+            // sv-surface D9 — the two reads a turn leaves behind (the
+            // skill registry, the last turn's provenance frame). Beside
+            // `turn_http` rather than inside it: that file is the DRIVER's
+            // surface, and these are reads over the serving Runtime's own
+            // registers. Unconditional for the reason the routers below
+            // give: a daemon with no Runtime answers a named 503, which is
+            // a different fact from an unmounted route's 404 (ARCH §18.3).
+            mounted.push(crate::turn_extras_http::turn_extras_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("turn_extras_http");
             // sv-surface rung 6 — the insight surface. Mounted
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these

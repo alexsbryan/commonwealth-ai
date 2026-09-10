@@ -78,7 +78,16 @@ pub struct SearchResult {
     pub conversation_id: String,
 }
 
-#[derive(Serialize)]
+/// One skill row as the SERVING runtime reports it.
+///
+/// `Deserialize` as well as `Serialize` since sv-surface D9: this is
+/// the type `TurnClient::list_skills` parses the daemon's
+/// `/v1/skills` bytes into, so the surface names ONE skill row rather
+/// than a wire mirror plus a frontend struct (§10.6). The field names
+/// are the route's field names; changing one here without changing
+/// `sovereign_mesh::turn_extras_http::SkillWireEntry` breaks the parse
+/// loudly at the call site.
+#[derive(Serialize, Deserialize)]
 pub struct SkillEntry {
     pub id: String,
     pub name: String,

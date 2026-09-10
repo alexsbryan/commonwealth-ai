@@ -619,6 +619,58 @@ impl TurnClient {
         Ok(wire.confidence)
     }
 
+    /// `GET /v1/skills` — every skill the SERVING runtime registered,
+    /// each flagged with whether that runtime has it active
+    /// (sv-surface D9).
+    ///
+    /// `T` is the caller's own row type — `sovereign-desktop`'s
+    /// `commands::SkillEntry`. Generic rather than mirrored (the
+    /// `corpus_atoms` convention, not the `InsightEntry` one) because a
+    /// mirror here would be a SECOND spelling of a row the surface
+    /// already declares for its frontend bridge, and this crate exists
+    /// to delete those.
+    ///
+    /// The envelope (`{"skills": [...]}`) is unwrapped here so the
+    /// caller names one type, not two.
+    pub async fn list_skills<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            skills: Vec<T>,
+        }
+        let wire: Wire<T> = self.internal_get("/v1/skills".to_string(), &[]).await?;
+        Ok(wire.skills)
+    }
+
+    /// `GET /v1/conversations/{id}/provenance` — the most recent
+    /// witness-turn provenance frame the SERVING runtime captured for
+    /// this conversation, or `None` when it has run no witness turn
+    /// (sv-surface D9).
+    ///
+    /// `T` is `sovereign_core::runtime::TurnProvenance`. Generic for
+    /// the `list_skills` reason plus a harder one: that struct is
+    /// twenty-odd fields over five nested types, and a mirror of it in
+    /// this crate would be the largest twin the campaign has minted.
+    ///
+    /// `Ok(None)` is a SUCCESS — "no witness turn yet" is an answer the
+    /// inner-work pane renders, not an absence to report as an error
+    /// (ARCH §18.3).
+    pub async fn last_turn_provenance<T: serde::de::DeserializeOwned>(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<T>> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            provenance: Option<T>,
+        }
+        let wire: Wire<T> = self
+            .internal_get(
+                format!("/v1/conversations/{conversation_id}/provenance"),
+                &[],
+            )
+            .await?;
+        Ok(wire.provenance)
+    }
+
     /// `GET /v1/insights?limit=` — the insight collection, newest first.
     pub async fn list_insights(&self, limit: Option<usize>) -> Result<Vec<InsightEntry>> {
         let url = format!("{}/v1/insights", self.base);
