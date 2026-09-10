@@ -527,33 +527,15 @@ async fn run_turn_via_runtime(
     question: &str,
     conversation_id: &str,
 ) -> Result<DocumentAskResponse, String> {
-    let runtime = {
-        let guard = state.runtime.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Runtime not ready")?
-    };
-
+    // sv-surface R5: a document question is a turn, and every turn rides
+    // the wire — the REST one-shot (same driver the socket serves, through
+    // the client family), exactly as the chat one-shot does.
     state.approval.set_task_id(conversation_id).await;
 
-    // The same driver the chat commands use (TOPOLOGY §10 phase 6). A
-    // document question is a turn; it was calling `handle_turn` directly and
-    // therefore skipping the raw-model check, the document-path decision and
-    // the graceful guards that `serve_turn` applies once for everyone.
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    }
-    .ok_or("Store not ready")?;
-
-    let turn = sovereign_core::runtime::collect_turn(
-        &runtime,
-        store.as_ref(),
-        conversation_id,
-        question,
-        sovereign_contracts::types::TurnMode::Grounded,
-        None,
-    )
-    .await
-    .map_err(|e| format!("Runtime turn failed: {e}"))?;
+    let turn = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .send_message(conversation_id, question)
+        .await
+        .map_err(|e| format!("turn failed: {e}"))?;
 
     // Runtime saved the assistant message itself and spawned auto-title.
     // Emit the list-refresh event the normal send_message command emits.
@@ -563,18 +545,13 @@ async fn run_turn_via_runtime(
         response: turn.text,
         operation: None,
         sources: Vec::new(),
-        // Carries the runtime's full message metadata — provenance,
-        // retrieved_chunks, and `grounding_gate` (the verification
-        // receipt) — to the live bubble. Read from the persisted row
-        // in-process, the same way the chat commands do it: `collect_turn`
-        // hands back the typed projection for callers across a socket, and
-        // this one owns the store.
-        metadata: sovereign_core::runtime::message_metadata(
-            store.as_ref(),
-            conversation_id,
-            &turn.message_id,
-        )
-        .await,
+        // The wire's TYPED projection (the Complete frame's provenance /
+        // epistemic metadata) where the in-process read returned the raw
+        // persisted blob — the same named G9 delta the chat one-shot
+        // carries.
+        metadata: turn
+            .metadata
+            .map(|m| serde_json::to_value(&m).unwrap_or(serde_json::Value::Null)),
     })
 }
 
