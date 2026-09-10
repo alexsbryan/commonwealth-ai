@@ -52,7 +52,7 @@ use commonwealth_core::ids::HandoffId;
 use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, SigningKey};
 use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecutorRegistry};
 use commonwealth_work::process::{ProcessExecutor, ProcessPayload, ResultSource, PROCESS_KIND};
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
+use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::may_take;
 use commonwealth_work::{
     act, seal, ActorKey, Completion, Failure, Submission, UnitRef, WorkAct, WORK_NAMESPACE,
@@ -397,20 +397,30 @@ async fn run_unit(
                     // `match`: a journal that could not be READ is not
                     // evidence that somebody else holds the lease, and killing
                     // a half-hour shard on it is the substitution §18.3
-                    // forbids. `work_donor::LeaseState` draws exactly this
-                    // split and `commonwealth-work` does not own it — the
-                    // first version of this file collapsed it to a bool.
-                    match fold(journal, roster).map(|p| p.unit(unit_ref).map(|u| u.status_at(now_ms()))) {
-                        Ok(Some(WorkUnitStatus::Leased { ref lessee, .. })) if lessee == me => {
+                    // forbids. The peer no longer draws that line itself —
+                    // `commonwealth_work::lease_state` owns it now, so this
+                    // program and the daemon's donor loop cannot disagree
+                    // about what "lost" means. The I/O half stays here,
+                    // because obtaining the fold is what differs between a
+                    // peer with a journal and a daemon with an AppState.
+                    let state = match fold(journal, roster) {
+                        Ok(p) => lease_state(&p, unit_ref, me, now_ms()),
+                        Err(e) => {
+                            eprintln!("work_peer: the fold was unreadable this heartbeat, holding ({e})");
+                            LeaseState::Unknown
+                        }
+                    };
+                    match state {
+                        LeaseState::Held => {
                             if let Err(e) = append(journal, key, roster, &WorkAct::Renew(unit_ref.clone())) {
                                 eprintln!("work_peer: a renew could not be appended: {e}");
                             }
                         }
-                        Ok(_) => {
-                            eprintln!("work_peer: lease lost on {} — cancelling", unit_ref.unit_hash);
+                        LeaseState::Lost(why) => {
+                            eprintln!("work_peer: lease lost on {} ({why}) — cancelling", unit_ref.unit_hash);
                             ctx.cancel();
                         }
-                        Err(e) => eprintln!("work_peer: the fold was unreadable this heartbeat, holding ({e})"),
+                        LeaseState::Unknown => {}
                     }
                 }
             }

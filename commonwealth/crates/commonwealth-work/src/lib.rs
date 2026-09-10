@@ -69,6 +69,12 @@ pub use act::{
     MIN_TTL_SECS,
 };
 pub use actor::{ActorKey, InvalidActorKey};
+// The three-state lease answer, re-exported for the same reason `ActorKey` is:
+// every donor — this daemon, a lifted peer — has to draw the SAME line between
+// "somebody else has it" and "I could not read the journal", and cw-lift 5f
+// proved what happens when a second one draws it itself (a bool, and a running
+// unit cancelled on one unreadable heartbeat).
+pub use projection::{lease_state, LeaseState};
 // The handoff id, re-exported for the same reason `ActorKey` and `seal` are:
 // a client of this plane should not have to link the crate that happens to
 // DEFINE the noun in order to use the plane. `svrn quality check --distribute`

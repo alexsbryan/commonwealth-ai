@@ -505,3 +505,103 @@ fn admission_gaps_are_carried_onto_the_projection() {
     assert_eq!(proj.gaps, 3, "seq 0, 1 and 2 are missing");
     assert_eq!(proj.handoffs.len(), 1, "the act itself still applied");
 }
+
+// -------------------------------------------------------------
+// The lease decider — three states, and the third is the point
+// -------------------------------------------------------------
+
+/// **The decider a second donor got wrong, and it had no test until now.**
+///
+/// `lease_state` lived in `sovereign-mesh::work_donor` where a package
+/// consumer could not reach it, so cw-lift 5f's lifted peer re-derived it —
+/// as a BOOL — and cancelled a running unit whenever the journal merely
+/// failed to read. The fix was to move the decider here; this is the test
+/// that should have existed when it was written.
+///
+/// Failing input for each arm is named in the assertion. The `Unknown` arm is
+/// deliberately absent: this function is handed a projection, so by
+/// construction it has one, and `Unknown` is the CALLER's verdict for a fold
+/// it could not obtain. That split is asserted separately below.
+#[test]
+fn the_lease_decider_answers_held_for_the_holder_and_lost_for_everyone_else() {
+    let (submit, a, _b) = submission();
+    let proj = fold(&[op(1, 100, 0, &submit), op(2, 200, 0, &lease(&a))]);
+    let r = unit_ref(&a);
+    let (holder, other) = (who(2), who(3));
+
+    // Held: the fold names this actor, inside the lease window.
+    assert_eq!(
+        lease_state(&proj, &r, &holder, 200_000),
+        LeaseState::Held,
+        "the actor the fold names as lessee holds it"
+    );
+
+    // Lost, to a named other. Failing input: a decider comparing anything but
+    // the lessee — a donor that renewed here would be writing over a lease it
+    // does not hold.
+    assert!(
+        matches!(lease_state(&proj, &r, &other, 200_000), LeaseState::Lost(ref why) if why.contains(holder.as_str())),
+        "a non-lessee is Lost, and the reason NAMES who holds it"
+    );
+
+    // Lost, by lapse. Failing input: a decider reading `Leased` without
+    // consulting `status_at` — the lease would look live forever and two
+    // donors would both believe they hold it.
+    let lapsed = 200_000 + commonwealth_core::knowledge::LEASE_MS + 1;
+    assert!(
+        matches!(lease_state(&proj, &r, &holder, lapsed), LeaseState::Lost(_)),
+        "past expires_at_ms the holder has lost it too — expiry is derived, \
+         not published, so every node agrees without an act"
+    );
+
+    // Lost, because the unit is not in this fold at all. Failing input: an
+    // `unwrap` or a `false`; the first panics a donor loop and the second
+    // silently renews a lease on a unit nobody is tracking.
+    let empty = fold(&[]);
+    assert!(
+        matches!(lease_state(&empty, &r, &holder, 200_000), LeaseState::Lost(_)),
+        "a unit absent from the fold is Lost, never Held"
+    );
+}
+
+/// A reported unit is not still held.
+///
+/// Failing input: a decider that treats "not Leased" as "still mine". After a
+/// `Complete` is admitted the heartbeat must stop renewing, or the donor
+/// appends `Renew` acts for work it already reported — which the fold counts
+/// as `unreadable`.
+#[test]
+fn a_reported_unit_is_lost_to_its_own_reporter() {
+    let (submit, a, _b) = submission();
+    let proj = fold(&[
+        op(1, 100, 0, &submit),
+        op(2, 200, 0, &lease(&a)),
+        op(2, 300, 1, &completion(&a)),
+    ]);
+    assert!(
+        matches!(
+            lease_state(&proj, &unit_ref(&a), &who(2), 300_000),
+            LeaseState::Lost(_)
+        ),
+        "the actor that reported it no longer holds it"
+    );
+}
+
+/// `Unknown` is the caller's verdict and never this function's.
+///
+/// The distinction is the whole reason the type has three variants rather
+/// than two, so it is pinned rather than left to the doc comment: an
+/// unreadable journal must never be expressible as `Lost`, because a caller
+/// matching on `Lost` cancels.
+#[test]
+fn unknown_is_never_produced_by_the_pure_decider() {
+    let (submit, a, _b) = submission();
+    let proj = fold(&[op(1, 100, 0, &submit), op(2, 200, 0, &lease(&a))]);
+    for (key, now) in [(who(2), 200_000u64), (who(3), 200_000), (who(2), u64::MAX)] {
+        assert_ne!(
+            lease_state(&proj, &unit_ref(&a), &key, now),
+            LeaseState::Unknown,
+            "given a fold, the answer is Held or Lost — never could-not-read"
+        );
+    }
+}

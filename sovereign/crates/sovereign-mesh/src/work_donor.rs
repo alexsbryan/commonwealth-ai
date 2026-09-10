@@ -77,7 +77,7 @@ use commonwealth_work::actor::ActorKey;
 // name the same absence, and the comparability rule keys on it.
 use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
+use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
 use commonwealth_work::refusal::{may_take, UnmetRequirement, WorkRefusal};
 use commonwealth_work::WORK_NAMESPACE;
 use kernel_types::attribution::ComputeAttribution;
@@ -1003,14 +1003,14 @@ fn credit_for(
     }
 }
 
-/// Whether this node still holds the lease it took.
-#[derive(Debug)]
-enum LeaseState {
-    Held,
-    Lost(String),
-    Unknown,
-}
-
+/// The I/O half of "do I still hold this lease".
+///
+/// The DECIDER moved to `commonwealth_work::projection::lease_state` — it is
+/// pure over the fold, and a lifted peer needs exactly the same three-state
+/// answer (cw-lift 5f found this by re-deriving it as a bool and cancelling a
+/// running unit on one unreadable heartbeat). What stays here is the only part
+/// that is this crate's business: obtaining the fold from an `AppState`, and
+/// answering `Unknown` when that fails.
 async fn still_ours(app_state: &AppState, unit_ref: &UnitRef, self_key: &ActorKey) -> LeaseState {
     match fold_now(app_state).await {
         Some((_, proj, _, now_ms)) => lease_state(&proj, unit_ref, self_key, now_ms),
@@ -1018,32 +1018,6 @@ async fn still_ours(app_state: &AppState, unit_ref: &UnitRef, self_key: &ActorKe
         // holds the lease. Kept apart from `Lost` so the caller can hold
         // rather than kill (ARCH §18.2 — could-not-judge is its own verdict).
         None => LeaseState::Unknown,
-    }
-}
-
-/// The pure half: given a fold, does `self_key` still hold this unit?
-///
-/// Split out so the decision is testable without a rail, a key or a journal —
-/// the states that matter (lost to another donor, lapsed past
-/// `expires_at_ms`, already reported) are all reachable as projection values.
-/// Expiry is derived by `status_at`, which is the ONE place it is decided, so
-/// a lease this donor let lapse reads as lost here for exactly the same
-/// reason it reads as re-queued to everybody else.
-fn lease_state(
-    proj: &WorkProjection,
-    unit_ref: &UnitRef,
-    self_key: &ActorKey,
-    now_ms: u64,
-) -> LeaseState {
-    let Some(projected) = proj.unit(unit_ref) else {
-        return LeaseState::Lost("the unit is no longer in the fold".to_string());
-    };
-    match projected.status_at(now_ms) {
-        WorkUnitStatus::Leased { ref lessee, .. } if lessee == self_key => LeaseState::Held,
-        WorkUnitStatus::Leased { lessee, .. } => {
-            LeaseState::Lost(format!("`{lessee}` holds the lease now"))
-        }
-        other => LeaseState::Lost(format!("the unit reads `{}`", other.id())),
     }
 }
 
