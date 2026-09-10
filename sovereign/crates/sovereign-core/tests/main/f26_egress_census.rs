@@ -295,6 +295,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // — the Run-a-workflow surface now POSTs the job to the daemon and polls
     // its events (the in-process runner is deleted; the daemon executes).
     ("sovereign/crates/sovereign-desktop/src-tauri/src/workflow_commands.rs", Class::LocalDaemon, 1),
+    // NEW (2026-09-09, sv-surface R4/B2): main.rs's readiness probe — the
+    // backend-ready gate now GETs this host's own daemon /v1/models until
+    // the port answers (250ms interval, 90s deadline). Loopback only; the
+    // probe IS the readiness signal, so it cannot reuse a longer-timeout
+    // command client without lying about liveness.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/main.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/contribution.rs", Class::LocalDaemon, 7),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/budget.rs", Class::LocalDaemon, 6),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs", Class::LocalDaemon, 2),
