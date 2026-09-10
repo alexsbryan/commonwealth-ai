@@ -183,10 +183,17 @@ impl IngestPayload {
     /// [`WorkRefusal::PayloadNotCanonical`] carries.
     pub fn parse(payload: &Value) -> Result<IngestPayload, String> {
         let parsed: IngestPayload = serde_json::from_value(payload.clone()).map_err(|e| {
+            // The variant names are PascalCase because
+            // `commonwealth_core::knowledge::WorkUnit` is
+            // `#[serde(tag = "kind", content = "value")]` with no
+            // `rename_all` (`knowledge.rs:318`). This text said `hf-file` /
+            // `jsonl-shard` / `jsonl-range` until 2026-09-09 — three spellings
+            // that cannot parse, taught on the FAILURE path, which is the one
+            // place a reader is already stuck (cw-lift 5g D1 found it live).
             format!(
                 "an `{INGEST_KIND}` payload is \
                  {{\"corpus_id\": …, \"recipe_id\": …, \"unit_id\": …, \"unit\": \
-                 {{\"kind\": \"hf-file\"|\"jsonl-shard\"|\"jsonl-range\", \"value\": …}}}} — {e}"
+                 {{\"kind\": \"HfFile\"|\"JsonlShard\"|\"JsonlRange\", \"value\": …}}}} — {e}"
             )
         })?;
         if parsed.corpus_id.trim().is_empty() {

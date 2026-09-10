@@ -287,7 +287,20 @@ pub async fn merge_from_fold_coverage(
     match shard_mgr.merge_participants(plan).await {
         Ok(Some(info)) => RecoveryOutcome::Recovered {
             chunks: info.chunk_count,
-            shards_covered: participants.len(),
+            // `expected`, not `participants.len()`. `participants` is the
+            // REMOTE nodes to pull from and excludes this one, so a
+            // single-node merge that folded one real shard reported
+            // `nodes=0` — seen live in cw-lift 5g's D1 run. `expected` is
+            // the count of VERIFIED contributors whose slices are in this
+            // corpus, and the coverage guard above has already established
+            // that at least that many shard dirs were merged.
+            //
+            // The disk-path producer fills this same field from
+            // `report.shard_union.len()` — shard INDICES a recipe expects.
+            // The two quantities are analogous rather than identical, and
+            // neither is a count of directories; `IndexInfo` carries no
+            // shard count for either to use.
+            shards_covered: expected,
         },
         Ok(None) => RecoveryOutcome::NotEnoughPartitions,
         Err(corpus_engine::Error::IncompleteCoverage {
