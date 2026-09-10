@@ -106,6 +106,19 @@ pub struct AppState {
     /// How this process bootstrapped. Used by mesh_commands and the UI
     /// badge to decide whether to drive mesh via Rust or HTTP.
     pub bootstrap_mode: crate::bootstrap::BootstrapMode,
+    /// The write half of the ACTIVE wire turn (sv-surface R5): parked by
+    /// `send_message_stream` when it opens the turn socket, so the
+    /// `submit_*` commands can answer the daemon's prompts from any task
+    /// while the drain keeps reading (the split the client crate's G11
+    /// bought). `None` between turns — a submit then falls back to the
+    /// local desk, which still serves the in-process turn shapes that have
+    /// not converted yet.
+    pub turn_wire: RwLock<Option<sovereign_turn_client::TurnSender>>,
+    /// Prompt ids the active wire turn has put to this surface and that no
+    /// answer has resolved yet — the wire-side form of the local desk's
+    /// `has_pending_information` guard, so the search-now affordance can
+    /// still fail fast on a stale card without spending a search budget.
+    pub pending_prompts: RwLock<std::collections::HashSet<String>>,
     /// Background health monitor. Populated during bootstrap; None before first boot.
     pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
     /// CancellationToken to shut down the health monitor on exit.
@@ -319,6 +332,8 @@ impl AppState {
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
+            turn_wire: RwLock::new(None),
+            pending_prompts: RwLock::new(std::collections::HashSet::new()),
             local_corpus: RwLock::new(None),
             watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),

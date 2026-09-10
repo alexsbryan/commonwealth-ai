@@ -279,12 +279,43 @@ pub async fn search_messages(
         .collect())
 }
 
+/// Answer a prompt from the ACTIVE WIRE TURN (sv-surface R5): the card's
+/// `key` is the daemon-minted prompt id, and the parked sender answers on
+/// the turn socket while the drain keeps reading. Falls back to the local
+/// desk when no wire turn is parked — the still-in-process turn shapes
+/// (redirect, resume) park there. Returns whether SOMETHING was answered;
+/// the authoritative after-the-fact word is the `ResolveAck` notice.
+async fn answer_wire_prompt(
+    state: &AppState,
+    key: &str,
+    answer: sovereign_contracts::types::TurnAnswer,
+) -> Option<bool> {
+    let guard = state.turn_wire.read().await;
+    let sender = guard.as_ref()?;
+    sender.send_answer(key, &answer).ok().map(|()| {
+        // Optimistic: the daemon's refusal (stale/wrong-kind) arrives as a
+        // StreamError the frontend surfaces; nothing here can know it
+        // synchronously over a socket, and pretending otherwise is the
+        // collapse §18.3 is about.
+        true
+    })
+}
+
 #[tauri::command]
 pub async fn submit_approval(
     state: State<'_, Arc<AppState>>,
     key: String,
     approved: bool,
 ) -> Result<bool, String> {
+    if let Some(hit) = answer_wire_prompt(
+        &state,
+        &key,
+        sovereign_contracts::types::TurnAnswer::Approved(approved),
+    )
+    .await
+    {
+        return Ok(hit);
+    }
     Ok(state.approval.submit_approval(&key, approved))
 }
 
@@ -294,6 +325,15 @@ pub async fn submit_input(
     key: String,
     response: String,
 ) -> Result<bool, String> {
+    if let Some(hit) = answer_wire_prompt(
+        &state,
+        &key,
+        sovereign_contracts::types::TurnAnswer::Text(response.clone()),
+    )
+    .await
+    {
+        return Ok(hit);
+    }
     Ok(state.approval.submit_input(&key, response))
 }
 
@@ -308,6 +348,18 @@ pub async fn submit_information_response(
     key: String,
     content: Option<String>,
 ) -> Result<bool, String> {
+    if let Some(hit) = answer_wire_prompt(
+        &state,
+        &key,
+        sovereign_contracts::types::TurnAnswer::Information {
+            content,
+            sources: Vec::new(),
+        },
+    )
+    .await
+    {
+        return Ok(hit);
+    }
     Ok(state.approval.submit_information_response(&key, content))
 }
 
@@ -388,13 +440,14 @@ pub async fn submit_information_search(
         return Err("query must not be empty".to_string());
     }
 
-    if !state.approval.has_pending_information(&key) {
+    let wire_parked = state.pending_prompts.read().await.contains(key);
+    if wire_parked {
+        // The active wire turn put this card up; the guard below is the
+        // LOCAL desk's and cannot see it. The Answer's own named refusal
+        // covers staleness daemon-side.
+    } else if !state.approval.has_pending_information(&key) {
         // Stale submission — the request was already resolved
         // (paste / skip / timed out). Don't spend a search budget.
-        // ATTACH (sv-surface G3b): the parked request lives daemon-side
-        // and this local check cannot see it — C2's conversion replaces
-        // it with the Answer's own refusal (NoSuchPending, by name),
-        // which is the honest after-the-fact form G8 already named.
         return Err("no pending information request for this key".to_string());
     }
 
@@ -624,6 +677,45 @@ pub async fn submit_information_search(
                 }
             }
         }
+    }
+
+    // Wire-first resolve (sv-surface R5/G3b): a search-built answer
+    // carries its registry rows IN the Answer, and the daemon folds them
+    // into the conversation as part of the resolve — one user action, one
+    // atomic effect. The local desk fallback keeps the in-process turn
+    // shapes working with the local registry write above.
+    if let Some(sender) = state.turn_wire.read().await.as_ref() {
+        let wire_sources: Vec<sovereign_core::types::SearchedSourceEntry> = sources
+            .iter()
+            .map(|s| {
+                // Turn stamps are placeholders — the daemon's merge stamps
+                // the conversation's REAL current turn (pinned by the G3b
+                // e2e); the client cannot know it and must not pretend.
+                sovereign_core::types::SearchedSourceEntry {
+                    url: s.url.clone(),
+                    title: s.title.clone(),
+                    first_seen_turn: 0,
+                    last_referenced_turn: 0,
+                    search_query: query.to_string(),
+                }
+            })
+            .collect();
+        let sent = sender
+            .send_answer(
+                &key,
+                &sovereign_contracts::types::TurnAnswer::Information {
+                    content: Some(formatted.clone()),
+                    sources: wire_sources,
+                },
+            )
+            .is_ok();
+        state.pending_prompts.write().await.remove(&key);
+        return Ok(SearchAugmentation {
+            query: query.to_string(),
+            backend_id: out.backend_id,
+            sources,
+            accepted: sent,
+        });
     }
 
     let accepted = state

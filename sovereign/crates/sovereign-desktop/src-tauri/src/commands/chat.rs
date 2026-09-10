@@ -149,37 +149,120 @@ pub async fn send_message_stream(
     let pending_id = uuid::Uuid::new_v4().to_string();
 
     let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
-    let (started_tx, started_rx) = tokio::sync::oneshot::channel::<String>();
-    let sink = DesktopTurnSink {
-        frames: frame_tx,
-        started: std::sync::Mutex::new(Some(started_tx)),
+
+    // sv-surface R5: THE WIRE IS THE ONE PATH. This command drove the
+    // in-process `Runtime` through `DesktopTurnSink`; it now drives the
+    // daemon's turn socket — the same frames down the same renderer, and
+    // in Local mode the daemon at the other end IS this process's own
+    // commission. "Local" means the daemon happens to be in-process, which
+    // is the realignment's end state. The socket CLAIMS approvals, so the
+    // daemon parks its questions on THIS surface instead of auto-answering
+    // them (C1), and the prompt frames become the same cards below.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    let mut stream = client
+        .connect_with(
+            &conversation_id,
+            sovereign_turn_client::StreamOptions {
+                claim_approvals: true,
+            },
+        )
+        .await
+        .map_err(|e| format!("opening the turn socket: {e}"))?;
+    stream
+        .send_message(&augmented_message, mode, None)
+        .await
+        .map_err(|e| format!("sending the turn: {e}"))?;
+    // Park the write half FIRST: a prompt can arrive before the id does,
+    // and the submit commands answer with this sender while the drain
+    // below keeps reading — the split the client family's socket gave us.
+    *state.turn_wire.write().await = Some(stream.sender());
+
+    // Sync id (G10's whole point): the FIRST frame is `TurnStarted`,
+    // emitted at handle acquisition — before retrieval, before the first
+    // token — so the placeholder goes up over the same window it always
+    // did in-process. A turn that dies before minting one falls back to
+    // the pending id, exactly the old contract.
+    let first = stream.next_frame().await;
+    let message_id = match first {
+        Ok(Some(TurnFrame::Notice {
+            notice: sovereign_contracts::types::TurnNotice::TurnStarted { message_id },
+        })) => message_id,
+        Ok(Some(other)) => {
+            // Unexpected order — keep the frame for the renderer and use
+            // the fallback id rather than dropping evidence.
+            let _ = frame_tx.send(other);
+            pending_id.clone()
+        }
+        _ => pending_id.clone(),
     };
 
-    // ONE turn driver (TOPOLOGY §10 phase 6). This command used to acquire a
-    // stream handle itself, drain it by hand, and carry its own fallback for
-    // turns that refuse to stream — the same loop `serve_turn` implements and
-    // the same fallback five other hosts each got subtly differently.
-    let store_for_turn = store_for_metadata.clone();
-    let conv_for_turn = conversation_id.clone();
-    tauri::async_runtime::spawn(async move {
-        let Some(store) = store_for_turn else {
-            return;
-        };
-        sovereign_core::runtime::serve_turn(
-            &runtime,
-            store.as_ref(),
-            &conv_for_turn,
-            &augmented_message,
-            mode,
-            // The desktop never pins an intent; the router classifies.
-            None,
-            // No narration subscription on this surface yet — the frontend
-            // renders progress from its own state machine.
-            None,
-            &sink,
-        )
-        .await;
-    });
+    // Read the rest of the turn: tokens and the terminal frame go to the
+    // ONE renderer unchanged; prompts and notices map onto the event
+    // vocabulary the frontend already listens for, payload for payload —
+    // the same cards the in-process `TauriApprovalChannel` used to raise.
+    {
+        let app_for_turn = app_handle.clone();
+        let state_for_turn = Arc::clone(&state);
+        let frames_for_turn = frame_tx.clone();
+        let conv_for_turn = conversation_id.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                let frame = match stream.next_frame().await {
+                    Ok(Some(f)) => f,
+                    _ => break, // socket closed; the renderer speaks next
+                };
+                match &frame {
+                    TurnFrame::Prompt { id, prompt } => {
+                        state_for_turn
+                            .pending_prompts
+                            .write()
+                            .await
+                            .insert(id.clone());
+                        raise_prompt_card(&app_for_turn, &conv_for_turn, id, prompt);
+                    }
+                    TurnFrame::Notice { notice } => {
+                        use sovereign_contracts::types::TurnNotice;
+                        match notice {
+                            TurnNotice::MessageRefined(payload) => {
+                                let _ = app_for_turn.emit("message-refined", payload.clone());
+                            }
+                            TurnNotice::LessonProposed(payload) => {
+                                let _ = app_for_turn.emit("lesson-proposed", payload.clone());
+                            }
+                            TurnNotice::StepDone {
+                                task_id,
+                                step_id,
+                                description,
+                                status,
+                            } => {
+                                let _ = app_for_turn.emit(
+                                    "step-done",
+                                    crate::approval::StepDonePayload {
+                                        task_id: task_id.clone(),
+                                        step_id: *step_id,
+                                        description: description.clone(),
+                                        status: status.to_string(),
+                                    },
+                                );
+                            }
+                            // The ack cleared the pending key; a stale
+                            // submit now fails fast instead of guessing.
+                            TurnNotice::ResolveAck { id, outcome } => {
+                                if *outcome == sovereign_contracts::types::ResolveOutcome::Resolved
+                                {
+                                    state_for_turn.pending_prompts.write().await.remove(id);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+                let _ = frames_for_turn.send(frame);
+            }
+            *state_for_turn.turn_wire.write().await = None;
+        });
+    }
 
     // Render the frames as the events the frontend already listens for. The
     // payload shapes are unchanged, so no TypeScript moved with this.
@@ -187,25 +270,72 @@ pub async fn send_message_stream(
         app_handle,
         frame_rx,
         conversation_id,
-        pending_id.clone(),
+        message_id.clone(),
         store_for_metadata,
     ));
-
-    // Return as soon as the turn HAS an id, not when it produces output — the
-    // frontend puts its placeholder on screen and retrieval is most of a cold
-    // turn's wait. A turn that never mints one (graceful guard, or the
-    // document path, which has no id until it finishes) returns the pending
-    // id immediately rather than holding the UI.
-    let message_id = if streaming {
-        started_rx.await.unwrap_or(pending_id)
-    } else {
-        pending_id
-    };
 
     Ok(StreamStartedResponse {
         message_id,
         streaming,
     })
+}
+
+/// One parked prompt becomes one card — the same events, payloads and
+/// `key` echo the frontend's approval machinery already speaks, with the
+/// wire prompt's id in the `key` slot. The in-process channel raised
+/// these from `TauriApprovalChannel`; over the wire the frames carry the
+/// same content, so the cards are byte-identical.
+fn raise_prompt_card(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    id: &str,
+    prompt: &sovereign_contracts::types::TurnPrompt,
+) {
+    use sovereign_contracts::types::TurnPrompt;
+    use tauri::Emitter;
+    match prompt {
+        TurnPrompt::Approval { preview } => {
+            let _ = app.emit(
+                "approval-request",
+                crate::approval::ApprovalRequestPayload {
+                    task_id: conversation_id.to_string(),
+                    step_id: 0,
+                    key: id.to_string(),
+                    tool_id: preview.tool_id.clone(),
+                    description: preview.description.clone(),
+                    params: preview.params.clone(),
+                },
+            );
+        }
+        TurnPrompt::UserInput { question } => {
+            let _ = app.emit(
+                "user-input-request",
+                crate::approval::UserInputRequestPayload {
+                    task_id: conversation_id.to_string(),
+                    key: id.to_string(),
+                    question: question.clone(),
+                },
+            );
+        }
+        TurnPrompt::Information { request } => {
+            let _ = app.emit(
+                "information-request",
+                crate::approval::InformationRequestPayload {
+                    task_id: conversation_id.to_string(),
+                    step_id: request.step_id,
+                    key: id.to_string(),
+                    current_understanding: request.current_understanding.clone(),
+                    gap: request.gap.clone(),
+                    relevance: request.relevance.clone(),
+                    satisfying_source: request.satisfying_source.clone(),
+                    search_hints: request.search_hints.clone(),
+                    kind: request.kind,
+                    task_title: request.task_title.clone(),
+                    routes: request.routes.clone(),
+                },
+            );
+        }
+    }
 }
 
 /// Bridges [`serve_turn`] to the Tauri event surface.

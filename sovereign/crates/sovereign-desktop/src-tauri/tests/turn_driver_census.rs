@@ -73,9 +73,20 @@ fn every_turn_shaped_command_renders_through_the_one_renderer() {
          that emits `message-chunk`/`message-complete` events any other way \
          is a second renderer wearing a command's name."
     );
-    // And the driver itself is reachable from this file both ways.
+    // sv-surface R5: send_message_stream drives the WIRE now — the daemon's
+    // turn socket through the client family, in BOTH boot modes ("Local"
+    // means the daemon happens to be in-process). redirect_turn and
+    // resume_session still drive `serve_turn`'s post-acquire half
+    // in-process and convert on the same pattern; when they do, the
+    // `serve_turn` pin below retires with them.
     assert!(
-        src.contains("sovereign_core::runtime::serve_turn("),
-        "send_message_stream must keep driving through serve_turn"
+        src.contains("connect_with("),
+        "send_message_stream must open the turn socket through the client family"
+    );
+    assert!(
+        src.contains("sovereign_core::runtime::serve_turn(")
+            || src.contains("drive_stream_handle("),
+        "redirect_turn / resume_session keep the one in-process driver until \
+         they convert — a private drain here is the rung-0 regression"
     );
 }
