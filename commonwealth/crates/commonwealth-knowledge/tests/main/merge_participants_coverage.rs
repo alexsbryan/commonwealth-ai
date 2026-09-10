@@ -41,7 +41,7 @@ pub(crate) const CORPUS: &str = "coverage";
 
 /// Never called: `merge_participants` merges vectors that already exist.
 /// Present only because `CorpusEngine::new` requires one.
-fn unused_embed_fn() -> EmbedFn {
+pub(crate) fn unused_embed_fn() -> EmbedFn {
     Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIM]) }))
 }
 
@@ -145,6 +145,14 @@ pub(crate) async fn serve_tarball(tar: Vec<u8>) -> String {
 pub(crate) struct Fixture {
     _tmp: tempfile::TempDir,
     pub(crate) index_dir: PathBuf,
+    /// The engine the manager writes through. Exposed so a reader can ask the
+    /// USER-ALTITUDE questions — `installed_indexes()`, `usable_indexes()`,
+    /// `open_index_for_corpus()` — of the same engine that did the merge,
+    /// rather than a second one built over the same directory.
+    pub(crate) engine: Arc<CorpusEngine>,
+    /// The gossip store the manager loads handoffs from. Exposed so a caller
+    /// can seed a handoff blob and drive `coordinate_merge`.
+    pub(crate) mesh_store: Arc<MeshStore>,
     pub(crate) manager: ShardManager,
     pub(crate) local: NodeId,
     pub(crate) reachable_peer: NodeId,
@@ -188,11 +196,17 @@ pub(crate) async fn fixture() -> Fixture {
         unused_embed_fn(),
     ));
     let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory mesh store"));
-    let manager = ShardManager::new(Arc::clone(&engine), index_dir.clone(), mesh_store);
+    let manager = ShardManager::new(
+        Arc::clone(&engine),
+        index_dir.clone(),
+        Arc::clone(&mesh_store),
+    );
 
     Fixture {
         _tmp: tmp,
         index_dir,
+        engine,
+        mesh_store,
         manager,
         local,
         reachable_peer,

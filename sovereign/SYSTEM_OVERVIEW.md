@@ -5729,31 +5729,43 @@ absent and the guards fail closed for *every* caller.
   subset canonical that would advertise itself as complete on gossip;
   `None` keeps the legacy "merge whatever is present" behaviour, which
   is what `coordinate_merge` passes.
-- **The merge is not the whole job, and `merge_participants` does only
-  the merge.** It ends at `CorpusEngine::merge_partitions` →
-  `sharding::merge_shards`, which writes the merged chunks and stops:
-  the output still carries `ingestion_in_progress: true,
-  indexes_built: false`, so `installed_indexes()` skips it,
-  `usable_indexes()` cannot search it, and `hosted_corpora` gossip —
-  built from `installed_indexes()` in `sovereign-mesh::capabilities` —
-  advertises nothing. Finishing it is
+- **The merge finishes the job: `Ok(Some(info))` from
+  `merge_participants` means REACHABLE.** `CorpusEngine::merge_partitions`
+  → `sharding::merge_shards` writes the merged chunks and stops — the
+  output carries `ingestion_in_progress: true, indexes_built: false`, so
+  `installed_indexes()` skips it, `usable_indexes()` cannot search it,
+  and `hosted_corpora` gossip — built from `installed_indexes()` in
+  `sovereign-mesh::capabilities` — advertises nothing. Finishing it is
   `corpus_engine::finalize_canonical` (`corpus-engine/src/sharding.rs`):
   `build_indexes` → `mark_indexes_built` → `mark_ingestion_complete`,
   then the content fingerprint LAST, because a peer pulling against a
-  fingerprint trusts the chunk set is stable and the
-  ingestion-complete bit is the proxy for stable. One name for that
-  sequence, shared with `merge_partitions_into_canonical`, which is
-  where it was lifted from (ARCH §10.6). The FOLD-side caller
-  (`commonwealth_api::auto_recover::merge_from_fold_coverage`) calls
-  it; **`coordinate_merge` does NOT, and its canonical has the same
-  gap** — cw-lift 5g part 2 shipped without the finalize on the fold
-  path, which produced a canonical holding both donors' chunks that
-  `installed_indexes()` returned zero rows for. When the merge lands
-  and the finalize does not, the answer is
-  `RecoveryOutcome::MergedButNotInstalled` — its own fact, because
-  `Recovered` would claim a built canonical and `Failed` would claim
-  nothing was produced while the source partitions are already
-  deleted. Nothing retries it: the next tick short-circuits on
+  fingerprint trusts the chunk set is stable and the ingestion-complete
+  bit is the proxy for stable. One name for that sequence, shared with
+  `merge_partitions_into_canonical`, which is where it was lifted from
+  (ARCH §10.6). **It is the last step of `merge_participants` itself**,
+  after the shard-dir cleanup — cw-lift 5g B8. Before that it was called
+  by the FOLD-side caller only
+  (`commonwealth_api::auto_recover::merge_from_fold_coverage`), and
+  `coordinate_merge` — the queue-mode caller, reached from
+  `routes_internal/corpus_queue.rs:210` and `:550` — shared the same merge
+  and had the identical gap: a queue-mode merge produced a canonical
+  holding every donor's chunks that `installed_indexes()` returned zero
+  rows for. "A merge produces a corpus someone can reach" is a
+  post-condition, so it lives with the function that promises it rather
+  than with two callers each remembering (ARCH #10).
+- When the merge lands and the finalize does not, `merge_participants`
+  returns `corpus_engine::Error::MergedNotFinalized { corpus,
+  canonical_path, chunks, detail }` and logs it at `error!`. Its own
+  variant because the state is neither neighbour (ARCH §18.3): the chunks
+  ARE on disk and the source partitions are already deleted, so that
+  directory holds the only copy — "nothing was produced" invites a caller
+  to re-derive from partitions that are gone, and "merged" claims a built
+  canonical, which is the defect verbatim. The canonical is deliberately
+  left in place. `merge_from_fold_coverage` carries the three fields
+  across the crate boundary unchanged as
+  `RecoveryOutcome::MergedButNotInstalled`; the two spellings stay
+  separate for the same dependency-direction reason `IncompleteCoverage`
+  does. Nothing retries it: the next tick short-circuits on
   `AlreadyHasCanonical`.
 - `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` so a node
   without a local embed model still ingests via the engine.

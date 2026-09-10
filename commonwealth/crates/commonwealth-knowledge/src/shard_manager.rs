@@ -7,7 +7,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{ChunkRange, Corpus, CorpusEngine, IndexInfo, ShardInfo};
+use corpus_engine::{ChunkRange, Corpus, CorpusEngine, CorpusIndex, IndexInfo, ShardInfo};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -203,6 +203,12 @@ impl ShardManager {
     ///   Participating peers come from `HandoffQueue.participating_peers`
     ///   rather than the empty `partitions` list. Merge leader is set
     ///   to the coordinator at handoff creation.
+    ///
+    /// Both modes end in [`ShardManager::merge_participants`], so `Ok(Some(_))`
+    /// here means a canonical that `installed_indexes()` and `usable_indexes()`
+    /// can see — not merely one whose chunks are on disk. That was NOT true
+    /// before cw-lift 5g B8; see `merge_participants` for what changed and why
+    /// the finalize lives there rather than at each call site.
     pub async fn coordinate_merge(
         &self,
         handoff_id: HandoffId,
@@ -420,8 +426,8 @@ impl ShardManager {
 
     /// The merge half of a collaborative ingest: resolve every
     /// participant's shard directory (this node's from disk, each
-    /// peer's by HTTP pull), merge them into the canonical index, and
-    /// clean the shard dirs up.
+    /// peer's by HTTP pull), merge them into the canonical index, clean
+    /// the shard dirs up, and FINISH the canonical so someone can reach it.
     ///
     /// Split out of [`ShardManager::coordinate_merge`] so that path and
     /// sovereign-mesh's fold-side collector — which resolve
@@ -429,14 +435,39 @@ impl ShardManager {
     /// implementation (ARCH §10.6). Everything the merge needs arrives
     /// as a [`MergePlan`]; nothing here reads handoff or queue state.
     ///
+    /// # `Ok(Some(info))` means REACHABLE, and that is new
+    ///
+    /// The finalize — [`corpus_engine::finalize_canonical`] — is the last
+    /// step of this function rather than something each caller does after it
+    /// (cw-lift 5g B8). Until then it was neither: `merge_partitions` writes
+    /// the chunks and stops, so both callers produced a canonical carrying
+    /// `ingestion_in_progress: true, indexes_built: false`, which
+    /// `CorpusEngine::installed_indexes` skips, `usable_indexes` therefore
+    /// never sees, and `hosted_corpora` gossip (built from the former in
+    /// `sovereign-mesh::capabilities`) advertises to no peer. `2dc1bf160`
+    /// gave the fold-side caller a finalize of its own; `coordinate_merge`
+    /// and its two call sites in `commonwealth-api`'s `corpus_queue` got
+    /// nothing and had the identical gap.
+    ///
+    /// "A merge produces a corpus someone can reach" is a POST-CONDITION, and
+    /// two callers each REMEMBERING to satisfy it is the shape that had
+    /// already failed once — so it lives with the function that promises it
+    /// (ARCH #10: structural, not remembered). It also makes the sentence
+    /// below true, which it was not before: this function either produces an
+    /// index or fails.
+    ///
     /// The `Option` in the return type is inherited from
     /// `coordinate_merge`, whose `None` means "not the merge leader".
-    /// This function itself never returns `Ok(None)`: it either
-    /// produces an index or fails.
+    /// This function itself never returns `Ok(None)`.
     ///
-    /// Refuses rather than merges when `plan.expected_partitions` names
-    /// a bar the resolved shards miss — see
-    /// [`corpus_engine::Error::IncompleteCoverage`].
+    /// # Two refusals, each with its own name
+    ///
+    /// * [`corpus_engine::Error::IncompleteCoverage`] — `plan.expected_partitions`
+    ///   named a bar the resolved shards miss, so nothing was merged.
+    /// * [`corpus_engine::Error::MergedNotFinalized`] — the chunks merged and
+    ///   the finalize did not. Not folded into a generic error: it carries
+    ///   the chunk count and the canonical path because that directory holds
+    ///   the only surviving copy of the merged rows (ARCH §18.3).
     pub async fn merge_participants(
         &self,
         plan: MergePlan<'_>,
@@ -620,6 +651,28 @@ impl ShardManager {
             std::fs::remove_dir_all(shard_dir).ok();
         }
 
+        // A merged chunk set is not yet a corpus anyone can reach.
+        // `merge_partitions` writes the rows and stops, leaving
+        // `ingestion_in_progress: true, indexes_built: false` — the two bits
+        // every surface that shows a corpus to anyone gates on. Finalizing
+        // here rather than at each caller is the whole of B8: the post-
+        // condition belongs to the function that promises it, not to two
+        // callers each remembering.
+        //
+        // AFTER the cleanup loop, not before, because that ordering is
+        // already documented as a state: when this fails, every source
+        // partition is gone and the canonical below holds the only copy of
+        // the chunks. Moving the finalize earlier would quietly change which
+        // directories survive a finalize failure, and that is a different
+        // decision from this one.
+        let canonical = match CorpusIndex::open(&output_dir).await {
+            Ok(index) => index,
+            Err(e) => return Err(self.not_finalized(corpus_id, &output_dir, &info, e)),
+        };
+        if let Err(e) = corpus_engine::finalize_canonical(&canonical, corpus_id, None).await {
+            return Err(self.not_finalized(corpus_id, &output_dir, &info, e));
+        }
+
         tracing::info!(
             handoff = %handoff_id,
             chunks = info.chunk_count,
@@ -627,6 +680,40 @@ impl ShardManager {
         );
 
         Ok(Some(info))
+    }
+
+    /// Report "the chunks merged and the finalize did not" as its own fact.
+    ///
+    /// One spelling for both ways the finalize can be missed — the canonical
+    /// would not open, or [`corpus_engine::finalize_canonical`] itself failed
+    /// — because the STATE they leave behind is identical and a caller that
+    /// had to tell them apart would be deciding the same thing twice
+    /// (ARCH §10.6). The `error!` lives here, at the site that discovers it,
+    /// so no caller has to remember to log it.
+    fn not_finalized(
+        &self,
+        corpus_id: &str,
+        canonical_path: &Path,
+        info: &IndexInfo,
+        cause: corpus_engine::Error,
+    ) -> corpus_engine::Error {
+        tracing::error!(
+            corpus = %corpus_id,
+            chunks = info.chunk_count,
+            canonical = %canonical_path.display(),
+            error = %cause,
+            "merge_participants: the merge landed but the canonical was NOT \
+             finalized — its chunks are on disk and no surface can see them \
+             (installed_indexes, usable_indexes and hosted_corpora all gate on \
+             the bits finalize writes). The source partitions were already \
+             cleaned up, so this canonical holds the only copy."
+        );
+        corpus_engine::Error::MergedNotFinalized {
+            corpus: corpus_id.to_string(),
+            canonical_path: canonical_path.display().to_string(),
+            chunks: info.chunk_count,
+            detail: cause.to_string(),
+        }
     }
 
     /// Fetch a remote corpus partition shard via HTTP transfer.

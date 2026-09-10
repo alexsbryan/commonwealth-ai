@@ -1252,11 +1252,18 @@ pub struct PartitionMergeReport {
 /// one implementation per rule). Two merge paths reach it:
 ///
 /// * [`merge_partitions_into_canonical`], the disk-derived one, and
-/// * `commonwealth_api::auto_recover::merge_from_fold_coverage`, the
-///   fold-derived one added by cw-lift 5g part 2.
+/// * `commonwealth_knowledge::ShardManager::merge_participants`, the
+///   peer-pull one, which serves BOTH the fold-derived collector
+///   (`commonwealth_api::auto_recover::merge_from_fold_coverage`) and the
+///   queue-mode coordinator (`ShardManager::coordinate_merge`).
 ///
-/// The second one shipped WITHOUT this sequence and the consequence was not
-/// subtle: `CorpusEngine::merge_partitions` writes the chunks and stops, so
+/// That second entry named `merge_from_fold_coverage` itself until cw-lift 5g
+/// B8. Calling this from the CALLER left `coordinate_merge` — which shares the
+/// same merge — without it, so the fix was to move the call one level down
+/// into the shared merge rather than add a third call site.
+///
+/// The peer-pull path shipped WITHOUT this sequence and the consequence was
+/// not subtle: `CorpusEngine::merge_partitions` writes the chunks and stops, so
 /// the canonical carried `ingestion_in_progress: true, indexes_built: false`.
 /// `installed_indexes()` skips it (`is_ingestion_complete` gate), which means
 /// `usable_indexes()` never sees it and `hosted_corpora` gossip

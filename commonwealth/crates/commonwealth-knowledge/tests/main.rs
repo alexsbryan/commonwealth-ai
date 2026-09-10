@@ -7,6 +7,8 @@
 //! `tests/main.rs` is a crate root, so a bare `mod foo;` would resolve to
 //! `tests/foo.rs`, which cargo would then also link as its own target.
 
+#[path = "main/coordinate_merge_installs_the_canonical.rs"]
+mod coordinate_merge_installs_the_canonical;
 #[path = "main/merge_participants_coverage.rs"]
 mod merge_participants_coverage;
 #[path = "main/merge_participants_idempotence.rs"]

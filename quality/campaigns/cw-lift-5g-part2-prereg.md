@@ -744,3 +744,126 @@ Known not checked by B7: two real machines; the ingest pipeline; two nodes
 ticking concurrently (that is B3's decision, not a concurrency test); the
 peer-canonical pull arm between the two, which needs a gossip advertisement
 this fixture has none of; and any tick after the first.
+
+---
+
+**B8 — MET, 2026-09-09.**
+`commonwealth-knowledge/tests/main/coordinate_merge_installs_the_canonical.rs::
+a_queue_mode_merge_lands_a_corpus_a_user_can_reach`, driving
+`ShardManager::coordinate_merge` — the queue-mode caller — end to end: a
+queue-mode `IngestionHandoff` serialized into the `MeshStore` under
+`handoff:<id>` where `load_handoff` reads it, a live `WorkQueueManager` whose
+two units were leased and completed by the two donors through `next_unit` /
+`complete_unit` (so `participating_peers` is populated the way
+`corpus_complete_unit` populates it, not hand-stuffed and not through the
+coordinator-restart gossip fallback), and the peer's partition arriving as a
+tarball over a loopback socket through `fetch_remote_shard`'s
+`GET /internal/index/serve` -> `tar xf`.
+
+**This is `coordinate_merge`'s first test.** Re-checked at HEAD before writing
+it, as `c001e3634` recorded: every prior mention of `coordinate_merge` under a
+`tests/` path was prose in a module comment. The state machine that decides
+queue-mode participation, leadership and the merge had no executable claim on
+it at all — which is why the gap `2dc1bf160` found on one caller could sit
+unnoticed on the other.
+
+Watched RED on the tree BEFORE the move, both probes side by side:
+
+    merge returned              : chunks=2 corpus=coverage
+    installed_indexes()         : []
+    usable_indexes()            : []
+    canonical dirs on disk      : ["coverage"]
+    local-only term (installed) : None
+    peer-only term (installed)  : None      <- THE BAR, and it was never asked
+    --- through CorpusIndex::open, which bypasses both gates ---
+    canonical exists            : true
+    canonical chunk_count       : 2 (expected 2: 1 local + 1 peer)
+    local-only term (on disk)   : true
+    peer-only term (on disk)    : true
+
+The merge REPORTED success — `Ok(Some(IndexInfo))`, 2 chunks — and both
+donors' rows were retrievable from a handle opened by path. Only the finalize
+was missing. `None` rather than `false` is deliberate (§18.3): the search never
+ran, because `usable_indexes()` had no row to run it against.
+
+GREEN after the move, same test, exit 0. Read by inverting the bar's expected
+value once so the diagnostic block renders its post-fix values rather than
+being unreachable:
+
+    merge returned              : chunks=2 corpus=coverage
+    installed_indexes()         : ["coverage"]
+    usable_indexes()            : ["coverage"]
+    local-only term (installed) : Some(true)
+    peer-only term (installed)  : Some(true)    <- THE BAR
+    canonical chunk_count       : 2
+
+*The change.* `corpus_engine::finalize_canonical` is now the last step of
+`ShardManager::merge_participants` itself, after the shard-dir cleanup, and
+`auto_recover::merge_from_fold_coverage`'s own call to it is gone. Not a second
+call site — the shared function — because "a merge produces a corpus someone
+can reach" is a POST-CONDITION, and two callers each REMEMBERING to satisfy it
+is exactly the shape that had already failed once (ARCH #10: structural, not
+remembered). `merge_participants`' own doc already claimed it "either produces
+an index or fails"; that sentence is now true. `Ok(Some(info))` from it means
+REACHABLE, for both callers and for any third one.
+
+*Ordering.* Unchanged inside the finalize — `build_indexes` ->
+`mark_indexes_built` -> `mark_ingestion_complete` -> fingerprint LAST — because
+that order is the contract and lives in one place. Unchanged around it too: the
+finalize runs AFTER the shard-dir cleanup, as it did when the caller ran it,
+because the state a finalize failure leaves behind is already documented in
+terms of that order (every source partition gone, the canonical holding the
+only copy). Moving it earlier would quietly change which directories survive a
+failure, and that is a different decision.
+
+*Merge succeeds, finalize fails — the state survives the move as an error that
+CARRIES it.* `merge_participants` returns
+`corpus_engine::Error::MergedNotFinalized { corpus, canonical_path, chunks,
+detail }` and logs it at `error!` at the site that discovers it. `Err` rather
+than a success-shaped value on purpose: an `Ok` carrying a "finalize: failed"
+field would put every caller back to REMEMBERING to check it, which is the
+shape this rung removes — and §18.3's smell is an `Err` collapsed into a
+success shape, not the reverse. Nothing is lost by the collapse because the
+variant carries the chunk count and the canonical path, which is the whole of
+"chunks exist, indexes do not". It sits beside `IncompleteCoverage` for the
+same reason and with the same crate-boundary note:
+`commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled` stays
+its own type because `corpus-engine` cannot name it, and now carries the three
+fields across unchanged rather than deriving them.
+
+Watched, on BOTH callers, by making the canonical fail to open after the merge:
+
+    queue-mode  Err(MergedNotFinalized { corpus: "coverage", chunks: 2,
+                canonical_path: ".../indexes/coverage",
+                detail: "Index not found: .../__b8_forced_failure" })
+    fold        RecoveryOutcome::MergedButNotInstalled { chunks: 4,
+                canonical_path: ".../indexes/cw-lift-5g-two-nodes",
+                error: "Index not found: .../__b8_forced_failure" }
+
+The fold reading is the same shape `2dc1bf160` produced from its own call site,
+so the move did not change what that caller reports.
+
+*B2 stayed green.* `two_donors_on_two_nodes_land_both_slices_in_the_canonical`
+passes unchanged after the move — the fold path was already correct and the
+move did not disturb it. Gates: `sovereign-lint.sh --human --full` exit 0;
+`sovereign-test.sh` exit 0 on commonwealth-knowledge (37), corpus-engine
+(2265), commonwealth-api (589), sovereign-mesh (1023). Conformance tags
+regenerated (one line: `sharding.rs` ST-9 shifted by a doc edit).
+
+**The claim, not inflated.** What is established is that **the queue-mode merge
+could not produce a usable corpus on its own** — verified in the code and now
+in a test on that caller. It is NOT established that users hit it.
+`auto_recover`'s disk path does finalize and is the fallback that has been
+carrying this, and the reason `auto_recover` exists at all is that the queue
+path deadlocks. Nothing here measures how often the queue path completes and
+reaches the merge in the field, so "collaborative ingest is broken for users"
+is a claim this rung cannot make.
+
+Known not checked by B8: the LEGACY static-partition branch of
+`coordinate_merge` (this fixture has empty `partitions` by construction, which
+is what makes it queue mode) — its peer-status poll and lowest-`NodeId` leader
+rule remain untested; the `Ok(None)` non-leader arm; the gossip participant
+fallback; two real machines; and the two `corpus_queue.rs` call sites
+themselves, which are unchanged and whose `Err` arms now surface
+`MergedNotFinalized` through their existing `error!` rather than through a
+variant of their own.
