@@ -12,6 +12,8 @@
 #     podman run --rm --userns=keep-id --entrypoint= \
 #                -v <donor-root>/work-donor/worktrees/<repo>:/work:Z -w /work \
 #                localhost/sovereign-work:latest cargo fetch --locked
+#     mkdir -p <that worktree>/.cargo-container/xdg-cache \
+#       && cp -a ~/.cache/ort.pyke.io <that worktree>/.cargo-container/xdg-cache/
 #
 # A unit runs with `--network=none` and ONE mount, so a unit that compiles
 # needs its inputs inside that mount. The base image's layout already says
@@ -27,6 +29,16 @@
 # network, by the operator — the same standing as building this image — and
 # `CARGO_NET_OFFLINE` below makes a unit that lacks an input fail in
 # milliseconds by name instead of spending its budget on retries.
+#
+# The registry is not the only build-time download. `ort-sys` (the ONNX
+# runtime behind gliner) fetches a prebuilt `libonnxruntime.a` from
+# parcel.pyke.io in its build script, cached under `$XDG_CACHE_HOME/
+# ort.pyke.io/dfbin/<triple>/<hash>/` — and `bench-compile` came back
+# `exited 101 after 18 s: Dns Failed: parcel.pyke.io` for exactly that.
+# `XDG_CACHE_HOME` below puts that cache INSIDE `.cargo-container`, which is
+# gitignored and so survives the donor's `clean -fdq` between units (a
+# `/work/.cache` would not); the second warm line copies the host's cache
+# there. Every host that has built this workspace has one.
 #
 # The image is the DONOR OPERATOR's declaration, never the submitter's and never
 # the package's: `commonwealth_work::sandbox` ships none and refuses to guess
@@ -69,6 +81,11 @@ ENV PATH=/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/l
 # minutes of `spurious network error` retries that expire the unit's budget and
 # read as "still compiling" from outside.
 ENV CARGO_NET_OFFLINE=true
+
+# Build-script caches (ort-sys's prebuilt runtime, anything else that reads
+# the XDG cache) live inside the one mount, in the ignored dir the registry
+# already uses, so they persist across units and are warmed the same way.
+ENV XDG_CACHE_HOME=/work/.cargo-container/xdg-cache
 
 # The unit's argv is the unit. `Sandbox::command_line` passes `--entrypoint=`
 # for exactly this reason — an image ENTRYPOINT would take the submitter's argv

@@ -103,6 +103,22 @@ pub trait JobExecutor: Send + Sync {
     /// appending a `Lease`, so a refusal here costs the unit nothing.
     fn validate(&self, unit: &JobUnit) -> Result<(), WorkRefusal>;
 
+    /// The host's half of the predicate — the unit's preconditions — asked of
+    /// the environment THIS executor runs units in.
+    ///
+    /// The default asks the donor's host, which is right for an executor that
+    /// runs in-process. An executor that runs units somewhere else (a
+    /// container image) overrides it, because a `container:` or `binary:`
+    /// precondition is a question about where the argv runs, and the host is
+    /// the wrong subject there in both directions — see
+    /// [`crate::refusal::environment_satisfies`]. Kept on the executor rather
+    /// than beside it so the environment a unit runs in and the one its
+    /// preconditions are judged against are one value (ARCH §10.6).
+    #[cfg(feature = "process")]
+    fn environment_satisfies(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
+        crate::refusal::host_satisfies(unit)
+    }
+
     /// Run the unit. `Ok` is a verdict; `Err` is the absence of one.
     ///
     /// Cancellation and the wall cap are the executor's own responsibility —

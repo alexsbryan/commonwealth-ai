@@ -507,7 +507,11 @@ fn a_sandboxed_executor_attributes_work_to_the_image_and_not_to_this_host() {
     let a = contained.attribution("deadbeef");
     assert_eq!(a.os, "plan9", "the image's OS, not this host's");
     assert_eq!(a.arch, "sparc64");
-    assert_ne!(a.os, std::env::consts::OS, "the default would have leaked the host in");
+    assert_ne!(
+        a.os,
+        std::env::consts::OS,
+        "the default would have leaked the host in"
+    );
     assert_eq!(a.repo_rev, "deadbeef");
 
     // The control: no boundary, and the executor's answer IS this host — so a

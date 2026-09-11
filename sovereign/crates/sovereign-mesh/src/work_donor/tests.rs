@@ -2,6 +2,7 @@
 //! `work_donor`'s tests. A sibling file only so `work_donor.rs` stays
 //! under ARCH §3.1's 1200-line ceiling — moved verbatim, nothing renamed.
 use super::*;
+use commonwealth_work::refusal::host_satisfies;
 
 fn section(kinds: &[&str]) -> WorkOfferSection {
     WorkOfferSection {

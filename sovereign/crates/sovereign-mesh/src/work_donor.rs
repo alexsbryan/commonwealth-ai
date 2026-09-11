@@ -85,7 +85,7 @@ use commonwealth_work::actor::ActorKey;
 use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
 use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::{host_satisfies, may_take, UnmetRequirement, WorkRefusal};
+use commonwealth_work::refusal::{may_take, UnmetRequirement, WorkRefusal};
 use commonwealth_work::sandbox::Sandbox;
 use commonwealth_work::WORK_NAMESPACE;
 use kernel_types::attribution::ComputeAttribution;
@@ -530,8 +530,19 @@ async fn take_round(
             trace_refusal(&unit_ref, &refusal);
             continue;
         }
-        if let Err(refusal) = host_satisfies(&unit) {
-            trace_refusal(&unit_ref, &refusal);
+        // Asked of the environment the EXECUTOR runs units in — under a
+        // container boundary that is the image, not this host. Announced at
+        // info: the submitter's side can only say "the host-side half is not
+        // visible from here", so this line is the one place the reason is.
+        if let Err(refusal) = executor.environment_satisfies(&unit) {
+            info!(
+                target: TRACE_TARGET,
+                handoff = %unit_ref.handoff,
+                unit = %unit_ref.unit_hash,
+                refusal = refusal.id(),
+                why = %refusal,
+                "work donor: refused — the unit's preconditions are not met by the environment this node runs units in"
+            );
             continue;
         }
         let workdir = match resolve_workdir(offer, &unit, donor_root).await {

@@ -972,6 +972,12 @@ impl JobExecutor for ProcessExecutor {
         crate::attribution::of_sandbox(repo_rev, &self.sandbox)
     }
 
+    fn environment_satisfies(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
+        // The sandbox is the environment the argv runs in; ask it, not the
+        // host. Under `Sandbox::Direct` this IS the host.
+        crate::refusal::environment_satisfies(unit, &self.sandbox)
+    }
+
     fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a> {
         Box::pin(self.run(unit, ctx))
     }

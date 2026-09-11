@@ -482,18 +482,50 @@ fn decide(
 /// so a lifter of the fold alone still links no I/O.
 #[cfg(feature = "process")]
 pub fn host_satisfies(unit: &oicp_types::JobUnit) -> Result<(), WorkRefusal> {
+    environment_satisfies(unit, &crate::sandbox::Sandbox::Direct)
+}
+
+/// [`host_satisfies`], asked of the environment the unit will actually RUN
+/// in rather than of the donor's host.
+///
+/// Under [`Sandbox::Direct`](crate::sandbox::Sandbox::Direct) the two are the
+/// same machine and this is `host_satisfies`. Under a container boundary
+/// they are not, and checking the host answers the wrong question in both
+/// directions: a `container:sovereign-vulkan` precondition read off the
+/// donor's `/run/.containerenv` refused every containerised donor for a
+/// unit its image could run (watched 2026-09-11: `sovereign-test` was never
+/// leased, and the submitter could only say "the host-side half is not
+/// visible"), and a `binary:` found on the host says nothing about the
+/// image the argv runs in.
+///
+/// So: a `container:` precondition names a build environment, and a donor
+/// running units inside the image its operator declared IS in one — the
+/// image is the CI environment (the same claim `local_attribution` reads at
+/// the reference). A `binary:` precondition is asked of the image, by running
+/// `command -v` inside it with no workdir and no network. The three kinds no
+/// package crate can evaluate stay refused, in either environment.
+#[cfg(feature = "process")]
+pub fn environment_satisfies(
+    unit: &oicp_types::JobUnit,
+    sandbox: &crate::sandbox::Sandbox,
+) -> Result<(), WorkRefusal> {
+    use crate::sandbox::Sandbox;
     for precondition in &unit.requirements.preconditions {
-        let met = match precondition {
-            Precondition::Binary(name) => binary_on_path(name),
-            Precondition::Container(name) => in_container(name),
+        let met = match (precondition, sandbox) {
+            (Precondition::Binary(name), Sandbox::Direct) => binary_on_path(name),
+            (Precondition::Binary(name), Sandbox::Container { .. }) => sandbox
+                .capture(&["sh", "-c", &format!("command -v -- {name}")])
+                .is_some(),
+            (Precondition::Container(name), Sandbox::Direct) => in_container(name),
+            (Precondition::Container(_), Sandbox::Container { .. }) => true,
             // Not evaluable from a package crate: a listening port is a
             // socket probe, and slots and corpora are an agent runtime's
             // state, which this closure deliberately cannot reach. Refused
             // and NAMED rather than assumed — the caller sees which
             // precondition stopped it, not a bare false.
-            Precondition::PortListening(_)
-            | Precondition::SlotDecodes(_)
-            | Precondition::CorpusInstalled(_) => false,
+            (Precondition::PortListening(_), _)
+            | (Precondition::SlotDecodes(_), _)
+            | (Precondition::CorpusInstalled(_), _) => false,
         };
         if !met {
             return Err(WorkRefusal::RequirementUnmet(
@@ -1190,6 +1222,46 @@ mod host_tests {
                 "{p:?} is not evaluable here and must refuse, never pass"
             );
         }
+    }
+
+    /// **The subject is the environment the unit runs in.** A container
+    /// precondition names a build environment; a donor running units inside
+    /// its declared image is in one, whatever its host's `/run/.containerenv`
+    /// says. Failing input: `container:sovereign-vulkan` under a container
+    /// sandbox on a host that is not that toolbox — the old decider refused
+    /// it, and every containerised donor with it (2026-09-11, `sovereign-test`
+    /// never leased). The host-side decider is unchanged: outside that
+    /// container, `Direct` still refuses.
+    #[test]
+    fn a_container_precondition_is_met_by_the_image_the_unit_runs_in() {
+        // A container this test process is certainly NOT in — named so the
+        // old decider (`in_container(name)` whatever the sandbox) fails here
+        // on every host, including inside the sovereign-vulkan toolbox where
+        // the gates run and where a `sovereign-vulkan` fixture would have
+        // passed the old arm too.
+        let unit = unit_needing(vec![Precondition::Container(
+            "a-toolbox-this-process-is-not-in-3f9c".into(),
+        )]);
+        let boundary = crate::sandbox::Sandbox::Container {
+            runtime: "podman".into(),
+            image: "localhost/sovereign-work:latest".into(),
+            os: "linux".into(),
+            arch: "x86_64".into(),
+        };
+        assert_eq!(environment_satisfies(&unit, &boundary), Ok(()));
+        // The uncheckable kinds stay refused under a boundary too — a
+        // container is not a reason to assume a port is listening.
+        let port = unit_needing(vec![Precondition::PortListening(9741)]);
+        assert!(environment_satisfies(&port, &boundary).is_err());
+        // And the host-side decider is unchanged: with no boundary, a
+        // container this process is not in is refused by name.
+        let err =
+            host_satisfies(&unit).expect_err("Direct asks the host, and the host is not in it");
+        assert!(
+            err.to_string()
+                .contains("a-toolbox-this-process-is-not-in-3f9c"),
+            "{err}"
+        );
     }
 
     /// A container precondition is answered from `/run/.containerenv`, and a
