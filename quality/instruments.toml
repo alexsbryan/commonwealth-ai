@@ -2170,6 +2170,66 @@ why = "builds the Windows desktop bundle"
 key = "scripts/fetch-desktop-binaries.sh"
 why = "downloads prebuilt sidecar binaries into the bundle"
 
+[[instrument]]
+id = "cw-work-lift"
+kind = "probe"
+claim = "invariant"
+command = "scripts/cw-work-lift.sh --sandbox"
+cost_secs = 60.0
+enforcement = "tracked"
+fidelity = "F3"
+baseline = { kind = "none" }
+negative_control = "none"
+# "none" is schema-honest, not a claim that there is no control: this run
+# carries one INTERNALLY. Step 6 runs the escape probe on the bare host first,
+# where it must succeed in reaching the internet, and only then as a donated
+# unit, where it must be refused; a probe that passes bare makes the whole run
+# ABSTAIN. `negative_control` must name a mutant id or a `kind = "control"`
+# instrument, and an in-run control is neither — it is not separately
+# addressable. Naming nothing is the accurate answer to the field as posed.
+runs_in = ["by-hand"]
+doc = "commonwealth/BOUNDARY.md"
+# Verifies the four things `cargo tree` cannot see: whether the copied closure
+# resolves, whether a hand-spelled `path = "../.."` survives flattening, whether
+# it builds with none of this workspace's `.cargo/config.toml` / `clippy.toml` /
+# `rust-toolchain.toml`, and whether a package-only peer completes real units.
+# Exits 3 (no claim) when the host declares no `CW_WORK_IMAGE`, because the
+# image is the donor operator's declaration and a run with no boundary is a
+# different fact from a run inside one.
+#
+# `runs_in = ["by-hand"]` is the HONEST declaration, not the desired one. It was
+# reached by the `cw-work-package-lift` bar until 2026-09-11, when the cw-lift
+# campaign closed and its file moved to `quality/campaigns/closed/`, which
+# `co-lineage.py`'s loader skips by construction. Registered so the gap is
+# inventory-visible rather than invisible; BOUNDARY.md §"What is enforced, and
+# what is not" ranks the three ways to give it a caller back.
+
+[[instrument]]
+id = "cw-rails-lift"
+kind = "probe"
+claim = "invariant"
+command = "scripts/cw-rails-lift.sh --sandbox"
+cost_secs = 120.0
+enforcement = "tracked"
+fidelity = "F4"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "commonwealth/BOUNDARY.md"
+# The same closure property for the package's first BINARY, plus the half no
+# manifest gate reaches: that the lifted `cw-rails` JOINS a real mesh by invite,
+# converges a roster carrying another member, lists one offering a library, is
+# handed a 127.0.0.1 viewer URL and gets an HTTP status through it. F4 because
+# the last act is a real mesh with a real member, not a synthesised one.
+#
+# Has NEVER had a caller. `quality/ARCH_LAYERS.toml` cites it as the reason a
+# [[forbid]] row exists — "this binary is BUILT AND RUN outside the monorepo by
+# scripts/cw-rails-lift.sh" — which describes something a person did once, not
+# something that happens. It also CANNOT become an unattended gate: its own
+# pre-registration makes verdict 3 could-not-judge with expected cause NO
+# INVITE, since the lifted daemon cannot mint one. Its honest venue is a step in
+# a release procedure, not a runner.
+
 [[not_instrument]]
 key = "scripts/stage-daemon-sidecar.sh"
 why = "the same act as `fetch-desktop-binaries.sh` for the one sidecar this repo BUILDS rather than downloads \u2014 it links `sovereign-cli-daemon` and copies it to `binaries/<name>-<triple>` so Tauri's `externalBin` finds it (svt-1). It stages an artifact; it takes no verdict and has nothing to fail on. What verifies the installer actually carries a working daemon is the desktop e2e lane, not this copy"

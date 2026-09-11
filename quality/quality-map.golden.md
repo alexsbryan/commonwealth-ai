@@ -92,6 +92,8 @@
 | `arch-report` | `sovereign code arch-report` | tracked | F2 | unmeasured | **no** |
 | `capability-map` | `sovereign code capability-map` | tracked | F2 | unmeasured | **no** |
 | `co-sweep` | `scripts/co-sweep.sh` | tracked | F0 | unmeasured | **no** |
+| `cw-rails-lift` | `scripts/cw-rails-lift.sh --sandbox` | tracked | F4 | 2m | **no** |
+| `cw-work-lift` | `scripts/cw-work-lift.sh --sandbox` | tracked | F3 | 1m | **no** |
 | `daemon-soak` | `scripts/daemon-soak.sh` | tracked | F3 | unmeasured | **no** |
 | `daemon-soak-report` | `scripts/daemon-soak-report.sh` | tracked | F0 | 3s | **no** |
 | `desktop-a11y` | `npm run a11y` | tracked | F1 | unmeasured | **no** |
@@ -146,8 +148,8 @@
 | F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
-| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
-| F4 | a supervised child process | `desktop-e2e-faults` |
+| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
+| F4 | a supervised child process | `cw-rails-lift`, `desktop-e2e-faults` |
 | F5 | the packaged boot chain a shipped install takes | `desktop-smoke`, `wizard-verify` |
 
 ## Load-bearing — what silently weakens a verdict
@@ -240,7 +242,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 
 | venue | instruments |
 |---|---|
-| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `lint-gate`, `mesh-soak`, `mesh-soak-gate`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
+| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `cw-rails-lift`, `cw-work-lift`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `lint-gate`, `mesh-soak`, `mesh-soak-gate`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
 | `check` | `chaos-monkey`, `chat-ask`, `enrichment-f1`, `knowledge-gym`, `retrieval-prod`, `routing`, `synth`, `throughput` |
 | `ci:cli-release` | `check-desktop-version` |
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
@@ -267,7 +269,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (71 of 97)
+### What CI does not run (73 of 99)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -283,6 +285,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `co-sweep` — scripts/run-if-stale.sh (header) · runs in: run-if-stale
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
+- `cw-rails-lift` — commonwealth/BOUNDARY.md · runs in: by-hand
+- `cw-work-lift` — commonwealth/BOUNDARY.md · runs in: by-hand
 - `daemon-concurrency-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-concurrency-soak-control` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-concurrency-soak-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
@@ -349,5 +353,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**97 instruments, 12 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
+**99 instruments, 12 with a negative control, 48 unmeasured cost, 33 by-hand only.** (0 run nowhere at all.)
 

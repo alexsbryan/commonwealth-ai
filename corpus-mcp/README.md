@@ -251,8 +251,15 @@ extract, cluster, name, resolve, tensions, gaps, configure, report, backfill),
 ending in a v2 atlas store with a seed table and an `ontology.json` — the
 thing `ask` walks. Neither half is implemented here: the recipe pipeline is
 `corpus-engine`'s and the enrichment is `sovereign-enrichment-build`'s, both
-of which now sit inside this package's boundary. What this binary adds is the
-two-endpoint resolution and one `config.json`.
+of which now sit inside this package's boundary — as does
+`sovereign-enrichment-catalog`, the third crate in it: the enrichment store's
+on-disk layout and `config.json` schema, which is how the orchestrator finds an
+atlas and how this host reads one. It joined the package in the same commit as
+`-build` and on the same evidence, when its last non-leaf edge
+(`sovereign_core::setup_config::client_daemon_base()`, one line) was cut; what
+it depends on now is `corpus-engine` and `sovereign-contracts`, the same two
+the rest of this package stands on. What this binary adds is the two-endpoint
+resolution and one `config.json`.
 
 Two things a bare endpoint does not have, and the run says both out loud
 rather than leaving them to be inferred from a slow phase: **GLiNER is not
