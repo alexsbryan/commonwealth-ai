@@ -5666,7 +5666,14 @@ library over plaintext), so there is nothing to opt it out to. What the read
 refuses it names — unknown, ambiguous, offline, no identity, no iroh path,
 non-loopback endpoint — rather than handing out a port that accepts and never
 answers; the CLI then does one real `GET /` through the bridge so the person
-sees an HTTP status, not a port. Watched failing:
+sees an HTTP status, not a port. The response also says which KIND of number a
+play would be: `path.relayed_reading` is true only for `relayed`, decided once
+by `PeerPath::is_relayed_reading` — `mixed` (a direct leg and a relay both
+live, bytes on the direct leg, which is every path on one LAN) is a direct
+number under a relay's name and must not clear the bar. The bar itself is
+measured through the SAME URL: `media_bridge_bench pull --url <it>
+--duration-secs 600` judges the pre-registered rate / stall / duration and
+leaves the path kind to that field. Watched failing:
 `iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
 and `media_reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
 

@@ -235,6 +235,12 @@ pub struct PeerTransportPath {
     pub relay: Option<String>,
     /// Count of active direct (IP) addresses to this peer.
     pub active_direct_addrs: usize,
+    /// Whether a number measured over this path now is a RELAYED reading —
+    /// the federated-media bar's kind. True only for `relayed`; `mixed` is a
+    /// direct number under a relay's name. Decided once, by
+    /// `commonwealth_transport::iroh::PeerPath::is_relayed_reading`.
+    #[serde(default)]
+    pub relayed_reading: bool,
 }
 
 /// Every member the iroh endpoint could hold a path to, paired with what
@@ -691,6 +697,7 @@ impl MeshIrohAccess {
             path: snap.path.as_str().to_string(),
             relay: snap.relay,
             active_direct_addrs: snap.active_direct_addrs,
+            relayed_reading: snap.path.is_relayed_reading(),
         })
     }
 

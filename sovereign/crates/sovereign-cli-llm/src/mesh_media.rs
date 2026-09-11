@@ -116,12 +116,30 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         }
         println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
     } else {
+        // The bar is stated on the RELAYED path, and on one LAN every path
+        // reads `mixed` — a direct leg and a relay both live, bytes on the
+        // direct leg. Say which kind of number a play here would be, so a
+        // LAN demo is never written up as the relayed reading.
         let path = reach
             .path
             .as_ref()
-            .map(|p| match &p.relay {
-                Some(r) => format!("{} via {r}", p.path),
-                None => p.path.clone(),
+            .map(|p| {
+                let mut line = match &p.relay {
+                    Some(r) => format!("{} via {r}", p.path),
+                    None => p.path.clone(),
+                };
+                if p.relayed_reading {
+                    line.push_str("  — a RELAYED reading (the bar's kind)");
+                } else if p.path == "mixed" {
+                    line.push_str(&format!(
+                        "  — {} direct addr + relay both live; bytes ride the direct leg, so this \
+                         is NOT a relayed reading (pin both ends with SOVEREIGN_IROH_RELAY_ONLY=1)",
+                        p.active_direct_addrs
+                    ));
+                } else if p.path == "direct" {
+                    line.push_str("  — a direct reading, not the bar's");
+                }
+                line
             })
             .unwrap_or_else(|| "not yet dialed".into());
         println!("{}", reach.url);
