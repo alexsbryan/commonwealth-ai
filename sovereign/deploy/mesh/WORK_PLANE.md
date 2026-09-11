@@ -330,8 +330,15 @@ code.
 Design gaps it exposes (added to the ledger, not yet scheduled):
 
 1. **The federated-query seam is corpus-shaped** — the fan-out/merge/serving-wall
-   machinery (`commonwealth-knowledge`) must become item-type-generic. Same move as
-   `JobKind`, on the data side; this customer is its second proof.
+   machinery must become item-type-generic. Same move as `JobKind`, on the data
+   side; this customer is its second proof. *(Corrected 2026-09-11: the machinery
+   never lived in `commonwealth-knowledge` — that crate is grants, shards and a
+   work queue. The fan-out was inline in `commonwealth-api/src/routes_knowledge.rs`,
+   and the peer half of it is now `commonwealth_api::fanout` — targets, one row
+   per target with served / failed / never-asked, the inflight gauge, per-peer
+   timeout, first-endpoint-that-answers — generic over what a peer is asked.
+   The knowledge route calls it; the media fan-out is its second caller. Merge
+   stays with the caller, because item semantics are the origin's.)*
 2. **External-provider-ID identity (§7.5)** — cross-server item identity is TMDB/IMDB
    ids, not content hashes; provider-id must be a first-class identity form.
 3. **The binary streaming plane** — sustained multi-Mbps over iroh is unmeasured; LAN

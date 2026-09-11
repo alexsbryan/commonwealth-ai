@@ -20,6 +20,7 @@ pub mod admission;
 pub mod auto_recover;
 pub mod client_auth;
 pub mod client_surface;
+pub mod fanout;
 pub mod frontdoor;
 pub mod headers;
 pub mod middleware;

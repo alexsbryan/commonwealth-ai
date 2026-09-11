@@ -5722,6 +5722,27 @@ member, and a non-member is closed regardless. Watched failing:
 `the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed` /
 `a_member_outside_media_allow_is_closed_and_one_inside_is_served`.
 
+**One fan-out for every federated question** (`commonwealth-api/src/fanout.rs`,
+2026-09-11 — WORK_PLANE.md design gap 1, done by extraction). The peer half
+of the knowledge route's fan-out moved out unchanged in behaviour and generic
+in type: `FanoutTarget` (identity + contact, cloned out of the mesh lock),
+`fan_out(inner, targets, per_peer, ask)` — one spawned task per target under
+the `fanout_inflight` gauge the `BoundedFanOut` soak invariant reads, an
+optional per-peer cap so one stalled relay cannot hold the rest, a
+`PeerRow<T>` per target in the order given with `Served(T)` / `Failed` /
+`NeverAsked` and elapsed, a panic in one task a failed row rather than a lost
+one — and `first_endpoint_that_answers`, the transport's candidate loop with
+the `note_success` pin. Every target is a row (`rows.len() == targets.len()`):
+the cloud-peer flight's lesson (note 60d4d79b) that an unasked corpus must
+not read as an empty answer, applied to peers. Merge stays with each caller,
+because item semantics are the origin's: the knowledge route keeps its
+corpus accounting and `X-Node-Id` stamp and calls the core; the media fan-out
+is the second caller. Watched failing: `fanout::tests::
+a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
+`a_target_refused_before_dialing_is_a_never_asked_row_not_an_absence`
+(verdict collapsed to failed); the extraction's guard is the unchanged
+`knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
+
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
 `cwth/client/0` from "any dial-string holder" to "any member" was a reduction,
