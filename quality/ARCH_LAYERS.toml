@@ -16,7 +16,7 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 3
+schema_version = 4
 
 # ── Back-of-house: the quality controls ──────────────────────────────────────
 # eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
@@ -957,6 +957,129 @@ crates = [
     "commonwealth-rails",
 ]
 
+# ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
+#
+# sv-surface's `sv-no-daemon-management` bar, operator 2026-09-11:
+#
+#   "Desktop is thin and a dumb client. Daemon logic lives in one place, is
+#    reused by all the clients (CLI + desktop + mobile). No more complicated
+#    stories."
+#
+# WHY THIS IS NOT A [[forbid]] ROW. Every other rule in this file tests one
+# DECLARED edge. This one tests the CLOSURE, because the ability it governs is
+# transitive: Cargo links what a crate reaches, not what it names. Measured
+# 2026-09-11 on this tree — `sovereign-desktop` → `sovereign-runtime-recipe`
+# → `sovereign-tools`, which binds an MCP listener. Delete the direct edges
+# the campaign's predicate lists and a direct-edge gate goes GREEN with
+# `sovereign-tools` still compiled into the app. That is the failure the bar
+# is named for, so the rule is reachability and the violation carries its
+# path. `quality/arch-layers/src/surfaces.rs` is the evaluator; the test
+# `an_indirect_path_is_caught_and_names_the_hop_a_direct_rule_would_miss`
+# pins exactly this case.
+#
+# WHY THESE FIVE. They are the crates that can assemble or HOST a backend, and
+# the list is the campaign predicate's, not a fresh one — same names, one
+# decider (`quality/campaigns/sv-surface.toml [predicate]`). Anchored on an
+# observable rather than on taste: four of the five bind a network listener in
+# their own `src/` (censused 2026-09-11: sovereign-mesh 14 files,
+# sovereign-cli-daemon 3, sovereign-tools 2, sovereign-compute 2), and
+# `sovereign-workflow-host` assembles the workflow execution host the daemon
+# serves.
+#
+# WHY corpus-engine IS NOT ON IT, though the bar's `floor_basis` names it.
+# `sovereign-core` reaches `corpus-engine`, so forbidding it would make the
+# rule unsatisfiable for any surface that keeps core — and corpus-engine binds
+# no listener and hosts nothing. It is on the bar's floor as SIZE (the 661 MB
+# story), which `size-gate` is the instrument for. Two questions, two gates.
+#
+# WHY MOBILE IS HERE. It is already clean (2 direct deps: sovereign-turn-client,
+# commonwealth-transport — measured 2026-09-11), which is the point: this rule
+# has a passing subject and a failing one on the same run, so a green is a
+# claim and not an absence of input (ARCH principle 5). Enrolling it now is
+# also what stops the phone growing the desktop's shape later.
+#
+# NOT ENROLLED, and stated rather than discovered later: `sovereign-cli` links
+# `sovereign-cli-dev`/`-llm` because it IS the dispatcher whose siblings are
+# the daemon, and `sovereign-studio` names `sovereign-workflow-host` because
+# authoring a workflow is its product. Neither is a client of a daemon it must
+# not become. `sovereign-server` and `sovereign-cli-daemon` ARE daemons.
+[thin_surfaces]
+crates = [
+    "sovereign-desktop",
+    "sovereign-mobile",
+]
+may_not_reach = [
+    "sovereign-cli-daemon",
+    "sovereign-mesh",
+    "sovereign-compute",
+    "sovereign-tools",
+    "sovereign-workflow-host",
+]
+doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
+
+# HALF TWO of the instrument reads the rest of this block — `cargo xtask
+# lifecycle-gate`. The two halves share `crates` above deliberately: a
+# dependency gate passes clean through supervision re-added one retry at a
+# time (a retry loop around `std::process` needs no crate at all), and a
+# census that spoke about a different set of surfaces than the dependency rule
+# would leave exactly one of them covered.
+#
+# THE ONE SANCTIONED BRING-UP. `sovereign-turn-client` may START and DETACH a
+# backend; it may not RETAIN or REAP one. That is the bar's settled line made
+# structural: "a client may bring a backend up at a moment a user action asks
+# for one, and never on a timer or a health signal". `bring_up` binds the
+# `Child` and drops it on the next line, so there is nothing to `try_wait` on
+# — and `reaps` being forbidden in this very file is what refuses the loop
+# that would grow back.
+bring_up_decider = { krate = "sovereign-turn-client", file = "sovereign/crates/sovereign-turn-client/src/reach.rs", reason = "ServingHost::ensure_reachable is the one decider for `is a backend reachable, and start one if this build ships one`. Thirteen private copies of the probe preceded it; retiring them onto one is why the client family, not the app, owns reachability." }
+
+# ── The lifecycle ledger — every process-control site a surface still has ────
+# Census 2026-09-11 (`cargo xtask lifecycle-gate`). `burning-down` rows are
+# what the bar counts; `sanctioned` rows are policy and may stand.
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs"
+rule = "starts"
+max = 3
+kind = "sanctioned"
+reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>/com.svrnmesh.daemon` or `systemctl --user restart svrnmesh`. The bar keeps this one explicitly: it is the `attach_restart_daemon` BUTTON, a user action, and it asks the OS service manager to do the restarting rather than doing it here. No handle is created (`.output()` runs to completion), no policy, no timer. Read it as the shape the rule permits, not as debt."
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/smoketest.rs"
+rule = "starts"
+max = 2
+kind = "burning-down"
+reason = "the crash-isolation smoketest forks `current_exe()` to try loading a GGUF in a throwaway process. 302 lines, and it belongs in the daemon — the daemon is what loads models, so the app is running a subprocess to answer a question about somebody else's data (ARCH principle 12). svt-3 moves it."
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/smoketest.rs"
+rule = "reaps"
+max = 3
+kind = "burning-down"
+reason = "the same subprocess: `try_wait` polling for a deadline, then `kill` + `wait`. This is a full lifecycle tracked in a client, and it is the clearest single reason the census exists as a separate half — no dependency edge moves when this is written."
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
+rule = "starts"
+max = 2
+kind = "burning-down"
+reason = "the Mobile Access toggle spawns a `sovereign-server` child (`start()`, :73 + :92). The bar's own survey counted it — `mobile-host supervision 90` lines — and it is the second daemon this app manages, not the first. It is also where the survey found a live defect: `stop_daemon_child` takes only `state.supervisor`, so this child is never stopped on quit and is orphaned by `_exit`."
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
+rule = "reaps"
+max = 2
+kind = "burning-down"
+reason = "`kill_on_drop(true)` (:88) and `child.wait().await` (:96) — the two halves of a lifetime the client decided for a process it does not own: it ends when the toggle's JoinHandle is aborted, and the client sits waiting to learn that it did. This pair is what taught the census its `kill_on_drop` needle; a `Child` is never named in the file, so a type-shaped rule would have missed it."
+
+[[thin_surfaces.lifecycle_allow]]
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_flow.rs"
+rule = "starts"
+max = 1
+kind = "burning-down"
+reason = "`relaunch_after_setup` spawns `current_exe()` and exits — THIS app, not a daemon, so read it as the mildest row here: no handle, no wait, no policy. It survives only because the one look for a serving host happens at startup, before the wizard has written config.toml, so the wizard session cannot acquire one and a fresh instance can. The bar already predicts its deletion: `under an OS service that whole relaunch DELETES`."
+
+
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
 [[exception]]
@@ -1012,3 +1135,38 @@ from = "commonwealth-api"
 to = "sovereign-atos"
 reason = "feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds"
 tracking = "R6"
+
+# ── Thin-surface reaches, grandfathered (sv-no-daemon-management) ────────────
+# The violation list as it stood on 2026-09-11, one row per crate the desktop
+# can reach. These are the burn-down, and svt-2 (supervision deletion) plus
+# svt-3 (route migration) are the rungs that delete them. Each will fail as
+# STALE the moment its last path disappears, which is how the win gets banked
+# rather than quietly accruing.
+#
+# `sovereign-mobile` has NO rows: it is already clean, and that is the
+# positive control for the whole rule.
+#
+# TWO ROWS ARE ALREADY GONE, deleted hours after they were written: svt-2
+# (99a0b1520, fc2086637) removed `sovereign-cli-daemon` and `sovereign-compute`
+# from src-tauri/Cargo.toml, and layer-gate FAILED on the stale entries until
+# they came out. That is the rule's closure loop running on a live landing
+# rather than a synthetic one, and it is the evidence that removals get banked
+# instead of quietly accruing.
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-mesh"
+reason = "11 desktop files name sovereign-mesh directly (mesh_commands, meshapp, health, state builders). svt-3 migrates them onto daemon routes through sovereign-turn-client."
+tracking = "sv-surface svt-3"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-tools"
+reason = "8 desktop files name sovereign-tools, and it also arrives transitively via sovereign-runtime-recipe and sovereign-mesh — which is the whole argument for making this rule reachability: removing the direct edge alone would turn a direct-edge gate green with the MCP listener still linked. svt-3."
+tracking = "sv-surface svt-3"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-workflow-host"
+reason = "the workflow-author tool bundle the desktop runtime registers so a Workflow project's chat can compose a workflow. Same agent loop as recipe authoring; it moves to the daemon with the rest of the runtime in svt-3."
+tracking = "sv-surface svt-3"

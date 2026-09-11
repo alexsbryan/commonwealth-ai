@@ -33,10 +33,12 @@
 //! policy file lives here and only here.
 
 mod packages;
+mod surfaces;
 mod violations;
 pub use packages::{
     evaluate_packages, missing_package_crates, Package, PackageLeaf, SHARED_LEAVES_SCOPE,
 };
+pub use surfaces::{BringUpDecider, LifecycleAllow, ThinSurfaces, BURNING_DOWN, SANCTIONED};
 pub use violations::Violation;
 
 use serde::Deserialize;
@@ -56,7 +58,14 @@ use std::collections::{BTreeMap, BTreeSet};
 /// layer map. Same argument for the bump, one rung sharper: an old build meets
 /// a v3 map, ignores every package, and prints the same "boundary-gate: clean"
 /// it prints when the packages are genuinely clean.
-pub const MAX_SCHEMA_VERSION: u32 = 3;
+///
+/// v4 added `[thin_surfaces]` — the reachability rule behind sv-surface's
+/// `sv-no-daemon-management` bar. Third time the same argument, and the
+/// sharpest of the three: the rule this version carries asks whether a client
+/// links a backend, so an old build meeting a v4 map would ignore the block
+/// and print "every edge points down or sideways" about a desktop that
+/// compiles the whole daemon. See `surfaces.rs`.
+pub const MAX_SCHEMA_VERSION: u32 = 4;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +113,12 @@ pub struct LayerMap {
     /// waiver.
     #[serde(default)]
     pub backstage: Vec<String>,
+    /// The thin surfaces — clients that may not become the thing they talk
+    /// to. Read by BOTH halves of `sv-no-daemon-management`'s instrument:
+    /// `evaluate` tests reachability here, `xtask lifecycle-gate` tests
+    /// process control over the same crate list. See [`ThinSurfaces`].
+    #[serde(default)]
+    pub thin_surfaces: ThinSurfaces,
 }
 
 #[derive(Debug, Deserialize)]
@@ -219,6 +234,7 @@ pub fn parse(toml_text: &str) -> Result<LayerMap, String> {
         );
     }
     packages::validate(&map)?;
+    surfaces::validate(&map)?;
 
     Ok(map)
 }
@@ -359,6 +375,13 @@ pub fn evaluate(map: &LayerMap, crates: &BTreeSet<String>, edges: &[DepEdge]) ->
             }
         }
     }
+
+    // The thin-surface pass, over the same edges and the SAME exception
+    // ledger. It runs here rather than in its own entry point precisely so a
+    // surface's `[[exception]]` is booked as used: a second entry point with
+    // its own bookkeeping is how `evaluate_packages` and this function once
+    // reported opposite verdicts about one row.
+    violations.extend(surfaces::evaluate(map, edges, &mut used_exceptions));
 
     // Exceptions that suppressed nothing are debt already paid — flag them.
     // Package-scoped ones answer to `evaluate_packages` (StalePackageException).

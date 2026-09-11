@@ -237,6 +237,23 @@ runs_in = ["prepush", "ci:gates"]
 doc = "sovereign/ARCH_PRINCIPLES.md §8"
 
 [[instrument]]
+id = "lifecycle-gate"
+kind = "gate"
+claim = "invariant"
+command = "cargo xtask lifecycle-gate"
+cost_secs = 0.1
+enforcement = "hard"
+fidelity = "F0"
+# No machine-written baseline, deliberately: the ledger is
+# `[[thin_surfaces.lifecycle_allow]]` in quality/ARCH_LAYERS.toml, where every
+# row carries a reason and a kind. `--update-baseline` on this gate REFUSES —
+# a waiver a gate can rewrite for you is one nobody reads.
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush", "ci:gates"]
+doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
+
+[[instrument]]
 id = "lock-gate"
 kind = "gate"
 claim = "invariant"
@@ -918,7 +935,6 @@ runs_in = ["smoke:4", "by-hand"]
 doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 load_bearing = [
   { flag = "-c playwright.faults.config.ts", why = "a separate config because the fault specs kill processes and own ports — they cannot share a run with anything" },
-  { flag = "SOVEREIGN_CLI_PATH", why = "the supervisor prefers it when set, so this suite exercises a DIFFERENT branch of resolve_daemon_child() than a packaged install takes" },
 ]
 
 [[instrument]]
@@ -1351,7 +1367,7 @@ negative_control = "none"
 runs_in = ["smoke:6", "by-hand"]
 doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
-  { flag = "SOVEREIGN_CLI_PATH UNSET", why = "every other supervised lane in the repo SETS it, so resolve_daemon_child() takes the env branch. This is the only coverage of the `current_exe() --daemon-child` branch a packaged install actually takes" },
+  { flag = "SOVEREIGN_FORCE_LOCAL UNSET", why = "the coverage claim SURVIVED svt-2 and its mechanism did not. It used to read `SOVEREIGN_CLI_PATH UNSET`, because every other supervised lane pinned that and this one did not, so only this lane took resolve_daemon_child()'s `current_exe() --daemon-child` branch. Supervision and that function are gone (99a0b1520). What is left is the same shape one rung out: this script unsets SOVEREIGN_FORCE_LOCAL (wizard-verify.sh:109) and drives a fresh profile, so it is still the only thing exercising the DEFAULT wizard path — the sidecar beside the executable, resolved by daemon_binary::stable_daemon_binary and brought up detached by serving_host::ensure_reachable. journeys/first-launch-setup.journey.spec.ts:86 SETS the flag, which is why the journey covers the branch real users never take (GUEST_QA_DESIGN.md:31-40)" },
   { flag = "a private netns (Linux) / checked-free ports (macOS)", why = "there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges" },
 ]
 
@@ -2065,6 +2081,10 @@ on_could_not_judge = "block"
 #
 # Every exemption carries a reason. The closure gate has NO skip-list of its
 # own — a silent one is how four harnesses came to sit off every map.
+
+[[not_instrument]]
+key = "scripts/stage-daemon-sidecar.sh"
+why = "a PACKAGING step, not a check: it copies the sovereign-cli-daemon binary into src-tauri/binaries under Tauri's `externalBin` target-triple name so the bundle ships the daemon it talks to (sv-surface svt-1, 70cca7483). It renders no verdict and has nothing to fail on. What VERIFIES the sidecar actually lands and boots is `wizard-verify` (registered above) — the lane that drives a packaged install with no CLI pinned."
 
 [[not_instrument]]
 key = "npm:dev"

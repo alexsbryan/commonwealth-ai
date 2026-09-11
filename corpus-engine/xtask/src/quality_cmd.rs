@@ -27,7 +27,7 @@
 
 use crate::{
     arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
-    layer_gate, layout_gate, lock_gate,
+    layer_gate, layout_gate, lifecycle_gate, lock_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -76,6 +76,15 @@ pub fn run() -> i32 {
         // indexed commit.
         ("clock-gate", Enforcement::Hard, &|| {
             clock_gate::run(&no_args)
+        }),
+        // Hard, and it reads the working tree: HALF TWO of sv-surface's
+        // `sv-no-daemon-management` bar (`layer-gate`'s [thin_surfaces] pass is
+        // half one). Either alone is a green gate enforcing nothing, so they
+        // run in the same table — a summary showing one green and one red is
+        // the honest reading of this bar, and a summary showing only one of
+        // them is not.
+        ("lifecycle-gate", Enforcement::Hard, &|| {
+            lifecycle_gate::run(&no_args)
         }),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)

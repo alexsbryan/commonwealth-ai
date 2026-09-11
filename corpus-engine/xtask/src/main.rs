@@ -8,6 +8,7 @@
 //!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
 //!   cargo xtask concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW duplicated type name
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
+//!   cargo xtask lifecycle-gate                            No thin surface retains a process handle or tracks a lifecycle
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
 //!   cargo xtask instrument-gate                    Every command a quality surface reaches is in quality/instruments.toml
@@ -30,6 +31,7 @@ mod env_gate;
 mod instrument_gate;
 mod layer_gate;
 mod layout_gate;
+mod lifecycle_gate;
 mod lint_gate;
 mod lock_gate;
 mod manifests;
@@ -56,6 +58,7 @@ fn main() {
         "env-gate" => env_gate::run(&args[1..]),
         "instrument-gate" => instrument_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
+        "lifecycle-gate" => lifecycle_gate::run(&args[1..]),
         "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
@@ -103,6 +106,9 @@ fn print_usage() {
     );
     eprintln!(
         "  layer-gate [--update-baseline|--tighten]  Enforce quality/ARCH_LAYERS.toml + the fan-in ratchet"
+    );
+    eprintln!(
+        "  lifecycle-gate                 No thin surface retains a process handle or tracks a lifecycle (sv-no-daemon-management, half 2)"
     );
     eprintln!(
         "  lock-gate [--update-baseline|--tighten]   No NEW duplicate crate versions in Cargo.lock"
