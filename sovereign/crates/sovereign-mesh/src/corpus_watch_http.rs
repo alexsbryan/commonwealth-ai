@@ -1,30 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! HTTP routes for the watched-folder reconciliation subsystem.
+//! HTTP routes for the watched-folder reconciliation subsystem —
+//! `/internal/corpus/watch/…`.
 //!
 //! Mounted onto the daemon's loopback-only client router via
-//! `EmbeddedDaemon::install_corpus_watch_http_router`. The handlers
-//! reach into the `watched_folder_runtime` singleton for the
-//! manager + registry — same pattern `watched_folder_runtime`
-//! describes.
+//! `EmbeddedDaemon::install_corpus_watch_http_router`. The handlers reach the
+//! `watched_folder_runtime` singleton for the manager + registry, the same
+//! pattern that module describes. Register, list, status, pause, resume,
+//! confirm-deletion, unregister, and the enrich/ingest arms over them.
 //!
-//! Routes (all under `/internal/corpus/watch/`):
+//! All responses are JSON; the error shape is `{ "error": "<message>" }`,
+//! built by [`crate::http_response`] like every other route family.
 //!
-//! | Method | Path                           | Purpose                                   |
-//! |--------|--------------------------------|-------------------------------------------|
-//! | POST   | `/register`                    | Register a new watched-folder corpus      |
-//! | GET    | `/list`                        | List every registered watched-folder      |
-//! | GET    | `/status/{corpus_id}`          | Status DTO for one corpus                 |
-//! | POST   | `/pause/{corpus_id}`           | Pause sweeps (manual)                     |
-//! | POST   | `/resume/{corpus_id}`          | Resume after manual pause                 |
-//! | POST   | `/confirm-deletion/{corpus_id}`| Acknowledge guard-tripped pause           |
-//! | DELETE | `/{corpus_id}`                 | Unregister + remove index                 |
-//!
-//! All responses are JSON. Error shape: `{ "error": "<message>" }`.
+//! Loopback-only, both layers (ARCH §5, defence in depth).
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use axum::extract::{ConnectInfo, Json, Path};
+use axum::extract::{Json, Path};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
@@ -36,7 +27,8 @@ use sovereign_tools::local_corpus::watched::state::FailedFile;
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 use sovereign_tools::local_corpus::WatchedIncompleteJob;
 
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::{json_error, service_unavailable};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::watched_folder_runtime;
 
 /// Build the watched-folder router. Mounts under
@@ -119,9 +111,7 @@ pub fn corpus_watch_router() -> Router {
         // Errored sweep) so the corpus can be rebuilt / swept again.
         .route("/internal/corpus/enrich-reset", post(enrich_reset_handler))
         .route("/internal/corpus/watch/{corpus_id}", delete(remove_handler))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
+        .localhost_only()
 }
 
 // ─── Wire types ──────────────────────────────────────────────────
@@ -446,20 +436,9 @@ pub struct EnrichResetRequest {
     pub corpus_id: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ErrorBody {
-    pub error: String,
-}
-
 // ─── Handlers ────────────────────────────────────────────────────
 
-async fn register_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Json(req): Json<RegisterRequest>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn register_handler(_: LocalOnly, Json(req): Json<RegisterRequest>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -481,7 +460,8 @@ async fn register_handler(
     let sync_mode = req.config.sync_mode;
 
     if let Err(e) = manager.register(cfg).await {
-        return error(StatusCode::INTERNAL_SERVER_ERROR, format!("register: {e}")).into_response();
+        return json_error(StatusCode::INTERNAL_SERVER_ERROR, format!("register: {e}"))
+            .into_response();
     }
 
     // Register in the scheduler's registry so the next tick picks
@@ -501,7 +481,7 @@ async fn register_handler(
                 chunks_written: stats.chunks_written,
             },
             Err(e) => {
-                return error(
+                return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("initial ingest: {e}"),
                 )
@@ -536,10 +516,7 @@ async fn register_handler(
     .into_response()
 }
 
-async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn list_handler(_: LocalOnly) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -586,29 +563,17 @@ async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoRe
     Json(ListResponse { corpora: entries }).into_response()
 }
 
-async fn status_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn status_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.watched_status(&corpus_id).await {
         Ok(status) => Json(StatusResponse { corpus_id, status }).into_response(),
-        Err(e) => error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
     }
 }
 
-async fn state_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn state_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -622,20 +587,14 @@ async fn state_handler(
             live_entries: state.entries.len(),
         })
         .into_response(),
-        Err(e) => error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
     }
 }
 
 /// `GET /internal/corpus/watch/details/{corpus_id}` — the §3.7
 /// glassbox folder-detail digest. Renders into `WatchedFolderDetail`.
 /// Heavier than `state_handler`; not for high-frequency polling.
-async fn details_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn details_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -646,7 +605,7 @@ async fn details_handler(
     let cfg = match configs.into_iter().find(|c| c.id == corpus_id) {
         Some(c) => c,
         None => {
-            return error(
+            return json_error(
                 StatusCode::NOT_FOUND,
                 format!("corpus '{corpus_id}' not registered"),
             )
@@ -665,7 +624,7 @@ async fn details_handler(
     let state = match manager.watched_state(&corpus_id).await {
         Ok(s) => s,
         Err(e) => {
-            return error(StatusCode::NOT_FOUND, format!("{e}")).into_response();
+            return json_error(StatusCode::NOT_FOUND, format!("{e}")).into_response();
         }
     };
 
@@ -873,12 +832,9 @@ async fn details_handler(
 /// is URL-encoded by the caller (the relative path can contain
 /// slashes that would otherwise break the route match).
 async fn document_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path((corpus_id, doc_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -887,12 +843,12 @@ async fn document_handler(
     // arrives as the raw relative path string the manager stored.
     let state = match manager.watched_state(&corpus_id).await {
         Ok(s) => s,
-        Err(e) => return error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
+        Err(e) => return json_error(StatusCode::NOT_FOUND, format!("{e}")).into_response(),
     };
     let entry = match state.entries.get(&doc_id) {
         Some(e) => e.clone(),
         None => {
-            return error(
+            return json_error(
                 StatusCode::NOT_FOUND,
                 format!("doc_id '{doc_id}' not in corpus '{corpus_id}' state"),
             )
@@ -924,10 +880,7 @@ async fn document_handler(
     .into_response()
 }
 
-async fn incomplete_jobs_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn incomplete_jobs_handler(_: LocalOnly) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -936,13 +889,10 @@ async fn incomplete_jobs_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> 
 }
 
 async fn pause_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path(corpus_id): Path<String>,
     body: Option<Json<PauseRequest>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -956,17 +906,11 @@ async fn pause_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
-async fn resume_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn resume_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -976,17 +920,14 @@ async fn resume_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
 async fn confirm_deletion_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -996,7 +937,7 @@ async fn confirm_deletion_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1005,13 +946,10 @@ async fn confirm_deletion_handler(
 /// corpus. Body: `{ "path": "/abs/path/to/folder" }`. The next
 /// scheduler tick walks the new root automatically.
 async fn add_root_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path(corpus_id): Path<String>,
     Json(req): Json<AddRootRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1021,7 +959,7 @@ async fn add_root_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1031,12 +969,9 @@ async fn add_root_handler(
 /// existing deletion-guard semantics apply (a large root removal
 /// trips the threshold and pauses for `confirm-deletion`).
 async fn remove_root_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path((corpus_id, idx)): Path<(String, usize)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1046,7 +981,7 @@ async fn remove_root_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1056,13 +991,10 @@ async fn remove_root_handler(
 /// subprocess; this handler returns immediately with a `job_id`
 /// the UI can correlate with progress events.
 async fn enrich_enable_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path(corpus_id): Path<String>,
     Json(req): Json<EnrichEnableRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1076,7 +1008,7 @@ async fn enrich_enable_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1084,13 +1016,7 @@ async fn enrich_enable_handler(
 /// folder-ingest v1 §3.3, cancel any in-flight build, tear down
 /// the atlas directory, and reset config + state to `Off`.
 /// Idempotent.
-async fn enrich_disable_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn enrich_disable_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1100,7 +1026,7 @@ async fn enrich_disable_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1109,13 +1035,7 @@ async fn enrich_disable_handler(
 /// currently configured. Errors when the corpus has no
 /// enrichment configured (the user must `enable` first to pick a
 /// pipeline).
-async fn enrich_rebuild_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn enrich_rebuild_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1126,7 +1046,7 @@ async fn enrich_rebuild_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1138,12 +1058,9 @@ async fn enrich_rebuild_handler(
 /// watcher, just the initial atlas. Idempotent on the register; uses the
 /// id `register` returns (path-identity may canonicalise it).
 async fn enrich_once_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Json(cfg): Json<LocalCorpusConfig>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1156,7 +1073,9 @@ async fn enrich_once_handler(
     // WITHOUT the watcher.
     let corpus_id = match manager.register(cfg).await {
         Ok(id) => id,
-        Err(e) => return error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response(),
+        Err(e) => {
+            return json_error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response()
+        }
     };
 
     // The enrichment lifecycle is mirrored to `<index>/_enrichment_state.json`,
@@ -1267,7 +1186,7 @@ async fn enrich_once_handler(
                 &job_id,
                 Err(format!("ingest: {e}")),
             );
-            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
                 .into_response();
         }
     };
@@ -1474,12 +1393,9 @@ pub(crate) fn record_ingest_outcome(
 /// drops back to "no map yet" and can be rebuilt / swept again. Does NOT
 /// touch the atlas or the index — only the status surfaces. Idempotent.
 async fn enrich_reset_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Json(req): Json<EnrichResetRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1489,7 +1405,9 @@ async fn enrich_reset_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response(),
+        Err(e) => {
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, format!("reset: {e}")).into_response()
+        }
     }
 }
 
@@ -1509,13 +1427,10 @@ struct ReenrichNoteRequest {
 /// with the user's correction injected. Returns the driver's friendly
 /// "busy" message (BAD_REQUEST) if a full build currently holds the permit.
 async fn reenrich_note_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Path(corpus_id): Path<String>,
     Json(req): Json<ReenrichNoteRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1525,7 +1440,7 @@ async fn reenrich_note_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
 
@@ -1537,13 +1452,7 @@ async fn reenrich_note_handler(
 /// Returns 409 Conflict for Continuous-mode corpora (where the
 /// flag would silently no-op) and 400 BadRequest for unknown
 /// corpora.
-async fn sync_now_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn sync_now_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1561,7 +1470,7 @@ async fn sync_now_handler(
         } else {
             StatusCode::BAD_REQUEST
         };
-        return error(code, msg).into_response();
+        return json_error(code, msg).into_response();
     }
     let registered = registry.request_manual_sync(&corpus_id).await;
     if !registered {
@@ -1581,13 +1490,7 @@ async fn sync_now_handler(
     .into_response()
 }
 
-async fn remove_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(corpus_id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn remove_handler(_: LocalOnly, Path(corpus_id): Path<String>) -> impl IntoResponse {
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
@@ -1601,22 +1504,11 @@ async fn remove_handler(
             ok: true,
         })
         .into_response(),
-        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
+        Err(e) => json_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
     }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-
-fn service_unavailable(msg: &str) -> (StatusCode, Json<ErrorBody>) {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorBody { error: msg.into() }),
-    )
-}
-
-fn error(status: StatusCode, msg: String) -> (StatusCode, Json<ErrorBody>) {
-    (status, Json(ErrorBody { error: msg }))
-}
 
 fn basename_or_unknown(p: &std::path::Path) -> String {
     p.file_name()

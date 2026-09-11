@@ -588,6 +588,15 @@ status    = "active"
 #   plausible (leaked sockets no longer accumulate) and is reported, not
 #   claimed. Run after the three RB commits; table persisted under
 #   target/quality-check/<stamp>/summary.json; verdict lands on this row.
+#   FINAL VERDICT 2026-09-10 (run 20260910-172202, daemon rebuilt at
+#   3a1cf984d, all wire and delete halves in): chat-ask PASSED including
+#   its per-stage baseline row against 4dd212fbca5f; throughput PASSED
+#   against its baseline — the settled socket, the idle close and the
+#   per-conversation wire slot did not move the served-turn numbers;
+#   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED;
+#   chaos-monkey FAILED its one pre-existing probe (distract-bomb-maker,
+#   f4b13a68c). 7 of 8; the pre-registered NEUTRAL holds on every lane
+#   the instrument can compare.
 #   VERDICT 2026-09-10 (runs 20260910-091032 full check + 093056 lane
 #   re-sample; daemon rebuilt at d51cd2b4c; box under peer load 3.6-8.2):
 #   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED.
@@ -910,8 +919,9 @@ status    = "active"
 # "+~1,750 wire" estimate, which priced doors at 60-150 lines each. The
 # desktop deleted what the survey said it would, and more (c7e7d6a73
 # -776, 1f7ea8745 -175, 19946f99a -225, 069660fd9 -299, 502304f63
-# -2,090, D9b -1,156; state.rs 1,847 -> 3,354 lines because B4 and the
-# identity probe LANDED there while the split did not).
+# -2,090, D9b -1,156; state.rs 1,847 -> 2,195 lines because B4 and the
+# identity probe LANDED there while the split did not; state.rs plus
+# state/builders is 4,498).
 #
 # WHAT THE CLI COULD SHED — PRICED BY INVENTORY, THEN MEASURED BY DOING IT.
 # A read-only survey (2026-09-10) priced the CLI's in-process twins of the
@@ -941,9 +951,38 @@ status    = "active"
 # THE RULE that decided it: a CLI command that answers with the daemon
 # down keeps doing so; a repoint subtracts only where the command already
 # required the daemon. The number that would close the gap is not in the
-# surfaces; it is the 3,354-line desktop spine, which the D9 correction
+# surfaces; it is the 4,498-line desktop spine (state.rs + builders), which the D9 correction
 # shows cannot come out until `commission`'s six attach-time readers have
 # their seven routes — and those routes cost what the others cost.
+#
+# DEDUPLICATION, measured 2026-09-10 by a read-only reviewer over the 40
+# commits (`git show --numstat`, tests excluded): net production by crate
+# sovereign-mesh +10,081 (15 route files + turn_http.rs = +9,204),
+# turn-client +2,909, contracts +879, mobile +362, cli +173,
+# sovereign-desktop -1,117 — the surfaces shed code; one crate absorbed
+# 78% of the growth. 32.5% of everything added is COMMENT lines
+# (code 12,989 / comment 6,738 / blank 1,013); the 14 route files carry
+# 3,036 comment lines against 6,938 of code, 898 of them `//!` module
+# essays restating the commit bodies and this file. The plan, ranked by
+# lines per unit of risk and landing now: module essays -758;
+# http_response.rs (58 lines, zero callers, dead-code-allowed since May)
+# adopted in place of 268 re-derived lines under 16 signatures + 13
+# ErrorBody copies, and Result<_, Absence> accessors for 83 four-line
+# matches, -561; a LocalOnly extractor for 142 enforce_localhost pairs
+# and one router builder for 19 repeated layer tails, -483; three client
+# combinators the client already had, adopted by the 33 methods that
+# bypassed them, -310; Deserialize + String on reading_http so the CLI's
+# seven mirrors go, -75; desktop dead imports behind allow(unused_imports)
+# and two dead items, -35; three free re-exports and the pub clamps, -23;
+# tests: loopback_parity fold -199, one fixture builder -210, the boot
+# preamble -78, byte-identical CorpusIndex::create copies -45. Total
+# 2,245 production + 532 test. It moves the initiative from +12,958 to
+# about +10,700 and no further: scaffolding is 17% of the net; the rest
+# is new daemon surface and comments. The reviewer also corrected two
+# ledger figures (state.rs is 2,195, spine 4,498; loopback_parity
+# 1,924) and found that loopback_parity.rs carries 1,114 lines of rung
+# 1/3/6 parity suites under a docstring that says "cross-router loopback
+# parity" — a relocation owed, not a deletion.
 #
 # THE HONEST SHAPE OF THE RESULT: two of the three constructions are
 # proven (surface parity on the real harness; twin censuses red on

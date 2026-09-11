@@ -2,75 +2,30 @@
 //! The corpus catalogue and the notebook shelf — the rest of
 //! `/internal/corpus` (sv-surface D9a).
 //!
-//! # Why here and not in `reading_http`
+//! Six routes over the same `CorpusEngine` `reading_http` serves: catalog
+//! (`builtin_corpora` ∪ `installed_indexes`), the five-source notebook shelf
+//! fold, diagnose, per-corpus health, coverage card, retry-enrichment. Their
+//! own file because they answer a different question, and `reading_http` is
+//! already within sight of the §3.1 split line. Serving the SHELF rather than
+//! its inputs makes ~120 lines of naming and sort judgement one
+//! implementation, on the process that holds all five sources natively.
 //!
-//! `reading_http` serves the READING surface: a chunk, its neighbours,
-//! an atom card. It also carries `/internal/corpus/status` because
-//! rung 1 put the one status decider there, and at 1,133 lines it is
-//! within sight of the §3.1 split line. These routes are a different
-//! question — "what corpora exist, and what does the shelf say about
-//! them" — over the same `CorpusEngine`, so they get their own file
-//! and the same loopback posture.
+//! **The param is `{corpus}`, not `{id}`** — `matchit` panics at merge time on
+//! two parameter names in one slot. A wire fact, not a style choice.
 //!
-//! | Route | Decider | Desktop command it retires |
-//! |---|---|---|
-//! | `GET /internal/corpus/catalog` | `builtin_corpora` ∪ `installed_indexes` | `list_corpora` |
-//! | `GET /internal/corpus/notebooks` | the five-source shelf fold | `notebook_list` |
-//! | `GET /internal/corpus/diagnose` | `CorpusEngine::diagnose_indexes` | `diagnose_corpus` |
-//! | `GET /internal/corpus/{corpus}/health` | the index's enrichment artefacts | `get_corpus_health` |
-//! | `GET /internal/corpus/{corpus}/coverage-card` | `sec_facts::coverage_card` | `corpus_coverage_card` |
-//! | `POST /internal/corpus/{corpus}/retry-enrichment` | `reprocess_skeleton_failures` | `retry_enrichment_failures` |
+//! Loopback posture is `reading_http`'s, unchanged.
 //!
-//! **The param is `{corpus}`, not `{id}`.** `reading_http`,
-//! `atlas_http` and `meshapp_http` all bind that name at the same
-//! position, and `matchit` panics at merge time on two different
-//! parameter names in one slot. It is a wire fact about the router,
-//! not a style choice.
-//!
-//! # `installed_indexes` is the one decider, and the shelf is one too
-//!
-//! `installed_indexes()` was already the decider both commands folded
-//! over — the rung-1 note says so, and the twin it deleted was the
-//! CLI's private walk, not the desktop's. What was NOT one decider is
-//! the FOLD: `notebook_list` merges five sources (the installed set,
-//! the built-in names, the local-corpus registry, the atlas readers,
-//! the conv-tiered buckets) plus a governance sweep, and applies four
-//! naming rules and a sort — about 120 lines of judgement the desktop
-//! had the only copy of. Serving its INPUTS would have kept that copy
-//! and added five round trips; serving the SHELF makes it one
-//! implementation, on the process that holds all five sources
-//! natively.
-//!
-//! # What this deliberately does NOT decide
-//!
-//! **`"installing"`.** `list_corpora`'s third status comes from
-//! `AppState.install_progress` — the surface's own live progress map,
-//! fed by its status poller. A corpus mid-ingest is not in
-//! `installed_indexes()` at all (it filters
-//! `ingestion_in_progress`), and the daemon's answer to "what is in
-//! flight" is rung 1's `GET /internal/corpus/status`, already on the
-//! wire. So [`CatalogEntry::status`] carries `installed` /
-//! `not_installed` only, and the caller composes the third from the
-//! decider that owns it. Re-deriving in-flight here would be the
-//! §10.6 twin of a route two doors down.
-//!
-//! **`tiers`.** [`tiers_for`] is a `match` on corpus id with eleven
-//! arms — the §2.1 smell, carried down verbatim from
-//! `commands/mod.rs` rather than improved in transit (§10.2: a wire
-//! rung does not also clean up nearby stuff). It is a lookup table
-//! that belongs in `registry_snapshot.toml` beside `catalog_status`,
-//! where a new recipe would declare its own tiers instead of editing
-//! Rust. Moving it there is a corpus-engine rung; moving it HERE is
-//! what makes it one copy again, which is the precondition.
-//!
-//! Loopback posture is `reading_http`'s: router-level middleware plus
-//! a per-handler `enforce_localhost` (ARCH §5, defence in depth).
+//! Deliberately NOT decided here:
+//! - **`"installing"`** — a corpus mid-ingest is not in `installed_indexes()`
+//!   at all; "what is in flight" is `GET /internal/corpus/status`'s answer.
+//! - **`tiers`** — [`tiers_for`] is an eleven-arm `match` on corpus id (§2.1),
+//!   carried down verbatim rather than improved in transit (§10.2); it belongs
+//!   in `registry_snapshot.toml`, and one copy is the precondition.
 
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path};
+use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -82,7 +37,8 @@ use sovereign_tools::atlas_view::FileAtlasReader;
 use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSourceType};
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::{json_error, Absence};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── The wire projections ──────────────────────────────────────
 
@@ -194,11 +150,6 @@ pub struct DiagnoseResponse {
     pub report: String,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-}
-
 // ─── Router ────────────────────────────────────────────────────
 
 /// The catalogue router. Mounted unconditionally on serving daemons;
@@ -218,10 +169,7 @@ pub fn corpus_catalog_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/corpus/{corpus}/retry-enrichment",
             post(retry_enrichment),
         )
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -237,16 +185,10 @@ pub fn corpus_catalog_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 /// `catalog_status: "hidden"` so they satisfy an installed-status check
 /// without crowding the picker's "Coming soon" rail.
 async fn catalog(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
     let builtins = engine.builtin_corpora();
     // Non-fatal, deliberately: the picker still renders so the user
     // can choose what to INSTALL when the indexes dir is unreadable.
@@ -346,7 +288,7 @@ async fn catalog(
         rows = corpora.len(),
         "corpus_catalog_http: catalogue ∪ installed served"
     );
-    Json(CatalogResponse { corpora }).into_response()
+    Ok(Json(CatalogResponse { corpora }).into_response())
 }
 
 /// GET `/internal/corpus/notebooks` — the unified Library shelf.
@@ -363,24 +305,18 @@ async fn catalog(
 /// notebook list that cannot say which rows are yours is not a
 /// notebook list.
 async fn notebooks(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
     let manager = match crate::watched_folder_runtime::manager() {
         Some(m) => m,
         None => {
-            return error_body(
+            return Ok(json_error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "local-corpus runtime not installed on this daemon, so the shelf cannot \
                  say which notebooks are yours",
-            )
+            ))
         }
     };
 
@@ -519,28 +455,22 @@ async fn notebooks(
         explorable = explorable.len(),
         "corpus_catalog_http: unified Library shelf served"
     );
-    Json(NotebookListResponse { notebooks }).into_response()
+    Ok(Json(NotebookListResponse { notebooks }).into_response())
 }
 
 /// GET `/internal/corpus/diagnose` — the engine's own indexes-dir
 /// report, verbatim.
 async fn diagnose(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
     let report = engine.diagnose_indexes().await;
     tracing::debug!(
         bytes = report.len(),
         "corpus_catalog_http: diagnosis served"
     );
-    Json(DiagnoseResponse { report }).into_response()
+    Ok(Json(DiagnoseResponse { report }).into_response())
 }
 
 /// GET `/internal/corpus/{corpus}/health` — enrichment health for one
@@ -551,24 +481,18 @@ async fn diagnose(
 /// enrichment data" — the same shape as an installed corpus that has
 /// simply never been enriched. Two different facts (§18.3).
 async fn health(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
         Err(e) => {
-            return error_body(
+            return Ok(json_error(
                 StatusCode::NOT_FOUND,
                 &format!("no index for corpus '{corpus}' opened on this daemon: {e}"),
-            )
+            ))
         }
     };
     let failures_path = index.path().join("_skeleton_failures.ndjson");
@@ -593,7 +517,7 @@ async fn health(
         parse_failure_count,
         "corpus_catalog_http: corpus health served"
     );
-    Json(CorpusHealth {
+    Ok(Json(CorpusHealth {
         corpus_id: corpus,
         claims_count,
         // No relationships table is read today; `0` is what the
@@ -602,7 +526,7 @@ async fn health(
         has_article_profiles,
         parse_failure_count,
     })
-    .into_response()
+    .into_response())
 }
 
 /// GET `/internal/corpus/{corpus}/coverage-card` — the typed
@@ -617,20 +541,14 @@ async fn health(
 /// through and the SAME `coverage_card` derivation — so the card
 /// cannot advertise a corpus or a period the tool would refuse.
 async fn coverage_card(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> Response {
+) -> Result<Response, Absence> {
     use corpus_engine::enrichment::atlas::analysis::sec_facts::{
         authoritative_store, coverage_card as derive_card,
     };
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+    let engine = engine_for(&daemon)?;
     let card = authoritative_store(engine.index_dir(), engine.recipes_dir(), &corpus)
         .map(|store| derive_card(&store));
     tracing::debug!(
@@ -639,7 +557,7 @@ async fn coverage_card(
         declared = card.is_some(),
         "corpus_catalog_http: coverage card served"
     );
-    Json(CoverageCardResponse { card }).into_response()
+    Ok(Json(CoverageCardResponse { card }).into_response())
 }
 
 /// `GET /{corpus}/coverage-card`'s body. An object, not a bare
@@ -655,27 +573,21 @@ pub struct CoverageCardResponse {
 /// No inference: only the saved raw responses are re-processed, and
 /// salvaged questions merge into the existing `field_skeleton.json`.
 async fn retry_enrichment(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let engine = match engine_for(&daemon) {
-        Ok(e) => e,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
         Err(e) => {
-            return error_body(
+            return Ok(json_error(
                 StatusCode::NOT_FOUND,
                 &format!("no index for corpus '{corpus}' opened on this daemon: {e}"),
-            )
+            ))
         }
     };
-    match corpus_engine::reprocess_skeleton_failures(&index) {
+    Ok(match corpus_engine::reprocess_skeleton_failures(&index) {
         Ok((salvaged, still_failed)) => {
             tracing::info!(
                 %corpus,
@@ -689,11 +601,11 @@ async fn retry_enrichment(
             })
             .into_response()
         }
-        Err(e) => error_body(
+        Err(e) => json_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("reprocessing failures for '{corpus}': {e}"),
         ),
-    }
+    })
 }
 
 // ─── Helpers ───────────────────────────────────────────────────
@@ -736,21 +648,10 @@ fn tiers_for(corpus_id: &str) -> Vec<String> {
 
 /// The daemon's own `CorpusEngine`. One lookup site, so no handler can
 /// read a different index dir than the one an ingest writes to.
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Response> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence> {
     daemon.corpus_engine().map(Arc::clone).ok_or_else(|| {
-        error_body(
-            StatusCode::SERVICE_UNAVAILABLE,
+        Absence::unavailable(
             "this daemon holds no CorpusEngine (it was commissioned to serve nothing)",
         )
     })
-}
-
-fn error_body(status: StatusCode, msg: &str) -> Response {
-    (
-        status,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
 }

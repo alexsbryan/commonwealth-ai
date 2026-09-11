@@ -2,103 +2,31 @@
 //! The recipe-author **project composition** over the wire —
 //! `/v1/recipe-projects` (sv-surface D8, third family).
 //!
-//! # The rung `features_http` named and declined
+//! All seven `recipe_author_commands.rs` commands, each composing
+//! `sovereign_tools::recipe_author::RecipeProject` over three roots the
+//! daemon already owns: the note store, the feature store, and the artifact
+//! tree under `svrnmesh_root()` resolved IN THIS PROCESS. No path crosses the
+//! wire and no root is a parameter — a caller names a `feature_id`.
+//! `features_http` keeps its three store routes; nothing here re-derives
+//! them. The TOML writes land under that artifact root, never a user-picked
+//! path, and validate before they persist. One decider folded in on the way:
+//! [`artifact_toml_path`], where the desktop had two spellings.
 //!
-//! D6 served `RecipeProjectStore`'s whole surface (three methods) and
-//! stopped there, saying so in its own header: five of the seven desktop
-//! commands are not store reads. Each composes
-//! `sovereign_tools::recipe_author::RecipeProject` over THREE things —
-//! the note store, the feature store, and the user's on-disk artifact
-//! tree — and the campaign forbids crossing only their store halves,
-//! because rows on the daemon with summaries on a local disk is the fork
-//! this campaign exists to close. 19946f99a then left
-//! `recipe_author_commands.rs` untouched on purpose and recorded why.
+//! Loopback posture is `reading_http`'s, unchanged.
 //!
-//! This is that rung. All seven cross here, including the two D6 already
-//! serves the store half of: `list_projects` and `new_project` compose
-//! too (a list loads one `RecipeProject` per row for its sidecar summary;
-//! a create provisions AND lays down the artifact tree), so serving them
-//! HERE — over one composition, on one host — is what makes the pair
-//! whole rather than half-wired.
-//!
-//! `features_http` keeps its three routes. They are the store's surface
-//! and other callers want it; nothing here re-derives them.
-//!
-//! # Why the daemon can host the composition unchanged
-//!
-//! Every root the composition touches is already the daemon's:
-//!
-//! - `notes` — [`crate::daemon::EmbeddedDaemon::notes_store`], the same
-//!   `notes.db` `/mcp` and `/v1/notes` write, wrapped in
-//!   `sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes` so the
-//!   recipe-author crate sees only the `RecipeNotes` contract.
-//! - `features` — [`crate::daemon::EmbeddedDaemon::features_store`], D6's
-//!   own door.
-//! - the artifact tree — `recipe_author::{projects_root_dir,
-//!   local_recipes_dir, local_workflows_dir}`, each resolved from
-//!   `sovereign_contracts::rebrand::svrnmesh_root()` IN THIS PROCESS. In
-//!   Local mode that is the same directory the desktop resolves; in
-//!   attach mode it is the daemon's own, which is the point of the rung.
-//!
-//! So no path is passed over the wire and no root is a parameter. A
-//! caller names a `feature_id`; the host resolves everything else.
-//!
-//! # The TOML writes happen here, and that is not the X-list case
-//!
-//! `save_edited_toml` and `restore_checkpoint` write `.toml.part` and
-//! rename. Both land UNDER the artifact root above — never a path the
-//! caller picked — so they are not the "file writes to user-picked paths"
-//! exception (`governance_export_write`, `lc_validate_path`). The
-//! validate-first invariant crosses with them: an artifact that does not
-//! parse is never persisted, because a saved broken TOML breaks both the
-//! build and the agent's next prelude.
-//!
-//! # What could not cross, named
-//!
-//! **Workflow-kind validation.** `validate_artifact_toml` dispatches on
-//! [`ArtifactKind`]: the recipe arm is `corpus_engine::Recipe::from_toml`
-//! plus `corpus_engine::testing::validate_recipe_offline`, both of which
-//! this crate already links; the workflow arm is `sovereign_workflow::
-//! Workflow::parse`, and sv-surface rung 5 settled that sovereign-mesh
-//! takes no studio workflow dep — the workflow capability crosses as an
-//! opaque `axum::Router` precisely so this crate never names those types
-//! (64dfedb33). So a workflow project's TOML is NOT judged here.
-//!
-//! It is reported unjudged, never guessed:
-//! [`RecipeAuthorDashboardState::validation`] is `None` with
-//! `validation_unavailable` naming the reason, and `PUT .../toml` on a
-//! workflow project answers **501** rather than writing unvalidated bytes.
-//! Reporting `ok: true` (or `ok: false`) for an unparsed workflow would be
-//! the §18.3 substitution — a green pill over an artifact nothing read.
-//! The structural fix is a validate route on the workflow host's own
-//! router, which owns the parser; it belongs in that crate.
-//!
-//! **`SOVEREIGN_DEV_FORCE_FIRST_RUN`.** `recipe_author_list_projects`
-//! short-circuits to an empty list under that dev flag so the Welcome
-//! pane replays its first-timer tutorial. That is a UI replay affordance,
-//! not data: it stays on the desktop, in front of the call. A daemon that
-//! hid real projects from every client because one client wanted to see
-//! an onboarding screen would be lying to the others.
-//!
-//! # One decider folded in on the way
-//!
-//! The desktop resolves the artifact TOML path TWICE with two different
-//! spellings — `artifact_toml_path` (via `recipe_author::
-//! local_recipes_dir`) and, inside `build_prelude`, a re-derived
-//! `sovereign_root_dir().join("recipes").join(id).join("recipe.toml")`.
-//! Same path today, two implementations, and the second would not follow
-//! the first if the root ever moved (ARCH §10.6). Here there is one:
-//! [`artifact_toml_path`].
-//!
-//! # Loopback only
-//!
-//! `reading_http`'s posture. These routes write the owner's artifact tree.
+//! Could NOT cross, named (ARCH §18.3):
+//! - **Workflow-kind validation** — rung 5 settled that sovereign-mesh takes
+//!   no studio workflow dep, so a workflow TOML is reported UNJUDGED
+//!   (`validation: None` + `validation_unavailable`) and `PUT …/toml` on one
+//!   answers 501 rather than writing bytes nothing read.
+//! - **`SOVEREIGN_DEV_FORCE_FIRST_RUN`** — a UI replay affordance that stays
+//!   in front of the call; a daemon hiding real projects from every client
+//!   because one wanted an onboarding screen would be lying to the others.
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path as AxumPath};
+use axum::extract::{Extension, Path as AxumPath};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -115,7 +43,8 @@ use sovereign_tools::recipe_author::{
 use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::{internal_error, not_found, Absence};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// Why a workflow project's TOML carries no verdict from this host.
 /// Stated once and sent verbatim wherever the absence surfaces.
@@ -343,11 +272,6 @@ pub struct PreludeResponse {
     pub prelude: String,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-}
-
 // ─── Router ────────────────────────────────────────────────────
 
 /// The recipe-author project router. Mounted unconditionally on serving
@@ -374,10 +298,7 @@ pub fn recipe_project_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             post(restore_checkpoint),
         )
         .route("/v1/recipe-projects/{feature_id}/prelude", get(prelude))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -392,19 +313,13 @@ pub fn recipe_project_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 /// summary-only fields come back `null`, which is what "not read" looks
 /// like on this payload.
 async fn list_projects(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
     let rows = match features.list(false).await {
         Ok(r) => r,
-        Err(e) => return internal_error(&format!("list projects: {e}")),
+        Err(e) => return Ok(internal_error(&format!("list projects: {e}"))),
     };
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
@@ -417,7 +332,7 @@ async fn list_projects(
     }
     out.sort_by_key(|e| std::cmp::Reverse(e.updated_at));
     tracing::debug!(returned = out.len(), "recipe_project_http: projects listed");
-    Json(out).into_response()
+    Ok(Json(out).into_response())
 }
 
 /// POST `/v1/recipe-projects` — provision the row AND the artifact tree,
@@ -428,20 +343,14 @@ async fn list_projects(
 /// (ARCH §7.5). `features_http`'s `POST` takes a caller-supplied id
 /// precisely because it is the STORE's door and this is the composition's.
 async fn new_project(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<NewProjectRequest>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
     let title = body.title.trim();
     if title.is_empty() {
-        return error_body(StatusCode::BAD_REQUEST, "title cannot be empty");
+        return Err(Absence::invalid("title cannot be empty"));
     }
     let project = match RecipeProject::new_with_kind(
         title,
@@ -453,50 +362,41 @@ async fn new_project(
     .await
     {
         Ok(p) => p,
-        Err(e) => return internal_error(&format!("new project: {e}")),
+        Err(e) => return Ok(internal_error(&format!("new project: {e}"))),
     };
     // Re-read the row + summary so the entry mirrors exactly what a
     // subsequent list would render.
     let row = match features.get(project.feature_id()).await {
         Ok(Some(r)) => r,
         Ok(None) => {
-            return internal_error("project row vanished after creation");
+            return Ok(internal_error("project row vanished after creation"));
         }
-        Err(e) => return internal_error(&format!("get row: {e}")),
+        Err(e) => return Ok(internal_error(&format!("get row: {e}"))),
     };
     let summary = project
         .read_summary()
         .unwrap_or_else(|_| default_summary(&row));
     tracing::info!(feature_id = %row.id, title = %row.title,
         kind = body.artifact_kind.label(), "recipe_project_http: project provisioned");
-    (
+    Ok((
         StatusCode::CREATED,
         Json(RecipeProjectListEntry::from_row_and_summary(&row, summary)),
     )
-        .into_response()
+        .into_response())
 }
 
 /// GET `/v1/recipe-projects/{feature_id}/dashboard` — the one big read.
 async fn dashboard_state(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath(feature_id): AxumPath<String>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
-    let project = match load_project(&feature_id, &notes, &features).await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &notes, &features).await?;
     let row = match features.get(&feature_id).await {
         Ok(Some(r)) => r,
-        Ok(None) => return not_found(&format!("no recipe project `{feature_id}`")),
-        Err(e) => return internal_error(&format!("get row: {e}")),
+        Ok(None) => return Ok(not_found(&format!("no recipe project `{feature_id}`"))),
+        Err(e) => return Ok(internal_error(&format!("get row: {e}"))),
     };
     let summary = project
         .read_summary()
@@ -524,7 +424,7 @@ async fn dashboard_state(
         .await
     {
         Ok(r) => r,
-        Err(e) => return internal_error(&format!("read notes: {e}")),
+        Err(e) => return Ok(internal_error(&format!("read notes: {e}"))),
     };
     let mut decisions = Vec::new();
     let mut research_findings = Vec::new();
@@ -547,7 +447,7 @@ async fn dashboard_state(
 
     let checkpoints = match project.list_checkpoints() {
         Ok(c) => c,
-        Err(e) => return internal_error(&format!("list checkpoints: {e}")),
+        Err(e) => return Ok(internal_error(&format!("list checkpoints: {e}"))),
     };
 
     let (validation, validation_unavailable) =
@@ -560,7 +460,7 @@ async fn dashboard_state(
         judged = validation.is_some(),
         "recipe_project_http: dashboard served",
     );
-    Json(RecipeAuthorDashboardState {
+    Ok(Json(RecipeAuthorDashboardState {
         feature_id,
         title: row.title,
         charter_md: row.charter_md,
@@ -582,7 +482,7 @@ async fn dashboard_state(
         validation,
         validation_unavailable,
     })
-    .into_response()
+    .into_response())
 }
 
 /// PUT `/v1/recipe-projects/{feature_id}/toml` — validate, then write.
@@ -596,75 +496,64 @@ async fn dashboard_state(
 /// host cannot validate it and will not write unvalidated bytes over a
 /// working artifact.
 async fn save_edited_toml(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath(feature_id): AxumPath<String>,
     Json(body): Json<SaveTomlRequest>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
-    let project = match load_project(&feature_id, &notes, &features).await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &notes, &features).await?;
     let summary = match project.read_summary() {
         Ok(s) => s,
-        Err(e) => return internal_error(&format!("read summary: {e}")),
+        Err(e) => return Ok(internal_error(&format!("read summary: {e}"))),
     };
     let kind = summary.artifact_kind;
     let Some(artifact_id) = summary.recipe_id else {
-        return error_body(
-            StatusCode::BAD_REQUEST,
-            &format!(
-                "this project has no {} yet — draft one with the agent before editing",
-                kind.label()
-            ),
-        );
+        return Err(Absence::invalid(format!(
+            "this project has no {} yet — draft one with the agent before editing",
+            kind.label()
+        )));
     };
 
     let (report, unavailable) = validate_artifact_toml(kind, Some(&body.edited_toml));
     let Some(report) = report else {
-        return error_body(
-            StatusCode::NOT_IMPLEMENTED,
-            &unavailable.unwrap_or_else(|| WORKFLOW_UNJUDGED.to_string()),
-        );
+        return Err(Absence::unsupported(
+            unavailable.unwrap_or_else(|| WORKFLOW_UNJUDGED.to_string()),
+        ));
     };
     if !report.ok {
-        return Json(report).into_response();
+        return Ok(Json(report).into_response());
     }
 
     // `.part` → rename, mirroring the structured-write tools, so an agent
     // write and a hand edit are indistinguishable on disk and the prelude
     // picks either up on its next disk re-read.
     let Some(path) = artifact_toml_path(kind, &artifact_id) else {
-        return internal_error("cannot locate the artifact directory (no home dir)");
+        return Ok(internal_error(
+            "cannot locate the artifact directory (no home dir)",
+        ));
     };
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            return internal_error(&format!("create {}: {e}", parent.display()));
+            return Ok(internal_error(&format!("create {}: {e}", parent.display())));
         }
     }
     let part = path.with_extension("toml.part");
     if let Err(e) = std::fs::write(&part, body.edited_toml.as_bytes()) {
-        return internal_error(&format!("write {}: {e}", part.display()));
+        return Ok(internal_error(&format!("write {}: {e}", part.display())));
     }
     if let Err(e) = std::fs::rename(&part, &path) {
-        return internal_error(&format!(
+        return Ok(internal_error(&format!(
             "rename {} → {}: {e}",
             part.display(),
             path.display()
-        ));
+        )));
     }
     tracing::info!(
         %feature_id, %artifact_id, kind = kind.label(),
         "recipe_project_http: hand-edited artifact TOML written",
     );
-    Json(report).into_response()
+    Ok(Json(report).into_response())
 }
 
 /// POST `.../link-recent-artifact` — register the artifact the agent just
@@ -672,46 +561,41 @@ async fn save_edited_toml(
 ///
 /// Idempotent and cheap; a chat surface calls it on every turn-complete.
 async fn link_recent_artifact(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath(feature_id): AxumPath<String>,
     Json(body): Json<LinkRecentRequest>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
-    let project = match load_project(&feature_id, &notes, &features).await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &notes, &features).await?;
     let mut summary = match project.read_summary() {
         Ok(s) => s,
-        Err(e) => return internal_error(&format!("read summary: {e}")),
+        Err(e) => return Ok(internal_error(&format!("read summary: {e}"))),
     };
     let dir = match artifact_root(summary.artifact_kind) {
         Some(d) => d,
-        None => return internal_error("cannot locate the artifact directory (no home dir)"),
+        None => {
+            return Ok(internal_error(
+                "cannot locate the artifact directory (no home dir)",
+            ))
+        }
     };
     let Some(id) = find_recent_artifact(summary.artifact_kind, &dir, body.since_unix) else {
-        return Json(LinkRecentResponse { artifact_id: None }).into_response();
+        return Ok(Json(LinkRecentResponse { artifact_id: None }).into_response());
     };
     if summary.recipe_id.as_deref() != Some(id.as_str()) {
         summary.recipe_id = Some(id.clone());
         summary.updated_at = sovereign_core::time::unix_now();
         if let Err(e) = project.write_summary(&summary) {
-            return internal_error(&format!("write summary: {e}"));
+            return Ok(internal_error(&format!("write summary: {e}")));
         }
         tracing::info!(%feature_id, artifact_id = %id, kind = summary.artifact_kind.label(),
             "recipe_project_http: linked freshly-authored artifact");
     }
-    Json(LinkRecentResponse {
+    Ok(Json(LinkRecentResponse {
         artifact_id: Some(id),
     })
-    .into_response()
+    .into_response())
 }
 
 /// POST `.../checkpoints/{checkpoint_id}/restore` — restore a snapshot
@@ -724,46 +608,39 @@ async fn link_recent_artifact(
 /// writer now, and a note claiming the desktop wrote it would be false
 /// the moment the CLI restores one.
 async fn restore_checkpoint(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath((feature_id, checkpoint_id)): AxumPath<(String, String)>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
-    let project = match load_project(&feature_id, &notes, &features).await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &notes, &features).await?;
     // Best-effort: a project with no artifact yet just gets a
     // restore-anchor checkpoint without touching disk. The write path is
     // resolved by the project's kind inside `restore_checkpoint`.
     let artifact_id = project.read_summary().ok().and_then(|s| s.recipe_id);
     let session_id = format!("daemon-recipe-author-{feature_id}");
-    match do_restore_checkpoint(
-        &project,
-        &checkpoint_id,
-        artifact_id.as_deref(),
-        None,
-        &session_id,
-    )
-    .await
-    {
-        Ok(outcome) => {
-            tracing::info!(%feature_id, %checkpoint_id, new = %outcome.checkpoint_id,
+    Ok(
+        match do_restore_checkpoint(
+            &project,
+            &checkpoint_id,
+            artifact_id.as_deref(),
+            None,
+            &session_id,
+        )
+        .await
+        {
+            Ok(outcome) => {
+                tracing::info!(%feature_id, %checkpoint_id, new = %outcome.checkpoint_id,
                 "recipe_project_http: checkpoint restored");
-            Json(RestoreCheckpointOutcome {
-                new_checkpoint_id: outcome.checkpoint_id,
-                source_checkpoint_id: checkpoint_id,
-            })
-            .into_response()
-        }
-        Err(e) => checkpoint_error(&checkpoint_id, &e.to_string()),
-    }
+                Json(RestoreCheckpointOutcome {
+                    new_checkpoint_id: outcome.checkpoint_id,
+                    source_checkpoint_id: checkpoint_id,
+                })
+                .into_response()
+            }
+            Err(e) => checkpoint_error(&checkpoint_id, &e.to_string()),
+        },
+    )
 }
 
 /// GET `/v1/recipe-projects/{feature_id}/prelude` — the per-turn situated
@@ -772,28 +649,19 @@ async fn restore_checkpoint(
 /// Cheap (~5KB, no network), so re-rendering every turn is the intended
 /// use and keeps the agent's view of project state fresh.
 async fn prelude(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath(feature_id): AxumPath<String>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let (notes, features) = match handles(&daemon) {
-        Ok(h) => h,
-        Err(resp) => return resp,
-    };
-    let project = match load_project(&feature_id, &notes, &features).await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let (notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &notes, &features).await?;
     let situated = match recipe_author::situated_context::render(&project).await {
         Ok(s) => s,
-        Err(e) => return internal_error(&format!("render situated context: {e}")),
+        Err(e) => return Ok(internal_error(&format!("render situated context: {e}"))),
     };
     let summary = match project.read_summary() {
         Ok(s) => s,
-        Err(e) => return internal_error(&format!("read summary: {e}")),
+        Err(e) => return Ok(internal_error(&format!("read summary: {e}"))),
     };
     let label = summary.artifact_kind.label();
     let (artifact_block, validation_block) = match &summary.recipe_id {
@@ -831,7 +699,7 @@ async fn prelude(
     let prelude =
         format!("[Project state]\n{situated}{artifact_block}{validation_block}\n[Partner says]\n");
     tracing::debug!(%feature_id, bytes = prelude.len(), "recipe_project_http: prelude rendered");
-    Json(PreludeResponse { prelude }).into_response()
+    Ok(Json(PreludeResponse { prelude }).into_response())
 }
 
 // ─── Validation (the one decider for "is this artifact valid?") ─
@@ -995,15 +863,15 @@ fn find_recent_artifact(
 /// covering both would send an operator to the wrong file.
 fn handles(
     daemon: &Arc<EmbeddedDaemon>,
-) -> Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), Response> {
+) -> Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), Absence> {
     let Some(note_store) = daemon.notes_store().map(Arc::clone) else {
-        return Err(service_unavailable(
+        return Err(Absence::unavailable(
             "this daemon has no note store (notes.db did not open) — the recipe-author \
              workspace composes over it",
         ));
     };
     let Some(features) = daemon.features_store().map(Arc::clone) else {
-        return Err(service_unavailable(
+        return Err(Absence::unavailable(
             "this daemon has no recipe-author store (features.db did not open)",
         ));
     };
@@ -1025,7 +893,7 @@ async fn load_project(
     feature_id: &str,
     notes: &Arc<dyn RecipeNotes>,
     features: &Arc<RecipeProjectStore>,
-) -> Result<RecipeProject, Response> {
+) -> Result<RecipeProject, Absence> {
     match RecipeProject::load(feature_id, Arc::clone(notes), Arc::clone(features)).await {
         Ok(p) => Ok(p),
         Err(e) => {
@@ -1034,9 +902,9 @@ async fn load_project(
                 Ok(None) => StatusCode::NOT_FOUND,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };
-            Err(error_body(
+            Err(Absence::at(
                 status,
-                &format!("load project `{feature_id}`: {msg}"),
+                format!("load project `{feature_id}`: {msg}"),
             ))
         }
     }
@@ -1068,26 +936,4 @@ fn checkpoint_error(checkpoint_id: &str, msg: &str) -> Response {
     } else {
         internal_error(msg)
     }
-}
-
-fn error_body(status: StatusCode, msg: &str) -> Response {
-    (
-        status,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn not_found(msg: &str) -> Response {
-    error_body(StatusCode::NOT_FOUND, msg)
-}
-
-fn internal_error(msg: &str) -> Response {
-    error_body(StatusCode::INTERNAL_SERVER_ERROR, msg)
-}
-
-fn service_unavailable(msg: &str) -> Response {
-    error_body(StatusCode::SERVICE_UNAVAILABLE, msg)
 }

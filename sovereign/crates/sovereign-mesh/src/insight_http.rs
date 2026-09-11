@@ -1,48 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The daemon serves the insight surface — `GET /v1/insights`,
-//! `GET /v1/insights/search`, `DELETE /v1/insights/{id}`,
-//! `POST /v1/insights/clip` (sv-surface rung 6, commit A),
-//! `GET /v1/insights/sinks` (D2's owed route) and
-//! `POST /v1/insights/by-id` (sv-surface D8 — the read `explore_insights`
-//! still does locally).
+//! The insight surface — `/v1/insights…` (sv-surface rung 6, D2, D8).
 //!
-//! # Why this exists
+//! List, search, clip, delete, sink status and the `by-id` read, over the
+//! `InsightService` the HOST commissions beside the state store and hands to
+//! [`crate::daemon_services::ServingCore`]. Nothing is re-derived here: there
+//! is one clip decider, in sovereign-core, and this file is the door.
+//! [`InsightEntry`] is the projection a client renders — every `InsightNode`
+//! field except `embedding`, `created_at` as RFC 3339 — and it lives beside
+//! the route, so in-process and wire answers agree by construction.
 //!
-//! The desktop's insight commands (clip a passage while reading, list and
-//! search the collection, delete a clip) have talked to an IN-PROCESS
-//! `InsightService` opened beside the state store — one of the
-//! attach-reachable deciders the sv-attach-pure-client bar counts. Rung 6
-//! makes the attached desktop a client; this is the daemon half of that
-//! conversion: the same `InsightService` the desktop builds, over the same
-//! `sovereign.db` connection the daemon already owns, served on loopback.
-//!
-//! The service is not re-derived here. It is COMMISSIONED by the host that
-//! owns the store (`daemon_cmd` for the standalone daemon, `state.rs` for
-//! the desktop's in-process one) and handed to [`crate::daemon_services::
-//! ServingCore`] — so there is one clip decider (the `InsightService` in
-//! sovereign-core), and this file is only the door.
-//!
-//! # The wire shape strips the embedding, on purpose
-//!
-//! [`InsightEntry`] is the projection a client renders: every field of
-//! `InsightNode` except `embedding` (raw floats the UI never draws) and
-//! with `created_at` as RFC 3339 (the UI's existing spelling, carried over
-//! from the desktop's local DTO). The projection lives HERE, beside the
-//! route that serves it, following the `reading_http` pattern: the desktop
-//! repoint (rung 6 commit D) serializes the same type, so in-process and
-//! wire answers are byte-identical by construction rather than by review.
-//!
-//! # Loopback only
-//!
-//! Same two layers as `turn_http` and `reading_http`: the router-level
-//! [`crate::loopback_guard::loopback_only`] middleware and a per-handler
-//! peer check. An insight is a clip from this user's reading of this
-//! host's corpora; it is not a peer-facing surface.
+//! Loopback posture is `reading_http`'s, unchanged: an insight is a clip from
+//! this user's reading of this host's corpora, never peer-facing.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path, Query};
+use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -52,7 +24,10 @@ use serde::{Deserialize, Serialize};
 use sovereign_contracts::types::{InsightPosition, InsightSinkState, InsightSource};
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use sovereign_core::insight::InsightService;
+
+use crate::http_response::{bad_request, internal_error, Absence};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// Mount the insight surface. Built from `Arc<Self>` by `start_daemon`, like
 /// the turn and reading routers — mounted unconditionally on serving
@@ -67,10 +42,7 @@ pub fn insight_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/insights/clip", post(clip_insight))
         .route("/v1/insights/sinks", get(sink_status))
         .route("/v1/insights/by-id", post(insights_by_id))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 /// The wire projection of one insight node — what a client renders.
@@ -196,99 +168,83 @@ pub struct SinkInfo {
 }
 
 async fn list_insights(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<ListQuery>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let limit = params.limit.unwrap_or(50);
-    match service.store.list(limit).await {
+    Ok(match service.store.list(limit).await {
         Ok(nodes) => Json(InsightListResponse {
             insights: nodes.into_iter().map(InsightEntry::from).collect(),
         })
         .into_response(),
         Err(e) => internal_error(&e.to_string()),
-    }
+    })
 }
 
 async fn search_insights(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<SearchQuery>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let Some(q) = params.q.filter(|q| !q.is_empty()) else {
-        return bad_request("the q parameter is required and must not be empty");
+        return Ok(bad_request(
+            "the q parameter is required and must not be empty",
+        ));
     };
-    match service.store.search_text(&q, 20).await {
+    Ok(match service.store.search_text(&q, 20).await {
         Ok(nodes) => Json(InsightListResponse {
             insights: nodes.into_iter().map(InsightEntry::from).collect(),
         })
         .into_response(),
         Err(e) => internal_error(&e.to_string()),
-    }
+    })
 }
 
 async fn delete_insight(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let Ok(id) = uuid::Uuid::parse_str(&id) else {
-        return bad_request("insight id must be a UUID");
+        return Ok(bad_request("insight id must be a UUID"));
     };
-    match service.store.delete(id).await {
+    Ok(match service.store.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => internal_error(&e.to_string()),
-    }
+    })
 }
 
 async fn clip_insight(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<ClipRequest>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let Ok(message_id) = uuid::Uuid::parse_str(&body.message_id) else {
-        return bad_request("message_id must be a UUID");
+        return Ok(bad_request("message_id must be a UUID"));
     };
-    match service
-        .clip(
-            &body.clipped_text,
-            message_id,
-            body.paragraph_index,
-            body.source,
-            body.position,
-        )
-        .await
-    {
-        Ok(node) => Json(ClipResponse {
-            insight: InsightEntry::from(node),
-        })
-        .into_response(),
-        Err(e) => internal_error(&e.to_string()),
-    }
+    Ok(
+        match service
+            .clip(
+                &body.clipped_text,
+                message_id,
+                body.paragraph_index,
+                body.source,
+                body.position,
+            )
+            .await
+        {
+            Ok(node) => Json(ClipResponse {
+                insight: InsightEntry::from(node),
+            })
+            .into_response(),
+            Err(e) => internal_error(&e.to_string()),
+        },
+    )
 }
 
 /// GET `/v1/insights/sinks` — every registered insight sink and
@@ -304,15 +260,10 @@ async fn clip_insight(
 /// 404. "No insight service at all" is the different fact, and that is
 /// the named 503 the other four handlers give.
 async fn sink_status(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let any_connected = service.sinks.any_connected().await;
     let mut sinks = Vec::new();
     for sink in service.sinks.iter() {
@@ -327,11 +278,11 @@ async fn sink_status(
         registered = sinks.len(),
         "insight_http: sink status served",
     );
-    Json(SinkStatusResponse {
+    Ok(Json(SinkStatusResponse {
         any_connected,
         sinks,
     })
-    .into_response()
+    .into_response())
 }
 
 /// POST `/v1/insights/by-id` — the read `explore_insights` still does
@@ -346,26 +297,21 @@ async fn sink_status(
 /// An unparseable uuid is a 400 naming WHICH one — one bad id in a batch
 /// of thirty is otherwise a mystery.
 async fn insights_by_id(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<ByIdRequest>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let Some(service) = daemon.insight_service() else {
-        return service_unavailable("this daemon serves no insight surface (no insight service)");
-    };
+) -> Result<Response, Absence> {
+    let service = service_for(&daemon)?;
     let mut ids = Vec::with_capacity(body.ids.len());
     for raw in &body.ids {
         match uuid::Uuid::parse_str(raw) {
             Ok(id) => ids.push(id),
-            Err(e) => return bad_request(&format!("`{raw}` is not an insight id: {e}")),
+            Err(e) => return Ok(bad_request(&format!("`{raw}` is not an insight id: {e}"))),
         }
     }
     // An empty request is a successful empty answer, not an error: a
     // selection of zero passages is a state a UI reaches by deselecting.
-    match service.store.list_by_ids(&ids).await {
+    Ok(match service.store.list_by_ids(&ids).await {
         Ok(nodes) => {
             let found: std::collections::HashSet<String> =
                 nodes.iter().map(|n| n.id.to_string()).collect();
@@ -387,29 +333,14 @@ async fn insights_by_id(
             .into_response()
         }
         Err(e) => internal_error(&e.to_string()),
-    }
+    })
 }
 
-fn bad_request(reason: &str) -> Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(serde_json::json!({ "error": reason })),
-    )
-        .into_response()
-}
-
-fn internal_error(reason: &str) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(serde_json::json!({ "error": reason })),
-    )
-        .into_response()
-}
-
-fn service_unavailable(reason: &str) -> Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(serde_json::json!({ "error": reason })),
-    )
-        .into_response()
+/// The daemon's own `InsightService`. ONE lookup site, so no handler can
+/// reach a different clip store than `POST /v1/insights/clip` writes to —
+/// six handlers spelled the same `let Some(…) else { return 503 }` before.
+fn service_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<InsightService>, Absence> {
+    daemon.insight_service().map(Arc::clone).ok_or_else(|| {
+        Absence::unavailable("this daemon serves no insight surface (no insight service)")
+    })
 }

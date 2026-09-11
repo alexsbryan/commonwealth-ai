@@ -1,85 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The daemon serves its OWN external-MCP configuration — what is
-//! declared, what is actually mounted, and the bearer secrets
-//! (sv-surface D8, second half).
+//! The daemon's OWN external-MCP configuration — what is declared, what is
+//! actually mounted, and the bearer secrets (sv-surface D8, second half).
 //!
-//! # The twin, and which half of it is real
+//! `commands/mcp_servers.rs` joined `SetupConfig::load()` with the DESKTOP's
+//! `McpServerManager`; an attached desktop assembles no tool registry, so
+//! that manager describes connections nobody uses (campaign X-list). These
+//! routes report the daemon's registry instead.
 //!
-//! `commands/mcp_servers.rs` reads TWO things and joins them:
-//! `SetupConfig::load()` (the canonical `config.toml`, the same
-//! `[[mcp_servers]]` array `svrn chat` and `svrn serve` read) and
-//! `state.mcp_servers` — the DESKTOP's own `McpServerManager`, holding
-//! statuses captured when the desktop last connected those servers into
-//! its own tool registry.
+//! Loopback-only, `reading_http`'s posture: `PUT …/token` writes a bearer
+//! secret to `~/.svrnmesh/secrets/mcp/` at 0600.
 //!
-//! The campaign's X-list settles the second half up front:
-//! *"state.mcp_servers live status is a twin to delete, not proxy"*. An
-//! attached desktop assembles no tool registry, so its manager describes
-//! connections nobody is using. The daemon's registry is the one an
-//! answer actually plans against, and that is what these routes report.
+//! NOT served, named rather than guessed (ARCH §18.3):
+//! - `connected` / `error` — the daemon keeps no `McpServerManager`, so they
+//!   have no source here; [`McpServerView::live_tool_count`] is an
+//!   observation served in their place and [`McpMountStatus::reason`] carries
+//!   the absence in words.
+//! - `mcp_add_server` / `mcp_remove_server` — both `SetupConfig::save()`,
+//!   which has zero call sites in this crate; who owns `config.toml` is a
+//!   decision, not a side effect of this rung.
 //!
-//! # What "live" can honestly mean here, and what it cannot
-//!
-//! The daemon does not KEEP an `McpServerManager`.
-//! `sovereign-runtime-recipe` builds one at boot, prints its per-server
-//! banner and drops it, and says why in its own comment: keeping it would
-//! need a keep-alive in the `ToolBundle` seam's return type, which is a
-//! change to the seam rather than a use of it. So the two fields the
-//! desktop renders from that manager — `connected: Option<bool>` and
-//! `error: Option<String>` — have no source on this host.
-//!
-//! They are therefore NOT served, rather than served as a plausible
-//! guess. What IS served is [`McpServerView::live_tool_count`]: how many
-//! tools bearing this server's `mcp_<name>_` prefix are in the registry
-//! behind the daemon's `/mcp` mount right now. That is an observation,
-//! not an inference. Reporting `connected: live_tool_count > 0` would
-//! have been the substitution §18.3 forbids — a server that legitimately
-//! exports zero tools is connected and would read as failed, and a server
-//! that connected and was later removed from the registry would read as
-//! never-configured.
-//!
-//! [`McpMountStatus::reason`] carries that absence in words on every
-//! response, so a caller rendering a settings pane can say "connect
-//! errors are not available from this host" instead of drawing a green
-//! dot it invented. The structural fix is an `McpServerManager` on
-//! [`crate::daemon_services::McpMount`], and it is a seam change in
-//! `sovereign-tools-base` + `sovereign-runtime-recipe` — a rung, not a
-//! door.
-//!
-//! Named imprecision in the prefix fold: tool ids are
-//! `mcp_<server>_<tool>` and both halves may contain `_`, so a server
-//! named `a` and a server named `a_b` cannot be told apart by prefix for
-//! a tool called `b_c`. The count is exact for every server name that is
-//! not a `_`-extended prefix of another. The structural fix is the
-//! manager above, which knows which tools it registered; a second id
-//! encoding invented here would be the §10.6 smell.
-//!
-//! # The two config WRITES do not cross, and this is why
-//!
-//! `mcp_add_server` and `mcp_remove_server` mutate `config.toml` through
-//! `SetupConfig::save()`. **This daemon owns no config-write path** —
-//! measured, not assumed: `SetupConfig::save()` has zero call sites in
-//! `sovereign-mesh`, and the writers are all CLI-side (`setup_cmd/finish`,
-//! `setup_cmd/terminal`, `setup_cmd/fim`, `model_cmd`). `admin_http`
-//! offers `POST /v1/admin/reload`, which RE-READS the file; it does not
-//! write it. Adding the first HTTP config write is a decision about who
-//! owns `config.toml` — one writer per data root is what the run lock
-//! buys — and it belongs to whoever takes it deliberately, not to this
-//! rung as a side effect. The two commands stay app-local with that
-//! reason recorded; a caller wanting them over the wire needs
-//! `POST /v1/admin/config` first, and then `POST /v1/admin/reload` to
-//! make the daemon act on it.
-//!
-//! # Loopback only
-//!
-//! `reading_http`'s posture. `PUT .../token` writes a bearer secret to
-//! `~/.svrnmesh/secrets/mcp/` at 0600; nothing about this family is
-//! peer-facing.
+//! Named imprecision: ids are `mcp_<server>_<tool>` and both halves may carry
+//! `_`, so the prefix count is exact for every server name that is not a
+//! `_`-extended prefix of another.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path};
+use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -91,7 +37,8 @@ use sovereign_tools::mcp::auth::{secret_env_var, McpAuth};
 use sovereign_tools::mcp::secret_store;
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::json_error;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── Wire types ────────────────────────────────────────────────
 
@@ -179,11 +126,6 @@ pub struct SetTokenRequest {
     pub token: String,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-}
-
 // ─── Router ────────────────────────────────────────────────────
 
 /// The MCP-configuration router. Mounted unconditionally on serving
@@ -198,10 +140,7 @@ pub fn mcp_config_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/v1/mcp/servers/{name}/token",
             put(set_token).delete(clear_token),
         )
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -218,13 +157,7 @@ pub fn mcp_config_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 ///
 /// An empty list is the right answer for an operator who configured none,
 /// and must never become a 404.
-async fn list_servers(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn list_servers(_: LocalOnly, Extension(daemon): Extension<Arc<EmbeddedDaemon>>) -> Response {
     let configured = daemon.configured_mcp_servers().await;
 
     // The live fold: tool ids in the daemon's own registry.
@@ -262,15 +195,12 @@ async fn list_servers(
 /// URL's, and the caller can act on that (fix the address, fix the token)
 /// where a 500 tells them only that something broke here.
 async fn test_connection(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(_daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<TestConnectionRequest>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     if body.url.trim().is_empty() {
-        return error_body(StatusCode::BAD_REQUEST, "Server URL is required.");
+        return json_error(StatusCode::BAD_REQUEST, "Server URL is required.");
     }
     // Prefer the token the caller just typed (not yet saved); otherwise
     // fall back to the stored / env secret for an already-saved server.
@@ -292,7 +222,7 @@ async fn test_connection(
         }
         Err(e) => {
             tracing::debug!(server = %body.name, error = %e, "mcp_config_http: probe failed");
-            error_body(StatusCode::BAD_GATEWAY, &e.to_string())
+            json_error(StatusCode::BAD_GATEWAY, &e.to_string())
         }
     }
 }
@@ -306,17 +236,14 @@ async fn test_connection(
 /// rebrand root, which is the same directory the daemon's own MCP loader
 /// reads at boot: writing here is writing where it will be read.
 async fn set_token(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(_daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(name): Path<String>,
     Json(body): Json<SetTokenRequest>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let name = name.trim();
     if name.is_empty() {
-        return error_body(StatusCode::BAD_REQUEST, "Server name is required.");
+        return json_error(StatusCode::BAD_REQUEST, "Server name is required.");
     }
     match secret_store::write_token(name, &body.token) {
         Ok(()) => {
@@ -325,7 +252,7 @@ async fn set_token(
                 "mcp_config_http: bearer secret updated");
             StatusCode::NO_CONTENT.into_response()
         }
-        Err(e) => error_body(
+        Err(e) => json_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("store token: {e}"),
         ),
@@ -336,19 +263,16 @@ async fn set_token(
 /// when none is set, and 204 either way: "there was nothing to delete" is
 /// not a failure of a delete.
 async fn clear_token(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(_daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(name): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     match secret_store::delete_token(name.trim()) {
         Ok(()) => {
             tracing::info!(server = %name.trim(), "mcp_config_http: bearer secret cleared");
             StatusCode::NO_CONTENT.into_response()
         }
-        Err(e) => error_body(
+        Err(e) => json_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("clear token: {e}"),
         ),
@@ -405,14 +329,4 @@ fn view_for(s: &McpServerConfig, tool_ids: &[String]) -> McpServerView {
         has_token: bearer && secret_store::has_token(&s.name),
         live_tool_count: live_tool_count(&s.name, tool_ids),
     }
-}
-
-fn error_body(status: StatusCode, msg: &str) -> Response {
-    (
-        status,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
 }

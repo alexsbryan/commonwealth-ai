@@ -26,10 +26,9 @@
 //!
 //! Local-only — same loopback guard as `mcp_router` and `mesh_http`.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension};
+use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::post;
@@ -40,7 +39,7 @@ use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// How the admin handler rebuilds an `InferenceProvider` from a new
 /// `SetupConfig`. Implemented by whoever owns the model-loading code —
@@ -65,10 +64,7 @@ pub trait ProviderFactory: Send + Sync {
 pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/admin/reload", post(admin_reload))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 /// Request body for `POST /v1/admin/reload`. Empty body (`{}` or no
@@ -101,13 +97,10 @@ pub struct ReloadResponse {
 }
 
 async fn admin_reload(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     body: Option<Json<ReloadRequest>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let req = body.map(|Json(b)| b).unwrap_or_default();
 
     match daemon
@@ -253,9 +246,11 @@ impl ConfigDiff {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::loopback_guard::enforce_localhost;
     use crate::EmbeddedDaemon;
     use async_trait::async_trait;
     use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection};
+    use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::TempDir;

@@ -28,6 +28,9 @@
 
 use corpus_engine::ScoredChunk;
 use serde::Deserialize;
+
+// The reading surface's OWN response types — the host's, not a mirror.
+use sovereign_mesh::reading_http::{AtomCard, AtomSpan, SectionRef};
 use sovereign_turn_client::TurnClient;
 
 /// Local error/result alias — keeps the harness independent of any
@@ -525,18 +528,20 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
     })
 }
 
-// ─── The wire shapes (reading_http's responses) ───────────────
+// ─── The wire shapes ─────────────────────────────────────────
 //
-// `reading_http`'s response types are `Serialize`-only, and three of
-// their fields (`atom_type`, `edge_type`, `role`) are `&'static str`,
-// which no `Deserialize` impl can fill. So the reader is declared here
-// with `String` in those positions rather than widening the mesh crate
-// — a mesh type that gained `Deserialize` would have to give up the
-// `&'static str`s to do it, and every handler builds them from a
-// `label()` that returns exactly those statics.
+// The atom card, its related rows and the spans are `reading_http`'s OWN
+// types, deserialized: the owner gained `Deserialize` (and `String` where
+// it had `&'static str`) so this reader parses what the host emits rather
+// than a mirror that can drift from it.
 //
-// Only the fields this report prints are named; serde ignores the
-// rest, so a host that grows a field does not break this reader.
+// Three shapes still cannot: `ChunkRecord` requires `chunk_id`,
+// `corpus_id` and `metadata`, and `AtomElsewhere` requires `atom_id` and
+// `corpus_id` — all of them always on the wire, none of them in the
+// hand-written partial fixtures this file's tests decode. Widening the
+// owner to make those optional would make an absent id read as a default,
+// which is the substitution §18.3 forbids. So the three below stay, and
+// they name exactly the fields this report prints.
 
 #[derive(Debug, Deserialize)]
 struct WireChunk {
@@ -544,16 +549,7 @@ struct WireChunk {
     #[serde(default)]
     section_id: Option<String>,
     #[serde(default)]
-    atom_spans: Vec<WireSpan>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WireSpan {
-    atom_id: String,
-    atom_type: String,
-    span_start: usize,
-    span_end: usize,
-    surface_form: String,
+    atom_spans: Vec<AtomSpan>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -566,38 +562,9 @@ struct WireNeighbors {
 }
 
 #[derive(Debug, Deserialize)]
-struct WireAtomCard {
-    atom_id: String,
-    atom_type: String,
-    canonical_name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    related: Vec<WireRelated>,
-    #[serde(default)]
-    cross_corpus: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WireRelated {
-    atom_id: String,
-    atom_type: String,
-    canonical_name: String,
-    edge_type: String,
-    role: String,
-}
-
-#[derive(Debug, Deserialize)]
 struct WireElsewhere {
     #[serde(default)]
-    same_corpus: Vec<WireSectionRef>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WireSectionRef {
-    section_id: String,
-    #[serde(default)]
-    chunk_id: Option<u64>,
+    same_corpus: Vec<SectionRef>,
 }
 
 // ─── Deref walk (over the daemon's reading routes) ───────────
@@ -805,7 +772,7 @@ async fn fetch_atom_card(
     args: &CmdArgs,
 ) -> Option<AtomCardStatus> {
     let card = client
-        .reading_atom_card::<WireAtomCard>(corpus_id, atom_id)
+        .reading_atom_card::<AtomCard>(corpus_id, atom_id)
         .await
         .ok()??;
     Some(card_status(card, args.max_related))
@@ -813,7 +780,7 @@ async fn fetch_atom_card(
 
 /// The card fold, apart from the fetch so a test can drive it with a
 /// body the daemon actually served (`reading_diag_wire_fold` below).
-fn card_status(card: WireAtomCard, max_related: usize) -> AtomCardStatus {
+fn card_status(card: AtomCard, max_related: usize) -> AtomCardStatus {
     AtomCardStatus {
         atom_id: card.atom_id,
         atom_type: card.atom_type,
@@ -1204,7 +1171,7 @@ mod reading_diag_wire_fold {
 
     #[test]
     fn the_card_body_folds_to_the_row_the_report_prints() {
-        let card: WireAtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
+        let card: AtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
         let row = card_status(card, 6);
 
         assert_eq!(row.atom_id, "entity-0002");
@@ -1227,7 +1194,7 @@ mod reading_diag_wire_fold {
 
     #[test]
     fn max_related_clips_the_sample_without_touching_the_count() {
-        let card: WireAtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
+        let card: AtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
         let row = card_status(card, 2);
         assert_eq!(row.sample_related.len(), 2);
         assert_eq!(

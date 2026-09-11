@@ -1,36 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Reading-surface HTTP — `/internal/corpus/{corpus}/chunks/...`
-//! and `/internal/corpus/{corpus}/atoms/...`.
+//! Reading-surface HTTP — `/internal/corpus/{corpus}/chunks/…` and
+//! `/internal/corpus/{corpus}/atoms/…`.
 //!
-//! Backs the desktop's glass-box reading experience: when the user
-//! clicks a citation, the desktop fetches the cited chunk + its
-//! immediate textual neighbors here; when the user clicks a typed
-//! term in the reading surface (an "atom"), it fetches that atom's
-//! card + a list of where else the atom appears.
+//! Serves the desktop's glass-box reading experience over the daemon's own
+//! `CorpusEngine`: a cited chunk, its immediate textual neighbours within one
+//! `source_doc_id`, the corpus's atlas atoms paged, an atom's card, and where
+//! else that atom appears.
 //!
-//! All routes are loopback-only. Two layers of enforcement, mirroring
-//! `admin_http`:
-//! 1. Router-level [`crate::loopback_guard::loopback_only`] middleware.
-//! 2. Per-handler `enforce_localhost`.
+//! Loopback-only, both layers — the router-level
+//! [`crate::loopback_guard::loopback_only`] middleware plus the per-handler
+//! [`crate::loopback_guard::LocalOnly`] extractor (ARCH §5, defence in depth).
+//! Every other route family in this crate names this file's posture.
 //!
-//! v1 scope (per the glass-box reading-surface plan):
-//! - `GET /internal/corpus/{corpus}/chunks/{chunk_id}` — single chunk
-//! - `GET /internal/corpus/{corpus}/chunks/{chunk_id}/neighbors?radius=N`
-//!   — center chunk plus up to N prev/next within the same source_doc
-//! - `GET /internal/corpus/{corpus}/atoms?offset=&limit=` — the
-//!   corpus's atlas atoms, paged (sv-surface D3: the wire form of
-//!   the desktop's one `load_atoms` primitive)
-//! - Atom routes ship in PR3/PR4 once the AtomSpan detector lands.
-//!
-//! Section-bounded reading (layer-2) is intentionally deferred — see
-//! ENRICHMENT_V2 §"Layer-2 section reading deferred" — and shows up
-//! here as "neighbors are id-ordered within source_doc_id" rather than
-//! "neighbors are bounded by section."
+//! Deferred, named rather than dropped: section-bounded reading — neighbours
+//! are id-ordered within `source_doc_id`, never bounded by section.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path, Query};
+use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
@@ -45,11 +32,12 @@ use corpus_engine::enrichment::atlas::{
 use corpus_engine::EnrichmentChunkRow;
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::{internal_error, not_found, service_unavailable};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── Response shapes ───────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkRecord {
     pub chunk_id: u64,
     pub corpus_id: String,
@@ -93,7 +81,7 @@ pub struct ChunkRecord {
 /// segments here are produced by parsing that delimiter — no
 /// schema change in the underlying corpus, just a frontend-friendly
 /// view of the same bytes.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationChunkMeta {
     /// The owning conversation's id. Equal to `source_doc_id` on
     /// the chunk; surfaced explicitly so the desktop can wire the
@@ -121,7 +109,7 @@ pub struct ConversationChunkMeta {
     pub segments: Vec<ConversationSegment>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConversationSegment {
     /// Either `"user"`, `"assistant"`, or `"system"`. The recipe
     /// writes whatever the messages table holds in `role`; we don't
@@ -131,10 +119,10 @@ pub struct ConversationSegment {
 }
 
 /// Wire shape mirrors `corpus_engine::atlas_traversal::AtomSpan`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomSpan {
     pub atom_id: String,
-    pub atom_type: &'static str,
+    pub atom_type: String,
     pub span_start: usize,
     pub span_end: usize,
     pub surface_form: String,
@@ -144,7 +132,7 @@ impl From<DetectorAtomSpan> for AtomSpan {
     fn from(s: DetectorAtomSpan) -> Self {
         Self {
             atom_id: s.atom_id,
-            atom_type: s.atom_type,
+            atom_type: s.atom_type.to_string(),
             span_start: s.span_start,
             span_end: s.span_end,
             surface_form: s.surface_form,
@@ -152,7 +140,7 @@ impl From<DetectorAtomSpan> for AtomSpan {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NeighborWindowResponse {
     pub center: ChunkRecord,
     pub prev: Vec<ChunkRecord>,
@@ -165,7 +153,7 @@ pub struct NeighborWindowResponse {
     /// How neighbors were resolved. Currently always
     /// `"id_within_source_doc"`; future section-anchored ordering
     /// will set a different discriminator.
-    pub ordering: &'static str,
+    pub ordering: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -272,17 +260,12 @@ pub struct CorpusAtomsPage {
     pub atoms: Vec<AtomEnvelope>,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-}
-
 // ─── Atom card / elsewhere shapes ──────────────────────────────
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomCard {
     pub atom_id: String,
-    pub atom_type: &'static str,
+    pub atom_type: String,
     pub corpus_id: String,
     pub canonical_name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -304,30 +287,30 @@ pub struct AtomCard {
     pub cross_corpus: Vec<CrossCorpusLink>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelatedAtom {
     pub atom_id: String,
-    pub atom_type: &'static str,
+    pub atom_type: String,
     pub canonical_name: String,
-    pub edge_type: &'static str,
+    pub edge_type: String,
     /// `"source"` if this atom is the edge source, `"target"` if
     /// the target. Used by the desktop to phrase the relationship
     /// in the right direction.
-    pub role: &'static str,
+    pub role: String,
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossCorpusLink {
     pub peer_corpus_id: String,
     pub peer_atom_id: String,
     pub peer_canonical_name: String,
-    pub edge_type: &'static str,
+    pub edge_type: String,
     pub signal: String,
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomElsewhere {
     pub atom_id: String,
     pub corpus_id: String,
@@ -338,18 +321,18 @@ pub struct AtomElsewhere {
     pub cross_corpus: Vec<CrossCorpusLink>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectionRef {
     pub section_id: String,
     /// First chunk id in this section, when resolvable. `None`
     /// means the section_id is in atom evidence but no chunk in
     /// the index carries it (legacy ingest, partial reshard).
     /// The desktop should grey out the row in this case.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chunk_id: Option<u64>,
     /// Short preview text from the atom evidence's
     /// passage_preview, when populated.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
 }
 
@@ -375,10 +358,7 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/corpus/{corpus}/atoms/{atom_id}/elsewhere",
             get(get_atom_elsewhere),
         )
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -395,12 +375,9 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 /// beside the typed `state` so a shell over the route greps the SAME
 /// spelling the CLI prints.
 async fn get_corpus_status(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
@@ -435,14 +412,11 @@ async fn get_corpus_status(
 /// instead, because there the atom layer is a garnish on a chunk
 /// read; here the atoms ARE the answer.)
 async fn get_corpus_atoms(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
     Query(AtomsPageQuery { offset, limit }): Query<AtomsPageQuery>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let limit = limit.min(ATOMS_PAGE_MAX);
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
@@ -484,13 +458,10 @@ async fn get_corpus_atoms(
 }
 
 async fn get_chunk(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
@@ -513,14 +484,11 @@ async fn get_chunk(
 }
 
 async fn get_neighbors(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
     Query(NeighborQuery { radius }): Query<NeighborQuery>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let radius = radius.min(5);
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
@@ -568,19 +536,16 @@ async fn get_neighbors(
         prev,
         next,
         outbound_url,
-        ordering: window.ordering,
+        ordering: window.ordering.to_string(),
     };
     (StatusCode::OK, Json(response)).into_response()
 }
 
 async fn get_atom_card(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, atom_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
@@ -610,13 +575,10 @@ async fn get_atom_card(
 }
 
 async fn get_atom_elsewhere(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, atom_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
@@ -732,7 +694,7 @@ fn build_atom_card(
     edges: &[Edge],
     cross_edges: &[CrossCorpusEdge],
 ) -> AtomCard {
-    let atom_type = atom.atom_type().label();
+    let atom_type = atom.atom_type().label().to_string();
     let (canonical_name, aliases, description, salience) = atom_surface_fields(atom);
 
     let target_id = atom.id();
@@ -749,10 +711,10 @@ fn build_atom_card(
             let (other_name, _, _, _) = atom_surface_fields(other);
             Some(RelatedAtom {
                 atom_id: other_id.as_str().to_string(),
-                atom_type: other.atom_type().label(),
+                atom_type: other.atom_type().label().to_string(),
                 canonical_name: other_name,
-                edge_type: e.edge_type.label(),
-                role,
+                edge_type: e.edge_type.label().to_string(),
+                role: role.to_string(),
                 confidence: e.confidence,
             })
         })
@@ -787,7 +749,7 @@ fn cross_corpus_links_for_atom(
             peer_corpus_id: e.peer.corpus_id.clone(),
             peer_atom_id: e.peer.atom_id.as_str().to_string(),
             peer_canonical_name: e.peer.canonical_name.clone(),
-            edge_type: e.edge.edge_type.label(),
+            edge_type: e.edge.edge_type.label().to_string(),
             signal: e.trace.signal.clone(),
             confidence: e.trace.confidence,
         })
@@ -992,36 +954,6 @@ fn stranded_partition(
                 .is_some_and(|n| n.starts_with(&prefix))
                 && p.join("_corpus_meta.json").exists()
         })
-}
-
-fn not_found(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn internal_error(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn service_unavailable(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
 }
 
 #[cfg(test)]

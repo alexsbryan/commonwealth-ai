@@ -70,12 +70,11 @@
 //! regresses — no host served a turn from the daemon before this file — but a
 //! reader should know it is missing on purpose.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{ConnectInfo, Extension, Path, Query, WebSocketUpgrade};
+use axum::extract::{Extension, Path, Query, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -97,7 +96,7 @@ use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, Str
 use sovereign_core::traits::StateStore;
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::turn_approval::SocketApprovalChannel;
 use sovereign_core::approval_desk::ResolveOutcome;
 
@@ -131,10 +130,7 @@ pub fn turn_router_with(daemon: Arc<EmbeddedDaemon>, timers: SocketTimers) -> Ro
         .route("/v1/memories/{id}", delete(delete_memory))
         .route("/v1/memories/{id}/weaken", post(weaken_memory))
         .route("/v1/notes/tool-outcome", post(record_tool_outcome))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
         .layer(Extension(timers))
 }
 
@@ -176,13 +172,10 @@ pub struct CreateConversationResponse {
 /// malformed body yields an untagged conversation rather than a 4xx — the
 /// server's behaviour, kept so one client works against both.
 async fn create_conversation(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     body: axum::body::Bytes,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(runtime) = daemon.runtime() else {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     };
@@ -316,13 +309,10 @@ pub struct MessageResponse {
 /// through verbatim — the same wire ANSWER the server's client would see for
 /// its own tenant, which is the compat that matters.
 async fn list_conversations(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<ListQuery>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -353,13 +343,10 @@ async fn list_conversations(
 /// client rendering a resumed conversation cannot tell which host answered.
 /// A missing row is the server's exact 404 sentence, not a generic one.
 async fn get_conversation(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -399,13 +386,10 @@ async fn get_conversation(
 /// idempotent from the client's point of view, and the row's absence
 /// afterward is observable via the 404 the get route now answers.
 async fn delete_conversation(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -429,14 +413,11 @@ async fn delete_conversation(
 /// turn that would pause for an approval cannot complete on this route, which
 /// is the same named gap, not a new one.
 async fn send_message(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Json(body): Json<SendMessageRequest>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let (Some(runtime), Some(store)) = (daemon.runtime(), daemon.state_store()) else {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     };
@@ -481,13 +462,10 @@ async fn send_message(
 /// process that used to hold it stopped holding it, which is the failure mode
 /// phase 6 has to not have.
 async fn end_conversation(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(runtime) = daemon.runtime() else {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     };
@@ -525,13 +503,10 @@ pub struct SearchEntry {
 }
 
 async fn search_conversations(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<SearchQuery>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -558,13 +533,10 @@ async fn search_conversations(
 /// wrong (soft delete; the row is preserved for audit and excluded from
 /// recall). The desktop's `forget_memory` repoints here in rung 6 commit D.
 async fn delete_memory(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(memory_id): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -589,13 +561,10 @@ pub struct WeakenResponse {
 }
 
 async fn weaken_memory(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(memory_id): Path<String>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -648,13 +617,10 @@ pub struct ToolOutcomeRequest {
 }
 
 async fn record_tool_outcome(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<ToolOutcomeRequest>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let Some(notes) = daemon.notes_store() else {
         return service_unavailable(
             "this daemon serves no notes surface (notes.db unavailable — /mcp not mounted)",
@@ -692,16 +658,13 @@ pub struct StreamParams {
 
 /// `GET /v1/conversations/{id}/stream` — WebSocket upgrade.
 async fn ws_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     ws: WebSocketUpgrade,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Query(params): Query<StreamParams>,
     Extension(timers): Extension<SocketTimers>,
 ) -> Response {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     if daemon.runtime().is_none() {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     }

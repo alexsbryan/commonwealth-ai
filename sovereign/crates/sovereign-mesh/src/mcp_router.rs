@@ -13,6 +13,8 @@
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
+
+use crate::loopback_guard::LoopbackRouter;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -193,9 +195,7 @@ pub fn mcp_router(
         // added here even if the author forgets the per-handler
         // `is_localhost` check. The per-handler check stays for
         // defense in depth.
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
+        .localhost_only()
         .layer(Extension(tools))
         .layer(Extension(logger))
         .layer(Extension(Arc::new(session_id)))

@@ -1,80 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Atlas-browse HTTP — `/internal/atlas/...` (sv-surface D4).
+//! Atlas-browse HTTP — `/internal/atlas/…` (sv-surface D4).
 //!
-//! The wire form of the desktop's Atlas Inspector. Until this router
-//! the twelve `atlas_*` Tauri commands each opened the atlas
-//! themselves: six over `AppState.corpus_engine` through
-//! `sovereign_tools::atlas_view::FileAtlasReader`, six over a private
-//! `Arc<SqliteStateStore>`. In attach mode that meant the desktop
-//! carried a second corpus engine purely to browse an atlas the
-//! daemon already had open — the §10.6 twin the sv-surface campaign
-//! exists to delete.
+//! The wire form of the desktop's Atlas Inspector, over the daemon's own
+//! `engine.index_dir()`: six routes for the `corpus_engine` commands
+//! (corpora, report, members, atoms, subgraph, atom detail) and six for the
+//! conversation-tiered ones. Each calls the SAME `sovereign_tools::atlas_view`
+//! method the Tauri command called and returns the SAME type, so the desktop
+//! rung is a repoint. `list_atoms` is a POST because `AtomFilter` carries a
+//! `Vec<String>`: a read, asked with a body.
 //!
-//! **The computation did not move; the process did.** Every handler
-//! here builds the SAME `FileAtlasReader` over the daemon's own
-//! `engine.index_dir()` and calls the SAME method the Tauri command
-//! called, returning the SAME type. That is what makes the desktop
-//! rung a repoint rather than a rewrite: the response bodies
-//! deserialise into `sovereign_tools::atlas_view::*` unchanged.
+//! Loopback posture is `reading_http`'s, unchanged.
 //!
-//! # What is here, and what is not
-//!
-//! Served (6 routes for the 6 `corpus_engine` commands):
-//!
-//! | Desktop command | Route |
-//! |---|---|
-//! | `atlas_list_corpora` | `GET  /internal/atlas/corpora` |
-//! | `atlas_build_report` | `GET  /internal/atlas/{corpus}/report` |
-//! | `atlas_list_members` | `GET  /internal/atlas/{corpus}/members` |
-//! | `atlas_list_atoms` | `POST /internal/atlas/{corpus}/atoms` |
-//! | `atlas_subgraph` | `GET  /internal/atlas/{corpus}/subgraph` |
-//! | `atlas_get_atom_detail` | `GET  /internal/atlas/{corpus}/atoms/{atom_id}` |
-//!
-//! `list_atoms` is a POST because its input is a structured
-//! `{filter, page}` — `AtomFilter` carries a `Vec<String>` of
-//! subtypes, which no flat query string expresses without a second
-//! encoding. Same house style as `POST /v1/knowledge/search`: a read,
-//! asked with a body.
-//!
-//! Served (6 more for the 6 conversation-tiered commands, added when
-//! `207b62b85` widened the reader):
-//!
-//! | Desktop command | Route |
-//! |---|---|
-//! | `atlas_list_conv_corpora` | `GET /internal/atlas/conv/corpora` |
-//! | `atlas_list_conversations` | `GET /internal/atlas/conv/{corpus}/conversations` |
-//! | `atlas_get_conv_detail` | `GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid}` |
-//! | `atlas_get_conv_entities` | `GET …/conversations/{conv_uuid}/entities` |
-//! | `atlas_get_entity_aggregate` | `GET /internal/atlas/conv/{corpus}/entities/aggregate?text=` |
-//! | `atlas_get_chunk_entity_progress` | `GET /internal/atlas/conv/{corpus}/chunk-entity-progress` |
-//!
-//! This paragraph said the opposite until 2026-09-10, and the reason
-//! it gave was real at the time: the seven store calls were INHERENT
-//! methods on the concrete `SqliteStateStore`, and the `dyn
-//! ConvTieredReader` the `Runtime` carries covered only two of them.
-//! `207b62b85` made `ConvBrowseReader` a supertrait of
-//! `ConvTieredReader` and moved the other five onto it, so the handle
-//! the daemon already held — `runtime.lane_sources.conv_tiered` —
-//! now reaches all seven. Nothing was added to `ServingCore` and no
-//! second accessor was minted.
-//!
-//! Also app-local by decision, not by omission: the two GLiNER model
-//! commands (`atlas_check_gliner_model`, `atlas_download_gliner_model`)
-//! manage a file the desktop downloads for its own extractor.
-//!
-//! Loopback posture is `reading_http`'s, unchanged: router-level
-//! [`crate::loopback_guard::loopback_only`] middleware plus a
-//! per-handler `enforce_localhost`.
+//! App-local by decision, not omission: the two GLiNER model commands manage
+//! a file the desktop downloads for its own extractor.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path, Query};
+use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvTieredReader};
 use sovereign_tools::atlas_view::{
@@ -84,7 +31,10 @@ use sovereign_tools::atlas_view::{
 };
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::http_response::{
+    internal_error, not_found, not_implemented, service_unavailable, Absence,
+};
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── Request shapes ────────────────────────────────────────────
 
@@ -106,11 +56,6 @@ pub struct SubgraphQuery {
     /// — one decider for the cap, still in `sovereign-tools`.
     #[serde(default)]
     pub max_nodes: Option<usize>,
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
 }
 
 // ─── Router ────────────────────────────────────────────────────
@@ -148,10 +93,7 @@ pub fn atlas_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/atlas/conv/{corpus}/chunk-entity-progress",
             get(conv_chunk_entity_progress),
         )
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -160,23 +102,17 @@ pub fn atlas_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 /// atlas, with per-atom-type counts. Wire form of
 /// `atlas_list_corpora`; answers `Vec<AtlasCorpusSummary>`.
 async fn list_corpora(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader.list_corpora().await {
+) -> Result<Response, Absence> {
+    let reader = reader_for(&daemon)?;
+    Ok(match reader.list_corpora().await {
         Ok(rows) => {
             tracing::debug!(corpora = rows.len(), "atlas_http: corpora listed");
             (StatusCode::OK, Json(rows)).into_response()
         }
         Err(e) => view_error(&e),
-    }
+    })
 }
 
 /// GET /internal/atlas/{corpus}/report — what the last build found.
@@ -186,21 +122,15 @@ async fn list_corpora(
 /// — a successful answer, not an error. That distinction is the
 /// reader's, kept here unchanged.
 async fn build_report(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader.build_report(&corpus).await {
+) -> Result<Response, Absence> {
+    let reader = reader_for(&daemon)?;
+    Ok(match reader.build_report(&corpus).await {
         Ok(report) => (StatusCode::OK, Json(report)).into_response(),
         Err(e) => view_error(&e),
-    }
+    })
 }
 
 /// GET /internal/atlas/{corpus}/members — the member atlases of a
@@ -211,42 +141,30 @@ async fn build_report(
 /// the frontend branches on it to pick which Explore surface to
 /// render — so this must never become a 404.
 async fn list_members(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader.list_members(&corpus).await {
+) -> Result<Response, Absence> {
+    let reader = reader_for(&daemon)?;
+    Ok(match reader.list_members(&corpus).await {
         Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
         Err(e) => view_error(&e),
-    }
+    })
 }
 
 /// POST /internal/atlas/{corpus}/atoms — filterable, paginated atom
 /// browse. Wire form of `atlas_list_atoms`; answers `AtomListPage`.
 async fn list_atoms(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
     body: Option<Json<AtomBrowseRequest>>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let reader = reader_for(&daemon)?;
     let req = body.map(|Json(r)| r).unwrap_or_default();
     let filter = req.filter.unwrap_or_default();
     let page = req.page.unwrap_or_default();
-    match reader.list_atoms(&corpus, filter, page).await {
+    Ok(match reader.list_atoms(&corpus, filter, page).await {
         Ok(page) => {
             tracing::debug!(
                 corpus = %corpus,
@@ -258,32 +176,28 @@ async fn list_atoms(
             (StatusCode::OK, Json(page)).into_response()
         }
         Err(e) => atom_error(&e),
-    }
+    })
 }
 
 /// GET /internal/atlas/{corpus}/subgraph?max_nodes= — the curated
 /// landscape map. Wire form of `atlas_subgraph`; answers
 /// `AtlasSubgraph`.
 async fn subgraph(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
     Query(SubgraphQuery { max_nodes }): Query<SubgraphQuery>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader
-        .subgraph(&corpus, max_nodes.unwrap_or(DEFAULT_MAX_NODES))
-        .await
-    {
-        Ok(graph) => (StatusCode::OK, Json(graph)).into_response(),
-        Err(e) => atom_error(&e),
-    }
+) -> Result<Response, Absence> {
+    let reader = reader_for(&daemon)?;
+    Ok(
+        match reader
+            .subgraph(&corpus, max_nodes.unwrap_or(DEFAULT_MAX_NODES))
+            .await
+        {
+            Ok(graph) => (StatusCode::OK, Json(graph)).into_response(),
+            Err(e) => atom_error(&e),
+        },
+    )
 }
 
 /// GET /internal/atlas/{corpus}/atoms/{atom_id} — the full inspector
@@ -301,13 +215,10 @@ async fn subgraph(
 /// clicks. Same policy, same cache key, now one copy for every
 /// surface instead of one per surface.
 async fn atom_detail(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, atom_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let engine = match daemon.corpus_engine() {
         Some(e) => Arc::clone(e),
         None => return service_unavailable("corpus engine not initialised"),
@@ -484,19 +395,13 @@ pub struct EntityAggregateQuery {
 /// and a corpus engine that will not answer at all leaves every row
 /// on that fallback rather than failing the list.
 async fn conv_list_corpora(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
     let buckets = match reader.list_conv_corpora_with_state_buckets().await {
         Ok(b) => b,
-        Err(e) => return conv_error("list_conv_corpora_with_state_buckets", &e),
+        Err(e) => return Ok(conv_error("list_conv_corpora_with_state_buckets", &e)),
     };
     let display = conv_display_index(&daemon).await;
     let mut out = Vec::with_capacity(buckets.len());
@@ -517,25 +422,19 @@ async fn conv_list_corpora(
         });
     }
     tracing::debug!(corpora = out.len(), "atlas_http: conv corpora listed");
-    (StatusCode::OK, Json(out)).into_response()
+    Ok((StatusCode::OK, Json(out)).into_response())
 }
 
 /// GET /internal/atlas/conv/{corpus}/conversations?filter=&offset= —
 /// one page of conversations, newest first. Wire form of
 /// `atlas_list_conversations`; answers `ConvListPage`.
 async fn conv_list_conversations(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
     Query(q): Query<ConvListQuery>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
     let offset = q.offset.unwrap_or(0);
     let filter = q.filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let (rows, total) = match reader
@@ -543,7 +442,7 @@ async fn conv_list_conversations(
         .await
     {
         Ok(page) => page,
-        Err(e) => return conv_error("list_conversations_paginated", &e),
+        Err(e) => return Ok(conv_error("list_conversations_paginated", &e)),
     };
     let mut conversations = Vec::with_capacity(rows.len());
     for row in rows {
@@ -552,7 +451,7 @@ async fn conv_list_conversations(
         // "no entities". Reported instead.
         let nodes = match reader.list_conv_raptor_nodes(&corpus, &row.conv_uuid).await {
             Ok(n) => n,
-            Err(e) => return conv_error("list_conv_raptor_nodes", &e),
+            Err(e) => return Ok(conv_error("list_conv_raptor_nodes", &e)),
         };
         let (top_entities, is_tiny) = summarize_entities(&nodes, CONV_LIST_TOP_ENTITIES);
         conversations.push(ConvSummary {
@@ -570,7 +469,7 @@ async fn conv_list_conversations(
     }
     let seen = offset + conversations.len() as u64;
     let next_offset = if seen < total { Some(seen) } else { None };
-    (
+    Ok((
         StatusCode::OK,
         Json(ConvListPage {
             conversations,
@@ -578,7 +477,7 @@ async fn conv_list_conversations(
             next_offset,
         }),
     )
-        .into_response()
+        .into_response())
 }
 
 /// GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid} — the
@@ -590,29 +489,23 @@ async fn conv_list_conversations(
 /// the pane must be able to tell "no such conversation" from "the
 /// daemon has no reader".
 async fn conv_detail(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, conv_uuid)): Path<(String, String)>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
     let skeleton = match reader.get_conv_skeleton(&corpus, &conv_uuid).await {
         Ok(Some(s)) => s,
         Ok(None) => {
-            return not_found(&format!(
+            return Ok(not_found(&format!(
                 "conversation '{conv_uuid}' is not in corpus '{corpus}'"
-            ))
+            )))
         }
-        Err(e) => return conv_error("get_conv_skeleton", &e),
+        Err(e) => return Ok(conv_error("get_conv_skeleton", &e)),
     };
     let nodes = match reader.list_conv_raptor_nodes(&corpus, &conv_uuid).await {
         Ok(n) => n,
-        Err(e) => return conv_error("list_conv_raptor_nodes", &e),
+        Err(e) => return Ok(conv_error("list_conv_raptor_nodes", &e)),
     };
     let max_level = nodes.iter().map(|n| n.level as u8).max().unwrap_or(0);
     let raptor_nodes: Vec<ConvRaptorNodeView> = nodes.into_iter().map(raptor_node_view).collect();
@@ -625,9 +518,9 @@ async fn conv_detail(
             correction_hint: c.correction_hint,
             created_at: c.created_at,
         }),
-        Err(e) => return conv_error("get_active_correction", &e),
+        Err(e) => return Ok(conv_error("get_active_correction", &e)),
     };
-    (
+    Ok((
         StatusCode::OK,
         Json(ConvDetailView {
             corpus_id: corpus,
@@ -644,57 +537,49 @@ async fn conv_detail(
             correction,
         }),
     )
-        .into_response()
+        .into_response())
 }
 
 /// GET /internal/atlas/conv/{corpus}/conversations/{conv_uuid}/entities
 /// — the salience-ranked chip row. Wire form of
 /// `atlas_get_conv_entities`; answers `Vec<ConvEntityChip>`.
 async fn conv_entities(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, conv_uuid)): Path<(String, String)>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader.list_conv_raptor_nodes(&corpus, &conv_uuid).await {
-        Ok(nodes) => (
-            StatusCode::OK,
-            Json(rank_entity_chips(&nodes, CONV_CHIP_TOP_N)),
-        )
-            .into_response(),
-        Err(e) => conv_error("list_conv_raptor_nodes", &e),
-    }
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
+    Ok(
+        match reader.list_conv_raptor_nodes(&corpus, &conv_uuid).await {
+            Ok(nodes) => (
+                StatusCode::OK,
+                Json(rank_entity_chips(&nodes, CONV_CHIP_TOP_N)),
+            )
+                .into_response(),
+            Err(e) => conv_error("list_conv_raptor_nodes", &e),
+        },
+    )
 }
 
 /// GET /internal/atlas/conv/{corpus}/entities/aggregate?text= — one
 /// entity's roll-up across the corpus. Wire form of
 /// `atlas_get_entity_aggregate`; answers `EntityAggregateRow`.
 async fn conv_entity_aggregate(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
     Query(q): Query<EntityAggregateQuery>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader
-        .aggregate_entity(&corpus, &q.text, ENTITY_CO_LIMIT, ENTITY_CONV_LIMIT)
-        .await
-    {
-        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
-        Err(e) => conv_error("aggregate_entity", &e),
-    }
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
+    Ok(
+        match reader
+            .aggregate_entity(&corpus, &q.text, ENTITY_CO_LIMIT, ENTITY_CONV_LIMIT)
+            .await
+        {
+            Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+            Err(e) => conv_error("aggregate_entity", &e),
+        },
+    )
 }
 
 /// GET /internal/atlas/conv/{corpus}/chunk-entity-progress — how far
@@ -707,40 +592,29 @@ async fn conv_entity_aggregate(
 /// about the corpus, not an absent resource, and the two must not
 /// arrive as the same status (§18.3).
 async fn conv_chunk_entity_progress(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-    let reader = match conv_reader_for(&daemon) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    match reader.get_chunk_entity_progress(&corpus).await {
+) -> Result<Response, Absence> {
+    let reader = conv_reader_for(&daemon)?;
+    Ok(match reader.get_chunk_entity_progress(&corpus).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(e) => conv_error("get_chunk_entity_progress", &e),
-    }
+    })
 }
 
 // ─── conv helpers ──────────────────────────────────────────────
 
 /// The one handle, reached the one way (`§10.6`).
-fn conv_reader_for(
-    daemon: &Arc<EmbeddedDaemon>,
-) -> Result<Arc<dyn ConvTieredReader>, axum::response::Response> {
-    let runtime = match daemon.runtime() {
-        Some(r) => r,
-        None => {
-            return Err(service_unavailable(
-                "this daemon assembled no Runtime, so it wired no conversation-tiered reader",
-            ))
-        }
-    };
+fn conv_reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn ConvTieredReader>, Absence> {
+    let runtime = daemon.runtime().ok_or_else(|| {
+        Absence::unavailable(
+            "this daemon assembled no Runtime, so it wired no conversation-tiered reader",
+        )
+    })?;
     match runtime.lane_sources.conv_tiered.as_ref() {
         Some(r) => Ok(Arc::clone(r)),
-        None => Err(service_unavailable(
+        None => Err(Absence::unavailable(
             "this daemon wired no conversation-tiered reader \
              (runtime.lane_sources.conv_tiered is None)",
         )),
@@ -752,13 +626,9 @@ fn conv_reader_for(
 /// the part it does not carry (`ConvBrowseReader::browse_unsupported`).
 fn conv_error(what: &str, e: &sovereign_core::error::Error) -> axum::response::Response {
     match e {
-        sovereign_core::error::Error::NotImplemented(msg) => (
-            StatusCode::NOT_IMPLEMENTED,
-            Json(ErrorBody {
-                error: format!("{what}: {msg}"),
-            }),
-        )
-            .into_response(),
+        sovereign_core::error::Error::NotImplemented(msg) => {
+            not_implemented(format!("{what}: {msg}"))
+        }
         other => internal_error(&format!("{what}: {other}")),
     }
 }
@@ -869,11 +739,11 @@ fn summarize_entities(nodes: &[ConvRaptorNodeRow], top_n: usize) -> (Vec<String>
     (chips.into_iter().map(|c| c.name).collect(), is_tiny)
 }
 
-fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, axum::response::Response> {
-    match daemon.corpus_engine() {
-        Some(engine) => Ok(FileAtlasReader::new(engine.index_dir().to_path_buf())),
-        None => Err(service_unavailable("corpus engine not initialised")),
-    }
+fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, Absence> {
+    daemon
+        .corpus_engine()
+        .map(|engine| FileAtlasReader::new(engine.index_dir().to_path_buf()))
+        .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
 }
 
 /// `AtlasViewError` → status. `CorpusNotFound` is the caller's
@@ -891,34 +761,4 @@ fn atom_error(e: &AtomQueryError) -> axum::response::Response {
         AtomQueryError::UnknownCorpus(_) => not_found(&e.to_string()),
         AtomQueryError::ReadAtoms(_) | AtomQueryError::Task(_) => internal_error(&e.to_string()),
     }
-}
-
-fn not_found(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn internal_error(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn service_unavailable(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorBody {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
 }

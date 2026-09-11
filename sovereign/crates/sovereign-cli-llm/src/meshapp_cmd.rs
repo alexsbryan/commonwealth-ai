@@ -20,6 +20,15 @@ use axum::{
 };
 use serde::Deserialize;
 
+// The clamps are `meshapp_http`'s — ONE decider for every surface that serves
+// these ops (ARCH §10.6). This dev server used to re-inline the same five
+// literal pairs; a bound changed there and not here would have made the two
+// explorers disagree with nothing red.
+use sovereign_mesh::meshapp_http::{
+    self, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
+    GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX,
+};
+
 struct DevCtx {
     index_path: PathBuf,
     bundle_dir: PathBuf,
@@ -298,11 +307,15 @@ async fn op_handler(
             sovereign_meshapp::graph_nodes(
                 &g,
                 a.node_type.as_deref(),
-                a.limit.unwrap_or(50).min(500),
+                meshapp_http::clamp(a.limit, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX),
             )
         })),
         "subgraph" => text(sovereign_meshapp::load_graph(idx).map(|g| {
-            sovereign_meshapp::subgraph(&g, a.node_type.as_deref(), a.limit.unwrap_or(30).min(80))
+            sovereign_meshapp::subgraph(
+                &g,
+                a.node_type.as_deref(),
+                meshapp_http::clamp(a.limit, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX),
+            )
         })),
         "node" => {
             text(sovereign_meshapp::load_graph(idx).and_then(|g| {
@@ -318,11 +331,12 @@ async fn op_handler(
                 &g,
                 a.query.as_deref().unwrap_or_default(),
                 a.node_type.as_deref(),
-                a.limit.unwrap_or(25).min(100),
+                meshapp_http::clamp(a.limit, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX),
             )
         })),
         "document_feed" => {
-            let limit = a.limit.unwrap_or(14).clamp(1, 90);
+            let limit =
+                meshapp_http::clamp(a.limit, FEED_DOCS_DEFAULT, FEED_DOCS_MAX).max(FEED_DOCS_MIN);
             text(sovereign_meshapp::document_feed(idx, limit).await)
         }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),

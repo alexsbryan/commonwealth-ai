@@ -15,17 +15,16 @@
 //! seam of its own. It is the sovereign-side counterpart to
 //! `commonwealth-core/src/mesh_identity.rs`, which owns the rule itself.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Json};
+use axum::extract::{Extension, Json};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::daemon::{EmbeddedDaemon, MeshError};
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::LocalOnly;
 use crate::persist;
 
 /// What [`EmbeddedDaemon::forget_member`] retired.
@@ -184,13 +183,10 @@ pub struct ForgetMemberRequest {
 /// [`EmbeddedDaemon::forget_member`] for why it tombstones rather than
 /// deletes, and why it cannot evict a live member.
 pub async fn mesh_forget_member(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<ForgetMemberRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     match daemon.forget_member(&req.member, req.force).await {
         Ok(outcome) => (StatusCode::OK, Json(serde_json::json!(outcome))).into_response(),
         Err(e @ MeshError::UnknownMember(_)) => (
