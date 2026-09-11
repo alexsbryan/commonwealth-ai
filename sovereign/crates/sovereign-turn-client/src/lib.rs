@@ -350,47 +350,32 @@ impl TurnClient {
         skill_id: Option<&str>,
         enabled_corpora: Option<&[String]>,
     ) -> Result<CreatedConversation> {
-        let url = format!("{}/v1/conversations", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&create_conversation_body(skill_id, enabled_corpora))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-
-        let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: reading body: {e}")))?;
-        if !status.is_success() {
-            // The host's own words, not a generic status line: a daemon that
-            // serves no turns says so ("this daemon serves no turns
-            // (mesh-admin)") and that is the sentence the operator needs.
-            // Both hosts wrap it as `{"error": "..."}`; unwrap that so the
-            // sentence reads as prose, and fall back to the raw body when
-            // the shape is anything else.
-            let reason = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-                .unwrap_or_else(|| body.trim().to_string());
-            return Err(Error::Inference(format!("POST {url}: {status}: {reason}")));
-        }
-
-        let v: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| Error::Inference(format!("POST {url}: malformed response: {e}")))?;
+        let (url, ctx) = self.target("POST", "/v1/conversations");
+        // A refusal arrives as the host's own words, not a generic status
+        // line: a daemon that serves no turns says so ("this daemon serves
+        // no turns (mesh-admin)") and that is the sentence the operator
+        // needs. `host_words` is where that unwrapping lives now — this
+        // method's private copy of it was the original (§10.6).
+        let body = Self::required(
+            self.http
+                .post(&url)
+                .json(&create_conversation_body(skill_id, enabled_corpora)),
+            &url,
+            &ctx,
+        )
+        .await?;
+        let v: serde_json::Value = parse(&body, &ctx)?;
         let id = v
             .get("id")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| Error::Inference(format!("POST {url}: response carried no id")))?
+            .ok_or_else(|| Error::Inference(format!("{ctx}: response carried no id")))?
             .to_string();
         let created_at = v.get("created_at").and_then(|x| x.as_i64()).unwrap_or(0);
         let echoed: Option<Vec<String>> = v
             .get("enabled_corpora")
             .and_then(|e| serde_json::from_value(e.clone()).ok());
         verify_allow_list_echo(enabled_corpora, echoed.as_deref())
-            .map_err(|why| Error::Inference(format!("POST {url}: {why}")))?;
+            .map_err(|why| Error::Inference(format!("{ctx}: {why}")))?;
         Ok(CreatedConversation {
             id,
             created_at,
@@ -404,22 +389,12 @@ impl TurnClient {
     /// A lifecycle call, not a turn. A REPL calls it when the user quits; a
     /// one-shot ask does not call it at all.
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
-        let url = format!("{}/v1/conversations/{conversation_id}/end", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(Error::Inference(format!(
-                "POST {url}: {status}: {}",
-                body.trim()
-            )));
-        }
-        Ok(())
+        self.internal_write_no_answer(
+            reqwest::Method::POST,
+            format!("/v1/conversations/{conversation_id}/end"),
+            None::<&()>,
+        )
+        .await
     }
 
     /// `GET /v1/conversations` — the host's conversation list.
@@ -433,23 +408,16 @@ impl TurnClient {
         limit: Option<usize>,
         offset: Option<usize>,
     ) -> Result<Vec<ListedConversation>> {
-        let url = format!("{}/v1/conversations", self.base);
-        let mut req = self.http.get(&url);
+        let mut query = Vec::new();
         if let Some(limit) = limit {
-            req = req.query(&[("limit", limit)]);
+            query.push(("limit", limit.to_string()));
         }
         if let Some(offset) = offset {
-            req = req.query(&[("offset", offset)]);
+            query.push(("offset", offset.to_string()));
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: ConversationListWire = parse(&body, &format!("GET {url}"))?;
+        let wire: ConversationListWire = self
+            .internal_get("/v1/conversations".to_string(), &query)
+            .await?;
         Ok(wire
             .conversations
             .into_iter()
@@ -469,18 +437,9 @@ impl TurnClient {
     /// A missing conversation surfaces as the host's error text (both hosts
     /// say `Conversation not found`), not a generic 404 line.
     pub async fn get_conversation(&self, conversation_id: &str) -> Result<ConversationHistory> {
-        let url = format!("{}/v1/conversations/{conversation_id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: ConversationWire = parse(&body, &format!("GET {url}"))?;
+        let wire: ConversationWire = self
+            .internal_get(format!("/v1/conversations/{conversation_id}"), &[])
+            .await?;
         Ok(ConversationHistory {
             id: wire.id,
             title: wire.title,
@@ -507,18 +466,8 @@ impl TurnClient {
     /// absence afterward is observable via [`Self::get_conversation`]'s
     /// "not found".
     pub async fn delete_conversation(&self, conversation_id: &str) -> Result<()> {
-        let url = format!("{}/v1/conversations/{conversation_id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
+        self.internal_delete(format!("/v1/conversations/{conversation_id}"))
             .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        Ok(())
     }
 
     /// `POST /v1/conversations/{id}/messages` — the one-shot REST turn.
@@ -530,19 +479,12 @@ impl TurnClient {
     /// envelope carries no `metadata` block, so `TurnOutcome::metadata` is
     /// `None` here by construction, never "the turn had none".
     pub async fn send_message(&self, conversation_id: &str, content: &str) -> Result<TurnOutcome> {
-        let url = format!("{}/v1/conversations/{conversation_id}/messages", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&serde_json::json!({ "content": content }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        let wire: MessageResponseWire = parse(&body, &format!("POST {url}"))?;
+        let wire: MessageResponseWire = self
+            .internal_post_json(
+                format!("/v1/conversations/{conversation_id}/messages"),
+                &serde_json::json!({ "content": content }),
+            )
+            .await?;
         Ok(TurnOutcome {
             message_id: wire.message_id,
             text: wire.content,
@@ -559,19 +501,12 @@ impl TurnClient {
     /// decider, capped at 50 the way the route caps — the cap has one home,
     /// server-side.
     pub async fn search_conversations(&self, query: &str) -> Result<Vec<SearchedMessage>> {
-        let url = format!("{}/v1/conversations/search", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .query(&[("q", query)])
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: SearchResponseWire = parse(&body, &format!("GET {url}"))?;
+        let wire: SearchResponseWire = self
+            .internal_get(
+                "/v1/conversations/search".to_string(),
+                &[("q", query.to_string())],
+            )
+            .await?;
         Ok(wire
             .results
             .into_iter()
@@ -586,36 +521,17 @@ impl TurnClient {
     /// row is preserved for audit and excluded from recall). 204 on
     /// success; a missing row surfaces as the host's error words.
     pub async fn delete_memory(&self, memory_id: &str) -> Result<()> {
-        let url = format!("{}/v1/memories/{memory_id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
+        self.internal_delete(format!("/v1/memories/{memory_id}"))
             .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        Ok(())
     }
 
     /// `POST /v1/memories/{id}/weaken` — halve a memory's confidence with
     /// the standard decay floor. THE one decider for the halving lives in
     /// the host; this returns the new confidence so a caller can render it.
     pub async fn weaken_memory(&self, memory_id: &str) -> Result<f64> {
-        let url = format!("{}/v1/memories/{memory_id}/weaken", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        let wire: WeakenResponseWire = parse(&body, &format!("POST {url}"))?;
+        let wire: WeakenResponseWire = self
+            .internal_post_bare(format!("/v1/memories/{memory_id}/weaken"))
+            .await?;
         Ok(wire.confidence)
     }
 
@@ -673,20 +589,9 @@ impl TurnClient {
 
     /// `GET /v1/insights?limit=` — the insight collection, newest first.
     pub async fn list_insights(&self, limit: Option<usize>) -> Result<Vec<InsightEntry>> {
-        let url = format!("{}/v1/insights", self.base);
-        let mut req = self.http.get(&url);
-        if let Some(limit) = limit {
-            req = req.query(&[("limit", limit)]);
-        }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: InsightListWire = parse(&body, &format!("GET {url}"))?;
+        let wire: InsightListWire = self
+            .internal_get("/v1/insights".to_string(), &limit_query(limit))
+            .await?;
         Ok(wire.insights)
     }
 
@@ -704,61 +609,37 @@ impl TurnClient {
 
     /// `GET /v1/insights/search?q=` — full-text search over the collection.
     pub async fn search_insights(&self, query: &str) -> Result<Vec<InsightEntry>> {
-        let url = format!("{}/v1/insights/search", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .query(&[("q", query)])
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: InsightListWire = parse(&body, &format!("GET {url}"))?;
+        let wire: InsightListWire = self
+            .internal_get(
+                "/v1/insights/search".to_string(),
+                &[("q", query.to_string())],
+            )
+            .await?;
         Ok(wire.insights)
     }
 
     /// `DELETE /v1/insights/{id}` — soft-delete a clip. 204 on success.
     pub async fn delete_insight(&self, insight_id: &str) -> Result<()> {
-        let url = format!("{}/v1/insights/{insight_id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
+        self.internal_delete(format!("/v1/insights/{insight_id}"))
             .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        Ok(())
     }
 
     /// `POST /v1/insights/clip` — clip a passage. The host embeds, finds
     /// adjacent nodes, persists, and answers the created row (with the
     /// embedding stripped — the wire projection).
     pub async fn clip_insight(&self, clip: ClipInsight<'_>) -> Result<InsightEntry> {
-        let url = format!("{}/v1/insights/clip", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&serde_json::json!({
-                "clipped_text": clip.clipped_text,
-                "message_id": clip.message_id,
-                "paragraph_index": clip.paragraph_index,
-                "source": clip.source,
-                "position": clip.position,
-            }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        let wire: ClipResponseWire = parse(&body, &format!("POST {url}"))?;
+        let wire: ClipResponseWire = self
+            .internal_post_json(
+                "/v1/insights/clip".to_string(),
+                &serde_json::json!({
+                    "clipped_text": clip.clipped_text,
+                    "message_id": clip.message_id,
+                    "paragraph_index": clip.paragraph_index,
+                    "source": clip.source,
+                    "position": clip.position,
+                }),
+            )
+            .await?;
         Ok(wire.insight)
     }
 
@@ -768,11 +649,10 @@ impl TurnClient {
     /// this method reports the host's answer so the caller decides what is
     /// fatal, never the wire (§18.3).
     pub async fn notes_tool_outcome(&self, outcome: ToolOutcome<'_>) -> Result<()> {
-        let url = format!("{}/v1/notes/tool-outcome", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&serde_json::json!({
+        self.internal_write_no_answer(
+            reqwest::Method::POST,
+            "/v1/notes/tool-outcome".to_string(),
+            Some(&serde_json::json!({
                 "session_id": outcome.session_id,
                 "conversation_id": outcome.conversation_id,
                 "tool_id": outcome.tool_id,
@@ -783,15 +663,9 @@ impl TurnClient {
                     "evidence_ids": outcome.evidence_ids,
                     "turn_index": outcome.turn_index,
                 },
-            }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        Ok(())
+            })),
+        )
+        .await
     }
 
     // ── The reading + atlas surfaces (sv-surface D3 / D4) ─────────
@@ -833,19 +707,11 @@ impl TurnClient {
         offset: usize,
         limit: usize,
     ) -> Result<AtomsPage<T>> {
-        let url = format!("{}/internal/corpus/{corpus_id}/atoms", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .query(&[("offset", offset), ("limit", limit)])
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}"))
+        self.internal_get(
+            format!("/internal/corpus/{corpus_id}/atoms"),
+            &[("offset", offset.to_string()), ("limit", limit.to_string())],
+        )
+        .await
     }
 
     /// Every atom in a corpus's atlas, paged until the host says the
@@ -933,19 +799,8 @@ impl TurnClient {
         corpus_id: &str,
         request: &B,
     ) -> Result<T> {
-        let url = format!("{}/internal/atlas/{corpus_id}/atoms", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(request)
-            .send()
+        self.internal_post_json(format!("/internal/atlas/{corpus_id}/atoms"), request)
             .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        parse(&body, &format!("POST {url}"))
     }
 
     /// `GET /internal/atlas/{corpus}/subgraph?max_nodes=` — the curated
@@ -960,20 +815,12 @@ impl TurnClient {
         corpus_id: &str,
         max_nodes: Option<usize>,
     ) -> Result<T> {
-        let url = format!("{}/internal/atlas/{corpus_id}/subgraph", self.base);
-        let mut req = self.http.get(&url);
-        if let Some(n) = max_nodes {
-            req = req.query(&[("max_nodes", n)]);
-        }
-        let resp = req
-            .send()
+        let query: Vec<(&str, String)> = max_nodes
+            .into_iter()
+            .map(|n| ("max_nodes", n.to_string()))
+            .collect();
+        self.internal_get(format!("/internal/atlas/{corpus_id}/subgraph"), &query)
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}"))
     }
 
     /// `GET /internal/atlas/{corpus}/atoms/{atom_id}` — the full
@@ -992,21 +839,8 @@ impl TurnClient {
         corpus_id: &str,
         atom_id: &str,
     ) -> Result<Option<T>> {
-        let url = format!("{}/internal/atlas/{corpus_id}/atoms/{atom_id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
+        self.internal_get_opt(format!("/internal/atlas/{corpus_id}/atoms/{atom_id}"), &[])
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     // ── The conversation-tiered browse (sv-surface D4 remainder) ──
@@ -1072,24 +906,11 @@ impl TurnClient {
         corpus_id: &str,
         conv_uuid: &str,
     ) -> Result<Option<T>> {
-        let url = format!(
-            "{}/internal/atlas/conv/{corpus_id}/conversations/{conv_uuid}",
-            self.base
-        );
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
+        self.internal_get_opt(
+            format!("/internal/atlas/conv/{corpus_id}/conversations/{conv_uuid}"),
+            &[],
+        )
+        .await
     }
 
     /// `GET …/conversations/{conv_uuid}/entities` — the salience-ranked
@@ -1178,21 +999,8 @@ impl TurnClient {
         &self,
         id: &str,
     ) -> Result<Option<T>> {
-        let url = format!("{}/v1/features/projects/{id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
+        self.internal_get_opt(format!("/v1/features/projects/{id}"), &[])
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     /// `POST /v1/features/projects` — provision a project; answers the
@@ -1211,19 +1019,8 @@ impl TurnClient {
         &self,
         body: &B,
     ) -> Result<T> {
-        let url = format!("{}/v1/features/projects", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(body)
-            .send()
+        self.internal_post_json("/v1/features/projects".to_string(), body)
             .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, resp_body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &resp_body, &format!("POST {url}")));
-        }
-        parse(&resp_body, &format!("POST {url}"))
     }
 
     // ── Notes CRUD (sv-surface D6) ───────────────────────────────
@@ -1254,24 +1051,17 @@ impl TurnClient {
         limit: Option<usize>,
         include_retired: bool,
     ) -> Result<Vec<T>> {
-        let url = format!("{}/v1/notes/query", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(&serde_json::json!({
-                "query": query,
-                "kinds": kinds,
-                "limit": limit,
-                "include_retired": include_retired,
-            }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        let wire: NoteListWire<T> = parse(&body, &format!("POST {url}"))?;
+        let wire: NoteListWire<T> = self
+            .internal_post_json(
+                "/v1/notes/query".to_string(),
+                &serde_json::json!({
+                    "query": query,
+                    "kinds": kinds,
+                    "limit": limit,
+                    "include_retired": include_retired,
+                }),
+            )
+            .await?;
         Ok(wire.notes)
     }
 
@@ -1284,21 +1074,7 @@ impl TurnClient {
     /// every read failure answers 500, so an absent store cannot arrive
     /// as an absent note.
     pub async fn note_get<T: serde::de::DeserializeOwned>(&self, id: &str) -> Result<Option<T>> {
-        let url = format!("{}/v1/notes/{id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
+        self.internal_get_opt(format!("/v1/notes/{id}"), &[]).await
     }
 
     /// `POST /v1/notes` — write one note; answers the id the store
@@ -1311,19 +1087,9 @@ impl TurnClient {
     /// host will not guess `global`/`agent` for you, because a wrong
     /// guess on `scope` is what puts a node-local note on the mesh.
     pub async fn note_create<B: serde::Serialize + ?Sized>(&self, body: &B) -> Result<String> {
-        let url = format!("{}/v1/notes", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, resp_body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &resp_body, &format!("POST {url}")));
-        }
-        let wire: CreatedIdWire = parse(&resp_body, &format!("POST {url}"))?;
+        let wire: CreatedIdWire = self
+            .internal_post_json("/v1/notes".to_string(), body)
+            .await?;
         Ok(wire.id)
     }
 
@@ -1354,18 +1120,7 @@ impl TurnClient {
     /// `DELETE /v1/notes/{id}` — real deletion, no tombstone. `false`
     /// means the row was not there, which is an answer and not an error.
     pub async fn note_delete(&self, id: &str) -> Result<bool> {
-        let url = format!("{}/v1/notes/{id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        let wire: AffectedWire = parse(&body, &format!("DELETE {url}"))?;
+        let wire: AffectedWire = self.internal_delete_json(format!("/v1/notes/{id}")).await?;
         Ok(wire.existed)
     }
 
@@ -1377,20 +1132,9 @@ impl TurnClient {
         path: String,
         body: &serde_json::Value,
     ) -> Result<bool> {
-        let url = format!("{}{path}", self.base);
-        let ctx = format!("{method} {url}");
-        let resp = self
-            .http
-            .request(method, &url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("{ctx}: {e}")))?;
-        let (status, resp_body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &resp_body, &ctx));
-        }
-        let wire: AffectedWire = parse(&resp_body, &ctx)?;
+        let (url, ctx) = self.target(method.as_str(), &path);
+        let answer = Self::required(self.http.request(method, &url).json(body), &url, &ctx).await?;
+        let wire: AffectedWire = parse(&answer, &ctx)?;
         Ok(wire.existed)
     }
 
@@ -1706,38 +1450,15 @@ impl TurnClient {
         &self,
         corpus_id: &str,
     ) -> Result<Option<T>> {
-        let url = format!("{}/internal/corpus/local/{corpus_id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
+        self.internal_get_opt(format!("/internal/corpus/local/{corpus_id}"), &[])
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     /// `DELETE /internal/corpus/local/{corpus}` — unregister and drop
     /// the index. Answers `204` with no body.
     pub async fn lc_remove(&self, corpus_id: &str) -> Result<()> {
-        let url = format!("{}/internal/corpus/local/{corpus_id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
+        self.internal_delete(format!("/internal/corpus/local/{corpus_id}"))
             .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        Ok(())
     }
 
     /// `POST /internal/corpus/local/{corpus}/cancel` — ask an in-flight
@@ -2074,7 +1795,7 @@ impl TurnClient {
     /// BLANK token clears it, which is the secret store's own contract
     /// and not a second rule invented here.
     pub async fn mcp_set_token(&self, name: &str, token: &str) -> Result<()> {
-        self.no_content(
+        self.internal_write_no_answer(
             reqwest::Method::PUT,
             format!("/v1/mcp/servers/{name}/token"),
             Some(&serde_json::json!({ "token": token })),
@@ -2086,10 +1807,10 @@ impl TurnClient {
     /// no-op when none is set, and `Ok` either way: nothing to delete is
     /// not a failed delete.
     pub async fn mcp_clear_token(&self, name: &str) -> Result<()> {
-        self.no_content(
+        self.internal_write_no_answer(
             reqwest::Method::DELETE,
             format!("/v1/mcp/servers/{name}/token"),
-            None,
+            None::<&()>,
         )
         .await
     }
@@ -2161,19 +1882,11 @@ impl TurnClient {
         feature_id: &str,
         edited_toml: &str,
     ) -> Result<T> {
-        let url = format!("{}/v1/recipe-projects/{feature_id}/toml", self.base);
-        let resp = self
-            .http
-            .put(&url)
-            .json(&serde_json::json!({ "edited_toml": edited_toml }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("PUT {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("PUT {url}")));
-        }
-        parse(&body, &format!("PUT {url}"))
+        self.internal_put_json(
+            format!("/v1/recipe-projects/{feature_id}/toml"),
+            &serde_json::json!({ "edited_toml": edited_toml }),
+        )
+        .await
     }
 
     /// `POST /v1/recipe-projects/{id}/link-recent-artifact` — register the
@@ -2242,32 +1955,6 @@ impl TurnClient {
         .await
     }
 
-    /// A write that answers `204 No Content`: nothing to parse, and a
-    /// non-success carries the host's words. Spelled once for the two
-    /// secret routes rather than twice with one of them drifting.
-    async fn no_content(
-        &self,
-        method: reqwest::Method,
-        path: String,
-        body: Option<&serde_json::Value>,
-    ) -> Result<()> {
-        let url = format!("{}{path}", self.base);
-        let ctx = format!("{method} {url}");
-        let mut req = self.http.request(method, &url);
-        if let Some(b) = body {
-            req = req.json(b);
-        }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("{ctx}: {e}")))?;
-        let (status, resp_body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &resp_body, &ctx));
-        }
-        Ok(())
-    }
-
     /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
     /// along an ingest is, and what it INDEXED once it is done. `T` is
     /// `sovereign_mesh::lc_http::IngestProgress`.
@@ -2327,7 +2014,7 @@ impl TurnClient {
         chunk_id: u64,
         radius: usize,
     ) -> Result<Option<T>> {
-        self.reading_get_opt(
+        self.internal_get_opt(
             format!("/internal/corpus/{corpus_id}/chunks/{chunk_id}/neighbors"),
             &[("radius", radius.to_string())],
         )
@@ -2348,7 +2035,7 @@ impl TurnClient {
         corpus_id: &str,
         atom_id: &str,
     ) -> Result<Option<T>> {
-        self.reading_get_opt(format!("/internal/corpus/{corpus_id}/atoms/{atom_id}"), &[])
+        self.internal_get_opt(format!("/internal/corpus/{corpus_id}/atoms/{atom_id}"), &[])
             .await
     }
 
@@ -2367,41 +2054,11 @@ impl TurnClient {
         corpus_id: &str,
         atom_id: &str,
     ) -> Result<Option<T>> {
-        self.reading_get_opt(
+        self.internal_get_opt(
             format!("/internal/corpus/{corpus_id}/atoms/{atom_id}/elsewhere"),
             &[],
         )
         .await
-    }
-
-    /// `internal_get` with the one 404 rule the reading family shares:
-    /// absence is an ANSWER, every other non-success is an error.
-    ///
-    /// One implementation rather than three copies of the same
-    /// status match (§10.6) — the rule the three routes agree on is
-    /// stated once, here.
-    async fn reading_get_opt<T: serde::de::DeserializeOwned>(
-        &self,
-        path: String,
-        query: &[(&str, String)],
-    ) -> Result<Option<T>> {
-        let url = format!("{}{path}", self.base);
-        let mut req = self.http.get(&url);
-        if !query.is_empty() {
-            req = req.query(query);
-        }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     // ─── sv-surface D9a: the documents family ────────────────
@@ -2436,38 +2093,16 @@ impl TurnClient {
         struct Wire<T> {
             document: T,
         }
-        let url = format!("{}/v1/documents/{asset_id}", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        let wire: Wire<T> = parse(&body, &format!("GET {url}"))?;
-        Ok(Some(wire.document))
+        let wire: Option<Wire<T>> = self
+            .internal_get_opt(format!("/v1/documents/{asset_id}"), &[])
+            .await?;
+        Ok(wire.map(|w| w.document))
     }
 
     /// `DELETE /v1/documents/{id}` — remove an asset and its chunks.
     pub async fn delete_document(&self, asset_id: &str) -> Result<()> {
-        let url = format!("{}/v1/documents/{asset_id}", self.base);
-        let resp = self
-            .http
-            .delete(&url)
-            .send()
+        self.internal_delete(format!("/v1/documents/{asset_id}"))
             .await
-            .map_err(|e| Error::Inference(format!("DELETE {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("DELETE {url}")));
-        }
-        Ok(())
     }
 
     /// `POST /v1/documents/{id}/skeleton` — rebuild the structural
@@ -2582,21 +2217,8 @@ impl TurnClient {
         &self,
         corpus_id: &str,
     ) -> Result<Option<T>> {
-        let url = format!("{}/internal/corpus/{corpus_id}/health", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
+        self.internal_get_opt(format!("/internal/corpus/{corpus_id}/health"), &[])
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     /// `GET /internal/corpus/{corpus}/coverage-card` — the typed
@@ -2649,22 +2271,11 @@ impl TurnClient {
         skill_id: &str,
         active: bool,
     ) -> Result<Option<T>> {
-        let url = format!("{}/v1/skills/{skill_id}/active", self.base);
-        let resp = self
-            .http
-            .put(&url)
-            .json(&serde_json::json!({ "active": active }))
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("PUT {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("PUT {url}")));
-        }
-        parse(&body, &format!("PUT {url}")).map(Some)
+        self.internal_put_json_opt(
+            format!("/v1/skills/{skill_id}/active"),
+            &serde_json::json!({ "active": active }),
+        )
+        .await
     }
 
     /// `GET /v1/ready` — is the backend that will answer my turns up.
@@ -2682,22 +2293,125 @@ impl TurnClient {
         struct Wire {
             ready: bool,
         }
-        let url = format!("{}/v1/ready", self.base);
-        let resp = self
-            .http
-            .get(&url)
+        // The 503 is this route's `absent`: the daemon ANSWERED and said
+        // it serves no turns. Nothing answering at all stays an `Err` —
+        // a different fact, and the reason this does not collapse both
+        // into a bool (ARCH §18.3).
+        let (url, ctx) = self.target("GET", "/v1/ready");
+        let answer = Self::exchange(
+            self.http.get(&url),
+            &url,
+            &ctx,
+            Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
+        )
+        .await?;
+        match answer {
+            Some(body) => Ok(parse::<Wire>(&body, &ctx)?.ready),
+            None => Ok(false),
+        }
+    }
+
+    // ─── The internal exchange: one sentence, six named shapes ────
+    //
+    // Every method above that talks to the host says one of six
+    // sentences: GET a thing, GET a thing that may not be there, POST
+    // a body, PUT a body, PUT a body whose answer may not be there,
+    // DELETE. Until 2026-09-10 thirty-three of them spelled that out
+    // by hand — 720 lines of build-url → send → read-body →
+    // status-match → parse, with the 404-is-an-answer rule written
+    // out nine separate times. Nine copies of one rule is nine places
+    // free to widen it independently, which is exactly the bug
+    // `daemon_reading_get` shipped by mapping ANY 404 to `Ok(None)`
+    // (ARCH §10.6, §18.3). The six below are the only place any of it
+    // is spelled now.
+
+    /// Send a prepared request and apply the status rule.
+    ///
+    /// `absent` names the ONE status this call reads as an ANSWER
+    /// rather than a failure — `NOT_FOUND` for the reads whose 404
+    /// means "this host has no such row", `SERVICE_UNAVAILABLE` for
+    /// [`Self::backend_ready`]. Every other non-success becomes the
+    /// host's own words: a corpus that will not open must never arrive
+    /// as "the atom is absent".
+    ///
+    /// `Ok(None)` is `absent`; `Ok(Some(body))` is a success body the
+    /// caller may parse or discard.
+    async fn exchange(
+        req: reqwest::RequestBuilder,
+        url: &str,
+        ctx: &str,
+        absent: Option<reqwest::StatusCode>,
+    ) -> Result<Option<String>> {
+        let resp = req
             .send()
             .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
-            return Ok(false);
+            .map_err(|e| Error::Inference(format!("{ctx}: {e}")))?;
+        let (status, body) = read_body(resp, url).await?;
+        if absent == Some(status) {
+            return Ok(None);
         }
         if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
+            return Err(host_words(status, &body, ctx));
         }
-        let wire: Wire = parse(&body, &format!("GET {url}"))?;
-        Ok(wire.ready)
+        Ok(Some(body))
+    }
+
+    /// [`Self::exchange`] for a call that named NO absent status, so a
+    /// body is owed. The `None` arm is structurally unreachable; it is
+    /// reported rather than defaulted, because a success-shaped value
+    /// invented here is the §18.3 failure itself.
+    async fn required(req: reqwest::RequestBuilder, url: &str, ctx: &str) -> Result<String> {
+        match Self::exchange(req, url, ctx, None).await? {
+            Some(body) => Ok(body),
+            None => Err(Error::Inference(format!("{ctx}: no answer"))),
+        }
+    }
+
+    /// The url and the error-context string for one call — the two
+    /// strings every shape below needs and none of them should spell.
+    fn target(&self, method: &str, path: &str) -> (String, String) {
+        let url = format!("{}{path}", self.base);
+        let ctx = format!("{method} {url}");
+        (url, ctx)
+    }
+
+    /// `GET`, parsed answer. Any non-success is the host's words.
+    async fn internal_get<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        query: &[(&str, String)],
+    ) -> Result<T> {
+        let (url, ctx) = self.target("GET", &path);
+        let mut req = self.http.get(&url);
+        if !query.is_empty() {
+            req = req.query(query);
+        }
+        parse(&Self::required(req, &url, &ctx).await?, &ctx)
+    }
+
+    /// `GET` where a 404 is an ANSWER — the host has no such row —
+    /// and EVERY other non-success stays an error.
+    ///
+    /// THE one implementation of that rule. Nine families used to
+    /// spell it themselves; each spelling was a separate chance to
+    /// widen "no such row" into "the store would not answer", and the
+    /// two ask the caller for different remedies (ARCH §18.3).
+    async fn internal_get_opt<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        query: &[(&str, String)],
+    ) -> Result<Option<T>> {
+        let (url, ctx) = self.target("GET", &path);
+        // An empty slice attaches nothing, so the url stays
+        // byte-for-byte the one a caller with no parameters sent.
+        let mut req = self.http.get(&url);
+        if !query.is_empty() {
+            req = req.query(query);
+        }
+        Self::exchange(req, &url, &ctx, Some(reqwest::StatusCode::NOT_FOUND))
+            .await?
+            .map(|b| parse(&b, &ctx))
+            .transpose()
     }
 
     /// `POST` with a JSON body, parsed answer. The POST twin of
@@ -2707,46 +2421,95 @@ impl TurnClient {
         path: String,
         body: &B,
     ) -> Result<T> {
-        let url = format!("{}{path}", self.base);
-        let resp = self
-            .http
-            .post(&url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("POST {url}")));
-        }
-        parse(&body, &format!("POST {url}"))
+        let (url, ctx) = self.target("POST", &path);
+        let answer = Self::required(self.http.post(&url).json(body), &url, &ctx).await?;
+        parse(&answer, &ctx)
     }
 
-    /// `POST` with no body — the shape for routes whose whole input is
-    /// the corpus id in the path.
+    /// `POST` with an EMPTY JSON body (`{}`) — the shape for routes
+    /// whose whole input is the corpus id in the path and whose handler
+    /// still extracts a body.
     async fn internal_post_empty<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
         self.internal_post_json(path, &serde_json::json!({})).await
     }
 
-    async fn internal_get<T: serde::de::DeserializeOwned>(
+    /// `POST` with NO body at all, parsed answer. Deliberately distinct
+    /// from [`Self::internal_post_empty`]: the two put different bytes
+    /// on the wire, and a route whose handler takes no body extractor
+    /// must keep receiving none.
+    async fn internal_post_bare<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
+        let (url, ctx) = self.target("POST", &path);
+        let answer = Self::required(self.http.post(&url), &url, &ctx).await?;
+        parse(&answer, &ctx)
+    }
+
+    /// `PUT` with a JSON body, parsed answer.
+    async fn internal_put_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
         &self,
         path: String,
-        query: &[(&str, String)],
+        body: &B,
     ) -> Result<T> {
-        let url = format!("{}{path}", self.base);
-        let mut req = self.http.get(&url);
-        if !query.is_empty() {
-            req = req.query(query);
+        let (url, ctx) = self.target("PUT", &path);
+        let answer = Self::required(self.http.put(&url).json(body), &url, &ctx).await?;
+        parse(&answer, &ctx)
+    }
+
+    /// [`Self::internal_put_json`] under [`Self::internal_get_opt`]'s
+    /// 404 rule — the shape for a write whose SUBJECT may not exist.
+    async fn internal_put_json_opt<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        body: &B,
+    ) -> Result<Option<T>> {
+        let (url, ctx) = self.target("PUT", &path);
+        let answer = Self::exchange(
+            self.http.put(&url).json(body),
+            &url,
+            &ctx,
+            Some(reqwest::StatusCode::NOT_FOUND),
+        )
+        .await?;
+        answer.map(|a| parse(&a, &ctx)).transpose()
+    }
+
+    /// `DELETE` whose answer is only its status — the 204 shape. The
+    /// body is read (a connection is not returned to the pool
+    /// otherwise) and discarded, because these routes send none.
+    async fn internal_delete(&self, path: String) -> Result<()> {
+        let (url, ctx) = self.target("DELETE", &path);
+        Self::exchange(self.http.delete(&url), &url, &ctx, None).await?;
+        Ok(())
+    }
+
+    /// `DELETE` whose answer is a VALUE — the notes `{existed}` shape,
+    /// where "the row was not there" is a fact the host states rather
+    /// than a status the caller has to infer (ARCH §18.3).
+    async fn internal_delete_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+    ) -> Result<T> {
+        let (url, ctx) = self.target("DELETE", &path);
+        let answer = Self::required(self.http.delete(&url), &url, &ctx).await?;
+        parse(&answer, &ctx)
+    }
+
+    /// A write whose answer is only its status, at any method — the
+    /// `POST …/end` and `POST …/tool-outcome` shape. `body` is
+    /// `None` for the routes that take no body at all, and their
+    /// request stays byte-for-byte the bodiless one they always sent.
+    async fn internal_write_no_answer<B: serde::Serialize + ?Sized>(
+        &self,
+        method: reqwest::Method,
+        path: String,
+        body: Option<&B>,
+    ) -> Result<()> {
+        let (url, ctx) = self.target(method.as_str(), &path);
+        let mut req = self.http.request(method, &url);
+        if let Some(body) = body {
+            req = req.json(body);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
-        let (status, body) = read_body(resp, &url).await?;
-        if !status.is_success() {
-            return Err(host_words(status, &body, &format!("GET {url}")));
-        }
-        parse(&body, &format!("GET {url}"))
+        Self::exchange(req, &url, &ctx, None).await?;
+        Ok(())
     }
 
     /// The WebSocket URL for one conversation's turn stream.

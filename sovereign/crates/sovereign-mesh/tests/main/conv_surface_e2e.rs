@@ -37,7 +37,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::index::{CorpusIndex, InsertChunk};
+use corpus_engine::index::InsertChunk;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::conv_tiered::{
     ChunkEntityProgressRow, ChunkEntityRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader,
@@ -92,17 +92,7 @@ async fn build_conv_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
     let path = indexes.join(CORPUS);
-    let index = CorpusIndex::create(
-        &path,
-        CORPUS,
-        "Governance",
-        "qwen3-embedding-0.6b",
-        EMBED_DIM,
-        /* mesh_sharing */ true,
-        "CC-BY-NC",
-    )
-    .await
-    .unwrap();
+    let index = common::fixture_index(&indexes, CORPUS).await;
     index
         .insert_batch(&[(
             InsertChunk {

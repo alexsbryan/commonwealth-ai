@@ -66,7 +66,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::index::{CorpusIndex, InsertChunk};
+use corpus_engine::index::InsertChunk;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::daemon::EmbeddedDaemon;
@@ -136,17 +136,7 @@ async fn build_meshapp_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     std::fs::create_dir_all(&indexes).unwrap();
 
     let path = indexes.join(CORPUS);
-    let index = CorpusIndex::create(
-        &path,
-        CORPUS,
-        "Governance",
-        "qwen3-embedding-0.6b",
-        EMBED_DIM,
-        /* mesh_sharing */ true,
-        "CC-BY-NC",
-    )
-    .await
-    .unwrap();
+    let index = common::fixture_index(&indexes, CORPUS).await;
     index
         .insert_batch(&[
             (

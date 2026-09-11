@@ -43,21 +43,9 @@ use sovereign_core::types::{
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::documents_http::documents_router;
 
-use crate::common::{desktop_services_with_store, mesh_admin_services, spawn_router, TestProvider};
-
-/// A real `CorpusEngine` over a tempdir — `ServingCore.corpus_engine`
-/// is not an `Option`, and no route in this file reads it.
-fn engine_at(tmp: &tempfile::TempDir) -> Arc<corpus_engine::CorpusEngine> {
-    let indexes = tmp.path().join("indexes");
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&indexes).unwrap();
-    std::fs::create_dir_all(&recipes).unwrap();
-    Arc::new(corpus_engine::CorpusEngine::new(
-        recipes,
-        indexes,
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-    ))
-}
+use crate::common::{
+    desktop_services_with_store, engine_at, mesh_admin_services, spawn_router, TestProvider,
+};
 
 fn asset(id: &str, title: &str, filename: &str) -> DocumentAsset {
     DocumentAsset {

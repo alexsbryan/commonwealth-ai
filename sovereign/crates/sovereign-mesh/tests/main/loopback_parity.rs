@@ -71,17 +71,27 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::Router;
 use corpus_engine_scip::ScipGraph;
+use reqwest::Method;
 
 use sovereign_contracts::types::projection::{project_epistemic_state, project_message_metadata};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
 use sovereign_core::types::{Message, Role};
 use sovereign_mesh::admin_http::admin_router;
+use sovereign_mesh::atlas_http::atlas_router;
 use sovereign_mesh::corpus_watch_http::corpus_watch_router;
 use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_mesh::features_http::features_router;
+use sovereign_mesh::governance_http::governance_router;
+use sovereign_mesh::insight_http::insight_router;
+use sovereign_mesh::lc_http::lc_router;
+use sovereign_mesh::mcp_config_http::mcp_config_router;
 use sovereign_mesh::mesh_http::mesh_router;
+use sovereign_mesh::meshapp_http::meshapp_router;
+use sovereign_mesh::notes_http::notes_router;
 use sovereign_mesh::project_http::project_router;
 use sovereign_mesh::reading_http::reading_router;
+use sovereign_mesh::recipe_project_http::recipe_project_router;
 use sovereign_mesh::reindexer::Reindexer;
 use sovereign_mesh::turn_http::{
     turn_router, ConversationListEntry, ConversationListResponse, ConversationResponse,
@@ -148,274 +158,210 @@ fn fresh_reindexer() -> (tempfile::TempDir, Arc<Reindexer>) {
 // GET with no required body — so we're observing the middleware's
 // decision, not the handler's success path.
 
-#[tokio::test]
-async fn mesh_http_rejects_non_loopback_via_mesh_status() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(mesh_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/mesh/status"))
-        .send()
-        .await
-        .expect("server reachable");
+/// One router's rejection contract: a non-loopback caller knocking on
+/// `path` is refused with 403, whatever the router.
+///
+/// `exposes` is the half of the message that is NOT mechanical — what a
+/// leak on THIS router would hand a LAN caller — and the reason the
+/// fifteen callers below stay fifteen NAMED tests rather than one loop
+/// over a table: a red still names the router that broke. The fifteen
+/// used to spell the spawn, the knock and the assert themselves, 269
+/// lines of it, which is fifteen chances for one to drift (ARCH §10.6).
+///
+/// A `POST` carries an empty JSON body because that is what the handler
+/// behind it expects — though on the path this asserts, the layer
+/// refuses before any handler reads it.
+async fn refused(router: Router, method: Method, path: &str, exposes: &str) {
+    let base = spawn_with_spoof(router).await;
+    let mut req = reqwest::Client::new().request(method.clone(), format!("{base}{path}"));
+    if method == Method::POST {
+        req = req.json(&serde_json::json!({}));
+    }
+    let resp = req.send().await.expect("server reachable");
     assert_eq!(
         resp.status(),
         reqwest::StatusCode::FORBIDDEN,
-        "mesh_http loopback guard slipped — non-loopback caller got {}",
+        "loopback guard slipped on {path} — {exposes}, and a non-loopback caller got {}",
         resp.status()
     );
+}
+
+#[tokio::test]
+async fn mesh_http_rejects_non_loopback_via_mesh_status() {
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        mesh_router(d),
+        Method::GET,
+        "/v1/mesh/status",
+        "it names this host's peers",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn admin_http_rejects_non_loopback_via_admin_reload() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(admin_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .post(format!("{base}/v1/admin/reload"))
-        .json(&serde_json::json!({}))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "admin_http loopback guard slipped — non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        admin_router(d),
+        Method::POST,
+        "/v1/admin/reload",
+        "these routes reload the owner's config",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn project_http_rejects_non_loopback_via_list_projects() {
-    let (_tmp, reindexer) = fresh_reindexer();
-    let base = spawn_with_spoof(project_router(reindexer)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/projects"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "project_http loopback guard slipped — non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, rex) = fresh_reindexer();
+    refused(
+        project_router(rex),
+        Method::GET,
+        "/v1/projects",
+        "the SCIP graph names this host's source trees",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn turn_http_rejects_non_loopback_via_conversation_create() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(turn_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .post(format!("{base}/v1/conversations"))
-        .json(&serde_json::json!({}))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "turn_http loopback guard slipped — a turn runs THIS host's tools \
-         against THIS host's corpora, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        turn_router(d),
+        Method::POST,
+        "/v1/conversations",
+        "a turn spends THIS host's inference",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn insight_http_rejects_non_loopback_via_insights_list() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::insight_http::insight_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/insights"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "insight_http loopback guard slipped — a clip is this user's reading \
-         of this host's corpora, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        insight_router(d),
+        Method::GET,
+        "/v1/insights",
+        "a clip is what the operator kept",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn meshapp_http_rejects_non_loopback_via_graph_read() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::meshapp_http::meshapp_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/meshapp/anything/graph"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "meshapp_http loopback guard slipped — the explorer reads THIS \
-         host's corpus index, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        meshapp_router(d),
+        Method::GET,
+        "/internal/meshapp/anything/graph",
+        "the explorer reads THIS host's corpus index",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn notes_http_rejects_non_loopback_via_note_query() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::notes_http::notes_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .post(format!("{base}/v1/notes/query"))
-        .json(&serde_json::json!({}))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "notes_http loopback guard slipped — notes.db is this operator's \
-         working memory, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        notes_router(d),
+        Method::POST,
+        "/v1/notes/query",
+        "notes.db is this operator's working memory",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn features_http_rejects_non_loopback_via_project_list() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::features_http::features_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/features/projects"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "features_http loopback guard slipped — a project charter is the \
-         operator's private brief, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        features_router(d),
+        Method::GET,
+        "/v1/features/projects",
+        "a charter is the operator's private brief",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn atlas_http_rejects_non_loopback_via_corpora_list() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::atlas_http::atlas_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/atlas/corpora"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "atlas_http loopback guard slipped — the atlas enumerates THIS host's \
-         corpora by name, and a non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        atlas_router(d),
+        Method::GET,
+        "/internal/atlas/corpora",
+        "the atlas names THIS host's corpora",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn reading_http_rejects_non_loopback_via_chunk_fetch() {
-    let (_tmp, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(reading_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/corpus/wikipedia/chunks/0"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "reading_http loopback guard slipped — non-loopback caller got {}",
-        resp.status()
-    );
+    let (_tmp, d) = fresh_daemon();
+    refused(
+        reading_router(d),
+        Method::GET,
+        "/internal/corpus/wikipedia/chunks/0",
+        "these routes serve corpus text verbatim",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn corpus_watch_http_rejects_non_loopback_via_list() {
-    let base = spawn_with_spoof(corpus_watch_router()).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/corpus/watch/list"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "corpus_watch_http loopback guard slipped — non-loopback caller got {}",
-        resp.status()
-    );
+    refused(
+        corpus_watch_router(),
+        Method::GET,
+        "/internal/corpus/watch/list",
+        "a watch list names the owner's folders",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn governance_http_rejects_non_loopback_via_view() {
-    let (_t, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::governance_http::governance_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/governance/any/view"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "governance_http loopback guard slipped — these routes APPEND to the \
-         owner's governance oplog with an actor stamped on each act, and a \
-         non-loopback caller got {}",
-        resp.status()
-    );
+    let (_t, d) = fresh_daemon();
+    refused(
+        governance_router(d),
+        Method::GET,
+        "/internal/governance/any/view",
+        "these routes APPEND to the owner's oplog",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn mcp_config_http_rejects_non_loopback_via_server_list() {
-    let (_t, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::mcp_config_http::mcp_config_router(daemon)).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/mcp/servers"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "mcp_config_http loopback guard slipped — this family reads the \
-         owner's server config and WRITES bearer secrets, and a non-loopback \
-         caller got {}",
-        resp.status()
-    );
+    let (_t, d) = fresh_daemon();
+    refused(
+        mcp_config_router(d),
+        Method::GET,
+        "/v1/mcp/servers",
+        "this family WRITES bearer secrets",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn recipe_project_http_rejects_non_loopback_via_project_list() {
-    let (_t, daemon) = fresh_daemon();
-    let base = spawn_with_spoof(sovereign_mesh::recipe_project_http::recipe_project_router(
-        daemon,
-    ))
+    let (_t, d) = fresh_daemon();
+    refused(
+        recipe_project_router(d),
+        Method::GET,
+        "/v1/recipe-projects",
+        "these routes write the owner's artifact tree",
+    )
     .await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/v1/recipe-projects"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "recipe_project_http loopback guard slipped — these routes write the \
-         owner's artifact tree, and a non-loopback caller got {}",
-        resp.status()
-    );
 }
 
 #[tokio::test]
 async fn lc_http_rejects_non_loopback_via_local_list() {
-    let base = spawn_with_spoof(sovereign_mesh::lc_http::lc_router()).await;
-    let resp = reqwest::Client::new()
-        .get(format!("{base}/internal/corpus/local"))
-        .send()
-        .await
-        .expect("server reachable");
-    assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::FORBIDDEN,
-        "lc_http loopback guard slipped — these routes ingest, write tags          into and roll back the OWNER's vault, and a non-loopback caller          got {}",
-        resp.status()
-    );
+    refused(
+        lc_router(),
+        Method::GET,
+        "/internal/corpus/local",
+        "these routes roll back the OWNER's vault",
+    )
+    .await;
 }
 
 // ── Negative control: loopback callers still reach handlers ──────
@@ -528,49 +474,25 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(turn_router(d5), "/v1/conversations").await;
 
     let (_t6, d6) = fresh_daemon();
-    assert_500_on_bare_serve(
-        sovereign_mesh::insight_http::insight_router(d6),
-        "/v1/insights",
-    )
-    .await;
+    assert_500_on_bare_serve(insight_router(d6), "/v1/insights").await;
 
     let (_t7, d7) = fresh_daemon();
-    assert_500_on_bare_serve(
-        sovereign_mesh::atlas_http::atlas_router(d7),
-        "/internal/atlas/corpora",
-    )
-    .await;
+    assert_500_on_bare_serve(atlas_router(d7), "/internal/atlas/corpora").await;
 
     let (_t8, d8) = fresh_daemon();
-    assert_500_on_bare_serve(
-        sovereign_mesh::meshapp_http::meshapp_router(d8),
-        "/internal/meshapp/anything/graph",
-    )
-    .await;
+    assert_500_on_bare_serve(meshapp_router(d8), "/internal/meshapp/anything/graph").await;
 
     let (_t9, d9) = fresh_daemon();
     // The GET on `/v1/notes/{id}` — the router's only GET-shaped read —
     // stands in for the family here: `assert_500_on_bare_serve` drives a
     // GET, and what is being proven is the guard's fail-closed posture,
     // which is per-handler and identical on all six.
-    assert_500_on_bare_serve(
-        sovereign_mesh::notes_http::notes_router(d9),
-        "/v1/notes/any-id",
-    )
-    .await;
+    assert_500_on_bare_serve(notes_router(d9), "/v1/notes/any-id").await;
 
     let (_t10, d10) = fresh_daemon();
-    assert_500_on_bare_serve(
-        sovereign_mesh::features_http::features_router(d10),
-        "/v1/features/projects",
-    )
-    .await;
+    assert_500_on_bare_serve(features_router(d10), "/v1/features/projects").await;
 
-    assert_500_on_bare_serve(
-        sovereign_mesh::lc_http::lc_router(),
-        "/internal/corpus/local",
-    )
-    .await;
+    assert_500_on_bare_serve(lc_router(), "/internal/corpus/local").await;
 }
 
 // ── The gate the handler cannot satisfy alone ────────────────────
@@ -726,17 +648,13 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     .await;
 
     let (_t6, d6) = fresh_daemon();
-    assert_the_guard_owns_the_method_fallback(
-        "insight_http",
-        sovereign_mesh::insight_http::insight_router(d6),
-        "/v1/insights",
-    )
-    .await;
+    assert_the_guard_owns_the_method_fallback("insight_http", insight_router(d6), "/v1/insights")
+        .await;
 
     let (_t7, d7) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "atlas_http",
-        sovereign_mesh::atlas_http::atlas_router(d7),
+        atlas_router(d7),
         "/internal/atlas/corpora",
     )
     .await;
@@ -744,38 +662,30 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t8, d8) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "meshapp_http",
-        sovereign_mesh::meshapp_http::meshapp_router(d8),
+        meshapp_router(d8),
         "/internal/meshapp/anything/graph",
     )
     .await;
 
     let (_t9, d9) = fresh_daemon();
-    assert_the_guard_owns_the_method_fallback(
-        "notes_http",
-        sovereign_mesh::notes_http::notes_router(d9),
-        "/v1/notes/any-id",
-    )
-    .await;
+    assert_the_guard_owns_the_method_fallback("notes_http", notes_router(d9), "/v1/notes/any-id")
+        .await;
 
     let (_t10, d10) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "features_http",
-        sovereign_mesh::features_http::features_router(d10),
+        features_router(d10),
         "/v1/features/projects",
     )
     .await;
 
-    assert_the_guard_owns_the_method_fallback(
-        "lc_http",
-        sovereign_mesh::lc_http::lc_router(),
-        "/internal/corpus/local",
-    )
-    .await;
+    assert_the_guard_owns_the_method_fallback("lc_http", lc_router(), "/internal/corpus/local")
+        .await;
 
     let (_t11, d11) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "governance_http",
-        sovereign_mesh::governance_http::governance_router(d11),
+        governance_router(d11),
         "/internal/governance/any/view",
     )
     .await;
@@ -783,7 +693,7 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t12, d12) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "mcp_config_http",
-        sovereign_mesh::mcp_config_http::mcp_config_router(d12),
+        mcp_config_router(d12),
         // NOT `.../{name}/token`: PUT is a real method there, so that path
         // could not distinguish the layer from a handler.
         "/v1/mcp/servers",
@@ -793,7 +703,7 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t13, d13) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback(
         "recipe_project_http",
-        sovereign_mesh::recipe_project_http::recipe_project_router(d13),
+        recipe_project_router(d13),
         // Same reason: `/{id}/toml` registers PUT.
         "/v1/recipe-projects",
     )
@@ -1558,8 +1468,7 @@ async fn insight_sink_status_names_each_sink_and_its_reachability() {
             Some(service),
         ),
     );
-    let addr =
-        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let addr = crate::common::spawn_router(insight_router(daemon)).await;
 
     let body: serde_json::Value = reqwest::Client::new()
         .get(format!("http://{addr}/v1/insights/sinks"))
@@ -1612,8 +1521,7 @@ async fn insight_sink_status_without_a_service_is_the_named_503() {
             None,
         ),
     );
-    let addr =
-        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let addr = crate::common::spawn_router(insight_router(daemon)).await;
     let resp = reqwest::Client::new()
         .get(format!("http://{addr}/v1/insights/sinks"))
         .send()
@@ -1635,8 +1543,7 @@ async fn insight_sink_status_without_a_service_is_the_named_503() {
 #[tokio::test]
 async fn insight_routes_clip_list_search_delete() {
     let (_tmp, daemon, service) = insight_fixture().await;
-    let addr =
-        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let addr = crate::common::spawn_router(insight_router(daemon)).await;
     let base = format!("http://{addr}");
     let client = reqwest::Client::new();
 
@@ -1787,8 +1694,7 @@ async fn insight_routes_without_a_service_answer_the_named_503() {
             None,
         ),
     );
-    let addr =
-        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let addr = crate::common::spawn_router(insight_router(daemon)).await;
     let resp = reqwest::Client::new()
         .get(format!("http://{addr}/v1/insights"))
         .send()
@@ -1827,8 +1733,7 @@ async fn insight_routes_without_a_service_answer_the_named_503() {
 #[tokio::test]
 async fn insights_by_id_returns_the_nodes_and_names_the_ones_that_are_gone() {
     let (_tmp, daemon, _service) = insight_fixture().await;
-    let addr =
-        crate::common::spawn_router(sovereign_mesh::insight_http::insight_router(daemon)).await;
+    let addr = crate::common::spawn_router(insight_router(daemon)).await;
     let base = format!("http://{addr}");
     let client = reqwest::Client::new();
 

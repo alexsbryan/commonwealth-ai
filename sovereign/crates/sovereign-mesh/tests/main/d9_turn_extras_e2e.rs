@@ -52,23 +52,9 @@ use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::turn_extras_http::turn_extras_router;
 
 use crate::common::{
-    desktop_services_with_runtime, mesh_admin_services, spawn_router, stub_runtime_with_skills,
-    TestProvider,
+    desktop_services_with_runtime, engine_at, mesh_admin_services, spawn_router,
+    stub_runtime_with_skills, TestProvider,
 };
-
-/// A real `CorpusEngine` over a tempdir — `ServingCore.corpus_engine` is
-/// not an `Option`, and neither route reads it.
-fn engine_at(tmp: &tempfile::TempDir) -> Arc<corpus_engine::CorpusEngine> {
-    let indexes = tmp.path().join("indexes");
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&indexes).unwrap();
-    std::fs::create_dir_all(&recipes).unwrap();
-    Arc::new(corpus_engine::CorpusEngine::new(
-        recipes,
-        indexes,
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-    ))
-}
 
 /// One skill, built the way production builds one: from a manifest.
 /// Hand-constructing a `Skill` here would be a second way to make the

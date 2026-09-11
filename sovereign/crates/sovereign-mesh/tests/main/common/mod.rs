@@ -482,6 +482,54 @@ impl InferenceProvider for TestProvider {
     }
 }
 
+// ── Corpus fixtures ─────────────────────────────────────────────
+
+/// The embedding width every fixture index and mock embed fn in this
+/// crate's e2e tests uses. One number, one name.
+pub const FIXTURE_EMBED_DIM: usize = 8;
+
+/// A real `CorpusEngine` over a tempdir, with `indexes/` and `recipes/`
+/// already made and a mock embed fn.
+///
+/// `ServingCore.corpus_engine` is not an `Option`, so every serving
+/// fixture needs one whether or not its routes read it. Three surface
+/// e2e files spelled this out identically before it landed here.
+pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<corpus_engine::CorpusEngine> {
+    let indexes = tmp.path().join("indexes");
+    let recipes = tmp.path().join("recipes");
+    std::fs::create_dir_all(&indexes).expect("fixture indexes dir");
+    std::fs::create_dir_all(&recipes).expect("fixture recipes dir");
+    Arc::new(corpus_engine::CorpusEngine::new(
+        recipes,
+        indexes,
+        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; FIXTURE_EMBED_DIM]) })),
+    ))
+}
+
+/// A fresh mesh-shared index under `indexes/<corpus_id>`, on the
+/// embedding shape [`engine_at`] mints.
+///
+/// The seven arguments were byte-identical in `atlas_surface_e2e`,
+/// `meshapp_surface_e2e` and `conv_surface_e2e` — three copies of one
+/// corpus's identity, which is three places for the embedding model or
+/// the licence to drift apart (ARCH §10.6).
+pub async fn fixture_index(
+    indexes: &std::path::Path,
+    corpus_id: &str,
+) -> corpus_engine::index::CorpusIndex {
+    corpus_engine::index::CorpusIndex::create(
+        &indexes.join(corpus_id),
+        corpus_id,
+        "Governance",
+        "qwen3-embedding-0.6b",
+        FIXTURE_EMBED_DIM,
+        /* mesh_sharing */ true,
+        "CC-BY-NC",
+    )
+    .await
+    .expect("fixture index creates")
+}
+
 // ── Daemon services fixtures ────────────────────────────────────
 
 /// A `DaemonServices::Desktop` around `engine` — the smallest variant that
@@ -496,26 +544,83 @@ impl InferenceProvider for TestProvider {
 pub fn desktop_services_with_engine(
     engine: Arc<corpus_engine::CorpusEngine>,
 ) -> sovereign_mesh::DaemonServices {
-    // Through THE assembler, like every production site — a fixture that
-    // composed a variant directly would be the one place able to build a shape
-    // no launch can produce, which is exactly what Falsifier 3 forbids.
+    desktop_services(DesktopParts::new(engine))
+}
+
+/// Everything the seven `desktop_services_with_*` fixtures vary, in one
+/// struct. [`DesktopParts::new`] is the honest empty daemon — a stub
+/// runtime over its own in-memory store, no MCP mount, no insight
+/// service, no feature store — and each fixture below names the ONE or
+/// two fields it is about.
+///
+/// Seven copies of the `assemble` call is seven places for the shape to
+/// drift, and the fields that differ were buried in thirty identical
+/// lines each (ARCH §10.6). They are named here instead.
+pub struct DesktopParts {
+    pub engine: Arc<corpus_engine::CorpusEngine>,
+    pub provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    pub store: Arc<dyn sovereign_core::traits::StateStore>,
+    pub runtime: Arc<sovereign_core::runtime::Runtime>,
+    pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
+    pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    pub mcp: sovereign_mesh::McpSurface,
+}
+
+impl DesktopParts {
+    /// The smallest serving desktop that still carries a corpus engine.
+    pub fn new(engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+        Self {
+            engine,
+            provider: Arc::new(TestProvider::new()),
+            store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            runtime: stub_runtime(Arc::new(TestProvider::new()), None),
+            insights: None,
+            features: None,
+            mcp: sovereign_mesh::McpSurface::Unavailable {
+                reason: "test fixture: no tool registry".into(),
+            },
+        }
+    }
+
+    /// The `/mcp` mount `EmbeddedDaemon::notes_store` reads a real
+    /// `NoteStore` from.
+    pub fn mounted(
+        mut self,
+        tools: Arc<sovereign_core::ToolRegistry>,
+        notes: Arc<corpus_engine_notes::NoteStore>,
+    ) -> Self {
+        self.mcp = sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+            tools,
+            notes,
+            session_id: "test-fixture".into(),
+        });
+        self
+    }
+}
+
+/// Commission a serving `Launch::Desktop` from `parts`.
+///
+/// Through THE assembler, like every production site — a fixture that
+/// composed a variant directly would be the one place able to build a
+/// shape no launch can produce, which is exactly what Falsifier 3
+/// forbids. This is the only site in the fixtures that names
+/// `ServingProfile`.
+pub fn desktop_services(parts: DesktopParts) -> sovereign_mesh::DaemonServices {
     sovereign_mesh::assemble(
         &sovereign_contracts::launch::Launch::Desktop,
         sovereign_mesh::LaunchParts::Serving {
             headless: None,
             serving: sovereign_mesh::ServingProfile {
                 core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: Arc::new(TestProvider::new()),
-                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
-                    insights: None,
-                    features: None,
+                    corpus_engine: parts.engine,
+                    inference_provider: parts.provider,
+                    state_store: parts.store,
+                    runtime: parts.runtime,
+                    insights: parts.insights,
+                    features: parts.features,
                 },
                 capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Unavailable {
-                        reason: "test fixture: no tool registry".into(),
-                    },
+                    mcp: parts.mcp,
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
                     workflow_http: Router::new(),
@@ -542,34 +647,10 @@ pub fn desktop_services_with_runtime(
     engine: Arc<corpus_engine::CorpusEngine>,
     runtime: Arc<sovereign_core::runtime::Runtime>,
 ) -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: Arc::new(TestProvider::new()),
-                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-                    runtime,
-                    insights: None,
-                    features: None,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Unavailable {
-                        reason: "test fixture: no tool registry".into(),
-                    },
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        runtime,
+        ..DesktopParts::new(engine)
+    })
 }
 
 /// [`stub_runtime`] carrying the caller's `SkillRegistry` instead of an
@@ -607,36 +688,10 @@ pub fn desktop_services_with_note_and_feature_stores(
     notes: Arc<corpus_engine_notes::NoteStore>,
     features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
 ) -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: Arc::new(TestProvider::new()),
-                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
-                    insights: None,
-                    features,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
-                        tools: Arc::new(sovereign_core::ToolRegistry::new()),
-                        notes,
-                        session_id: "test-fixture".into(),
-                    }),
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        features,
+        ..DesktopParts::new(engine).mounted(Arc::new(sovereign_core::ToolRegistry::new()), notes)
+    })
 }
 
 /// A serving desktop commission carrying real note + feature stores AND a
@@ -655,36 +710,10 @@ pub fn desktop_services_with_tool_registry(
     features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
     tools: Arc<sovereign_core::ToolRegistry>,
 ) -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: Arc::new(TestProvider::new()),
-                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
-                    insights: None,
-                    features,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
-                        tools,
-                        notes,
-                        session_id: "test-fixture".into(),
-                    }),
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        features,
+        ..DesktopParts::new(engine).mounted(tools, notes)
+    })
 }
 
 /// The cheapest `Runtime` that is still a real one — core's stub router and
@@ -767,34 +796,11 @@ pub fn desktop_services_with_conv_reader(
         Some(Arc::clone(&store)),
         lanes,
     ));
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: Arc::new(TestProvider::new()),
-                    state_store: store,
-                    runtime,
-                    insights: None,
-                    features: None,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Unavailable {
-                        reason: "test fixture: no tool registry".into(),
-                    },
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        store,
+        runtime,
+        ..DesktopParts::new(engine)
+    })
 }
 
 /// A `Desktop` serving daemon whose `ServingCore` carries the given store and
@@ -828,34 +834,12 @@ pub fn desktop_services_with_planner(
     let mut runtime = stub_runtime_parts(Arc::clone(&provider), Some(Arc::clone(&store)));
     runtime.corpus_engine = Some(Arc::clone(&engine));
     runtime.planner = planner;
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: provider,
-                    state_store: store,
-                    runtime: Arc::new(runtime),
-                    insights: None,
-                    features: None,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Unavailable {
-                        reason: "test fixture: no tool registry".into(),
-                    },
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        provider,
+        store,
+        runtime: Arc::new(runtime),
+        ..DesktopParts::new(engine)
+    })
 }
 
 /// [`desktop_services_with_store`] with an `InsightService` commissioned —
@@ -874,34 +858,13 @@ pub fn desktop_services_with_insights(
         Some(Arc::clone(&store)),
         Arc::clone(&engine),
     );
-    sovereign_mesh::assemble(
-        &sovereign_contracts::launch::Launch::Desktop,
-        sovereign_mesh::LaunchParts::Serving {
-            headless: None,
-            serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    corpus_engine: engine,
-                    inference_provider: provider,
-                    state_store: store,
-                    runtime,
-                    insights,
-                    features: None,
-                },
-                capability: sovereign_mesh::ServingCapability {
-                    mcp: sovereign_mesh::McpSurface::Unavailable {
-                        reason: "test fixture: no tool registry".into(),
-                    },
-                    project_http: Router::new(),
-                    corpus_watch_http: Router::new(),
-                    workflow_http: Router::new(),
-                },
-                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                    reason: "test fixture: no embed probe".into(),
-                },
-            },
-        },
-    )
-    .expect("Launch::Desktop assembles a serving profile with no rails")
+    desktop_services(DesktopParts {
+        provider,
+        store,
+        runtime,
+        insights,
+        ..DesktopParts::new(engine)
+    })
 }
 
 /// Commission a `MeshAdmin` daemon THE WAY PRODUCTION DOES.

@@ -80,6 +80,7 @@ use crate::common::spawn_router;
 #[allow(clippy::unwrap_used)]
 mod fixture {
     use super::*;
+    pub use crate::common::engine_at;
 
     pub const CORPUS: &str = "house-rules";
 
@@ -91,18 +92,6 @@ mod fixture {
         pub daemon: Arc<EmbeddedDaemon>,
         pub engine: Arc<CorpusEngine>,
         pub _tmp: tempfile::TempDir,
-    }
-
-    pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<CorpusEngine> {
-        let indexes = tmp.path().join("indexes");
-        let recipes = tmp.path().join("recipes");
-        std::fs::create_dir_all(&indexes).unwrap();
-        std::fs::create_dir_all(&recipes).unwrap();
-        Arc::new(CorpusEngine::new(
-            recipes,
-            indexes,
-            Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-        ))
     }
 
     /// A serving daemon with both stores and an empty tool registry.
