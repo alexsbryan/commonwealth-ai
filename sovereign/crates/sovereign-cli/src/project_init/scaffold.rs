@@ -429,7 +429,6 @@ pub(super) fn generate_agents_md(
     )
 }
 
-
 pub(super) fn generate_claude_settings(
     port: u16,
     corpus_id: &str,
@@ -571,7 +570,7 @@ pub(super) fn merge_claude_settings(existing: &str, generated: &str) -> String {
         }
     }
 
-serde_json::to_string_pretty(&base).unwrap_or_else(|_| generated.to_string())
+    serde_json::to_string_pretty(&base).unwrap_or_else(|_| generated.to_string())
 }
 
 // ─── .gitignore ──────────────────────────────────────────────
