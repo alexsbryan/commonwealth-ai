@@ -47,15 +47,27 @@ reachable" belongs to the client package, so the desktop can hold zero daemon
 code. But no surface yet ships a backend it could bring up — the daemon is not
 packaged as a sidecar, `tauri.conf.json` still has `externalBin: null`. An
 on-by-default capability here would compile a bring-up path with no caller,
-which is inventory (ARCH principle 11).
+which is inventory (ARCH principle 11). It stays dark for a second reason
+after the same day's amendment: the default topology is an OS-installed
+service, so the fallback this serves is the exception, and an exception that
+is on everywhere is not one.
 
-**Flip condition, falsifiable.** The desktop ships the daemon as a sidecar
-copied to a stable path at setup, and its `Cargo.toml` declares
-`features = ["bundled-backend"]`. At that moment the desktop's own supervision
-(1,990 prod lines, ~271 keepers) is deletable and the bar's dependency-edge
-half can go green. If instead the sidecar is abandoned in favour of an
-OS-service-only topology on every platform, this row moves to REJECTED and the
-feature is deleted rather than left dark.
+**Flip condition, falsifiable — REVISED the same day.** The first version of
+this row assumed the sidecar was the destination. The operator settled
+otherwise hours later: the daemon is a mesh node and must be available to
+peers while the app is closed, so setup INSTALLS THE SERVICE by default and
+the OS owns the daemon (sv-surface bar, "AMENDED 2026-09-11"). That makes
+this feature the FALLBACK rather than the main topology, and the flip
+condition is the fallback's own moment: a surface ships a backend binary and
+declares `features = ["bundled-backend"]` to cover the two cases a service
+cannot — the first-run window before registration succeeds, and a host that
+refuses or declines to register one (managed machines; the user who wants
+nothing in their login items). Recovery is NOT one of those cases: the
+service manager restarts a crashed daemon, and a client may bring one up
+only at a moment a user action asks for it, never on a timer or a health
+signal. This row moves to REJECTED and the feature is deleted if setup's
+service install proves reliable enough on all three platforms that no
+surface ever needs a backend of its own.
 
 **What settles it.** sv-surface next items (2) sidecar packaging and (3)
 desktop supervision deletion — `quality/campaigns/sv-surface.toml`,

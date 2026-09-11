@@ -1428,6 +1428,93 @@ status       = "open"
 # is a user-choice feature, which is why per-platform backends are the right
 # price there and would have been the wrong tax on the desktop.
 #
+# ── AMENDED 2026-09-11, LATER THE SAME DAY, BY THE OPERATOR ────────────────
+#
+# THE PARAGRAPH ABOVE IS WRONG ABOUT WHOSE PATH THE SERVICE IS, and the
+# correction is the product, not the wording:
+#
+#   "Even when you're not interacting with the app you ought to still be
+#    available to contribute to the mesh (that is a core part of this
+#    system)."
+#
+# So the service is the DESKTOP's path too, installed by DEFAULT. It is not
+# a convenience for operators who dislike relaunching; availability is a
+# property of the NODE. A node that exists only while someone has a window
+# open is not a mesh member, it is a client that occasionally appears — and
+# the per-platform backends are therefore the right price for the app as
+# well, not a tax on it. The session that drafted this file argued the
+# service on thin grounds (fewer relaunches, user preference) and reached
+# the right answer for a weak reason; the reason is membership.
+#
+# WHICH MAKES THE OPT-OUT A MEMBERSHIP SETTING, NOT A LIFECYCLE ONE. "Don't
+# run when I'm not using the app" means "don't contribute while I'm away",
+# and it belongs in the contribution settings where it says so, never in a
+# service checkbox where it reads as login-items hygiene and quietly removes
+# the node from the mesh. Two preferences ARE coherent and cost nothing:
+# "don't register an autostart entry in my account" (the client brings the
+# backend up by path instead — `sovereign_turn_client::reach`, 523ae2fb5),
+# and "don't lend this machine" (a contribution setting). What is NOT
+# coherent is "no daemon": every capability the app has is served by it.
+#
+# AND IT FORBIDS AN IDLE-EXIT POLICY. A daemon that exits when nobody is
+# looking cannot answer a peer. The resident-RAM answer is therefore the
+# idle-UNLOAD policy this file already named and nothing else: hold close to
+# nothing while nobody is asking, load on demand for a peer or a user. That
+# moves `[daemon] extras_idle_secs` + the missing fast/embed monitors
+# (daemon_cmd/build/inference.rs:293,347) from a nicety to a REQUIREMENT of
+# always-on: until they exist, "always available" and "tens of GB pinned"
+# are the same sentence, which is what makes users ask to turn the daemon
+# off in the first place.
+#
+# RECOVERY IS THE OS's JOB, AND `attach_watch` MAY NOT RE-SPAWN. Settled
+# 2026-09-11 after the question was put to the operator. The falsifiable
+# line, and what the census half checks: A CLIENT MAY BRING A BACKEND UP AT
+# A MOMENT A USER ACTION ASKS FOR ONE, AND NEVER ON A TIMER OR A HEALTH
+# SIGNAL. Four reasons, the last one decisive:
+#   * THE TRIGGER IS UNFIT. `attach_watch` declares Down after 3 missed
+#     probes at 5s = ~15s. The daemon's own readiness budget is 120s
+#     (`parse_ready_timeout`, daemon_cmd/lifecycle.rs:883) and the service
+#     managers wait 10s / 10s / 60s before relaunching, so Down routinely
+#     means STARTING. Spawning on it loses the RunLock race or races a start
+#     already underway. Making the signal fit means teaching the client
+#     about pids, locks and load phases — a neighbour learning the daemon's
+#     internals forever (ARCH principle 12).
+#   * IT CREATES A SECOND RESTARTER. launchd `KeepAlive.SuccessfulExit=false`
+#     (ThrottleInterval ~10s), systemd `Restart=on-failure` +
+#     `StartLimitBurst=5`/600s, Task Scheduler `RestartOnFailure` 5 × PT1M
+#     already own this (ARCH principle 8). Worse, an app-driven kickstart
+#     routes around systemd's burst brake — the one platform with a
+#     crash-loop limiter loses it.
+#   * IT HIDES A CRASH LOOP. A backend that died four times in two minutes
+#     is something the user needs to see, not a flickering banner (ARCH
+#     principle 6).
+#   * AND THE CASE THAT MOST NEEDS AUTO-RECOVERY IS ONE THE APP CANNOT SERVE
+#     BY CONSTRUCTION: a crash at 3am with the app closed. An app-side retry
+#     covers only the case where a human is already present to press a
+#     button. Recovery for an unattended node is the service manager's job
+#     or nobody's.
+# What the desktop does instead: reachability rides the next user-initiated
+# action (`ServingHost::ensure_reachable` — one shot, no handle, no policy),
+# and the existing `attach_restart_daemon` button stays as the explicit
+# path. This is the sequence this file already predicted — "a retry, then a
+# backoff, then a health check, then a restart policy" — refused at step
+# one, deliberately, so the census has standing to refuse steps two and
+# three.
+#
+# THE PLATFORM CEILING, NAMED RATHER THAN DISCOVERED LATER. All three
+# backends are SESSION-scoped: the launchd agent loads into `gui/<uid>`, the
+# Windows task is logon-triggered, the systemd unit is a user unit
+# (`WantedBy=default.target`) and NOTHING enables lingering — `grep -ri
+# linger sovereign/crates/sovereign-service sovereign/contrib` returns zero
+# hits as of this amendment. So a Linux node leaves the mesh at logout and
+# does not return until someone logs in, and macOS/Windows come back at
+# login rather than at boot. On the machine most worth having in the mesh —
+# the one in the corner with the GPU — that is absence during exactly the
+# window that matters. `loginctl enable-linger` closes it on Linux; macOS
+# and Windows would need a system-level daemon, which K1's grain argument
+# already rejected, so the honest claim there is "contributes while you are
+# logged in" and it must be stated rather than assumed.
+#
 # THIS BAR OUTRANKS sv-attach-pure-client AND SUBSUMES IT. That bar counts
 # needles inside a mode ("attach constructs zero local deciders"), which
 # presupposes both modes exist and measures a lagging count. This one asks
