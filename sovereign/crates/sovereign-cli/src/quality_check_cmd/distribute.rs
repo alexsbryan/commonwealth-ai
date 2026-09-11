@@ -338,8 +338,28 @@ pub(super) use commonwealth_work::attribution::ABSENT_TOOLCHAIN;
 ///
 /// The reference every donor's `provenance` is checked against, so that "a
 /// verdict that is not yours" is a typed question rather than a footnote.
+///
+/// **THE IMAGE IS THE CI ENVIRONMENT, so the reference is read from the same
+/// boundary a donor uses** (operator, 2026-09-10, on what a distributed verdict
+/// is comparable to — the ordinary answer anyone who has run CI would give).
+/// This read `of_this_host` until then, and the consequence was not subtle: a
+/// containerized donor reports the image's compiler (`rustc 1.97.1` here) while
+/// the reference reported the laptop's (`1.95.0`), the toolchain field differed,
+/// and `comparable_to` refused EVERY donor's verdict — including this node's own.
+/// The distributed path could not have adopted a single row.
+///
+/// It is still an INDEPENDENT reading, which is what §18.1 requires: this runs
+/// `Sandbox::probe` on this host's declared image and reads the compiler itself,
+/// exactly as a donor does on its own machine. Shared method, separate values.
+/// With no image declared the probe reports `Direct`, `of_sandbox` falls through
+/// to this host, and a native reference is the honest one — because on such a
+/// host a unit would have run natively too.
 pub(super) fn local_attribution(repo_rev: &str) -> ComputeAttribution {
-    commonwealth_work::attribution::of_this_host(repo_rev)
+    let image = sovereign_core::setup_config::SetupConfig::load()
+        .ok()
+        .and_then(|c| c.compute.work_offer.image.clone());
+    let (sandbox, _why) = commonwealth_work::sandbox::Sandbox::probe(image.as_deref());
+    commonwealth_work::attribution::of_sandbox(repo_rev, &sandbox)
 }
 
 /// Which fields of a donor's attribution do not match this checkout's.
