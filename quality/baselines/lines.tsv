@@ -132,8 +132,8 @@
 27	sovereign/crates/sovereign-time
 41454	sovereign/crates/sovereign-tools
 24871	sovereign/crates/sovereign-tools::tests
-1584	sovereign/crates/sovereign-turn-client
-593	sovereign/crates/sovereign-turn-client::tests
+1884	sovereign/crates/sovereign-turn-client
+818	sovereign/crates/sovereign-turn-client::tests
 1735	sovereign/crates/sovereign-work-atlas
 1200	sovereign/crates/sovereign-work-atlas::tests
 3645	studio/crates/sovereign-recipe-author

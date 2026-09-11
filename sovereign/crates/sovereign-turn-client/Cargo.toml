@@ -22,5 +22,15 @@ tokio-tungstenite = "0.29"
 tracing = { workspace = true }
 reqwest = { workspace = true }
 
+[features]
+default = []
+# Does this build ship a backend it can bring up? See `src/reach.rs` — the
+# capability is NAMED here rather than smuggled in as a networking detail,
+# and it is a question about the BUILD, never about the platform (ARCH principle 12).
+# It gates code only: no dependency hangs off it, so enabling it cannot move
+# a dependency edge and the `sv-no-daemon-management` gate is unaffected by
+# a build that turns it on.
+bundled-backend = []
+
 [lints]
 workspace = true

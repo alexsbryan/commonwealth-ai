@@ -436,21 +436,15 @@ fn discover_fixtures(dir: &Path, filter: &[String]) -> Result<Vec<runner::Fixtur
     Ok(out)
 }
 
+/// One question, one implementation: `sovereign_turn_client::ServingHost`
+/// owns "is a backend reachable" for every surface (sv-surface,
+/// 2026-09-11). The 5s budget is preserved — it is now up to five seconds
+/// of polling rather than one five-second request, which answers sooner
+/// when the daemon is already up.
 async fn daemon_reachable(base_url: &str) -> bool {
-    let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    client
-        .get(&url)
-        .send()
+    sovereign_turn_client::ServingHost::at(base_url)
+        .wait_until_serving(Duration::from_secs(5))
         .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
 }
 
 #[derive(Debug)]

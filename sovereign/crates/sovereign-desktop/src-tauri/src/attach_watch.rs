@@ -6,10 +6,20 @@
 //! until this module it ran no health monitoring either: attach was
 //! explicitly fire-and-forget ("inference 503s will surface it through
 //! the chat UI"), so a dead daemon degraded to per-turn error bubbles
-//! with no global surface. This poller closes that: probe
-//! `/v1/models` (any 2xx = healthy — the same contract the
-//! supervisor's heartbeat and `daemon start`'s readiness wait use)
-//! and emit `attach-daemon-state` events the ReconnectBanner renders.
+//! with no global surface. This poller closes that: ask the client
+//! family whether a host is serving ([`ServingHost::is_serving`] — a
+//! `/v1/models` probe, any 2xx = healthy, the same contract the
+//! supervisor's heartbeat and `daemon start`'s readiness wait use) and
+//! emit `attach-daemon-state` events the ReconnectBanner renders.
+//!
+//! The probe itself is NOT written here (sv-surface, 2026-09-11). "Is a
+//! backend reachable" belongs to `sovereign-turn-client`, where it is
+//! written once for the desktop, the CLI and the phone; this module's
+//! own subject is the BANNER — how many consecutive misses raise it and
+//! what the UI is told. It holds no process and starts nothing: when the
+//! daemon is down, the affordance is `attach_restart_daemon`
+//! (service-manager kickstart, `commands/supervisor_ctl.rs`), not a
+//! supervisor here.
 //!
 //! Recovery is automatic by construction — attach-mode calls are
 //! stateless HTTP, so the moment the daemon answers again everything
@@ -22,10 +32,10 @@
 //! call site.
 
 use serde::Serialize;
+use sovereign_turn_client::ServingHost;
 use tauri::{AppHandle, Emitter};
 
 const PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
-const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 /// Consecutive failures before the banner raises. 3×5s rides out a
 /// hot-reload blip; a restarting daemon (30–60s model load) correctly
 /// shows as down until it answers again.
@@ -49,23 +59,13 @@ pub enum AttachDaemonState {
 /// `client_port`. Detached for the app's lifetime.
 pub fn spawn(app_handle: AppHandle, client_port: u16) {
     tauri::async_runtime::spawn(async move {
-        let url = format!("http://127.0.0.1:{client_port}/v1/models");
-        let client = match reqwest::Client::builder().timeout(PROBE_TIMEOUT).build() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!(error = %e, "attach-watch: could not build probe client");
-                return;
-            }
-        };
+        let host = ServingHost::at(format!("http://127.0.0.1:{client_port}"));
         tracing::info!(client_port, "attach-watch: armed");
         let mut consecutive: u32 = 0;
         let mut raised = false;
         loop {
             tokio::time::sleep(PROBE_INTERVAL).await;
-            let ok = matches!(
-                client.get(&url).send().await,
-                Ok(resp) if resp.status().is_success()
-            );
+            let ok = host.is_serving().await;
             if ok {
                 if raised {
                     tracing::info!(client_port, "attach-watch: daemon is back");

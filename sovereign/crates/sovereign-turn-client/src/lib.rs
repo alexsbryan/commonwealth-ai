@@ -63,6 +63,14 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use sovereign_contracts::error::{Error, Result};
 
+// "Ensure a backend is reachable" belongs to the client, not to the
+// application — sv-surface's `sv-no-daemon-management` bar. See `reach.rs`.
+pub mod reach;
+
+#[cfg(feature = "bundled-backend")]
+pub use reach::BundledBackend;
+pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};
+
 // ─── The protocol, re-exported ─────────────────────────────────
 //
 // Every type below already crosses this crate's public surface: a

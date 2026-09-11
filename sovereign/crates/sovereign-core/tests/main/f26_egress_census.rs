@@ -151,6 +151,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback-only at both layers and refuses anything else — so the class
     // is LocalDaemon, not egress. Nothing here leaves the machine.
     ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
+    // `reach.rs` — the named reachability capability (sv-surface,
+    // 2026-09-11). One `reqwest::Client` in `ServingHost::at`, used for a
+    // `GET /v1/models` readiness probe against the base the CALLER supplies.
+    // Same class and the same reason as the row above: a probe carries no
+    // estate payload out, and the base is this host's own daemon. It is the
+    // one implementation of that probe for every surface — thirteen private
+    // copies preceded it — so this row is where a future probe-site review
+    // lands instead of in each consumer.
+    ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
     // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
@@ -330,7 +339,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs", Class::LocalDaemon, 1),
+    // attach_watch.rs held a `reqwest::Client` for its own `/v1/models`
+    // poll until sv-surface (2026-09-11) moved the probe onto
+    // `ServingHost::is_serving`. The module keeps the BANNER — how many
+    // consecutive misses raise it — and constructs no client at all, which
+    // is why it has no row here.
 
     // ---- sovereign-enrichment-build ----
     // R-5's named path: the enrich --provider dispatch. The chat
@@ -379,7 +392,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // and nothing on this path may construct a RemotePayload/QueryEgress
     // client (that stays in the boundary).
     ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
+    // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
+    // building its own client and asks `ServingHost` instead.
+    ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-cli-llm/src/remote_gguf.rs", Class::InboundOnly, 2),
