@@ -1638,7 +1638,7 @@ impl TurnClient {
 
     // ── The local-corpus manager (sv-surface D5) ─────────────────
     //
-    // Fourteen methods for `lc_http`'s fourteen routes over the
+    // Fifteen methods for `lc_http`'s fifteen routes over the
     // daemon's OWN `LocalCorpusManager`. Generic for the family
     // reason: this crate is Tier-0 and cannot name
     // `sovereign_tools::local_corpus::*`. Each doc names the type.
@@ -1654,6 +1654,26 @@ impl TurnClient {
     /// absent runtime is an `Err` and not one.
     pub async fn lc_list<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
         self.internal_get("/internal/corpus/local".to_string(), &[])
+            .await
+    }
+
+    /// `POST /internal/corpus/local` — register (or re-register) one
+    /// local corpus with the daemon's manager. `B` and `T` are both
+    /// `sovereign_tools::local_corpus::config::LocalCorpusConfig`.
+    ///
+    /// The answer is the config AS REGISTERED, and its `id` is the only
+    /// id to use afterwards: the manager keeps the EXISTING id when this
+    /// path is already registered under one, so the id sent and the id
+    /// kept can differ. Ingesting under the id you SENT is the
+    /// `404 … is not registered locally` this method exists to end.
+    ///
+    /// Idempotent — re-registering the same id overwrites, mirroring
+    /// `LocalCorpusManager::register`. There is no 409.
+    pub async fn lc_register<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        config: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/local".to_string(), config)
             .await
     }
 
@@ -2269,6 +2289,119 @@ impl TurnClient {
             &[],
         )
         .await
+    }
+
+    // ─── sv-surface: the reading family (reading_http) ───────
+    //
+    // Three of `reading_http`'s six routes, added for the CLI rung:
+    // `svrn reading-diag` walked the deref chain by re-deriving it over
+    // `corpus_engine` — its own `atom_brief`, its own edge fold, its own
+    // `detect_atom_spans` call — beside the handlers that already answer
+    // the same five questions. The file's own banner called those helpers
+    // "(mirror reading_http)", which is the §10.6 smell naming itself.
+    //
+    // Generic for the family reason (see `corpus_atoms` above): this
+    // crate is Tier-0 and cannot name `reading_http`'s response types.
+    // It could not reuse them even with an edge — every one is
+    // `Serialize`-only, and `atom_type` / `edge_type` / `role` are
+    // `&'static str`, which no `Deserialize` impl can fill. The caller
+    // declares a mirror carrying `String` in those three positions; each
+    // doc below names the exact type the bytes are.
+
+    /// `GET /internal/corpus/{corpus}/chunks/{chunk_id}/neighbors?radius=`
+    /// — the center chunk with its prev/next siblings inside
+    /// `source_doc_id`. `T` is `sovereign_mesh::reading_http::NeighborWindowResponse`.
+    ///
+    /// The center chunk carries `atom_spans` already detected against
+    /// its own text, so a caller that wants both the window and the
+    /// atom mentions pays ONE round trip and runs no detector of its
+    /// own.
+    ///
+    /// `Ok(None)` for a 404 — the host saying no chunk in this corpus
+    /// carries that id. Every other non-success is an `Err`, so a
+    /// corpus that will not open never reads as "chunk absent"
+    /// (§18.3, and the confusion `atlas_atom_detail`'s doc records).
+    pub async fn reading_neighbors<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+        radius: usize,
+    ) -> Result<Option<T>> {
+        self.reading_get_opt(
+            format!("/internal/corpus/{corpus_id}/chunks/{chunk_id}/neighbors"),
+            &[("radius", radius.to_string())],
+        )
+        .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/atoms/{atom_id}` — the one-hop
+    /// card: surface fields, related edges, cross-corpus bridges. `T`
+    /// is `sovereign_mesh::reading_http::AtomCard`.
+    ///
+    /// `related` is UNCAPPED and resolved: the host drops an edge whose
+    /// other end is not in this atlas, so `related.len()` counts rows a
+    /// caller can name rather than raw edge hits.
+    ///
+    /// `Ok(None)` for a 404 — no such atom in this corpus's atoms.json.
+    pub async fn reading_atom_card<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        atom_id: &str,
+    ) -> Result<Option<T>> {
+        self.reading_get_opt(format!("/internal/corpus/{corpus_id}/atoms/{atom_id}"), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/atoms/{atom_id}/elsewhere` — the
+    /// sections this atom is evidenced in, each with a resolved
+    /// `chunk_id` when the index carries one. `T` is
+    /// `sovereign_mesh::reading_http::AtomElsewhere`.
+    ///
+    /// A `SectionRef` with no `chunk_id` is the answer "this section is
+    /// in the atom's evidence and no chunk claims it" — a legacy ingest
+    /// or a partial reshard — not a failure.
+    ///
+    /// `Ok(None)` for a 404.
+    pub async fn reading_atom_elsewhere<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        atom_id: &str,
+    ) -> Result<Option<T>> {
+        self.reading_get_opt(
+            format!("/internal/corpus/{corpus_id}/atoms/{atom_id}/elsewhere"),
+            &[],
+        )
+        .await
+    }
+
+    /// `internal_get` with the one 404 rule the reading family shares:
+    /// absence is an ANSWER, every other non-success is an error.
+    ///
+    /// One implementation rather than three copies of the same
+    /// status match (§10.6) — the rule the three routes agree on is
+    /// stated once, here.
+    async fn reading_get_opt<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+        query: &[(&str, String)],
+    ) -> Result<Option<T>> {
+        let url = format!("{}{path}", self.base);
+        let mut req = self.http.get(&url);
+        if !query.is_empty() {
+            req = req.query(query);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("GET {url}: {e}")))?;
+        let (status, body) = read_body(resp, &url).await?;
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(host_words(status, &body, &format!("GET {url}")));
+        }
+        parse(&body, &format!("GET {url}")).map(Some)
     }
 
     // ─── sv-surface D9a: the documents family ────────────────

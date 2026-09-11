@@ -135,14 +135,17 @@ async fn register_folder(manager: &Arc<LocalCorpusManager>, tag: &str) -> (Strin
     (id, folder)
 }
 
-/// Register a document folder holding `files` named documents, so a
-/// terminal `files_indexed` is a number a hard-coded `1` cannot fake.
+/// Write a document folder holding `files` named documents and mint its
+/// config — WITHOUT registering it anywhere. The `files` count is what
+/// makes a terminal `files_indexed` a number a hard-coded `1` cannot
+/// fake; the un-registered half is what lets a caller drive the register
+/// route the way the desktop does.
 #[allow(clippy::unwrap_used)]
-async fn register_folder_with_files(
+fn folder_fixture(
     manager: &Arc<LocalCorpusManager>,
     tag: &str,
     files: usize,
-) -> (String, PathBuf) {
+) -> (LocalCorpusConfig, PathBuf) {
     let root = manager.index_dir_root();
     let folder = root
         .parent()
@@ -157,6 +160,18 @@ async fn register_folder_with_files(
         .unwrap();
     }
     let cfg = LocalCorpusConfig::document_folder(folder.clone(), format!("Fixture {tag}"));
+    (cfg, folder)
+}
+
+/// Register a document folder holding `files` named documents, so a
+/// terminal `files_indexed` is a number a hard-coded `1` cannot fake.
+#[allow(clippy::unwrap_used)]
+async fn register_folder_with_files(
+    manager: &Arc<LocalCorpusManager>,
+    tag: &str,
+    files: usize,
+) -> (String, PathBuf) {
+    let (cfg, folder) = folder_fixture(manager, tag, files);
     let id = manager.register(cfg).await.expect("register");
     (id, folder)
 }
@@ -563,5 +578,159 @@ async fn ingest_progress_follows_a_document_folder_to_its_terminal_stats() {
         stats["chunks_written"].as_u64().unwrap_or(0) > 0,
         "three documents produce chunks; a zero here means the counts are \
          defaulted rather than measured: {last:#?}"
+    );
+}
+
+/// The desktop's WHOLE folder-drop journey over the wire, from a folder
+/// no manager has ever heard of: register, ingest, follow the progress
+/// route to its terminal counts.
+///
+/// # What this reproduces
+///
+/// The defect the real-mode harness found on run 5. D8 crossed the
+/// desktop's ingest arm (502304f63) and left its registration behind in
+/// `lc_pre_scan`, on this process's own `LocalCorpusManager`. On an
+/// attached boot that manager is a different instance from this one, so
+/// the ingest arrived for a corpus the daemon had never been told about
+/// and answered
+/// `404 … corpus 'folder-corpus-2918e9ebc0b5' is not registered
+/// locally`. Every other case in this file registers through
+/// `manager.register` directly, which is exactly the step that was
+/// missing — so none of them could see it.
+///
+/// Step (0) is that 404, asserted rather than described: it is the
+/// harness's own failure, and it is what the register route has to turn
+/// into a 202.
+///
+/// # Red-watch (2026-09-10, run, not asserted)
+///
+/// `POST /internal/corpus/local` taken back out of `lc_router` (the
+/// handler left in place, so the suite still built) and this case
+/// re-run — `pass: 0 fail: 1`:
+///
+/// ```text
+/// register_then_ingest_a_folder_no_manager_has_seen  :653
+///     assertion `left == right` failed: register: Null
+///       left: 405   right: 200
+/// ```
+///
+/// Read step (0) alongside it: that assertion PASSED under the sabotage,
+/// because a daemon with no register route 404s the ingest exactly as
+/// one that was never told about the corpus does. Step (0) is the
+/// harness's failure reproduced, and step (1) is the only line that can
+/// tell the fix apart from it.
+#[tokio::test]
+async fn register_then_ingest_a_folder_no_manager_has_seen() {
+    let (manager, addr) = harness().await;
+    let (cfg, folder) = folder_fixture(&manager, "register", 2);
+    let minted = cfg.id.clone();
+
+    // (0) The harness's own failure. Nothing registered this corpus, so
+    // the ingest route refuses it BY NAME — not a job id for a corpus
+    // that does not exist.
+    let (status, body) = post(
+        addr,
+        &format!("/internal/corpus/local/{minted}/ingest"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(
+        status, 404,
+        "an ingest for an unregistered corpus is refused, not accepted: {body:#?}"
+    );
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains(&minted),
+        "the refusal NAMES the corpus — this is the exact body the real-mode \
+         harness read on run 5: {body:#?}"
+    );
+
+    // (1) Register over the wire, the way `lc_pre_scan` now does.
+    let (status, registered) = post(
+        addr,
+        "/internal/corpus/local",
+        serde_json::to_value(&cfg).expect("the config serialises"),
+    )
+    .await;
+    assert_eq!(status, 200, "register: {registered:#?}");
+    let corpus_id = registered["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the answer carries the id AS REGISTERED: {registered:#?}"))
+        .to_string();
+    assert_eq!(
+        registered["display_name"], "Fixture register",
+        "the answer is the config the manager KEPT, not an ack stub: {registered:#?}"
+    );
+    assert!(
+        serde_json::to_string(&registered)
+            .unwrap_or_default()
+            .contains(&folder.to_string_lossy().to_string()),
+        "the registered config carries the root it was registered with: {registered:#?}"
+    );
+
+    // Idempotent, because `register` is: a second pre-scan of the same
+    // folder is an ordinary thing for a user to do, and it must not 409.
+    let (status, again) = post(
+        addr,
+        "/internal/corpus/local",
+        serde_json::to_value(&cfg).expect("the config serialises"),
+    )
+    .await;
+    assert_eq!(status, 200, "re-register is idempotent: {again:#?}");
+    assert_eq!(
+        again["id"],
+        serde_json::json!(corpus_id),
+        "re-registering the same folder keeps the same id — a second id \
+         would orphan the first corpus and double-ingest the folder: {again:#?}"
+    );
+
+    // (2) The very call that 404'd at step (0) is now accepted.
+    let (status, ack) = post(
+        addr,
+        &format!("/internal/corpus/local/{corpus_id}/ingest"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(
+        status, 202,
+        "the ingest the registration unblocked: {ack:#?}"
+    );
+    let job_id = ack["job_id"].as_str().expect("a job id").to_string();
+    let progress_path = ack["progress_route"]
+        .as_str()
+        .expect("the ack names its progress route")
+        .to_string();
+
+    // (3) Follow it to the terminal counts. Two files in, two reported —
+    // a defaulted or fabricated stat block cannot pass this.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let last = loop {
+        let (status, body) = get(addr, &progress_path).await;
+        assert_eq!(status, 200, "the progress route stays reachable: {body:#?}");
+        if body["finished"] == serde_json::json!(true) {
+            break body;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("the ingest never reached its terminal frame; last answer: {body:#?}");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    };
+    assert_eq!(
+        last["outcome"]["job_id"],
+        serde_json::json!(job_id),
+        "the receipt names the job the ack handed back: {last:#?}"
+    );
+    assert!(
+        last["outcome"]["error"].is_null(),
+        "the fixture ingest succeeds; an error here is a real failure: {last:#?}"
+    );
+    assert_eq!(
+        last["outcome"]["stats"]["files_indexed"],
+        serde_json::json!(2),
+        "two files were written into the folder and two are reported — the \
+         count the desktop's terminal frame renders: {last:#?}"
+    );
+    assert_eq!(
+        last["outcome"]["stats"]["corpus_id"],
+        serde_json::json!(corpus_id)
     );
 }

@@ -23,6 +23,7 @@
 //! |---|---|
 //! | `lc_ocr_available` | `GET    /internal/corpus/local/ocr-available` |
 //! | `lc_list` | `GET    /internal/corpus/local` |
+//! | (`manager.register`, the write inside `lc_pre_scan`) | `POST   /internal/corpus/local` |
 //! | (`manager.get`, the read inside `lc_enrich_now`) | `GET    /internal/corpus/local/{corpus}` |
 //! | `lc_remove` | `DELETE /internal/corpus/local/{corpus}` |
 //! | `lc_incomplete_jobs` | `GET    /internal/corpus/local/incomplete-jobs` |
@@ -78,11 +79,25 @@
 //!
 //! # NOT served, named rather than dropped (ARCH §18.3)
 //!
-//! - `lc_validate_path` and `lc_pre_scan` are app-local by decision:
-//!   both probe a path the USER just picked in a file dialog, before
-//!   any corpus exists. `lc_pre_scan` additionally `register`s that
-//!   path, which is why no bare `register` route is offered either —
-//!   there is no caller for one that is not the pre-scan flow.
+//! - `lc_validate_path` and the SCAN half of `lc_pre_scan` are
+//!   app-local by decision: both probe a path the USER just picked in
+//!   a file dialog, and the scan reads that path's files rather than
+//!   any manager's state.
+//!
+//!   CORRECTION, 2026-09-10. This bullet used to cover `lc_pre_scan`
+//!   WHOLE, and used its `register` call to argue that "no bare
+//!   `register` route is offered either — there is no caller for one
+//!   that is not the pre-scan flow". The path probe is app-local; the
+//!   registration never was. `register` writes the REGISTRY ON DISK,
+//!   which is precisely the state this file's own rule says both
+//!   managers must share, and every route below that answers
+//!   `not_registered` is its consumer. D8 crossed the ingest job
+//!   (502304f63) and left the registration behind, so on an attached
+//!   boot the desktop registered into its own manager and this
+//!   daemon answered the ingest `404 … is not registered locally`
+//!   (real-mode journeys, run 5). Consumer without producer — the
+//!   pairing 069660fd9 named. `POST /internal/corpus/local` is the
+//!   producer crossing to join them.
 //! - `lc_cluster` is a job whose ONLY output channel is the desktop's
 //!   Tauri progress emitter. The manager writes no state file for
 //!   clustering, so serving it would require minting the job table the
@@ -253,7 +268,7 @@ pub struct LocalSearchHit {
 /// different fact from "the route is not mounted".
 pub fn lc_router() -> Router {
     Router::new()
-        .route("/internal/corpus/local", get(list))
+        .route("/internal/corpus/local", get(list).post(register))
         .route("/internal/corpus/local/ocr-available", get(ocr_available))
         .route(
             "/internal/corpus/local/incomplete-jobs",
@@ -346,6 +361,64 @@ async fn incomplete_jobs(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl Int
         Err(resp) => return resp,
     };
     (StatusCode::OK, Json(manager.incomplete_jobs().await)).into_response()
+}
+
+/// POST /internal/corpus/local — register (or re-register) one local
+/// corpus with THIS daemon's manager. Wire form of the `.register`
+/// call `lc_pre_scan` used to make on the desktop's own manager.
+///
+/// # Idempotent, because `register` is
+///
+/// `LocalCorpusManager::register` overwrites on a repeat id and keeps
+/// the EXISTING id when the path is already registered under one (its
+/// path-identity guard). The route mirrors that rather than minting a
+/// 409: a second pre-scan of the same folder is an ordinary thing for a
+/// user to do, and answering 409 would make the pane treat it as an
+/// error it cannot resolve.
+///
+/// # Why the answer is the config AS REGISTERED
+///
+/// Because the id the caller sent is not necessarily the id the manager
+/// kept. The stored config carries the surviving id in its own `id`
+/// field, so there is ONE name for it on the wire and no second field
+/// to disagree with (§10.6). A caller that ingests under the id it sent,
+/// rather than the id it got back, is the 404 this route exists to end.
+async fn register(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(config): Json<LocalCorpusConfig>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let manager = match manager_or_503() {
+        Ok(m) => m,
+        Err(resp) => return resp,
+    };
+    let requested = config.id.clone();
+    let root = config.root_path.clone();
+    let id = match manager.register(config).await {
+        Ok(id) => id,
+        Err(e) => return internal_error(&format!("register: {e}")),
+    };
+    match manager.get(&id).await {
+        Some(stored) => {
+            tracing::info!(
+                corpus_id = %id,
+                requested = %requested,
+                reused_existing_id = id != requested,
+                root = %root.display(),
+                "lc_http: local corpus registered"
+            );
+            (StatusCode::OK, Json(stored)).into_response()
+        }
+        // Not reachable through `register`, which inserts before it
+        // returns. Reported rather than papered over with the config
+        // that was SENT, which would echo an id the registry does not
+        // hold (§18.3).
+        None => internal_error(&format!(
+            "register: '{id}' is not in the registry immediately after being written"
+        )),
+    }
 }
 
 // ─── Handlers: one corpus ──────────────────────────────────────
