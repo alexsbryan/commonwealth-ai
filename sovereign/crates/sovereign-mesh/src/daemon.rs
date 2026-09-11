@@ -3888,11 +3888,32 @@ impl EmbeddedDaemon {
                 })
             })
         };
+        // A MEDIA ORIGIN A MEMBER MAY REACH, when the operator declared one.
+        // Parsed here and REFUSED by name if it does not parse: a media library
+        // silently not served is the shape of a demo that fails at the worst
+        // moment, and a dropped config value is the §18.3 substitution.
+        let media_origin: Option<std::net::SocketAddr> = {
+            let raw = self.setup_config.read().await.iroh.media_origin.clone();
+            match raw {
+                None => None,
+                Some(raw) => match raw.parse() {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        return Err(MeshError::Config(format!(
+                            "[iroh] media_origin = \"{raw}\" is not a host:port ({e}) — a node \
+                             that cannot parse what it would serve must not boot pretending to \
+                             serve it"
+                        )))
+                    }
+                },
+            }
+        };
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             peer_addr,
             guest_addr,
+            media_origin,
             member_check.clone(),
             iroh_enabled,
             &iroh_relay_cfg,
@@ -3986,6 +4007,7 @@ impl EmbeddedDaemon {
                         internal_port,
                         peer_addr,
                         guest_addr,
+                        media_origin,
                         member_check.clone(),
                         iroh_enabled,
                         &relay_cfg,

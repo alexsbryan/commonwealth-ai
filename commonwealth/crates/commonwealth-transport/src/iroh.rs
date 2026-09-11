@@ -98,6 +98,21 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// cannot reach the trusted listener, and a peer's inference is untouched.
 pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 
+/// A MEMBER reaching this node's media origin — whatever HTTP media server its
+/// operator already runs (Jellyfin's `:8096`, a plain file server, anything that
+/// speaks `Range`).
+///
+/// Its own protocol rather than a path on the client API, because the product is
+/// that clients speak the media server's OWN api: the bridge is
+/// [`tokio::io::copy`] in both directions and never parses HTTP, so `Range`
+/// passes through untouched and a player seeks as if the library were local. A
+/// path on `CLIENT_ALPN` would have meant re-implementing the media server.
+///
+/// Members only, and refused rather than downgraded for a stranger — the origin
+/// authenticates nothing, so there is no safe listener to fall back to. Same
+/// rule as [`RPC_ALPN`], for the same reason.
+pub const MEDIA_ALPN: &[u8] = b"cwth/media/0";
+
 // Re-exported so feature consumers (sovereign-server, the mobile
 // core, the sovereign-mesh spike test) build endpoints without
 // declaring their own iroh dependency — keeps the version pin in

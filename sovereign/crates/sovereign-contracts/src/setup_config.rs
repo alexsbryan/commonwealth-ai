@@ -221,6 +221,27 @@ pub struct IrohSection {
     /// ```
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relay_urls: Vec<String>,
+    /// `[iroh] media_origin` — a local HTTP media server that MEMBERS of this
+    /// mesh may reach over iroh, as `host:port`.
+    ///
+    /// Absent (the default) means this node serves no media and does not
+    /// advertise the protocol at all, so a dial is closed rather than hanging.
+    /// Present means the daemon's acceptor forwards `MEDIA_ALPN` to it for a
+    /// dialer the roster carries — no VPN, no port-forward, no public exposure:
+    /// the origin stays bound to loopback and the only way in is a mesh key.
+    ///
+    /// It is the OPERATOR's declaration, like `[compute.work_offer] image`: this
+    /// repository ships no media server and must not guess at one. A value that
+    /// does not parse as a socket address refuses the boot rather than being
+    /// dropped (§18.3).
+    ///
+    /// ```toml
+    /// [iroh]
+    /// enabled = true
+    /// media_origin = "127.0.0.1:8096"   # Jellyfin's default
+    /// ```
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_origin: Option<String>,
     /// Which discovery/relay infrastructure to use (H1 sovereignty
     /// knob). `"n0"` or absent (the default) = n0's public relays AND
     /// n0's DNS/pkarr address-lookup. `"none"` / `"self"` / `"local"`

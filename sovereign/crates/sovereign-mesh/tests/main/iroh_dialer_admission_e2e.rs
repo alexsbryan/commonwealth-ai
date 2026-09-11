@@ -113,6 +113,7 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         rpc: Some("127.0.0.1:2".parse().unwrap()),
         peer,
         guest,
+        media: None,
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -320,6 +321,7 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         // client router, `/internal/*` and all.
         peer: Some(spawn_router(client_router(state.clone())).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: None,
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();

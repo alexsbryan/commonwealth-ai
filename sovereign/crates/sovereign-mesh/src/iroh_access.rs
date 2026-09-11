@@ -29,7 +29,7 @@ use std::path::Path;
 
 use commonwealth_transport::iroh::{
     build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, RelayConfig,
-    ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN,
+    ALPN, CLIENT_ALPN, GUEST_ALPN, MEDIA_ALPN, RPC_ALPN,
 };
 use commonwealth_transport::TrafficClass;
 
@@ -328,6 +328,10 @@ pub struct AcceptorRoutes {
     pub guest: Option<SocketAddr>,
     /// A local ggml rpc-server, when this node serves one.
     pub rpc: Option<SocketAddr>,
+    /// A local HTTP media origin, when this node's operator declared one
+    /// (`[iroh] media_origin`). `None` means the protocol is not advertised at
+    /// all, so a dial is closed rather than left hanging on a route to nowhere.
+    pub media: Option<SocketAddr>,
 }
 
 impl AcceptorRoutes {
@@ -405,6 +409,22 @@ impl AcceptorRoutes {
             );
             return self.guest;
         }
+        if alpn == MEDIA_ALPN {
+            if is_member(dialer).await {
+                return self.media;
+            }
+            // The origin authenticates nothing — it is somebody's Jellyfin on
+            // loopback — so there is no listener to downgrade a stranger to,
+            // and this is the branch that would leak a media library to the
+            // whole internet if it ever became an unconditional forward (§9.1).
+            tracing::warn!(
+                target: "transport",
+                dialer = %hex::encode(dialer.0),
+                "iroh(mesh): REFUSED a MEDIA_ALPN dial from a non-member — the media origin \
+                 authenticates nothing, so there is no safe downgrade"
+            );
+            return None;
+        }
         if alpn == RPC_ALPN {
             if is_member(dialer).await {
                 return self.rpc;
@@ -438,6 +458,7 @@ impl MeshIrohAccess {
         internal_port: u16,
         peer_addr: Option<SocketAddr>,
         guest_addr: Option<SocketAddr>,
+        media_origin: Option<SocketAddr>,
         member_check: MemberCheck,
         enabled: bool,
         relay_cfg: &RelayConfig,
@@ -468,6 +489,18 @@ impl MeshIrohAccess {
         let mut alpns = vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()];
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
+        }
+        // Advertised only when there is something behind it, for the same
+        // reason RPC is: a node that negotiates a protocol it cannot forward
+        // turns a closed dial into a hang.
+        if let Some(origin) = media_origin {
+            alpns.push(MEDIA_ALPN.to_vec());
+            tracing::info!(
+                target: "transport",
+                media_origin = %origin,
+                "iroh(mesh): serving MEDIA_ALPN to members — a peer's player reaches this \
+                 origin by mesh key, with no port forwarded and no VPN"
+            );
         }
         // A guest is a different principal from a peer, so it gets a different
         // protocol — forwarded to the daemon's SECOND bind of the client
@@ -524,6 +557,7 @@ impl MeshIrohAccess {
             peer: peer_addr,
             guest: guest_addr,
             rpc: rpc_forward,
+            media: media_origin,
         };
         let acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
             let is_member = member_check.clone();
@@ -834,6 +868,7 @@ mod tests {
             peer: Some(addr(41001)),
             guest: Some(addr(41000)),
             rpc: Some(addr(50052)),
+            media: Some(addr(8096)),
         }
     }
 
@@ -918,6 +953,39 @@ mod tests {
         );
         assert_eq!(
             r.forward_for(RPC_ALPN, STRANGER, &only_the_member()).await,
+            None,
+        );
+    }
+
+    /// **A MEDIA LIBRARY IS NOT A PUBLIC SURFACE.** The origin is somebody's
+    /// Jellyfin on loopback and it authenticates nothing, so — exactly like the
+    /// rpc-server — a member is forwarded and a stranger is refused rather than
+    /// downgraded to some other listener. The failing input is this arm
+    /// returning `self.media` unconditionally, which is how a dial string that
+    /// rides in every invite would become a key to the operator's films.
+    #[tokio::test]
+    async fn the_media_alpn_admits_members_only_and_has_no_downgrade() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(MEDIA_ALPN, MEMBER, &only_the_member()).await,
+            r.media,
+        );
+        assert!(r.media.is_some(), "the fixture must actually serve media, or the assertion above passes on a shared None");
+        assert_eq!(
+            r.forward_for(MEDIA_ALPN, STRANGER, &only_the_member()).await,
+            None,
+        );
+
+        // A node that declares no origin advertises nothing and closes even a
+        // member's dial — no route to nowhere.
+        let unserved = AcceptorRoutes {
+            media: None,
+            ..routes()
+        };
+        assert_eq!(
+            unserved
+                .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+                .await,
             None,
         );
     }
