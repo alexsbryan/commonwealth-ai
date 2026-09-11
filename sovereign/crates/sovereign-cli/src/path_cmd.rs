@@ -39,23 +39,18 @@ pub async fn run(args: &[String]) -> i32 {
     let which = positional.first().map(|s| s.as_str()).unwrap_or("root");
 
     let (path, reason) = match which {
-        // The per-user root. NOT override-sensitive — `SVRNMESH_DATA_DIR`
-        // does not move it, which is deliberate: the daemon run lock and
-        // projects.json live here and reader/writer must agree.
-        "root" => {
+        // The per-user root, and `data` is its alias. Until 2026-09-10 the
+        // two differed: `root` was `$HOME`-derived and this comment called
+        // that deliberate "because the run lock and projects.json live
+        // here and reader/writer must agree". The run lock had already
+        // been re-keyed onto the data root (2026-08-24), and the split
+        // was the disagreement — a process with `SVRNMESH_DATA_DIR` set
+        // read its config from one root and its data from another. The
+        // override is now applied inside `svrnmesh_root_explained`, so
+        // every accessor moves together and `--explain` names it.
+        "root" | "data" => {
             let (p, choice) = rebrand::svrnmesh_root_explained();
             (p, choice.reason().to_string())
-        }
-        // The data root, honouring SVRNMESH_DATA_DIR / SOVEREIGN_DATA_DIR.
-        "data" => {
-            let overridden = rebrand::svrnmesh_env("DATA_DIR").is_some();
-            let reason = if overridden {
-                "SVRNMESH_DATA_DIR / SOVEREIGN_DATA_DIR override is set".to_string()
-            } else {
-                let (_, choice) = rebrand::svrnmesh_root_explained();
-                format!("no DATA_DIR override; {}", choice.reason())
-            };
-            (rebrand::data_dir(), reason)
         }
         // The platform-native CONFIG dir — where a GUI settings file
         // (`desktop.toml`) lives. On macOS this resolves to the same directory
@@ -87,19 +82,15 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "svrn path",
     summary: "Print a per-user directory as the toolchain resolves it.",
     sections: &[
-        crate::util::help::HelpSection::Usage("svrn path [root|data|mesh-data|config] [--explain]"),
+        crate::util::help::HelpSection::Usage("svrn path [root|data|config] [--explain]"),
         crate::util::help::HelpSection::Subcommands(&[
             (
                 "root",
-                "Per-user root (~/.svrnmesh, or a populated legacy ~/.sovereign). The default.",
+                "Per-user root: SVRNMESH_DATA_DIR / SOVEREIGN_DATA_DIR if set, else ~/.svrnmesh (or a populated legacy ~/.sovereign). The default.",
             ),
             (
                 "data",
-                "Data root — as `root`, but honours SVRNMESH_DATA_DIR / SOVEREIGN_DATA_DIR",
-            ),
-            (
-                "mesh-data",
-                "Platform-native data dir for the embedded mesh's shared storage",
+                "Alias of `root` — the two were one derivation from 2026-09-10; kept for scripts",
             ),
             (
                 "config",

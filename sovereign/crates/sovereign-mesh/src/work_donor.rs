@@ -37,10 +37,17 @@
 //!    constructs those refusals ([`UnmetRequirement`]) in the same enum.
 //! 4. The operator is not at the keyboard, when the offer says to yield.
 //!
-//! **Consent is not isolation.** `process:v1` runs the submitter's argv as
-//! this node's user with this node's filesystem and network; there is no
-//! sandbox in this repository. That is why [`DONOR_ISOLATION`] is
-//! `Subprocess` and why `[compute.work_offer] accept` defaults to `nobody`.
+//! **Consent is not isolation, and the boundary is now a thing rather than a
+//! warning.** Until 2026-09-10 `process:v1` ran the submitter's argv as this
+//! node's user with this node's filesystem and network, and the only wall was
+//! `accept_from`. A unit now runs inside `commonwealth_work::sandbox` —
+//! rootless container, no network, no capabilities, nothing mounted but its
+//! own workdir — and what this node PROVIDES is whatever
+//! [`Sandbox::probe`](commonwealth_work::sandbox::Sandbox::probe) could
+//! actually find. A host with no runtime, or no declared image, provides
+//! [`DONOR_ISOLATION`] and therefore offers no kind that demands more, which
+//! is every kind that runs a stranger's argv. `accept` still defaults to
+//! `nobody`; it is no longer the only thing standing there.
 //!
 //! # A lost lease cancels the unit
 //!
@@ -72,9 +79,14 @@ use commonwealth_api::state::AppState;
 use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail};
 use commonwealth_work::act::{Completion, Failure, UnitRef, WorkAct};
 use commonwealth_work::actor::ActorKey;
+// The named absence for a workdir that is not a checkout. Imported rather
+// than re-spelled: this donor, the submitter and a lifted peer all have to
+// name the same absence, and the comparability rule keys on it.
+use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::executor::{subject_of, JobContext, JobError, JobExecutorRegistry};
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::{may_take, UnmetRequirement, WorkRefusal};
+use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
+use commonwealth_work::refusal::{host_satisfies, may_take, UnmetRequirement, WorkRefusal};
+use commonwealth_work::sandbox::Sandbox;
 use commonwealth_work::WORK_NAMESPACE;
 use kernel_types::attribution::ComputeAttribution;
 use kernel_types::quality::Precondition;
@@ -98,17 +110,21 @@ use crate::supervised_task::SupervisedTask;
 /// be dark for anybody who typed the obvious one.
 pub const TRACE_TARGET: &str = commonwealth_work::TRACE_TARGET;
 
-/// The isolation this build actually provides, and therefore the only one it
-/// may offer.
+/// What a donor provides when it has NO boundary — a child in its own process
+/// group, killed on timeout, and the donor's own user, filesystem and network.
 ///
-/// `ProcessExecutor` runs a child in its own process group and kills the
-/// group on timeout. That is `Subprocess` and nothing above it: there is no
-/// bwrap, no firejail, no nsjail and no network namespace anywhere in this
-/// repository, so `RootlessContainer` would be a claim with no mechanism
-/// behind it. It is a constant rather than a config key for the reason
-/// `oicp_types::Isolation` refuses a `Default` — a donor that does not answer
-/// how it isolates has not answered, and the honest answer here is a fact
-/// about the build (ARCH §18.3).
+/// It is the floor of the ladder rather than the answer: since 2026-09-10 the
+/// answer is `Sandbox::provides()`, derived from a probe that has to find a
+/// rootless runtime and a locally-present image before it will report
+/// anything above this. The constant remains because it is the value that
+/// probe FALLS BACK to, and because `ingest:v1` — which runs this daemon's own
+/// code in-process — is covered by it.
+///
+/// It stays a constant and not a config key for the reason
+/// `oicp_types::Isolation` refuses a `Default`: a donor that does not answer
+/// how it isolates has not answered, and a config that could assert an
+/// isolation the host cannot perform is §18.3's substitution in the one place
+/// it would be least visible.
 pub const DONOR_ISOLATION: Isolation = Isolation::Subprocess;
 
 /// How often the fold is re-read for takeable units.
@@ -143,13 +159,11 @@ pub enum OfferRefused {
         kind: JobKind,
         registered: Vec<JobKind>,
     },
-    /// A registered executor needs stronger isolation than this build offers.
-    #[error("[compute.work_offer] offers `{kind}`, whose executor requires `{required:?}` isolation, and this build provides `{offered:?}`")]
-    IsolationBelow {
-        kind: JobKind,
-        required: Isolation,
-        offered: Isolation,
-    },
+    // An executor demanding more isolation than this build provides was a
+    // REFUSED BOOT until 2026-09-10 and is now a dropped kind with a `warn`
+    // — see the floor's comment in `resolve_offer`. The variant is gone
+    // rather than kept unreachable: an error nothing constructs is a claim
+    // that a path exists, and the next reader would look for it.
     /// An `accept_from` entry is not an actor key.
     #[error("[compute.work_offer] accept_from contains `{raw}`, which is not an actor key: {why}")]
     AcceptKey { raw: String, why: String },
@@ -187,14 +201,21 @@ fn registered_list(kinds: &[JobKind]) -> String {
 /// failure the boot check exists to prevent (ARCH §18.3).
 pub fn donor_registry(
     corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    sandbox: Sandbox,
 ) -> JobExecutorRegistry {
     let mut registry = JobExecutorRegistry::new();
     // `register` refuses a duplicate kind rather than overwriting, and each
     // kind is registered once here, so neither `Result` can be an error — both
     // are still surfaced rather than unwrapped, because a future second
     // registration must not be able to vanish (ARCH §18.3).
-    if let Err(e) = registry.register(Arc::new(commonwealth_work::process::ProcessExecutor::new()))
-    {
+    //
+    // The sandbox goes INTO the executor rather than being consulted beside
+    // it, so the boundary a unit actually runs in and the isolation this node
+    // advertises are one value read twice — a node cannot run units one way
+    // and describe itself another (ARCH §10.6).
+    if let Err(e) = registry.register(Arc::new(
+        commonwealth_work::process::ProcessExecutor::with_sandbox(sandbox),
+    )) {
         warn!(target: TRACE_TARGET, error = %e, "work donor: an executor could not be registered");
     }
     match corpus_engine {
@@ -228,8 +249,9 @@ pub fn resolve_offer(
     registry: &JobExecutorRegistry,
     os: &str,
     arch: &str,
+    provides: Isolation,
 ) -> Result<Option<WorkOffer>, OfferRefused> {
-    let Some(offer) = section.to_offer(os, arch, DONOR_ISOLATION)? else {
+    let Some(offer) = section.to_offer(os, arch, provides)? else {
         debug!(
             target: TRACE_TARGET,
             "work donor: [compute.work_offer] names no kinds, so this node donates nothing"
@@ -248,27 +270,59 @@ pub fn resolve_offer(
     // `registry.kinds()` is the same set `registry.resolve` answers from, so
     // a kind that passes here cannot fail to resolve in the loop — one
     // decider, not two lists that agree today (ARCH §10.6).
-    for kind in &offer.kinds {
-        let Some(executor) = registry.resolve(kind) else {
-            return Err(OfferRefused::UnregisteredKind {
-                kind: kind.clone(),
-                registered: registry.kinds(),
-            });
-        };
-        // The other half of the same question, and the refusal the predicate's
-        // own docs say the REGISTRY decides: a unit does not carry its
-        // isolation requirement, its executor's descriptor does. An executor
-        // this build cannot isolate as strongly as it demands must not be
-        // offered at all.
-        let required = executor.descriptor().isolation;
-        if !DONOR_ISOLATION.covers(required) {
-            return Err(OfferRefused::IsolationBelow {
-                kind: kind.clone(),
-                required,
-                offered: DONOR_ISOLATION,
-            });
-        }
+    // THE ISOLATION FLOOR IS A DROP, NOT A REFUSED BOOT (2026-09-10).
+    //
+    // The two failures below look alike and must not be treated alike. An
+    // UNREGISTERED kind is the operator's typo, and refusing the boot is the
+    // right answer: nothing they intended can happen and the sooner they read
+    // the sentence the better. An isolation shortfall is OURS — it is this
+    // build changing what a kind demands under a config that was valid when
+    // it was written. Every daemon on this mesh carries
+    // `kinds = ["process:v1"]` today, so refusing the boot would take those
+    // daemons DOWN on their next restart to enforce a rule about work they
+    // are not currently doing, which trades a security posture for an outage.
+    //
+    // So the kind is dropped from the published offer and the drop is NAMED
+    // at `warn` — never silently, which would be the §18.3 substitution. If
+    // that empties the offer, this node publishes none and donates nothing,
+    // which is exactly the shipped posture for a node that offers no kind.
+    // The partition is `commonwealth-work`'s, not this module's — the floor
+    // has to reach a donor built from the package alone, and a second copy
+    // here is the §10.6 twin this campaign has now closed three times.
+    let partition = registry.offerable(&offer.kinds, provides);
+    if let Some(kind) = partition.unregistered.first() {
+        return Err(OfferRefused::UnregisteredKind {
+            kind: kind.clone(),
+            registered: registry.kinds(),
+        });
     }
+    for dropped in &partition.dropped {
+        warn!(
+            target: TRACE_TARGET,
+            kind = %dropped.kind,
+            required = ?dropped.required,
+            provides = ?dropped.provides,
+            "work donor: NOT offering this kind — {dropped}, so a unit of it \
+             would run with this node's user, filesystem and network behind \
+             nothing but consent. The config is left alone; the kind is \
+             dropped from the offer. A container-backed executor is what \
+             lifts this, not a config key"
+        );
+    }
+    let offerable = partition.offerable;
+    if offerable.is_empty() {
+        info!(
+            target: TRACE_TARGET,
+            configured = %registered_list(&offer.kinds),
+            "work donor: every configured kind was dropped by the isolation \
+             floor, so this node publishes no offer and donates nothing"
+        );
+        return Ok(None);
+    }
+    let offer = WorkOffer {
+        kinds: offerable,
+        ..offer
+    };
     if offer.max_concurrent == 0 {
         // Reported, not corrected. `may_take` will refuse every unit with
         // `Concurrency { held: 0, max: 0 }`, which is a working donor that
@@ -567,54 +621,6 @@ fn trace_refusal(unit_ref: &UnitRef, refusal: &WorkRefusal) {
 // -----------------------------------------------------------------
 // The host's half of the predicate
 // -----------------------------------------------------------------
-
-/// The requirements only this host can answer.
-///
-/// `may_take` has already decided os and arch from the offer; what is left is
-/// the precondition list, and the rule is the one ARCH §18.3 states: a
-/// precondition this build cannot EVALUATE is refused, never assumed met. A
-/// donor that treated "I cannot check this" as "it is fine" would return a
-/// verdict about a machine that did not meet the unit's terms.
-fn host_satisfies(unit: &JobUnit) -> Result<(), WorkRefusal> {
-    for precondition in &unit.requirements.preconditions {
-        let met = match precondition {
-            Precondition::Binary(name) => binary_on_path(name),
-            Precondition::Container(name) => in_container(name),
-            // Not evaluable from this crate: a listening port is a socket
-            // probe, and slots and corpora are the agent runtime's state,
-            // which the mesh crate deliberately cannot reach. Refused and
-            // named rather than assumed.
-            Precondition::PortListening(_)
-            | Precondition::SlotDecodes(_)
-            | Precondition::CorpusInstalled(_) => false,
-        };
-        if !met {
-            return Err(WorkRefusal::RequirementUnmet(
-                UnmetRequirement::Precondition(precondition.clone()),
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// Is `name` an executable on this host's `PATH`?
-fn binary_on_path(name: &str) -> bool {
-    let Ok(path) = std::env::var("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
-}
-
-/// Is this process inside the named toolbox/container?
-///
-/// `/run/.containerenv` names the container and its absence means the host —
-/// the same read `AGENTS.md` documents for a person checking by hand, so
-/// there is one answer to "which side am I on" (ARCH §10.6).
-fn in_container(name: &str) -> bool {
-    std::fs::read_to_string("/run/.containerenv")
-        .map(|text| text.contains(&format!("name=\"{name}\"")))
-        .unwrap_or(false)
-}
 
 // -----------------------------------------------------------------
 // Checkouts
@@ -999,14 +1005,14 @@ fn credit_for(
     }
 }
 
-/// Whether this node still holds the lease it took.
-#[derive(Debug)]
-enum LeaseState {
-    Held,
-    Lost(String),
-    Unknown,
-}
-
+/// The I/O half of "do I still hold this lease".
+///
+/// The DECIDER moved to `commonwealth_work::projection::lease_state` — it is
+/// pure over the fold, and a lifted peer needs exactly the same three-state
+/// answer (cw-lift 5f found this by re-deriving it as a bool and cancelling a
+/// running unit on one unreadable heartbeat). What stays here is the only part
+/// that is this crate's business: obtaining the fold from an `AppState`, and
+/// answering `Unknown` when that fails.
 async fn still_ours(app_state: &AppState, unit_ref: &UnitRef, self_key: &ActorKey) -> LeaseState {
     match fold_now(app_state).await {
         Some((_, proj, _, now_ms)) => lease_state(&proj, unit_ref, self_key, now_ms),
@@ -1014,32 +1020,6 @@ async fn still_ours(app_state: &AppState, unit_ref: &UnitRef, self_key: &ActorKe
         // holds the lease. Kept apart from `Lost` so the caller can hold
         // rather than kill (ARCH §18.2 — could-not-judge is its own verdict).
         None => LeaseState::Unknown,
-    }
-}
-
-/// The pure half: given a fold, does `self_key` still hold this unit?
-///
-/// Split out so the decision is testable without a rail, a key or a journal —
-/// the states that matter (lost to another donor, lapsed past
-/// `expires_at_ms`, already reported) are all reachable as projection values.
-/// Expiry is derived by `status_at`, which is the ONE place it is decided, so
-/// a lease this donor let lapse reads as lost here for exactly the same
-/// reason it reads as re-queued to everybody else.
-fn lease_state(
-    proj: &WorkProjection,
-    unit_ref: &UnitRef,
-    self_key: &ActorKey,
-    now_ms: u64,
-) -> LeaseState {
-    let Some(projected) = proj.unit(unit_ref) else {
-        return LeaseState::Lost("the unit is no longer in the fold".to_string());
-    };
-    match projected.status_at(now_ms) {
-        WorkUnitStatus::Leased { ref lessee, .. } if lessee == self_key => LeaseState::Held,
-        WorkUnitStatus::Leased { lessee, .. } => {
-            LeaseState::Lost(format!("`{lessee}` holds the lease now"))
-        }
-        other => LeaseState::Lost(format!("the unit reads `{}`", other.id())),
     }
 }
 
@@ -1053,9 +1033,14 @@ fn lease_state(
 /// the comparison `ComputeAttribution::comparable_to` exists to fail (the
 /// plan's 5e bar iii: a stale donor's unpinned verdict must be flaggable).
 ///
-/// Where a value genuinely cannot be read, it is a NAMED absence that
-/// `kernel_types::is_absent_marker` recognises, never a plausible-looking
-/// substitute (ARCH §18.3).
+/// THE REV IS THE ONLY PART THIS FUNCTION STILL DECIDES. Resolving it needs a
+/// workdir, which is a donor's own business; os, arch and toolchain are "what
+/// host am I", and that had three implementations — here, the submitter's
+/// `distribute::local_attribution`, and the lifted peer's — which cw-lift 5f
+/// recorded as a hole in the package's surface. One reader now
+/// (`commonwealth_work::attribution`), called independently by each side, so
+/// the METHOD is shared and the VALUE is still each host's own (ARCH §10.6,
+/// and §18.1 on why the two readings must stay independent).
 fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
     let repo_rev = unit
         .requirements
@@ -1068,53 +1053,7 @@ fn attribution(unit: &JobUnit, workdir: &Path) -> ComputeAttribution {
         })
         .filter(|rev| !rev.is_empty())
         .unwrap_or_else(|| ABSENT_REV.to_string());
-    ComputeAttribution {
-        repo_rev,
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        toolchain: toolchain().to_string(),
-        host: Server::Local,
-    }
-}
-
-/// The rev of a workdir that is not a checkout. A named absence
-/// (`kernel_types::is_absent_marker` reads it as one), so a reader can tell
-/// "no revision" from a revision.
-pub const ABSENT_REV: &str = "unknown (this donor's workdir is not a git checkout)";
-
-/// The toolchain absence, in the same vocabulary.
-pub const ABSENT_TOOLCHAIN: &str = "unknown (rustc is not on this donor's PATH)";
-
-/// `rustc --version`, read once per process.
-///
-/// The compiler identity, which is what `ComputeAttribution::toolchain` asks
-/// for — not this crate's own version, which is a fact about the source and
-/// would compare equal across two machines running different compilers.
-fn toolchain() -> &'static str {
-    static TOOLCHAIN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    TOOLCHAIN.get_or_init(|| {
-        match std::process::Command::new("rustc")
-            .arg("--version")
-            .output()
-        {
-            Ok(out) if out.status.success() => {
-                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if v.is_empty() {
-                    ABSENT_TOOLCHAIN.to_string()
-                } else {
-                    v
-                }
-            }
-            _ => {
-                warn!(
-                    target: TRACE_TARGET,
-                    "work donor: `rustc --version` is unreadable, so results from this node \
-                     carry a named absence for their toolchain rather than a guess"
-                );
-                ABSENT_TOOLCHAIN.to_string()
-            }
-        }
-    })
+    commonwealth_work::attribution::of_this_host(repo_rev)
 }
 
 /// Append one act to the local `work` journal, then nudge the ring round.

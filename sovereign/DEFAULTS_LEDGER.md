@@ -30,6 +30,131 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `process:v1` donation — a BOUNDARY, not a refusal → **GRADUATED 2026-09-10** for the package donor (the daemon path is built, not measured)
+
+**What ships NOW.** `ProcessExecutor`'s descriptor still REQUIRES
+`Isolation::RootlessContainer`; what changed is that a build can provide it.
+`commonwealth_work::sandbox::Sandbox::probe` derives the answer at boot from
+three things it CONFIRMS — a runtime on `PATH`, rootless, and the declared
+image present locally — and `Isolation::Subprocess` is what a host missing any
+of them gets, with the reason on the boot trace. `work_donor::DONOR_ISOLATION`
+survives as that fallback rather than as the answer; the daemon reads the probe
+(`daemon.rs:2751-2777`, on `[compute.work_offer] image`) and the lifted peer
+reads the same probe on `--image` / `CW_WORK_IMAGE`. So a donor with podman and
+an image publishes `process:v1`, and a donor without one still refuses it and
+names which of the four things to fix. `ingest:v1` is unaffected: it declares
+`InProcess`, it runs our own code on the daemon's threads, and it still offers.
+
+**What ships in the boundary**, and the flag list is the mechanism (§7 —
+structural, not remembered): `--entrypoint=` so the unit's argv is the program
+that runs, `--network=none`, `--cap-drop=ALL`,
+`--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`, and EXACTLY ONE
+`-v` — the unit's workdir. The donor's data directory is therefore unreachable
+by construction rather than by an exclusion someone maintains, which is what
+`work_donor::resolve_workdir` already made possible by handing out
+`donor_root/scratch`, a CHILD of the data dir.
+
+`--entrypoint=` was a MEASURED defect, not a review catch: the first sandboxed
+lift run gave three units, three exit-127s and a `failed` verdict for a program
+that never ran, because the declared image's own `ENTRYPOINT` took the unit's
+argv as arguments. A donor reporting a verdict about a program the submitter
+never sealed is the §18.3 substitution in its purest form.
+
+**There is no flag, and that is the point.** Operator decision 2026-09-10:
+isolation is the default and there is no arbitrary code execution outside a
+well-defined boundary. A config key here would be a way to assert an
+isolation this build cannot perform, which is the substitution §18.3
+forbids — `DONOR_ISOLATION` is a `const` for that reason, and the fix is a
+mechanism.
+
+**What it was before.** `process:v1` published an offer whose only wall was
+consent, and the module's own doc says consent is not isolation
+(`work_donor.rs:40-43`): a unit ran as the donor's user with the donor's
+filesystem and network, which reaches `~/.svrnmesh/node_key` — the donor's
+mesh identity readable by the work it accepts. `accept` defaulted to
+`nobody`, so the surface was safe by convention. It is now safe by
+refusal.
+
+**Flip condition — MET for the package donor, on the evidence it asked
+for.** It asked for a container-backed executor raising what the build
+PROVIDES to `RootlessContainer`, a run donating a unit through it, and a
+watched red where a unit tries to read the donor's identity or open a socket
+and FAILS. All three, 2026-09-10, on the Fedora host with rootless podman
+5.8.4:
+
+- **Donated, measured, repeated.** `scripts/cw-work-lift.sh --sandbox` with an
+  image reports `{"value": 1}` — three heterogeneous units complete on a
+  nine-act rail, built outside the monorepo, with `podman info` rootless
+  confirmed by the probe. Four runs, one verdict. `co-lineage.py measure
+  cw-lift` stamped `cw-work-package-lift  met  value=1.0`, which is the row
+  that bar's own text said it was waiting for.
+- **Contained, not merely configured.** The shell unit carries back
+  `cwd=/work`, so the unit ran inside the mount and not beside it.
+- **THE WATCHED RED IS NOW A STEP, not a sentence.** Step 6 of the instrument
+  writes an escape probe, runs it FIRST on the bare host where it must fail
+  (it does: `ESCAPE: this unit opened a TCP connection to the internet`), then
+  submits it as a donated unit where it must pass (it does: no network, and
+  the donor's rail is not on the unit's filesystem). Both branches were
+  watched failing on their own. A probe that cannot fail is not a gate
+  (§18.1), so the control is not optional and an instrument whose probe passes
+  bare ABSTAINS rather than reporting green.
+
+**What is NOT measured, and it is the honest half:** no run has donated
+through the DAEMON. It composes the same probe, the same registry and the same
+executor as the peer, so the parts are the ones under test — but "the same code
+path" is an argument, not a measurement, and the daemon-side reading is D2's
+and needs a second machine.
+
+**IT COST D3, AND THE COST IS THE POINT.** The floor is
+`JobExecutorRegistry::offerable` in `commonwealth-work` — the package both
+donors link — rather than only in `sovereign-mesh`'s boot path, because a
+donor built from the package alone had no floor at all and the lifted peer
+(`examples/work_peer.rs`) was exactly that donor: it published `process:v1`
+and ran a stranger's argv with consent in front of it. With the floor
+reaching it, the peer published nothing and exited 3, so
+`scripts/cw-work-lift.sh --sandbox` read **could-not-judge** where it had read
+a measured 1 — the honest verdict rather than a regression, since steps 1-4
+still measured and only the donation abstained.
+
+**THE COST IS REPAID, and by the mechanism rather than by an exemption.** The
+peer donates again because it now HAS a boundary, not because it was let off
+one: same floor, same `offerable` partition, and with no `--image` it still
+publishes nothing and still exits 3 naming what is absent. `cw-work-package-lift`
+is back at `met` 1.0. The peer did not grow to get there — it is unchanged at
+400 code lines, which is its own cap (`cw-work-second-lift`), and the two things
+this rung needed went into the package and the instrument instead. That cap is
+now the binding constraint on the demo: a `--env` flag for `ProcessPayload::env`
+costs four lines and did not fit, so the instrument spells the unit's
+environment with `env(1)` in the argv. Moving the cap is the operator's call.
+
+**Known open beside it, banked against cw-lift.** The first two closed the
+same day: `JobRequirements.isolation` exists (`oicp-types/src/job.rs:384`) and
+`WorkRefusal::IsolationBelow` has a producer in `may_take`
+(`commonwealth-work/src/refusal.rs:408`), so a submitter can now demand a
+boundary and be refused by name. Still open:
+
+- **A donor cannot bind an `accept_from` key to the peer it names** — mesh
+  transport prints no peer pubkeys, so the whole trust boundary is a 64-hex
+  string asserted in a chat message.
+- **`host_satisfies` checks the DONOR'S HOST while the unit runs inside the
+  DONOR'S IMAGE.** Under a container boundary a `Precondition::Binary` is a
+  claim about the image, and nothing checks it there — so a host without
+  python3 refuses a unit its image could have run, and a host with cargo
+  accepts one its image cannot. Found by running the lift, not by reading it.
+- **A unit that COMPILES needs its inputs inside the one mount.** `--network=none`
+  plus a single `-v` means no registry and no writable package cache, which is
+  correct and is also a requirement submitters have to be told: the lift's
+  first sandboxed shard failed with `no matching package named blake3` until the
+  instrument vendored 119 crate sources into the workdir (0.4 s, 109 MB) and
+  pointed `CARGO_HOME` at a relative path inside it. `--distribute` will pay the
+  same cost for D2, and an absolute path there would hardcode `sandbox`'s mount
+  point into a submitter's payload.
+
+**Review by 2026-11-01**, now for the daemon half only: if no run has
+donated a unit through a DAEMON's `[compute.work_offer] image` by then, say so
+and decide whether the daemon ships `ingest:v1` only while the package donor
+carries `process:v1`.
+
 ### Merge coverage bar — `MergePlan::expected_partitions`, shipped UNSET (2026-09-09)
 
 **What ships.** `ShardManager::merge_participants` refuses a merge —

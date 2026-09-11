@@ -140,10 +140,19 @@ SESSION_KILLED=""; SESSION_RC=0
 run_session() { # prompt_file tag
   local prompt="$1" tag="$2"
   local log="$STATE_DIR/logs/${tag}.out"
+  local input="$STATE_DIR/logs/${tag}.input.md"
   SESSION_KILLED=""; SESSION_RC=0
+  {
+    if [ -n "$(git status --porcelain)" ]; then
+      printf 'NOTE: the tree holds uncommitted work from a prior session:\n'
+      git status --short
+      printf 'Inspect it and continue from it; do not discard work already done. Commit it as you go.\n\n'
+    fi
+    cat "$prompt"
+  } > "$input"
   local before after
   before=$(grep -c 'auto-rejecting' "$log" 2>/dev/null || true); before=${before:-0}
-  "$OPENCODE_BIN" run "$(cat "$prompt")" > "$log" 2>&1 &
+  "$OPENCODE_BIN" run "$(cat "$input")" > "$log" 2>&1 &
   local pid=$! start last_change t lmt
   start=$(date +%s); last_change=$start
   while kill -0 "$pid" 2>/dev/null; do

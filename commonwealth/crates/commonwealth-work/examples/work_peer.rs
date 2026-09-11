@@ -2,7 +2,8 @@
 //! A **package-only work peer** — cw-lift 5f, the campaign's second lift.
 //!
 //! ```text
-//! work_peer --root <rail-dir> [--workdir <dir>] [--label <name>] [-- <shard argv...>]
+//! work_peer --root <rail-dir> [--workdir <dir>] [--label <name>]
+//!            [--image <container-image>] [-- <shard argv...>]
 //! ```
 //!
 //! The campaign's CLAIM block asks for a second application composing on the
@@ -53,13 +54,14 @@ use commonwealth_core::ids::HandoffId;
 use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, SigningKey};
 use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecutorRegistry};
 use commonwealth_work::process::{ProcessExecutor, ProcessPayload, ResultSource, PROCESS_KIND};
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::may_take;
+use commonwealth_work::projection::{lease_state, LeaseState, WorkProjection, WorkUnitStatus};
+use commonwealth_work::refusal::{host_satisfies, may_take};
+use commonwealth_work::sandbox::Sandbox;
 use commonwealth_work::{
     act, seal, ActorKey, Completion, Failure, Submission, UnitRef, WorkAct, WORK_NAMESPACE,
 };
 use kernel_types::quality::Precondition;
-use kernel_types::{ComputeAttribution, ContentHash, Server, Verdict};
+use kernel_types::{ContentHash, Verdict};
 use oicp_types::{Isolation, JobKind, JobRequirements, JobUnit, WorkOffer};
 
 /// The test shard's argv when the caller does not supply one after `--`. The
@@ -124,6 +126,12 @@ struct PeerArgs {
     root: PathBuf,
     workdir: PathBuf,
     label: String,
+    /// The image a unit runs inside, on THIS host. Absent means this peer has
+    /// no boundary and therefore offers nothing — which is a working peer
+    /// that declines, not a broken one. It is a flag rather than a constant
+    /// because the package ships no image and must not pretend to: a third
+    /// party naming their own is the whole point of the lift.
+    image: Option<String>,
     shard: Vec<String>,
 }
 
@@ -133,6 +141,7 @@ impl PeerArgs {
             root: PathBuf::new(),
             workdir: std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?,
             label: "cw-work-lift peer".to_string(),
+            image: std::env::var("CW_WORK_IMAGE").ok(),
             shard: SHARD.split_whitespace().map(str::to_string).collect(),
         };
         let mut it = args.iter().skip(1);
@@ -142,6 +151,7 @@ impl PeerArgs {
                 "--root" => cfg.root = PathBuf::from(value()?),
                 "--workdir" => cfg.workdir = PathBuf::from(value()?),
                 "--label" => cfg.label = value()?,
+                "--image" => cfg.image = Some(value()?),
                 // Everything past `--` is the test shard's argv, so the
                 // instrument can point the shard at the tree it just built
                 // without this file knowing where that is.
@@ -172,28 +182,11 @@ fn key_of(label: &str) -> SigningKey {
     SigningKey::from_bytes(ContentHash::of_str(label).as_bytes())
 }
 
-/// The host half of consent — the questions no signature over the rail can
-/// answer. `work_donor::host_satisfies`'s shape, in the same closed
-/// vocabulary, so a unit this host cannot run is never leased rather than
-/// leased and burnt.
-fn host_satisfies(unit: &JobUnit) -> Result<(), String> {
-    for p in &unit.requirements.preconditions {
-        match p {
-            Precondition::Binary(name) => {
-                if !on_path(name) {
-                    return Err(format!("`{name}` is not on this donor's PATH"));
-                }
-            }
-            other => return Err(format!("this peer cannot check `{other:?}`")),
-        }
-    }
-    Ok(())
-}
-
-fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(name).is_file()))
-}
+// The host half of consent is `commonwealth_work::refusal::host_satisfies`
+// now, not a copy here. cw-lift 5f shipped this peer with its own twelve-line
+// version that checked `Binary` and refused `Container` outright — so a unit
+// this machine could in fact have run was declined, silently, by a second
+// decider nobody compared against the first.
 
 fn plan(cfg: &PeerArgs) -> Result<Vec<PlannedUnit>, String> {
     let kind = JobKind::parse(PROCESS_KIND).map_err(|e| e.to_string())?;
@@ -286,11 +279,52 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         )),
     )?;
 
+    // THE REGISTRY COMES FIRST, because the floor is asked BEFORE anything is
+    // published. This peer used to build its offer, append it, and only then
+    // register an executor — which is how a third-party donor came to
+    // advertise `process:v1` with nothing in front of a stranger's argv. The
+    // decider is `commonwealth-work`'s, so a donor built from this crate
+    // cannot get it wrong by forgetting to write it.
+    // PROBE, then register with what the probe found — the same order and the
+    // same decider the daemon uses. What this peer PROVIDES is never asserted
+    // here: it is whatever `Sandbox::probe` could actually confirm on this
+    // host, which is the §18.3 rule that keeps a config from claiming a
+    // boundary a machine does not have.
+    let (sandbox, why) = Sandbox::probe(cfg.image.as_deref());
+    if let Some(reason) = &why {
+        eprintln!("work_peer: no boundary — {reason}");
+    }
+    let peer_provides = sandbox.provides();
+    let mut registry = JobExecutorRegistry::new();
+    registry
+        .register(Arc::new(ProcessExecutor::with_sandbox(sandbox)))
+        .map_err(|e| e.to_string())?;
+
+    let partition = registry.offerable(std::slice::from_ref(&kind), peer_provides);
+    for dropped in &partition.dropped {
+        eprintln!("work_peer: NOT offering {dropped}");
+    }
+    if partition.offerable.is_empty() {
+        // ABSTAIN, and say which — never a silent exit and never a failure.
+        // This peer lifting and building is one question; whether this build
+        // may donate is another, and collapsing them would report a working
+        // closure as a broken one (ARCH §18.3). Exit 3 is the lift
+        // instrument's could-not-judge.
+        eprintln!(
+            "work_peer: this host provides `{peer_provides:?}` isolation and every \
+             offered kind demands more, so it publishes no offer and donates \
+             nothing. The package lifted and ran; it declined to execute a \
+             stranger's argv without a boundary. Give it `--image <ref>` on a \
+             host with a rootless runtime and it donates."
+        );
+        std::process::exit(3);
+    }
+
     let offer = WorkOffer {
-        kinds: vec![kind],
+        kinds: partition.offerable,
         max_concurrent: 1,
         yield_to_foreground: false,
-        isolation: Isolation::Subprocess,
+        isolation: peer_provides,
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         repos: Vec::new(),
@@ -299,11 +333,6 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     append(&journal, &key, &roster, &WorkAct::Offer(offer.clone()))?;
     let (os, arch, root) = (&offer.os, &offer.arch, cfg.root.display());
     eprintln!("work_peer: {me} offers {PROCESS_KIND} on {os}/{arch}, rail at {root}");
-
-    let mut registry = JobExecutorRegistry::new();
-    registry
-        .register(Arc::new(ProcessExecutor::new()))
-        .map_err(|e| e.to_string())?;
     let started = Instant::now();
     loop {
         let proj = fold(&journal, &roster)?;
@@ -392,35 +421,45 @@ async fn run_unit(
                     // `match`: a journal that could not be READ is not
                     // evidence that somebody else holds the lease, and killing
                     // a half-hour shard on it is the substitution §18.3
-                    // forbids. `work_donor::LeaseState` draws exactly this
-                    // split and `commonwealth-work` does not own it — the
-                    // first version of this file collapsed it to a bool.
-                    match fold(journal, roster).map(|p| p.unit(unit_ref).map(|u| u.status_at(unix_now_millis()))) {
-                        Ok(Some(WorkUnitStatus::Leased { ref lessee, .. })) if lessee == me => {
+                    // forbids. The peer no longer draws that line itself —
+                    // `commonwealth_work::lease_state` owns it now, so this
+                    // program and the daemon's donor loop cannot disagree
+                    // about what "lost" means. The I/O half stays here,
+                    // because obtaining the fold is what differs between a
+                    // peer with a journal and a daemon with an AppState.
+                    let state = match fold(journal, roster) {
+                        Ok(p) => lease_state(&p, unit_ref, me, unix_now_millis()),
+                        Err(e) => {
+                            eprintln!("work_peer: the fold was unreadable this heartbeat, holding ({e})");
+                            LeaseState::Unknown
+                        }
+                    };
+                    match state {
+                        LeaseState::Held => {
                             if let Err(e) = append(journal, key, roster, &WorkAct::Renew(unit_ref.clone())) {
                                 eprintln!("work_peer: a renew could not be appended: {e}");
                             }
                         }
-                        Ok(_) => {
-                            eprintln!("work_peer: lease lost on {} — cancelling", unit_ref.unit_hash);
+                        LeaseState::Lost(why) => {
+                            eprintln!("work_peer: lease lost on {} ({why}) — cancelling", unit_ref.unit_hash);
                             ctx.cancel();
                         }
-                        Err(e) => eprintln!("work_peer: the fold was unreadable this heartbeat, holding ({e})"),
+                        LeaseState::Unknown => {}
                     }
                 }
             }
         }
     };
-    let provenance =
-        ComputeAttribution {
-            repo_rev: unit.requirements.repo_rev.clone().unwrap_or_else(|| {
-                "unknown (this peer's workdir is not a git checkout)".to_string()
-            }),
-            os: std::env::consts::OS.to_string(),
-            arch: std::env::consts::ARCH.to_string(),
-            toolchain: "unknown (a lifted peer does not read the donor's rustc)".to_string(),
-            host: Server::Local,
-        };
+    // THE THIRD HAND-BUILT ATTRIBUTION, and 5f named it as this crate's own
+    // hole: every donor invented its own, which is precisely the value
+    // `comparable_to` exists to compare. It also declared a REFUSAL to read
+    // (`"a lifted peer does not read the donor's rustc"`) where the honest
+    // answer is this peer's actual compiler — a lifted peer runs the unit, so
+    // its rustc is the one that matters. One reader now, in the crate the peer
+    // already links.
+    let provenance = commonwealth_work::attribution::of_this_host(
+        unit.requirements.repo_rev.clone().unwrap_or_default(),
+    );
     match outcome {
         Ok((outcome, result)) => WorkAct::Complete(Completion {
             handoff: unit_ref.handoff,

@@ -443,6 +443,17 @@ else:
                          "describes work you are continuing — and if you know "
                          "which it is, `sovereign session attach <id>` makes "
                          "the next /clear in this window deterministic._\n")
+            # A frame is the wrong surface for campaign work, and this list is
+            # exactly where that goes wrong: N frames, none of them able to say
+            # which one you continue, while `co-resume.sh <campaign>` is
+            # unambiguous by construction. A cw-lift frame's hand-written
+            # Objective named two of three demos and dropped the third for a
+            # week (MAIN_SESSION_PROTOCOL §Session splitting).
+            lines.append(
+                "_Continuing a CAMPAIGN? Do not pick a frame — "
+                "`scripts/co-resume.sh <campaign-id>` is the surface, and it "
+                "reads the artifacts rather than a distillation of them. "
+                "Frames under an order carry only invariants and dead ends._\n")
             block = "\n".join(lines)
             prov["frame_bytes_injected"] = nbytes(block)
             emit(block)
@@ -469,27 +480,108 @@ if not os.environ.get("SOVEREIGN_NO_ORDERS"):
             or os.environ.get("CLAUDE_PROJECT_DIR")
             or os.getcwd()
         )
+        # THE PROCESS RATCHET (2026-09-10). The repo has eight blocking
+        # ratchets for code and had none for its own process artifacts, so a
+        # campaign ran eight rungs with no campaign.md and nothing anywhere
+        # said so — the workspace's characteristic failure (a plausible,
+        # well-formed, exit-0 result that is wrong) applied to the meta layer.
+        # These three flags are cheap: two stat() calls and a regex on a head
+        # already read. They are ADVISORY and appear only when something is
+        # missing, so an order set in good shape adds not one character.
         _orders = []
         for _p in sorted(_glob.glob(os.path.join(
                 _repo, ".sovereign", "features", "*", "order.md"))):
             try:
-                _head = open(_p, encoding="utf-8", errors="replace").read(2048)
+                _head = open(_p, encoding="utf-8", errors="replace").read(4096)
             except OSError:
                 continue
             _st = re.search(r"^status:\s*(\S+)", _head, re.M)
             if not _st or _st.group(1) != "open":
                 continue
             _ti = re.search(r"^# Order:\s*(.+)$", _head, re.M)
-            _orders.append((os.path.basename(os.path.dirname(_p)),
-                            (_ti.group(1).strip() if _ti else "")[:80]))
+            _dir = os.path.dirname(_p)
+            _flags = []
+            _camp = re.search(r"^(?:campaign|serves):\s*(\S+)", _head, re.M)
+            _cid = _camp.group(1) if _camp else ""
+            if _cid and not _cid.startswith("("):
+                if not os.path.exists(os.path.join(
+                        _repo, ".sovereign", "features", _cid, "campaign.md")):
+                    _flags.append("no campaign.md")
+            _dm = re.search(r"^## Demo\s*$\n+(.*?)(?=^## |\Z)", _head, re.M | re.S)
+            _dmb = re.sub(r"<!--.*?-->", "", _dm.group(1), flags=re.S).strip() if _dm else ""
+            if not _dmb or _dmb == "(none)":
+                _flags.append("no demo")
+            if not os.path.exists(os.path.join(_dir, "journal.md")):
+                _flags.append("no cursor")
+            _orders.append((os.path.basename(_dir),
+                            (_ti.group(1).strip() if _ti else "")[:80], _flags))
         if _orders:
             _lines = [f"### Open work orders ({len(_orders)})\n"]
-            for _oid, _title in _orders[:3]:
-                _lines.append(f"- `{_oid}` — {_title}  "
+            for _oid, _title, _fl in _orders[:3]:
+                _warn = ("  ⚠ " + " · ".join(_fl)) if _fl else ""
+                _lines.append(f"- `{_oid}` — {_title}{_warn}  "
                               f"(`.sovereign/features/{_oid}/order.md`)")
             if len(_orders) > 3:
                 _lines.append(
                     f"- …and {len(_orders) - 3} more in `.sovereign/features/`")
+            _nc = sum(1 for _, _, _f in _orders if "no campaign.md" in _f)
+            _nd = sum(1 for _, _, _f in _orders if "no demo" in _f)
+            _nj = sum(1 for _, _, _f in _orders if "no cursor" in _f)
+            if _nc or _nd or _nj:
+                _bits = []
+                if _nc:
+                    _bits.append(f"{_nc} name a campaign with no `campaign.md` "
+                                 "(so every ambiguity axis escalates and depth "
+                                 "is unbounded — `co-campaign.sh new <id>`)")
+                if _nd:
+                    _bits.append(f"{_nd} name no demo (satisfiable by work "
+                                 "nobody can watch)")
+                if _nj:
+                    _bits.append(f"{_nj} have no cursor "
+                                 "(`co-journal.sh new <order-id>`)")
+                _lines.append("\n_Process ratchet: " + "; ".join(_bits) + "._")
+            # An order the cursor says is finished and the file still calls
+            # open is the write-side failure: the next session picks up work
+            # that already landed. Cheap enough to ask every boot.
+            _fin = []
+            for _o, _, _ in _orders:
+                _j = os.path.join(_repo, ".sovereign", "features", _o, "journal.md")
+                if not os.path.exists(_j):
+                    continue
+                try:
+                    _jb = open(_j, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                _bx = re.findall(r"^- \[(.)\] \d+\.", _jb, re.M)
+                if _bx and all(_b == "x" for _b in _bx):
+                    _fin.append(_o)
+            if _fin:
+                _lines.append(
+                    f"\n_UNCLOSED: {len(_fin)} order(s) whose cursor says every step is "
+                    "done and which still read `open` — the next session picks up work "
+                    "that already landed. `scripts/co-close.sh <id> --decision \"…\"`: "
+                    + ", ".join(f"`{o}`" for o in _fin[:3]) + "._")
+            # Dedup on the STRING, not the match object — a set of match
+            # objects is never equal and printed `deep-research` twice.
+            _camps = set()
+            for _o, _, _ in _orders:
+                try:
+                    _oh = open(os.path.join(_repo, ".sovereign", "features",
+                                            _o, "order.md"),
+                               encoding="utf-8", errors="replace").read(4096)
+                except OSError:
+                    continue
+                _m = re.search(r"^(?:campaign|serves):\s*(\S+)", _oh, re.M)
+                if _m and not _m.group(1).startswith("("):
+                    _camps.add(_m.group(1))
+            if _camps:
+                _cs = sorted(_camps)
+                _lines.append(
+                    "\n_Picking up a campaign? `scripts/co-resume.sh <id>` is the "
+                    "whole brief — demos, live frontier, the cursor and the next "
+                    "step, computed. Open here: "
+                    + ", ".join(f"`{c}`" for c in _cs[:4])
+                    + (f" (+{len(_cs) - 4})" if len(_cs) > 4 else "") + "._")
             _lines.append("\n_If this session is picking one up, Read it "
                           "whole first — it carries objective, scope to "
                           "claim, lane, budget, seams. If not, ignore this "

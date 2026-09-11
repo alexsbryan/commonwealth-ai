@@ -1745,3 +1745,251 @@ target       = 6.0
 direction    = "higher_is_better"
 instrument   = "the ledger's own as-of reader, counting live grants"
 kill         = "K5 — the ledger cannot express §10.1j, a finding about an INSTRUMENT's blindness rather than a debt with a payer. Then it covers the easy half of §10, the prose stays, and 1g is not declared."
+# ── RUNG TABLE — THE ONE RECORD OF RUNG STATUS (2026-09-10) ─────────────────────────────────────
+# THE TABLE OWNS STATUS. The comment ladder above keeps the rationale —
+# what each rung learned, which is worth more than a status line and
+# which no schema should hold. When they disagree, the table is right
+# about `status` and the prose is right about everything else.
+# Validate with `scripts/co-ladder.py check cw-lift`.
+
+[[rung]]
+id     = "-1"
+title  = "instrument the boundary"
+status = "done"
+sha    = ["b704b845d"]
+demo   = ""
+
+[[rung]]
+id     = "0a"
+title  = "delete 12 dead modules"
+status = "done"
+sha    = ["5cc9076fc"]
+demo   = ""
+
+[[rung]]
+id     = "0b"
+title  = "delete orchestrator + gossip"
+status = "done"
+sha    = ["e9f20feec"]
+demo   = ""
+
+[[rung]]
+id     = "0c"
+title  = "ProcessKind + what it strands"
+status = "done"
+sha    = ["cfa70611f"]
+demo   = ""
+
+[[rung]]
+id     = "4a"
+title  = "fair_sched -> serving-policy"
+status = "done"
+sha    = ["e26414742"]
+demo   = ""
+
+[[rung]]
+id     = "1a"
+title  = "oplog -> tier-0 leaf"
+status = "done"
+sha    = ["33b003a2e"]
+demo   = ""
+
+[[rung]]
+id     = "1b"
+title  = "the rail becomes two crates"
+status = "done"
+sha    = ["ff63884f3"]
+demo   = ""
+
+[[rung]]
+id     = "4b"
+title  = "model_aliases + glob -> oicp"
+status = "done"
+sha    = ["2a5b63325", "4759e7b04"]
+demo   = ""
+
+[[rung]]
+id     = "1c"
+title  = "consumers name the rail, facade gone"
+status = "done"
+sha    = ["b94d399eb"]
+demo   = ""
+
+[[rung]]
+id     = "1d"
+title  = "re-derived: the last knowledge edge"
+status = "done"
+sha    = ["84e6fd1c0"]
+demo   = ""
+
+[[rung]]
+id     = "1e"
+title  = "RingVerifier seam (Membership DROPPED)"
+status = "done"
+sha    = ["34d308b85", "dc9010181"]
+demo   = ""
+
+[[rung]]
+id     = "1f"
+title  = "DESCOPED 2026-09-04 — canon x rail was a way to EXERCISE the work, not"
+status = "descoped"
+sha    = []
+demo   = ""
+
+[[rung]]
+id     = "2a"
+title  = "the ceiling, measured + watched red"
+status = "done"
+sha    = ["b55b9179e", "73a273dd1"]
+demo   = ""
+
+[[rung]]
+id     = "2b"
+title  = "twelve free namespaces off the wire"
+status = "done"
+sha    = ["4747d6fa6"]
+demo   = ""
+
+[[rung]]
+id     = "2f"
+title  = "chunk the exchange (NEW, earned by 2a's measurement)"
+status = "done"
+sha    = ["bc600f424"]
+demo   = ""
+
+[[rung]]
+id     = "2d"
+title  = "mesh-measurements onto the rail, roster DERIVED not written"
+status = "partial"
+sha    = ["ce42f893f", "92a64d778"]
+demo   = ""
+
+
+[[rung]]
+id     = "3a"
+title  = "the two misnamed crates go home"
+status = "open"
+sha    = []
+demo   = ""
+
+[[rung]]
+id     = "3b"
+title  = "the daemon goes local-only"
+status = "partial"
+sha    = ["f15d28a4c", "9f1ed6692"]
+demo   = ""
+
+[[rung]]
+id     = "3c"
+title  = "the instrument counts CLASSES, by PATH not prefix"
+status = "done"
+sha    = ["3554c409f"]
+demo   = ""
+
+
+[[rung]]
+id     = "4a"
+title  = "the journal can forget — seal AND prune, one rung"
+status = "done"
+sha    = ["e8279937d", "3c9a41bd8"]
+demo   = ""
+
+[[rung]]
+id     = "4b"
+title  = "the store is a projection with an outbox, and the daemon pumps it"
+status = "done"
+sha    = ["195cb16f3", "ea4da7b68"]
+demo   = ""
+
+[[rung]]
+id     = "4c"
+title  = "the six namespaces ride it — ZERO per-namespace code"
+status = "done"
+sha    = []
+demo   = ""
+
+[[rung]]
+id     = "2e"
+title  = "the second replication path is deleted; census 3 -> 1"
+status = "done"
+sha    = ["d82a39538"]
+demo   = ""
+
+[[rung]]
+id     = "4d"
+title  = "THE LOCAL-ONLY DAEMON CLOSEOUT — K2 fired, the profile is the ship"
+status = "done"
+sha    = ["d6f247e5c"]
+demo   = ""
+
+[[rung]]
+id     = "4e"
+title  = "a seal carries the deletes it retires"
+status = "done"
+sha    = ["df42ce62a", "35a2f18fb", "693b8e043", "929d1cd57"]
+demo   = ""
+
+[[rung]]
+id     = "5a"
+title  = "ground truth, the audit, the live bug, F1"
+status = "done"
+sha    = ["df832d294"]
+demo   = "none"
+
+[[rung]]
+id     = "5b"
+title  = "the job vocabulary in the leaf, no behaviour change"
+status = "done"
+sha    = ["405aa2f4e"]
+demo   = "none"
+
+[[rung]]
+id     = "5c"
+title  = "commonwealth-work: codec, fold, one predicate, executor"
+status = "done"
+sha    = ["239f93354"]
+demo   = "D3"
+
+[[rung]]
+id     = "5d"
+title  = "the daemon projects `work`, seals it, runs a donor loop"
+status = "done"
+sha    = ["3338f43e4", "a69c674c8"]
+demo   = "D2"
+
+[[rung]]
+id     = "5e"
+title  = "CI on your metal: --distribute on the runner that already exists"
+status = "done"
+sha    = ["2a3437399"]
+demo   = "D2"
+
+[[rung]]
+id     = "5f"
+title  = "the second lift is paid, and the package surface has three holes"
+status = "done"
+sha    = ["b03cbad01"]
+demo   = "D3"
+
+[[rung]]
+id     = "5g"
+title  = "ingest rides the fold; the deletion payoff, gated on 5e"
+status = "partial"
+sha    = ["1e5418f4b", "a32115fc4"]
+demo   = "none"
+
+[[rung]]
+id     = "5h"
+title  = "the ledger credits the donor, and only the donor can"
+status = "done"
+sha    = ["9eb723b37", "4759e7b04", "99bfde104", "f22270fa2"]
+demo   = "none"
+
+# 35 rung(s) drafted. REVIEW EVERY ONE before appending — the parse is
+
+[[rung]]
+id     = "5i"
+title  = "the last two package-surface holes come home"
+status = "done"
+sha    = ["a2e745456", "264adbab7", "111d460ca", "d4bd2adfd"]
+demo   = "D3"

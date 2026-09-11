@@ -18,8 +18,10 @@ use std::path::PathBuf;
 /// Root of the per-user data directory. Every mutable piece of
 /// sovereign state lives underneath: models, corpora, mesh.json,
 /// notes.db, per-project indexes, logs. Delegates to the rebrand-aware
-/// SSOT (`sovereign_contracts::rebrand`) — prefer `~/.svrnmesh`, fall
-/// back to a populated legacy `~/.sovereign`.
+/// SSOT (`sovereign_contracts::rebrand`): `SVRNMESH_DATA_DIR` /
+/// `SOVEREIGN_DATA_DIR` if set, else `~/.svrnmesh`, else a populated
+/// legacy `~/.sovereign`. The override is applied THERE, once — this
+/// wrapper must never re-derive it (§10.6).
 pub fn sovereign_root() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root()
 }

@@ -399,6 +399,63 @@ pub struct ReapStats {
     pub phase_transitions: u32,
 }
 
+/// Does the holder still hold it — and the third answer, which is the point.
+///
+/// **Three states, not two.** A journal that could not be READ is not evidence
+/// that somebody else took the lease, and cancelling a half-hour shard on it
+/// is the substitution ARCH §18.3 forbids. [`Unknown`](LeaseState::Unknown) is
+/// that verdict, kept apart from [`Lost`](LeaseState::Lost) so a caller can
+/// HOLD rather than kill.
+///
+/// This is not a hypothetical. cw-lift 5f wrote a second donor — a lifted peer
+/// — and the first version of it collapsed this to a bool, so a single
+/// unreadable heartbeat cancelled a running unit. The decider existed at the
+/// time, in `sovereign-mesh::work_donor`, where a package consumer could not
+/// reach it; 5f recorded that as a hole in this crate's surface and the peer's
+/// own comment named the repair. This is it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeaseState {
+    /// The fold says this actor holds the lease at `now_ms`.
+    Held,
+    /// The fold is readable and says the lease is NOT this actor's — taken by
+    /// another donor, lapsed past `expires_at_ms`, or already reported. The
+    /// string names which, for the log line the caller writes.
+    Lost(String),
+    /// The fold could not be read. Says nothing about the lease.
+    ///
+    /// [`lease_state`] never returns this — it is handed a projection, so by
+    /// construction it HAS one. It is constructed by the caller that failed to
+    /// obtain the fold, which is the only place that knows.
+    Unknown,
+}
+
+/// The pure half of "do I still hold this lease": given a fold, an actor and a
+/// clock, [`Held`](LeaseState::Held) or [`Lost`](LeaseState::Lost).
+///
+/// Pure so the decision is testable without a rail, a key or a journal — every
+/// state that matters (lost to another donor, lapsed, already reported) is
+/// reachable as a projection value. The I/O half — obtaining the fold, and
+/// answering [`Unknown`](LeaseState::Unknown) when that fails — belongs to the
+/// caller, because a daemon reads it from an `AppState` and a lifted peer
+/// reads it off its own journal, and neither shape belongs in this crate.
+pub fn lease_state(
+    proj: &WorkProjection,
+    unit_ref: &UnitRef,
+    self_key: &ActorKey,
+    now_ms: u64,
+) -> LeaseState {
+    let Some(projected) = proj.unit(unit_ref) else {
+        return LeaseState::Lost("the unit is no longer in the fold".to_string());
+    };
+    match projected.status_at(now_ms) {
+        WorkUnitStatus::Leased { ref lessee, .. } if lessee == self_key => LeaseState::Held,
+        WorkUnitStatus::Leased { lessee, .. } => {
+            LeaseState::Lost(format!("`{lessee}` holds the lease now"))
+        }
+        other => LeaseState::Lost(format!("the unit reads `{}`", other.id())),
+    }
+}
+
 /// Count what a lease sweep at `now_ms` would move.
 ///
 /// Derived, never applied: nothing here mutates `proj`, and no node publishes

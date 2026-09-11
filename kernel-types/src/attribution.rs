@@ -113,11 +113,34 @@ impl ComputeAttribution {
     /// Everything a donor could plausibly differ on and still be trusted was
     /// considered and none of it survived: the rev, the OS, the arch and the
     /// toolchain each change what the program under test IS, so all four count.
+    ///
+    /// # A named absence never matches, including another one just like it
+    ///
+    /// Equality is not enough, because two hosts that BOTH failed to read a
+    /// field are not thereby running the same thing. A field naming an absence
+    /// ([`crate::is_absent_marker`]) makes this comparison `false` on either
+    /// side, so an unreadable rev or toolchain lands as could-not-judge rather
+    /// than as agreement (ARCH §18.3: absence is reported, never defaulted).
+    ///
+    /// THIS USED TO HOLD BY ACCIDENT AND THE ACCIDENT WAS ABOUT TO BE REMOVED.
+    /// The rule lived nowhere; what stood in for it was that the work plane's
+    /// two `rustc --version` readers spelled their absence differently — the
+    /// submitter's said "this checkout's PATH", the donor's said "this donor's
+    /// PATH" — so two unreadable hosts compared unequal for the right reason by
+    /// luck. Converging those readers onto one spelling is exactly what §10.6
+    /// asks for, and doing it would have silently turned "neither of us knows"
+    /// into "we agree". Encoded here so it cannot be forgotten by the next
+    /// person who tidies the strings (ARCH §7).
     pub fn comparable_to(&self, other: &ComputeAttribution) -> bool {
-        self.repo_rev == other.repo_rev
-            && self.os == other.os
-            && self.arch == other.arch
-            && self.toolchain == other.toolchain
+        let pairs = [
+            (&self.repo_rev, &other.repo_rev),
+            (&self.os, &other.os),
+            (&self.arch, &other.arch),
+            (&self.toolchain, &other.toolchain),
+        ];
+        pairs.iter().all(|(mine, theirs)| {
+            mine == theirs && !crate::is_absent_marker(mine) && !crate::is_absent_marker(theirs)
+        })
     }
 }
 
@@ -231,6 +254,61 @@ mod tests {
         };
         assert!(mine.comparable_to(&donor));
         assert_ne!(mine, donor, "host still distinguishes the values");
+    }
+
+    /// Two machines that BOTH failed to read the same field are not thereby
+    /// running the same thing.
+    ///
+    /// Failing input: `toolchain` set to one named absence on both sides.
+    /// Before this rule, `comparable_to` was plain string equality, so two
+    /// identical `"unknown (…)"` markers compared EQUAL and a donor verdict
+    /// was adopted as evidence about this tree when neither host could say
+    /// which compiler produced it.
+    ///
+    /// THE OLD SAFETY WAS AN ACCIDENT OF AUTHORSHIP, which is why this is a
+    /// rule and not a convention: the submitter's marker read "this
+    /// checkout's PATH" and the donor's read "this donor's PATH", so the two
+    /// differed and the comparison failed for the right reason by luck. The
+    /// moment those two readers converged on one spelling — which is exactly
+    /// what §10.6 asks for — the luck would have run out silently.
+    #[test]
+    fn two_named_absences_in_one_field_are_never_comparable() {
+        for field in ["repo_rev", "os", "arch", "toolchain"] {
+            let mut a = compute("aaaa111");
+            let absent = format!("unknown ({field} could not be read here)");
+            assert!(
+                crate::is_absent_marker(&absent),
+                "the fixture must actually name an absence: {absent}"
+            );
+            match field {
+                "repo_rev" => a.repo_rev = absent.clone(),
+                "os" => a.os = absent.clone(),
+                "arch" => a.arch = absent.clone(),
+                _ => a.toolchain = absent.clone(),
+            }
+            let b = a.clone();
+            assert_eq!(a, b, "the two values are byte-identical");
+            assert!(
+                !a.comparable_to(&b),
+                "{field}: two hosts that both could not read {field} must not \
+                 compare as running the same thing"
+            );
+        }
+    }
+
+    /// The accept case stays intact — the rule above must reject absences, not
+    /// every comparison. Without this, deleting the whole body of
+    /// `comparable_to` and returning `false` would pass the test above.
+    #[test]
+    fn a_real_value_that_merely_contains_unknown_still_compares() {
+        let mut a = compute("aaaa111");
+        a.toolchain = "rustc 1.89.0 (unknown-vendor build)".into();
+        let b = a.clone();
+        assert!(
+            !crate::is_absent_marker(&a.toolchain),
+            "word-boundary rule: this is a real value, not an absence"
+        );
+        assert!(a.comparable_to(&b));
     }
 
     #[test]

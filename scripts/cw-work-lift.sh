@@ -6,7 +6,7 @@
 # lifts and this is the second: `commonwealth-work` plus a package-only work
 # peer BUILD and RUN outside this monorepo.
 #
-#   scripts/cw-work-lift.sh --sandbox [--dir <path>] [--keep]
+#   scripts/cw-work-lift.sh --sandbox [--image <ref>] [--dir <path>] [--keep]
 #
 # THE BAR IS A PHYSICAL LIFT, NOT A CRATE-NAME COUNT. `cargo tree` cannot see
 # a `build.rs`, an `include_str!` that escapes the crate root, a hand-spelled
@@ -26,6 +26,24 @@
 #   rc 3                        could-not-judge: a precondition of the RUN is
 #                               absent (no cargo, no python3, dependencies
 #                               unresolvable). Nothing was measured.
+#                               THE SHIPPED CAUSE, since the isolation floor
+#                               reached the peer on 2026-09-10, is a missing
+#                               BOUNDARY: the peer offers `process:v1` only when
+#                               `Sandbox::probe` finds a rootless runtime and an
+#                               image, so with no `--image` it publishes no offer
+#                               and exits 3 naming that. Steps 1-4 still MEASURE
+#                               — the closure resolves, builds and passes its
+#                               own tests outside the monorepo — and only step 5
+#                               abstains. Reporting that as `{"value": 0}` would
+#                               say the lift failed when what happened is that a
+#                               donor declined to run a stranger's argv without a
+#                               boundary (ARCH §18.3). Give it an image this host
+#                               already has and the donation measures again.
+#                               (Until 2026-09-10 this said no build in the tree
+#                               PROVIDED a container. `commonwealth-work`'s
+#                               `sandbox` module now does, and it is the package's
+#                               — so the abstention is a missing declaration, not
+#                               a missing mechanism.)
 #   rc 2                        usage
 #   rc 127                      instrument-missing (the runner's own reading
 #                               when this file does not exist)
@@ -43,6 +61,14 @@ ARTIFACT="$REPO/target/cw-work-lift/last.json"
 SANDBOX=""
 KEEP=0
 MODE=""
+# The image a donated unit runs INSIDE, on this host. The instrument does not
+# choose one and ships none: `commonwealth-work::sandbox` documents that the
+# image is the DONOR OPERATOR's declaration, and an instrument that hardcoded
+# one would be making that choice on their behalf — and would report
+# could-not-judge on every host that did not happen to have it. With none
+# declared the peer publishes no offer and this run abstains, which is the
+# honest reading of "this host has no boundary".
+IMAGE="${CW_WORK_IMAGE:-}"
 
 say() { printf '%s\n' "$*" >&2; }
 rule() { say "── $* ─────────────────────────────────────────────" ; }
@@ -51,9 +77,12 @@ rule() { say "── $* ──────────────────�
 # cannot disagree (ARCH §10.6). $1 value, $2 one-line reason.
 verdict() {
   mkdir -p "$(dirname "$ARTIFACT")"
-  printf '{"value": %s, "reason": %s, "sandbox": "%s", "at": "%s"}\n' \
+  # The image is in the row because a green with no boundary and a green
+  # inside one are different facts, and a reader six weeks out cannot tell
+  # them apart from a value alone.
+  printf '{"value": %s, "reason": %s, "sandbox": "%s", "image": "%s", "at": "%s"}\n' \
     "$1" "$(printf '%s' "$2" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
-    "$SANDBOX" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ARTIFACT"
+    "$SANDBOX" "$IMAGE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ARTIFACT"
   say ""
   say "VERDICT $1 — $2"
   printf '{"value": %s, "artifact": "target/cw-work-lift/last.json"}\n' "$1"
@@ -71,8 +100,8 @@ abstain() {
 
 cleanup() {
   if [ -n "$SANDBOX" ] && [ -d "$SANDBOX" ]; then
-    if [ "$KEEP" = 1 ]; then say "sandbox kept at $SANDBOX"
-    else rm -rf "$SANDBOX"; fi
+    if [ "$KEEP" = 1 ]; then say "sandbox kept at $SANDBOX (rail at ${RAIL:-unset})"
+    else rm -rf "$SANDBOX" "${RAIL:-}" "${RAIL:-/nonexistent}.probe"; fi
   fi
 }
 
@@ -80,13 +109,14 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --sandbox) MODE=sandbox ;;
     --keep) KEEP=1 ;;
+    --image) shift; IMAGE="${1:-}" ;;
     --dir) shift; SANDBOX="${1:-}" ;;
     -h|--help) sed -n '3,10p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
     *) say "unknown argument \`$1\`"; exit 2 ;;
   esac
   shift
 done
-[ "$MODE" = sandbox ] || { say "usage: scripts/cw-work-lift.sh --sandbox [--dir <path>] [--keep]"; exit 2; }
+[ "$MODE" = sandbox ] || { say "usage: scripts/cw-work-lift.sh --sandbox [--image <ref>] [--dir <path>] [--keep]"; exit 2; }
 
 # ── Preconditions of the RUN, not of the claim ─────────────────────────────
 command -v cargo   >/dev/null 2>&1 || abstain "cargo is not on PATH — nothing can be built, so nothing was measured"
@@ -101,6 +131,19 @@ command -v python3 >/dev/null 2>&1 || abstain "python3 is not on PATH — the li
 [ -n "$SANDBOX" ] || SANDBOX="${TMPDIR:-/tmp}/cw-work-lift.$$"
 case "$SANDBOX" in "$REPO"|"$REPO"/*) say "refusing a sandbox inside the repository: $SANDBOX"; exit 2 ;; esac
 rm -rf "$SANDBOX"; mkdir -p "$SANDBOX" || abstain "could not create the sandbox at $SANDBOX"
+
+# THE RAIL IS A SIBLING OF THE WORKDIR, NOT A CHILD OF IT, and that is the
+# property under test rather than a tidiness preference. The workdir is the
+# ONE thing `Sandbox::command_line` mounts, so a rail under it would hand the
+# peer's own `work` journal to every stranger's unit — while the demo went on
+# claiming that a donor's state is unreachable by construction. The daemon
+# gets this right for the same reason and by the same shape
+# (`work_donor::resolve_workdir` hands out `donor_root/scratch`, a CHILD of the
+# data dir, so the parent and the node key in it never cross), and an
+# instrument that did it the other way would be proving a weaker thing than the
+# one written down.
+RAIL="${SANDBOX%/}.rail"
+rm -rf "$RAIL" "$RAIL.probe"
 
 rule "1. the closure, and the hazards a crate-name count cannot see"
 python3 - "$REPO" "$SANDBOX" <<'PY'
@@ -254,12 +297,69 @@ test_rc=${PIPESTATUS[0]}
 say "test: rc=$test_rc"
 [ "$test_rc" = 0 ] || verdict 0 "the lifted package's own tests do not pass in isolation (see $SANDBOX/test.log)"
 
+rule "4b. the workdir a unit can actually build in"
+# MEASURED 2026-09-10, on the first run of this instrument with an image: the
+# shard unit failed inside the boundary with `no matching package named
+# blake3`. Nothing was wrong with the plane. The boundary is `--network=none`
+# with EXACTLY ONE mount, so a unit that compiles has no registry to resolve
+# from and no writable `CARGO_HOME` — the donor's `~/.cargo` is on the other
+# side of the mount by construction, which is the whole point of the mount
+# rule.
+#
+# So the SUBMITTER ships the package cache in the workdir, and that is the
+# general shape rather than an instrument trick: a `process:v1` unit that needs
+# anything but the image gets it from the one directory that crosses. `cargo
+# vendor` is 0.4 s and 109 MB here because it copies only this closure's
+# dependencies, against the `Cargo.lock` that already travelled.
+#
+# This is what `--distribute` will have to do for D2, and it is the honest cost
+# of the boundary: a CI shard's inputs are workdir contents, not host state.
+if ! (cd "$SANDBOX" && RUSTC_WRAPPER= cargo vendor --offline --versioned-dirs vendor >/dev/null 2>"$SANDBOX/vendor.err"); then
+  say "$(tail -5 "$SANDBOX/vendor.err")"
+  abstain "the closure's dependencies could not be vendored into the workdir, so the shard unit could not have resolved inside a boundary — see $SANDBOX/vendor.err"
+fi
+mkdir -p "$SANDBOX/.cargo" "$SANDBOX/.cargo-home"
+# Written into the SANDBOX, not copied from the repo. The lift refuses to carry
+# this monorepo's `.cargo/config.toml` (see above) and that still holds: this
+# file says only "resolve from the vendor directory beside you", which is a
+# fact about the workdir a submitter prepared and not about the repository.
+cat > "$SANDBOX/.cargo/config.toml" <<'CFG'
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+CFG
+say "vendored $(find "$SANDBOX/vendor" -maxdepth 1 -mindepth 1 -type d | wc -l) crate source(s) into the workdir"
+
 rule "5. the peer completes three heterogeneous units"
 # The shard unit runs the SANDBOX's own tests as donated work, which is the
 # demonstration: a lifted peer running a lifted crate's CI on the rail.
+#
+# `env CARGO_HOME=.cargo-home cargo …` and not a bare `cargo`, because a unit
+# that compiles needs a WRITABLE package cache and the boundary discards every
+# directory but this one. The path is RELATIVE on purpose: it is right as
+# `/work/.cargo-home` inside the boundary and as `$SANDBOX/.cargo-home` without
+# one, so nothing here has to know `sandbox`'s mount point. `env(1)` rather than
+# an `sh -c` prologue keeps the unit's argv literally the program that runs.
+#
+# THE PROPER SEAM IS `ProcessPayload::env`, which exists and which the peer has
+# no flag for. Adding one costs four lines and the peer is at 400 of its 400-line
+# cap (`cw-work-second-lift`), so this is a deliberate deferral to a target that
+# is the operator's to move, not a preference.
+#
+# And a live seam neither can close: `host_satisfies` checks
+# `Precondition::Binary` against the DONOR'S HOST while the unit runs inside the
+# DONOR'S IMAGE. Under a container boundary that is the wrong subject in both
+# directions — a host without python3 refuses a unit its image could have run,
+# and a host with cargo accepts one its image cannot. Which is also why argv[0]
+# being `env` here costs less than it looks: the precondition was already about
+# the wrong machine.
 (cd "$SANDBOX" && "$SANDBOX/target/debug/examples/work_peer" \
-    --root "$SANDBOX/.work-rail" --workdir "$SANDBOX" --label "cw-work-lift peer" \
-    -- cargo test --offline -q -p commonwealth-rail-core 2>&1) | tee "$SANDBOX/peer.log" >&2
+    --root "$RAIL" --workdir "$SANDBOX" --label "cw-work-lift peer" \
+    --image "$IMAGE" \
+    -- env CARGO_HOME=.cargo-home cargo test --offline -q -p commonwealth-rail-core \
+    2>&1) | tee "$SANDBOX/peer.log" >&2
 peer_rc=${PIPESTATUS[0]}
 say "peer: rc=$peer_rc"
 case $peer_rc in
@@ -268,10 +368,59 @@ case $peer_rc in
   *) verdict 0 "the peer did not complete its three units (rc $peer_rc, see $SANDBOX/peer.log)" ;;
 esac
 
-acts=$(grep -c '"op"' "$SANDBOX/.work-rail/rings/work/ring_oplog.jsonl" 2>/dev/null || echo 0)
+rule "6. and the boundary HOLDS — the ledger's own watched red"
+# `sovereign/DEFAULTS_LEDGER.md`'s `process:v1` row names the falsification for
+# the whole mechanism: "a unit that tries to read `node_key` or open a socket
+# and FAILS". Until 2026-09-10 that was a sentence. It is this step.
+#
+# Two escapes, attempted by a real donated unit through the real executor —
+# never by a podman line written here, which would be a second implementation
+# of the boundary and could pass while the shipped one leaked (§10.6).
+cat > "$SANDBOX/probe.sh" <<EOF
+# Exits 0 only if BOTH escapes were refused. Run from the unit's workdir.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "PROBE BROKEN: no python3, so a blocked socket cannot be told from a missing interpreter"; exit 1
+fi
+if python3 -c 'import socket; socket.setdefaulttimeout(4); socket.create_connection(("1.1.1.1", 53))' 2>/dev/null; then
+  echo "ESCAPE: this unit opened a TCP connection to the internet"; exit 1
+fi
+echo "ok: no network from inside the unit"
+if [ -e "$RAIL" ]; then
+  echo "ESCAPE: this unit can see the donor's rail — and a rail holds a donor's identity"; exit 1
+fi
+echo "ok: the donor's rail is not on this filesystem"
+EOF
+
+# THE CONTROL COMES FIRST. On this host, with no boundary at all, the probe MUST
+# fail — otherwise it is a check with no failing input and its green means
+# nothing (§18.1). Watched failing on 2026-09-10: the socket branch on a machine
+# with a route, and the rail branch on its own with the network down.
+if (cd "$SANDBOX" && sh probe.sh >"$SANDBOX/probe-control.log" 2>&1); then
+  say "$(cat "$SANDBOX/probe-control.log")"
+  abstain "the escape probe PASSED on the bare host, so it cannot detect an escape — nothing was measured about the boundary"
+fi
+say "control: the probe fails without a boundary — $(head -1 "$SANDBOX/probe-control.log")"
+
+# A SECOND RAIL, because a peer handed the first one finds every unit already
+# complete and would report a cheerful green having run nothing.
+(cd "$SANDBOX" && "$SANDBOX/target/debug/examples/work_peer" \
+    --root "$RAIL.probe" --workdir "$SANDBOX" --label "cw-work-lift probe" \
+    --image "$IMAGE" -- sh probe.sh 2>&1) | tee "$SANDBOX/probe.log" >&2
+probe_rc=${PIPESTATUS[0]}
+say "probe: rc=$probe_rc"
+case $probe_rc in
+  0) : ;;
+  3) abstain "the probe run could not judge itself — see $SANDBOX/probe.log" ;;
+  # The probe's own stdout is not carried back: its unit is `ExitCodeOnly`, which
+  # is the point of that unit and not worth bending for a diagnostic. The reason
+  # therefore names the command that shows which escape happened.
+  *) verdict 0 "a donated unit ESCAPED the boundary (rc $probe_rc) — reproduce with: cd $SANDBOX && sh probe.sh, then the same argv through the peer" ;;
+esac
+
+acts=$(grep -c '"op"' "$RAIL/rings/work/ring_oplog.jsonl" 2>/dev/null || echo 0)
 # The peer decides its own verdict, so this is the guard on the DECIDER: a
 # green report with an empty journal would mean the fold read nothing and
 # said so cheerfully. A submit, an offer and three lease/report pairs is 8.
 [ "$acts" -ge 8 ] || verdict 0 "the peer reported green with only $acts act(s) on the work rail — a submit, an offer and three lease/report pairs is 8"
 
-verdict 1 "built in ${build_s}s and ran three heterogeneous units on a $acts-act rail, outside the monorepo"
+verdict 1 "built in ${build_s}s, ran three heterogeneous units on a $acts-act rail and refused both escapes, outside the monorepo, inside \`$IMAGE\`"

@@ -63,8 +63,9 @@ visibility = "public"
 # question, and because shell scripts must ask rather than hard-code:
 # creating `~/.svrnmesh` by hand on a machine that still has a populated
 # `~/.sovereign` makes every getter prefer the new dir and silently
-# orphans the real data root. Subcommand-shaped (root / data / mesh-data
-# / config); in-process, so no daemon needed.
+# orphans the real data root. Subcommand-shaped (root / data / config;
+# `data` is an alias of `root` since the override moved into the root
+# derivation on 2026-09-10); in-process, so no daemon needed.
 [[command]]
 path = "path"
 binary = "dispatcher"

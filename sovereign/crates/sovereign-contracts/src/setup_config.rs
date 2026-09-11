@@ -946,6 +946,24 @@ pub struct WorkOfferSection {
     /// which is worse for the submitter than a node that never offered.
     #[serde(default)]
     pub kinds: Vec<String>,
+    /// The container image a unit runs INSIDE, on this host.
+    ///
+    /// Absent — the default — means this node has no boundary and therefore
+    /// offers no kind that demands one, which today is every kind that runs a
+    /// submitter's argv. Naming one is not permission: `Sandbox::probe` still
+    /// has to find a rootless runtime and find the image present LOCALLY
+    /// before the node will describe itself as isolating anything, and a
+    /// config naming an image on a host without podman gets `Subprocess` with
+    /// the reason on the boot trace (ARCH §18.3).
+    ///
+    /// It is the donor's operator who names it, and deliberately not the
+    /// package (which ships no image and has no registry to fetch from) and
+    /// not the submitter (whose unit would then choose the contents of its
+    /// own sandbox, and pull an arbitrary reference onto somebody else's
+    /// machine). Pull it yourself once; a donor does not fetch on your
+    /// behalf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
     /// How many units this node holds leases on at once. `0` — the default —
     /// takes nothing. Raising it is the throughput knob; the donor never
     /// exceeds it because the fold counts its own live leases.
@@ -996,6 +1014,7 @@ impl Default for WorkOfferSection {
     fn default() -> Self {
         Self {
             kinds: Vec::new(),
+            image: None,
             max_concurrent: 0,
             yield_to_foreground: DEFAULT_YIELD_TO_FOREGROUND,
             accept: WorkAcceptFrom::default(),
@@ -2013,7 +2032,18 @@ impl SetupConfig {
     /// to remember. Falls back to `./.sovereign/config.toml` if the home
     /// directory can't be resolved — matches `default_data_dir()`.
     pub fn default_path() -> PathBuf {
-        default_data_dir().join("config.toml")
+        Self::path_in(&default_data_dir())
+    }
+
+    /// The config file inside a GIVEN data root.
+    ///
+    /// [`Self::default_path`] is this over the root the process resolved;
+    /// `svrn setup --data-dir <p>` needs it over the root it is configuring.
+    /// One join, so the two answers cannot drift — before this, setup wrote
+    /// `[data] dir = <p>` into a file it saved at the DEFAULT root, which is
+    /// a config that names one universe and lives in another (ARCH §10.6).
+    pub fn path_in(root: &Path) -> PathBuf {
+        root.join("config.toml")
     }
 
     /// The pre-consolidation location: `dirs::config_dir()/sovereign/
@@ -2096,9 +2126,16 @@ impl SetupConfig {
 
     /// Remove the config file. Used by `sovereign setup --reset`.
     pub fn remove() -> Result<(), String> {
-        let path = Self::default_path();
+        Self::remove_at(&Self::default_path())
+    }
+
+    /// Remove the config at an explicit path — the `--reset` half of
+    /// [`Self::path_in`]. A reset that removed the DEFAULT config while
+    /// setup went on to configure another root would delete the wrong
+    /// machine's config, so both halves read one path.
+    pub fn remove_at(path: &Path) -> Result<(), String> {
         if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
+            std::fs::remove_file(path).map_err(|e| format!("remove {}: {e}", path.display()))?;
         }
         Ok(())
     }

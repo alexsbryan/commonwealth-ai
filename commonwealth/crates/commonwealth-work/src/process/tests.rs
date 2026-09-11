@@ -406,20 +406,34 @@ fn a_version_skew_is_named_as_skew_and_a_foreign_kind_is_not() {
 // ───── the descriptor ─────
 
 /// The descriptor is what a peer reads, so the two claims that must not be
-/// prose-only live in it: the isolation level, and the exit codes this
-/// executor declares mean could-not-judge.
+/// prose-only live in it: the isolation this executor REQUIRES, and the exit
+/// codes it declares mean could-not-judge.
+///
+/// It said `Subprocess` until 2026-09-10 and the assertion here said so too.
+/// That was the floor written as a capability: `resolve_offer` reads this
+/// field as the DEMAND (`work_donor.rs:265-273`), and running a submitter's
+/// arbitrary argv demands a container. Raising it is what makes a daemon
+/// refuse to donate this kind rather than publish an offer walled only by
+/// consent — operator decision the same day, and consent is not isolation.
 #[test]
-fn the_descriptor_says_subprocess_and_names_its_trust_level() {
+fn the_descriptor_requires_a_container_and_says_no_build_provides_one() {
     let d = ProcessExecutor::new().descriptor();
     assert_eq!(d.kind, JobKind::parse(PROCESS_KIND).unwrap());
-    assert_eq!(d.isolation, Isolation::Subprocess);
+    assert_eq!(
+        d.isolation,
+        Isolation::RootlessContainer,
+        "this executor runs a stranger's argv; anything below a container is \
+         a floor nobody is holding"
+    );
     assert_eq!(d.could_not_judge_exits, vec![4, 5]);
     assert_eq!(d.idempotency, Idempotency::NonIdempotent);
     assert!(d.est_secs.is_none());
     let description = d.parameters["description"].as_str().expect("a description");
     assert!(
-        description.contains("TRUSTED-NATIVE") && description.contains("no sandbox"),
-        "the descriptor must say there is no sandbox, not imply one: {description}"
+        description.contains("REQUIRES") && description.contains("REFUSES"),
+        "the descriptor must say what it demands and that a daemon therefore \
+         refuses the kind — a peer reading it must not infer a sandbox that \
+         does not exist: {description}"
     );
 }
 

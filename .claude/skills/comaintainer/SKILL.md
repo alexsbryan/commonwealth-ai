@@ -146,8 +146,18 @@ When the work IS a spec, per-order intake just re-interviews the spec.
 Draft `./scripts/co-campaign.sh new <id>` and show ONE draft
 (kind=order): the approved ladder authorizes every order under it.
 
-The operator approves the ladder, the ambiguity policy, the tuning
-bounds, the stop conditions. Then run it, escalating only what the
+**Draft the Demos section first, and let it outrank the Ladder**
+(operator, 2026-09-10). A campaign whose demos are unnamed is one whose
+rungs can all be green while the thing the spec leads with goes untouched
+for a week — the cw-lift case, where four orders declared
+`campaign: cw-lift`, no campaign file existed, and the consumer demo
+`WORK_PLANE.md` puts front and centre was in no objective any worker
+held. Name each demo, what a person watches, its gate, and its current
+verdict; then every rung says which demo it moves. A rung that moves
+none and unblocks none does not get drafted.
+
+The operator approves the demos, the ladder, the ambiguity policy, the
+tuning bounds, the stop conditions. Then run it, escalating only what the
 campaign cannot pre-authorize: the premise is falsified; a bar needs
 re-registering or **a target needs moving (operator-only, always,
 §18.6)**; a commons or irreversible action; taste or priority.
@@ -201,8 +211,19 @@ OVERDUE rendering carries the review pressure.
 
 3. **Interview to pin the order**, one exchange each: objective at
    initiative altitude, falsifiable done-when,
-   not-worth-continuing-if, lane, scope, engine, budget, seams.
+   not-worth-continuing-if, **the demo**, **the ordered steps**, lane,
+   scope, engine, budget, seams.
    `./scripts/co-order.sh new <id>`, fill; `check` is advisory.
+
+   **Demo and Steps carry the two failures orders alone do not catch**
+   (operator, 2026-09-10). An objective stated as architecture is
+   satisfiable by work nobody can watch, so `## Demo` names what a
+   PERSON watches and which campaign demo it moves — a build gate is
+   not a demo, and "not demo-visible, it unblocks D1" is a legal
+   answer that still stops the drift. `## Steps` is the ordered plan
+   the operator approves as a SEQUENCE; without it the order is a set
+   of conditions with no position in it, and the worker has nothing to
+   knock down in order.
 
    **Set `serves:`** — `<campaign-id> [<bar-id> ...]` from
    `quality/campaigns/` (`co-lineage.py list`). `(unattributed)` is
@@ -231,7 +252,22 @@ OVERDUE rendering carries the review pressure.
    per-call model (opencode), the Engine picks the AGENT. Spawn prompt =
    ORDER TEXT VERBATIM + the eleven + "claim your Scope via
    declare_scope at start; release at end" + the near-miss protocol +
-   the banking clause + the escalation clause, all verbatim. Under a
+   the MARCH clause + the banking clause + the escalation clause, all
+   verbatim. Run `./scripts/co-journal.sh new <id>` before the spawn so
+   the worker's cursor exists on its first prompt.
+
+   **Under a campaign, do not assemble the context by hand — spawn from
+   `./scripts/co-resume.sh <campaign-id>`** (operator direction
+   2026-09-10: "point an agent to a campaign and they pick up exactly
+   where the last one left off"). Its output IS the pickup brief:
+   objective from the committed toml, demos and live frontier verbatim
+   from `campaign.md`, the open order's cursor and next step computed
+   from the journal, what landed from `git log`, stop conditions and
+   ambiguity policy verbatim, peer claims, and the standing contract. It
+   invents nothing and summarizes nothing — every line is computed or
+   printed verbatim from the one file that owns it, because a summary in
+   the middle is where the drift gets in. Paste it whole, then add only
+   what this spawn changes. Under a
    campaign, add its ambiguity policy and tuning block — a worker that
    cannot see the policy can only guess or ask. Cap: 3 concurrent.
    Narrate every spawn. When the Engine calls for a full session
@@ -239,6 +275,29 @@ OVERDUE rendering carries the review pressure.
    the boot command. Phase switch = bank-and-respawn: worker parks
    (frame banked, claims released), operator acks, successor boots with
    the next engine.
+
+   **March clause (verbatim in every spawn prompt; operator direction
+   2026-09-10).** The other two clauses say what reaches the seat; this
+   says what keeps the worker moving between those moments. Without it
+   a worker treats every step boundary as a place to stop and ask, and
+   every interesting finding as a licence to go deep — the two halves of
+   the drift this artifact set exists for:
+
+   "MARCH: your cursor is `scripts/co-journal.sh show <order-id>`. Read
+   it now, and re-read it whenever you re-orient — it carries the demo,
+   the objective and the ordered steps, and it is ~25 lines against the
+   order's two hundred. Work the steps IN ORDER and stamp every
+   transition (`co-journal.sh step <n> done|wip|blocked [note]`). You
+   return to the seat on exactly three things: every step done, a
+   campaign stop condition, or budget out. Nothing else ends your turn —
+   not an interesting finding, not a green gate, not a step boundary.
+   BEFORE ANY WORK NOT ON THE CURSOR, name which demo it moves and how
+   the operator would SEE that; if you cannot name one, it is an
+   invented problem — bank it and return to the cursor. One build-test
+   cycle per sub-problem: past that it is a banked finding, not a task.
+   On an ambiguity the campaign's policy covers, take the smaller
+   change, append the dated principle-citing line to the campaign's
+   Decisions, and continue."
 
    **The two clauses below are the worker's only channels out, and the
    seams between them and the operator's console are mapped in

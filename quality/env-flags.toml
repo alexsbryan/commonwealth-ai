@@ -787,7 +787,7 @@ cluster = "infra-paths"
 default = "~/.svrnmesh (legacy-aware)"
 status = "shipped"
 shadows = "data.dir"
-purpose = "Per-user data root override. ONE derivation: sovereign_contracts::rebrand::data_dir() — read sites must not re-derive the fallback chain (pre-2026-07-30 chains wrote into CWD when HOME was unset)."
+purpose = "Per-user data root override. ONE derivation: sovereign_contracts::rebrand::svrnmesh_root() applies it at the bottom (since 2026-09-10; data_dir() is its alias), so every path accessor moves together — read sites must not re-derive the fallback chain (pre-2026-07-30 chains wrote into CWD when HOME was unset; until 2026-09-10 svrnmesh_root itself was env-blind, which split config from data for any second node)."
 
 [[flag]]
 name = "SOVEREIGN_PORT"

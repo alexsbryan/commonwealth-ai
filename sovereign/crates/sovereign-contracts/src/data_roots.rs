@@ -67,6 +67,19 @@ pub enum RootConflict {
     /// The resolved root holds NO live data while another root does. Booting
     /// here starts fresh on top of live data. This is the refusal.
     Stranded(Vec<ForeignRoot>),
+    /// The resolved root holds no live data, another root does, AND the
+    /// resolved root is not one of the historical defaults — so nothing could
+    /// have resolved to it by accident. Somebody named it.
+    ///
+    /// This is how a SECOND node starts on a machine that already runs one:
+    /// its own data root, its own node key, its own ring journals. The run
+    /// lock already declares that scenario supported — it was re-keyed off
+    /// `$HOME` onto the data root in 2026-08-24 precisely because the old key
+    /// "refused three soak nodes with three data dirs under one HOME"
+    /// (`daemon_cmd/mod.rs`) — and classifying every such root `Stranded`
+    /// re-closed at this layer what that change opened at the other.
+    /// Loud, not fatal: the operator still hears that another root holds data.
+    Fresh(Vec<ForeignRoot>),
 }
 
 impl RootConflict {
@@ -82,7 +95,7 @@ impl RootConflict {
     pub fn others(&self) -> &[ForeignRoot] {
         match self {
             Self::Clear => &[],
-            Self::Split(v) | Self::Stranded(v) => v,
+            Self::Split(v) | Self::Stranded(v) | Self::Fresh(v) => v,
         }
     }
 }
@@ -102,6 +115,15 @@ impl std::fmt::Display for RootConflict {
                     render(others)
                 )
             }
+            Self::Fresh(others) => write!(
+                f,
+                "this data root is new and empty, and it is not one of the \
+                 directories a sovereign resolves by default — so it was named \
+                 deliberately. Live data also sits in {}. Starting a SECOND node \
+                 here is supported; if you meant to start the EXISTING one, point \
+                 this process at that root instead.",
+                render(others)
+            ),
             Self::Stranded(others) => write!(
                 f,
                 "this data root is EMPTY while live sovereign data sits in {}. \
@@ -129,6 +151,16 @@ fn render(others: &[ForeignRoot]) -> String {
 /// against every other directory that has been a data root on some machine.
 pub fn classify(resolved: &Path) -> RootConflict {
     classify_among(resolved, &candidate_roots())
+}
+
+/// Is `resolved` one of the directories a sovereign resolves by DEFAULT?
+///
+/// The candidate list is exactly that set, so membership IS the question —
+/// which is why the rule lives inside [`classify_among`] and stays testable
+/// over an explicit list. Symlink-aware for the same reason the comparison is.
+fn is_a_default_root(resolved: &Path, candidates: &[PathBuf]) -> bool {
+    let id = identity(resolved);
+    candidates.iter().any(|c| identity(c) == id)
 }
 
 /// Every directory that has been a sovereign data root, in any release. Not
@@ -176,8 +208,13 @@ fn classify_among(resolved: &Path, candidates: &[PathBuf]) -> RootConflict {
         RootConflict::Clear
     } else if live_marker(resolved).is_some() {
         RootConflict::Split(others)
-    } else {
+    } else if is_a_default_root(resolved, candidates) {
+        // Empty, and it IS a directory this process could have resolved by
+        // itself — so the empty universe may be an accident. The refusal.
         RootConflict::Stranded(others)
+    } else {
+        // Empty, and nothing resolves here on its own. Somebody named it.
+        RootConflict::Fresh(others)
     }
 }
 
@@ -211,11 +248,59 @@ mod tests {
         std::fs::create_dir_all(&fresh).expect("mkdir");
         touch(&platform, "mesh.json");
 
-        let v = classify_among(&fresh, &[platform.clone()]);
+        // `fresh` is in the list because production's `candidate_roots()`
+        // contains `~/.svrnmesh`: the resolved root IS a candidate, and that
+        // is what makes an empty one an accident rather than a choice.
+        let v = classify_among(&fresh, &[fresh.clone(), platform.clone()]);
         assert!(v.is_refusal(), "{v:?}");
         assert_eq!(v.others().len(), 1);
         assert_eq!(v.others()[0].evidence, "mesh.json");
         assert!(format!("{v}").contains("SVRNMESH_DATA_DIR"), "{v}");
+    }
+
+    /// A root nobody could have resolved by DEFAULT never refuses a boot.
+    ///
+    /// This is the second node's boot: `svrn setup --data-dir <p>
+    /// --client-port <n>` writes a config there and the daemon has to be able
+    /// to start on it. Before the `Fresh` verdict, every such root was
+    /// `Stranded` forever, because the FIRST node holds the live markers.
+    #[test]
+    fn a_root_that_was_never_a_default_is_not_a_refusal() {
+        let base = tempfile::tempdir().expect("tempdir");
+        let named = base.path().join("second-node");
+        std::fs::create_dir_all(&named).expect("mkdir");
+
+        let default_root = base.path().join(".svrnmesh");
+        touch(&default_root, "sovereign.db");
+
+        // `named` is deliberately NOT in the candidate list — that is the
+        // whole fact about it, and production's `candidate_roots()` holds
+        // only the four historical defaults.
+        let v = classify_among(&named, &[default_root]);
+        assert!(
+            !v.is_refusal(),
+            "a deliberately named root must not refuse a boot, got {v:?}"
+        );
+        assert!(matches!(v, RootConflict::Fresh(_)), "{v:?}");
+    }
+
+    /// The control, and what stops the downgrade above from swallowing the
+    /// refusal this module exists for: an empty root that IS a historical
+    /// default still strands.
+    #[test]
+    fn an_empty_default_root_still_strands() {
+        let base = tempfile::tempdir().expect("tempdir");
+        let fresh = base.path().join(".svrnmesh");
+        let platform = base.path().join("Library/svrnmesh");
+        std::fs::create_dir_all(&fresh).expect("mkdir");
+        touch(&platform, "mesh.json");
+
+        // `fresh` is in the candidate list here, which is what production's
+        // `candidate_roots()` does for `~/.svrnmesh`.
+        let candidates = vec![fresh.clone(), platform];
+        let v = classify_among(&fresh, &candidates);
+        assert!(v.is_refusal(), "{v:?}");
+        assert!(is_a_default_root(&fresh, &candidates));
     }
 
     /// A migrated machine with residue: both hold data, nothing is lost, and

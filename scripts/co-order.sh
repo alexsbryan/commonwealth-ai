@@ -85,6 +85,35 @@ Not worth continuing if:
      not a target. Enumerate the scope or state the number as an open question. -->
 Target derived from scope:
 
+## Demo
+
+<!-- WHAT A PERSON WATCHES to know this landed, and the first thing a worker
+     re-reads (scripts/co-journal.sh show). Operator direction 2026-09-10:
+     "get our demos humming perfectly with clean code and good architecture".
+     An objective stated as architecture is satisfiable by work nobody can
+     watch — which is how hours go into fixes for invented problems while the
+     demo the spec leads with goes unnamed for a week. Name the campaign demo
+     this order moves (campaign.md, Demos section) and the command or the
+     click the operator runs to see it.
+     A BUILD GATE IS NOT A DEMO: "cargo test green" belongs in Done-when.
+     If the order genuinely is not demo-visible, say so and name the demo it
+     unblocks — that is a legal answer, and it is the sentence that stops the
+     work drifting off one. -->
+
+(none)
+
+## Steps
+
+<!-- THE ORDERED PLAN: what the operator approves as a SEQUENCE and the worker
+     knocks down in order. Numbered, one line each, five to twelve of them.
+     scripts/co-journal.sh new <id> copies these into a cursor with state;
+     each transition stamps a log line and "check" warns when one step has
+     been in flight past a build-test cycle. Without this the order is a set
+     of conditions with no position in it, and every turn boundary looks like
+     a plausible place to stop and ask. -->
+
+(none)
+
 ## Lane
 
 <!-- The measurement that proves the work. "(none)" is honest for work
@@ -235,20 +264,34 @@ def section(name):
     return (m.group(1).strip() if m else None)
 problems, nudges = [], []
 obj = section("Objective")
+
+# TWO SPELLINGS, ONE QUESTION (fixed 2026-09-10). The template stacks
+# "Done when:" and "Not worth continuing if:" as inline labels inside
+# Objective; hand-written orders promote them to their own "## Done when"
+# section instead, and all four cw-lift orders do. Reading only the inline
+# form reported "it is not falsifiable yet" on every one of them — a gate
+# firing on an input that is correct, and co-role.py's G2 BLOCKS a draft on
+# it. Accept either, and say so here so a third spelling does not get added
+# without noticing this one.
+def stated(label, section_name):
+    if obj and re.search(rf"{label}:[ \t]*\S", obj):
+        return True
+    return bool((section(section_name) or "").strip())
+
 if not obj:
     problems.append("Objective section missing")
 else:
-    # [ \t]* not \s*: the template stacks the two labels on adjacent
-    # lines, and \s* walks across the newline into the next label —
-    # an empty 'Done when:' then reads as filled (watched failing).
-    if not re.search(r"Done when:[ \t]*\S", obj):
-        problems.append("Objective has an empty 'Done when:' — it is not falsifiable yet")
-    if not re.search(r"Not worth continuing if:[ \t]*\S", obj):
-        problems.append("Objective has an empty 'Not worth continuing if:'")
+    if not stated("Done when", "Done when"):
+        problems.append("no falsifiable 'Done when' — neither the Objective label nor a '## Done when' section says one")
+    if not stated("Not worth continuing if", "Not worth continuing if"):
+        problems.append("no 'Not worth continuing if' — neither the Objective label nor its own section")
     # A NUMERIC done-when with no derivation is the drafting defect that has
     # bitten three times, always caught by the worker and never by the drafter.
     # Advisory, like everything here — but never silent.
     dw = re.search(r"Done when:(.*?)(?:\nNot worth continuing if:|\Z)", obj, re.S)
+    # Same two spellings as `stated` above — a number in a "## Done when"
+    # section is a number that owes a derivation just as much.
+    _dw_sect = (section("Done when") or "").strip()
     # The number is as often in a "Pre-registered prediction" section as in the
     # Done-when line — nc-17 carried its 600-1,100 there and the first version of
     # this check sailed past it. Scan both (watched failing before this line was
@@ -258,14 +301,34 @@ else:
     # exact-name lookup sails straight past it (watched, on nc-17).
     _pre_m = re.search(r"^## Pre-registered prediction.*?\n(.*?)(?=^## |\Z)", body, re.M | re.S)
     pre = _pre_m.group(1) if _pre_m else ""
-    numeric = bool(dw and re.search(r"\d", dw.group(1))) or bool(re.search(r"\d", pre))
+    numeric = (bool(dw and re.search(r"\d", dw.group(1)))
+               or bool(re.search(r"\d", pre))
+               or bool(re.search(r"\d", _dw_sect)))
     if numeric:
-        if not re.search(r"Target derived from scope:[ \t]*\S", obj + pre):
+        if not re.search(r"Target derived from scope:[ \t]*\S", obj + pre + _dw_sect):
             nudges.append(
                 "Done-when names a NUMBER but no 'Target derived from scope:' line — "
                 "three orders in three waves stated a target their Scope could not reach, "
                 "each caught by the worker after approval. A citation is not a derivation."
             )
+# Demo and Steps get their own words rather than the generic line, because
+# the generic line reads as a shrug and these two are the ones that were
+# missing when the drift was diagnosed (operator, 2026-09-10). Still
+# NUDGES, never problems: co-role.py's G2 gates on the exit code, and an
+# order without a demo is still a legal order.
+if section("Demo") in (None, "", "(none)"):
+    nudges.append(
+        "Demo is (none) — nothing here says what a PERSON watches, so this order "
+        "can be fully satisfied by work no one can see. Name the campaign demo it "
+        "moves, or say it is not demo-visible and name the demo it unblocks."
+    )
+if section("Steps") in (None, "", "(none)"):
+    nudges.append(
+        "Steps is (none) — the order is a set of conditions with no position in it. "
+        "A worker has nothing to knock down in order, so every turn boundary looks "
+        "like a place to stop and ask. scripts/co-journal.sh derives its cursor from "
+        "this section."
+    )
 for name in ("Lane", "Scope", "Engine", "Budget", "Seams"):
     s = section(name)
     if s in (None, "", "(none)"):

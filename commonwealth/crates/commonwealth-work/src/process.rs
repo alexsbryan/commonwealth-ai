@@ -411,9 +411,20 @@ struct RunOutcome {
     duration_ms: u128,
 }
 
-/// Runs a unit's `argv` as a child process in its own process group.
+/// Runs a unit's `argv` inside the boundary this build has, in its own
+/// process group.
 pub struct ProcessExecutor {
     kind: JobKind,
+    /// How a unit is actually run. [`Sandbox::Direct`] by default, because a
+    /// default that assumed a container would be a claim on behalf of every
+    /// host that constructs one — and `new()` is called from boot paths that
+    /// have not probed anything.
+    ///
+    /// A donor builds this with [`ProcessExecutor::with_sandbox`] from its own
+    /// [`Sandbox::probe`], and the SAME value answers what the build provides.
+    /// One derivation, so a node cannot run units one way and describe itself
+    /// another (ARCH §10.6).
+    sandbox: crate::sandbox::Sandbox,
 }
 
 impl Default for ProcessExecutor {
@@ -432,10 +443,24 @@ impl ProcessExecutor {
     // path a donor registers from.
     #[allow(clippy::expect_used)]
     pub fn new() -> ProcessExecutor {
+        ProcessExecutor::with_sandbox(crate::sandbox::Sandbox::Direct)
+    }
+
+    /// The executor a donor registers, carrying the boundary it probed.
+    #[allow(clippy::expect_used)]
+    pub fn with_sandbox(sandbox: crate::sandbox::Sandbox) -> ProcessExecutor {
         ProcessExecutor {
             kind: JobKind::parse(PROCESS_KIND)
                 .expect("`process:v1` is a valid JobKind by construction"),
+            sandbox,
         }
+    }
+
+    /// What this executor's boundary PROVIDES — the value a donor compares
+    /// against `descriptor().isolation`, which is what it REQUIRES. Two
+    /// different questions that were one field until 2026-09-10.
+    pub fn provides(&self) -> Isolation {
+        self.sandbox.provides()
     }
 
     /// The kind this executor is registered under.
@@ -468,26 +493,56 @@ impl ProcessExecutor {
         cwd: &Path,
         ctx: &JobContext,
     ) -> Result<RunOutcome, JobError> {
-        let program = payload.argv[0].clone();
+        // The unit's own environment FIRST, and the colour normalization
+        // LAST, so a unit cannot set FORCE_COLOR on itself and re-run the
+        // 2026-08-25 `0p/0f` incident. Built as a list rather than applied
+        // straight onto the command because the container path has to pass
+        // the same pairs, in the same order, as `--env` flags — one ordering,
+        // two spawn shapes (ARCH §10.6).
+        let mut env: Vec<(String, String)> = payload
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (k, v) in [
+            ("NO_COLOR", "1"),
+            ("PYTHON_COLORS", "0"),
+            ("CARGO_TERM_COLOR", "never"),
+        ] {
+            env.retain(|(have, _)| have != k);
+            env.push((k.to_string(), v.to_string()));
+        }
+
+        // THE BOUNDARY. `Direct` hands back the unit's own argv unchanged, so
+        // a build with no container behaves exactly as it did — and offers
+        // nothing, because `resolve_offer` refuses the kind on what this
+        // sandbox `provides`. A `Container` wraps it with the hardening in
+        // `sandbox::Sandbox::command_line`, which is asserted there rather
+        // than trusted to a reading of this function.
+        let line = self.sandbox.command_line(
+            &payload.argv,
+            cwd,
+            env.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+        );
+        let program = line[0].clone();
         let mut command = Command::new(&program);
         command
-            .args(&payload.argv[1..])
+            .args(&line[1..])
             .current_dir(cwd)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
-        // The unit's own environment FIRST …
-        for (k, v) in &payload.env {
-            command.env(k, v);
+        // Applied to the child only on the direct path. Inside a container
+        // the pairs already went in as `--env`, and setting them on the
+        // RUNTIME's process would leak the unit's environment into podman
+        // rather than into the unit.
+        if matches!(self.sandbox, crate::sandbox::Sandbox::Direct) {
+            for (k, v) in &env {
+                command.env(k, v);
+            }
         }
-        // … and the colour normalization LAST, so a unit cannot set
-        // FORCE_COLOR on itself and re-run the 2026-08-25 `0p/0f` incident.
-        // Copied verbatim from test_runner.rs:67-72.
         command
-            .env("NO_COLOR", "1")
-            .env("PYTHON_COLORS", "0")
-            .env("CARGO_TERM_COLOR", "never")
             .env_remove("FORCE_COLOR")
             .env_remove("CLICOLOR_FORCE");
 
@@ -763,21 +818,38 @@ impl JobExecutor for ProcessExecutor {
     fn descriptor(&self) -> JobExecutorDescriptor {
         JobExecutorDescriptor {
             kind: self.kind.clone(),
-            // Subprocess, and no more. See the module doc: there is no sandbox
-            // mechanism in this repository, so claiming RootlessContainer here
-            // would be prose over nothing.
-            isolation: Isolation::Subprocess,
+            // WHAT THIS EXECUTOR REQUIRES, not what it provides. `resolve_offer`
+            // reads this field as the demand and refuses to publish an offer the
+            // build cannot meet (`work_donor.rs:265-273`). The two readings
+            // coincided while both sides said `Subprocess`, and the comment that
+            // stood here read it the other way round — which is how a floor came
+            // to be written as a capability.
+            //
+            // Running a submitter's arbitrary argv REQUIRES a container. That is
+            // the operator's posture as of 2026-09-10: isolation is the default,
+            // and there is no arbitrary execution outside a well-defined
+            // boundary. `DONOR_ISOLATION` stays `Subprocess` because that is what
+            // the build actually provides, so a daemon now refuses this kind at
+            // boot BY NAME instead of publishing an offer whose only wall is
+            // consent — and consent is not isolation (module doc, and
+            // `work_donor.rs:40-43`). This arm stays red until a container-backed
+            // executor raises what the build provides, which is a mechanism and
+            // not a config key (ARCH §18.3).
+            isolation: Isolation::RootlessContainer,
             parameters: json!({
                 "type": "object",
                 "title": "process:v1",
                 "description":
-                    "Runs `argv` as a child process on the donor's own machine, in its own \
-                     process group, killed as a group on timeout. Isolation is `subprocess` \
-                     and trust is TRUSTED-NATIVE: there is no sandbox — no bwrap, no \
-                     firejail, no nsjail, no network namespace — so a unit runs with the \
-                     donor's user, filesystem and network. What limits it is consent \
-                     (`Submit.allowed` intersected with `Offer.accept_from`), and consent is \
-                     not isolation. Offer this kind only to actors you would hand a shell.",
+                    "Runs `argv` as a child process, in its own process group, killed as a \
+                     group on timeout. REQUIRES `rootless-container` isolation, and no build \
+                     in this repository provides it yet — no bwrap, no firejail, no nsjail, \
+                     no network namespace — so a daemon REFUSES to offer this kind at boot \
+                     and names the shortfall. That refusal is the shipped state and it is \
+                     deliberate: unsandboxed, a unit runs with the donor's user, filesystem \
+                     and network, which reaches the donor's own mesh private key. What would \
+                     otherwise limit it is consent (`Submit.allowed` intersected with \
+                     `Offer.accept_from`), and consent is not isolation. A container-backed \
+                     executor is what lifts this, not a config key.",
                 "required": ["argv", "timeout_secs", "result"],
                 "additionalProperties": false,
                 "properties": {

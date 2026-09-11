@@ -314,9 +314,8 @@ Print a per-user directory as the toolchain resolves it, from the path SSOT. Ans
 
 | Subcommand | Description |
 |---|---|
-| `root` (default) | Per-user root — `~/.svrnmesh`, or a populated legacy `~/.sovereign` |
-| `data` | As `root`, but honours `SVRNMESH_DATA_DIR` / `SOVEREIGN_DATA_DIR` |
-| `mesh-data` | Platform-native data dir for the embedded mesh's shared storage |
+| `root` (default) | Per-user root — `SVRNMESH_DATA_DIR` / `SOVEREIGN_DATA_DIR` if set, else `~/.svrnmesh` (or a populated legacy `~/.sovereign`) |
+| `data` | Alias of `root` — one derivation since 2026-09-10; kept for scripts |
 | `config` | Platform-native config dir for GUI-owned settings (`desktop.toml`) |
 
 | Flag | Description |
