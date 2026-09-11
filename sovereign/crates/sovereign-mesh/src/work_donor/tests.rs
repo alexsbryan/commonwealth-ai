@@ -381,6 +381,113 @@ fn an_unpinned_unit_reports_the_rev_the_donor_actually_ran_at() {
     );
 }
 
+/// **A unit's checkout carries its own history inside the one mount.** A
+/// `git worktree` link puts the gitdir in the parent repo, outside the
+/// directory a boundary mounts, and inside it `git` answered "not a git
+/// repository" — ten tests failed on the environment (2026-09-11). The
+/// checkout is a self-contained clone: `.git` is a DIRECTORY, HEAD is the
+/// pin, and a rev the clone predates is fetched from the offered path. The
+/// failing input is the old `worktree add`, whose `.git` is a file.
+#[test]
+fn a_checkout_is_a_self_contained_clone_at_the_pin() {
+    let src = tempfile::tempdir().unwrap();
+    let ok = |args: &[&str]| git(src.path(), args).expect(&format!("git {args:?}"));
+    ok(&["init", "-q"]);
+    ok(&[
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "one",
+    ]);
+    let first = ok(&["rev-parse", "HEAD"]).trim().to_string();
+    let repos = vec![("https://h/x/demo.git".to_string(), src.path().to_path_buf())];
+    let root = tempfile::tempdir().unwrap();
+
+    let wt = checkout_at(&repos, root.path(), &first).expect("first checkout");
+    assert!(
+        wt.join(".git").is_dir(),
+        "a clone, not a worktree link: {}",
+        wt.display()
+    );
+    assert_eq!(git(&wt, &["rev-parse", "HEAD"]).unwrap().trim(), first);
+
+    // A rev the clone predates: fetched from the offered path, checked forward.
+    ok(&[
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "two",
+    ]);
+    let second = ok(&["rev-parse", "HEAD"]).trim().to_string();
+    let again = checkout_at(&repos, root.path(), &second).expect("second checkout");
+    assert_eq!(again, wt, "one checkout per repo, reused");
+    assert_eq!(git(&wt, &["rev-parse", "HEAD"]).unwrap().trim(), second);
+}
+
+/// The conversion arm: a checkout made as a worktree LINK (every donor before
+/// the clone rule) becomes a clone in place, and what sat beside `.git` —
+/// the warm `target/` is the whole point — survives.
+#[test]
+fn a_worktree_link_is_converted_in_place_and_its_target_dir_survives() {
+    let src = tempfile::tempdir().unwrap();
+    let ok = |args: &[&str]| git(src.path(), args).expect(&format!("git {args:?}"));
+    ok(&["init", "-q"]);
+    // The real repo ignores target/; the fixture must too, or `clean -fdq`
+    // (which this arm runs, and whose `-x` is deliberately absent) removes
+    // the very directory the assertion below is about.
+    std::fs::write(src.path().join(".gitignore"), "target/\n").unwrap();
+    ok(&["add", ".gitignore"]);
+    ok(&[
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "-m",
+        "one",
+    ]);
+    let rev = ok(&["rev-parse", "HEAD"]).trim().to_string();
+    let root = tempfile::tempdir().unwrap();
+    let wt = root.path().join(stable_repo_key("https://h/x/demo.git"));
+    ok(&[
+        "worktree",
+        "add",
+        "--detach",
+        &wt.display().to_string(),
+        &rev,
+    ]);
+    assert!(
+        wt.join(".git").is_file(),
+        "the fixture must be the old shape, or this test is vacuous"
+    );
+    std::fs::create_dir_all(wt.join("target")).unwrap();
+    std::fs::write(wt.join("target/warm"), b"keep").unwrap();
+
+    let repos = vec![("https://h/x/demo.git".to_string(), src.path().to_path_buf())];
+    let got = checkout_at(&repos, root.path(), &rev).expect("conversion");
+    assert_eq!(got, wt);
+    assert!(wt.join(".git").is_dir(), "converted into a clone");
+    assert_eq!(git(&wt, &["rev-parse", "HEAD"]).unwrap().trim(), rev);
+    assert_eq!(std::fs::read(wt.join("target/warm")).unwrap(), b"keep");
+    assert!(
+        !git(src.path(), &["worktree", "list"])
+            .unwrap()
+            .contains(&wt.display().to_string()),
+        "the parent no longer lists it as a worktree"
+    );
+}
+
 /// One worktree per repo, named from the repo's URL rather than from its
 /// position in the offer — so re-ordering `[[compute.work_offer.repos]]`
 /// does not silently re-point two repos at each other's checkout.

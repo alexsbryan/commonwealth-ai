@@ -644,12 +644,22 @@ fn trace_refusal(unit_ref: &UnitRef, refusal: &WorkRefusal) {
 
 /// The directory a unit runs in.
 ///
-/// A unit pinned to a `repo_rev` runs in **one worktree per repo, reused and
+/// A unit pinned to a `repo_rev` runs in **one checkout per repo, reused and
 /// checked forward** — `scripts/evidence-verdict.py:529 ensure_worktree`'s
 /// recipe, with `git clean -x` deliberately omitted so `target/` stays warm.
-/// A per-unit worktree would invert that: the whole reason a dev peer is a
+/// A per-unit checkout would invert that: the whole reason a dev peer is a
 /// good donor is the warm target directory it already has, and a fresh
-/// worktree per unit throws it away and pays minutes per unit for nothing.
+/// checkout per unit throws it away and pays minutes per unit for nothing.
+///
+/// The checkout is a self-contained local CLONE, not a `git worktree`. A
+/// worktree's `.git` is a file pointing into the parent repo's `.git/`, which
+/// is outside the one directory the boundary mounts — so inside the boundary
+/// `git` answered "not a git repository" and ten tests that shell out to it
+/// (conformance tags, refactor destinations, the donor's own rev
+/// attribution) failed on the environment, not the code (watched
+/// 2026-09-11, 12,730 / 13 in the boundary against 12,731 / 0 at the
+/// reference). A local clone hardlinks the objects, so it costs no space and
+/// carries its own history inside the mount.
 ///
 /// A unit with no `repo_rev` runs in one reused scratch directory, for the
 /// same reason and by the same rule.
@@ -709,19 +719,77 @@ fn checkout_at(
         if let Err(e) = std::fs::create_dir_all(worktree_root) {
             return Err(format!("could not create {}: {e}", worktree_root.display()));
         }
-        if !worktree.join(".git").exists() {
+        let source = path.display().to_string();
+        let dot_git = worktree.join(".git");
+        if !dot_git.exists() {
             git(
                 path,
                 &[
-                    "worktree",
-                    "add",
-                    "--detach",
+                    "clone",
+                    "--quiet",
+                    "--no-checkout",
+                    "--",
+                    &source,
                     &worktree.display().to_string(),
-                    rev,
                 ],
             )
-            .map_err(|e| format!("`git worktree add` failed for {url}: {e}"))?;
+            .map_err(|e| format!("`git clone` failed for {url}: {e}"))?;
+        } else if dot_git.is_file() {
+            // A worktree LINK from before the clone rule: convert it in place
+            // and keep everything else (target/ above all). The link's parent
+            // entry is pruned so the parent repo stops listing a worktree
+            // that is now a repository of its own.
+            let staging = worktree_root.join(format!("{key}.converting"));
+            let _ = std::fs::remove_dir_all(&staging);
+            git(
+                path,
+                &[
+                    "clone",
+                    "--quiet",
+                    "--no-checkout",
+                    "--",
+                    &source,
+                    &staging.display().to_string(),
+                ],
+            )
+            .map_err(|e| format!("`git clone` (conversion) failed for {url}: {e}"))?;
+            // Order matters: the parent's entry is pruned only while the
+            // link is GONE and nothing sits at `.git` yet — `git worktree
+            // prune` keeps an entry whose path still exists, a directory
+            // included (watched in the test's first run).
+            std::fs::remove_file(&dot_git).map_err(|e| {
+                format!(
+                    "removing the worktree link at {} failed: {e}",
+                    dot_git.display()
+                )
+            })?;
+            if let Err(e) = git(path, &["worktree", "prune"]) {
+                // Not fatal for the unit — the clone below is complete either
+                // way — but a stale entry in the parent is worth a line.
+                warn!(
+                    target: TRACE_TARGET,
+                    parent = %path.display(),
+                    error = %e,
+                    "work donor: the parent repo still lists the converted checkout as a worktree — `git worktree prune` failed"
+                );
+            }
+            std::fs::rename(staging.join(".git"), &dot_git).map_err(|e| {
+                format!(
+                    "moving the clone's .git into {} failed: {e}",
+                    worktree.display()
+                )
+            })?;
+            let _ = std::fs::remove_dir_all(&staging);
+            info!(
+                target: TRACE_TARGET,
+                checkout = %worktree.display(),
+                "work donor: converted a worktree link into a self-contained clone — git now works inside the boundary"
+            );
         }
+        // The clone may predate `rev`; a local fetch brings it in (objects
+        // copied from the offered path, nothing crosses a network).
+        git(&worktree, &["fetch", "--quiet", "--", &source, rev])
+            .map_err(|e| format!("`git fetch {rev}` failed in {}: {e}", worktree.display()))?;
         git(&worktree, &["checkout", "-q", "-f", "--detach", rev])
             .map_err(|e| format!("`git checkout` failed in {}: {e}", worktree.display()))?;
         // `-x` is deliberately absent: target/ is ignored and warm, and the

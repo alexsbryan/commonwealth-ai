@@ -77,7 +77,28 @@
 # git 2.34.1.
 FROM localhost/sovereign-desktop-linux-build:latest
 
-ENV PATH=/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# The workspace pins its compiler (rust-toolchain.toml → 1.95.0) and the
+# reference runs on it; the base image installs `stable`, which had drifted to
+# 1.97.1. Watched 2026-09-11: the two trybuild suites failed in the boundary
+# on diagnostic WORDING alone (`no associated function or constant named`
+# against the snapshot's `no function or associated item named`) — the image
+# is the CI environment, so it carries the pinned toolchain, and that
+# toolchain's own bin dir goes first on PATH (see the rustup-proxy note
+# below). The pin is COPIED in rather than typed here so there is one place
+# it lives; bump the file, rebuild the image.
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+# CARGO_HOME is pinned to /usr/local/cargo for this step only: the base image
+# points it at the workdir for units, and rustup keeps its own settings under
+# CARGO_HOME, so without this `rustup default` says it is not installed.
+RUN set -eu; export CARGO_HOME=/usr/local/cargo; \
+    pin="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' /tmp/rust-toolchain.toml)"; \
+    test -n "$pin"; \
+    rustup toolchain install "$pin" --profile minimal --component clippy,rustfmt; \
+    rustup default "$pin"; \
+    ln -sfn "/usr/local/rustup/toolchains/${pin}-x86_64-unknown-linux-gnu" /usr/local/rustup/toolchains/pinned; \
+    rm /tmp/rust-toolchain.toml
+
+ENV PATH=/usr/local/rustup/toolchains/pinned/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # There is no network inside the boundary, and cargo should not act as if
 # there might be: with this set, a missing crate is `error: no matching
@@ -90,6 +111,19 @@ ENV CARGO_NET_OFFLINE=true
 # the XDG cache) live inside the one mount, in the ignored dir the registry
 # already uses, so they persist across units and are warmed the same way.
 ENV XDG_CACHE_HOME=/work/.cargo-container/xdg-cache
+
+# The reference runs `sovereign-test.sh` under nextest (one process per test);
+# without it the script's `auto` engine falls back to plain cargo, which runs
+# every test of a binary in ONE process and adds doctests — a different
+# instrument. Watched 2026-09-11 in the boundary: 12,730 / 13 under cargo
+# against 12,731 / 0 under nextest at the same rev, two of the 13 being one
+# in-process e2e pair sharing a listener address across tokio runtimes. D2's
+# done-when is counts that EQUAL the local run, which needs the same engine.
+# Prebuilt tarball rather than `cargo install`: seconds, not minutes, and the
+# toolchain's own bin dir is already first on PATH.
+RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/cargo/bin \
+ && chmod a+rx /usr/local/cargo/bin/cargo-nextest \
+ && cargo nextest --version
 
 # The unit's argv is the unit. `Sandbox::command_line` passes `--entrypoint=`
 # for exactly this reason — an image ENTRYPOINT would take the submitter's argv
