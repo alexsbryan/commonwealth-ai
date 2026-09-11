@@ -13,7 +13,7 @@
 #                -v <donor-root>/work-donor/worktrees/<repo>:/work:Z -w /work \
 #                localhost/sovereign-work:latest cargo fetch --locked
 #     mkdir -p <that worktree>/.cargo-container/xdg-cache \
-#       && cp -a ~/.cache/ort.pyke.io <that worktree>/.cargo-container/xdg-cache/
+#       && cp -a ~/.cache/ort.pyke.io/dfbin <that worktree>/.cargo-container/xdg-cache/
 #
 # A unit runs with `--network=none` and ONE mount, so a unit that compiles
 # needs its inputs inside that mount. The base image's layout already says
@@ -38,7 +38,11 @@
 # `XDG_CACHE_HOME` below puts that cache INSIDE `.cargo-container`, which is
 # gitignored and so survives the donor's `clean -fdq` between units (a
 # `/work/.cache` would not); the second warm line copies the host's cache
-# there. Every host that has built this workspace has one.
+# there. Every host that has built this workspace has one. Note the layout:
+# with XDG_CACHE_HOME set, ort-sys uses that directory AS its root (dfbin/
+# directly under it), while the HOME fallback adds `.cache/ort.pyke.io/` —
+# so the copy is of `dfbin`, not of `ort.pyke.io`. Watched: the first warm
+# copied `ort.pyke.io` whole and the build script fetched anyway.
 #
 # The image is the DONOR OPERATOR's declaration, never the submitter's and never
 # the package's: `commonwealth_work::sandbox` ships none and refuses to guess
