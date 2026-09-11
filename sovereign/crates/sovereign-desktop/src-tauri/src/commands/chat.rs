@@ -3,22 +3,16 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
 use sovereign_contracts::types::{TurnFrame, TurnMode};
 use sovereign_core::runtime::message_metadata;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 // ─── Commands ────────────────────────────────────────────────
 

@@ -33,8 +33,7 @@ use tauri::{
 };
 
 use crate::commands::{
-    self, get_contribution_status_at, pause_contributions_at, resume_contributions_at,
-    ContributionStatus,
+    get_contribution_status_at, pause_contributions_at, resume_contributions_at, ContributionStatus,
 };
 use crate::state::AppState;
 
@@ -201,17 +200,6 @@ fn render_status_text(s: &ContributionStatus) -> String {
         1 => "Status: Serving 1 peer request".into(),
         n => format!("Status: Serving {n} peer requests"),
     }
-}
-
-// `commands` re-export to silence the `unused import` lint if no
-// other path hits these names directly. The poller + menu use the
-// `*_at` helpers above; keep the public command fns referenced too so
-// a future refactor doesn't silently drop them from the tray surface.
-#[allow(dead_code)]
-fn _keep_commands_used() {
-    let _ = commands::get_contribution_status;
-    let _ = commands::pause_contributions;
-    let _ = commands::resume_contributions;
 }
 
 #[cfg(test)]

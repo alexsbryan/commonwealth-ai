@@ -3,19 +3,13 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 // ─── Document Asset commands ─────────────────────────────────
 
@@ -591,15 +585,10 @@ pub async fn delete_document_asset(
         .map_err(|e| format!("Delete failed: {e}"))
 }
 
-/// A document from the legacy chunks table (uploaded via the old
-/// paperclip path before DocumentAssetManager existed).
-#[derive(Serialize, Deserialize)]
-pub struct LegacyDocumentEntry {
-    pub source: String,
-    pub filename: String,
-    pub chunk_count: usize,
-    pub word_count: usize,
-}
+/// A document from the legacy chunks table (uploaded via the old paperclip
+/// path before DocumentAssetManager existed) — the route's own type, which
+/// `list_legacy_documents` parses with and returns verbatim.
+pub use sovereign_mesh::documents_http::LegacyDocumentEntry;
 
 /// List documents from the legacy `documents` table that don't have
 /// a corresponding DocumentAsset record. These are shown in the picker

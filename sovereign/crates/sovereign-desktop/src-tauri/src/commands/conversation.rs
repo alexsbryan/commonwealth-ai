@@ -3,19 +3,13 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 #[tauri::command]
 pub async fn create_conversation(
@@ -469,10 +463,7 @@ pub async fn submit_information_search(
     query: String,
     conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
-    use sovereign_tools::web::search::{
-        BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs,
-        TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
-    };
+    use sovereign_tools::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
 
     let query = query.trim();
     if query.is_empty() {

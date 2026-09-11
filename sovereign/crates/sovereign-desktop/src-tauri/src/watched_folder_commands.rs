@@ -60,7 +60,7 @@ fn build_client() -> reqwest::Client {
 // them back in with defaults on the daemon side. The user's sensitive toggle,
 // sync-mode radio, OCR checkbox, additional-roots picker and enrichment choice
 // were all inert, silently.
-pub use sovereign_tools::local_corpus::config::{DeletionGuardConfig, WatchedFolderConfig};
+pub use sovereign_tools::local_corpus::config::WatchedFolderConfig;
 
 // ─── Wire types ──────────────────────────────────────────────────
 //
@@ -73,7 +73,7 @@ pub use sovereign_tools::local_corpus::config::{DeletionGuardConfig, WatchedFold
 // `serde_json::Value`. The commands below only pass these through to the
 // frontend; nothing here reads a field.
 pub use sovereign_mesh::corpus_watch_http::{
-    AckResponse, IncompleteJobsResponse, ListEntry, ListResponse, RegisterResponse, StateResponse,
+    AckResponse, IncompleteJobsResponse, ListResponse, RegisterResponse, StateResponse,
     StatusResponse,
 };
 

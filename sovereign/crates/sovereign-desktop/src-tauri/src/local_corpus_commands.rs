@@ -1449,17 +1449,11 @@ pub async fn lc_clean(
 
 // ─── Command: lc_search ──────────────────────────────────────────────
 
-/// The hit shape the frontend already matches. Field-for-field the
-/// route's `sovereign_mesh::lc_http::LocalSearchHit`, so the bytes the
-/// webview receives are unchanged; `Deserialize` is here to parse the
-/// route's answer, not to widen the contract.
-#[derive(Serialize, serde::Deserialize)]
-pub struct LocalSearchHit {
-    pub content: String,
-    pub title: Option<String>,
-    pub corpus_id: String,
-    pub score: f32,
-}
+/// The hit shape the frontend already matches — the ROUTE's own type, not
+/// a twin of it. `lc_search` below both parses the route's answer with this
+/// and returns it to the webview, so one definition owns both ends and the
+/// serialized bytes cannot drift (ARCH §10.6).
+pub use sovereign_mesh::lc_http::LocalSearchHit;
 
 // ─── Command: lc_cluster ─────────────────────────────────────────────
 
