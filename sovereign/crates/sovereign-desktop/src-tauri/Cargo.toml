@@ -11,11 +11,6 @@ sovereign-contracts = { workspace = true }
 # routes conversation search / memory / insight surfaces through it rather
 # than re-deriving local deciders (sv-surface rung 6).
 sovereign-turn-client = { workspace = true }
-# OS service registration, so setup can hand the daemon to launchd / systemd /
-# Task Scheduler WITHOUT linking a daemon — which is the crate's whole reason
-# to exist (sv-surface `sv-no-daemon-management`). Its in-repo dep list is
-# `sovereign-contracts` alone; nothing here can serve a turn or hold a store.
-sovereign-service = { workspace = true }
 # The enrichment store the CLI and the daemon also read — `enrich_commands`
 # lists it rather than re-deriving the layout and the schema (rung
 # nc-16-shared-capability).
