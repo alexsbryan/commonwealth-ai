@@ -170,6 +170,13 @@ crates = [
     # acts it is given. See its [[forbid]] block below; the layer entry alone
     # would be a green gate enforcing nothing (§5.1).
     "commonwealth-work",
+    # Federated media (cw-lift D1 follow-on, 2026-09-11). Mesh vocabulary for
+    # the same reason the rail and the work plane are: who offers a library,
+    # who may reach it, and the catalogue fan-out are roster questions, and its
+    # whole in-repo surface is `commonwealth-core` + `commonwealth-transport`.
+    # See its [[forbid]] blocks below; the layer entry alone would be a green
+    # gate enforcing nothing (§5.1).
+    "commonwealth-media",
 ]
 
 # The agent substrate: runtime core, inference, persistence, and the studio
@@ -455,6 +462,29 @@ reason = "the rail's manifests declare commonwealth-core ABSENT in prose and not
 from = "commonwealth-work"
 to = "sovereign-*"
 reason = "cw-lift 5f builds this crate in a sandbox outside the monorepo; a sovereign-* edge is the one thing that makes that impossible and it would be acquired in a commit nothing else here goes red on"
+
+# Federated media, cw-lift D1. Its own rows for the same reason the work
+# plane needed its own: the matcher is a literal glob
+# (`arch-layers/src/lib.rs:231`), so nothing above reaches
+# `commonwealth-media` and without these it would sit in `mesh-foundation`
+# with nothing stopping either edge.
+[[forbid]]
+from = "commonwealth-media"
+to = "sovereign-*"
+reason = "a package-only rails daemon composes this crate with no sovereign runtime under it; a sovereign-* edge ends that, and it would be acquired in a commit nothing else here goes red on"
+
+# The second half, and the one a well-meant commit would breach first: media
+# rides the mesh RAILS, not the applications. `commonwealth-api` has the
+# fan-out helper, `commonwealth-knowledge` has a corpus, and reaching for
+# either would pull a ~600-crate closure into the lift. Written as the
+# closure itself — `commonwealth-*` minus the two crates this one is allowed
+# to name — rather than as three rows naming today's applications, so a crate
+# added to that layer tomorrow is refused without anyone remembering to.
+[[forbid]]
+from = "commonwealth-media"
+to = "commonwealth-*"
+except = ["commonwealth-core", "commonwealth-transport"]
+reason = "the media decisions are the rails' own; commonwealth-{api,knowledge,inference} are applications on this substrate and each carries a corpus-engine closure the rails lift cannot take"
 
 [[forbid]]
 from = "commonwealth-core"
@@ -818,6 +848,16 @@ crates = [
     # against it, and every gate in the repo would be green on a
     # `sovereign-*` dep acquired the day before that lift.
     "commonwealth-work",
+    # Federated media, admitted 2026-09-11 at cw-lift D1. Seven crates -> eight
+    # and the zero-exception property still holds: its entire internal surface
+    # is `commonwealth-core` + `commonwealth-transport`, both already members,
+    # so the widening admits no new leaf at all.
+    #
+    # Here the day it is registered, and for the same reason the work plane
+    # was: `commonwealth-rails` is being written against it, and the two
+    # [[forbid]] rows above are what keep the closure liftable between now and
+    # then.
+    "commonwealth-media",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────

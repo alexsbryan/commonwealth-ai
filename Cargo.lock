@@ -2028,6 +2028,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "commonwealth-media"
+version = "0.6.0"
+dependencies = [
+ "axum",
+ "commonwealth-core",
+ "commonwealth-transport",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "commonwealth-rail"
 version = "0.6.0"
 dependencies = [
@@ -12638,6 +12654,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-inference",
+ "commonwealth-media",
  "commonwealth-rail",
  "commonwealth-state",
  "commonwealth-test-harness",

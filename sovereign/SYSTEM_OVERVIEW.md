@@ -5652,7 +5652,8 @@ Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_t
 wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
 
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
-`sovereign-mesh/src/media_reach.rs`, 2026-09-11). The holder declares
+`commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
+glue in `sovereign-mesh/src/media_reach.rs`, 2026-09-11). The holder declares
 `[iroh] media_origin = "127.0.0.1:8096"`; a value that does not parse refuses
 the boot. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
@@ -5677,7 +5678,9 @@ measured through the SAME URL: `media_bridge_bench pull --url <it>
 --duration-secs 600` judges the pre-registered rate / stall / duration and
 leaves the path kind to that field. Watched failing:
 `iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
-and `media_reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
+and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
+These decisions live in the package crate so the inference daemon and the
+package-only rails daemon compose ONE implementation of them (ARCH §10.6).
 
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
 `OriginKind`, 2026-09-11). The acceptor knows whether it routes `cwth/media/0`
@@ -5696,14 +5699,16 @@ with their status, because a person wants to know the library exists. And
 `pick_member` refuses a named member that advertises none
 (`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
 close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
-failing: `media_reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
+failing: `commonwealth-media reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
 
 **The origin is told WHO is asking, by the acceptor and never by the client**
 (`commonwealth-transport/src/iroh_identity_forward.rs`, `[iroh] media_allow`,
 2026-09-11). The acceptor's resolver now returns a `Forward` kind: `Splice`
 (the byte copy above, unchanged for every other ALPN) or `Http { origin,
 headers }`, which `AcceptorRoutes::forward_for` picks for `cwth/media/0` from
-a member — `MemberCheck` returns `Option<MemberIdentity>` (name + node id)
+a member — `MemberCheck` returns `Option<MemberIdentity>` (name + node id,
+both `commonwealth-media/src/identity.rs` since 2026-09-11, with
+`admit_media` the one place the three refusals are decided)
 rather than a bool, so the identity the QUIC handshake verified is in hand
 where the route is decided. `pump_with_identity` parses request HEADS only,
 on the client→origin direction: every client-supplied `x-mesh-*` header is
@@ -5743,8 +5748,10 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 (verdict collapsed to failed); the extraction's guard is the unchanged
 `knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
 
-**Federated media, the catalogue half** (`sovereign-mesh/src/media_fanout.rs`,
-`POST /v1/mesh/media/fanout`, `svrn mesh media fanout <path>`, 2026-09-11).
+**Federated media, the catalogue half**
+(`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
+`sovereign-mesh/src/media_fanout.rs`, `POST /v1/mesh/media/fanout`,
+`svrn mesh media fanout <path>`, 2026-09-11).
 The same origin-relative request to every member that offers a media origin,
 each through its own bridge (the URL `svrn mesh media <peer>` prints, so the
 holder's identity headers ride along), concurrently under a per-member cap,
@@ -5754,10 +5761,13 @@ bytes, elapsed — or `failed` / `never_asked` with the reason. `peers` names
 members exactly as the verb resolves them, and a name the roster refuses is
 a `never_asked` row carrying that refusal, never a dropped name
 (`select_targets`); without `peers`, the targets are what the bare verb
-lists. `roster_candidates` is now the one projection all three media reads
+lists. `roster_of` is now the one projection all three media reads
 share. Deliberately absent: merge, dedup, item schema (the origin's), and
-streams (the per-member URL's). Watched failing:
-`media_fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
+streams (the per-member URL's). Like the viewer half above, the selection, the
+request validation and the per-origin ask live in the package crate so the
+inference daemon and the rails daemon fan out with one implementation
+(ARCH §10.6). Watched failing:
+`commonwealth-media fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
 (refused names filtered out) and
 `an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
 

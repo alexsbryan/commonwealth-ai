@@ -47,6 +47,10 @@ kernel-types = { workspace = true }
 # (ARCH §8.3: the owner, not `commonwealth-api`'s re-export of it).
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+# The media decisions — admission, reach, catalogue fan-out — so this daemon
+# and the package-only rails daemon compose ONE implementation (ARCH §10.6).
+# A direct path dep on the owner like its neighbours above (ARCH §8.3).
+commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory

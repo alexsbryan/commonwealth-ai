@@ -33,67 +33,19 @@ use commonwealth_transport::iroh::{
 };
 use commonwealth_transport::TrafficClass;
 
+/// The media decisions this acceptor makes are the package crate's (moved
+/// 2026-09-11, cw-lift D1): the membership consult, the identity an origin is
+/// handed, the `media_allow` verdict, and the live-path reading. Re-exported
+/// under their old paths so `daemon.rs`, `media_reach`, the CLI and the tests
+/// keep naming them here, while a package-only rails daemon composes exactly
+/// the same code (ARCH §10.6).
+pub use commonwealth_media::{admits_no_one, MemberCheck, MemberIdentity, PeerTransportPath};
+
 /// Map `[iroh.transport]` config to the traffic classes routed over
 /// iroh. Since the iroh-first flip (2026-07): iroh enabled means EVERY
 /// class routes iroh-first (with automatic per-dial IP fallback via
 /// `RoutedTransport`'s empty required set), and the config is an
 /// opt-OUT — `<class> = "ip"` pins that class to the IP path. A legacy
-/// Answers "is this dialer a live member of the mesh we are serving?"
-///
-/// A closure rather than a snapshot because membership changes between dials
-/// and a cached set would admit a departed node (or refuse a fresh one) for as
-/// long as it was stale. The daemon supplies one reading `AppState`'s live
-/// `Mesh`; `MemberRecord.removed_at` tombstones are excluded, so leaving the
-/// mesh takes reachability with it.
-pub type MemberCheck = std::sync::Arc<
-    dyn Fn(
-            commonwealth_core::ids::NodePubkey,
-        )
-            -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<MemberIdentity>> + Send>>
-        + Send
-        + Sync,
->;
-
-/// A check that admits nobody. For hosts with no mesh to consult — every
-/// `CLIENT_ALPN` dial is treated as a stranger and meets the bearer gate.
-/// Fail-CLOSED by construction: forgetting to wire the real check cannot
-/// widen access, only narrow it.
-pub fn admits_no_one() -> MemberCheck {
-    std::sync::Arc::new(|_| Box::pin(std::future::ready(None)))
-}
-
-/// Who a verified dialer IS, as the roster names it. `Some` is membership;
-/// the fields are what an origin behind [`MEDIA_ALPN`] is handed on every
-/// request (`X-Mesh-Member`, `X-Mesh-Node`), so a server that authenticates
-/// nothing can still tell members apart — and so `[iroh] media_allow` can be
-/// a list of names rather than of keys.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemberIdentity {
-    pub name: String,
-    pub node_id: commonwealth_core::ids::NodeId,
-}
-
-impl MemberIdentity {
-    /// The request headers the media origin receives. Values are visible
-    /// ASCII by the time they reach the wire (`rewrite_head` filters), and
-    /// any client-supplied header under `x-mesh-` is stripped before these
-    /// are added, so the origin reads them as the acceptor's word.
-    pub fn headers(&self, dialer: commonwealth_core::ids::NodePubkey) -> Vec<(String, String)> {
-        vec![
-            ("X-Mesh-Member".to_string(), self.name.clone()),
-            ("X-Mesh-Node".to_string(), self.node_id.to_string()),
-            ("X-Mesh-Pubkey".to_string(), hex::encode(dialer.0)),
-        ]
-    }
-
-    /// Whether an `[iroh] media_allow` entry names this member: its exact
-    /// name, or a node-id prefix of at least four characters — the same
-    /// resolution `svrn mesh media <peer>` and `forget-member` use.
-    pub fn named_by(&self, entry: &str) -> bool {
-        crate::roster_repair::member_matches(self.node_id, &self.name, entry)
-    }
-}
-
 /// `"iroh"` entry is a no-op (it names the default) and is logged as
 /// such; unknown values get the default (routed) with a warning. The
 /// string→`TrafficClass` interpretation lives here (Track W3) because
@@ -252,28 +204,6 @@ fn env_kill_switch() -> bool {
         std::env::var("SOVEREIGN_IROH").ok().as_deref(),
         Some("off") | Some("0") | Some("false")
     )
-}
-
-/// The live iroh connection path to one peer (H2 observability). A
-/// point-in-time snapshot from the endpoint's `remote_info`; the
-/// operator's answer to "is this peer on a direct path or the relay?"
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct PeerTransportPath {
-    /// `direct` (active IP path, hole-punched), `relayed` (active only
-    /// via a relay), `mixed` (both active), `idle` (known peer, no
-    /// active path this moment), or `unknown` (endpoint has no record).
-    pub path: String,
-    /// The relay URL in active use, if the path rides one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub relay: Option<String>,
-    /// Count of active direct (IP) addresses to this peer.
-    pub active_direct_addrs: usize,
-    /// Whether a number measured over this path now is a RELAYED reading —
-    /// the federated-media bar's kind. True only for `relayed`; `mixed` is a
-    /// direct number under a relay's name. Decided once, by
-    /// `commonwealth_transport::iroh::PeerPath::is_relayed_reading`.
-    #[serde(default)]
-    pub relayed_reading: bool,
 }
 
 /// Every member the iroh endpoint could hold a path to, paired with what
@@ -461,45 +391,18 @@ impl AcceptorRoutes {
             return self.guest.map(Forward::Splice);
         }
         if alpn == MEDIA_ALPN {
-            if let Some(who) = is_member(dialer).await {
-                let origin = self.media?;
-                // The allow-list is about identities the mesh gossiped, checked
-                // where the key was verified — never about addresses, and never
-                // a header the client could have typed.
-                if !self.media_allow.is_empty()
-                    && !self.media_allow.iter().any(|entry| who.named_by(entry))
-                {
-                    tracing::warn!(
-                        target: "transport",
-                        member = %who.name,
-                        node_id = %who.node_id,
-                        allow = ?self.media_allow,
-                        "iroh(mesh): REFUSED a MEDIA_ALPN dial from a member outside [iroh] media_allow"
-                    );
-                    return None;
-                }
-                tracing::info!(
-                    target: "transport",
-                    member = %who.name,
-                    node_id = %who.node_id,
-                    "iroh(mesh): media dial admitted — the origin is told who is asking"
-                );
-                return Some(Forward::Http {
-                    origin,
-                    headers: who.headers(dialer),
-                });
-            }
-            // The origin authenticates nothing — it is somebody's Jellyfin on
-            // loopback — so there is no listener to downgrade a stranger to,
-            // and this is the branch that would leak a media library to the
-            // whole internet if it ever became an unconditional forward (§9.1).
-            tracing::warn!(
-                target: "transport",
-                dialer = %hex::encode(dialer.0),
-                "iroh(mesh): REFUSED a MEDIA_ALPN dial from a non-member — the media origin \
-                 authenticates nothing, so there is no safe downgrade"
+            // One decider for the media dial: the origin declared here, the
+            // roster's word on the dialer, and the allow-list. The three
+            // refusals (no origin, non-member, outside the list) and their
+            // tracing live in `commonwealth_media::admit_media`, so a rails
+            // daemon with none of this acceptor under it refuses the same
+            // dials for the same reasons (ARCH §10.6).
+            return commonwealth_media::admit_media(
+                is_member(dialer).await.as_ref(),
+                dialer,
+                self.media,
+                &self.media_allow,
             );
-            return None;
         }
         if alpn == RPC_ALPN {
             if is_member(dialer).await.is_some() {
@@ -749,31 +652,17 @@ impl MeshIrohAccess {
         self.endpoint.id().to_string()
     }
 
-    /// The live connection path to `peer_pubkey` over iroh, from the
-    /// endpoint's `remote_info` snapshot (H2 observability — the
-    /// "is anyone actually on the relay?" question). Returns the
-    /// `path` classification, the active relay if any, and the count
-    /// of active direct addresses. `None` when the endpoint has no
-    /// record of this peer (never dialed, or not iroh-reachable).
-    /// Takes an [`Endpoint`] handle (see [`Self::endpoint_handle`]) so
-    /// the caller needn't hold the daemon-state lock across the await.
+    /// The live connection path to `peer_pubkey` over iroh — the "is anyone
+    /// actually on the relay?" question. Takes an [`Endpoint`] handle (see
+    /// [`Self::endpoint_handle`]) so the caller needn't hold the daemon-state
+    /// lock across the await. The reading itself is
+    /// `commonwealth_media::path_to`, which is the one conversion from the
+    /// transport's snapshot the operator surface and the health term share.
     pub async fn peer_path_on(
         endpoint: &Endpoint,
         peer_pubkey: &[u8; 32],
     ) -> Option<PeerTransportPath> {
-        let id = commonwealth_transport::iroh::PublicKey::from_bytes(peer_pubkey).ok()?;
-        // The classification itself lives in `commonwealth_transport::iroh`
-        // (ARCH §10.6 — one implementation): the watchdog's peer-path health
-        // term reads the same snapshot, and a second copy here is how the
-        // operator surface and the health term would come to disagree about
-        // what "reachable" means.
-        let snap = commonwealth_transport::iroh::peer_path_snapshot(endpoint, id).await?;
-        Some(PeerTransportPath {
-            path: snap.path.as_str().to_string(),
-            relay: snap.relay,
-            active_direct_addrs: snap.active_direct_addrs,
-            relayed_reading: snap.path.is_relayed_reading(),
-        })
+        commonwealth_media::path_to(endpoint, peer_pubkey).await
     }
 
     /// Bounded wait for a RELAY-bearing dial string, polling every
