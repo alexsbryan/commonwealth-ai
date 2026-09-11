@@ -3,63 +3,46 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 #[tauri::command]
 pub async fn create_conversation(
     state: State<'_, Arc<AppState>>,
     surface_skill_id: Option<String>,
 ) -> Result<CreateConversationResponse, String> {
-    let id = uuid::Uuid::new_v4().to_string();
-    let created_at = now_epoch();
-
-    // Persist the conversation row with its surface tag NOW so the
-    // first chat dispatch already knows which surface created this
-    // conversation. Pre-2026-05-24 this was a lazy create — the row
-    // appeared only when the first message was saved, and the
-    // runtime auto-tagged with whatever was in
-    // `SkillRegistry::primary_skill_id_for_conversation()` at dispatch
-    // time. That coupled routing to global mutable registry state +
-    // required every workspace surface to toggle skills via
-    // `rebuild_runtime` on mount/destroy (15s × N rebuilds). With
-    // the surface declaring its skill at create-time, routing
-    // becomes a stateless per-turn lookup and the lifecycle glue
-    // disappears.
+    // sv-surface D9b — `POST /v1/conversations`. The row is SEEDED, not
+    // created lazily, and that is exactly why it has to be seeded on the
+    // store the turn will be answered against: the surface tag decides
+    // routing at dispatch, and since R5 the dispatch is the daemon's. The
+    // local arm seeded this process's `sqlite_store`, which in attach is a
+    // different file from the one serving the turn — the tag was written
+    // where nobody would read it.
     //
-    // `surface_skill_id == None` is the default-chat case: no
-    // workspace tag, routing follows intent-derived policy.
-    if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .insert_empty_conversation(&id, created_at, surface_skill_id.as_deref())
-            .await
-            .map_err(|e| format!("create_conversation insert: {e}"))?;
-    } else {
-        // Sqlite store unavailable (early boot, IO error). Fall
-        // through: the conversation row still gets created lazily
-        // on first message save and runtime's older auto-tag path
-        // handles attribution best-effort.
-        tracing::warn!("create_conversation: sqlite store unavailable, deferring insert");
-    }
+    // The old `else` branch is gone with it, and that is a §18.3 repair,
+    // not a loss: "sqlite store unavailable" used to `warn!` and return a
+    // conversation id anyway, leaving the frontend holding an id for a row
+    // that did not exist and would be lazily minted UNTAGGED by the first
+    // turn. The route either seeds the row or says why.
+    //
+    // `enabled_corpora: None` — the desktop's own create seeds no
+    // allow-list; the client verifies the daemon echoed what was sent, so
+    // a host that ignores the field is an error rather than a silent
+    // "everything is searchable".
+    let created = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .create_conversation(surface_skill_id.as_deref(), None)
+        .await
+        .map_err(|e| format!("create_conversation: {e}"))?;
 
     Ok(CreateConversationResponse {
-        id,
-        created_at,
-        // The desktop's own create seeds no allow-list; the field exists on
-        // the wire type so a scoped create can echo one (the daemon's route
-        // does), and `None` is omitted from the serialized bytes.
-        enabled_corpora: None,
+        id: created.id,
+        created_at: created.created_at,
+        enabled_corpora: created.enabled_corpora,
     })
 }
 
@@ -70,28 +53,20 @@ pub async fn list_conversations(
     offset: Option<usize>,
     surface_skill_id: Option<String>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    // Readiness gates on the DATABASE, not the chat Runtime: listing
-    // conversations is not a chat operation (Phase 0).
-    let _ = require_store!(state);
-    // Surface-scoped listing: each surface only sees its own
-    // conversations. The default-chat sidebar passes `None` and
-    // gets back only conversations with `skill_id IS NULL`; the
-    // Inner Work history drawer passes `Some("inner-work")`;
-    // Recipe Author passes `Some("recipe-author")`. No "all
-    // conversations" mode — cross-surface visibility is structurally
-    // restricted (2026-05-24 architecture redesign).
-    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .list_conversations_for_surface(
-                surface_skill_id.as_deref(),
-                limit.unwrap_or(50),
-                offset.unwrap_or(0),
-            )
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        return Err("list_conversations: sqlite store unavailable".to_string());
-    };
+    // `GET /v1/conversations?skill_id=`, in BOTH modes — the read half of
+    // the row `create`, `rename` and `delete` already cross for. Leaving it
+    // local was the sharper half of the split: in attach the sidebar listed
+    // THIS process's rows while every write went to the daemon's, so a new
+    // conversation never appeared in the list it was created from.
+    //
+    // The scoping travels with the request rather than being approximated
+    // here: `skill_id=` (empty) is the DEFAULT surface, a named id is that
+    // surface, and there is no spelling for "every surface" — which is what
+    // keeps the 2026-05-24 visibility restriction structural over the wire.
+    let convos = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_conversations_for_surface(surface_skill_id.as_deref(), limit.or(Some(50)), offset)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(convos
         .into_iter()
@@ -108,6 +83,7 @@ pub async fn list_conversations(
 /// — the notebook's Ask-tab history. Default-chat surface only;
 /// "everything"-scoped conversations are excluded (see
 /// `SqliteStateStore::list_conversations_for_corpus`).
+/// `GET /v1/conversations?corpus_id=` since sv-surface, in both modes.
 #[tauri::command]
 pub async fn notebook_conversations(
     state: State<'_, Arc<AppState>>,
@@ -115,15 +91,10 @@ pub async fn notebook_conversations(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    let _ = require_store!(state);
-    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .list_conversations_for_corpus(&corpus_id, limit.unwrap_or(20), offset.unwrap_or(0))
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        return Err("notebook_conversations: sqlite store unavailable".to_string());
-    };
+    let convos = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_conversations_for_corpus(&corpus_id, limit, offset)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(convos
         .into_iter()
@@ -141,6 +112,16 @@ pub async fn get_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<ConversationDetail, String> {
+    // sv-surface D9b — NOT repointed, and this one is a wire GAP, not a
+    // missing route. `GET /v1/conversations/{id}` exists and `export_answer`
+    // below rides it. But it answers the TYPED projection
+    // (provenance/citations/epistemic_state) and drops two fields this DTO
+    // carries: `metadata`, the verbatim blob the frontend types as `unknown`
+    // and reads with pointers, and `enabled_corpora`, which
+    // `CorpusFilterStrip` renders. Repointing today would quietly empty
+    // both. Two ways out, both outside this rung: widen the route's
+    // `ConversationResponse`, or convert the renderer onto the projections
+    // (`conversation_wire_census.rs` already names that as rung 6's job).
     let store = require_store!(state);
 
     let convo = store
@@ -156,6 +137,13 @@ pub async fn get_conversation(
             .into_iter()
             .map(|m| {
                 let role = m.role_str().to_string();
+                // sv-surface D7/G9: `metadata` stays the verbatim blob.
+                // The frontend types it as `unknown` and reads it with
+                // pointers, so retyping this contract is a later rung —
+                // and `MessageEntry` itself lives in `commands/mod.rs`,
+                // outside this rung's zone. `ask_document` carries the
+                // typed projection beside the blob (document_asset.rs)
+                // and `export_answer` below already renders from it.
                 MessageEntry {
                     id: m.id,
                     role,
@@ -176,9 +164,11 @@ pub async fn delete_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let store = require_store!(state);
-
-    store
+    // sv-surface D9b — `DELETE /v1/conversations/{id}`, in BOTH modes. The
+    // daemon's store is the one the sidebar was listed from; deleting the
+    // desktop's own row left the served row in place, so the entry came
+    // back on the next list.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
         .delete_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())
@@ -191,21 +181,17 @@ pub async fn rename_conversation(
     conversation_id: String,
     title: String,
 ) -> Result<(), String> {
-    let trimmed = title.trim();
-    if trimmed.is_empty() {
-        return Err("Title cannot be empty".to_string());
-    }
-    // Guard against unreasonably long titles.
-    let title = if trimmed.chars().count() > 200 {
-        trimmed.chars().take(200).collect::<String>()
-    } else {
-        trimmed.to_string()
-    };
-
-    let store = require_store!(state);
-
-    store
-        .update_conversation_title(&conversation_id, &title)
+    // `PATCH /v1/conversations/{id}`, in BOTH modes — the write half of the
+    // row `create` and `delete` already cross for. Measured the same way as
+    // the allow-list below: against a live daemon the row lives in the
+    // daemon's store, so the local rename found nothing to update.
+    //
+    // The trim, the empty refusal and the 200-character clamp went WITH the
+    // write (§10.6). They were never a UI rule: a CLI rename would have
+    // needed the same three, and the daemon is the one place they hold for
+    // every surface. A refusal arrives as the host's own words.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .rename_conversation(&conversation_id, &title)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -228,10 +214,32 @@ pub async fn set_conversation_enabled_corpora(
     conversation_id: String,
     enabled_corpora: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let store = require_store!(state);
-
-    store
-        .set_conversation_enabled_corpora(&conversation_id, enabled_corpora)
+    // `PUT /v1/conversations/{id}/enabled-corpora`, in BOTH modes.
+    //
+    // MEASURED, because the comment this replaces was wrong and worth
+    // correcting rather than inheriting. It said the toggle "is written
+    // where the retrieval that honours it will never look". Driven against
+    // a real attached desktop (command bridge, scratch profile, live daemon
+    // on :9741) the conversation is minted by `POST /v1/conversations` on
+    // the DAEMON's store and is absent from this process's — so the local
+    // write hit zero rows and returned `NotFound`. In the shipped shape,
+    // where setup mirrors `data_dir` into the CLI's config, it is one
+    // sqlite FILE and the write did land. Neither is "silently ignored".
+    //
+    // Two things are wrong with it anyway, and they are why this crosses:
+    //
+    //   * NO VALIDATION. The local write stored any string. The route runs
+    //     `corpus_allow_list_verdict` against the corpora the daemon can
+    //     actually search — proved on the real daemon: `definitely-not-
+    //     installed` now comes back 400 naming all installed ids, where the
+    //     local write accepted it and left retrieval to intersect it away
+    //     into an answer reading "the corpus does not cover this" (§18.3).
+    //   * A SECOND WRITER. When the roots DO match, this process was
+    //     writing a data root whose `RunLock` the daemon holds — the
+    //     invariant state.rs states at the commission site, and the class
+    //     D0's CompactionWorker fix belonged to.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .set_enabled_corpora(&conversation_id, enabled_corpora.as_deref())
         .await
         .map_err(|e| e.to_string())?;
 
@@ -244,34 +252,16 @@ pub async fn search_messages(
     state: State<'_, Arc<AppState>>,
     query: String,
 ) -> Result<Vec<SearchResult>, String> {
-    // Attach: the daemon's store is the one writer — search crosses the
-    // wire (the rung-6 route serves the SAME `search_messages` trait call
-    // with the SAME 50-row cap, so the answer cannot drift from Local's).
-    if state.is_attach_mode() {
-        let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
-        let messages = client
-            .search_conversations(&query)
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(messages
-            .into_iter()
-            .map(|m| SearchResult {
-                content: m.content,
-                conversation_id: m.conversation_id,
-            })
-            .collect());
-    }
-
-    let store = require_store!(state);
-
-    let messages = store
-        .search_messages(&query)
+    // The daemon's store is the one writer, so search crosses the wire in
+    // BOTH modes (sv-surface D2). The route serves the same `search_messages`
+    // trait call behind the same 50-row cap the deleted local arm applied —
+    // one query decider, so the answer cannot depend on which boot asked.
+    let messages = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .search_conversations(&query)
         .await
         .map_err(|e| e.to_string())?;
-
     Ok(messages
         .into_iter()
-        .take(50)
         .map(|m| SearchResult {
             content: m.content,
             conversation_id: m.conversation_id,
@@ -279,26 +269,53 @@ pub async fn search_messages(
         .collect())
 }
 
-/// Answer a prompt from the ACTIVE WIRE TURN (sv-surface R5): the card's
-/// `key` is the daemon-minted prompt id, and the parked sender answers on
-/// the turn socket while the drain keeps reading. Falls back to the local
-/// desk when no wire turn is parked — the still-in-process turn shapes
-/// (redirect, resume) park there. Returns whether SOMETHING was answered;
-/// the authoritative after-the-fact word is the `ResolveAck` notice.
+/// Answer a prompt from a LIVE WIRE TURN (sv-surface R5): the card's
+/// `key` is the daemon-minted prompt id, and the sender parked for the
+/// conversation that prompt belongs to answers on the turn socket while
+/// the drain keeps reading.
+///
+/// `None` means "not a wire prompt" and the caller falls back to the
+/// local desk, which still serves the in-process turn shapes (redirect,
+/// resume). Two things used to be conflated with that (review C8): an
+/// answer for a key NOTHING is parked under went onto the wire anyway and
+/// came back `true`, and the sender it went to was whichever turn was
+/// most recent rather than this card's. Both are refusals now, by name.
+///
+/// `Some(true)` is still optimistic about the far end — a queued send is
+/// not a resolved question — but it is no longer optimistic about
+/// whether the card exists. The authoritative word is the `ResolveAck`
+/// notice, which `pump_wire_frames` renders (a `WrongKind` re-raises the
+/// card; a `NoSuchPending` drops it).
 async fn answer_wire_prompt(
     state: &AppState,
     key: &str,
     answer: sovereign_contracts::types::TurnAnswer,
 ) -> Option<bool> {
-    let guard = state.turn_wire.read().await;
-    let sender = guard.as_ref()?;
-    sender.send_answer(key, &answer).ok().map(|()| {
-        // Optimistic: the daemon's refusal (stale/wrong-kind) arrives as a
-        // StreamError the frontend surfaces; nothing here can know it
-        // synchronously over a socket, and pretending otherwise is the
-        // collapse §18.3 is about.
-        true
-    })
+    let parked = state.pending_prompts.get(key).await?;
+    let Some(sender) = state.turn_wire.sender_for(&parked.conversation_id).await else {
+        // The card is ours but its turn's socket is gone — the turn ended
+        // while the card was on screen. Refuse by name and forget the
+        // card; claiming it reached a question is the §18.3 substitution.
+        tracing::warn!(
+            prompt_id = %key,
+            conversation_id = %parked.conversation_id,
+            "answer_wire_prompt: the turn this card belongs to is no longer parked"
+        );
+        state.pending_prompts.resolve(key).await;
+        return Some(false);
+    };
+    match sender.send_answer(key, &answer) {
+        Ok(()) => Some(true),
+        Err(e) => {
+            tracing::warn!(
+                prompt_id = %key,
+                conversation_id = %parked.conversation_id,
+                error = %e,
+                "answer_wire_prompt: the turn socket's writer is gone"
+            );
+            Some(false)
+        }
+    }
 }
 
 #[tauri::command]
@@ -430,18 +447,15 @@ pub async fn submit_information_search(
     query: String,
     conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
-    use sovereign_tools::web::search::{
-        BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs,
-        TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
-    };
+    use sovereign_tools::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
 
     let query = query.trim();
     if query.is_empty() {
         return Err("query must not be empty".to_string());
     }
 
-    let wire_parked = state.pending_prompts.read().await.contains(&key);
-    if wire_parked {
+    let parked = state.pending_prompts.get(&key).await;
+    if parked.is_some() {
         // The active wire turn put this card up; the guard below is the
         // LOCAL desk's and cannot see it. The Answer's own named refusal
         // covers staleness daemon-side.
@@ -458,60 +472,34 @@ pub async fn submit_information_search(
     // in-conversation lookup came up short and the user reached
     // for the external escape hatch." Soft-fail: missing NoteStore
     // is silently skipped. See `dossier::record_tool_outcome`.
-    if state.is_attach_mode() {
-        // Attach: the notes.db the dossier writes lives daemon-side
-        // (rung 6 route). Soft-fail preserved — the in-process path
-        // skips a missing NoteStore, and a daemon without a notes
-        // surface answers the named 503; either way the search below
-        // still runs.
-        let outcome = sovereign_turn_client::TurnClient::new(state.client_base_url())
-            .notes_tool_outcome(sovereign_turn_client::ToolOutcome {
-                session_id: &key,
-                conversation_id: conversation_id.as_deref(),
-                tool_id: "knowledge_lookup",
-                outcome: sovereign_core::memory::ToolDecisionOutcome::NoResults,
-                reasoning: "user clicked Search-the-web on the INFORMATION REQUEST card \
-                             — prior in-conversation lookup did not satisfy",
-                // Tier 1: no summary/evidence_ids/turn_index — this
-                // write fires from a USER click, not a tool-result
-                // post-stream hook. The originating turn's baseline
-                // write (from the runtime's KQ dispatch) already
-                // carries those fields; this is an audit overlay.
-                extras_summary: None,
-                evidence_ids: Vec::new(),
-                turn_index: 0,
-            })
-            .await;
-        if let Err(e) = outcome {
-            tracing::info!(
-                error = %e,
-                "submit_information_search: attach-mode tool-outcome write skipped (daemon-side notes unavailable)"
-            );
-        }
-    } else {
-        let notes_guard = state.notes.read().await;
-        let notes_ref: Option<&corpus_engine_notes::NoteStore> =
-            notes_guard.as_ref().map(|arc| arc.as_ref());
-        sovereign_core::dossier::record_tool_outcome(
-            notes_ref,
-            // `key` is a per-conversation-turn opaque id (see
-            // approval::TauriApprovalChannel) — using it as the
-            // session-id proxy keeps the audit trail traceable
-            // back to the originating INFORMATION REQUEST card.
-            &key,
-            conversation_id.as_deref(),
-            "knowledge_lookup",
-            sovereign_core::memory::ToolDecisionOutcome::NoResults,
-            "user clicked Search-the-web on the INFORMATION REQUEST card \
-             — prior in-conversation lookup did not satisfy",
-            // Tier 1: no summary/evidence_ids/turn_index — this
-            // write fires from a USER click, not a tool-result
-            // post-stream hook. The originating turn's baseline
-            // write (from the runtime's KQ dispatch) already
-            // carries those fields; this is an audit overlay.
-            sovereign_core::memory::ToolDecisionExtras::none(),
-        )
+    // The notes.db the dossier writes is the daemon's in both modes
+    // (sv-surface D2), so the write crosses the wire either way. Soft-fail
+    // preserved — the deleted local arm skipped a missing NoteStore, and a
+    // daemon without a notes surface answers the named 503; the search below
+    // still runs regardless.
+    let outcome = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .notes_tool_outcome(sovereign_turn_client::ToolOutcome {
+            session_id: &key,
+            conversation_id: conversation_id.as_deref(),
+            tool_id: "knowledge_lookup",
+            outcome: sovereign_core::memory::ToolDecisionOutcome::NoResults,
+            reasoning: "user clicked Search-the-web on the INFORMATION REQUEST card \
+                         — prior in-conversation lookup did not satisfy",
+            // Tier 1: no summary/evidence_ids/turn_index — this write fires
+            // from a USER click, not a tool-result post-stream hook. The
+            // originating turn's baseline write (from the runtime's KQ
+            // dispatch) already carries those fields; this is an audit
+            // overlay.
+            extras_summary: None,
+            evidence_ids: Vec::new(),
+            turn_index: 0,
+        })
         .await;
+    if let Err(e) = outcome {
+        tracing::info!(
+            error = %e,
+            "submit_information_search: tool-outcome write skipped (daemon-side notes unavailable)"
+        );
     }
 
     let config_snapshot = state.config.read().await.clone();
@@ -628,17 +616,30 @@ pub async fn submit_information_search(
     // uses (sv-surface G3b; the inline copy this replaced was the second
     // spelling).
     //
-    // ATTACH (G3b): this write is the DAEMON's over the wire — the
-    // Answer carries its `sources` and the daemon folds them as part of
-    // resolving it. The local write below would hit a store the daemon
-    // never reads, so attach mode skips it.
+    // ONE predicate, not two (review C4, ARCH §10.6). This gate and the
+    // wire resolve below decide the SAME question — who folds these
+    // sources into the conversation — and they used to disagree: this one
+    // asked the boot-mode fork, the resolve asked whether a wire turn was
+    // parked. Since R5 a Local turn rides the wire too, so both were true
+    // at once and the sources were folded TWICE, once by this write and
+    // once by the daemon resolving the Answer. The wire turn's existence
+    // is the only fact either needs, and the daemon's fold is the atomic
+    // one (it stamps the conversation's REAL current turn), so the local
+    // write runs only when no wire turn will do it.
     //
     // Soft-fail: a missing conversation_id (legacy callers, tests
     // without a wired conversation) skips the registry update; the
     // search still feeds through to refinement so the bench's
     // `submit_information_response` path is unaffected.
     if let Some(ref cid) = conversation_id {
-        if !state.is_attach_mode() {
+        // sv-surface D9b — NOT repointed: `searched_sources` has no wire
+        // accessor (neither `get_conversation`'s response nor any write
+        // route carries it). This arm is already dead whenever a wire turn
+        // is parked, which since R5 is every real turn; it survives for
+        // legacy callers and for bench paths with no conversation wired.
+        // Owed with the enabled-corpora write above, or delete the arm once
+        // the daemon's fold is proven to be the only one.
+        if !state.turn_wire.has(cid).await {
             let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
                 let guard = state.store.read().await;
                 guard.as_ref().map(Arc::clone)
@@ -684,7 +685,15 @@ pub async fn submit_information_search(
     // into the conversation as part of the resolve — one user action, one
     // atomic effect. The local desk fallback keeps the in-process turn
     // shapes working with the local registry write above.
-    if let Some(sender) = state.turn_wire.read().await.as_ref() {
+    // RB5: the socket is THIS card's turn's, found through the
+    // conversation the prompt was parked under — not whichever turn
+    // started most recently. A card whose turn ended between the click
+    // and the search finishing falls through to the local desk.
+    let wire_sender = match parked {
+        Some(ref p) => state.turn_wire.sender_for(&p.conversation_id).await,
+        None => None,
+    };
+    if let Some(sender) = wire_sender {
         let wire_sources: Vec<sovereign_core::types::SearchedSourceEntry> = sources
             .iter()
             .map(|s| {
@@ -709,7 +718,7 @@ pub async fn submit_information_search(
                 },
             )
             .is_ok();
-        state.pending_prompts.write().await.remove(&key);
+        state.pending_prompts.resolve(&key).await;
         return Ok(SearchAugmentation {
             query: query.to_string(),
             backend_id: out.backend_id,
@@ -752,9 +761,20 @@ pub async fn finalize_inner_work_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    if let Err(e) = runtime.end_conversation(&conversation_id).await {
+    // sv-surface D9b — `POST /v1/conversations/{id}/end`. The extraction
+    // pass has to run on the Runtime that OWNS the conversation's memories,
+    // which since R5 is the serving one. This process's `Runtime` in attach
+    // has never seen the conversation, so the local call extracted from an
+    // empty history and stamped nothing.
+    //
+    // The soft-fail contract is UNCHANGED on purpose: a failed extraction
+    // warns and still answers `Ok(())`, because the user closing an
+    // inner-work session must not see an error for a background pass. What
+    // changed is only WHICH runtime does the work.
+    if let Err(e) = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .end_conversation(&conversation_id)
+        .await
+    {
         tracing::warn!(
             error = %e,
             conversation_id = %conversation_id,
@@ -773,16 +793,10 @@ pub async fn forget_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
-    // Attach: the tombstone crosses the wire — the daemon's row is the
-    // one recall reads (rung 6 route; same `delete_memory` decider).
-    if state.is_attach_mode() {
-        return sovereign_turn_client::TurnClient::new(state.client_base_url())
-            .delete_memory(&memory_id)
-            .await
-            .map_err(|e| e.to_string());
-    }
-    let store = require_store!(state);
-    store
+    // The tombstone crosses the wire in BOTH modes (sv-surface D2) — the
+    // daemon's row is the one recall reads, and its route drives the same
+    // `delete_memory` decider the deleted local arm called.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
         .delete_memory(&memory_id)
         .await
         .map_err(|e| e.to_string())
@@ -797,27 +811,17 @@ pub async fn weaken_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
-    // Attach: the halving decider is the DAEMON's route (rung 6 moved the
-    // formula off this command so it has one home). The new confidence is
-    // persisted server-side against the daemon's own row; the command
-    // keeps its `Ok(())` frontend contract.
-    if state.is_attach_mode() {
-        return sovereign_turn_client::TurnClient::new(state.client_base_url())
-            .weaken_memory(&memory_id)
-            .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
-    }
-    let store = require_store!(state);
-    let all = store.get_all_memories().await.map_err(|e| e.to_string())?;
-    let current = all
-        .iter()
-        .find(|m| m.id == memory_id)
-        .ok_or_else(|| format!("memory {memory_id} not found"))?;
-    let new_conf = (current.confidence * 0.5).max(0.0);
-    store
-        .update_memory_confidence(&memory_id, new_conf)
+    // ONE halving decider, and it is the DAEMON's route (§10.6). This command
+    // used to re-derive the formula behind an `is_attach_mode()` fork — read
+    // every memory, find the row, `confidence * 0.5` — a second implementation
+    // of the same threshold, which is exactly the twin the smell table names.
+    // Deleted (sv-surface D2). The new confidence is persisted server-side
+    // against the daemon's own row; the command keeps its `Ok(())` frontend
+    // contract.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .weaken_memory(&memory_id)
         .await
+        .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
@@ -835,39 +839,38 @@ pub async fn weaken_memory(
 /// conversation hasn't received a streaming witness response yet, or
 /// because it ran on the non-streaming path (we don't capture there
 /// today; mirror the capture in `handle_expressive_query` if needed).
+///
+/// sv-surface D9 — reads the DAEMON's register, in BOTH boot modes.
+/// This command used to ask THIS process's `Runtime`, which since R5
+/// never runs the turn: in attach the register was structurally empty
+/// and the pane rendered "no provenance yet" forever. One of the three
+/// no-fork degradations the ladder names — broken with no
+/// `is_attach_mode()` branch to point at, because nobody wrote one.
 #[tauri::command]
 pub async fn get_last_turn_provenance(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<Option<sovereign_core::runtime::TurnProvenance>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    Ok(runtime.get_last_turn_provenance(&conversation_id))
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .last_turn_provenance::<sovereign_core::runtime::TurnProvenance>(&conversation_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
+/// The skills the SERVING runtime registered, and which of them it has
+/// active.
+///
+/// sv-surface D9, and the same correction as the command above: the
+/// registry that matters is the one the turn is answered against. In
+/// attach that is the daemon's, and this process's copy — built from
+/// the same manifests but activated from the DESKTOP's config — could
+/// disagree with it about the active set with nothing to say so.
 #[tauri::command]
 pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEntry>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-
-    let all_skills = runtime.skills.list();
-    let active_ids: Vec<String> = runtime
-        .skills
-        .active_skills()
-        .iter()
-        .map(|s| s.id.clone())
-        .collect();
-
-    Ok(all_skills
-        .iter()
-        .map(|s| SkillEntry {
-            active: active_ids.contains(&s.id),
-            id: s.id.clone(),
-            name: s.name.clone(),
-            description: s.description.clone(),
-            trust_level: format!("{:?}", s.trust_level).to_lowercase(),
-        })
-        .collect())
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_skills::<SkillEntry>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -880,26 +883,26 @@ pub async fn toggle_skill(
 }
 
 /// Shared body for the `toggle_skill` Tauri command. Single
-/// implementation guarantees uniform idempotency + rebuild
-/// behavior. (Pre-2026-05-24 also served per-workspace wrappers
-/// like `recipe_author_set_workspace_active`; those were removed
-/// when routing moved to conversation-tag-driven primary skill
-/// selection.)
+/// implementation guarantees uniform idempotency. (Pre-2026-05-24
+/// also served per-workspace wrappers like
+/// `recipe_author_set_workspace_active`; those were removed when
+/// routing moved to conversation-tag-driven primary skill selection.)
 ///
 /// Idempotent: if the requested state already matches the stored
-/// `config.active_skills`, returns early without `config.save()`
-/// or `rebuild_runtime`. Diagnosed 2026-05-23: the InnerWork
-/// surface and a parallel App.svelte view-effect both called the
-/// older non-idempotent `toggle_skill` on view-enter, kicking off
-/// two ~15s `rebuild_runtime` passes that locked the UI for ~30s.
-/// Even after removing the redundant caller, no-op short-circuit
-/// is the right shape for a toggle — callers shouldn't have to
-/// track local state to avoid thrashing the registry.
+/// `config.active_skills`, returns early without `config.save()` and
+/// without touching the serving registry. Diagnosed 2026-05-23: the
+/// InnerWork surface and a parallel App.svelte view-effect both called
+/// the older non-idempotent `toggle_skill` on view-enter, kicking off
+/// two ~15s runtime rebuilds that locked the UI for ~30s. Removing
+/// that rebuild is what sv-surface D9b did (see the body); the no-op
+/// short-circuit stays because it is the right shape for a toggle —
+/// callers shouldn't have to track local state to avoid a round trip.
 pub async fn toggle_skill_impl(
     state: &Arc<AppState>,
     skill_id: String,
     active: bool,
 ) -> Result<(), String> {
+    let skill_id_for_wire = skill_id.clone();
     {
         let mut config = state.config.write().await;
         let already = config.active_skills.contains(&skill_id);
@@ -917,259 +920,56 @@ pub async fn toggle_skill_impl(
         config.save()?;
     }
 
-    state::rebuild_runtime(state).await
-}
-
-/// Render an assistant answer + its provenance as a self-contained
-/// Markdown document — the "provenance survives the handoff" guarantee.
-/// Built entirely from the persisted message (content + metadata), so no
-/// re-fetch and no schema change: the metadata already carries
-/// `provenance` (model + per-corpus source summary) and `retrieved_chunks`
-/// (the actual grounding passages). Pure + unit-tested so the **source
-/// ledger** can't silently regress to dead text.
-fn render_answer_markdown(content: &str, metadata: Option<&serde_json::Value>) -> String {
-    let mut md = String::from("# svrnmesh answer\n\n");
-
-    // Provenance meta line: who answered + which corpora grounded it.
-    let mut meta_bits: Vec<String> = Vec::new();
-    if let Some(backend) = metadata
-        .and_then(|m| m.pointer("/provenance/inference_backend"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-    {
-        meta_bits.push(format!("answered by {backend}"));
-    }
-    if let Some(sources) = metadata
-        .and_then(|m| m.pointer("/provenance/sources"))
-        .and_then(|v| v.as_array())
-    {
-        let names: Vec<String> = sources
-            .iter()
-            .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
-            .filter_map(|s| {
-                s.get("display_name")
-                    .and_then(|v| v.as_str())
-                    .filter(|x| !x.is_empty())
-                    .or_else(|| s.get("origin").and_then(|v| v.as_str()))
-                    .map(str::to_string)
-            })
-            .collect();
-        if !names.is_empty() {
-            meta_bits.push(format!("searched {}", names.join(", ")));
+    // sv-surface D9b — `PUT /v1/skills/{id}/active`. The registry that
+    // decides which skills a turn may use is the SERVING runtime's, and
+    // since R5 that is the daemon's in both modes (in Local the daemon is
+    // handed `Arc::clone(&runtime_arc)`, so this PUT reaches the very
+    // object this process holds — one registry, one answer).
+    //
+    // `rebuild_runtime` is GONE from this path, and it is the deletion
+    // that matters: a ~15s drop-and-recommission of the whole Runtime, to
+    // change one bool in a set. It could not have been doing the job in
+    // attach anyway — rebuilding THIS process's registry while the turn is
+    // answered against the daemon's is the C2 divergence in miniature.
+    // The config write above stays: it is the persisted PREFERENCE the
+    // next boot activates from, a different fact from the live set.
+    //
+    // A 404 means the daemon has no such skill registered. That is a
+    // named refusal, not an `Ok(())` — the pane must not paint a toggle
+    // the serving runtime never accepted (ARCH §18.3).
+    let echoed = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .set_skill_active::<SkillEntry>(&skill_id_for_wire, active)
+        .await
+        .map_err(|e| format!("toggle_skill: {e}"))?;
+    match echoed {
+        Some(entry) => {
+            tracing::info!(
+                skill_id = %entry.id,
+                active = entry.active,
+                "toggle_skill: the serving registry echoed back"
+            );
+            Ok(())
         }
-    }
-    if !meta_bits.is_empty() {
-        md.push_str(&format!("*{}*\n\n", meta_bits.join(" · ")));
-    }
-
-    md.push_str(content.trim());
-    md.push_str("\n\n");
-
-    // The source ledger — every grounding passage, traceable to its corpus.
-    let chunks = metadata
-        .and_then(|m| m.get("retrieved_chunks"))
-        .and_then(|v| v.as_array())
-        .filter(|c| !c.is_empty());
-    if let Some(chunks) = chunks {
-        md.push_str(
-            "---\n\n## Sources\n\nThis answer was grounded in the following passages \
-             from your indexed corpora:\n\n",
-        );
-        for (i, c) in chunks.iter().enumerate() {
-            let title = c
-                .get("title")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-                .unwrap_or("(untitled passage)");
-            let corpus = c.get("corpus_id").and_then(|v| v.as_str()).unwrap_or("");
-            md.push_str(&format!("{}. **{}** — `{}`\n", i + 1, title, corpus));
-            if let Some(snippet) = c
-                .get("snippet")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-            {
-                for line in snippet.lines() {
-                    md.push_str(&format!("   > {line}\n"));
-                }
-            }
-            if let Some(url) = c
-                .get("url")
-                .and_then(|v| v.as_str())
-                .filter(|x| !x.is_empty())
-            {
-                md.push_str(&format!("   <{url}>\n"));
-            }
-            md.push('\n');
-        }
-    } else {
-        md.push_str(
-            "---\n\n*No corpus passages were cited for this answer — it came from the \
-             model's own knowledge or a non-retrieval path.*\n\n",
-        );
-    }
-
-    md.push_str("---\n*Exported from svrnmesh — provenance preserved.*\n");
-    md
-}
-
-/// Structured view of an answer + its provenance — the shared intermediate
-/// the docx and PDF renderers walk, so neither re-parses the metadata. (The
-/// Markdown renderer above predates this and extracts inline; left as-is to
-/// avoid churning a tested path.)
-struct SourceEntry {
-    title: String,
-    corpus_id: String,
-    snippet: Option<String>,
-    url: Option<String>,
-}
-
-struct AnswerDoc {
-    answered_by: Option<String>,
-    corpora: Vec<String>,
-    body: String,
-    sources: Vec<SourceEntry>,
-}
-
-impl AnswerDoc {
-    fn from_message(content: &str, metadata: Option<&serde_json::Value>) -> Self {
-        let answered_by = metadata
-            .and_then(|m| m.pointer("/provenance/inference_backend"))
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
-        let corpora = metadata
-            .and_then(|m| m.pointer("/provenance/sources"))
-            .and_then(|v| v.as_array())
-            .map(|srcs| {
-                srcs.iter()
-                    .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
-                    .filter_map(|s| {
-                        s.get("display_name")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .or_else(|| s.get("origin").and_then(|v| v.as_str()))
-                            .map(str::to_string)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let sources = metadata
-            .and_then(|m| m.get("retrieved_chunks"))
-            .and_then(|v| v.as_array())
-            .map(|chunks| {
-                chunks
-                    .iter()
-                    .map(|c| SourceEntry {
-                        title: c
-                            .get("title")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .unwrap_or("(untitled passage)")
-                            .to_string(),
-                        corpus_id: c
-                            .get("corpus_id")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        snippet: c
-                            .get("snippet")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .map(str::to_string),
-                        url: c
-                            .get("url")
-                            .and_then(|v| v.as_str())
-                            .filter(|x| !x.is_empty())
-                            .map(str::to_string),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        Self {
-            answered_by,
-            corpora,
-            body: content.trim().to_string(),
-            sources,
-        }
-    }
-
-    fn meta_line(&self) -> Option<String> {
-        let mut bits = Vec::new();
-        if let Some(b) = &self.answered_by {
-            bits.push(format!("answered by {b}"));
-        }
-        if !self.corpora.is_empty() {
-            bits.push(format!("searched {}", self.corpora.join(", ")));
-        }
-        (!bits.is_empty()).then(|| bits.join(" \u{00B7} "))
+        None => Err(format!(
+            "toggle_skill: the serving runtime has no skill `{skill_id_for_wire}` registered"
+        )),
     }
 }
 
-/// A flat, format-agnostic block sequence both renderers walk.
-enum Block {
-    Title(String),
-    Heading(String),
-    Meta(String),
-    Para(String),
-    SourceTitle(String),
-    Quote(String),
-    Url(String),
-    Footer(String),
-}
-
-fn doc_blocks(doc: &AnswerDoc) -> Vec<Block> {
-    let mut blocks = vec![Block::Title("svrnmesh answer".to_string())];
-    if let Some(meta) = doc.meta_line() {
-        blocks.push(Block::Meta(meta));
-    }
-    for para in doc.body.split("\n\n") {
-        let cleaned = strip_markdown_light(para);
-        if !cleaned.is_empty() {
-            blocks.push(Block::Para(cleaned));
-        }
-    }
-    if doc.sources.is_empty() {
-        blocks.push(Block::Para(
-            "No corpus passages were cited for this answer — it came from the model's own \
-             knowledge or a non-retrieval path."
-                .to_string(),
-        ));
-    } else {
-        blocks.push(Block::Heading("Sources".to_string()));
-        for (i, s) in doc.sources.iter().enumerate() {
-            blocks.push(Block::SourceTitle(format!(
-                "{}. {} \u{2014} {}",
-                i + 1,
-                s.title,
-                s.corpus_id
-            )));
-            if let Some(snippet) = &s.snippet {
-                blocks.push(Block::Quote(strip_markdown_light(snippet)));
-            }
-            if let Some(url) = &s.url {
-                blocks.push(Block::Url(url.clone()));
-            }
-        }
-    }
-    blocks.push(Block::Footer(
-        "Exported from svrnmesh — provenance preserved.".to_string(),
-    ));
-    blocks
-}
-
-/// Light Markdown de-noising so prose reads cleanly in PDF/Word (which don't
-/// interpret Markdown): drops `**`, leading `#`/`>`, and backticks. Not a
-/// parser — just enough to avoid stray markup in the exported document.
-fn strip_markdown_light(s: &str) -> String {
-    let mut lines = Vec::new();
-    for line in s.lines() {
-        let l = line.trim_start();
-        let l = l.trim_start_matches(['#', '>']).trim_start();
-        let cleaned = l.replace("**", "").replace("__", "").replace('`', "");
-        lines.push(cleaned.trim_end().to_string());
-    }
-    lines.join("\n").trim().to_string()
-}
+/// The answer document — its extraction, its block flattening and its
+/// Markdown rendering — moved to
+/// [`sovereign_contracts::types::answer_doc`] in sv-surface D7/G9. It
+/// only ever formatted a turn's result, so it was never desktop
+/// business; a wire-attached client renders the same export now.
+///
+/// What stayed here, and why: the `.docx` and `.pdf` encoders below
+/// (format-specific byte layout, host business) and `export_answer`'s
+/// write to the user's chosen path — a file write to a user-picked
+/// destination cannot cross a wire (sv-surface D7 "CANNOT CROSS"). Both
+/// walk [`Block`], which is why the shared module exposes it.
+use sovereign_contracts::types::answer_doc::{
+    doc_blocks, render_answer_markdown, AnswerDoc, Block,
+};
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -1456,8 +1256,13 @@ pub async fn export_answer(
     message_id: String,
     dest_path: String,
 ) -> Result<(), String> {
-    let store = require_store!(state);
-    let convo = store
+    // sv-surface D9b — `GET /v1/conversations/{id}`. The wire row already
+    // carries the TYPED projection this export needs, run by
+    // `project_message_metadata` on the daemon: one reader of the metadata
+    // shape, not one per host (ARCH §10.6). So the local
+    // `project_message_metadata` call below is gone, not moved — an
+    // exported document now cannot depend on which process rendered it.
+    let convo = sovereign_turn_client::TurnClient::new(state.client_base_url())
         .get_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -1466,18 +1271,20 @@ pub async fn export_answer(
         .iter()
         .find(|m| m.id == message_id)
         .ok_or_else(|| format!("message {message_id} not found"))?;
-    let metadata = msg.metadata.as_ref();
     // Format follows the extension the user picked in the save dialog.
     let ext = std::path::Path::new(&dest_path)
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
+    // The document is built from the TYPED projection the host already
+    // ran, not from a second local read of the persisted blob.
+    let doc = AnswerDoc::from_projection(&msg.content, msg.provenance.as_ref(), &msg.citations);
     let bytes: Vec<u8> = match ext.as_str() {
-        "pdf" => render_answer_pdf(&AnswerDoc::from_message(&msg.content, metadata))?,
-        "docx" => render_answer_docx(&AnswerDoc::from_message(&msg.content, metadata))?,
+        "pdf" => render_answer_pdf(&doc)?,
+        "docx" => render_answer_docx(&doc)?,
         // `.md` and anything else fall back to Markdown.
-        _ => render_answer_markdown(&msg.content, metadata).into_bytes(),
+        _ => render_answer_markdown(&doc).into_bytes(),
     };
     std::fs::write(&dest_path, bytes).map_err(|e| format!("write {dest_path}: {e}"))?;
     Ok(())
@@ -1485,34 +1292,82 @@ pub async fn export_answer(
 
 #[cfg(test)]
 mod export_tests {
-    use super::{render_answer_docx, render_answer_markdown, render_answer_pdf, AnswerDoc};
+    use super::{render_answer_docx, render_answer_pdf};
+    use sovereign_contracts::types::answer_doc::{render_answer_markdown, AnswerDoc};
+    use sovereign_contracts::types::projection::project_message_metadata;
 
-    #[test]
-    fn markdown_includes_source_ledger() {
-        let meta = serde_json::json!({
+    /// The persisted-metadata shape the export path actually reads.
+    fn fixture_blob() -> serde_json::Value {
+        serde_json::json!({
             "provenance": {
                 "inference_backend": "Qwen3-8B-Q4_K_M",
-                "sources": [{ "origin": "sep", "count": 3 }]
+                "sources": [
+                    {"origin": "case-files-7f2a", "count": 3, "display_name": "Case Files"},
+                    {"origin": "sep", "count": 2},
+                    {"origin": "wikipedia", "count": 0}
+                ]
             },
             "retrieved_chunks": [
-                { "title": "Free Will", "corpus_id": "sep", "snippet": "Compatibilism holds that..." }
+                {"title": "Free Will", "corpus_id": "sep", "chunk_id": "sep:fw:3",
+                 "snippet": "Compatibilism holds that...\nfreedom is not the absence of cause.",
+                 "score": 0.91, "url": "https://plato.stanford.edu/entries/free-will/"},
+                {"title": "", "corpus_id": "case-files-7f2a", "chunk_id": "cf:9",
+                 "snippet": "The deposition of 12 March.", "score": 0.6}
             ]
-        });
-        let md = render_answer_markdown("Free will is compatible with determinism.", Some(&meta));
-        assert!(md.contains("# svrnmesh answer"));
-        assert!(md.contains("Free will is compatible with determinism."));
-        assert!(md.contains("answered by Qwen3-8B-Q4_K_M"));
-        assert!(md.contains("searched sep"));
-        // The ledger: title, corpus handle, and the grounding quote.
-        assert!(md.contains("## Sources"));
-        assert!(md.contains("**Free Will**"));
-        assert!(md.contains("`sep`"));
-        assert!(md.contains("> Compatibilism holds that..."));
+        })
+    }
+
+    /// Exactly what `export_answer` does to reach a document, minus the
+    /// store fetch and the file write.
+    fn fixture_doc() -> AnswerDoc {
+        let (prov, cites) = project_message_metadata(&Some(fixture_blob()));
+        AnswerDoc::from_projection(
+            "Free will is compatible with determinism.",
+            prov.as_ref(),
+            &cites,
+        )
+    }
+
+    /// THE GOLDEN — sv-surface D7/G9. These bytes were produced by the
+    /// blob-reading renderer this file carried before the move, on
+    /// `fixture_blob()`; `markdown_golden_survived_the_move` asserted
+    /// old == new while both existed, and this pins the surviving half.
+    /// The twin lives at
+    /// `sovereign_contracts::types::answer_doc::tests::markdown_golden`.
+    /// A diff here is a diff in what a user's exported document says.
+    const GOLDEN_MD: &str = concat!(
+        "# svrnmesh answer\n",
+        "\n",
+        "*answered by Qwen3-8B-Q4_K_M \u{00B7} searched Case Files, sep*\n",
+        "\n",
+        "Free will is compatible with determinism.\n",
+        "\n",
+        "---\n",
+        "\n",
+        "## Sources\n",
+        "\n",
+        "This answer was grounded in the following passages from your indexed corpora:\n",
+        "\n",
+        "1. **Free Will** \u{2014} `sep`\n",
+        "   > Compatibilism holds that...\n",
+        "   > freedom is not the absence of cause.\n",
+        "   <https://plato.stanford.edu/entries/free-will/>\n",
+        "\n",
+        "2. **(untitled passage)** \u{2014} `case-files-7f2a`\n",
+        "   > The deposition of 12 March.\n",
+        "\n",
+        "---\n",
+        "*Exported from svrnmesh \u{2014} provenance preserved.*\n",
+    );
+
+    #[test]
+    fn markdown_golden_survived_the_move() {
+        assert_eq!(render_answer_markdown(&fixture_doc()), GOLDEN_MD);
     }
 
     #[test]
     fn markdown_without_sources_says_so() {
-        let md = render_answer_markdown("Hello.", None);
+        let md = render_answer_markdown(&AnswerDoc::from_projection("Hello.", None, &[]));
         assert!(md.contains("Hello."));
         assert!(md.contains("No corpus passages were cited"));
         // Never silently implies sources that aren't there.
@@ -1521,27 +1376,17 @@ mod export_tests {
 
     #[test]
     fn answerdoc_extracts_provenance() {
-        let meta = serde_json::json!({
-            "provenance": {
-                "inference_backend": "Darwin-36B",
-                "sources": [{ "origin": "sep", "count": 2 }, { "origin": "empty", "count": 0 }]
-            },
-            "retrieved_chunks": [{ "title": "T", "corpus_id": "sep", "snippet": "q" }]
-        });
-        let d = AnswerDoc::from_message("Body", Some(&meta));
-        assert_eq!(d.answered_by.as_deref(), Some("Darwin-36B"));
-        assert_eq!(d.corpora, vec!["sep".to_string()]); // count:0 dropped
-        assert_eq!(d.sources.len(), 1);
+        let d = fixture_doc();
+        assert_eq!(d.answered_by.as_deref(), Some("Qwen3-8B-Q4_K_M"));
+        // count:0 dropped; the folder's typed name beats its slug.
+        assert_eq!(d.corpora, vec!["Case Files".to_string(), "sep".to_string()]);
+        assert_eq!(d.sources.len(), 2);
         assert_eq!(d.sources[0].corpus_id, "sep");
     }
 
     #[test]
     fn docx_is_a_valid_zip_package() {
-        let meta = serde_json::json!({
-            "retrieved_chunks": [{ "title": "Free Will", "corpus_id": "sep", "snippet": "grounding quote" }]
-        });
-        let doc = AnswerDoc::from_message("The answer body.", Some(&meta));
-        let bytes = render_answer_docx(&doc).expect("docx renders");
+        let bytes = render_answer_docx(&fixture_doc()).expect("docx renders");
         // Real .docx is an OOXML zip — starts with the PK zip-local-header.
         assert_eq!(&bytes[..2], b"PK");
         assert!(bytes.len() > 300);
@@ -1549,7 +1394,7 @@ mod export_tests {
 
     #[test]
     fn pdf_has_pdf_header() {
-        let doc = AnswerDoc::from_message("A short answer.", None);
+        let doc = AnswerDoc::from_projection("A short answer.", None, &[]);
         let bytes = render_answer_pdf(&doc).expect("pdf renders");
         assert_eq!(&bytes[..5], b"%PDF-");
         assert!(bytes.len() > 300);

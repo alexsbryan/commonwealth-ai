@@ -146,7 +146,6 @@ export const plugin: Plugin = async ({ directory }) => {
         booted = true
         blocks.push(runHook(directory, "session-boot.sh", envelope))
       }
-      blocks.push(runHook(directory, "inject-notes.py", envelope))
       blocks.push(runHook(directory, "split-enforce.py", envelope))
 
       // Advice buffered from the previous turn's tool calls.

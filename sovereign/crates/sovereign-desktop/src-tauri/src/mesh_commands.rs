@@ -394,15 +394,10 @@ pub async fn mesh_rotate_invite(
     })
 }
 
-/// One membership in the mesh switcher's list.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnownMeshDto {
-    pub mesh_id: String,
-    pub name: String,
-    pub members_total: usize,
-    pub is_active: bool,
-    pub last_seen_unix: u64,
-}
+/// One membership in the mesh switcher's list — the route's own type.
+/// `mesh_list` parses `/v1/mesh/status`'s rows into it in Attach mode and
+/// builds it in Local mode; both ends deserve one definition (ARCH §10.6).
+pub use sovereign_mesh::mesh_http::KnownMeshDto;
 
 /// Every mesh this node has joined — active and parked.
 #[tauri::command]

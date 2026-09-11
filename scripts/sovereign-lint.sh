@@ -365,11 +365,17 @@ cargo_args+=(--all-targets)
 # new is awareness_cmd's 7,526 lines, and it is paid once.
 features="corpus-engine/treesitter"
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst"
+    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
 else
     for c in "${crates[@]}"; do
         if [[ "$c" == "sovereign-cli" ]]; then
             features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
+        fi
+        if [[ "$c" == "sovereign-turn-client" ]]; then
+            # Kept in step with scripts/lib/cargo-scope.sh — same value in
+            # both gates, so no fingerprint flip. Without it the reach
+            # module's bring-up half is never compiled by any check.
+            features+=",sovereign-turn-client/bundled-backend"
         fi
         if [[ "$c" == "sovereign-mesh" ]]; then
             # `treesitter` too — kept in step with scripts/lib/cargo-scope.sh

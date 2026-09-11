@@ -13,35 +13,44 @@
 //! sovereign/ARCH_PRINCIPLES.md), and atlas inspection is a distinct
 //! concern from the "reading from a citation" flow that owns the
 //! `read_*` commands.
+//!
+//! # Where the browse half is decided (sv-surface D4)
+//!
+//! The six browse commands hold NO reader. Each is one call onto
+//! `sovereign_mesh::atlas_http`'s routes over `client_base_url()` — ONE
+//! path in both boot modes, because Local means the daemon is in-process
+//! over this process's own `corpus_engine`. Their return types are
+//! unchanged and unwrapped: the routes answer the same
+//! `sovereign_tools::atlas_view` types the local `FileAtlasReader`
+//! returned, so the frontend contract is byte-identical — and the
+//! section→chunk map that makes `atlas_get_atom_detail`'s evidence rows
+//! clickable is now built and cached ONCE per host rather than once per
+//! surface.
+//!
+//! The six conversation-tiered commands crossed on the same rung, over
+//! `/internal/atlas/conv/` and the daemon's own
+//! `runtime.lane_sources.conv_tiered` — so this file holds no reader and
+//! no store handle at all.
+//!
+//! What is deliberately still local, and why: the two GLiNER commands
+//! download a model into this app's own data dir (app-local by the
+//! campaign's closed set).
 
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
     AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
-    ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
-    ConvSummary, FileAtlasReader, PageCursor, SummaryCorrectionView,
+    ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, PageCursor,
 };
 use tauri::State;
 
 use crate::state::AppState;
 
-/// Per-corpus `section_id → chunk_id` map for atom-detail evidence
-/// deep-linking, built once and cached. Building it is a full
-/// chunks.lance scan (2.8 GB / ~90s on Wikipedia's 1.9M rows), so the
-/// atom-detail command NEVER builds it on the click path — it resolves
-/// from the cache when ready and otherwise kicks off a one-time
-/// background build. See `atlas_get_atom_detail`.
-enum SectionMapState {
-    Building,
-    Ready(Arc<std::collections::HashMap<String, u64>>),
-}
-
-fn section_map_cache(
-) -> &'static std::sync::Mutex<std::collections::HashMap<String, SectionMapState>> {
-    static CACHE: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<String, SectionMapState>>,
-    > = std::sync::OnceLock::new();
-    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+/// The client for the daemon's atlas-browse surface — the same
+/// `FileAtlasReader` over the same `index_dir` the desktop used to
+/// construct here, reached over loopback instead (sv-surface D4).
+fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
 /// List every installed corpus that has an atlas on disk. Drives the
@@ -52,13 +61,8 @@ fn section_map_cache(
 pub async fn atlas_list_corpora(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<AtlasCorpusSummary>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_corpora()
+    atlas_client(&state)
+        .atlas_corpora::<Vec<AtlasCorpusSummary>>()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
 }
@@ -75,13 +79,8 @@ pub async fn atlas_build_report(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<AtlasBuildReport, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .build_report(&corpus_id)
+    atlas_client(&state)
+        .atlas_build_report::<AtlasBuildReport>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_build_report: {e}"))
 }
@@ -100,13 +99,8 @@ pub async fn atlas_list_members(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Vec<AtlasMemberSummary>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_members(&corpus_id)
+    atlas_client(&state)
+        .atlas_members::<Vec<AtlasMemberSummary>>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_list_members: {e}"))
 }
@@ -126,17 +120,13 @@ pub async fn atlas_list_atoms(
     filter: Option<AtomFilter>,
     page: Option<PageCursor>,
 ) -> Result<AtomListPage, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .list_atoms(
-            &corpus_id,
-            filter.unwrap_or_default(),
-            page.unwrap_or_default(),
-        )
+    // `atlas_http::AtomBrowseRequest`'s two keys, carrying the SAME
+    // `Option` semantics this command already had — an absent value is the
+    // type's `Default`, now applied by the route so the default has one
+    // decider rather than two (ARCH §10.6).
+    let request = serde_json::json!({ "filter": filter, "page": page });
+    atlas_client(&state)
+        .atlas_atoms::<_, AtomListPage>(&corpus_id, &request)
         .await
         .map_err(|e| format!("atlas_list_atoms: {e}"))
 }
@@ -152,16 +142,11 @@ pub async fn atlas_subgraph(
     corpus_id: String,
     max_nodes: Option<usize>,
 ) -> Result<sovereign_tools::atlas_view::AtlasSubgraph, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    reader
-        .subgraph(
-            &corpus_id,
-            max_nodes.unwrap_or(sovereign_tools::atlas_view::DEFAULT_MAX_NODES),
-        )
+    // `None` travels as an absent `max_nodes` and the route applies
+    // `atlas_view::DEFAULT_MAX_NODES` — the cap keeps ONE decider, and it
+    // is not this file.
+    atlas_client(&state)
+        .atlas_subgraph::<sovereign_tools::atlas_view::AtlasSubgraph>(&corpus_id, max_nodes)
         .await
         .map_err(|e| format!("atlas_subgraph: {e}"))
 }
@@ -170,106 +155,29 @@ pub async fn atlas_subgraph(
 /// one-hop related atoms + cross-corpus bridges + evidence
 /// excerpts. Drives the desktop's `AtomDetail.svelte`.
 ///
-/// After `FileAtlasReader` produces the detail, this command
-/// resolves the section ids on every evidence excerpt to numeric
-/// chunk ids via `index.resolve_sections_to_chunks` — the same path
-/// `read_get_atom_elsewhere` uses. The frontend then renders
-/// evidence rows as clickable, opening the ReadingSurface centered
-/// on the chunk.
+/// The evidence excerpts arrive with their `section_id`s ALREADY
+/// resolved to numeric `chunk_id`s — the route does that half now, off
+/// the same per-corpus cache and the same never-build-on-the-click-path
+/// policy the desktop used to keep privately. A row whose section did
+/// not resolve stays `chunk_id: None` and renders non-clickable, exactly
+/// as before; the map fills in the background and later clicks resolve.
 ///
 /// Returns `Ok(None)` when the atom id isn't present in the corpus's
 /// atoms.json (stale UI link, or extraction renumbered atom_ids
-/// since the last list_atoms call).
+/// since the last list_atoms call) — the route's 404, which
+/// `atlas_atom_detail` maps to `None` while leaving every OTHER
+/// non-success an error, so "corpus will not open" cannot read as
+/// "atom absent".
 #[tauri::command]
 pub async fn atlas_get_atom_detail(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     atom_id: String,
 ) -> Result<Option<AtomDetail>, String> {
-    let engine = match state.corpus_engine.read().await.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
-    let mut detail = match reader
-        .get_atom_detail(&corpus_id, &atom_id)
+    atlas_client(&state)
+        .atlas_atom_detail::<AtomDetail>(&corpus_id, &atom_id)
         .await
-        .map_err(|e| format!("atlas_get_atom_detail: {e}"))?
-    {
-        Some(d) => d,
-        None => return Ok(None),
-    };
-
-    // Resolve section_id → numeric chunk_id so evidence rows can
-    // deep-link to the ReadingSurface. Best-effort: a resolution
-    // failure on one section logs a warning but doesn't fail the
-    // whole detail — the row just stays non-clickable.
-    let unique_sections: Vec<String> = {
-        let mut seen = std::collections::HashSet::new();
-        detail
-            .evidence_excerpts
-            .iter()
-            .filter_map(|e| {
-                if seen.insert(e.section_id.clone()) {
-                    Some(e.section_id.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    };
-    if !unique_sections.is_empty() {
-        // Non-blocking, cached resolution. Building the section→chunk map
-        // is a full chunks.lance scan (2.8 GB / ~90s on Wikipedia), so we
-        // NEVER do it on the click path. If the per-corpus map is cached,
-        // resolve every evidence row from memory; otherwise leave
-        // chunk_id=None (the frontend renders the row non-clickable) and
-        // kick off a ONE-TIME background build so later clicks resolve.
-        // (On Wikipedia the atom section_id space doesn't even match chunk
-        // metadata, so resolution finds nothing regardless — all the more
-        // reason not to stall the load on it.)
-        let cached: Option<Arc<std::collections::HashMap<String, u64>>> = {
-            let mut cache = section_map_cache().lock().unwrap();
-            match cache.get(&corpus_id) {
-                Some(SectionMapState::Ready(m)) => Some(Arc::clone(m)),
-                Some(SectionMapState::Building) => None,
-                None => {
-                    cache.insert(corpus_id.clone(), SectionMapState::Building);
-                    let engine = Arc::clone(&engine);
-                    let corpus_bg = corpus_id.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let built = match engine.open_index_for_corpus(&corpus_bg).await {
-                            Ok(index) => index.section_chunk_index().await.ok(),
-                            Err(_) => None,
-                        };
-                        let mut cache = section_map_cache().lock().unwrap();
-                        match built {
-                            Some(map) => {
-                                tracing::info!(
-                                    corpus_id = %corpus_bg,
-                                    sections = map.len(),
-                                    "atlas: section→chunk map built + cached (background)",
-                                );
-                                cache.insert(corpus_bg, SectionMapState::Ready(Arc::new(map)));
-                            }
-                            None => {
-                                // Build failed — drop the marker so a later
-                                // click retries instead of wedging on Building.
-                                cache.remove(&corpus_bg);
-                            }
-                        }
-                    });
-                    None
-                }
-            }
-        };
-        if let Some(map) = cached {
-            for excerpt in &mut detail.evidence_excerpts {
-                excerpt.chunk_id = map.get(&excerpt.section_id).copied();
-            }
-        }
-    }
-    Ok(Some(detail))
+        .map_err(|e| format!("atlas_get_atom_detail: {e}"))
 }
 
 // ── Conversation tiered-retrieval commands (spec CONV_TIERED_PORT.md
@@ -277,76 +185,53 @@ pub async fn atlas_get_atom_detail(
 //
 // Conv corpora never wrote atoms.json — their tiered enrichment lives
 // in the `conv_skeletons` / `conv_raptor_nodes` / `conv_motifs` SQLite
-// sidecar tables. These commands read via the
-// `Arc<SqliteStateStore>` stashed at desktop bootstrap. AtlasIndex
-// calls BOTH atlas_list_corpora (atoms.json) and
-// atlas_list_conv_corpora (these), then merges client-side.
-
-/// Display-name + icon lookup for a conv corpus_id. Best-effort —
-/// pulls from the corpus registry when reachable, falls back to the
-/// corpus_id itself. Doesn't fail if recipe registry isn't loaded
-/// (some test paths skip the engine bootstrap).
-async fn conv_display_metadata(
-    state: &State<'_, Arc<AppState>>,
-    corpus_id: &str,
-) -> (String, Option<String>, Option<String>) {
-    let mut display_name = corpus_id.to_string();
-    let mut category: Option<String> = None;
-    let mut icon: Option<String> = None;
-    if let Some(engine) = state.corpus_engine.read().await.as_ref() {
-        if let Ok(infos) = engine.installed_indexes().await {
-            if let Some(info) = infos.iter().find(|i| i.corpus_id == corpus_id) {
-                if !info.corpus_name.is_empty() {
-                    display_name = info.corpus_name.clone();
-                }
-                if let Some(d) = &info.display {
-                    category = d.category.clone();
-                    icon = d.icon.clone();
-                }
-            }
-        }
-    }
-    (display_name, category, icon)
-}
+// sidecar tables. These six commands hold NO reader either (sv-surface
+// D4 remainder): each is one call onto `sovereign_mesh::atlas_http`'s
+// `/internal/atlas/conv/` routes over `client_base_url()`, which read
+// the daemon's `runtime.lane_sources.conv_tiered`. ONE path in both
+// boot modes. AtlasIndex still calls BOTH atlas_list_corpora
+// (atoms.json) and atlas_list_conv_corpora (these), then merges
+// client-side — that fold is unchanged, because the return types are
+// the same `atlas_view` / `conv_tiered` types the store reads built.
+//
+// TWO SUBSTITUTIONS ARE GONE, deliberately (§18.3). The store-side
+// bodies swallowed two failures:
+//
+//   * `list_conv_raptor_nodes(..).unwrap_or_default()` inside the list
+//     fold — a reader error rendered as "this conversation has no
+//     entities" on every row.
+//   * `get_active_correction(..).ok().flatten()` inside the detail —
+//     a reader error rendered as "not revised by you", which is the
+//     provenance badge saying the opposite of what happened.
+//
+// The routes REPORT both. These commands therefore surface an `Err`
+// where they used to return a plausible empty — the pane shows the
+// host's words instead of a wrong answer. Absence still has its own
+// answers and they are NOT errors: an unknown conversation is
+// `Ok(None)` (the 404) and never-extracted chunk progress is
+// `Ok(None)` from an explicit `null` body.
 
 /// List every conv corpus with at least one row in `conv_skeletons`,
-/// plus its state-bucket counts. Drives the desktop Atlas index
-/// "Conversations" group.
+/// plus its state-bucket counts and its display metadata. Drives the
+/// desktop Atlas index "Conversations" group.
+///
+/// The display-name/icon lookup that used to live here (a
+/// best-effort `installed_indexes()` walk) is the route's now — one
+/// decider, and the route has the engine beside the reader.
 #[tauri::command]
 pub async fn atlas_list_conv_corpora(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<ConvCorpusSummary>, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    let buckets = store
-        .list_conv_corpora_with_state_buckets()
+    atlas_client(&state)
+        .conv_corpora::<ConvCorpusSummary>()
         .await
-        .map_err(|e| format!("atlas_list_conv_corpora: {e}"))?;
-    let mut out = Vec::with_capacity(buckets.len());
-    for (corpus_id, total, max_ts, per_state) in buckets {
-        let (display_name, category, icon) = conv_display_metadata(&state, &corpus_id).await;
-        let mut state_counts = std::collections::BTreeMap::new();
-        for (state_name, n) in per_state {
-            state_counts.insert(state_name, n);
-        }
-        out.push(ConvCorpusSummary {
-            corpus_id,
-            display_name,
-            conv_count: total,
-            state_counts,
-            last_updated_unix: if max_ts > 0 { Some(max_ts) } else { None },
-            display_category: category,
-            display_icon: icon,
-        });
-    }
-    Ok(out)
+        .map_err(|e| format!("atlas_list_conv_corpora: {e}"))
 }
 
 /// Paginated list of conversations in one corpus, filterable by
-/// substring on `overview`. Page size capped at 200 to match the
-/// existing atoms-list pagination.
+/// substring on `overview`. The page size is the HOST's (200) — the
+/// same 200 this command hard-coded, moved down to the one decider,
+/// which is why `limit` is not a parameter here.
 #[tauri::command]
 pub async fn atlas_list_conversations(
     state: State<'_, Arc<AppState>>,
@@ -354,127 +239,31 @@ pub async fn atlas_list_conversations(
     filter: Option<String>,
     offset: Option<u64>,
 ) -> Result<ConvListPage, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    let limit: u64 = 200;
-    let offset = offset.unwrap_or(0);
-    let filter_str = filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let (rows, total) = store
-        .list_conversations_paginated(&corpus_id, filter_str, offset, limit)
+    let filter = filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    atlas_client(&state)
+        .conv_conversations::<ConvListPage>(&corpus_id, filter, offset)
         .await
-        .map_err(|e| format!("atlas_list_conversations: {e}"))?;
-    let mut conversations = Vec::with_capacity(rows.len());
-    for row in rows {
-        let raptor = store
-            .list_conv_raptor_nodes(&corpus_id, &row.conv_uuid)
-            .await
-            .unwrap_or_default();
-        let chunk_count = row.chunk_count;
-        let (top_entities, is_tiny) = summarize_entities(&raptor, 6);
-        conversations.push(ConvSummary {
-            conv_uuid: row.conv_uuid,
-            title: row
-                .overview
-                .clone()
-                .unwrap_or_else(|| "(untitled conversation)".to_string()),
-            state: row.state,
-            chunk_count,
-            top_entities,
-            updated_at: row.updated_at,
-            is_tiny,
-        });
-    }
-    let next_offset = if (offset + conversations.len() as u64) < total {
-        Some(offset + conversations.len() as u64)
-    } else {
-        None
-    };
-    Ok(ConvListPage {
-        conversations,
-        total_matching: total,
-        next_offset,
-    })
+        .map_err(|e| format!("atlas_list_conversations: {e}"))
 }
 
-/// Full conversation detail: skeleton + RAPTOR tree. Drives the
-/// ConvDetail.svelte component (tree view).
+/// Full conversation detail: skeleton + RAPTOR tree + any active
+/// summary correction. Drives the ConvDetail.svelte component (tree
+/// view).
+///
+/// `Ok(None)` is the route's 404 and ONLY that: this corpus has no
+/// such conversation. A daemon with no conv-tiered reader is a 503 and
+/// stays an `Err`, so "the reader is missing" cannot render as "the
+/// conversation is missing".
 #[tauri::command]
 pub async fn atlas_get_conv_detail(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     conv_uuid: String,
 ) -> Result<Option<ConvDetailView>, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    let skeleton = match store
-        .get_conv_skeleton(&corpus_id, &conv_uuid)
+    atlas_client(&state)
+        .conv_detail::<ConvDetailView>(&corpus_id, &conv_uuid)
         .await
-        .map_err(|e| format!("atlas_get_conv_detail.skeleton: {e}"))?
-    {
-        Some(s) => s,
-        None => return Ok(None),
-    };
-    let nodes = store
-        .list_conv_raptor_nodes(&corpus_id, &conv_uuid)
-        .await
-        .map_err(|e| format!("atlas_get_conv_detail.nodes: {e}"))?;
-    let max_level = nodes.iter().map(|n| n.level as u8).max().unwrap_or(0);
-    let raptor_nodes: Vec<ConvRaptorNodeView> = nodes
-        .into_iter()
-        .map(|n| {
-            let primary_entities: Vec<String> =
-                serde_json::from_str(&n.primary_entities_json).unwrap_or_default();
-            let direct_member_chunk_ids: Vec<u64> = n
-                .direct_member_chunk_ids_json
-                .as_deref()
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default();
-            let evidence_chunk_ids: Vec<u64> =
-                serde_json::from_str(&n.evidence_chunk_ids_json).unwrap_or_default();
-            let is_synthetic_tiny =
-                primary_entities.is_empty() && (n.cluster_coherence - 1.0).abs() < 1e-6;
-            ConvRaptorNodeView {
-                node_id: n.node_id,
-                level: n.level as u8,
-                summary: n.summary,
-                primary_entities,
-                direct_member_chunk_ids,
-                evidence_chunk_count: evidence_chunk_ids.len(),
-                cluster_coherence: n.cluster_coherence,
-                is_synthetic_tiny,
-            }
-        })
-        .collect();
-    // Active summary correction (the "flag a wrong summary" revision
-    // loop) — drives the "revised by you" provenance badge.
-    let correction = store
-        .get_active_correction(&corpus_id, &conv_uuid)
-        .await
-        .ok()
-        .flatten()
-        .map(|c| SummaryCorrectionView {
-            status: c.status,
-            correction_hint: c.correction_hint,
-            created_at: c.created_at,
-        });
-    Ok(Some(ConvDetailView {
-        corpus_id,
-        conv_uuid,
-        title: skeleton
-            .overview
-            .clone()
-            .unwrap_or_else(|| "(untitled conversation)".to_string()),
-        state: skeleton.state,
-        chunk_count: skeleton.chunk_count,
-        updated_at: skeleton.updated_at,
-        raptor_nodes,
-        max_level,
-        correction,
-    }))
+        .map_err(|e| format!("atlas_get_conv_detail: {e}"))
 }
 
 /// GliNER model availability + path for the Settings → Imports
@@ -544,21 +333,17 @@ pub async fn atlas_download_gliner_model(
 /// this to render mention/conv counts, label breakdown, top convs,
 /// and co-occurring entities. Matches `text` case-insensitively so
 /// the drawer collapses casing variance but splits homonyms by label.
+///
+/// The two drawer caps (20 co-occurring, 10 conversations) moved down
+/// to the route with the read — one decider.
 #[tauri::command]
 pub async fn atlas_get_entity_aggregate(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     text: String,
 ) -> Result<sovereign_core::conv_tiered::EntityAggregateRow, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    // Drawer hard-caps. Co-occurring 20 fits a single scroll-free
-    // column; top-convs 10 covers a "where it appears" tail with
-    // room for an explicit "view all" affordance later.
-    store
-        .aggregate_entity(&corpus_id, &text, 20, 10)
+    atlas_client(&state)
+        .conv_entity_aggregate::<sovereign_core::conv_tiered::EntityAggregateRow>(&corpus_id, &text)
         .await
         .map_err(|e| format!("atlas_get_entity_aggregate: {e}"))
 }
@@ -566,17 +351,19 @@ pub async fn atlas_get_entity_aggregate(
 /// Per-corpus entity-extraction progress. Drives the AtlasIndex
 /// "X% extracted" badge that appears alongside per-state enrichment
 /// counts while extraction is running.
+///
+/// `Ok(None)` is an explicit `null` body on a 200 — the corpus exists
+/// and extraction never ran. It is not "no route" and not "no reader";
+/// both of those are `Err`.
 #[tauri::command]
 pub async fn atlas_get_chunk_entity_progress(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    store
-        .get_chunk_entity_progress(&corpus_id)
+    atlas_client(&state)
+        .conv_chunk_entity_progress::<sovereign_core::conv_tiered::ChunkEntityProgressRow>(
+            &corpus_id,
+        )
         .await
         .map_err(|e| format!("atlas_get_chunk_entity_progress: {e}"))
 }
@@ -584,85 +371,33 @@ pub async fn atlas_get_chunk_entity_progress(
 /// Top-N entity chips for one conversation (A2). Drives the entity
 /// chip row above `ConversationChunkRenderer`'s message bubbles.
 /// Tiny convs return an empty list — the UI suppresses the chip row.
+///
+/// The salience rank and the N (12) are the route's now: the same
+/// ranking feeds `atlas_list_conversations`' `top_entities`, and two
+/// copies of one formula is the §10.6 smell.
 #[tauri::command]
 pub async fn atlas_get_conv_entities(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     conv_uuid: String,
 ) -> Result<Vec<ConvEntityChip>, String> {
-    let store = match state.sqlite_store.read().await.as_ref() {
-        Some(s) => Arc::clone(s),
-        None => return Err("Sqlite store not initialised".into()),
-    };
-    let nodes = store
-        .list_conv_raptor_nodes(&corpus_id, &conv_uuid)
+    atlas_client(&state)
+        .conv_entities::<ConvEntityChip>(&corpus_id, &conv_uuid)
         .await
-        .map_err(|e| format!("atlas_get_conv_entities: {e}"))?;
-    Ok(rank_entity_chips(&nodes, 12))
-}
-
-/// Salience-rank entities for both A1's `top_entities` and A2's
-/// chip row. Returns the top-N entities sorted by salience desc,
-/// salience = sum of `cluster_coherence` over nodes containing the
-/// entity. Also returns whether the conv is "Tiny" (single
-/// synthetic node, no LLM-extracted entities).
-fn summarize_entities(
-    nodes: &[sovereign_store::sqlite::ConvRaptorNodeRow],
-    top_n: usize,
-) -> (Vec<String>, bool) {
-    let chips = rank_entity_chips(nodes, top_n);
-    let is_tiny = nodes.len() == 1
-        && (nodes[0].cluster_coherence - 1.0).abs() < 1e-6
-        && nodes[0].primary_entities_json.trim() == "[]";
-    (chips.into_iter().map(|c| c.name).collect(), is_tiny)
-}
-
-fn rank_entity_chips(
-    nodes: &[sovereign_store::sqlite::ConvRaptorNodeRow],
-    top_n: usize,
-) -> Vec<ConvEntityChip> {
-    use std::collections::HashMap;
-    let mut acc: HashMap<String, (f32, u32)> = HashMap::new();
-    for node in nodes {
-        let entities: Vec<String> =
-            serde_json::from_str(&node.primary_entities_json).unwrap_or_default();
-        for ent in entities {
-            let trimmed = ent.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let entry = acc.entry(trimmed.to_string()).or_insert((0.0, 0));
-            entry.0 += node.cluster_coherence as f32;
-            entry.1 += 1;
-        }
-    }
-    let mut ranked: Vec<(String, f32, u32)> = acc
-        .into_iter()
-        .map(|(name, (sal, occ))| (name, sal, occ))
-        .collect();
-    ranked.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.0.cmp(&b.0))
-    });
-    ranked
-        .into_iter()
-        .take(top_n)
-        .map(|(name, salience, occurrence_count)| ConvEntityChip {
-            name,
-            salience,
-            occurrence_count,
-        })
-        .collect()
+        .map_err(|e| format!("atlas_get_conv_entities: {e}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The browse commands no longer construct a reader (sv-surface D4);
+    // these two tests still drive `FileAtlasReader` DIRECTLY, because what
+    // they pin is the on-disk fixture the route will read, not the command.
     use corpus_engine::enrichment::atlas::atoms::{
         AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
     };
     use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+    use sovereign_tools::atlas_view::FileAtlasReader;
 
     fn write_atoms(atlas_dir: &std::path::Path, atoms: Vec<AtomEnvelope>) {
         std::fs::create_dir_all(atlas_dir).unwrap();

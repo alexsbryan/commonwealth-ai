@@ -12,7 +12,7 @@
 use rusqlite::{params, Connection};
 
 use crate::error::Result;
-use crate::remote::dto::{CitationDto, ConversationDto, CorpusRefDto, MessageDto, ProvenanceDto};
+use crate::remote::dto::{Citation, ConversationDto, CorpusRefDto, MessageDto, Provenance};
 
 pub fn upsert_conversation(conn: &Connection, host_id: &str, c: &ConversationDto) -> Result<()> {
     conn.execute(
@@ -43,8 +43,8 @@ pub fn upsert_conversation(conn: &Connection, host_id: &str, c: &ConversationDto
 pub fn upsert_message_full(
     conn: &mut Connection,
     m: &MessageDto,
-    provenance: Option<&ProvenanceDto>,
-    citations: &[CitationDto],
+    provenance: Option<&Provenance>,
+    citations: &[Citation],
 ) -> Result<()> {
     let tx = conn.transaction()?;
     let newer: bool = tx
@@ -90,11 +90,14 @@ pub fn upsert_message_full(
                     m.id,
                     p.inference_backend,
                     p.routing_tier,
-                    p.ttft_ms,
-                    p.total_ms,
+                    // The contract's projection counts are unsigned;
+                    // SQLite integers are i64. Cast at the boundary rather
+                    // than widening the schema.
+                    p.ttft_ms.map(|v| v as i64),
+                    p.total_ms.map(|v| v as i64),
                     p.finish_reason,
-                    p.max_tokens_budget,
-                    p.completion_tokens
+                    p.max_tokens_budget.map(|v| v as i64),
+                    p.completion_tokens.map(|v| v as i64)
                 ],
             )?;
         }
@@ -102,8 +105,10 @@ pub fn upsert_message_full(
         tx.execute("DELETE FROM citation WHERE message_id = ?1", params![m.id])?;
         for c in citations {
             tx.execute(
-                "INSERT INTO citation (id, message_id, corpus_id, chunk_id, title, snippet, score, rank)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO citation
+                     (id, message_id, corpus_id, chunk_id, title, snippet, score, rank,
+                      url, provenance_tier)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     format!("{}:{}", m.id, c.rank),
                     m.id,
@@ -112,7 +117,9 @@ pub fn upsert_message_full(
                     c.title,
                     c.snippet,
                     c.score,
-                    c.rank,
+                    c.rank as i64,
+                    c.url,
+                    c.provenance_tier,
                 ],
             )?;
         }
@@ -131,7 +138,11 @@ pub fn set_message_status(conn: &Connection, message_id: &str, status: &str) -> 
     Ok(())
 }
 
-pub fn replace_corpus_refs(conn: &mut Connection, host_id: &str, refs: &[CorpusRefDto]) -> Result<()> {
+pub fn replace_corpus_refs(
+    conn: &mut Connection,
+    host_id: &str,
+    refs: &[CorpusRefDto],
+) -> Result<()> {
     let tx = conn.transaction()?;
     tx.execute(
         "DELETE FROM corpus_ref WHERE host_connection_id = ?1",
@@ -159,7 +170,11 @@ pub fn replace_corpus_refs(conn: &mut Connection, host_id: &str, refs: &[CorpusR
 
 /// Resolve a citation's snippet from cache — the (corpus_id, chunk_id)
 /// handle that proves "leveraging an installed corpus" (§4).
-pub fn citation_snippet(conn: &Connection, corpus_id: &str, chunk_id: &str) -> Result<Option<String>> {
+pub fn citation_snippet(
+    conn: &Connection,
+    corpus_id: &str,
+    chunk_id: &str,
+) -> Result<Option<String>> {
     Ok(conn
         .query_row(
             "SELECT snippet FROM citation WHERE corpus_id = ?1 AND chunk_id = ?2 LIMIT 1",
@@ -246,32 +261,34 @@ pub fn read_conversation(conn: &Connection, id: &str) -> Result<Option<Conversat
                  FROM response_provenance WHERE message_id = ?1",
                 params![m.id],
                 |r| {
-                    Ok(ProvenanceDto {
+                    Ok(Provenance {
                         inference_backend: r.get(0)?,
                         routing_tier: r.get(1)?,
-                        ttft_ms: r.get(2)?,
-                        total_ms: r.get(3)?,
+                        ttft_ms: r.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                        total_ms: r.get::<_, Option<i64>>(3)?.map(|v| v as u64),
                         finish_reason: r.get(4)?,
-                        max_tokens_budget: r.get(5)?,
-                        completion_tokens: r.get(6)?,
+                        max_tokens_budget: r.get::<_, Option<i64>>(5)?.map(|v| v as u64),
+                        completion_tokens: r.get::<_, Option<i64>>(6)?.map(|v| v as u64),
                         sources: Vec::new(),
                     })
                 },
             )
             .ok();
         let mut cs = conn.prepare(
-            "SELECT corpus_id, chunk_id, title, snippet, score, rank
+            "SELECT corpus_id, chunk_id, title, snippet, score, rank, url, provenance_tier
              FROM citation WHERE message_id = ?1 ORDER BY rank ASC",
         )?;
         m.citations = cs
             .query_map(params![m.id], |r| {
-                Ok(CitationDto {
+                Ok(Citation {
                     corpus_id: r.get(0)?,
                     chunk_id: r.get(1)?,
                     title: r.get(2)?,
                     snippet: r.get(3)?,
                     score: r.get(4)?,
-                    rank: r.get(5)?,
+                    rank: r.get::<_, i64>(5)? as usize,
+                    url: r.get(6)?,
+                    provenance_tier: r.get(7)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;

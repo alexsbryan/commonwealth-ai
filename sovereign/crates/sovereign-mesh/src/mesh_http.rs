@@ -15,10 +15,9 @@
 //! endpoints are deliberately symmetric with the `sovereign mesh …`
 //! CLI subcommands.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension};
+use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -26,7 +25,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// Build the mesh HTTP router. Merged into the daemon's client router
 /// next to `mcp_router`. Call once at `start_daemon` time and hand the
@@ -62,10 +61,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         // the per-handler `enforce_localhost` checks. Adding a new
         // route to this module inherits the guard for free; the
         // per-handler check stays as a secondary barrier.
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))
+        .localhost_only_with(daemon)
 }
 
 /// Request body for `POST /v1/mesh/create`. Both fields default so a
@@ -415,13 +411,9 @@ fn default_node_name(override_name: Option<String>) -> String {
 
 /// `GET /v1/mesh/status` — read-only snapshot for UI polling.
 async fn mesh_status(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
-
     let running = daemon.is_running().await;
     // Read live off the daemon's config — see `EmbeddedDaemon::node_class`.
     let node_class = daemon.node_class().await.id().to_string();
@@ -685,13 +677,10 @@ pub struct PeerMeasurementsResponse {
 /// because it was an in-memory buffer that lost this node's history on every
 /// restart. See [`crate::measurements_rail`].
 async fn publish_measurement(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(record): Json<sovereign_core::mesh_measurements::MeasurementRecord>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let refuse = |why: String| {
         (
             StatusCode::OK,
@@ -771,13 +760,10 @@ async fn publish_measurement(
 
 /// Every measurement the ring has put on this namespace's journal.
 async fn peer_measurements(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     axum::extract::Query(q): axum::extract::Query<PeerMeasurementsQuery>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let empty = || {
         (
             StatusCode::OK,
@@ -864,13 +850,10 @@ fn peer_view(
 }
 
 async fn mesh_create(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     body: Option<Json<CreateRequest>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let node_name = default_node_name(req.node_name);
     let mesh_name = req.name.unwrap_or_else(|| format!("{node_name}'s Mesh"));
@@ -910,13 +893,10 @@ async fn mesh_create(
 
 /// `POST /v1/mesh/join` — join an existing mesh by key or URL.
 async fn mesh_join(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<JoinRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     // Accept bare key, https URL, or sovereign:// deep link — matches
     // what the CLI's `sovereign mesh join` takes.
     let link = match crate::deep_link::parse_join_argument(&req.key_or_url) {
@@ -1001,13 +981,10 @@ pub struct SwitchRequest {
 /// response mid-flight — the historical "connection reset / :9741 down
 /// forever" bug. Answer `202` first, switch 300ms later.
 async fn mesh_switch(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<SwitchRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     // Resolve BEFORE detaching so a bad name is a 404 the caller can read,
     // rather than a 202 followed by silence.
     let known = daemon.known_meshes();
@@ -1054,13 +1031,10 @@ pub struct RotateQuery {
 /// how a rotation could report success and then be reverted by the next gossip
 /// round. There is nothing left here but transport.
 async fn mesh_rotate(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     axum::extract::Query(q): axum::extract::Query<RotateQuery>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     match daemon.rotate_invite(q.force).await {
         Ok(rotated) => {
             // Rotation exists to SHARE the new key, so a soloist rotating in
@@ -1102,10 +1076,7 @@ async fn mesh_rotate(
 /// query param when sharing the invite. Doesn't require a running
 /// mesh — the candidates are interface-derived and a user might
 /// want to look at them before deciding to create a mesh.
-async fn mesh_relay_candidates(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
+async fn mesh_relay_candidates(_: LocalOnly) -> impl IntoResponse {
     // Internal port is fixed at 9742 today (matches what the daemon
     // binds in start_daemon and what the gossip handshake targets).
     // Plumbing this through config is a follow-up; for now the
@@ -1128,12 +1099,9 @@ async fn mesh_relay_candidates(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> im
 /// exited with code 103 and hoped launchd/systemd would bring us back,
 /// which stranded `:9741` when nothing supervised the daemon).
 async fn mesh_leave(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     // Must be running to leave — preserve the 409 contract for callers.
     if !daemon.is_running().await {
         return (
@@ -1170,6 +1138,7 @@ mod tests {
         DaemonSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
     };
     use std::collections::BTreeMap;
+    use std::net::SocketAddr;
     use std::path::PathBuf;
     use tempfile::TempDir;
 

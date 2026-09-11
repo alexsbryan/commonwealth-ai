@@ -43,10 +43,15 @@ use crate::common::{desktop_services_with_store, mesh_admin_services, spawn_rout
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
-use sovereign_contracts::types::{TurnAnswer, TurnFrame, TurnMode, TurnRequest};
+use sovereign_contracts::types::{
+    ResolveOutcome, TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnRequest,
+};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
-use sovereign_mesh::{turn_http::turn_router, EmbeddedDaemon};
+use sovereign_mesh::{
+    turn_http::{turn_router, turn_router_with, SocketTimers},
+    EmbeddedDaemon,
+};
 
 fn engine(dir: &std::path::Path) -> Arc<corpus_engine::CorpusEngine> {
     Arc::new(corpus_engine::CorpusEngine::new(
@@ -274,6 +279,163 @@ async fn create_conversation_refuses_an_unknown_corpus_and_lists_the_installed_o
     );
 }
 
+/// The allow-list has a SECOND writer — the desktop's corpus-chip strip,
+/// which toggles it long after create — and until sv-surface it had no wire
+/// form at all. The desktop wrote the column through its own store handle,
+/// so in attach mode every chip the user touched landed on a row the turn
+/// never reads: a filter that looked like it worked and did nothing.
+///
+/// PUT replaces the list wholesale, which is what a chip strip does.
+#[tokio::test]
+async fn enabled_corpora_put_writes_the_row_the_turn_reads() {
+    let (tmp, daemon, store) = serving_daemon(TestProvider::new());
+    std::fs::create_dir_all(tmp.path().join("indexes")).unwrap();
+    install_corpus(&tmp.path().join("indexes"), "sep").await;
+    install_corpus(&tmp.path().join("indexes"), "gutenberg").await;
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let http = reqwest::Client::new();
+
+    let body = http
+        .post(format!("http://{addr}/v1/conversations"))
+        .json(&serde_json::json!({ "enabled_corpora": ["sep"] }))
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let conv = body["id"].as_str().unwrap().to_string();
+
+    let resp = http
+        .put(format!(
+            "http://{addr}/v1/conversations/{conv}/enabled-corpora"
+        ))
+        .json(&serde_json::json!({ "enabled_corpora": ["gutenberg"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::NO_CONTENT);
+    assert_eq!(
+        store
+            .get_conversation(&conv)
+            .await
+            .unwrap()
+            .enabled_corpora
+            .as_deref(),
+        Some(&["gutenberg".to_string()][..]),
+        "the PUT must REPLACE the seeded list on the row the turn reads, \
+         not merge with it"
+    );
+
+    // `null` clears, and clearing means "search every installed corpus" —
+    // the column's contract, so the route must not confuse it with the
+    // empty list below.
+    let resp = http
+        .put(format!(
+            "http://{addr}/v1/conversations/{conv}/enabled-corpora"
+        ))
+        .json(&serde_json::json!({ "enabled_corpora": serde_json::Value::Null }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::NO_CONTENT);
+    assert_eq!(
+        store.get_conversation(&conv).await.unwrap().enabled_corpora,
+        None,
+        "null clears the column — not 'search nothing'"
+    );
+}
+
+/// The named failing inputs (§18.1), both of which the desktop's local write
+/// accepted: an id nothing has installed, and the empty list. Retrieval
+/// intersects the allow-list SILENTLY, so either one produced an empty
+/// fan-out and an answer that read as "the corpus does not cover this".
+/// The route refuses both, names the remedy, and leaves the row as it was.
+#[tokio::test]
+async fn enabled_corpora_put_refuses_what_would_search_nothing() {
+    let (tmp, daemon, store) = serving_daemon(TestProvider::new());
+    std::fs::create_dir_all(tmp.path().join("indexes")).unwrap();
+    install_corpus(&tmp.path().join("indexes"), "sep").await;
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    let http = reqwest::Client::new();
+
+    let body = http
+        .post(format!("http://{addr}/v1/conversations"))
+        .json(&serde_json::json!({ "enabled_corpora": ["sep"] }))
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let conv = body["id"].as_str().unwrap().to_string();
+
+    let resp = http
+        .put(format!(
+            "http://{addr}/v1/conversations/{conv}/enabled-corpora"
+        ))
+        .json(&serde_json::json!({ "enabled_corpora": ["nope"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let err = resp.json::<serde_json::Value>().await.unwrap()["error"]
+        .as_str()
+        .expect("the refusal carries a reason")
+        .to_string();
+    assert!(err.contains("unknown corpus id: nope"), "{err}");
+    assert!(err.contains("installed: sep"), "{err}");
+
+    let resp = http
+        .put(format!(
+            "http://{addr}/v1/conversations/{conv}/enabled-corpora"
+        ))
+        .json(&serde_json::json!({ "enabled_corpora": [] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let err = resp.json::<serde_json::Value>().await.unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(err.contains("would search nothing"), "{err}");
+
+    assert_eq!(
+        store
+            .get_conversation(&conv)
+            .await
+            .unwrap()
+            .enabled_corpora
+            .as_deref(),
+        Some(&["sep".to_string()][..]),
+        "a refused PUT must leave the row exactly as it found it"
+    );
+}
+
+/// A conversation the daemon does not hold is a 404, not a silent success.
+/// The store's write reports `NotFound` and the route must carry that
+/// through rather than collapse it into 204 (§18.3) — otherwise an attached
+/// surface pointed at the wrong daemon toggles chips forever and is told
+/// each one landed.
+#[tokio::test]
+async fn enabled_corpora_put_on_a_missing_conversation_is_404() {
+    let (tmp, daemon, _store) = serving_daemon(TestProvider::new());
+    std::fs::create_dir_all(tmp.path().join("indexes")).unwrap();
+    install_corpus(&tmp.path().join("indexes"), "sep").await;
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+
+    let resp = reqwest::Client::new()
+        .put(format!(
+            "http://{addr}/v1/conversations/ghost/enabled-corpora"
+        ))
+        .json(&serde_json::json!({ "enabled_corpora": ["sep"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+}
+
 /// The create route SEEDS the row. Handing back an id without writing one
 /// would pass a status-code assertion and fail the first turn.
 #[tokio::test]
@@ -321,7 +483,18 @@ async fn a_mesh_admin_daemon_refuses_with_a_reason() {
 }
 
 /// Send an `Answer` and read the daemon's reply to it.
-async fn approve_and_read_refusal(addr: std::net::SocketAddr, conv: &str, claim: bool) -> String {
+/// Answer a question nothing is parked under and hand back what the daemon
+/// said about it.
+///
+/// A `ResolveAck` and not a `StreamError` since sv-surface RB4: a reply that
+/// resolved nothing is a recoverable fact about ONE question, and riding the
+/// terminal frame meant a client that double-clicked approve threw away a
+/// turn that was running perfectly well.
+async fn answer_and_read_ack(
+    addr: std::net::SocketAddr,
+    conv: &str,
+    claim: bool,
+) -> ResolveOutcome {
     let query = if claim { "?approvals=true" } else { "" };
     let (mut ws, _) = tokio_tungstenite::connect_async(format!(
         "ws://{addr}/v1/conversations/{conv}/stream{query}"
@@ -352,8 +525,14 @@ async fn approve_and_read_refusal(addr: std::net::SocketAddr, conv: &str, claim:
     .expect("the answer is a well-formed TurnFrame");
 
     match frame {
-        TurnFrame::StreamError { message, .. } => message,
-        other => panic!("expected a StreamError, got {other:?}"),
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck { outcome, .. },
+        } => outcome,
+        TurnFrame::StreamError { message, .. } => panic!(
+            "a refused answer must not ride the TERMINAL frame — both clients end the turn \
+             on it (sv-surface RB4); got {message:?}"
+        ),
+        other => panic!("expected a ResolveAck notice, got {other:?}"),
     }
 }
 
@@ -370,11 +549,11 @@ async fn an_unclaimed_socket_is_told_its_reply_resolved_nothing() {
     let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
     let conv = create_conversation(&format!("http://{addr}")).await;
 
-    let message = approve_and_read_refusal(addr, &conv, false).await;
-    assert!(
-        message.contains("did not claim") && message.contains("approvals=true"),
-        "the refusal names the claim the client is missing and how to make it; \
-         got {message:?}"
+    assert_eq!(
+        answer_and_read_ack(addr, &conv, false).await,
+        ResolveOutcome::Unclaimed,
+        "the outcome names the CLAIM the client is missing — not `NoSuchPending`, \
+         which is a socket that could have answered and had nothing parked"
     );
 }
 
@@ -387,11 +566,10 @@ async fn a_claimed_socket_is_told_when_nothing_is_pending() {
     let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
     let conv = create_conversation(&format!("http://{addr}")).await;
 
-    let message = approve_and_read_refusal(addr, &conv, true).await;
-    assert!(
-        message.contains("no approval is pending") && !message.contains("did not claim"),
-        "a claimed socket is answered about its QUESTIONS, not about its claim; \
-         got {message:?}"
+    assert_eq!(
+        answer_and_read_ack(addr, &conv, true).await,
+        ResolveOutcome::NoSuchPending,
+        "a claimed socket is answered about its QUESTIONS, not about its claim"
     );
 }
 
@@ -762,62 +940,326 @@ async fn a_socket_redirects_its_own_session_and_gets_a_second_answer() {
     }
 }
 
-/// sv-surface R3 + the C1 OPEN VERIFICATION, closed: a REAL turn that
-/// PAUSES on a question over the wire. Until this, no test anywhere drove
-/// a turn that parks the executor through `serve_turn` +
-/// `capabilities::scope` + a real WebSocket — the unit tests exercised
-/// the channel in isolation, and the stub fixture's `NoOpPlanner` made
-/// the ComplexTask path unreachable. The planner knob
-/// (`desktop_services_with_planner`) exists for exactly this.
+// ─── The socket's own life: settling, closing, reuse (sv-surface RB1) ─────
+//
+// `Complete` is the terminal frame of the TURN, and until RB1 nothing was
+// the terminal frame of the SOCKET: `handle_ws` looped forever, the client's
+// drain ended only on a host close that never came, and every turn leaked a
+// WebSocket, a writer task and an approval channel on both ends.
+//
+// The windows come from `SocketTimers` rather than the production constants
+// because the property is only observable by living through one — see
+// `turn_router_with`.
+
+/// Milliseconds, so a test can watch a real socket close.
+fn quick_timers() -> SocketTimers {
+    SocketTimers {
+        idle_after_settled: std::time::Duration::from_millis(300),
+        post_complete_settle_max: std::time::Duration::from_secs(5),
+    }
+}
+
+/// Read frames until one satisfies `done`, and hand back everything read.
+async fn read_until(
+    ws: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    what: &str,
+    done: impl Fn(&TurnFrame) -> bool,
+) -> Vec<TurnFrame> {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        let mut seen = Vec::new();
+        while let Some(Ok(msg)) = ws.next().await {
+            let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
+                continue;
+            };
+            let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
+            let stop = done(&frame);
+            seen.push(frame);
+            if stop {
+                return seen;
+            }
+        }
+        panic!("the socket ended before {what}; read {seen:?}");
+    })
+    .await
+    .unwrap_or_else(|_| panic!("waited 30s for {what} and the daemon said nothing"))
+}
+
+/// **The turn settles, the daemon says so, and then it closes the socket.**
+///
+/// Three claims, and each one failed before RB1: no `TurnSettled` was ever
+/// emitted (there was no such frame), the receive loop had no exit, and the
+/// writer task ran until the process did.
+///
+/// The settled notice carries the turn's message id — stamped by the writer,
+/// which is the only thing that has SEEN the `Complete` go out.
 #[tokio::test]
-async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
-    use sovereign_contracts::types::{
-        ConversationContext, Plan, Step, StepKind, ToolDescriptor, TurnNotice,
+async fn a_settled_turn_is_said_and_the_daemon_closes_the_socket_nobody_reused() {
+    let provider = TestProvider::new().with_stream_chunks(vec!["done".to_string()]);
+    let (_tmp, daemon, _store) = serving_daemon(provider);
+    let addr = spawn_router(turn_router_with(Arc::clone(&daemon), quick_timers())).await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let mut ws = open_stream(addr, &conv).await;
+    send_request(
+        &mut ws,
+        TurnRequest::Message {
+            content: "one question".to_string(),
+            mode: TurnMode::Grounded,
+            intent: None,
+        },
+    )
+    .await;
+
+    let frames = read_until(&mut ws, "the settled notice", |f| {
+        matches!(
+            f,
+            TurnFrame::Notice {
+                notice: TurnNotice::TurnSettled { .. }
+            }
+        )
+    })
+    .await;
+
+    let completed = frames
+        .iter()
+        .find_map(|f| match f {
+            TurnFrame::Complete { message_id, .. } => Some(message_id.clone()),
+            _ => None,
+        })
+        .expect("the turn completed before it settled");
+    let TurnFrame::Notice {
+        notice: TurnNotice::TurnSettled { message_id },
+    } = frames.last().expect("read_until stopped on it")
+    else {
+        unreachable!("read_until stopped on the settled notice")
     };
+    assert_eq!(
+        message_id, &completed,
+        "the settled notice names the turn it closes out"
+    );
 
-    /// A planner whose plan is ONE `UserInput` step: the executor parks on
-    /// the SOCKET's channel (the socket claimed approvals) and the turn
-    /// cannot finish until the wire answers.
-    struct AskPlanner;
-    #[async_trait::async_trait]
-    impl sovereign_core::traits::Planner for AskPlanner {
-        async fn plan(
-            &self,
-            goal: &str,
-            _context: &ConversationContext,
-            _tools: &[ToolDescriptor],
-        ) -> sovereign_core::error::Result<Plan> {
-            Ok(Plan {
-                id: "plan-ask".into(),
-                goal: goal.to_string(),
-                steps: vec![Step {
-                    id: 0,
-                    description: "Ask the user which corpus".into(),
-                    kind: StepKind::UserInput {
-                        question: "Which corpus should I search?".into(),
-                    },
-                    requires_approval: false,
-                    inputs: Vec::new(),
-                    sampling: None,
-                    evaluation: None,
-                }],
-                edges: Vec::new(),
-            })
+    // And the socket ENDS. Bounded by well over the idle window, because the
+    // failure being pinned is "never" — a test that waited a moment and gave
+    // up would pass against the leak it exists to catch.
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while let Some(Ok(msg)) = ws.next().await {
+            if let tokio_tungstenite::tungstenite::Message::Close(_) = msg {
+                return true;
+            }
         }
+        // The stream ending is the same fact.
+        true
+    })
+    .await;
+    assert!(
+        closed.is_ok(),
+        "the daemon never closed a socket nobody was using — one leaked WebSocket, writer \
+         task and approval channel per turn (sv-surface RB1)"
+    );
+}
 
-        /// The plan cannot fail (one step, no tools), so a replan is the
-        /// same plan again — the executor never asks on this fixture.
-        async fn replan(
-            &self,
-            original: &Plan,
-            _completed: &[(usize, sovereign_core::types::StepOutput)],
-            _failure: &sovereign_core::types::StepError,
-            _tools: &[ToolDescriptor],
-        ) -> sovereign_core::error::Result<Plan> {
-            Ok(original.clone())
-        }
+/// The settle does not end the CONVERSATION: a second turn on the same
+/// socket, sent inside the idle window, runs normally.
+///
+/// This is the constraint the close had to respect — `handle_ws` serves
+/// sequential turns, and a socket that hung up at `Complete` would have
+/// broken every client that asks a follow-up.
+#[tokio::test]
+async fn a_second_turn_on_a_settled_socket_runs_normally() {
+    let provider = TestProvider::new().with_stream_chunks(vec!["again".to_string()]);
+    let (_tmp, daemon, _store) = serving_daemon(provider);
+    let addr = spawn_router(turn_router_with(
+        Arc::clone(&daemon),
+        SocketTimers {
+            // Long enough to send a follow-up by hand, short enough that the
+            // close still happens in this test's lifetime.
+            idle_after_settled: std::time::Duration::from_secs(5),
+            post_complete_settle_max: std::time::Duration::from_secs(5),
+        },
+    ))
+    .await;
+    let conv = create_conversation(&format!("http://{addr}")).await;
+
+    let mut ws = open_stream(addr, &conv).await;
+    for turn in ["first", "second"] {
+        send_request(
+            &mut ws,
+            TurnRequest::Message {
+                content: turn.to_string(),
+                mode: TurnMode::Grounded,
+                intent: None,
+            },
+        )
+        .await;
+        let frames = read_until(&mut ws, "the settled notice", |f| {
+            matches!(
+                f,
+                TurnFrame::Notice {
+                    notice: TurnNotice::TurnSettled { .. }
+                }
+            )
+        })
+        .await;
+        assert!(
+            frames
+                .iter()
+                .any(|f| matches!(f, TurnFrame::Complete { .. })),
+            "turn {turn} completed on the reused socket; got {frames:?}"
+        );
+    }
+}
+
+/// **Stop, on an open consent card.** sv-surface RB2.
+///
+/// `Cancel` tripped the turn's cancellation tokens and nothing else, and a
+/// turn parked in `Parked::answered` is blocked on a `oneshot` that no token
+/// reaches: the executor never returned, so NO terminal frame was ever
+/// emitted and the user's stop button did nothing at all. The desk has to be
+/// resolved too, by the per-kind hangup policy (E2).
+///
+/// The assertion that went red before the fix is the terminal read below —
+/// it waits 30s and panics with "the daemon said nothing", which is exactly
+/// what the client saw.
+#[tokio::test]
+async fn a_cancel_unparks_the_question_its_turn_is_stopped_on() {
+    let ParkedTurn {
+        _tmp,
+        _daemon,
+        mut ws,
+        prompt_id,
+        ..
+    } = turn_parked_on_a_question(quick_timers()).await;
+    assert!(prompt_id.ends_with(":input"), "parked on the ask_user step");
+
+    send_request(&mut ws, TurnRequest::Cancel {}).await;
+
+    let frames = read_until(&mut ws, "the cancelled turn's terminal frame", |f| {
+        matches!(
+            f,
+            TurnFrame::Complete { .. } | TurnFrame::StreamError { .. }
+        )
+    })
+    .await;
+    match frames.last().expect("read_until stopped on it") {
+        // KNOWN GAP, measured here rather than assumed: the terminal frame
+        // arrives (which is the whole of RB2) but on the AGENTIC path it
+        // carries `provenance.finish_reason: None` — watched, 2026-09-10.
+        // The `"cancelled"` stamp is the STREAMING path's
+        // (handlers/generative.rs), and the non-streaming turn persists no
+        // finish reason at all, so a client cannot yet tell a stopped
+        // agentic turn from a finished one. Closing that is a
+        // sovereign-core change (the non-streaming turn's provenance), not
+        // one this socket may make: rewriting the projection here would
+        // make the frame disagree with the row it was projected from
+        // (§18.3).
+        TurnFrame::Complete { .. } => {}
+        TurnFrame::StreamError { message, .. } => panic!(
+            "a stop is not a failure — the turn ends the way a cancelled turn always ended, \
+             with its terminal Complete; got {message:?}"
+        ),
+        other => unreachable!("read_until stopped on {other:?}"),
     }
 
+    // And the question is gone with it: an answer arriving after the stop
+    // resolves nothing rather than restarting what the user stopped.
+    send_request(
+        &mut ws,
+        TurnRequest::Answer {
+            id: prompt_id,
+            answer: TurnAnswer::Text("too late".into()),
+        },
+    )
+    .await;
+    let acked = read_until(&mut ws, "the ack for the late answer", |f| {
+        matches!(
+            f,
+            TurnFrame::Notice {
+                notice: TurnNotice::ResolveAck { .. }
+            }
+        )
+    })
+    .await;
+    let TurnFrame::Notice {
+        notice: TurnNotice::ResolveAck { outcome, .. },
+    } = acked.last().unwrap()
+    else {
+        unreachable!()
+    };
+    assert_eq!(
+        *outcome,
+        ResolveOutcome::NoSuchPending,
+        "the cancelled question is not still parked"
+    );
+}
+
+// ─── A turn that PARKS on a question (sv-surface R3; RB2's fixture too) ───
+//
+// Hoisted out of the R3 test by RB2, which needs the same parked turn to
+// CANCEL: one planner and one setup, not two that drift (ARCH §10.6).
+
+use sovereign_contracts::types::{ConversationContext, Plan, Step, StepKind, ToolDescriptor};
+
+struct AskPlanner;
+#[async_trait::async_trait]
+impl sovereign_core::traits::Planner for AskPlanner {
+    async fn plan(
+        &self,
+        goal: &str,
+        _context: &ConversationContext,
+        _tools: &[ToolDescriptor],
+    ) -> sovereign_core::error::Result<Plan> {
+        Ok(Plan {
+            id: "plan-ask".into(),
+            goal: goal.to_string(),
+            steps: vec![Step {
+                id: 0,
+                description: "Ask the user which corpus".into(),
+                kind: StepKind::UserInput {
+                    question: "Which corpus should I search?".into(),
+                },
+                requires_approval: false,
+                inputs: Vec::new(),
+                sampling: None,
+                evaluation: None,
+            }],
+            edges: Vec::new(),
+        })
+    }
+
+    /// The plan cannot fail (one step, no tools), so a replan is the
+    /// same plan again — the executor never asks on this fixture.
+    async fn replan(
+        &self,
+        original: &Plan,
+        _completed: &[(usize, sovereign_core::types::StepOutput)],
+        _failure: &sovereign_core::types::StepError,
+        _tools: &[ToolDescriptor],
+    ) -> sovereign_core::error::Result<Plan> {
+        Ok(original.clone())
+    }
+}
+
+/// A live turn, parked on its question, and the socket that owns it.
+struct ParkedTurn {
+    _tmp: tempfile::TempDir,
+    _daemon: Arc<EmbeddedDaemon>,
+    ws: tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    /// Everything that arrived before the question.
+    before: Vec<TurnFrame>,
+    /// The id the question was asked under.
+    prompt_id: String,
+}
+
+/// Drive a `ComplexTask` turn on a CLAIMED socket until it pauses on its
+/// question.
+///
+/// Bounded: a hang here is the failure mode this fixture exists to catch, and
+/// a test that hangs reports nothing.
+async fn turn_parked_on_a_question(timers: SocketTimers) -> ParkedTurn {
     let tmp = tempfile::tempdir().unwrap();
     let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let provider = TestProvider::new().with_complete_text("searched.");
@@ -827,12 +1269,12 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
         Arc::new(provider),
         Box::new(AskPlanner),
     );
-    let daemon = Arc::new(EmbeddedDaemon::new(
+    let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
         services,
-    ));
-    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+    );
+    let addr = spawn_router(turn_router_with(Arc::clone(&daemon), timers)).await;
     let conv = create_conversation(&format!("http://{addr}")).await;
 
     let (mut ws, _) = tokio_tungstenite::connect_async(format!(
@@ -852,9 +1294,7 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
     .await
     .unwrap();
 
-    // Read until the turn PAUSES. Bounded: a hang here is the real
-    // failure mode the OPEN VERIFICATION named.
-    let mut frames: Vec<TurnFrame> = Vec::new();
+    let mut before: Vec<TurnFrame> = Vec::new();
     let prompt_id = tokio::time::timeout(std::time::Duration::from_secs(60), async {
         loop {
             let Some(Ok(msg)) = ws.next().await else {
@@ -865,14 +1305,39 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
             };
             let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
             if let TurnFrame::Prompt { id, .. } = &frame {
-                return (frames, id.clone());
+                return id.clone();
             }
-            frames.push(frame);
+            before.push(frame);
         }
     })
     .await
     .expect("the turn reaches its question rather than hanging");
-    let (frames, id) = prompt_id;
+
+    ParkedTurn {
+        _tmp: tmp,
+        _daemon: daemon,
+        ws,
+        before,
+        prompt_id,
+    }
+}
+
+/// sv-surface R3 + the C1 OPEN VERIFICATION, closed: a REAL turn that
+/// PAUSES on a question over the wire. Until this, no test anywhere drove
+/// a turn that parks the executor through `serve_turn` +
+/// `capabilities::scope` + a real WebSocket — the unit tests exercised
+/// the channel in isolation, and the stub fixture's `NoOpPlanner` made
+/// the ComplexTask path unreachable. The planner knob
+/// (`desktop_services_with_planner`) exists for exactly this.
+#[tokio::test]
+async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
+    let ParkedTurn {
+        _tmp,
+        _daemon,
+        mut ws,
+        before: frames,
+        prompt_id: id,
+    } = turn_parked_on_a_question(SocketTimers::default()).await;
 
     // On THIS path the pause beats every other frame: ComplexTask is
     // non-streamable, so the whole turn — pause included — runs inside
@@ -883,12 +1348,17 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
         frames.is_empty(),
         "the pause is the wire's first frame; got {frames:?}"
     );
-    assert_eq!(id, "input", "ask_user parks under the one id it mints");
+    assert!(
+        id.ends_with(":input") && id.len() > ":input".len(),
+        "ask_user parks under the one id it mints, PREFIXED by the turn's own nonce — a bare \
+         `input` is spelled the same on every turn of this socket, so a late answer would \
+         resolve the next turn's question (sv-surface C2); got {id:?}"
+    );
 
     // The answer goes up the same socket; the parked executor resumes.
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Answer {
-            id,
+            id: id.clone(),
             answer: TurnAnswer::Text("sep".into()),
         })
         .unwrap()
@@ -943,7 +1413,7 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
     // the same id resolves nothing and the refusal says so by name.
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Answer {
-            id: "input".into(),
+            id: id.clone(),
             answer: TurnAnswer::Text("stale".into()),
         })
         .unwrap()
@@ -951,23 +1421,34 @@ async fn a_turn_pauses_on_a_question_over_the_wire_and_its_answer_resumes_it() {
     ))
     .await
     .unwrap();
-    let refused = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    let answered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         while let Some(Ok(msg)) = ws.next().await {
             let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
                 continue;
             };
             let frame: TurnFrame = serde_json::from_str(&t).expect("frames stay well-formed");
-            if let TurnFrame::StreamError { message, .. } = frame {
-                return message;
+            match frame {
+                TurnFrame::Notice {
+                    notice: TurnNotice::ResolveAck { outcome, .. },
+                } => return outcome,
+                // sv-surface RB4, the whole point: the double-answer is a
+                // recoverable refusal about one question. Riding the
+                // terminal frame made a client throw away a turn that had
+                // already completed perfectly well.
+                TurnFrame::StreamError { message, .. } => {
+                    panic!("a stale reply must not be reported as a dead turn; got {message:?}")
+                }
+                _ => continue,
             }
         }
         panic!("no frame answered the stale reply");
     })
     .await
     .expect("the stale reply is answered, not swallowed");
-    assert!(
-        refused.contains("no user reply is pending"),
-        "the refusal names what resolved nothing; got {refused:?}"
+    assert_eq!(
+        answered,
+        ResolveOutcome::NoSuchPending,
+        "the ack names what the reply found: nothing, because it was already answered"
     );
 }
 
@@ -1081,7 +1562,11 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
     })
     .await
     .expect("the turn parks on its information request");
-    assert_eq!(prompt_id, "info:0");
+    assert!(
+        prompt_id.ends_with(":info:0") && prompt_id.len() > ":info:0".len(),
+        "the information request parks under the step's id, PREFIXED by the turn's nonce \
+         (sv-surface C2); got {prompt_id:?}"
+    );
 
     // The client's search-produced answer, carrying its registry rows.
     ws.send(tokio_tungstenite::tungstenite::Message::Text(

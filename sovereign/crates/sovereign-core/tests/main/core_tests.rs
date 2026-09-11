@@ -114,6 +114,25 @@ impl ConversationStore for MockStore {
     async fn list_conversations(&self, _limit: usize, _offset: usize) -> Result<Vec<Conversation>> {
         Ok(Vec::new())
     }
+    // The scoped listings answer the same "this mock holds no rows to
+    // page" as the unscoped one above — every test using MockStore drives
+    // a turn, none drives a sidebar.
+    async fn list_conversations_for_surface(
+        &self,
+        _surface_skill_id: Option<&str>,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        Ok(Vec::new())
+    }
+    async fn list_conversations_for_corpus(
+        &self,
+        _corpus_id: &str,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        Ok(Vec::new())
+    }
     async fn search_messages(&self, _query: &str) -> Result<Vec<Message>> {
         Ok(Vec::new())
     }

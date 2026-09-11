@@ -201,6 +201,20 @@ pub struct ServingCore {
     /// itself is sovereign-core's, constructed by the host that owns the
     /// concrete store handle; this field is the door, not a second decider.
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
+    /// The recipe-author project layer — `features.db` at this daemon's
+    /// data root (sv-surface D6). `None` on a commission that could not
+    /// open it, which `features_http` renders as a named 503; the same
+    /// warn-and-skip posture `sovereign daemon run` already took at
+    /// `daemon_cmd/mod.rs:947`, now visible in the type instead of only
+    /// in a log line.
+    ///
+    /// `Option` for the `insights` reason, not for a different one: a
+    /// serving daemon without an authoring surface is a real shape, and
+    /// "the file would not open" must stay a different fact from "this
+    /// route is not mounted" (ARCH §18.3). The store itself is
+    /// `sovereign-recipe-author`'s, reached through `sovereign-store`;
+    /// this field is the door, not a second decider.
+    pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the
@@ -716,6 +730,7 @@ pub(crate) mod fixtures {
                 state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
                 runtime: runtime(),
                 insights: None,
+                features: None,
             },
             capability: ServingCapability {
                 mcp: McpSurface::Unavailable {

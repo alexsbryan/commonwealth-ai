@@ -275,7 +275,7 @@ impl Runtime {
                     start_text.clone(),
                 );
                 let elapsed_ms = turn_start.elapsed().as_millis() as u64;
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -370,7 +370,7 @@ impl Runtime {
                     result_summary.clone(),
                 );
                 let elapsed_complete_ms = turn_start.elapsed().as_millis() as u64;
-                self.routing_events
+                self.turn_routing_events()
                     .emit_turn_narration(TurnNarration {
                         session_id: session_id.clone(),
                         conversation_id: conversation_id.to_string(),
@@ -667,7 +667,7 @@ impl Runtime {
             "Verifying the drafted answer against the attached document before showing it."
                 .to_string(),
         ) {
-            self.routing_events
+            self.turn_routing_events()
                 .emit_turn_narration(TurnNarration {
                     session_id: session_id.to_string(),
                     conversation_id: conversation_id.to_string(),
@@ -715,7 +715,7 @@ impl Runtime {
         // attached-doc wait gets the identical Check-station UX.
         // `spawn_reader` also emits the audit-open frame.
         let progress_tx = crate::runtime::streaming::GateProgressWiring {
-            events: std::sync::Arc::clone(&self.routing_events),
+            events: self.turn_routing_events(),
             session_id: session_id.to_string(),
             conversation_id: conversation_id.to_string(),
             started: turn_start,

@@ -30,6 +30,41 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `sovereign-turn-client/bundled-backend` — reachability is named, and no surface has a backend to bring up yet
+
+**What ships now.** `sovereign_turn_client::reach` — `ServingHost::at(base)`
+answers "is a host serving" for every surface (the desktop's `attach_watch`,
+`search_gym` and `bench ablate` now ask it rather than each holding a probe),
+and `ensure_reachable` reports absence as a typed `NotReachable` instead of a
+default. The `bundled-backend` feature is the other half: with it on, a caller
+can name a `BundledBackend` binary the client may bring up when nothing
+answers — detached, handle dropped at the spawn site, no retry and no
+lifecycle. It is OFF by default and nothing in the workspace turns it on.
+
+**Why dark.** The capability is the client's half of sv-surface's
+`sv-no-daemon-management` bar (revised 2026-09-11): "ensure a backend is
+reachable" belongs to the client package, so the desktop can hold zero daemon
+code. But no surface yet ships a backend it could bring up — the daemon is not
+packaged as a sidecar, `tauri.conf.json` still has `externalBin: null`. An
+on-by-default capability here would compile a bring-up path with no caller,
+which is inventory (ARCH principle 11).
+
+**Flip condition, falsifiable.** The desktop ships the daemon as a sidecar
+copied to a stable path at setup, and its `Cargo.toml` declares
+`features = ["bundled-backend"]`. At that moment the desktop's own supervision
+(1,990 prod lines, ~271 keepers) is deletable and the bar's dependency-edge
+half can go green. If instead the sidecar is abandoned in favour of an
+OS-service-only topology on every platform, this row moves to REJECTED and the
+feature is deleted rather than left dark.
+
+**What settles it.** sv-surface next items (2) sidecar packaging and (3)
+desktop supervision deletion — `quality/campaigns/sv-surface.toml`,
+`sv-no-daemon-management`.
+
+**Review by 2026-10-15.** If neither (2) nor (3) has landed by then, the
+question to put to the operator is which topology the desktop actually ships,
+not whether to extend the date.
+
 ### `process:v1` donation — a BOUNDARY, not a refusal → **GRADUATED 2026-09-10** for the package donor (the daemon path is built, not measured)
 
 **What ships NOW.** `ProcessExecutor`'s descriptor still REQUIRES

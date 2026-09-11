@@ -12253,6 +12253,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-runtime-recipe",
+ "sovereign-service",
  "sovereign-store",
  "sovereign-tdd",
  "sovereign-tools",
@@ -12706,6 +12707,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-inference",
+ "sovereign-meshapp",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12736,6 +12738,28 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "sovereign-mobile"
+version = "0.1.0"
+dependencies = [
+ "commonwealth-transport",
+ "futures",
+ "futures-util",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sovereign-turn-client",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -12830,6 +12854,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-service"
+version = "0.6.0"
+dependencies = [
+ "dirs 5.0.1",
+ "libc",
+ "sovereign-contracts",
 ]
 
 [[package]]
@@ -13047,6 +13080,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-contracts",
+ "sovereign-time",
  "sovereign-tools-base",
  "sovereign-workflow",
  "tempfile",

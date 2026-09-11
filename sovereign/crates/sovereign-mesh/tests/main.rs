@@ -18,6 +18,8 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
+#[path = "main/atlas_surface_e2e.rs"]
+mod atlas_surface_e2e;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
 #[path = "main/capabilities_published.rs"]
@@ -28,10 +30,23 @@ mod chat_completion_e2e;
 mod client_exposure;
 #[path = "main/common/mod.rs"]
 mod common;
+#[path = "main/conv_surface_e2e.rs"]
+mod conv_surface_e2e;
 #[path = "main/corpus_sharing_over_iroh_e2e.rs"]
 mod corpus_sharing_over_iroh_e2e;
 #[path = "main/corpus_watch_http_e2e.rs"]
 mod corpus_watch_http_e2e;
+#[path = "main/d6_surface_e2e.rs"]
+mod d6_surface_e2e;
+#[path = "main/d8_surface_e2e.rs"]
+mod d8_surface_e2e;
+
+#[path = "main/d9_turn_extras_e2e.rs"]
+mod d9_turn_extras_e2e;
+#[path = "main/d9a_corpus_catalog_e2e.rs"]
+mod d9a_corpus_catalog_e2e;
+#[path = "main/d9a_documents_e2e.rs"]
+mod d9a_documents_e2e;
 #[path = "main/daemon_variant_census.rs"]
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
@@ -78,6 +93,8 @@ mod knowledge_fanout_e2e;
 mod knowledge_served_e2e;
 #[path = "main/landscape_digest_http_e2e.rs"]
 mod landscape_digest_http_e2e;
+#[path = "main/lc_surface_e2e.rs"]
+mod lc_surface_e2e;
 #[path = "main/load_awareness_e2e.rs"]
 mod load_awareness_e2e;
 #[path = "main/local_only_boot.rs"]
@@ -94,6 +111,8 @@ mod manifest_fanout_concurrency;
 mod mesh_sim_scoreboard;
 #[path = "main/mesh_switch.rs"]
 mod mesh_switch;
+#[path = "main/meshapp_surface_e2e.rs"]
+mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
 #[path = "main/node_id_persistence.rs"]

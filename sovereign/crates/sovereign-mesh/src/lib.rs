@@ -12,11 +12,13 @@
 //! - Expose mesh operations for both GUI and CLI
 
 pub mod admin_http;
+pub mod atlas_http;
 pub mod auto_ingest;
 pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
 pub mod commit_harvest;
+pub mod corpus_catalog_http;
 pub mod corpus_watch_http;
 pub mod daemon;
 pub mod daemon_services;
@@ -36,11 +38,14 @@ pub mod decision_replay;
 /// episode the Tier-1 simulator replays.
 pub mod decision_trace;
 pub mod deep_link;
+pub mod documents_http;
 #[cfg(feature = "dst")]
 pub mod dst;
 pub mod entry_endpoint;
+pub mod features_http;
 pub mod fim_adapter;
 pub mod gossip;
+pub mod governance_http;
 pub mod guest_lender;
 pub mod guest_tunnel;
 pub mod http_response;
@@ -58,10 +63,12 @@ pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
+pub mod lc_http;
 pub mod local_only;
 pub mod loopback_guard;
 #[cfg(feature = "treesitter")]
 pub mod lsp_tier;
+pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod measurements_rail;
 pub mod media_fanout;
@@ -74,8 +81,10 @@ pub mod mesh_http;
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
+pub mod meshapp_http;
 pub mod model_fetch;
 pub mod newsworthy_host;
+pub mod notes_http;
 pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
@@ -96,6 +105,7 @@ pub mod rail_bind;
 pub mod rail_kv_pump;
 pub mod reading_formatters;
 pub mod reading_http;
+pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod ring_roster;
@@ -116,6 +126,7 @@ pub mod throughput_tracking;
 pub mod tier;
 pub mod tool_profile;
 pub mod turn_approval;
+pub mod turn_extras_http;
 pub mod turn_http;
 pub mod types;
 pub mod watched_folder_runtime;
@@ -143,7 +154,7 @@ pub mod pinned_pod_snapshot;
 pub mod pinned_transport;
 pub mod pinned_worker_source;
 
-pub use daemon::EmbeddedDaemon;
+pub use daemon::{ClientListener, EmbeddedDaemon};
 pub use daemon_services::{
     assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
     HeadlessServices, LaunchParts, McpMount, McpSurface, MeshAdminWitness, ServingCapability,

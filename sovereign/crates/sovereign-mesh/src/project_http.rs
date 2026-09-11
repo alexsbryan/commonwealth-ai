@@ -13,17 +13,16 @@
 //! - `POST /v1/projects/{id}/unregister`              — remove a project
 //! - `POST /v1/projects/{id}/rebuild`                 — explicit rebuild nudge
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension, Path};
+use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::projects::{ProjectEntry, Registry, WatcherKind, WatcherStatus, WatcherToggles};
 use crate::reindexer::{RebuildReason, Reindexer};
 
@@ -39,10 +38,7 @@ pub fn project_router(reindexer: Arc<Reindexer>) -> Router {
             post(unregister_project),
         )
         .route("/v1/projects/{corpus_id}/rebuild", post(rebuild_project))
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(reindexer))
+        .localhost_only_with(reindexer)
 }
 
 // ─── Response shapes ────────────────────────────────────────
@@ -117,12 +113,9 @@ pub struct RebuildResponse {
 // ─── Handlers ────────────────────────────────────────────────
 
 async fn list_projects(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(reindexer): Extension<Arc<Reindexer>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let mut projects = Vec::new();
     for handle in reindexer.snapshot().await {
         let status_map = handle
@@ -149,13 +142,10 @@ async fn list_projects(
 }
 
 async fn register_project(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(reindexer): Extension<Arc<Reindexer>>,
     Json(req): Json<RegisterRequest>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     if req.corpus_id.trim().is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -232,13 +222,10 @@ async fn register_project(
 }
 
 async fn unregister_project(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(reindexer): Extension<Arc<Reindexer>>,
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let mut registry = match Registry::load() {
         Ok(r) => r,
         Err(e) => {
@@ -268,14 +255,11 @@ async fn unregister_project(
 }
 
 async fn rebuild_project(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(reindexer): Extension<Arc<Reindexer>>,
     Path(corpus_id): Path<String>,
     body: Option<Json<RebuildRequest>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let _reason = body.map(|Json(b)| b).unwrap_or_default();
     match reindexer.get(&corpus_id).await {
         Some(handle) => {

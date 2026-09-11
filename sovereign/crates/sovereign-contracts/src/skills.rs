@@ -4,6 +4,7 @@
 //! (planner templates, prompt overrides, memory rules, inference envelopes).
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -463,7 +464,45 @@ pub struct SkillRegistry {
     /// recency tie-break is structural: most-recently-activated
     /// workspace skill wins. Lookups are O(n) but n is the count
     /// of active skills (≤ a handful), not registered skills.
-    active: Vec<String>,
+    ///
+    /// **Behind a lock since sv-surface D9a**, so the ACTIVE SET is
+    /// toggleable through a shared `Arc<SkillRegistry>` — which is
+    /// how `Runtime` holds it, and therefore the only way
+    /// `PUT /v1/skills/{id}/active` can reach the registry the
+    /// serving runtime actually reads. Before this, `activate` took
+    /// `&mut self` and the desktop's `toggle_skill` wrote its own
+    /// config instead; in attach that config no longer reached the
+    /// answer (the no-fork degradation `turn_extras_http`'s header
+    /// records).
+    ///
+    /// `std::sync::RwLock`, not an `ArcSwap`: this crate already
+    /// carries three interior-mutability siblings on exactly that
+    /// shape (`registry.rs`'s `call_counts`, `tool_result_cache.rs`'s
+    /// `entries`, `peer.rs`'s `entries`) and no `arc-swap`
+    /// dependency, and `sovereign-contracts` is the bottom of the
+    /// layer map — adding a dep there to re-solve a solved problem is
+    /// what ARCH §19 refuses. The critical sections are a `Vec` of a
+    /// handful of `String`s; there is nothing here an atomic pointer
+    /// swap would buy.
+    ///
+    /// Poisoning is unwrapped-through rather than propagated: every
+    /// write below is two `Vec` ops that cannot panic, so a poisoned
+    /// lock would mean a panic *elsewhere* mid-borrow, and a registry
+    /// that then reported "no skills" would be a silent substitution
+    /// (§18.3). It takes the inner value and carries on.
+    active: RwLock<Vec<String>>,
+}
+
+impl SkillRegistry {
+    /// Read the activation order. See [`Self::active`] on poisoning.
+    fn active_ids(&self) -> std::sync::RwLockReadGuard<'_, Vec<String>> {
+        self.active.read().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Write the activation order. See [`Self::active`] on poisoning.
+    fn active_ids_mut(&self) -> std::sync::RwLockWriteGuard<'_, Vec<String>> {
+        self.active.write().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 impl SkillRegistry {
@@ -471,7 +510,7 @@ impl SkillRegistry {
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
-            active: Vec::new(),
+            active: RwLock::new(Vec::new()),
         }
     }
 
@@ -509,9 +548,11 @@ impl SkillRegistry {
     /// Recipe Author rail entry from inside the Inner Work view
     /// should make Recipe Author win even if it was already enabled
     /// from a prior session.
-    pub fn activate(&mut self, skill_id: &str) {
-        self.active.retain(|id| id != skill_id);
-        self.active.push(skill_id.to_string());
+    /// `&self` since sv-surface D9a — see [`Self::active`].
+    pub fn activate(&self, skill_id: &str) {
+        let mut active = self.active_ids_mut();
+        active.retain(|id| id != skill_id);
+        active.push(skill_id.to_string());
     }
 
     /// Activate every registered **background** skill. Skips skills
@@ -532,13 +573,14 @@ impl SkillRegistry {
     /// prevent. Restricting auto-activation to Background skills
     /// makes the rule structural: with no surface intent, no
     /// workspace owns the conversation.
-    pub fn activate_all(&mut self) {
+    pub fn activate_all(&self) {
+        let mut active = self.active_ids_mut();
         for skill in &self.skills {
             if skill.activation_kind == ActivationKind::Workspace {
                 continue;
             }
-            if !self.active.iter().any(|id| id == &skill.id) {
-                self.active.push(skill.id.clone());
+            if !active.iter().any(|id| id == &skill.id) {
+                active.push(skill.id.clone());
             }
         }
     }
@@ -563,7 +605,7 @@ impl SkillRegistry {
     /// id on their row (create-time surface declaration) and route
     /// correctly WITHOUT global activation — verified live — so skipping
     /// workspace skills here is safe and closes the leak at its source.
-    pub fn activate_configured(&mut self, ids: &[String]) {
+    pub fn activate_configured(&self, ids: &[String]) {
         for id in ids {
             let is_workspace = self
                 .skill_by_id(id)
@@ -582,8 +624,9 @@ impl SkillRegistry {
     }
 
     /// Remove a skill from the active set (no-op when it wasn't active).
-    pub fn deactivate(&mut self, skill_id: &str) {
-        self.active.retain(|id| id != skill_id);
+    /// `&self` since sv-surface D9a — see [`Self::active`].
+    pub fn deactivate(&self, skill_id: &str) {
+        self.active_ids_mut().retain(|id| id != skill_id);
     }
 
     /// Every registered skill, in registration order.
@@ -596,10 +639,23 @@ impl SkillRegistry {
     /// (e.g. `primary_skill_id_for_conversation`) iterate in
     /// reverse.
     pub fn active_skills(&self) -> Vec<&Skill> {
-        self.active
+        // The guard borrows `self.active`; the returned refs borrow
+        // `self.skills`. Two disjoint fields behind one `&self`, so
+        // the guard drops at the end of this call and the refs
+        // outlive it — no clone of the skill set is needed.
+        self.active_ids()
             .iter()
             .filter_map(|id| self.skills.iter().find(|s| &s.id == id))
             .collect()
+    }
+
+    /// Whether `skill_id` is in the ACTIVE set. One membership test,
+    /// so a caller reporting activation (`GET /v1/skills`'s `active`
+    /// field, `PUT /v1/skills/{id}/active`'s echo) cannot answer it a
+    /// second way — the `active_ids.contains(&s.id)` fold both used to
+    /// carry was the beginning of that twin (§10.6).
+    pub fn is_active(&self, skill_id: &str) -> bool {
+        self.active_ids().iter().any(|id| id == skill_id)
     }
 
     /// Return the ids of all registered skills whose inference config

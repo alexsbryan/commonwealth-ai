@@ -37,38 +37,14 @@ pub struct SinkInfoDto {
     pub connected: bool,
 }
 
-impl From<sovereign_core::types::InsightNode> for InsightNodeDto {
-    fn from(n: sovereign_core::types::InsightNode) -> Self {
-        Self {
-            id: n.id.to_string(),
-            clipped_text: n.clipped_text,
-            message_id: n.message_id.to_string(),
-            paragraph_index: n.paragraph_index,
-            source: n.source,
-            position: n.position,
-            adjacent: n.adjacent,
-            created_at: n.created_at.to_rfc3339(),
-            sink_state: n.sink_state,
-        }
-    }
-}
-
-// ─── Helper ──────────────────────────────────────────────────
-
-async fn get_insight_service(
-    state: &AppState,
-) -> Result<Arc<sovereign_core::insight::InsightService>, String> {
-    state.insight_service.read().await.clone().ok_or_else(|| {
-        "Insight service not initialized. Backend may still be starting.".to_string()
-    })
-}
-
-/// The attach-mode client for the daemon's insight surface (rung 6): the
-/// SAME `InsightService` the desktop builds, served on loopback. The wire
-/// projection (`sovereign_turn_client::InsightEntry`) maps 1:1 onto the
-/// DTO below — same fields, embedding already stripped — so the frontend
-/// contract is unchanged between boot modes.
-fn attach_insight_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+/// The client for the daemon's insight surface (rung 6): the SAME
+/// `InsightService` in both boot modes — commissioned into the in-process
+/// daemon on a Local boot, owned by the CLI daemon on an attached one — served
+/// on loopback either way. The wire projection
+/// (`sovereign_turn_client::InsightEntry`) maps 1:1 onto the DTO below (same
+/// fields, embedding already stripped), so the frontend contract does not
+/// depend on which boot answered (sv-surface D2).
+fn insight_client(state: &AppState) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
@@ -108,33 +84,19 @@ pub async fn clip_insight(
         .transpose()
         .map_err(|e| format!("Invalid position: {e}"))?;
 
-    // Attach: the clip crosses the wire — the daemon's service embeds and
-    // persists (one clip decider, the same `InsightService` this command
-    // drives in Local mode).
-    if state.is_attach_mode() {
-        let entry = attach_insight_client(&state)
-            .clip_insight(sovereign_turn_client::ClipInsight {
-                clipped_text: &clipped_text,
-                message_id: &message_id,
-                paragraph_index,
-                source,
-                position,
-            })
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(InsightNodeDto::from(entry));
-    }
-
-    let service = get_insight_service(&state).await?;
-    let message_id =
-        uuid::Uuid::parse_str(&message_id).map_err(|e| format!("Invalid message_id: {e}"))?;
-
-    let node = service
-        .clip(&clipped_text, message_id, paragraph_index, source, position)
+    // The clip crosses the wire in BOTH modes — the daemon's service embeds
+    // and persists. One clip decider (sv-surface D2).
+    let entry = insight_client(&state)
+        .clip_insight(sovereign_turn_client::ClipInsight {
+            clipped_text: &clipped_text,
+            message_id: &message_id,
+            paragraph_index,
+            source,
+            position,
+        })
         .await
         .map_err(|e| e.to_string())?;
-
-    Ok(InsightNodeDto::from(node))
+    Ok(InsightNodeDto::from(entry))
 }
 
 #[tauri::command]
@@ -142,20 +104,11 @@ pub async fn list_insights(
     limit: Option<usize>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
-    if state.is_attach_mode() {
-        let entries = attach_insight_client(&state)
-            .list_insights(limit)
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
-    }
-    let service = get_insight_service(&state).await?;
-    let nodes = service
-        .store
-        .list(limit.unwrap_or(50))
+    let entries = insight_client(&state)
+        .list_insights(limit)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(nodes.into_iter().map(InsightNodeDto::from).collect())
+    Ok(entries.into_iter().map(InsightNodeDto::from).collect())
 }
 
 #[tauri::command]
@@ -163,51 +116,65 @@ pub async fn search_insights(
     query: String,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<InsightNodeDto>, String> {
-    if state.is_attach_mode() {
-        let entries = attach_insight_client(&state)
-            .search_insights(&query)
-            .await
-            .map_err(|e| e.to_string())?;
-        return Ok(entries.into_iter().map(InsightNodeDto::from).collect());
-    }
-    let service = get_insight_service(&state).await?;
-    let nodes = service
-        .store
-        .search_text(&query, 20)
+    let entries = insight_client(&state)
+        .search_insights(&query)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(nodes.into_iter().map(InsightNodeDto::from).collect())
+    Ok(entries.into_iter().map(InsightNodeDto::from).collect())
 }
 
 #[tauri::command]
 pub async fn delete_insight(id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    if state.is_attach_mode() {
-        return attach_insight_client(&state)
-            .delete_insight(&id)
-            .await
-            .map_err(|e| e.to_string());
-    }
-    let service = get_insight_service(&state).await?;
-    let id = uuid::Uuid::parse_str(&id).map_err(|e| format!("Invalid id: {e}"))?;
-    service.store.delete(id).await.map_err(|e| e.to_string())
+    insight_client(&state)
+        .delete_insight(&id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
+/// `GET /v1/insights/sinks` — the daemon's OWN sink registry, in both
+/// boot modes (sv-surface D2's owed route, landed in 710a0326e).
+///
+/// This read THIS process's registry until now, which on an attached boot
+/// is empty however many vaults the daemon has connected — `any_connected`
+/// was false there regardless — and it hard-coded `sinks: vec![]` in every
+/// mode. Both are gone: the route answers the real registry, and the DTO
+/// carries whatever it holds.
 #[tauri::command]
 pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStatusDto, String> {
-    let service = get_insight_service(&state).await?;
-    let any_connected = service.sinks.any_connected().await;
+    let status = insight_client(&state)
+        .insight_sinks()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(SinkStatusDto {
-        any_connected,
-        sinks: vec![], // populated when Obsidian sink is added
+        any_connected: status.any_connected,
+        sinks: status
+            .sinks
+            .into_iter()
+            .map(|s| SinkInfoDto {
+                id: s.id,
+                display_name: s.display_name,
+                connected: s.connected,
+            })
+            .collect(),
     })
 }
 
+/// Start a conversation seeded with the text of the insights the user
+/// gathered. The NODE FETCH crosses (sv-surface D8): `POST
+/// /v1/insights/by-id` reads the daemon's own insight store — the one
+/// `clip_insight` has written to since D2, and on an attached boot not the
+/// one this process opened.
+///
+/// `missing` is reported, not dropped. `list_by_ids` silently omits an id
+/// that names no live row, so a short list alone would have seeded a
+/// conversation with fewer insights than the user selected and said nothing
+/// (ARCH §18.3). The conversation itself is still written to this process's
+/// store, which is where the chat surface reads it from.
 #[tauri::command]
 pub async fn explore_insights(
     node_ids: Vec<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let service = get_insight_service(&state).await?;
     let store = state
         .store
         .read()
@@ -215,20 +182,29 @@ pub async fn explore_insights(
         .clone()
         .ok_or_else(|| "Store not initialized".to_string())?;
 
-    let ids: Vec<uuid::Uuid> = node_ids
-        .iter()
-        .map(|s| uuid::Uuid::parse_str(s))
-        .collect::<Result<_, _>>()
-        .map_err(|e| format!("Invalid id: {e}"))?;
+    // Parse first: an id the store could never match is the caller's error,
+    // not an absence to report.
+    for s in &node_ids {
+        uuid::Uuid::parse_str(s).map_err(|e| format!("Invalid id: {e}"))?;
+    }
 
-    let nodes = service
-        .store
-        .list_by_ids(&ids)
+    let fetched = insight_client(&state)
+        .insights_by_id(&node_ids)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("explore_insights: {e}"))?;
+    if !fetched.missing.is_empty() {
+        return Err(format!(
+            "{} of the {} gathered insights no longer exist ({}). \
+             Refresh the gather tray and try again.",
+            fetched.missing.len(),
+            node_ids.len(),
+            fetched.missing.join(", ")
+        ));
+    }
 
     // Build context preamble from distillations.
-    let context_preamble = nodes
+    let context_preamble = fetched
+        .insights
         .iter()
         .map(|n| {
             format!(

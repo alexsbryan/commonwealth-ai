@@ -35,81 +35,80 @@ You are a Senior Architect. You look to apply SOLID principles and best practice
 
 ## The architectural compass — read this before you decide anything
 
-**This section exists because the compass kept getting lost.** Sessions boot holding a task frame — ranked next-actions, working set, drift posture — and no architecture, then make design calls with nothing to navigate by. The two architecture docs are 299KB together (~74k tokens); injecting them every session is not affordable and would not help anyway. What follows is the distillation: **the eleven you hold**, the four commitments they descend from (`sovereign/ARCH_PRINCIPLES.md §0`), the seventeen smells that mean *stop*, and the index of which door to open. Hold the eleven actively. Open the numbered section when one of them is at stake.
+**`sovereign/ARCH_PRINCIPLES.md` is now 6.2k tokens and is meant to be read
+WHOLE.** It was 19k across 80 sections and was sampled, never read — which is
+how a compass stops steering. It is now twelve principles under a fixed budget
+(8k file, 600 per section, never ratcheted), each carrying the incident that
+minted it. Read it on your first session in this repo, and re-read the one
+principle when it is at stake. The list below is the index, not a substitute.
 
-<!-- portable:start the eleven + the smell table -->
-### The eleven — hold these; everything else is lookup
+### The twelve — hold these
 
-`ARCH_PRINCIPLES.md`'s own distillation, and the only part of it you are expected to carry without opening the file. A violation of one of these should stop you mid-keystroke. Each names the section carrying its evidence.
+1. **Glassbox, always.** A decision invisible at `tracing=debug` is not finished.
+2. **Don't whack moles.** Instrument, reproduce, understand — *then* fix.
+   Behaviour-preserving refactors by default, one dimension at a time.
+3. **Write for the next reader.** Doc change lands in the same commit; comments
+   name the *why* and must be checkable, or they rot invisibly.
+4. **Cite, don't recall.** Verify before you claim it — `grep`, `symbols`, or a
+   run you just did. Claims in commit bodies bind too.
+5. **A gate you have not watched fail is not a gate.** Four verdicts, not two:
+   passed, failed, could-not-judge, never-ran — and the two that make no claim
+   are owed, not free.
+6. **Never silently substitute.** Refuse, or name the substitution. Absence is
+   reported, never defaulted; "did not answer" is not "answered: no".
+7. **Validate the instrument before the result.** One run is not a measurement,
+   and a judge is never tuned in one direction.
+8. **One decider, one name.** One implementation per threshold, scorer, schema
+   and key; one accessor per path; identity from essence, never a counter or an
+   address. Collapse the drive before you split the file.
+9. **Closed sets are enums, open sets are registries, open text is a centroid.**
+   Config that can change without a code change is data, not program.
+10. **Make it structural, not remembered.** Encode the invariant so it cannot be
+    forgotten — never ask a model to guarantee what code can enforce.
+11. **The inventory outranks the plan.** Prove what exists cannot serve before
+    you build new. A design that feels complicated is usually a missed reuse.
+12. **Draw the line by what each side owns about itself.** A gap in one thing is
+    not a job for another; calling something is not owning it; and you drew it
+    wrong when the uses go to zero and the ability stays.
 
-1. **Glassbox, always.** A decision invisible at `tracing=debug` is not finished. *(§0, §9)*
-2. **Don't whack moles.** Instrument, reproduce, understand — *then* fix. *(§0)*
-3. **Write for the next reader,** and land the doc change in the same commit as the code. *(§0, §1)*
-4. **Cite, don't recall.** Verify before you claim it — from `grep`, from `symbols`, or from a run you just did. *(§11)*
-5. **A gate you have not watched fail is not a gate.** Four verdicts, not two: passed, failed, could-not-judge, never-ran — and the two that make no claim are owed, not free. An abstention you have not watched be necessary is not rigor. *(§18.1, §18.2)*
-6. **Never silently substitute.** Refuse, or name the substitution in the response. Absence is reported, never defaulted. *(§18.3)*
-7. **Validate the instrument before the result.** One run is not a measurement. *(§18.4, §18.5)*
-8. **One decider, one name.** One implementation per threshold, scorer, schema and key; one accessor per path; identity from essence, never a counter or an address. *(§10.6, §7.5)*
-9. **Closed sets are enums, open sets are registries, open text is a centroid.** *(§2, §4)*
-10. **Make it structural, not remembered.** Encode the invariant so it cannot be forgotten — and never ask a model to guarantee what code can enforce. *(§7, §7.6)*
-11. **The inventory outranks the plan.** Survey what already exists — corpora, seams, tools, scripts, prior art — and prove it cannot serve before you build new. A design that feels complicated is usually a missed reuse. *(§19)*
+One through four are this workspace's operating ethos. Five through eight were
+earned — they describe this system's characteristic failure, a plausible,
+well-formed, exit-0 result that is wrong. Nine and ten prevent the most rework.
+Eleven was minted 2026-08-08 and twelve 2026-09-11, both by operator directive
+after the same pattern recurred a third time, every catch coming from the
+operator rather than the builder's own process.
 
-One through four are this workspace's declared ethos. **Five through eight were earned** — they are what six months of working notes say actually goes wrong here, and the failure they describe (a plausible, well-formed, exit-0 result that is wrong) is this system's characteristic one. Nine and ten prevent the most rework. Eleven was minted 2026-08-08 after the additive-bias pattern recurred a third documented time — each catch came from the operator, never from the builder's own process (§19).
+### The smell table — any of these in your own diff, fix it now
 
-### The smell table (`§15`) — any of these in your own diff, fix it now
-
-| Smell | See |
+| Smell | Principle |
 |---|---|
-| A `match` on string ids with more than 3 arms | §2.1 |
-| A file that crossed 1200 lines since the last split | §3.1 |
-| A trait with more than ~8 methods and no obvious sub-trait shape | §5.1 |
-| A large const string literal in a `.rs` file | §6.2 |
-| Two crates depending on the same third-party crate at different versions | §8.2 |
-| A non-`core` crate taking a direct dep on a re-exported shared type crate | §8.3 |
-| A branch of production code with no tracing event | §9.1 |
-| A refactor PR that also "just cleans up some nearby stuff" | §10.2 |
-| A claim in commit or PR body that a function exists, without a citation | §11.1 |
-| An assertion in English prose rather than in a test | §7.2 |
-| A check with no failing input you can name | §18.1 |
-| An abstention branch with no run that demanded it | §18.2 |
-| A guard asserting on a field the subject supplies or echoes back | §18.1 |
-| An `Err` collapsed into a success-shaped value | §18.3 |
-| A single-run delta reported as a result | §18.5 |
-| A judge change reported only in the direction it was meant to fix | §18.6 |
-| Two implementations of one threshold, formula, or key | §10.6 |
-| A key derived from a row count, sequence number, or network address | §7.5 |
-| New capability added without citing the existing surface that was checked | §19 |
+| A branch of production code with no tracing event | 1 |
+| A status field produced by a call that can block | 1 |
+| A refactor PR that also "just cleans up some nearby stuff" | 2 |
+| A comment asserting in English what a test could assert in code | 3, 10 |
+| A comment citing a path or symbol nobody checked | 3, 4 |
+| A claim in a commit or PR body with no citation | 4 |
+| A check with no failing input you can name | 5 |
+| An abstention branch with no run that demanded it | 5 |
+| A guard asserting on a field the subject supplies or echoes back | 5 |
+| An `Err` collapsed into a success-shaped value | 6 |
+| A single-run delta reported as a result | 7 |
+| A judge change reported only in the direction it was meant to fix | 7 |
+| Two implementations of one threshold, formula, or key | 8 |
+| A key derived from a row count, sequence number, or network address | 8 |
+| A `match` on string ids with more than 3 arms | 9 |
+| A large const string literal in a `.rs` file | 9 |
+| A guarantee asked of a model that code could enforce | 10 |
+| New capability added without citing the existing surface checked | 11 |
+| A component holding another's lifecycle | 12 |
+| A count that could reach zero with the ability fully intact | 12 |
 
-<!-- portable:end -->
-### Which door to open
-
-`ARCH_PRINCIPLES.md` is 19 numbered sections. **Read the section, not the file** — each is ~200-600 tokens and a targeted read is always affordable. Never recall a principle from memory when you're about to act on it; §11.1 is the principle that says so.
-
-| Question in front of you | Section |
-|---|---|
-| Am I about to write a doc, or does my change make one wrong? | §1 |
-| Stringly-typed ids, enums, wire-API constants | §2 |
-| Classifying open text — keyword list vs. embedding centroid | §2.4 |
-| This file is getting long / should I split it? | §3 |
-| Pluggable dispatch, unknown-id handling | §4 |
-| Trait surface too wide, pipeline stage coupling | §5 |
-| Config-as-data vs. code — the SICP separation | §6 |
-| A privacy or safety invariant needs to be unforgettable | §7 |
-| Crate deps, feature flags, the layer map (`quality/ARCH_LAYERS.toml`) | §8 |
-| What to trace and at which level | §9 |
-| I'm refactoring — scope, ordering, when to test first | §10 |
-| Am I about to claim something I haven't verified? | §11 |
-| Does this deserve a test, and which kind? | §12 |
-| Which MCP tool instead of grep | §13 |
-| How work lands: PR size, notes, roadmap, ATOS | §14 |
-| Review checklist of known smells | §15 |
-| What this doc is *not* / how to add to it | §16, §17 |
-| Is this green real? Gates, judges, benchmarks, silent fallbacks | §18 |
-| Am I changing a judge, scorer, veto or threshold? | §18.6 |
-| Am I asking a model to guarantee a behaviour? | §7.6 |
-| Health checks, probes, "is the peer alive?" | §9.5 |
-| Am I about to build something new — a store, pass, corpus, harness, script? | §19 |
-
+Rules with a ratchet behind them are NOT in ARCH_PRINCIPLES — they live in the
+gate that enforces them, which names its own fix command: file ceilings in
+`size-gate`, dependency direction in `layer-gate`, doc paths in `docs-gate`,
+version skew in `lock-gate`, wire constants in `api-gate`, new nouns in
+`concept-gate`, env vars in `env-gate`, zero-test runs in `sovereign-test.sh`.
+`cargo xtask quality` runs them all with one table.
 ### System geography — three tiers, cheapest first
 
 `SYSTEM_OVERVIEW.md` is 265KB and is **not** a document you read. Use it as a lookup surface:
@@ -118,7 +117,7 @@ One through four are this workspace's declared ethos. **Five through eight were 
 - **"Where does X live?"** `SYSTEM_OVERVIEW.md §8 "Where to look for what"` (line ~3362), or `§2 Workspace map` (line ~99) for the crate layout. Read the section.
 - **"What does the narrative claim about this symbol?"** `drift_findings(query: "name")` — cheaper and more exact than reading either doc.
 
-If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same commit. That is §1.1 and it is a contract, not a courtesy.
+If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same commit. That is ARCH principle 3 and it is a contract, not a courtesy.
 
 ## Code Intelligence (MCP, with CLI fallback)
 
@@ -390,7 +389,7 @@ honest), test names, corrections that lead with what was wrong, and comments
 where the next reader would otherwise misread the code. CUT: any document
 restating what the commit message, the test, and the data already say.
 
-This does not weaken §1.1 (a subsystem change updates its `SYSTEM_OVERVIEW`
+This does not weaken ARCH principle 3 (a subsystem change updates its `SYSTEM_OVERVIEW`
 entry in the same commit) or the closure-loop rule — those record what LANDED.
 It targets narrative about work in flight and work abandoned.
 

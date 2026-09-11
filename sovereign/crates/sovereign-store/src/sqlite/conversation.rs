@@ -233,6 +233,137 @@ impl ConversationStore for SqliteStateStore {
         Ok(())
     }
 
+    /// List conversations filtered by their surface tag. Drives the
+    /// cross-surface visibility restriction: the default chat
+    /// sidebar passes `None` (untagged conversations only); the
+    /// Inner Work history drawer passes `Some("inner-work")`;
+    /// Recipe Author passes `Some("recipe-author")`.
+    ///
+    /// The filter is exact-match: `None` returns conversations
+    /// where `skill_id IS NULL`; `Some(id)` returns conversations
+    /// where `skill_id = id`. There is no "all conversations"
+    /// affordance — that would defeat the visibility restriction
+    /// the surfaces are meant to enforce.
+    async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let conn = self.conn.lock().await;
+        let limit_i = limit as i64;
+        let offset_i = offset as i64;
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Conversation> {
+            let enabled_corpora_json: Option<String> = row.get(5)?;
+            let searched_sources_json: Option<String> = row.get(6)?;
+            Ok(Conversation {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                messages: Vec::new(),
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                version: 0,
+                deleted_at: None,
+                skill_id: row.get(4)?,
+                enabled_corpora: enabled_corpora_json
+                    .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
+                searched_sources: searched_sources_json.and_then(|s| {
+                    serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()
+                }),
+            })
+        };
+        let rows: Vec<Conversation> = match surface_skill_id {
+            Some(id) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources \
+                         FROM conversations \
+                         WHERE skill_id = ?1 AND deleted_at IS NULL \
+                         ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+                    )
+                    .map_err(map_db)?;
+                let iter = stmt
+                    .query_map(rusqlite::params![id, limit_i, offset_i], map_row)
+                    .map_err(map_db)?;
+                let collected: std::result::Result<Vec<_>, _> = iter.collect();
+                collected.map_err(map_db)?
+            }
+            None => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources \
+                         FROM conversations \
+                         WHERE skill_id IS NULL AND deleted_at IS NULL \
+                         ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
+                    )
+                    .map_err(map_db)?;
+                let iter = stmt
+                    .query_map(rusqlite::params![limit_i, offset_i], map_row)
+                    .map_err(map_db)?;
+                let collected: std::result::Result<Vec<_>, _> = iter.collect();
+                collected.map_err(map_db)?
+            }
+        };
+        Ok(rows)
+    }
+
+    /// List the conversations explicitly scoped to one corpus (notebook),
+    /// newest first — a notebook's Ask-tab history. A conversation
+    /// matches when its `enabled_corpora` allow-list *contains*
+    /// `corpus_id`. "Everything" conversations (`enabled_corpora IS NULL`)
+    /// are deliberately excluded, so a notebook only shows threads the
+    /// user actually had while scoped to it. Default-chat surface only
+    /// (`skill_id IS NULL`) — these are the conversations a notebook's
+    /// Ask tab mints. Mirrors `list_conversations_for_surface`'s row map.
+    async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let conn = self.conn.lock().await;
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Conversation> {
+            let enabled_corpora_json: Option<String> = row.get(5)?;
+            let searched_sources_json: Option<String> = row.get(6)?;
+            Ok(Conversation {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                messages: Vec::new(),
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                version: 0,
+                deleted_at: None,
+                skill_id: row.get(4)?,
+                enabled_corpora: enabled_corpora_json
+                    .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
+                searched_sources: searched_sources_json.and_then(|s| {
+                    serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()
+                }),
+            })
+        };
+        // `enabled_corpora IS NOT NULL` guards `json_each` against a NULL
+        // (and is exactly the "exclude everything-scoped" rule). `json_each`
+        // ships with SQLite ≥ 3.38.
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources \
+                 FROM conversations \
+                 WHERE skill_id IS NULL AND deleted_at IS NULL \
+                   AND enabled_corpora IS NOT NULL \
+                   AND EXISTS (SELECT 1 FROM json_each(conversations.enabled_corpora) WHERE value = ?1) \
+                 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(map_db)?;
+        let iter = stmt
+            .query_map(
+                rusqlite::params![corpus_id, limit as i64, offset as i64],
+                map_row,
+            )
+            .map_err(map_db)?;
+        let collected: std::result::Result<Vec<_>, _> = iter.collect();
+        collected.map_err(map_db)
+    }
+
     async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()> {
         let conn = self.conn.lock().await;
         let ts = now();

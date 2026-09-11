@@ -87,6 +87,11 @@ fn complete_frame_carries_provenance_and_citations() {
                     origin: "sep".into(),
                     count: 6,
                     from_peer: Some("mac-peer".into()),
+                    // Absent here on purpose — see the D7/G9 case below.
+                    // This pin proves a source WITHOUT a folder name
+                    // still serializes byte-for-byte as it did before
+                    // `display_name` existed.
+                    display_name: None,
                 }],
             }),
             citations: vec![Citation {
@@ -113,6 +118,47 @@ fn complete_frame_carries_provenance_and_citations() {
             r#""sources":[{"origin":"sep","count":6,"from_peer":"mac-peer"}]},"#,
             r#""citations":[{"corpus_id":"sep","chunk_id":"1396570","title":"Free Will","#,
             r#""snippet":"Compatibilism holds that...","score":0.91,"rank":0}]}}"#,
+        ),
+    );
+}
+
+/// sv-surface D7/G9. `ProvenanceSource.display_name` — the folder's
+/// user-typed name — rides the wire. Before this the typed projection
+/// dropped it and every wire-fed surface degraded "Case Files" to the
+/// `case-files-7f2a` slug. Pinned as bytes: the key sits AFTER
+/// `from_peer`, so the pin above (no folder name) is unchanged.
+#[test]
+fn provenance_source_carries_the_folder_display_name() {
+    pin_frame(
+        TurnFrame::Complete {
+            message_id: "m4".into(),
+            provenance: Some(Provenance {
+                inference_backend: "Qwen3.5-9B.Q8_0".into(),
+                routing_tier: None,
+                ttft_ms: None,
+                total_ms: None,
+                finish_reason: None,
+                max_tokens_budget: None,
+                completion_tokens: None,
+                sources: vec![ProvenanceSource {
+                    origin: "case-files-7f2a".into(),
+                    count: 4,
+                    from_peer: None,
+                    display_name: Some("Case Files".into()),
+                }],
+            }),
+            citations: Vec::new(),
+            epistemic_state: None,
+            task: None,
+            metadata: None,
+        },
+        concat!(
+            r#"{"type":"complete","data":{"message_id":"m4","#,
+            r#""provenance":{"inference_backend":"Qwen3.5-9B.Q8_0","#,
+            r#""sources":[{"origin":"case-files-7f2a","count":4,"#,
+            // `citations` is omitted when empty, so this pin also holds
+            // the D7 shape for a turn that cited nothing.
+            r#""display_name":"Case Files"}]}}}"#,
         ),
     );
 }
@@ -349,6 +395,48 @@ fn notice_frame_wire_form() {
         },
         r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"resolved"}}}}"#,
     );
+    // The two outcomes sv-surface RB2/RB4 added. `waiter_gone` was folded
+    // into `resolved` by the desk (a send into a dropped receiver reported
+    // success); `unclaimed` is the socket that never asked to answer, which
+    // rode a StreamError and therefore READ AS A DEAD TURN to both clients.
+    // Both are now ordinary outcomes on the ordinary notice.
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck {
+                id: "step:7".into(),
+                outcome: sovereign_contracts::types::ResolveOutcome::WaiterGone,
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"waiter_gone"}}}}"#,
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::ResolveAck {
+                id: "step:7".into(),
+                outcome: sovereign_contracts::types::ResolveOutcome::Unclaimed,
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"resolve_ack":{"id":"step:7","outcome":"unclaimed"}}}}"#,
+    );
+    // The bookend to `turn_started` (sv-surface RB1): the host has nothing
+    // further for this turn and the socket may close. `message_id` is
+    // OMITTED when the turn produced none — absent, never `null` (§18.3).
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnSettled {
+                message_id: "m1".into(),
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"turn_settled":{"message_id":"m1"}}}}"#,
+    );
+    pin_frame(
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnSettled {
+                message_id: String::new(),
+            },
+        },
+        r#"{"type":"notice","data":{"notice":{"turn_settled":{}}}}"#,
+    );
     // G7's two routing events — payloads that already lived in contracts;
     // these pins are their first wire form.
     pin_frame(
@@ -505,6 +593,13 @@ fn turn_request_wire_form() {
                 session_id: "s1".into(),
                 intent_hint: "Comparison".into(),
             },
+        ),
+        (
+            // G2: the cancel carries NOTHING — the host aborts whatever is
+            // in flight on this socket, and the turn's own terminal frame
+            // says how it ended.
+            r#"{"type":"cancel","data":{}}"#,
+            TurnRequest::Cancel {},
         ),
     ];
     for (wire, expected) in cases {

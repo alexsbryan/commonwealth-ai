@@ -26,6 +26,10 @@ pub struct AppState {
     /// screen drains it via `take_pending_pair_link` on mount; warm
     /// opens ride the `pair-link` event instead.
     pub pending_pair_link: Mutex<Option<String>>,
+    /// The write half of every turn socket with a turn in flight, keyed by
+    /// conversation. `answer_prompt` / `cancel_turn` reach the socket
+    /// through this while the drive task is parked reading frames.
+    pub senders: crate::remote::stream::SenderRegistry,
 }
 
 impl AppState {
@@ -35,11 +39,15 @@ impl AppState {
             credentials,
             bridges: crate::iroh_bridge::BridgeManager::new(),
             pending_pair_link: Mutex::new(None),
+            senders: Default::default(),
         }
     }
 
     fn with_db<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
-        let conn = self.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+        let conn = self
+            .db
+            .lock()
+            .map_err(|_| Error::Other("db poisoned".into()))?;
         f(&conn)
     }
 

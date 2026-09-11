@@ -29,6 +29,11 @@ sovereign-inference = { workspace = true }
 # Compute-child process boundary (P1): the `--compute-child` re-exec arm in
 # run_with_args + the daemon-side ComputeChildManager/provider facade.
 sovereign-compute = { workspace = true }
+# OS service registration (launchd / systemd / Task Scheduler). Extracted from
+# this crate so a surface can register the daemon WITHOUT linking it — the
+# `sv-no-daemon-management` bar. The daemon is its first consumer, not its
+# owner (ARCH §10.6).
+sovereign-service = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }

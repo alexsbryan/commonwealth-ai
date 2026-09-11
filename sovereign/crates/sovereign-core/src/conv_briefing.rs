@@ -748,11 +748,17 @@ mod tests {
 
     /// Minimal `ConvTieredReader` for unit-testing the vault
     /// synthesis briefing render path. Returns whatever themes the
-    /// test pre-loads; all other trait methods return empty results.
+    /// test pre-loads; all other RETRIEVAL methods return empty results.
+    /// The five `ConvBrowseReader` methods take the trait default and
+    /// REFUSE — this stub has no tables to page.
     #[derive(Default)]
     struct StubVaultReader {
         themes: HashMap<String, Vec<VaultThemeRow>>,
     }
+
+    // The browse half it genuinely cannot serve: no overrides, so every
+    // method refuses by name rather than returning an empty page.
+    impl crate::conv_tiered::ConvBrowseReader for StubVaultReader {}
 
     #[async_trait::async_trait]
     impl crate::conv_tiered::ConvTieredReader for StubVaultReader {

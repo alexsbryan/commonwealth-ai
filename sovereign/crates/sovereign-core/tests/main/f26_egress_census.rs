@@ -151,6 +151,25 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback-only at both layers and refuses anything else — so the class
     // is LocalDaemon, not egress. Nothing here leaves the machine.
     ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
+    // `reach.rs` — the named reachability capability (sv-surface,
+    // 2026-09-11). One `reqwest::Client` in `ServingHost::at`, used for a
+    // `GET /v1/models` readiness probe against the base the CALLER supplies.
+    // Same class and the same reason as the row above: a probe carries no
+    // estate payload out, and the base is this host's own daemon. It is the
+    // one implementation of that probe for every surface — thirteen private
+    // copies preceded it — so this row is where a future probe-site review
+    // lands instead of in each consumer.
+    ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
+    // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
+    // `TurnClient::new(base_url)` over the same client family the desktop
+    // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
+    // The base url is the OWNER's own daemon on the LAN or over the mesh,
+    // reached by pairing — the estate's own transport, not a third party,
+    // and no estate content leaves the estate. Class Mesh for the same
+    // reason peer traffic is: own auth (the daemon's), custody class peer.
+    // Joined the workspace 2026-09-10, which is when the census first saw
+    // it.
+    ("sovereign-mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
     // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
     // the module became a directory on 2026-09-07 in registry-1-selections, so
     // the one row became two — same two clients, same class, split across the
@@ -310,12 +329,21 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
+    // state.rs: B4's identity probe (65b92cd15) — on a run-lock refusal the
+    // desktop asks the client port WHO holds it, reading /status.process.pid
+    // over loopback before attaching to the holder. Its own daemon's port;
+    // nothing leaves the machine.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs", Class::LocalDaemon, 1),
+    // attach_watch.rs held a `reqwest::Client` for its own `/v1/models`
+    // poll until sv-surface (2026-09-11) moved the probe onto
+    // `ServingHost::is_serving`. The module keeps the BANNER — how many
+    // consecutive misses raise it — and constructs no client at all, which
+    // is why it has no row here.
 
     // ---- sovereign-enrichment-build ----
     // R-5's named path: the enrich --provider dispatch. The chat
@@ -376,7 +404,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
+    // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
+    // building its own client and asks `ServingHost` instead.
+    ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-cli-llm/src/remote_gguf.rs", Class::InboundOnly, 2),

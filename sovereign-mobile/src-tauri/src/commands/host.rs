@@ -54,7 +54,10 @@ pub async fn add_host_connection(
     // metadata → SQLite.
     state.credentials.set_token(&id, &token)?;
     {
-        let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| Error::Other("db poisoned".into()))?;
         conn_store::insert(&conn, &hc)?;
         conn.execute(
             "INSERT INTO credential (id, host_connection_id, tenant_id, issued_at, expires_at)
@@ -79,13 +82,19 @@ pub async fn add_host_connection(
 
 #[tauri::command]
 pub async fn list_host_connections(state: State<'_, AppState>) -> Result<Vec<HostConnection>> {
-    let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| Error::Other("db poisoned".into()))?;
     conn_store::list(&conn)
 }
 
 #[tauri::command]
 pub async fn set_default_host(state: State<'_, AppState>, id: String) -> Result<()> {
-    let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| Error::Other("db poisoned".into()))?;
     conn_store::set_default(&conn, &id)
 }
 
@@ -102,7 +111,10 @@ pub async fn remove_host_connection(state: State<'_, AppState>, id: String) -> R
     // so the accept loop doesn't outlive the row.
     state.bridges.drop_bridge(&id).await;
     state.credentials.delete_token(&id)?;
-    let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| Error::Other("db poisoned".into()))?;
     conn.execute(
         "DELETE FROM credential WHERE host_connection_id = ?1",
         rusqlite::params![id],

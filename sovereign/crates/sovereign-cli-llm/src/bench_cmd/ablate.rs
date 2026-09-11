@@ -396,16 +396,13 @@ fn lock_holders() -> Vec<i32> {
         .unwrap_or_default()
 }
 
+/// :9741 has no `/healthz` (it 404s) — and which door answers that is the
+/// client's decision, not this harness's: `ServingHost` is the one
+/// implementation of "is a backend reachable" (sv-surface, 2026-09-11).
 async fn daemon_reachable() -> bool {
-    // :9741 has no /healthz (it 404s) — /v1/models is the liveness probe.
-    matches!(
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            reqwest::get("http://127.0.0.1:9741/v1/models"),
-        )
-        .await,
-        Ok(Ok(r)) if r.status().is_success()
-    )
+    sovereign_turn_client::ServingHost::at("http://127.0.0.1:9741")
+        .wait_until_serving(std::time::Duration::from_secs(5))
+        .await
 }
 
 /// Stop whatever daemon is running and wait until the run lock is free.

@@ -1,0 +1,283 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! sv-surface D3 + D4: the atlas-browse surface and the MeshApp atom
+//! readers hold NO local reader. Both read the daemon's routes, in both
+//! boot modes, because Local means the daemon is in-process over this
+//! process's own `corpus_engine`.
+//!
+//! # The state this makes unrepresentable
+//!
+//! A second atlas reader in the desktop. Two of them were deleted here:
+//!
+//!   * `atlas_commands.rs` constructed a `FileAtlasReader` over
+//!     `engine.index_dir()` in each of six browse commands, and carried a
+//!     private `section_id → chunk_id` cache — a full 2.8 GB chunks.lance
+//!     scan on Wikipedia — so the same map was built once per SURFACE
+//!     rather than once per host.
+//!   * `commands/meshapp.rs::load_atoms` opened `atlas/atoms.json` with
+//!     `corpus_engine::enrichment::atlas::read_atlas_atoms`, which means
+//!     it answered NOTHING on an attached boot: the atlas belongs to the
+//!     daemon's index dir, not this process's.
+//!
+//!   * the same file's THIRTEEN explorer ops resolved the corpus's index
+//!     directory from this process's `CorpusEngine::installed_indexes()`
+//!     and called `sovereign_meshapp::*` on it — thirteen more reads that
+//!     answer nothing on an attached boot, each re-applying its own page
+//!     default and clamp beside the route's.
+//!
+//!   * the same file's SIX conversation-tiered commands read
+//!     `SqliteStateStore`'s inherent `conv_*` methods off the handle
+//!     stashed at desktop bootstrap — a store that, on an attached boot,
+//!     is not the one the daemon enriched into. Two of those six folded a
+//!     reader FAILURE into a plausible empty (`list_conv_raptor_nodes(..)
+//!     .unwrap_or_default()` -> "no entities"; `get_active_correction(..)
+//!     .ok().flatten()` -> "not revised by you"), which is §18.3's
+//!     silent substitution with a UI in front of it.
+//!
+//! All four are now one call each onto `sovereign_mesh::{atlas_http,
+//! reading_http, meshapp_http}` over `client_base_url()`. Bring any back —
+//! a `FileAtlasReader` in a browse command, a `read_atlas_atoms` or a
+//! `sovereign_meshapp::load_graph` in the MeshApp bridge, a `sqlite_store`
+//! read in a conv command — and this goes red naming the rule.
+//!
+//! # Calibration (ARCH §18.1 — name the failing input)
+//!
+//! PRODUCTION lines only, and only above `#[cfg(test)]`. Comment lines
+//! are excluded for the reason `reading_wire_types_census` records: the
+//! doc comment that explains why the local reader is gone has to NAME the
+//! reader to do so, and prose that mentions a needle is documentation,
+//! not a second path. `atlas_commands.rs`'s own test module is excluded
+//! for the analogous reason — its two fixture tests drive
+//! `FileAtlasReader` directly ON PURPOSE, to validate the on-disk atlas
+//! the ROUTE will read; that is a fixture check, not a desktop read path.
+
+use std::path::Path;
+
+fn production_source(rel: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    // Cut the test module off, then drop comment lines.
+    let prod = match src.find("\n#[cfg(test)]") {
+        Some(i) => &src[..i],
+        None => &src[..],
+    };
+    prod.lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !t.starts_with("//")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn the_atlas_browse_surface_holds_no_reader() {
+    let code = production_source("src/atlas_commands.rs");
+    assert!(
+        !code.contains("FileAtlasReader"),
+        "sv-surface D4: atlas_commands.rs constructs a FileAtlasReader again. \
+         The six browse commands are one call each onto sovereign_mesh::\
+         atlas_http's routes over client_base_url() — the daemon holds the \
+         reader, and holds it once. A local one is a second decider for the \
+         same six answers, and it is the one that cannot see an attached \
+         daemon's index_dir."
+    );
+    assert!(
+        !code.contains("index_dir"),
+        "sv-surface D4: atlas_commands.rs reads the corpus engine's index_dir \
+         again. The browse commands do not know where the atlas lives; the \
+         route does."
+    );
+    assert!(
+        !code.contains("section_chunk_index") && !code.contains("SectionMapState"),
+        "sv-surface D4: the section→chunk cache is back in atlas_commands.rs. \
+         Building it is a full chunks.lance scan (2.8 GB / ~90s on Wikipedia); \
+         atlas_http::atom_detail owns that cache now, so it is built ONCE per \
+         host rather than once per surface."
+    );
+}
+
+#[test]
+fn the_meshapp_atom_readers_read_the_wire() {
+    let code = production_source("src/commands/meshapp.rs");
+    assert!(
+        !code.contains("read_atlas_atoms"),
+        "sv-surface D3: commands/meshapp.rs opens atlas/atoms.json directly \
+         again. The three atom readers (read_corpus, search_parcels, \
+         parcel_analytics) go through wire_atoms -> \
+         TurnClient::corpus_atoms_all over GET /internal/corpus/{{c}}/atoms — \
+         the same bytes in both boot modes. A direct file read answers \
+         nothing at all on an attached boot."
+    );
+    // The wire read is the ONE path — not a Local arm beside it.
+    assert!(
+        !code.contains("is_attach_mode"),
+        "sv-surface D3: commands/meshapp.rs forks on the boot mode. The \
+         campaign's directive is one path in both modes; Local means the \
+         daemon is in-process, not that there is a second reader."
+    );
+    // The gate CANNOT cross the wire (campaign X2): the webview label is
+    // host-assigned to a window in THIS process. Every gated command must
+    // still carry it — a wire repoint that dropped it would be a silent
+    // authorization hole, so this counts it rather than trusting review.
+    let authorize_calls = code.matches("authorize(&installs, webview.label()").count();
+    assert!(
+        authorize_calls >= 17,
+        "sv-surface X2: only {authorize_calls} MeshApp commands still gate on \
+         authorize(&installs, webview.label(), ...). The permission gate cannot \
+         cross the wire — the webview label is host-assigned to a window in \
+         THIS process and is the only unspoofable caller identity the bridge \
+         has. A repoint that drops it is an authorization hole, not a cleanup."
+    );
+}
+
+/// The thirteen explorer ops (sv-surface D3's delete half). Each one is
+/// now `TurnClient::meshapp_*` over `GET /internal/meshapp/{corpus}/...`,
+/// which runs THIS projection on the daemon's index dir.
+///
+/// The names are checked as CALLS (`sovereign_meshapp::load_graph(`), not
+/// as bare identifiers: the commands still name `sovereign_meshapp`'s DTOs
+/// as their return types, and must — a repoint that changed the type the
+/// frontend receives would be feature loss dressed as cleanup. What may
+/// not come back is the projection running HERE.
+const LOCAL_PROJECTIONS: &[&str] = &[
+    "sovereign_meshapp::load_graph(",
+    "sovereign_meshapp::graph_nodes(",
+    "sovereign_meshapp::node_detail(",
+    "sovereign_meshapp::findings(",
+    "sovereign_meshapp::search_entities(",
+    "sovereign_meshapp::load_claims(",
+    "sovereign_meshapp::load_questions(",
+    "sovereign_meshapp::reconciliation(",
+    "sovereign_meshapp::subgraph(",
+    "sovereign_meshapp::corpus_stats(",
+    "sovereign_meshapp::timeline(",
+    "sovereign_meshapp::read_chunk(",
+    "sovereign_meshapp::document_feed(",
+    "sovereign_meshapp::wrapped::wrapped_artifact(",
+];
+
+#[test]
+fn the_meshapp_explorer_ops_read_the_wire() {
+    let code = production_source("src/commands/meshapp.rs");
+    for call in LOCAL_PROJECTIONS {
+        assert!(
+            !code.contains(call),
+            "sv-surface D3: commands/meshapp.rs runs the projection `{call}` \
+             in-process again. The thirteen explorer ops are one \
+             TurnClient::meshapp_* call each onto GET /internal/meshapp/\
+             {{corpus}}/... — the daemon runs the very same sovereign-meshapp \
+             function over ITS index dir, which is the only one an attached \
+             boot can see. Keep the DTO, lose the read."
+        );
+    }
+    assert!(
+        !code.contains("resolve_index_path") && !code.contains("installed_indexes"),
+        "sv-surface D3: commands/meshapp.rs resolves a corpus's on-disk index \
+         directory again. The bridge does not know where an index lives — the \
+         route does, and it resolves it against the DAEMON's corpus engine. A \
+         local resolve is how thirteen commands came to answer `corpus is not \
+         installed` on a boot where it was installed all along."
+    );
+    // One decider for the page defaults (ARCH §10.6): the route applies
+    // them and says what it applied. A command that re-derives one is a
+    // second decider whose answer silently wins over the host's.
+    //
+    // Scoped to the EXPLORER commands — everything from `meshapp_graph`
+    // down. The three parcel folds above it (read_corpus, search_parcels,
+    // parcel_analytics) page their own fold over `corpus_atoms_all`, which
+    // serves every atom; their caps are this file's to decide and stay.
+    let explorer = &code[code
+        .find("pub async fn meshapp_graph(")
+        .expect("meshapp_graph is the first explorer command; the section marker moved")..];
+    for clamp in [
+        ".unwrap_or(50).min(500)",
+        ".unwrap_or(25).min(100)",
+        ".unwrap_or(100).min(500)",
+        ".unwrap_or(30).min(80)",
+        ".unwrap_or(14).clamp(1, 90)",
+    ] {
+        assert!(
+            !explorer.contains(clamp),
+            "sv-surface D3: commands/meshapp.rs re-applies the page clamp \
+             `{clamp}`. The defaults and maxima live in meshapp_http's \
+             GRAPH_/ENTITY_/ATOM_/SUBGRAPH_/FEED_ constants; passing Option \
+             through is what makes the host the one decider."
+        );
+    }
+}
+
+/// The six conversation-tiered browse commands (sv-surface D4 remainder).
+/// Each is one `TurnClient::conv_*` call onto
+/// `GET /internal/atlas/conv/...`, which reads the daemon's
+/// `runtime.lane_sources.conv_tiered`.
+///
+/// Checked as CALLS with their receiver, not as bare identifiers: the
+/// commands still name `atlas_view`'s `Conv*` types as their return types
+/// and must — a repoint that changed the bytes the frontend receives
+/// would be feature loss dressed as cleanup. What may not come back is
+/// the READ running here.
+/// Each is spelled with the leading receiver dot: `atlas_get_chunk_entity
+/// _progress` is a COMMAND name that ends in one of these method names, so
+/// a bare-identifier needle matches the very function it is guarding and
+/// the gate can never go green. (Watched: it did exactly that on first
+/// run, naming `get_chunk_entity_progress(` against its own command.)
+const LOCAL_CONV_READS: &[&str] = &[
+    ".list_conv_corpora_with_state_buckets(",
+    ".list_conversations_paginated(",
+    ".get_conv_skeleton(",
+    ".list_conv_raptor_nodes(",
+    ".get_active_correction(",
+    ".aggregate_entity(",
+    ".get_chunk_entity_progress(",
+];
+
+#[test]
+fn the_conv_browse_surface_holds_no_store() {
+    let code = production_source("src/atlas_commands.rs");
+    assert!(
+        !code.contains("sqlite_store"),
+        "sv-surface D4: atlas_commands.rs holds the SqliteStateStore again. \
+         The six conv commands are one TurnClient::conv_* call each onto \
+         GET /internal/atlas/conv/... — the daemon reads its OWN \
+         conv_tiered lane source, which is the only one an attached boot \
+         shares with the enrichment that wrote it."
+    );
+    for read in LOCAL_CONV_READS {
+        assert!(
+            !code.contains(read),
+            "sv-surface D4: atlas_commands.rs runs the conv read `{read}` \
+             in-process again. The route runs the very same reader method \
+             over the daemon's store. Keep the type, lose the read."
+        );
+    }
+    // The two swallows, by name (ARCH §18.3). These are the reason the
+    // repoint is not merely a move: the route REPORTS both failures, so
+    // the commands surface an Err where they used to answer a plausible
+    // empty. Re-introducing either here would put the wrong answer back
+    // in front of the user with the wire still underneath it.
+    assert!(
+        !code.contains("unwrap_or_default()"),
+        "sv-surface D4: atlas_commands.rs swallows a conv read failure into \
+         an empty again. `list_conv_raptor_nodes(..).unwrap_or_default()` \
+         rendered a reader error as `this conversation has no entities` on \
+         every row of the list. Absence is reported, never defaulted."
+    );
+    assert!(
+        !code.contains(".ok()"),
+        "sv-surface D4: atlas_commands.rs swallows a conv read failure with \
+         `.ok()` again. `get_active_correction(..).ok().flatten()` rendered \
+         a reader error as `not revised by you` — the provenance badge \
+         saying the opposite of what happened."
+    );
+    // The salience formula moved DOWN with the read: the route ranks for
+    // both `top_entities` and the chip row. Two copies of one formula is
+    // the §10.6 smell, and the copy here was the one that could disagree.
+    assert!(
+        !code.contains("cluster_coherence"),
+        "sv-surface D4/§10.6: atlas_commands.rs re-derives the entity \
+         salience rank. One scorer, and it is the route's — it feeds both \
+         atlas_list_conversations' top_entities and atlas_get_conv_entities' \
+         chips from the same fold."
+    );
+}

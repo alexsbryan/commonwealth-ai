@@ -1,14 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! HTTP client for the host's `sovereign-server`. Injects the tenant
-//! token, only ever dials the configured tailnet address (no fallback
-//! route — fail-closed off-tailnet is enforced upstream by the monitor),
-//! and surfaces `503 + Retry-After` as [`Error::HostBusy`] so the busy
-//! state stays distinct from a hard failure.
+//! The phone's REST client — the tenant-authed half.
+//!
+//! # What this is, now that it is not the wire
+//!
+//! Conversation CRUD is NOT here any more. It is
+//! [`sovereign_turn_client::TurnClient`], and the two inline `#[derive(
+//! Deserialize)] struct Wrap { conversations }` / `struct R { id }`
+//! envelopes that used to parse it by hand are gone with it — they were the
+//! REST half of the same hand-rolled consumer `remote::dto`'s `ServerEvent`
+//! was the streaming half (sv-surface R6, `sv-one-client`).
+//!
+//! What remains is the tenant-front's OWN surface — `GET /v1/corpora` and
+//! the reading window — plus the two things the turn client deliberately
+//! does not do: inject the tenant bearer token, and surface `503 +
+//! Retry-After` as [`Error::HostBusy`] so the busy state stays distinct
+//! from a hard failure. See `Self::turn` for where that boundary bites.
 
 use reqwest::{Client, StatusCode};
+use sovereign_turn_client::TurnClient;
 
 use crate::error::{Error, Result};
-use crate::remote::dto::{ConversationDto, CorpusListDto, CorpusRefDto, ReadingWindowDto};
+use crate::remote::dto::{
+    Citation, ConversationDto, CorpusListDto, CorpusRefDto, MessageDto, Provenance,
+    ReadingWindowDto,
+};
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -46,14 +61,26 @@ impl ApiClient {
         format!("{}{}", self.base_url, path)
     }
 
-    /// `ws(s)://<host>/v1/conversations/<id>/stream`.
-    pub fn ws_url(&self, conversation_id: &str) -> String {
-        let ws_base = self.base_url.replacen("http", "ws", 1);
-        format!("{ws_base}/v1/conversations/{conversation_id}/stream")
+    /// The host root this client dials — what [`TurnClient`] is built on.
+    pub fn base_url(&self) -> &str {
+        &self.base_url
     }
 
-    pub fn token(&self) -> &str {
-        &self.token
+    /// THE client family, pointed at this host.
+    ///
+    /// # The gap this method does not close
+    ///
+    /// `TurnClient` builds its own bare `reqwest::Client` and dials the
+    /// WebSocket with `connect_async(url)` — it has no way to carry a
+    /// bearer token on either transport. So this reaches a DAEMON (which
+    /// authenticates nobody) and not the tenant-front `sovereign-server`
+    /// with `[auth] mode = "api_key"` set, which is the campaign's
+    /// daemon-first order and not an oversight. The tenant path needs a
+    /// token seam on the family; until it has one, the token is injected
+    /// only by the REST calls below. Said here rather than defaulted
+    /// silently (ARCH §18.3).
+    pub fn turn(&self) -> TurnClient {
+        TurnClient::new(self.base_url.clone())
     }
 
     async fn parse<T: serde::de::DeserializeOwned>(&self, resp: reqwest::Response) -> Result<T> {
@@ -84,46 +111,61 @@ impl ApiClient {
     }
 
     pub async fn list_conversations(&self) -> Result<Vec<ConversationDto>> {
-        #[derive(serde::Deserialize)]
-        struct Wrap {
-            #[serde(default)]
-            conversations: Vec<ConversationDto>,
-        }
-        let w: Wrap = self.get_json("/v1/conversations").await?;
-        Ok(w.conversations)
+        let rows = self
+            .turn()
+            .list_conversations(None, None)
+            .await
+            .map_err(|e| Error::Http(e.to_string()))?;
+        Ok(rows
+            .into_iter()
+            .map(|c| ConversationDto {
+                id: c.id,
+                title: c.title,
+                // The list projection carries no bodies; the phone's list
+                // screen renders titles and reconciles per-conversation on
+                // open. Empty because the host sent none, which is what the
+                // cache upsert must not mistake for "the conversation was
+                // emptied" — `upsert_conversation` writes the row only.
+                messages: Vec::new(),
+                created_at: c.created_at,
+                updated_at: c.updated_at,
+                synced_version: None,
+                indexed_in_corpus: false,
+            })
+            .collect())
     }
 
     pub async fn get_conversation(&self, id: &str) -> Result<ConversationDto> {
-        self.get_json(&format!("/v1/conversations/{id}")).await
+        let h = self
+            .turn()
+            .get_conversation(id)
+            .await
+            .map_err(|e| Error::Http(e.to_string()))?;
+        Ok(ConversationDto {
+            id: h.id,
+            title: h.title,
+            messages: h.messages.into_iter().map(message_dto).collect(),
+            created_at: h.created_at,
+            updated_at: h.updated_at,
+            synced_version: None,
+            indexed_in_corpus: false,
+        })
     }
 
     pub async fn create_conversation(&self) -> Result<String> {
-        #[derive(serde::Deserialize)]
-        struct R {
-            id: String,
-        }
-        let resp = self
-            .http
-            .post(self.url("/v1/conversations"))
-            .bearer_auth(&self.token)
-            .send()
-            .await?;
-        let r: R = self.parse(resp).await?;
-        Ok(r.id)
+        Ok(self
+            .turn()
+            .create_conversation(None, None)
+            .await
+            .map_err(|e| Error::Http(e.to_string()))?
+            .id)
     }
 
     pub async fn delete_conversation(&self, id: &str) -> Result<()> {
-        let resp = self
-            .http
-            .delete(self.url(&format!("/v1/conversations/{id}")))
-            .bearer_auth(&self.token)
-            .send()
-            .await?;
-        if resp.status().is_success() {
-            Ok(())
-        } else {
-            Err(Error::Http(resp.status().to_string()))
-        }
+        self.turn()
+            .delete_conversation(id)
+            .await
+            .map_err(|e| Error::Http(e.to_string()))
     }
 
     pub async fn list_corpora(&self) -> Result<Vec<CorpusRefDto>> {
@@ -135,14 +177,32 @@ impl ApiClient {
     /// the reader. `chunk_id` is the opaque string handle the client holds;
     /// the host parses it as a numeric corpus chunk id (a non-numeric id
     /// simply 404s and the reader degrades to the cached snippet).
-    pub async fn read_chunk(
-        &self,
-        corpus_id: &str,
-        chunk_id: &str,
-    ) -> Result<ReadingWindowDto> {
+    pub async fn read_chunk(&self, corpus_id: &str, chunk_id: &str) -> Result<ReadingWindowDto> {
         self.get_json(&format!(
             "/v1/corpora/{corpus_id}/chunks/{chunk_id}?radius=1"
         ))
         .await
+    }
+}
+
+/// One history message, as the phone's cache and WebView want it.
+///
+/// The projections (`Provenance`, `Citation`) are the CONTRACT's, carried
+/// straight through — this maps the envelope, never the payload, which is
+/// the difference between an adapter and the mirror R6 deleted.
+fn message_dto(m: sovereign_turn_client::ConversationMessage) -> MessageDto {
+    let provenance: Option<Provenance> = m.provenance;
+    let citations: Vec<Citation> = m.citations;
+    MessageDto {
+        id: m.id,
+        conversation_id: String::new(),
+        role: m.role,
+        content: m.content,
+        status: Some("complete".into()),
+        created_at: m.created_at,
+        server_version: None,
+        provenance,
+        citations,
+        metadata: None,
     }
 }

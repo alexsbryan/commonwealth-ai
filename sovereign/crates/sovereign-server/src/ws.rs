@@ -9,7 +9,7 @@ use futures::{SinkExt, StreamExt};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 
-use sovereign_contracts::types::{TurnFrame, TurnRequest};
+use sovereign_contracts::types::{TurnFrame, TurnNotice, TurnRequest};
 use sovereign_core::approval_desk::ResolveOutcome;
 use sovereign_core::runtime::{serve_turn, Runtime};
 use sovereign_core::traits::StateStore;
@@ -240,9 +240,13 @@ async fn handle_ws(
             }
             // sv-surface R1: the two reply variants folded into
             // `Answer { id, answer }` — the id the Prompt arrived under.
-            // The outcome is traced rather than streamed back as an error
-            // (this host's clients historically heard nothing, and G8's
-            // ResolveAck is the proper wire answer, landing with R3).
+            // R4/RB4: the outcome now goes BACK, as `Notice::ResolveAck` on
+            // the socket that answered. This host discarded it — its clients
+            // heard nothing at all and could not tell "accepted" from "never
+            // arrived" (§18.3) — and a notice is the right carrier because a
+            // refused answer is a recoverable fact about ONE question, never
+            // the death of the turn (`StreamError` is that, and both clients
+            // treat it as terminal).
             TurnRequest::Answer { id, answer } => {
                 let outcome = approval.submit(&id, &answer);
                 if outcome != ResolveOutcome::Resolved {
@@ -253,6 +257,9 @@ async fn handle_ws(
                         "ws: answer resolved nothing"
                     );
                 }
+                let _ = out_tx.send(TurnFrame::Notice {
+                    notice: TurnNotice::ResolveAck { id, outcome },
+                });
             }
             // Session continuation is the local daemon's half of the protocol
             // (sv-surface rung 6 C2-b). This host's `TenantRuntime` does hold
@@ -274,6 +281,23 @@ async fn handle_ws(
                     message: "this host does not serve session continuations — resume and \
                               redirect are served by the local daemon, whose sessions are not \
                               tenant-scoped"
+                        .to_string(),
+                    retry_after_secs: None,
+                });
+            }
+            // G2 cancel, same tenant shape: the cancel targets "this
+            // conversation's" session, and the session store here is
+            // unscoped — cancelling by an unscoped key could trip ANOTHER
+            // tenant's token. Same named debt as above; the local daemon
+            // serves the cancel.
+            TurnRequest::Cancel {} => {
+                tracing::warn!(
+                    conversation_id = %conversation_id,
+                    "ws: cancel refused — tenant host serves no unscoped sessions"
+                );
+                let _ = out_tx.send(TurnFrame::StreamError {
+                    message: "this host does not serve turn cancellation — cancel is \
+                              served by the local daemon, whose sessions are not tenant-scoped"
                         .to_string(),
                     retry_after_secs: None,
                 });

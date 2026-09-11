@@ -32,7 +32,6 @@
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 2	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
-2	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/solve_http.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs
 1	sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs

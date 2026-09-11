@@ -8,12 +8,29 @@
 //! decider. Attach mode means a daemon is already serving on the client
 //! port; the campaign's claim is that the desktop in that mode is a CLIENT
 //! (`svrn chat`'s shape), not a second assembler. The floor is the measured
-//! inventory below — 13 constructions in `state.rs`'s spine plus the
-//! attach-mode provider in the builders file (14 total), all reachable from
-//! `bootstrap_with_progress` in BOTH boot modes (only the `EmbeddedDaemon`
-//! commission and `RunLock` are Local-only). Each campaign rung deletes
-//! needles; the total only moves through a rung row recorded in the
-//! campaign file, never silently.
+//! inventory below — 11 constructions in `state.rs`'s spine plus the
+//! attach-mode provider in the builders file (12 total), all reachable from
+//! `bootstrap_with_progress` in BOTH boot modes. Each campaign rung deletes
+//! needles; the total only moves through a rung row recorded in the campaign
+//! file, never silently.
+//!
+//! # 14 -> 12, and the instrument was wrong about one of them (sv-surface D0)
+//!
+//! `WatchedSubsystem::install` was never attach-reachable: it sits inside
+//! `if let Some((daemon_handle, cli_cfg)) = local_daemon_wiring`, which is
+//! `None` in attach. A needle list that counts a Local-only construction
+//! against the ATTACH floor overstates the bar and — worse for an instrument
+//! — would have gone green on its deletion for the wrong reason. It moves to
+//! `the_local_only_constructions_stay_local`, where its guard is what is
+//! pinned. That is a MEASUREMENT correction: -1 with no code change.
+//!
+//! `CompactionWorker::spawn` was correctly counted and was a real defect. It
+//! ran unconditionally, so an attached desktop spawned a second rolling-
+//! summary compaction pass over the daemon's own `sovereign.db` while the
+//! comment two lines up claimed "attach-mode leaves the worker `None`". D0
+//! gated it on `local_daemon_wiring` — the config is an `Option` now, so
+//! there is nothing to spawn from in attach — and it likewise moves to the
+//! Local-only test. That is a FIX: -1 with a code change behind it.
 //!
 //! # The instrument's own weakness, recorded rather than hidden
 //!
@@ -24,6 +41,75 @@
 //! boot assertion — attach boots and the surface suite runs green with
 //! zero of these constructed — is the stronger instrument that replaces
 //! this census when the floor reaches zero.
+//!
+//! # Why D9 did not replace this census (measured 2026-09-10)
+//!
+//! The ladder's D9 row hoists attach out of `bootstrap_with_progress`
+//! and takes the floor to zero, on the survey's premise that every
+//! attach-time consumer already reads the wire because "all 15
+//! `is_attach_mode` forks already have their wire form". The forks ARE
+//! retired — `is_attach_mode()` appears twice in the whole command
+//! surface. But the forks were never the population that matters.
+//!
+//! Counted over `src/` with `#[cfg(test)]` cut and comment lines
+//! dropped, `require_runtime!` + `require_store!` +
+//! `state.<needle>.read()` + the two typed accessors: **49 reads across
+//! 13 files**, none behind a mode fork, every one of them live in
+//! attach today because this spine builds all ten needles in BOTH
+//! modes. Deleting the constructions deletes those 49 answers. The
+//! sharpest is `commands/config_setup.rs`'s `is_backend_ready`, whose
+//! own doc comment is written ABOUT attach mode: it reads
+//! `state.runtime.is_some()` as the pull-based recovery for a missed
+//! `backend-ready` event, so a null runtime hangs the splash forever.
+//! Two more fail SILENTLY — `list_corpora` and `notebook_list` return
+//! `Ok(Vec::new())` on `None`, rendering an empty picker rather than an
+//! error.
+//!
+//! So the needle count is a LAGGING indicator in a second way the D-row
+//! did not name: a floor of 12 says nothing about how many CONSUMERS
+//! still need those 12. The consumer count is the number D9 has to
+//! drive to zero, and it is not this test's number. Minting it as its
+//! own ratchet is deferred only because the D5-D8 delete halves are in
+//! flight in the same files as this is written, and a gate with a
+//! guaranteed false positive is how people learn to reach for
+//! `--no-verify`.
+//!
+//! # D9b consumed 22 of the reads and the floor did not move (2026-09-10)
+//!
+//! Re-counted first, same method, on the tree D9b started from: **55 reads
+//! across 13 files**, not 49. Eleven of the thirteen per-file numbers above
+//! reproduce exactly; `chat.rs` is 8 (recorded 3) and `recipe_testing.rs` is
+//! 3 (recorded 2). Re-running the counter AT 65b92cd15 gives 8 and 3 there
+//! too, so those two figures were an undercount when written, not drift
+//! since — the instrument is sound, the two numbers it reported were not
+//! (§18.4: validate the instrument before the result).
+//!
+//! D9b repointed 22 onto 2a9a9e91e's routes — the six document commands, the
+//! corpus catalogue, the shelf, health, retry-enrichment, diagnose, the tier
+//! installs, conversation create/delete/end/export, the skill toggle and
+//! `is_backend_ready`. **55 -> 33 across 10 files.** The consumer census is
+//! `d9b_consumer_census.rs`; it pins each retired primitive to the route
+//! that answers it now.
+//!
+//! The FLOOR is unchanged at 12, and that is a measurement, not an omission.
+//! Every one of the eleven spine needles is consumed by
+//! `sovereign_runtime_recipe::common_parts` -> `commission` — `store`,
+//! `sqlite_store`, `corpus_engine`, `notes`, `features` (via the tool
+//! bundles), `skills`, the GLiNER extractor, the tiered provider and the
+//! knowledge view all feed the Runtime this process commissions in attach
+//! mode too. `notes` and `features` have NO command-surface reader at all
+//! and are still not free for that reason. So the commission is the
+//! blocker, and the commission has six live attach-time readers of its own:
+//! `chat.rs` 110 and 954 (readiness gates), 1063 (the cancel fallback), 1161
+//! (the session->conversation soft read), `document_asset.rs` 387
+//! (`ask_document`'s turn half) and `models.rs` 34 (`search_web`'s tool
+//! registry). Three of those six are named CANNOT-CROSS in 2a9a9e91e and one
+//! more is a turn-path change owing a pre-registered bench (§18.6).
+//!
+//! `attach_bootstrap()` is therefore still not written, on the same rule the
+//! D9 correction set: the floor reaches zero when the last consumer does,
+//! and a hoist before then deletes answers. The remaining consumers and the
+//! route each one needs are enumerated on the campaign's D9b row.
 //!
 //! Watched to fail: add or remove a construction site in `state.rs`'s
 //! bootstrap spine (or edit an expected count here) and this goes red
@@ -95,11 +181,6 @@ const FLOOR: &[Needle] = &[
         why: "the knowledge-view manager (attach-gated params, constructed both modes)",
     },
     Needle {
-        hay: "sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(",
-        count: 1,
-        why: "the watched-folder subsystem singleton",
-    },
-    Needle {
         hay: "sovereign_runtime_recipe::common_parts(",
         count: 1,
         why: "the shared recipe's parts — tool registry, router, MCP, atlas, wiki graph, reranker — gathered host-side",
@@ -108,11 +189,6 @@ const FLOOR: &[Needle] = &[
         hay: "sovereign_runtime_recipe::commission(",
         count: 1,
         why: "THE Runtime, commissioned in attach mode too, over the remote provider (the C2 divergence's root)",
-    },
-    Needle {
-        hay: "CompactionWorker::spawn(",
-        count: 1,
-        why: "the memory-compaction worker, one per host Runtime",
     },
 ];
 
@@ -174,23 +250,26 @@ fn the_attach_construction_floor_is_pinned() {
         total += needle.count;
     }
     assert_eq!(
-        total, 13,
-        "sv-attach-pure-client floor: the pinned spine total must be 13 here, \
+        total, 11,
+        "sv-attach-pure-client floor: the pinned spine total must be 11 here, \
          plus the attach-provider needle pinned in the builders file = the \
-         campaign file's floor_basis (14). A needle added or removed without \
-         the campaign row moving is the exact silent drift this census \
-         exists to catch."
+         campaign file's floor_basis (12, sv-surface D0: was 14 — \
+         WatchedSubsystem::install was never attach-reachable and \
+         CompactionWorker::spawn is gated on the local wiring now). A needle \
+         added or removed without the campaign row moving is the exact silent \
+         drift this census exists to catch."
     );
 }
 
 #[test]
 fn the_local_only_constructions_stay_local() {
-    // The two constructions that are Local-mode-only today must keep an
+    // The constructions that are Local-mode-only today must keep an
     // attach-visible guard: `sovereign_mesh::assemble` (the EmbeddedDaemon
-    // commission) and the RunLock claim both sit behind the
-    // `local_daemon_wiring` Option, which is None in attach. If either
-    // ever runs in attach mode, that is not a needle-count change — it is
-    // the whole bar inverting, and it should fail HERE first.
+    // commission), the RunLock claim, the watched-folder subsystem and the
+    // compaction worker all sit behind the `local_daemon_wiring` Option,
+    // which is None in attach. If any ever runs in attach mode, that is not
+    // a needle-count change — it is the whole bar inverting, and it should
+    // fail HERE first.
     let src = state_rs();
     assert_eq!(
         src.match_indices("sovereign_mesh::assemble(").count(),
@@ -212,5 +291,31 @@ fn the_local_only_constructions_stay_local() {
         "the Local-only guard binding assemble+RunLock to Local mode was \
          renamed or removed — attach mode constructing a daemon is the bar \
          inverting, not a count moving"
+    );
+
+    // sv-surface D0 — the two that came OFF the attach floor. Both still
+    // exist; what is pinned here is that each stays behind the local wiring.
+    assert_eq!(
+        src.match_indices("sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(")
+            .count(),
+        1,
+        "the watched-folder subsystem install moved or multiplied — it is \
+         Local-only (inside the `if let Some((daemon_handle, cli_cfg)) = \
+         local_daemon_wiring` arm) and is pinned HERE so it can never \
+         silently join the attach-reachable spine"
+    );
+    assert_eq!(
+        src.match_indices("CompactionWorker::spawn(").count(),
+        1,
+        "the memory-compaction worker spawn moved or multiplied — one per \
+         host Runtime, and only where the host OWNS the memory store"
+    );
+    assert!(
+        src.contains("let compaction_worker = compaction_config_for_runtime.map(|cfg| {"),
+        "sv-surface D0: the compaction worker is spawned unconditionally \
+         again. The config it needs is `Some` only under the local daemon \
+         wiring; in attach the daemon owns that `sovereign.db` and runs its \
+         own worker, so a second pass here is two writers deriving rolling \
+         summaries from each other's rows."
     );
 }

@@ -3,22 +3,16 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
 use sovereign_contracts::types::{TurnFrame, TurnMode};
 use sovereign_core::runtime::message_metadata;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 // ─── Commands ────────────────────────────────────────────────
 
@@ -105,9 +99,11 @@ pub async fn send_message_stream(
     context_chunks: Option<Vec<FocusedChunkRef>>,
     attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<StreamStartedResponse, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap().clone();
-    drop(guard);
+    // Readiness gate only — the wire drive below needs no Runtime handle;
+    // in Local mode the daemon answering the socket IS this process's. So
+    // the gate asks the PORT, not `state.runtime`: the local handle was
+    // answering a different question and, in attach, the wrong one.
+    crate::commands::require_backend_ready(&state).await?;
 
     state.approval.set_task_id(&conversation_id).await;
 
@@ -148,8 +144,6 @@ pub async fn send_message_stream(
     // what the previous non-streaming branch did with its pending uuid.
     let pending_id = uuid::Uuid::new_v4().to_string();
 
-    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
-
     // sv-surface R5: THE WIRE IS THE ONE PATH. This command drove the
     // in-process `Runtime` through `DesktopTurnSink`; it now drives the
     // daemon's turn socket — the same frames down the same renderer, and
@@ -172,100 +166,159 @@ pub async fn send_message_stream(
         .send_message(&augmented_message, mode, None)
         .await
         .map_err(|e| format!("sending the turn: {e}"))?;
-    // Park the write half FIRST: a prompt can arrive before the id does,
-    // and the submit commands answer with this sender while the drain
-    // below keeps reading — the split the client family's socket gave us.
-    *state.turn_wire.write().await = Some(stream.sender());
+    let message_id = finish_wire_turn(
+        &state,
+        app_handle,
+        stream,
+        conversation_id,
+        pending_id,
+        store_for_metadata,
+    )
+    .await?;
 
-    // Sync id (G10's whole point): the FIRST frame is `TurnStarted`,
-    // emitted at handle acquisition — before retrieval, before the first
-    // token — so the placeholder goes up over the same window it always
-    // did in-process. A turn that dies before minting one falls back to
-    // the pending id, exactly the old contract.
-    let first = stream.next_frame().await;
-    let message_id = match first {
-        Ok(Some(TurnFrame::Notice {
-            notice: sovereign_contracts::types::TurnNotice::TurnStarted { message_id },
-        })) => message_id,
-        Ok(Some(other)) => {
-            // Unexpected order — keep the frame for the renderer and use
-            // the fallback id rather than dropping evidence.
-            let _ = frame_tx.send(other);
-            pending_id.clone()
+    Ok(StreamStartedResponse {
+        message_id,
+        streaming,
+    })
+}
+
+/// Which frames may legally precede `TurnStarted`, and what the turn's
+/// sync id becomes when one arrives that may not.
+///
+/// The lead window is REAL and it is not disorder. The runtime narrates
+/// retrieval before the stream handle is acquired (a cold turn's
+/// retrieval is exactly when narration fires), a queued turn reports its
+/// place in line, and a `ComplexTask` turn puts its FIRST prompt up
+/// before any message exists to stream — sovereign-mesh's
+/// `turn_surface.rs` pins that order. Reading a leading `Prompt` as
+/// disorder is the RB3 defect: the fallback id was taken AND the prompt
+/// frame was handed to the renderer, which drops prompts, so every
+/// agentic ask hung with no card.
+#[derive(Debug, PartialEq, Eq)]
+enum LeadDisposition {
+    /// Legal before the id — forward it and keep waiting.
+    KeepWaiting,
+    /// The turn minted its id (G10).
+    SyncId(String),
+    /// A message-carrying frame arrived with no `TurnStarted` — the
+    /// graceful guards (oversize paste, contentless message) answer
+    /// exactly this way. Take the id off the FRAME when it carries one,
+    /// the caller's pending uuid otherwise: `render_turn_frames` keys its
+    /// events off these same frames, so agreeing with it here is what
+    /// keeps the placeholder and the chunks on one id.
+    SettleOn(Option<String>),
+}
+
+fn lead_disposition(frame: &TurnFrame) -> LeadDisposition {
+    use sovereign_contracts::types::TurnNotice;
+    match frame {
+        TurnFrame::Notice {
+            notice: TurnNotice::TurnStarted { message_id },
+        } => LeadDisposition::SyncId(message_id.clone()),
+        TurnFrame::Narration { .. }
+        | TurnFrame::QueuePosition { .. }
+        | TurnFrame::Prompt { .. }
+        | TurnFrame::Notice { .. } => LeadDisposition::KeepWaiting,
+        TurnFrame::Token { message_id, .. } | TurnFrame::Complete { message_id, .. } => {
+            LeadDisposition::SettleOn((!message_id.is_empty()).then(|| message_id.clone()))
         }
-        _ => pending_id.clone(),
+        TurnFrame::StreamError { .. } => LeadDisposition::SettleOn(None),
+    }
+}
+
+/// What the pump's verdict on the sync id means to the command that is
+/// waiting for it.
+///
+/// `Ok(Some(id))` and `Ok(None)` are the two ways a turn decides
+/// (see [`LeadDisposition`]). `Err` is the pump ending WITHOUT deciding —
+/// the socket died, or spoke a frame that would not parse, before
+/// anything named a message.
+///
+/// C3: that third case used to be folded into the fallback id, so the
+/// command returned `Ok(StreamStartedResponse)` for a turn that never
+/// happened and the frontend held a placeholder no `message-complete`
+/// and no `message-error` would ever close — a permanent "preparing". A
+/// dropped turn is not an empty one (§18.3): it is reported as dropped.
+fn sync_id_or_dropped(
+    reported: Result<Option<String>, tokio::sync::oneshot::error::RecvError>,
+    fallback: String,
+) -> Result<String, String> {
+    match reported {
+        Ok(Some(id)) => Ok(id),
+        Ok(None) => Ok(fallback),
+        Err(_) => Err("the turn socket ended before the turn started".to_string()),
+    }
+}
+
+/// The second half of every wire turn (sv-surface R5): park the write
+/// half under THIS conversation, spawn the ONE loop that reads the
+/// socket, take the sync id it reports off the `TurnStarted` frame (G10
+/// — emitted at handle acquisition, so the placeholder goes up over the
+/// same window it always did in-process), then spawn the renderer that
+/// turns frames into `message-chunk` / `message-complete`.
+///
+/// There is no second drain here. The sync id used to come from a
+/// private loop that ran to `TurnStarted` forwarding only
+/// Narration|Notice, which is how a leading `Prompt` reached a renderer
+/// that drops prompts (RB3). The pump owns every frame from the first
+/// one and hands the id back over a oneshot; dropping that oneshot
+/// without deciding is how it reports a turn that died before it started
+/// (C3).
+async fn finish_wire_turn(
+    state: &Arc<AppState>,
+    app_handle: tauri::AppHandle,
+    stream: sovereign_turn_client::TurnStream,
+    conversation_id: String,
+    fallback_id: String,
+    store_for_metadata: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+) -> Result<String, String> {
+    // Park the write half FIRST, keyed by conversation (RB5): a prompt can
+    // arrive before the id does, and `cancel_stream` / the submit commands
+    // reach THIS turn — not whichever turn started most recently — while
+    // the pump keeps reading. The handle comes back so the pump can prove
+    // the parked entry is still its own before clearing it.
+    let mine = state
+        .turn_wire
+        .park(&conversation_id, stream.sender())
+        .await;
+
+    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
+    let (id_tx, id_rx) = tokio::sync::oneshot::channel::<Option<String>>();
+
+    tauri::async_runtime::spawn(pump_wire_frames(
+        app_handle.clone(),
+        Arc::clone(state),
+        stream,
+        conversation_id.clone(),
+        frame_tx,
+        Some(id_tx),
+        mine,
+    ));
+
+    let message_id = match sync_id_or_dropped(id_rx.await, fallback_id.clone()) {
+        Ok(id) => id,
+        Err(message) => {
+            tracing::warn!(
+                conversation_id = %conversation_id,
+                message_id = %fallback_id,
+                "finish_wire_turn: {message}"
+            );
+            let _ = app_handle.emit(
+                "message-error",
+                MessageErrorPayload {
+                    conversation_id,
+                    message_id: fallback_id,
+                    message: message.clone(),
+                },
+            );
+            return Err(message);
+        }
     };
 
-    // Read the rest of the turn: tokens and the terminal frame go to the
-    // ONE renderer unchanged; prompts and notices map onto the event
-    // vocabulary the frontend already listens for, payload for payload —
-    // the same cards the in-process `TauriApprovalChannel` used to raise.
-    {
-        let app_for_turn = app_handle.clone();
-        let state_for_turn = Arc::clone(&state);
-        let frames_for_turn = frame_tx.clone();
-        let conv_for_turn = conversation_id.clone();
-        tauri::async_runtime::spawn(async move {
-            loop {
-                let frame = match stream.next_frame().await {
-                    Ok(Some(f)) => f,
-                    _ => break, // socket closed; the renderer speaks next
-                };
-                match &frame {
-                    TurnFrame::Prompt { id, prompt } => {
-                        state_for_turn
-                            .pending_prompts
-                            .write()
-                            .await
-                            .insert(id.clone());
-                        raise_prompt_card(&app_for_turn, &conv_for_turn, id, prompt);
-                    }
-                    TurnFrame::Notice { notice } => {
-                        use sovereign_contracts::types::TurnNotice;
-                        match notice {
-                            TurnNotice::MessageRefined(payload) => {
-                                let _ = app_for_turn.emit("message-refined", payload.clone());
-                            }
-                            TurnNotice::LessonProposed(payload) => {
-                                let _ = app_for_turn.emit("lesson-proposed", payload.clone());
-                            }
-                            TurnNotice::StepDone {
-                                task_id,
-                                step_id,
-                                description,
-                                status,
-                            } => {
-                                let _ = app_for_turn.emit(
-                                    "step-done",
-                                    crate::approval::StepDonePayload {
-                                        task_id: task_id.clone(),
-                                        step_id: *step_id,
-                                        description: description.clone(),
-                                        status: status.to_string(),
-                                    },
-                                );
-                            }
-                            // The ack cleared the pending key; a stale
-                            // submit now fails fast instead of guessing.
-                            TurnNotice::ResolveAck { id, outcome } => {
-                                if *outcome == sovereign_contracts::types::ResolveOutcome::Resolved
-                                {
-                                    state_for_turn.pending_prompts.write().await.remove(id);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-                let _ = frames_for_turn.send(frame);
-            }
-            *state_for_turn.turn_wire.write().await = None;
-        });
-    }
-
     // Render the frames as the events the frontend already listens for. The
-    // payload shapes are unchanged, so no TypeScript moved with this.
+    // payload shapes are unchanged, so no TypeScript moved with this. The
+    // pump has been buffering into `frame_tx` since before the id existed,
+    // so the lead frames arrive here in order.
     tauri::async_runtime::spawn(render_turn_frames(
         app_handle,
         frame_rx,
@@ -274,10 +327,232 @@ pub async fn send_message_stream(
         store_for_metadata,
     ));
 
-    Ok(StreamStartedResponse {
-        message_id,
-        streaming,
-    })
+    Ok(message_id)
+}
+
+/// THE per-turn frame loop: the only reader of this socket. Tokens and the
+/// terminal frame go to the ONE renderer unchanged; prompts and notices
+/// map onto the event vocabulary the frontend already listens for, payload
+/// for payload — the same cards the in-process `TauriApprovalChannel` used
+/// to raise. The routing notices also record session→conversation, which is
+/// how a redirect click (a session id alone) finds its socket.
+///
+/// `sync_id` is the channel `finish_wire_turn` is waiting on: the first
+/// frame that decides the turn's id fills it (see [`lead_disposition`]),
+/// and a socket that ends before any frame does drops it, which is the
+/// signal that the turn never started.
+async fn pump_wire_frames(
+    app_handle: tauri::AppHandle,
+    state: Arc<AppState>,
+    mut stream: sovereign_turn_client::TurnStream,
+    conversation_id: String,
+    frames: tokio::sync::mpsc::UnboundedSender<TurnFrame>,
+    mut sync_id: Option<tokio::sync::oneshot::Sender<Option<String>>>,
+    mine: Arc<sovereign_turn_client::TurnSender>,
+) {
+    let mut frames_seen = 0u32;
+    loop {
+        let frame = match stream.next_frame().await {
+            Ok(Some(f)) => f,
+            ended => {
+                tracing::info!(
+                    conversation_id = %conversation_id,
+                    frames_seen,
+                    ended_cleanly = matches!(ended, Ok(None)),
+                    turn_started = sync_id.is_none(),
+                    "pump_wire_frames: socket ended"
+                );
+                break; // socket closed; the renderer speaks next
+            }
+        };
+        frames_seen += 1;
+
+        // The sync id, decided ONCE, by the same loop that raises the
+        // cards — so a `Prompt` in the lead window gets its card AND
+        // leaves the id still to be minted.
+        if let Some(tx) = sync_id.take() {
+            match lead_disposition(&frame) {
+                LeadDisposition::KeepWaiting => sync_id = Some(tx),
+                LeadDisposition::SyncId(id) => {
+                    tracing::info!(
+                        conversation_id = %conversation_id,
+                        id_from = "turn_started",
+                        frames_seen,
+                        "pump_wire_frames: sync id taken"
+                    );
+                    let _ = tx.send(Some(id));
+                }
+                LeadDisposition::SettleOn(id) => {
+                    tracing::info!(
+                        conversation_id = %conversation_id,
+                        id_from = if id.is_some() { "frame" } else { "fallback" },
+                        frames_seen,
+                        "pump_wire_frames: sync id taken with no TurnStarted"
+                    );
+                    let _ = tx.send(id);
+                }
+            }
+        }
+
+        match &frame {
+            TurnFrame::Prompt { id, prompt } => {
+                state
+                    .pending_prompts
+                    .park(id, &conversation_id, prompt.clone())
+                    .await;
+                raise_prompt_card(&app_handle, &conversation_id, id, prompt);
+            }
+            TurnFrame::Notice { notice } => {
+                use sovereign_contracts::types::{ResolveOutcome, TurnNotice};
+                match notice {
+                    TurnNotice::MessageRefined(payload) => {
+                        let _ = app_handle.emit("message-refined", payload.clone());
+                    }
+                    TurnNotice::LessonProposed(payload) => {
+                        let _ = app_handle.emit("lesson-proposed", payload.clone());
+                    }
+                    TurnNotice::StepDone {
+                        task_id,
+                        step_id,
+                        description,
+                        status,
+                    } => {
+                        let _ = app_handle.emit(
+                            "step-done",
+                            crate::approval::StepDonePayload {
+                                task_id: task_id.clone(),
+                                step_id: *step_id,
+                                description: description.clone(),
+                                status: status.to_string(),
+                            },
+                        );
+                    }
+                    // RB4, client half: an ack is NEVER terminal. The
+                    // daemon's answer refusals ride here — they used to
+                    // ride `StreamError`, which this surface ends the turn
+                    // on, so a double-clicked approve discarded a healthy
+                    // turn. Nothing below breaks the loop.
+                    TurnNotice::ResolveAck { id, outcome } => match outcome {
+                        ResolveOutcome::Resolved => {
+                            // The question is consumed; a stale submit now
+                            // fails fast instead of guessing.
+                            state.pending_prompts.resolve(id).await;
+                        }
+                        ResolveOutcome::WrongKind => {
+                            // The question SURVIVES — the desk left it
+                            // parked for the right answer, so the card
+                            // comes back. Same event, same payload, from
+                            // the prompt parked with it: no new frontend
+                            // vocabulary, because the listeners are the
+                            // ones `raise_prompt_card` already feeds.
+                            match state.pending_prompts.get(id).await {
+                                Some(parked) => {
+                                    tracing::warn!(
+                                        conversation_id = %conversation_id,
+                                        prompt_id = %id,
+                                        "pump_wire_frames: wrong-kind answer refused — re-raising the card"
+                                    );
+                                    raise_prompt_card(
+                                        &app_handle,
+                                        &conversation_id,
+                                        id,
+                                        &parked.prompt,
+                                    );
+                                }
+                                None => tracing::warn!(
+                                    conversation_id = %conversation_id,
+                                    prompt_id = %id,
+                                    "pump_wire_frames: wrong-kind ack for a card this surface never parked"
+                                ),
+                            }
+                        }
+                        // The three that reached nothing. Each drops our
+                        // record of the card so the next submit refuses
+                        // here instead of spending a round trip, and each
+                        // says WHICH nothing — the distinction is the
+                        // whole point of the typed outcome (§18.3).
+                        ResolveOutcome::NoSuchPending => {
+                            tracing::warn!(
+                                conversation_id = %conversation_id,
+                                prompt_id = %id,
+                                "pump_wire_frames: nothing was parked under that id — already answered, or the turn moved on"
+                            );
+                            state.pending_prompts.resolve(id).await;
+                        }
+                        ResolveOutcome::WaiterGone => {
+                            tracing::warn!(
+                                conversation_id = %conversation_id,
+                                prompt_id = %id,
+                                "pump_wire_frames: the answer was taken but the executor had already gone — nothing resumed"
+                            );
+                            state.pending_prompts.resolve(id).await;
+                        }
+                        ResolveOutcome::Unclaimed => {
+                            // The socket never claimed this turn's
+                            // approvals, so no card of ours could have
+                            // been parked there. Every streaming command
+                            // on this surface connects with
+                            // `claim_approvals: true`, so seeing this at
+                            // all means the claim was refused — worth
+                            // saying loudly rather than swallowing.
+                            tracing::error!(
+                                conversation_id = %conversation_id,
+                                prompt_id = %id,
+                                "pump_wire_frames: this socket holds no approval desk — the turn's approvals were never claimed"
+                            );
+                            state.pending_prompts.resolve(id).await;
+                        }
+                    },
+                    TurnNotice::InterpretationProposed(p) => {
+                        state
+                            .session_conversations
+                            .write()
+                            .await
+                            .insert(p.session_id.clone(), p.conversation_id.clone());
+                    }
+                    TurnNotice::ClarificationRequest(p) => {
+                        state
+                            .session_conversations
+                            .write()
+                            .await
+                            .insert(p.session_id.clone(), p.conversation_id.clone());
+                    }
+                    // The socket's own closer (RB1). `Complete` is the
+                    // terminal frame of the TURN, not of the host's
+                    // talking — `MessageRefined` and `LessonProposed`
+                    // fire after it from a detached spawn — so this is
+                    // the first moment a client can know the socket has
+                    // finished being useful. Ending here rather than on
+                    // the far end's close is what stops one leaked
+                    // connection + writer task per turn. The renderer
+                    // ignores `Notice` frames, so nothing is lost by not
+                    // forwarding it.
+                    TurnNotice::TurnSettled { message_id } => {
+                        tracing::info!(
+                            conversation_id = %conversation_id,
+                            message_id = %message_id,
+                            frames_seen,
+                            "pump_wire_frames: turn settled — closing the socket"
+                        );
+                        break;
+                    }
+                    TurnNotice::TurnStarted { .. } => {}
+                }
+            }
+            _ => {}
+        }
+        let _ = frames.send(frame);
+    }
+
+    // RB5: unpark THIS turn, and only if the entry is still ours. A
+    // redirect parks a second socket on the same conversation while this
+    // drain is still finishing; the loser must not clear the winner.
+    let released = state.turn_wire.release(&conversation_id, &mine).await;
+    tracing::info!(
+        conversation_id = %conversation_id,
+        released,
+        "pump_wire_frames: turn unparked"
+    );
 }
 
 /// One parked prompt becomes one card — the same events, payloads and
@@ -340,37 +615,14 @@ fn raise_prompt_card(
 
 /// Bridges [`serve_turn`] to the Tauri event surface.
 ///
-/// Two jobs: forward frames to the async task that renders them (the sink's
-/// `emit` is synchronous and the metadata read is not), and publish the
-/// message id the moment the turn acquires one, so the command can return it
-/// before the first token arrives.
-struct DesktopTurnSink {
-    frames: tokio::sync::mpsc::UnboundedSender<TurnFrame>,
-    started: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
-}
-
-impl sovereign_core::runtime::TurnSink for DesktopTurnSink {
-    fn emit(&self, frame: TurnFrame) {
-        let _ = self.frames.send(frame);
-    }
-
-    fn on_turn_started(&self, message_id: &str) {
-        if let Some(tx) = self
-            .started
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
-        {
-            let _ = tx.send(message_id.to_string());
-        }
-    }
-}
-
 /// The ONE frame renderer: turn frames in, the frontend's event vocabulary
-/// out. Every turn-shaped command drives the one driver (`serve_turn` or
-/// `drive_stream_handle`) through [`DesktopTurnSink`] and renders through
+/// out. Every turn-shaped command drives the wire (sv-surface R5: the
+/// daemon's turn socket through `finish_wire_turn`) and renders through
 /// this loop — the payload shapes are unchanged, so no TypeScript moves
-/// with any conversion onto it (sv-surface rung 0).
+/// with any conversion onto it (sv-surface rung 0). The in-process
+/// `DesktopTurnSink` this used to pair with is deleted with the local
+/// drive; its two jobs — frame forwarding and the sync id — live in
+/// `finish_wire_turn` and the `TurnStarted` frame now.
 ///
 /// `fallback_id` keys the placeholder for a turn that never mints an id
 /// (graceful guards, the document path); a command that already knows its
@@ -485,17 +737,25 @@ async fn render_turn_frames(
                         full_text,
                         metadata,
                     },
+                    // Glassbox (first-turn hang): the terminal render —
+                    // its absence beside a pump "socket ended" line
+                    // localizes any frame loss.
                 );
                 // Sidebar: updated_at bumped; title may auto-update.
                 let _ = app.emit("conversations:changed", ());
                 return;
             }
-            // No narration channel is installed, and queue position is a
-            // shared-hub concern. A Prompt belongs to the ATTACH path —
-            // in-process, this host's own `TauriApprovalChannel` raises
-            // the card and no frame is ever produced (rung 6 commit C2
-            // wires the attached side). Notices render when their
-            // daemon-side producers exist (sv-surface R3).
+            // Everything that is not a token, an error or the terminal
+            // frame is already handled UPSTREAM, by `pump_wire_frames`:
+            // narration, queue position, the prompt cards and every
+            // notice are emitted there against the frontend vocabulary
+            // that expects them. They pass through here so this renderer
+            // stays the single place a turn's `message-chunk` /
+            // `message-complete` / `message-error` are decided — not
+            // because they belong to some other path. (This comment said
+            // a `Prompt` belongs to the ATTACH path and that no frame is
+            // ever produced; since R5 BOTH boot modes drive the wire and
+            // the daemon produces exactly these frames.)
             TurnFrame::Narration { .. }
             | TurnFrame::QueuePosition { .. }
             | TurnFrame::Prompt { .. }
@@ -686,8 +946,9 @@ pub async fn send_message(
     context_chunks: Option<Vec<FocusedChunkRef>>,
     attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<MessageResponse, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    // Readiness gate only — the one-shot answer crosses the wire, so the
+    // gate asks the port (see `send_message_stream`).
+    crate::commands::require_backend_ready(&state).await?;
 
     state.approval.set_task_id(&conversation_id).await;
 
@@ -698,32 +959,25 @@ pub async fn send_message(
     // the same question from the same app and used to run different
     // pipelines — the streaming one and the non-streaming one — so the answer
     // depended on which button the user pressed.
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    }
-    .ok_or("Store not ready")?;
-
-    let turn = sovereign_core::runtime::collect_turn(
-        runtime,
-        store.as_ref(),
-        &conversation_id,
-        &augmented_message,
-        TurnMode::Grounded,
-        None,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    // sv-surface R5: the one-shot answer crosses the wire too — the REST
+    // turn (POST /v1/conversations/{id}/messages) drives the SAME driver
+    // the socket serves, through the client family. DELTA, named: the
+    // `metadata` this returns is the wire's TYPED projection
+    // (`Complete.metadata`) where the in-process read returned the raw
+    // persisted blob — the G9 row's divergence, now the frontend's to
+    // consume field-by-field (its only blob-key gates, recipe-author and
+    // cancelled, have wire homes: `routed_intent` (stamped by R3) and
+    // `provenance.finish_reason`).
+    let turn = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .send_message(&conversation_id, &augmented_message)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Notify the sidebar — updated_at bumped, title may be auto-generated
     // asynchronously. A second event fires when the title lands (runtime
     // spawns the auto-title task independently, but we emit conservatively
     // here so list ordering refreshes immediately).
     let _ = app_handle.emit("conversations:changed", ());
-
-    // The persisted blob, read in-process — the frontend's `metadata` field
-    // is the raw shape it has always received (see `send_message_stream`).
-    let metadata = message_metadata(store.as_ref(), &conversation_id, &turn.message_id).await;
 
     Ok(MessageResponse {
         message_id: turn.message_id,
@@ -736,7 +990,9 @@ pub async fn send_message(
             status: t.status,
             steps_completed: t.steps_completed,
         }),
-        metadata,
+        metadata: turn
+            .metadata
+            .map(|m| serde_json::to_value(&m).unwrap_or(serde_json::Value::Null)),
     })
 }
 
@@ -755,8 +1011,67 @@ pub async fn cancel_stream(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    // sv-surface R5/G2: wire-first — the daemon trips the turn's own
+    // cancellation (session token + preparing token, the same pair this
+    // command used to trip in-process), and the ordinary Complete with
+    // finish_reason=cancelled closes the stream.
+    //
+    // RB5: THIS conversation's turn. The sender used to be one global
+    // slot, so a Stop on conversation A cancelled whichever turn started
+    // most recently.
+    //
+    // C9: `send_cancel() == Ok` means the writer task took the bytes —
+    // QUEUED, not acted. The acknowledgement is the turn's own terminal
+    // frame (`Complete` with `provenance.finish_reason: "cancelled"`,
+    // which the renderer already turns into `message-complete`), and it
+    // arrives later or not at all. So a queued send does NOT license
+    // skipping the local pair below: in Local mode the daemon's turn IS
+    // this process's, and tripping its session token is idempotent with
+    // the daemon's own abort; in attach mode there is no local session to
+    // trip and the block is a no-op. Only the wire send is skipped when
+    // no turn is parked here.
+    let wire_sent = match state.turn_wire.sender_for(&conversation_id).await {
+        Some(sender) => match sender.send_cancel() {
+            Ok(()) => {
+                tracing::info!(
+                    conversation_id,
+                    "cancel_stream: wire cancel queued — the turn's Complete will say cancelled"
+                );
+                true
+            }
+            Err(e) => {
+                tracing::warn!(
+                    conversation_id,
+                    error = %e,
+                    "cancel_stream: the turn socket's writer is gone — falling back to the local pair"
+                );
+                false
+            }
+        },
+        None => {
+            tracing::info!(
+                conversation_id,
+                "cancel_stream: no wire turn is parked for this conversation"
+            );
+            false
+        }
+    };
+
+    let guard = state.runtime.read().await;
+    let Some(runtime) = guard.as_ref() else {
+        // No local turn machinery at all (attach mode, or bootstrap still
+        // in flight). If the wire took the cancel that is the whole
+        // answer; if it did not, nothing was cancelled and saying `Ok`
+        // would be the §18.3 substitution.
+        return if wire_sent {
+            Ok(())
+        } else {
+            Err(format!(
+                "cancel_stream: no wire turn is parked for conversation {conversation_id} \
+                 and this surface holds no local runtime"
+            ))
+        };
+    };
     // Cancel the registered session if one exists…
     let hit_session = runtime
         .sessions
@@ -790,8 +1105,9 @@ pub async fn cancel_stream(
             // in `handleStop` regardless; log the inventory so an id/timing
             // mismatch stays legible.
             conversation_id,
+            wire_sent,
             live_sessions = ?runtime.sessions.conversation_ids(),
-            "cancel_stream: nothing in flight — cancel is a no-op (already finished?)"
+            "cancel_stream: nothing in flight locally — cancel is a no-op (already finished?)"
         ),
     }
     Ok(())
@@ -816,67 +1132,72 @@ pub async fn redirect_turn(
     session_id: String,
     intent_hint: String,
 ) -> Result<StreamStartedResponse, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap().clone();
-    drop(guard);
+    // sv-surface R5: the redirect crosses the wire (`send_redirect`, the
+    // client family's sender). The daemon owns the session store, so the
+    // conversation comes from the surface's OWN map — recorded as the
+    // routing notices that raised this card arrived — with the in-process
+    // session store as the fallback while unconverted shapes remain.
+    let conversation_id = {
+        let map = state.session_conversations.read().await;
+        map.get(&session_id).cloned()
+    };
+    let conversation_id = match conversation_id {
+        Some(cid) => cid,
+        None => {
+            // sv-surface D9 — the third no-fork degradation, named
+            // rather than left to read an empty register. The fallback
+            // asks whichever `Runtime` THIS process happens to host: in
+            // Local that is the same object the embedded daemon serves
+            // the turn from, so it answers; in attach this process has
+            // never seen the session and `require_runtime!` reported
+            // that as "Backend is still loading", which is a different
+            // and wrong fact (ARCH §18.3). A soft read, so the mode is
+            // not branched on — "Local" is just the boot where the
+            // daemon happens to be in-process — and a named refusal
+            // when nobody here knows the pairing.
+            let hosted = state.runtime.read().await;
+            hosted
+                .as_ref()
+                .and_then(|rt| rt.sessions.get(&session_id).map(|s| s.conversation_id.clone()))
+                .ok_or_else(|| {
+                    format!(
+                        "session {session_id} is not paired with a conversation on this surface                          — the routing card that would have recorded it never arrived, and this                          process does not host the session store that owns the pairing"
+                    )
+                })?
+        }
+    };
 
     let store_for_metadata = {
         let guard = state.store.read().await;
         guard.as_ref().map(Arc::clone)
     };
 
-    // The session's conversation routes the events; read it before the
-    // acquire consumes the session's place in the flow.
-    let conversation_id = runtime
-        .sessions
-        .get(&session_id)
-        .map(|s| s.conversation_id.clone())
-        .ok_or_else(|| format!("session {session_id} not found"))?;
-
-    // The acquire is redirect's own: cancel the in-flight sampler, write the
-    // routing signal, and start the replacement stream with the synthetic
-    // REDIRECT classification — one implementation, in the runtime. The
-    // DRIVE is the one driver's: the hand-rolled drain this replaced was
-    // already missing `present_answer` stripping and the graceful guards
-    // the plain path learned (sv-surface rung 0).
-    let handle = runtime
-        .redirect_turn_stream(&session_id, &intent_hint)
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    let mut stream = client
+        .connect_with(
+            &conversation_id,
+            sovereign_turn_client::StreamOptions {
+                claim_approvals: true,
+            },
+        )
         .await
-        .map_err(|e| e.to_string())?;
-    let message_id = handle.message_id.clone();
-
-    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
-    let sink = DesktopTurnSink {
-        frames: frame_tx,
-        // The id is already known — no started handshake to publish.
-        started: std::sync::Mutex::new(None),
-    };
-
-    tauri::async_runtime::spawn({
-        let store = store_for_metadata.clone();
-        let conv = conversation_id.clone();
-        async move {
-            let Some(store) = store else {
-                return;
-            };
-            sovereign_core::runtime::drive_stream_handle(
-                handle,
-                store.as_ref(),
-                &conv,
-                // No narration subscription on this surface yet.
-                None,
-                &sink,
-            )
-            .await;
-        }
-    });
-    tauri::async_runtime::spawn(render_turn_frames(
+        .map_err(|e| format!("opening the turn socket: {e}"))?;
+    // Redirect carries NO content on purpose: the daemon re-answers the
+    // message the session already holds — a client re-sending text could
+    // disagree with what was actually asked.
+    stream
+        .send_redirect(&session_id, &intent_hint)
+        .await
+        .map_err(|e| format!("sending the redirect: {e}"))?;
+    let message_id = finish_wire_turn(
+        &state,
         app_handle,
-        frame_rx,
+        stream,
         conversation_id,
-        message_id.clone(),
+        uuid::Uuid::new_v4().to_string(),
         store_for_metadata,
-    ));
+    )
+    .await?;
 
     Ok(StreamStartedResponse {
         message_id,
@@ -900,65 +1221,179 @@ pub async fn resume_session(
     session_id: String,
     intent_hint: String,
 ) -> Result<StreamStartedResponse, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap().clone();
-    drop(guard);
-
-    state.approval.set_task_id(&conversation_id).await;
-
     let store_for_metadata = {
         let guard = state.store.read().await;
         guard.as_ref().map(Arc::clone)
     };
 
-    // The acquire is resume's own: the synthetic CONTINUATION classification
-    // with the session's provenance in its rationale. The DRIVE is the one
-    // driver's (sv-surface rung 0).
-    let resume = sovereign_core::types::ResumeSession {
-        session_id,
-        intent_hint,
-    };
-    let handle = runtime
-        .resume_session_stream(&message, &conversation_id, resume)
+    // sv-surface R5: the resume crosses the wire (`send_resume`). An
+    // expired session is the daemon's call to make — it answers by
+    // running the turn normally (provenance, not key), which is why
+    // there is no expiry check here.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    let mut stream = client
+        .connect_with(
+            &conversation_id,
+            sovereign_turn_client::StreamOptions {
+                claim_approvals: true,
+            },
+        )
         .await
-        .map_err(|e| e.to_string())?;
-    let message_id = handle.message_id.clone();
-
-    let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel::<TurnFrame>();
-    let sink = DesktopTurnSink {
-        frames: frame_tx,
-        // The id is already known — no started handshake to publish.
-        started: std::sync::Mutex::new(None),
-    };
-
-    tauri::async_runtime::spawn({
-        let store = store_for_metadata.clone();
-        let conv = conversation_id.clone();
-        async move {
-            let Some(store) = store else {
-                return;
-            };
-            sovereign_core::runtime::drive_stream_handle(
-                handle,
-                store.as_ref(),
-                &conv,
-                // No narration subscription on this surface yet.
-                None,
-                &sink,
-            )
-            .await;
-        }
-    });
-    tauri::async_runtime::spawn(render_turn_frames(
+        .map_err(|e| format!("opening the turn socket: {e}"))?;
+    stream
+        .send_resume(&message, &session_id, &intent_hint)
+        .await
+        .map_err(|e| format!("sending the resume: {e}"))?;
+    let message_id = finish_wire_turn(
+        &state,
         app_handle,
-        frame_rx,
+        stream,
         conversation_id,
-        message_id.clone(),
+        uuid::Uuid::new_v4().to_string(),
         store_for_metadata,
-    ));
+    )
+    .await?;
 
     Ok(StreamStartedResponse {
         message_id,
         streaming: true,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sovereign_contracts::types::{ActionPreview, NarrationPhase, TurnNotice, TurnPrompt};
+
+    fn narration() -> TurnFrame {
+        TurnFrame::Narration {
+            message_id: String::new(),
+            phase: NarrationPhase::RoutingCommitted,
+            text: "reading the corpus".to_string(),
+            elapsed_ms: 12,
+        }
+    }
+
+    fn approval_prompt() -> TurnFrame {
+        TurnFrame::Prompt {
+            id: "task-1:0".to_string(),
+            prompt: TurnPrompt::Approval {
+                preview: ActionPreview {
+                    tool_id: "web_search".to_string(),
+                    description: "search the web".to_string(),
+                    params: serde_json::json!({}),
+                },
+            },
+        }
+    }
+
+    /// RB3. A `ComplexTask` turn sends its FIRST prompt before any message
+    /// exists to stream (sovereign-mesh `turn_surface.rs` pins that order).
+    /// Watched red against the shipped rule, which forwarded only
+    /// Narration|Notice and treated everything else — a leading `Prompt`
+    /// included — as "settle on the fallback id": the assertion below
+    /// failed with `SettleOn(None)`, which is the hang. Every agentic ask
+    /// took a fallback id AND handed its prompt to a renderer that drops
+    /// prompts, so no card ever went up.
+    #[test]
+    fn a_prompt_may_precede_turn_started() {
+        assert_eq!(
+            lead_disposition(&approval_prompt()),
+            LeadDisposition::KeepWaiting,
+            "a leading Prompt is the ComplexTask shape, not disorder: the \
+             card goes up and the id is still to be minted"
+        );
+    }
+
+    /// The lead window's other legal residents: retrieval narration (the
+    /// runtime narrates before the stream handle is acquired) and a
+    /// queued turn's place in line.
+    #[test]
+    fn narration_and_queue_position_may_precede_turn_started() {
+        assert_eq!(lead_disposition(&narration()), LeadDisposition::KeepWaiting);
+        assert_eq!(
+            lead_disposition(&TurnFrame::QueuePosition {
+                position: 2,
+                estimated_wait_ms: 4_000,
+            }),
+            LeadDisposition::KeepWaiting
+        );
+        assert_eq!(
+            lead_disposition(&TurnFrame::Notice {
+                notice: TurnNotice::ResolveAck {
+                    id: "task-1:0".to_string(),
+                    outcome: sovereign_contracts::types::ResolveOutcome::Resolved,
+                },
+            }),
+            LeadDisposition::KeepWaiting
+        );
+    }
+
+    #[test]
+    fn turn_started_is_the_sync_id() {
+        assert_eq!(
+            lead_disposition(&TurnFrame::Notice {
+                notice: TurnNotice::TurnStarted {
+                    message_id: "msg-real".to_string(),
+                },
+            }),
+            LeadDisposition::SyncId("msg-real".to_string())
+        );
+    }
+
+    /// A graceful guard (oversize paste, contentless message) answers with
+    /// no `TurnStarted` at all. Take the id off the frame that carries one:
+    /// `render_turn_frames` keys its events off the same frames, so the
+    /// returned id and the emitted id agree — which is the property the
+    /// first-turn hang broke.
+    #[test]
+    fn a_message_carrying_frame_settles_the_id_on_itself() {
+        assert_eq!(
+            lead_disposition(&TurnFrame::Token {
+                message_id: "msg-real".to_string(),
+                chunk: "hi".to_string(),
+            }),
+            LeadDisposition::SettleOn(Some("msg-real".to_string()))
+        );
+        assert_eq!(
+            lead_disposition(&TurnFrame::StreamError {
+                message: "boom".to_string(),
+                retry_after_secs: None,
+            }),
+            LeadDisposition::SettleOn(None),
+            "an error names no message; the caller's pending id keys the render"
+        );
+    }
+
+    /// C3. Watched red against the shipped arm (`_ => break
+    /// fallback_id.clone()`), which reported a socket that died before the
+    /// turn started as an ordinary turn on the fallback id: the assertion
+    /// failed with `Ok("pending-uuid")`. The frontend then held a
+    /// placeholder that no `message-complete` and no `message-error` would
+    /// ever close — permanent "preparing".
+    #[tokio::test]
+    async fn a_turn_that_never_started_is_reported_not_faked() {
+        // The real signal: the pump ended without deciding, so its half of
+        // the channel is gone.
+        let (id_tx, id_rx) = tokio::sync::oneshot::channel::<Option<String>>();
+        drop(id_tx);
+        let dropped = sync_id_or_dropped(id_rx.await, "pending-uuid".to_string());
+        assert!(
+            dropped.is_err(),
+            "a socket that ended before the turn started is a dropped turn, \
+             not an empty one (§18.3) — got {dropped:?}"
+        );
+    }
+
+    #[test]
+    fn a_decided_id_is_passed_through_and_none_takes_the_fallback() {
+        assert_eq!(
+            sync_id_or_dropped(Ok(Some("msg-real".to_string())), "pending".to_string()),
+            Ok("msg-real".to_string())
+        );
+        assert_eq!(
+            sync_id_or_dropped(Ok(None), "pending".to_string()),
+            Ok("pending".to_string())
+        );
+    }
 }

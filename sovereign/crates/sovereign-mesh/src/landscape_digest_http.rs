@@ -15,10 +15,9 @@
 //! owns enrichment, so the desktop must pull the assembled digest
 //! over HTTP rather than splice locally.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Extension};
+use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::post;
@@ -29,7 +28,7 @@ use commonwealth_inference::oicp::{
 
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 
-use crate::loopback_guard::enforce_localhost;
+use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// Build the landscape-digest router. Caller must hand an
 /// `Arc<KnowledgeViewManager>` cloned from the manager that
@@ -41,20 +40,14 @@ pub fn landscape_digest_router(manager: Arc<KnowledgeViewManager>) -> Router {
             "/v1/knowledge/landscape_digest",
             post(landscape_digest_handler),
         )
-        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(manager))
+        .localhost_only_with(manager)
 }
 
 async fn landscape_digest_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    _: LocalOnly,
     Extension(manager): Extension<Arc<KnowledgeViewManager>>,
     body: Option<Json<LandscapeDigestRequest>>,
 ) -> impl IntoResponse {
-    if let Err(r) = enforce_localhost(&peer) {
-        return r;
-    }
     let req = body.map(|Json(b)| b).unwrap_or_default();
 
     let digests = manager

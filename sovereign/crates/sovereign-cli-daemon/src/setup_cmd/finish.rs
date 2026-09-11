@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::service_install;
 use crate::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 
 use super::opencode::{install_opencode_config, opencode_config_snippet, OpencodeInstall};
@@ -115,7 +114,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             return 0;
         }
     };
-    match service_install::install_service(&bin_path) {
+    match sovereign_service::install_service(&bin_path) {
         Ok(()) => println!("    \u{2713} Service registered"),
         Err(e) => {
             eprintln!("  warning: service registration failed: {e}");

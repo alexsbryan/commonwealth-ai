@@ -11,6 +11,27 @@ register  = "quality/CONCEPTS.toml"
 declared  = "2026-09-08"
 status    = "active"
 
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Added 2026-09-11, retro-fitted deliberately: this campaign IS the case that
+# minted the mechanism. Every bar below was at or near target — is_attach_mode
+# forks 15->0, capability twins 6->0 "HOLDING at 0", the construction census
+# 14->12 — and the objective was false the whole time, because the desktop
+# names sovereign-cli-daemon and sovereign-mesh directly in [dependencies].
+#
+# The bars are countable because an author listed the needles. The file says so
+# itself at sv-attach-pure-client: "The needle list cannot see an UNLISTED new
+# construction." A denominator the worker writes is a map. This denominator is
+# cargo's.
+#
+# DIRECT EDGES ONLY, and stated so rather than discovered later: the five names
+# below are what sovereign-desktop declares. The transitive closure (53 crates,
+# six of which bind a listener) collapses when these go, so the direct form is
+# the honest cheap check, not a weaker one wearing the same sentence.
+[predicate]
+statement = "sovereign-desktop depends on no crate that can assemble or host a daemon — it names none of sovereign-mesh, sovereign-cli-daemon, sovereign-compute, sovereign-workflow-host, sovereign-tools in [dependencies]"
+check = "! grep -qE '^(sovereign-mesh|sovereign-cli-daemon|sovereign-compute|sovereign-workflow-host|sovereign-tools) *=' sovereign/crates/sovereign-desktop/src-tauri/Cargo.toml"
+
+
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
 #
 # Turns already landed the destination shape: ONE driver (`serve_turn`), with
@@ -193,10 +214,16 @@ status    = "active"
 #       in-process only. drive_stream_handle (serve.rs:355) is public, so the
 #       daemon dispatch is small. Cross-conversation refusal required: a
 #       client must not resume/redirect another conversation's session.
-#   G2  cancel                       OPEN. No TurnRequest::Cancel; the
-#       QuerySession registry (query_session.rs) is in-process. Socket close
-#       aborts the turn today (turn_http.rs hangup abort), so the fallback is
-#       "drop the stream" — but cancel_preparing has no equivalent at all.
+#   G2  cancel                       DONE 2026-09-09 (R5, 154e14ca4).
+#       TurnRequest::Cancel {} — the daemon trips the SAME pair the
+#       in-process host tripped (session token + preparing token), so the
+#       turn ends the way a cancelled turn always ended: Complete with
+#       finish_reason=cancelled, not a task abort with no terminal frame.
+#       cancel_preparing's race is gone by construction — over the wire
+#       the preparing window is inside the turn task. The server refuses
+#       by name (same tenant-scoping debt as resume/redirect: its session
+#       store is unscoped, and cancelling by an unscoped key could trip
+#       another tenant's token).
 #   G3  request_information          DONE 2026-09-09 (R3).
 #       SocketApprovalChannel::request_information parks under
 #       "info:{step_id}" and prompts with the whole InformationRequest;
@@ -483,6 +510,16 @@ status    = "active"
 #   B3  BIND FAILURE IS BEST-EFFORT. daemon.rs logs a warn! and returns from
 #       the serve task. Harmless today (chat is in-process); a silent total
 #       outage in an always-client world. Must become surfaced and fatal.
+#       LANDED 2026-09-10, both hosts, without changing the task's posture:
+#       the serve task publishes `sovereign_mesh::ClientListener`
+#       (Pending/Bound/Failed, a watch on EmbeddedDaemon); `daemon run`
+#       reads it before "svrn daemon is running" and exits 1 on Failed;
+#       the desktop's Local bootstrap reads it after resume/create and
+#       returns Err (backend-error) on Failed or a 30s Pending. Watched
+#       fail twice the same day, both as "a port is not an identity": the
+#       fixture daemon lost :9741 to the operator's launchd relaunch (D3),
+#       and the first-launch journey's embedded daemon lost :9741 to the
+#       fixture daemon and served its turn through the stranger.
 #   B4  RUN-LOCK REFUSAL commissions NO daemon, deliberately, and state.rs
 #       says so: "Every desktop surface that does not need the mesh keeps
 #       working." Chat is one of those surfaces today. It will not be.
@@ -507,6 +544,135 @@ status    = "active"
 #       local_daemon_wiring` (state.rs:980) — Local-only. The census FLOOR and
 #       this file's floor_basis have both been counting a needle that cannot
 #       fire in attach. Correct the census and the bar in ONE commit.
+#
+#   D3  THE INGEST ESCAPE WAS NEVER A REBRAND SPLIT-BRAIN. Scratch .sovereign
+#       is a symlink to .svrnmesh (same as the real home). The fixture daemon
+#       lost the :9741 bind to the operator's launchd-relaunched daemon, kept
+#       running (the in-task bind is best-effort), logged "is running", and
+#       the harness's /v1/models probe was answered by the STRANGER — so the
+#       app attached to the real daemon and the fixture corpus landed in the
+#       real ~/.svrnmesh (the 2026-07-30 incident, again). Fixed 2026-09-10:
+#       `daemon run` reads the serve task's bind outcome
+#       (sovereign_mesh::ClientListener) before claiming to run and exits 1 on
+#       Failed; /status.process carries pid + run_id; the harness's readiness
+#       is IDENTITY (pid == spawned child), not liveness.
+#
+# ── REVIEW 2026-09-10 — three read-only reviewers over R1-R5 (HEAD aaf09ddbe) ─
+#
+# Structure delivers the claim: closed enums over existing serde payloads,
+# one resolve mapping, ResolveOutcome moved not mirrored, socket split
+# falsified on a real socket, DesktopTurnSink gone, one renderer, all four
+# turn commands on the wire in both modes. BEHAVIOUR does not yet, and each
+# of the six below is survivable today ONLY because a local path still
+# exists — so they gate the deletion half, in this order. Full findings
+# (35, with scenarios) are the note tagged sv-surface-review-2026-09-10.
+#
+#   RB1 NOBODY CLOSES THE SOCKET AFTER Complete. turn_http.rs:1093 continues
+#       forever; drain_after_complete (turn-client lib.rs:1387) and the
+#       desktop pump (chat.rs:280) end only on socket end. One leaked
+#       WebSocket + writer task + SocketApprovalChannel PER TURN, both ends;
+#       `turn_wire` never cleared. E1 has no closer. (all three reviewers)
+#   RB2 CANCEL DOES NOT UNPARK A PROMPT. turn_http.rs:1020 trips tokens;
+#       Parked::answered (approval_desk.rs:85) blocks; executor.rs:757 has no
+#       select. Stop on an open consent card -> no Complete, ever.
+#   RB3 finish_wire_turn DROPS A PROMPT THAT PRECEDES TurnStarted
+#       (chat.rs:228-235 forwards only Narration|Notice). ComplexTask sends
+#       Prompt FIRST (turn_surface.rs:877 pins it): every agentic ask hangs,
+#       and the fallback id is taken — the aaf09ddbe hang, re-created.
+#   RB4 StreamError CARRIES RECOVERABLE REFUSALS (turn_http.rs:1216) and both
+#       clients treat it as terminal (turn-client lib.rs:1354; chat.rs:456).
+#       Double-click approve -> a healthy turn is discarded. Refusals ride
+#       Notice::ResolveAck, which exists.
+#   RB5 `state.turn_wire` IS ONE GLOBAL SLOT for a per-conversation resource
+#       (chat.rs:207/:353/:816; state.rs:116). cancel_stream ignores its
+#       conversation_id; a redirect overwrites and the first pump's end
+#       clears the live one. HashMap<conversation_id, TurnSender>.
+#   RB6 G7 IS NOT DELIVERED AS CLAIMED. emit_clarification_request still
+#       reads self.routing_events (no-op on the daemon) at
+#       knowledge_query.rs:117,243 and ask_move.rs:90,209; narration at
+#       document_op.rs:233,268 and attached_doc.rs:278,373,670,718. The card
+#       fires in-process and vanishes on the wire. Boundary test owed.
+#
+#   PRE-REGISTERED 2026-09-10, BEFORE the RB1-RB6 commits land (18.6): the
+#   fixes change the turn socket's LIFECYCLE (a TurnSettled notice + idle
+#   close), cancel's reach (the parked desk), refusal FRAMING (ResolveAck,
+#   not StreamError), the desktop's lead-frame handling and its per-
+#   conversation wire slot, and which sink the clarification card reaches.
+#   None of them touches retrieval, routing, prompt assembly or synthesis;
+#   token order inside a turn is unchanged by construction. Expected on
+#   `svrn quality check` (chat-ask, routing, retrieval-prod, synth,
+#   throughput, enrichment-f1, knowledge-gym, chaos-monkey): NEUTRAL on
+#   every lane vs the committed baseline within RUNBOOK §6's noise band.
+#   A reddened lane indicts the FACTOR (a frame the client now treats
+#   differently — TurnSettled, ResolveAck — or a socket closed under a
+#   lane's own harness), not the answers; a chaos-monkey improvement is
+#   plausible (leaked sockets no longer accumulate) and is reported, not
+#   claimed. Run after the three RB commits; table persisted under
+#   target/quality-check/<stamp>/summary.json; verdict lands on this row.
+#   FINAL VERDICT 2026-09-10 (run 20260910-172202, daemon rebuilt at
+#   3a1cf984d, all wire and delete halves in): chat-ask PASSED including
+#   its per-stage baseline row against 4dd212fbca5f; throughput PASSED
+#   against its baseline — the settled socket, the idle close and the
+#   per-conversation wire slot did not move the served-turn numbers;
+#   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED;
+#   chaos-monkey FAILED its one pre-existing probe (distract-bomb-maker,
+#   f4b13a68c). 7 of 8; the pre-registered NEUTRAL holds on every lane
+#   the instrument can compare.
+#   VERDICT 2026-09-10 (runs 20260910-091032 full check + 093056 lane
+#   re-sample; daemon rebuilt at d51cd2b4c; box under peer load 3.6-8.2):
+#   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED.
+#   throughput COULD-NOT-JUDGE: first `check` run for stack 4dd212fbca5f,
+#   baseline MINTED (sovereign/bench/quality-check/baselines/throughput/);
+#   the two earlier runs today were prepush gates with no banks. So the
+#   RB delta itself is UNJUDGED by construction — no pre-change reading on
+#   this stack exists; this run is the pre-deletion baseline instead.
+#   chat-ask FAILED once on `per-stage calls [q2]` (audit 16 > 12 on run 2
+#   of 3; the audit pass's retry ladder re-extracts and re-judges when a
+#   claim is judged unsupported) and PASSED every stage-call check on both
+#   questions in the re-sample — one run is not a measurement (§18.5);
+#   P(useful) 0.996-1.000 both runs. chaos-monkey FAILED 2 of 2 on
+#   `ungrounded assertion: distract-bomb-maker` — PRE-EXISTING: f4b13a68c
+#   (2026-09-08) added that row and records the same probe ungrounded on
+#   all three of its own live runs; the answer ("The Professor") is the
+#   gold keyword and 7 of 19 retrieved chunks carry it, but the released
+#   quote does not, so the citation gate grounds a correct answer on a
+#   quote that does not support it — a grounding-gate finding for its
+#   owner, not this campaign. Net: nothing reddened that the RB factor
+#   explains; the pre-registered NEUTRAL stands as far as this instrument
+#   can see, and the next run has a baseline to compare against.
+#
+#   NET-DELETION ACCOUNTING, measured 2026-09-10 (`git show --shortstat
+#   -- '*.rs'` over the 15 sv-surface commits R1..3c7ad5933, Rust only):
+#   +3,427 / -892 = NET +2,535. The deletion targets it must pay against:
+#   state.rs + state/builders/ = 3,098 lines, commands/ = 10,998 lines,
+#   16 is_attach_mode forks. Nothing on the ledger is negative yet; the
+#   RB fixes above will ADD (a notice variant, a map, tests) before the
+#   deletion half subtracts. No number reported as a result until then.
+#
+#   LANDED 2026-09-10, each watched red on a real socket or a real turn:
+#     RB1+RB2+RB4  188a9e4e4 (mesh, contracts, turn-client, server ws)
+#     RB3+RB5+C4   759ea5133 (desktop; forks 16 -> 15; census re-pinned
+#                  on next_frame().await == 1)
+#     RB6+C6+T3    the core commit below this row's sha (handlers off
+#                  the no-op sink 13 -> 1 read sites; boundary census
+#                  turn_capability_census.rs; capabilities tests)
+#   Gate for the batch: workspace lint --full clean, sovereign-test full
+#   12716/12716, real-mode journeys 5/5 against the settled-socket daemon.
+#   Open from the batch: the agentic (non-streaming) path persists no
+#   finish_reason, so a cancelled agentic Complete carries None (core);
+#   narration sites in document_op/attached_doc are census-covered but
+#   have no behavioural test (needs a document fixture).
+#
+#   ALSO COUNTED: 16 is_attach_mode decision points at HEAD vs the 15 above —
+#   conversation.rs:641, added by 0f76bde5c (G3b), and it double-folds the
+#   searched sources now that Local rides the wire. Plus four new
+#   turn_wire.is_some()/runtime.sessions wire-or-local branches (chat.rs:816,
+#   :893; conversation.rs:293, :687) — the additive pattern under a new
+#   predicate. Feature loss against directive 2: TurnMetadata carries no
+#   retrieved_chunks/provenance and the live bubble reads both. try_resume's
+#   Err arm still only warns (state.rs:1806) — post-R5 that is a total chat
+#   outage. Ledger honesty: G3/G3b/G8/G10 DONE with e2e that fails without
+#   the producer; G4/G5/G6 unit-proven only; G2 byte-pinned only.
 #
 # ── CLOSEOUT LADDER (revised 2026-09-09; supersedes rung 6's C2/E sketch) ────
 #
@@ -590,7 +756,294 @@ status    = "active"
 #   R5  THE COLLAPSE. Delete the 15 forks and the desktop's in-process turn
 #       path. `sv-attach-pure-client` floor 13 -> 0. THIS is where the ledger
 #       turns; nothing before it deletes much.
+#       TURN-COMMAND HALF LANDED 2026-09-09 (05e56c483 + 154e14ca4 +
+#       f7fe8cfff): every turn-shaped command drives the wire in BOTH boot
+#       modes — send_message_stream/redirect/resume share finish_wire_turn
+#       (socket claims approvals, TurnStarted is the sync id, pump_wire_frames
+#       raises the same cards, ONE renderer unchanged, zero TypeScript
+#       moved); send_message + document_ask ride the REST one-shot;
+#       cancel_stream is wire-first; DesktopTurnSink is DELETED and the
+#       rung-0 censuses evolved (wire sends pinned where the in-process
+#       drive was). METADATA DELTA named on both one-shots: the wire's
+#       typed projection replaces the raw blob (G9's client half; the two
+#       blob gates have wire homes). REMAINS: delete the local deciders
+#       (floor 14 -> 0 via the boot assertion replacing the census), the
+#       15 is_attach_mode forks in non-turn commands, and the seven object
+#       migrations (the census's bulk-retire plan).
 #   R6  MOBILE (M-1/M-2). By construction once it consumes the client family.
+#
+# ── CONSTRUCTION 2, SURFACE PARITY — PROVEN 2026-09-10 on the real harness ──
+#
+# tests/e2e/real/journeys/surface-parity.journey.spec.ts + cli-surface.ts:
+# one fixture question ("Who manufactured the Meridian Lighthouse's Fresnel
+# lens, and in what year was it made?" — both facts in one passage of
+# lamp-mechanism.txt; Aubert/Fresnel appear in no other fixture doc, so a
+# source divergence is a retrieval difference, not a tie-break), asked
+# through the desktop (filter strip pinned to the fixture corpus) and
+# through `svrn chat ask --corpus <same id>` against the SAME fixture
+# daemon under the SAME scratch profile env. Rows, run 1789066857283:
+#   routed_intent          HARD    passed  KnowledgeQuery = KnowledgeQuery
+#   sources                HARD    passed  identical (corpus_id, chunk_id)
+#                                          set, 3 chunks — handles, not
+#                                          titles, so a different top-k of
+#                                          the same doc would show
+#   grounding_gate_action  HARD    passed  released = released, ran both
+#   answer_names_fact      TRACKED passed  Aubert + 1886 on both surfaces
+#   full_text              TRACKED differs desktop 900 chars, CLI 1,578 —
+#                                          same intent, sources and gate;
+#                                          the surfaces PRESENT the same
+#                                          answer differently (the desktop
+#                                          runs present_answer's envelope
+#                                          strip; the CLI prints more). A
+#                                          presentation twin, recorded for
+#                                          the deletion half's D9 to fold
+#                                          into one renderer.
+#   negative control: the same question scoped to the governance corpus
+#   cites 0 fixture chunks and a DIFFERENT source set (differs=true) — the
+#   comparator can tell a twin apart, so the greens above are not vacuous.
+#   one store: the CLI's two conversations are visible in the desktop
+#   sidebar — both surfaces are projections over the daemon's store. (An
+#   earlier draft asserted the opposite as "pollution" and was wrong on
+#   the live run; the row is inverted and says why.)
+#   Record: test-artifacts/results/surface-parity.json (gitignored; the
+#   rows above are the citation). Journey suite 6/6 green with it.
+#
+# ── THE DELETION LADDER (surveyed 2026-09-10 at d51cd2b4c; every claim cited) ─
+#
+# SURVEY FINDING THAT RESIZES THE HALF: all 15 is_attach_mode forks already
+# have their wire form. reading.rs:226,272,363,404 -> reading_http.rs:266-282
+# (the file's own daemon_reading_get); insight_commands.rs:114,145,166,184
+# -> insight_http.rs + TurnClient::{clip,list,search,delete}_insight;
+# conversation.rs:250 -> /v1/conversations/search; :488 ->
+# /v1/notes/tool-outcome; :819,845 -> /v1/memories/{id}[/weaken] (and
+# :849-861 re-derives the halving formula, §10.6); state.rs:854/1634 are
+# params, not forks. The ledger's wire-first gate is ALREADY satisfied for
+# the whole fork population: D1+D2 are pure deletions.
+# The seven objects: LocalCorpusManager has a daemon twin already serving 17
+# watch routes (corpus_watch_http.rs over watched_folder_runtime::manager());
+# MeshApp's 17 reads funnel through ONE primitive (meshapp.rs:85-108
+# load_atoms) so one route serves all 17; governance and deep-research read
+# the FILESYSTEM and cost zero needles; ServingCore already holds
+# corpus_engine/state_store/runtime/insights, so every missing route is a
+# door over an object the daemon has. Attach floor: 13 needles in state.rs
+# (D2 confirmed: WatchedSubsystem::install at :1173 is inside the Local arm)
+# + build_attach_provider = 14 counted; none is in the closed app-local set.
+# G9's one named byte of feature loss: ProvenanceSource has no display_name
+# (projection.rs:81-90). Three degradations with NO fork at all:
+# get_last_turn_provenance (conversation.rs:884), list_skills (:891), the
+# session->conversation map (chat.rs:1150) read the DESKTOP's Runtime,
+# which in attach never ran the turn — broken today.
+#
+#   D1  reading fork family — delete the four forks + nine private DTO
+#       helpers; daemon_reading_get the only path. ~ -500. Parity:
+#       read_get_atom_card desktop vs /internal/corpus/{c}/atoms/{a}.
+#   D2  the eight single-line forks (insights x4, conversation x4) — wire
+#       unconditional; delete get_insight_service, the halving twin, the
+#       require_store! twins; add GET sink status (~40). FORKS 15 -> 0.
+#       ~ +60/-260. Parity: clip -> list -> search -> delete, both surfaces.
+#   D0  census correction: WatchedSubsystem out of the needle list (D2);
+#       CompactionWorker::spawn + compaction: Some gated on
+#       local_daemon_wiring (D1 defect). Floor 14 -> 12. ~ +5/-10.
+#   D3  MeshApp reads: GET /internal/corpus/{c}/atoms over
+#       ServingCore.corpus_engine (+~90) + TurnClient::corpus_atoms; the 17
+#       projections fold over wire atoms; authorize(webview.label()) stays
+#       (X2). ~ +150/-430.
+#   D4  Atlas browse: atlas_http (+~230) for the 12 data commands; the two
+#       GLiNER downloads stay app-local. ~ +230/-620.
+#   D5  LocalCorpusManager: lc_http over the daemon's own manager; lc_ingest
+#       submits as a job (64dfedb33's pattern); lc_validate_path/lc_pre_scan
+#       stay app-local. ~ +320/-950. Needle 8 out -> floor 11. DIRECTIVE 3
+#       BECOMES TRUE HERE, not before.
+#   D6  notes + features: /v1/notes CRUD + /v1/features/projects (+~200);
+#       lessons.rs (4) + recipe_author_commands.rs (7). ~ +200/-600.
+#       Needles 2,3 out -> floor 9.
+#   D7  store CRUD + document assets + G9: /v1/documents (+~180) and
+#       display_name on ProvenanceSource; AnswerDoc render shared; the
+#       fs::write to a user path stays app-local. ~ +230/-500. Needle 1
+#       out -> floor 8.
+#   D8  governance (9) + MCP config (6): route families over the daemon's
+#       own atlas dir (+~330). ~ +330/-1,000. Zero needles.
+#   D9  THE BOOT SPLIT + B4: attach_bootstrap() (~130 ln) replaces the
+#       1,450-line bootstrap_with_progress on the attach path; /v1/skills +
+#       /v1/conversations/{id}/provenance close the three no-fork
+#       degradations; RunLockError::Held -> re-probe -> Attach, fatal when
+#       the holder does not answer (identity: /status.process pid);
+#       build_attach_provider dies. Floor 12 -> 0; assert_attach_purity
+#       replaces the census. ~ +250/-700.
+#   DEFERRED, not promised: deep-research (1,648 ln, filesystem run dirs,
+#   no needle).
+#   CANNOT CROSS: MeshApp authorization (webview.label() is the token, X2);
+#   detect_bootstrap (X1); supervisor/app.exit/app.restart (X3); file
+#   writes to user-picked paths (renderers move, the write does not);
+#   state.mcp_servers live status (a twin to delete, not proxy); the closed
+#   app-local set.
+#   D9 CORRECTION, measured 2026-09-10 (note 1ee37b89): the boot split's
+#   premise — "every attach-time consumer already reads the wire" — is
+#   FALSE. The forks were never the population that matters. Counted
+#   over src/ (cfg(test) cut, comments dropped): 49 needle READS across
+#   13 files, none behind a mode fork, every one live in attach because
+#   the spine builds all needles in both modes: conversation.rs 12,
+#   document_asset.rs 12, corpus.rs 8, chat.rs 3, budget.rs 2,
+#   models.rs 2, recipe_testing.rs 2, local_corpus_commands.rs 2,
+#   commands/mod.rs 2 (macro defs), config_setup / contribution /
+#   corpus_install / insight_commands 1 each. Sharpest: is_backend_ready
+#   reads state.runtime.is_some() and a null runtime hangs the splash;
+#   list_corpora and notebook_list return Ok(vec![]) on None — silent.
+#   Hoisting attach out today deletes 49 answers. So D9 splits in two:
+#   D9a WIRE: /v1/documents family (skeleton, ask, list — the 12
+#        document_asset reads; 748ffbdb5 was AnswerDoc only), the corpus
+#        catalogue + notebooks over /internal/corpus (corpus.rs, budget.rs,
+#        corpus_install.rs), PUT /v1/skills/{id}/active (needs an ArcSwap
+#        on SkillRegistry first), a readiness fact for is_backend_ready
+#        that is not a needle (3c7ad5933's identity probe is it).
+#   D9b CONSUME + SPLIT: conversation.rs's 5 CRUD commands onto
+#        turn_http's existing CRUD, the rest of the 49 onto the routes
+#        above; then attach_bootstrap() and the purity assertion, which
+#        cannot be written as a tests/*.rs today (bin-only crate, real
+#        AppHandle, a real GGUF at slots.fast) — it is a structural
+#        census over the attach code path plus a runtime probe.
+#   LANDED from D9 (partial): GET /v1/skills + GET /v1/conversations/{id}
+#   /provenance (turn_extras_http.rs; trust_level lowercased on the daemon,
+#   §10.6; provenance null is a 200); the desktop reads both in both
+#   modes; B4 attach-to-the-holder (RunLockError::Held -> re-probe ->
+#   /status.process.pid identity -> attach, or FATAL naming root, lock
+#   reason and port); the session->conversation map soft-reads. Floor
+#   stays 12; the consumer count (49) is the number D9b drives to zero,
+#   not minted as a ratchet while D5-D8 delete halves are landing in the
+#   same files.
+#
+#   TOTALS (estimates from the survey, to be replaced by measurement per
+#   rung): wire +~1,750, local -~5,570, net ~ -3,820; campaign then
+#   ~ +5,180/-6,460 = net ~ -1,280 Rust. Floor 14 -> 12 (D0) -> 11 (D5)
+#   -> 9 (D6) -> 8 (D7) -> 0 (D9); D1-D4 delete consumers, not needles —
+#   the needle count is a LAGGING indicator and this row says so.
+#   ORDER: D1, D2, D0 first (no new wire, all forks gone, ~ -770 for ~0
+#   risk); then D3/D4 wire can be built beside them.
+#
+# ── THE LEDGER — measured 2026-09-10 at the end of the landing session ──────
+#
+# Method: `git show --numstat -M` over every sv-surface commit (R1 through
+# D9a, 35 commits, plus D9b uncommitted at the time of writing), Rust only,
+# production = any .rs not under a tests/ directory and not *_tests.rs.
+#
+#   production Rust   +18,397 / -5,439  = NET +12,958  (with D9b: +12,224)
+#   test Rust         + 9,878 /   -376  = NET + 9,502
+#   all Rust                              NET +22,460
+#
+# DIRECTIVE 3 ("this whole initiative MUST reduce code by the end") IS NOT
+# MET, and this row says so rather than reporting a plan. Where the lines
+# went, from the same table: the wire batches d250e0893 (+877),
+# 710a0326e (+2,199), 4c45a1fc9 (+1,606), 21f572734 (+3,513), 2a9a9e91e
+# (+1,868), 188a9e4e4 (+985) — a route family costs 400 to 1,100
+# production lines (handlers + absence mapping + a generic client method
+# per route + the loopback leg), an order of magnitude above the survey's
+# "+~1,750 wire" estimate, which priced doors at 60-150 lines each. The
+# desktop deleted what the survey said it would, and more (c7e7d6a73
+# -776, 1f7ea8745 -175, 19946f99a -225, 069660fd9 -299, 502304f63
+# -2,090, D9b -1,156; state.rs 1,847 -> 2,195 lines because B4 and the
+# identity probe LANDED there while the split did not; state.rs plus
+# state/builders is 4,498).
+#
+# WHAT THE CLI COULD SHED — PRICED BY INVENTORY, THEN MEASURED BY DOING IT.
+# A read-only survey (2026-09-10) priced the CLI's in-process twins of the
+# new routes at ~2,600 production lines: reading_diag_cmd ~788, notes_cmd
+# ~650, atlas inspect/status/stats ~430, corpus_catalog_cmd ~290, mcp_cmd
+# ~200, meshapp dev's op_handler ~150, corpus_watch_cmd ~120. The rung that
+# tried to land them found the survey wrong by an order of magnitude:
+# NET -13 production lines across sovereign-cli-llm + sovereign-cli. One
+# family crossed — reading-diag, which already REQUIRED the daemon
+# (build_session fails at "daemon unreachable" before any changed line;
+# stdout byte-identical on a golden; -70 in the file, +57 for three
+# additive client methods reading_neighbors / reading_atom_card /
+# reading_atom_elsewhere; reading_http's DTOs are Serialize-only with
+# &'static str fields, so a minimal typed reader stays CLI-side). The
+# other six are the DAEMON-DOWN FALLBACK the CLI keeps by design, or
+# print things the daemon deliberately does not serve: notes_cmd is
+# already daemon-first through the MCP door with NoteStore as the named
+# required fallback (the agent-notes journey documents it); atlas status
+# has no route and its charter is "works without a running daemon";
+# atlas stats has no route and 3 of 8 columns have no daemon source;
+# atlas inspect already shares ONE FileAtlasReader with atlas_http (not a
+# twin); corpus_catalog_cmd is a name collision with corpus_catalog_http,
+# not a counterpart; mcp_cmd works daemon-down and prints connected /
+# tool_count / error, which 21f572734's route refuses to fabricate
+# (mcp-interop is a live journey on that stdout); meshapp dev's point is
+# offline bundle dev, and its real §10.6 twin is the duplicated clamps.
+# THE RULE that decided it: a CLI command that answers with the daemon
+# down keeps doing so; a repoint subtracts only where the command already
+# required the daemon. The number that would close the gap is not in the
+# surfaces; it is the 4,498-line desktop spine (state.rs + builders), which the D9 correction
+# shows cannot come out until `commission`'s six attach-time readers have
+# their seven routes — and those routes cost what the others cost.
+#
+# DEDUPLICATION, measured 2026-09-10 by a read-only reviewer over the 40
+# commits (`git show --numstat`, tests excluded): net production by crate
+# sovereign-mesh +10,081 (15 route files + turn_http.rs = +9,204),
+# turn-client +2,909, contracts +879, mobile +362, cli +173,
+# sovereign-desktop -1,117 — the surfaces shed code; one crate absorbed
+# 78% of the growth. 32.5% of everything added is COMMENT lines
+# (code 12,989 / comment 6,738 / blank 1,013); the 14 route files carry
+# 3,036 comment lines against 6,938 of code, 898 of them `//!` module
+# essays restating the commit bodies and this file. The plan, ranked by
+# lines per unit of risk and landing now: module essays -758;
+# http_response.rs (58 lines, zero callers, dead-code-allowed since May)
+# adopted in place of 268 re-derived lines under 16 signatures + 13
+# ErrorBody copies, and Result<_, Absence> accessors for 83 four-line
+# matches, -561; a LocalOnly extractor for 142 enforce_localhost pairs
+# and one router builder for 19 repeated layer tails, -483; three client
+# combinators the client already had, adopted by the 33 methods that
+# bypassed them, -310; Deserialize + String on reading_http so the CLI's
+# seven mirrors go, -75; desktop dead imports behind allow(unused_imports)
+# and two dead items, -35; three free re-exports and the pub clamps, -23;
+# tests: loopback_parity fold -199, one fixture builder -210, the boot
+# preamble -78, byte-identical CorpusIndex::create copies -45. Total
+# 2,245 production + 532 test. It moves the initiative from +12,958 to
+# about +10,700 and no further: scaffolding is 17% of the net; the rest
+# is new daemon surface and comments. The reviewer also corrected two
+# ledger figures (state.rs is 2,195, spine 4,498; loopback_parity
+# 1,924) and found that loopback_parity.rs carries 1,114 lines of rung
+# 1/3/6 parity suites under a docstring that says "cross-router loopback
+# parity" — a relocation owed, not a deletion.
+#
+# AFTER THE DEDUPLICATION PASS (55a7ff294, 4d91462d1, d9e2577d5), the
+# same numstat over all 44 sv-surface commits R1..HEAD:
+#   production Rust   +21,047 / -10,576  = NET +10,471   (was +12,958)
+#   test Rust         +11,637 /  -1,096  = NET +10,541
+#   by crate, production net: sovereign-mesh +7,782; turn-client +2,462;
+#   contracts +875; core +616; mobile +362; cli-llm +140; meshapp +76;
+#   store +50; cli-daemon +34; server +30; tools +27; commonwealth-api
+#   +21; sovereign-desktop -2,004.
+# The dedup removed 2,487 production lines, 11% above the plan's 2,245,
+# and the result is the shape the reviewer predicted: the surfaces are
+# thinner (desktop -2,004 net), the daemon is larger by the routes that
+# serve them, and directive 3 stays NOT MET at +10,471.
+#
+# CONSTRUCTION 3, TWIN CENSUSES — FINAL RUN on the clean tree at 2a3a78766
+# (scripts/twin-census.py; runs 20260911T015127Z + 20260911T025452Z):
+# 20 families, 20 proved-red, 0 NOT-A-GATE, 0 could-not-judge. The first
+# pass abstained on five families whose plants had gone stale under the
+# dedup and D9b (a find string that no longer occurred, a plant that no
+# longer compiled, an expect_red the census no longer prints); each was
+# re-planted against today's code, compile-verified, restored byte-for-
+# byte, and reddened its census by name. Families: turn-driver,
+# reading-wire, atlas-browse, meshapp-atoms, meshapp-explorer,
+# attach-floor, conversation-wire, conv-browse, governance-oplog,
+# insight-gather, insight-sink-wire, lessons-notes-wire,
+# local-corpus-ingest, local-corpus-registry, mcp-config-wire,
+# recipe-project-composition, sv-desktop-d9b-consumer, turn-capability
+# (core), mobile-wire-mirror (mobile), mesh-loopback-layer (mesh — the
+# PUT gate that closed f6a633519's finding).
+#
+# THE HONEST SHAPE OF THE RESULT: two of the three constructions are
+# proven (surface parity on the real harness; twin censuses red on
+# planted twins across 19 families), the third is measured and not met
+# (attach floor 12 of 14, 33 attach-time reads remaining, one object —
+# the Runtime commission — behind all of them), every peripheral fork is
+# gone, mobile is on the one client family, the turn protocol's lifecycle
+# holes are closed, and the code is larger. The operator's three
+# directives pulled against each other exactly as the REALIGNMENT section
+# said they might, and directive 2 (no feature loss) won: every capability
+# crossed at the price of its wire.
 #
 # ── WHERE TO PICK THIS UP ───────────────────────────────────────────────────
 #
@@ -899,6 +1352,188 @@ status    = "active"
 # never what embedded is entitled to.
 
 [[bar]]
+id           = "sv-no-daemon-management"
+one_line     = "CLAIM: the desktop cannot BECOME a daemon - it does not link the crates that assemble one, and reachability belongs to the client package, not the app"
+derives_from = "operator, 2026-09-11: 'DoD of this initiative is most fundamentally that we do away with the desktop app managing a daemon (the thinness purity moment)'"
+status       = "open"
+# ── REVISED 2026-09-11, SAME DAY, BY THE OPERATOR — read this first ────────
+#
+# The bar first read "cannot spawn one, cannot become one, and does not link
+# the crates that would let it". The middle clause was wrong, and the
+# correction is the architecture rather than a wording fix.
+#
+#   "The daemon is the daemon and the desktop client is the client. If
+#    there's a small moment where the client has to spawn something that's
+#    the kind of integration surface we actually can tolerate."
+#
+# WHAT IS ACTUALLY BEING SEPARATED is ownership of identity, not who calls
+# spawn. The daemon owns the data root, the RunLock, the weights and the
+# serving. A binary that LINKS `sovereign-cli-daemon` and re-enters itself
+# (main.rs:136-138) is a daemon wearing a UI whatever the process tree looks
+# like at runtime — and an attach-needle count reaches zero with the whole
+# backend still compiled in. So the operative test is the DEPENDENCY EDGE.
+# `Command::new(path).spawn()` links nothing and is not the failure.
+#
+# AND THE APP SHOULD NOT HOLD EVEN THAT. The better decomposition is the one
+# an API client package already shows: an application calls the client and
+# moves on; establishing reachability is the CLIENT's concern the way
+# connection setup is `libpq`'s and not the caller's. So "ensure a backend is
+# reachable" belongs to the client family (`sovereign-turn-client`), where
+# retry, readiness and backoff live once and every surface — desktop, CLI,
+# phone — inherits the same behaviour. The desktop then holds ZERO daemon
+# code, not a little, and the parity claim pays out instead of being argued.
+# The honest precedent is a language server or an embedded database driver,
+# NOT an API client (libpq does not start Postgres) — so the capability is
+# NAMED on the client, never smuggled in as a networking detail.
+#
+# THE CAPABILITY IS CAPABILITY-SHAPED, NOT PLATFORM-SHAPED. A first draft of
+# this revision proposed making "mobile cannot spawn" structural by omitting
+# the feature from mobile's build. That encodes TODAY'S DEPLOYMENT as an
+# invariant and boxes out on-device inference on a phone — a bonsai or 1-bit
+# model — which the operator caught. The flag asks "does this build ship a
+# backend it can bring up", and a phone flips it the day a model fits, with
+# no architecture change: this file's own sentence already covers it, because
+# "Local" is just the boot where the daemon happens to be in-process. A phone
+# running on-device is a client whose daemon is COLOCATED, not an exception.
+#
+# WHICH IS WHY IN-PROCESS HOSTING SURVIVES. iOS forbids fork/exec for App
+# Store apps, so on a phone an embedded backend cannot be a sidecar process —
+# it must be in-process, exactly the thing being removed from the desktop.
+# The embedded sink was already sanctioned at the top of this file ("nothing
+# requires a host to speak HTTP"); THIS is the case it was sanctioned for.
+# What dies is the DESKTOP assembling a daemon as a side effect of being a
+# UI. What lives is in-process hosting as a DECLARED mode with a named owner.
+#
+# THE INSTRUMENT NEEDS TWO HALVES, and the first one alone is how this rots.
+# A dependency-edge gate passes clean through someone adding a retry, then a
+# backoff, then a health check, then a restart policy — nobody re-supervises
+# in one commit. So the bar is the dependency edge PLUS a census that no
+# surface retains a process handle or tracks a lifecycle. Same lesson the
+# attach floor already taught: a count that cannot move under real regression
+# does not measure it (§18.4).
+#
+# A CORRECTION TO THIS FILE'S OWN PRODUCT TRADE. An earlier revision said a
+# service-managed daemon "keeps ~28 GB resident after the window closes" and
+# treated quitting as a way to free it. A user never wants the daemon DOWN;
+# they want not to pay for idle, and that is the daemon's own policy, which
+# already exists: `[daemon] primary_idle_secs` defaults to 300 and
+# `extras_idle_secs` to 0, applied in daemon_cmd/build/inference.rs:293,347.
+# The real gap is that the fast and embed slots have NO idle monitor at all.
+# That is a daemon-side fix in the place that should be deciding, not an
+# argument about lifecycle.
+#
+# WHERE fe5a85cc3 LANDS AFTER THIS. `sovereign-service` and the Windows
+# Scheduled Task are NOT the desktop's path — they are the CLI / headless /
+# server path, for operators who want a daemon that outlives a session. That
+# is a user-choice feature, which is why per-platform backends are the right
+# price there and would have been the wrong tax on the desktop.
+#
+# THIS BAR OUTRANKS sv-attach-pure-client AND SUBSUMES IT. That bar counts
+# needles inside a mode ("attach constructs zero local deciders"), which
+# presupposes both modes exist and measures a lagging count. This one asks
+# the coarser, honest question: is the daemon something this app owns? If
+# the crate is not linked, the spine cannot be constructed, the census stops
+# being needed rather than being driven to zero, and the parity claim
+# (desktop = cli = mobile) becomes structural rather than argued.
+#
+# WHY SUPERVISED-CHILD IS NOT THE DESTINATION. It looks like the answer and
+# is not. `main.rs:136-138` is `Launch::Daemon =>
+# std::process::exit(sovereign_cli_daemon::daemon_child_main())`: the "child
+# daemon" is THIS BINARY re-entering itself (`current_exe() --daemon-child`,
+# supervisor_setup.rs:134-149). So the desktop must LINK the whole backend to
+# be able to become one - 21 workspace crates in src-tauri/Cargo.toml
+# including sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe,
+# corpus-engine+treesitter, gliner, inference, commonwealth-core/state.
+# Debug binaries: sovereign-desktop 661 MB, sovereign-cli-daemon 614 MB - the
+# app is LARGER than the daemon it supervises, because it is the daemon plus
+# a UI. `svrn chat` links sovereign-turn-client and speaks HTTP; mobile
+# consumes the one client family; the desktop contains the backend. That is
+# the parity gap, and no attach-needle count reaches it.
+# Supervised-child (W1 flip, 2026-07-18) bought CRASH ISOLATION and is worth
+# keeping as a product property - it just delivered it by making the app able
+# to BE a daemon instead of by having one it does not own.
+#
+# MEASURED 2026-09-11 (three read-only surveys, file:line in each finding):
+#   * 1,990 production Rust lines in sovereign-desktop exist for daemon
+#     lifecycle; ~271 survive an OS-managed daemon. Buckets: child supervision
+#     645, in-process EmbeddedDaemon + RunLock 365 (state.rs), bootstrap
+#     Attach/Local decision 280 (collapses to a ~40-line readiness wait),
+#     smoketest crash-isolation subprocess 302 (belongs in the daemon, which
+#     is what loads models), mobile-host supervision 90, crash-log
+#     consumption 37. Plus sovereign-compute/src/supervisor.rs 1,082 - but
+#     see below, that module STAYS.
+#   * THE REPLACEMENT IS ALREADY WRITTEN. `kickstart_daemon`
+#     (config_setup.rs:256-298) shells `launchctl kickstart -k
+#     gui/<uid>/com.svrnmesh.daemon` and `systemctl --user restart svrnmesh`
+#     today, exposed as `attach_restart_daemon`. `install-service` writes a
+#     launchd LaunchAgent (KeepAlive.SuccessfulExit=false) and a systemd user
+#     unit (Restart=on-failure, StartLimitBurst=5). `attach_watch.rs` (101
+#     lines) already polls an EXTERNALLY owned daemon and drives the
+#     ReconnectBanner's attach-down state. The OS-managed topology is the
+#     path the desktop already takes when it finds a daemon running.
+#   * THE SHARED SUPERVISOR IS NOT DELETED, only its desktop caller.
+#     `sovereign_compute::supervisor` is consumed by sovereign-cli-daemon
+#     (daemon_cmd/bootstrap.rs:592, discovery_policy.rs:24) for its own
+#     compute children. A daemon supervising its compute children is right;
+#     a desktop supervising a daemon is not.
+#   * FIRST LAUNCH ALREADY NEEDS NONE OF IT, on the default path. The wizard
+#     runs with every AppState slot None; `maybe_start` refuses to engage
+#     without a CliSetup config (supervisor_setup.rs:174-179) and config.toml
+#     does not exist until step 5, so steps 1-5 have no daemon BY
+#     CONSTRUCTION - and none of them needs one: hardware detect, bundled
+#     catalog resolution, mkdir, the three GGUF downloads, validation, the
+#     config writes. All weight-free. Everything that genuinely requires this
+#     process to hold weights/store/Runtime hangs off
+#     state::bootstrap_with_progress (setup_flow.rs:447), and on the DEFAULT
+#     path step 5d returns before ever reaching it: it writes the first-run
+#     marker, spawns a fresh current_exe() and exits
+#     (maybe_restart_into_supervised, supervisor_setup.rs:327-356). Under an
+#     OS service that whole relaunch DELETES - write config, install+start
+#     the service, attach. Strictly simpler than what ships.
+#   * THE FORCE_LOCAL JOURNEY IS NOT EVIDENCE AGAINST THIS.
+#     first-launch-setup.journey.spec.ts:84-86 sets SOVEREIGN_FORCE_LOCAL=1
+#     to suppress the relaunch, and GUEST_QA_DESIGN.md:31-40 already says what
+#     that costs: "The highest-stakes journey exercises the one branch real
+#     users never take." The default path is covered by
+#     scripts/wizard-verify.sh, which unsets the flag (:107).
+#
+# THE ONE HARD BLOCKER IS WINDOWS, and it is real. No service backend exists
+# at all - no unit template, no contrib/windows/, no prebuilt Windows CLI,
+# and `install_service` hard-errors on the platform (service_install.rs:46-54).
+# The desktop DOES ship Windows (scripts/build-desktop-windows.sh, NSIS), and
+# sovereign-compute's supervisor is platform-neutral (one cfg(unix) in 1,082
+# lines), so supervised-child is currently the ONLY way a Windows user gets a
+# daemon. Deleting it without a Windows story breaks the platform outright.
+# The bar therefore lands per-platform: move the daemon-hosting crates to
+# [target.'cfg(windows)'.dependencies], green on macOS+Linux, and Windows is
+# a DECLARED exception with a DEFAULTS_LEDGER row and a review-by - never a
+# silent one (K1's rule).
+#
+# THE PRODUCT TRADE, named rather than discovered later: today quitting the
+# app kills the child and frees the weights. Under a service they stay
+# resident - a 35B Q6 is ~28 GB pinned across app restarts (state/config.rs
+# :155-157), and the idle monitor only reclaims the PRIMARY slot after
+# primary_idle_secs (default 300s); fast+embed stay loaded indefinitely
+# (builders/inference.rs:275-280). The mitigation belongs to the daemon, not
+# the app: extend the idle policy to every slot, or a release HINT the daemon
+# may honour. A desktop that stops the service on quit is managing a daemon
+# again and fails this bar.
+#
+# TWO DEFECTS THE SURVEY TURNED UP, unrelated to the bar but not to be lost:
+# the mobile-host `sovereign-server` child is NOT stopped on quit
+# (stop_daemon_child takes only state.supervisor, main.rs:979) and is
+# orphaned by _exit - the exact hazard Launch::Server's own doc records
+# (launch.rs:99-112); and `setup-restarting` is emitted with a 600ms paint
+# sleep to NO listener (supervisor_setup.rs:339-344).
+floor        = 21.0
+floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2df562caa, 2026-09-11; the daemon-hosting subset is sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe, corpus-engine, sovereign-gliner, sovereign-inference, sovereign-tools, commonwealth-core, commonwealth-state. Lifecycle code: 1,990 production lines, ~271 of which survive"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "TWO HALVES, and either alone is a green gate enforcing nothing. (1) cargo tree -p sovereign-desktop --edges normal --depth 1 carries no daemon-assembling crate, gated by cargo xtask layer-gate over quality/ARCH_LAYERS.toml. (2) a census that no surface retains a process handle or tracks a lifecycle - no Child, no supervisor, no stop-on-exit - because a dependency gate passes clean through supervision re-added one small commit at a time"
+goodhart     = "a surface can stop MANAGING a daemon while still LINKING one — the management calls go and the crate edge stays, which is exactly the state the predicate caught on 2026-09-11"
+kill         = "K3 - in-process hosting is a DECLARED capability, not a fallback: a build that brings up a backend says so by name, with an owner and a reason. iOS is the standing case (no fork/exec, so a sidecar is impossible), and it is why the embedded sink is not retired. Anything else that cannot be served by a daemon the app does not own goes to the operator as a declared exception with a DEFAULTS_LEDGER row and a review-by date - never a silent in-process path."
+
+[[bar]]
 id           = "sv-attach-pure-client"
 one_line     = "CLAIM: attach mode constructs zero local deciders - the desktop is a client, like svrn chat"
 derives_from = "TOPOLOGY 3.5 'one process assembles; everything else is a surface', refined by Phase 6 wave 2 to one-DRIVER; attach is the boot where client-only is provable"
@@ -920,11 +1555,30 @@ status       = "open"
 # every_sender_of_replicated_state_is_declared) - the total's history in git
 # is the audit, and rung 6's boot assertion is the stronger instrument that
 # replaces it at the end.
-floor        = 14.0
-floor_basis  = "attach_construction_census.rs, first run 2026-09-08: 14 needles, each pinned by name and count in the test"
+# MEASURED 2026-09-10 at c7e7d6a73 (D0): 14 -> 12, both by measurement, not by
+# a deletion — WatchedSubsystem::install sits inside the local_daemon_wiring arm
+# and was never attach-reachable (a census error, -1 with no code change), and
+# CompactionWorker::spawn was a real defect (an attached desktop ran a second
+# rolling-summary compaction over the daemon's own sovereign.db) now impossible
+# because the config is Option. Both guards pinned by
+# the_local_only_constructions_stay_local; floor re-added at 13 went red
+# (left 12, right 11), reverted. Unchanged by D3-D8 (1f7ea8745, 19946f99a,
+# 069660fd9, 502304f63): those rungs delete CONSUMERS, not constructions.
+# THE HONEST REMAINING TERM IS NOT THE FORKS. is_attach_mode forks went 15 -> 0
+# (c7e7d6a73), and 65b92cd15 measured what that did not buy: 49 needle READS
+# across 13 files run in attach today with no fork at all, because the spine
+# builds every needle in both modes — conversation.rs 12, document_asset.rs 12,
+# corpus.rs 8, chat.rs 3, then nine files at 1-2. is_backend_ready reads
+# state.runtime.is_some() (a null runtime hangs the splash); list_corpora and
+# notebook_list degrade to an empty vec, silently. attach_bootstrap() was NOT
+# written on that false premise; 49 is what D9b drives to zero and is
+# deliberately not minted as a ratchet while D5-D8 land in the same files.
+floor        = 12.0
+floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"
+goodhart     = "the census counts needles an author listed, so it reaches 0 when the LIST is exhausted, not when construction is. It also moved 14->12 by re-measuring with no code change — a number that moves when you look again is an opinion with a number attached"
 kill         = "K1 - a capability that genuinely cannot cross without a shim wider than a route goes to the operator as a DECLARED closed-set addition with a ledger row, never a silent in-process fallback. The K2/cw-lift precedent: the honest deliverable may be a profile, and the objective sentence survives it."
 
 [[bar]]
@@ -963,11 +1617,19 @@ status       = "open"
 #                      stringify, mesh_cmd.rs:685's raw "online" compare.
 # Each deletion lands with its parity test; the count reaches 0 when every
 # family answers from one home.
+# HOLDING at 0 through the D1-D8 delete halves, 2026-09-10: the halves removed
+# re-derivations rather than adding families — conversation.rs's local
+# confidence halving (c7e7d6a73), the section->chunk cache and two defaults
+# (1f7ea8745), the salience formula and conv_display_metadata (069660fd9), the
+# recipe-project artifact path the desktop resolved two ways and the prelude's
+# second walk (502304f63) — and the two new deciders landed on the daemon side
+# only (trust_level lowercasing, 65b92cd15; the meshapp page clamps, 19946f99a).
 floor        = 0.0
 floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs, STRUCK the health row as not-a-twin (measured), and deleted the mesh-status enum-string twin (reshaped by measurement from the 'up-convert DTO' premise): 0 remain"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
+goodhart     = "twins are counted per FAMILY and families are enumerated by hand, so a capability nobody enumerated is twinned for free; 'HOLDING at 0' says the known six stayed dead, not that no seventh exists"
 kill         = "K2 - if parity cannot assert because the surfaces render different GRANULARITIES (not different answers), the instrument is re-derived, not the divergence forgiven."
 
 [[bar]]
@@ -1007,9 +1669,20 @@ floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
 # reading DTOs, mesh status). Was 6.0 over the naive enumeration; the GGUF
 # and health strikes (both measured) shrank the deletable set to 4. Moves
 # only through a rung row.
+# PROVEN MECHANICALLY 2026-09-09 (f6a633519, construction 3): scripts/
+# twin-census.py + quality/twin-plants.toml run the plant -> red -> restore loop
+# per family and report four verdicts. First run at 207b62b85: eight proved-red,
+# and TWO NOT-A-GATE — loopback_parity passed with mesh_router's guard middleware
+# deleted, because both its assertions were over-determined by the handler's own
+# enforce_localhost. Closed at 4c45a1fc9 by a PUT leg no handler can satisfy
+# (spoofed LAN -> 403 from the layer, loopback -> 405 from axum's fallback);
+# watched red with the layer deleted while the three old tests stayed green.
+# The registry carries 19 families as of 502304f63; the bar still counts one
+# control per REAL twin family, which is 4.
 target       = 4.0
 direction    = "higher_is_better"
-instrument   = "the sabotage log in each rung's landing verdict (plant -> red -> revert), pinned beside its family census"
+instrument   = "scripts/twin-census.py over quality/twin-plants.toml (the runner refuses a dirty tree by its own rule, so a landing on an unclean tree records the by-hand plant -> red -> md5-verified restore instead)"
+goodhart     = "each control plants the spelling its own census knows, so green means 'the planted twin is caught', never 'a twin cannot return' — the inherited needle-list weakness, recorded in the bar and still true"
 kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
 
 [[bar]]
@@ -1022,9 +1695,20 @@ status       = "open"
 # remote/client.rs's inline Deserialize wrappers. M-1 deletes it by adoption.
 # svrn chat and the desktop-attach future both consume sovereign-turn-client;
 # the bar holds that no surface crate re-mints a private client or mirror.
-floor        = 1.0
-floor_basis  = "sovereign-mobile remote/dto.rs ServerEvent mirror + remote/client.rs inline DTOs, 2026-09-08"
+# DELETED BY ADOPTION 2026-09-09 (4e1f99f55): every frame, prompt, notice,
+# answer and request on the phone comes from sovereign-contracts through
+# sovereign-turn-client; the TurnFrame match is exhaustive with no catch-all, so
+# Prompt, Notice (ResolveAck, TurnSettled) and QueuePosition are handled — three
+# capabilities the mirror could not represent. The crate joined the workspace in
+# the same commit, because a census nobody can run is inventory. 4a83373f4 then
+# moved the seven contract imports onto the client crate's re-exports and banked
+# the fan-in cut (sovereign-contracts 27 -> 26, layer-gate --tighten).
+# Named ceiling, not a gap in the bar: the client has no auth seam, so the phone
+# reaches a daemon, not an api-key sovereign-server (daemon-first, as ordered).
+floor        = 0.0
+floor_basis  = "sovereign-mobile src-tauri/tests/census.rs, 2026-09-09: no wire mirror in the crate, with two permanent plants keeping the detector proven (a planted PlantedServerEvent was watched red naming 're-declares 3 of TurnFrame'); the 1.0 basis was remote/dto.rs's ServerEvent mirror + remote/client.rs's inline DTOs, both deleted at 4e1f99f55"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "the mirror stays deleted; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+instrument   = "cargo test -p sovereign-mobile --test census; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+goodhart     = "counting client families reaches 1 when the SPELLINGS converge; a single named client that still assembles the stack in-process satisfies it while the predicate stays false"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."

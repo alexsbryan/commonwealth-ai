@@ -14,9 +14,27 @@
 //! from host state. The numeric LVT ops (`read_corpus`, `parcel_analytics`)
 //! stay here — they fold corpus-engine's `compute_aggregates`, so the SF-LVT
 //! "no confabulated numbers" guarantee carries onto the desktop surface.
+//!
+//! # Where the atoms come from (sv-surface D3)
+//!
+//! The three atom readers — `meshapp_read_corpus`, `meshapp_search_parcels`,
+//! `meshapp_parcel_analytics` — no longer open `atlas/atoms.json`. They read
+//! `GET /internal/corpus/{corpus}/atoms` through [`wire_atoms`], which is ONE
+//! path in both boot modes. The FOLDS stay here: they are the projection, and
+//! the authorization gate above them cannot cross a socket (the webview label
+//! is host-assigned to THIS process's window).
+//!
+//! The other thirteen graph ops read the same way as of sv-surface D3's
+//! delete half: each is one `TurnClient::meshapp_*` call against
+//! `GET /internal/meshapp/{corpus}/...`, which runs the very
+//! `sovereign_meshapp::*` projection this file used to call in-process —
+//! over the DAEMON's index dir, so an attached boot answers at all. The
+//! DTOs are unchanged (`sovereign-meshapp`'s own types, now `Deserialize`),
+//! so the frontend sees the same bytes. `resolve_index_path` is gone with
+//! them, and so are the page defaults and clamps each command re-applied:
+//! those live in the route, once (ARCH §10.6).
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -79,32 +97,34 @@ pub struct ParcelAnalyticsDto {
     pub derivation: Vec<String>,
 }
 
-/// Load a corpus's atlas atoms, propagating errors (the bridge surfaces a
-/// reason rather than silently returning empty). Mirrors the read path in
-/// `commands::reading`.
-async fn load_atoms(
+/// Every atom in a corpus's atlas, read over the daemon's
+/// `GET /internal/corpus/{corpus}/atoms` — ONE path in both boot modes,
+/// because Local means the daemon is in-process over this process's own
+/// `corpus_engine` (sv-surface D3).
+///
+/// Replaces the in-process `load_atoms`, which opened `atlas/atoms.json`
+/// itself and therefore answered nothing at all on an attached boot. The
+/// route serialises `corpus_engine_vocab::AtomsFile`'s vec verbatim, so
+/// `AtomEnvelope` is the same type the three folds below already matched
+/// on and none of them changes. Errors still propagate a reason rather
+/// than silently returning empty — `corpus_atoms_all` pages until the
+/// host says the read is finished and reports a host that would not
+/// advance rather than clipping (ARCH §18.3).
+async fn wire_atoms(
     state: &State<'_, Arc<AppState>>,
     corpus_id: &str,
 ) -> Result<Vec<AtomEnvelope>, String> {
-    let engine = state
-        .corpus_engine
-        .read()
+    wire(state)
+        .corpus_atoms_all::<AtomEnvelope>(corpus_id)
         .await
-        .as_ref()
-        .map(Arc::clone)
-        .ok_or_else(|| "corpus engine not initialized".to_string())?;
-    let installed = engine
-        .installed_indexes()
-        .await
-        .map_err(|e| format!("installed_indexes: {e}"))?;
-    let entry = installed
-        .iter()
-        .find(|i| i.corpus_id == corpus_id)
-        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))?;
-    let atlas_dir = entry.path.join("atlas");
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms for `{corpus_id}`: {e}"))?;
-    Ok(file.atoms)
+        .map_err(|e| format!("read atoms for `{corpus_id}`: {e}"))
+}
+
+/// The daemon this process talks to — in-process on a Local boot, over
+/// the socket on an attached one. ONE construction for the whole file, so
+/// the base url is resolved in one place (ARCH §10.6).
+fn wire(state: &State<'_, Arc<AppState>>) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
 /// `window.meshApp.capabilities()` — ungated. Returns the permission
@@ -139,7 +159,7 @@ pub async fn meshapp_read_corpus(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
 
     let want: HashSet<&str> = atom_ids.iter().map(String::as_str).collect();
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let out = atoms
         .into_iter()
         .filter_map(|env| match env {
@@ -180,7 +200,7 @@ pub async fn meshapp_search_parcels(
         return Ok(Vec::new());
     }
     let cap = limit.unwrap_or(25).min(100);
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let mut out: Vec<ParcelDto> = atoms
         .into_iter()
         .filter_map(|env| match env {
@@ -226,7 +246,7 @@ pub async fn meshapp_parcel_analytics(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
 
     let target = business_tax_target.unwrap_or(DEFAULT_BUSINESS_TAX_TARGET);
-    let atoms = load_atoms(&state, &corpus_id).await?;
+    let atoms = wire_atoms(&state, &corpus_id).await?;
     let parcels: Vec<_> = atoms
         .into_iter()
         .filter_map(|env| match env {
@@ -301,35 +321,13 @@ pub async fn meshapp_parcel_analytics(
     })
 }
 
-// ─── Explorer graph ops — thin wrappers over `sovereign-meshapp` ─────
+// ─── Explorer graph ops — thin wrappers over the meshapp routes ──────
 // The projection logic (atlas/investigation dispatch, degree ranking, edge
 // resolution, the subgraph/timeline/stats/reconciliation reads) lives in the
-// `sovereign-meshapp` lib. Each command's only added responsibility is the
-// `mesh_store_read` gate + resolving the corpus's on-disk index from host
-// state. The DTOs are re-used from the lib so the wire contract is identical.
-
-/// Resolve an installed corpus's on-disk index directory, or a reason.
-async fn resolve_index_path(
-    state: &State<'_, Arc<AppState>>,
-    corpus_id: &str,
-) -> Result<PathBuf, String> {
-    let engine = state
-        .corpus_engine
-        .read()
-        .await
-        .as_ref()
-        .map(Arc::clone)
-        .ok_or_else(|| "corpus engine not initialized".to_string())?;
-    let installed = engine
-        .installed_indexes()
-        .await
-        .map_err(|e| format!("installed_indexes: {e}"))?;
-    installed
-        .iter()
-        .find(|i| i.corpus_id == corpus_id)
-        .map(|i| i.path.clone())
-        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))
-}
+// `sovereign-meshapp` lib, which the DAEMON now calls: each command below is
+// the `mesh_store_read` gate plus one `TurnClient::meshapp_*` call. The DTOs
+// are re-used from the lib so the wire contract is identical, and the
+// defaults/clamps each command used to apply belong to the route.
 
 /// `window.meshApp.graph(corpusId, nodeType?, limit?)` — gated on
 /// `mesh_store_read`. Degree-ranked entities, highest-degree first.
@@ -343,13 +341,10 @@ pub async fn meshapp_graph(
 ) -> Result<Vec<GraphNodeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::graph_nodes(
-        &g,
-        node_type.as_deref(),
-        limit.unwrap_or(50).min(500),
-    ))
+    wire(&state)
+        .meshapp_graph::<Vec<GraphNodeDto>>(&corpus_id, node_type.as_deref(), limit)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.node(corpusId, id)` — gated on `mesh_store_read`. One
@@ -363,9 +358,10 @@ pub async fn meshapp_node(
 ) -> Result<NodeDetailDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    sovereign_meshapp::node_detail(&g, &id).map_err(|e| format!("`{corpus_id}`: {e}"))
+    wire(&state)
+        .meshapp_node::<NodeDetailDto>(&corpus_id, &id)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.findings(corpusId, pattern?)` — gated on `mesh_store_read`.
@@ -378,13 +374,17 @@ pub async fn meshapp_findings(
 ) -> Result<Vec<FindingDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::findings(&g, pattern.as_deref()))
+    wire(&state)
+        .meshapp_findings::<Vec<FindingDto>>(&corpus_id, pattern.as_deref())
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.searchEntities(corpusId, query, nodeType?, limit?)` —
 /// gated on `mesh_store_read`. Case-folded substring over name/aliases/attrs.
+/// A blank query answers `[]` at the HOST without loading the graph, so a
+/// cleared search box costs one round-trip and no disk — the short-circuit
+/// this command used to make locally, moved to where the decision is made.
 #[tauri::command]
 pub async fn meshapp_search_entities(
     webview: WebviewWindow,
@@ -396,17 +396,15 @@ pub async fn meshapp_search_entities(
 ) -> Result<Vec<GraphNodeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    if query.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::search_entities(
-        &g,
-        &query,
-        node_type.as_deref(),
-        limit.unwrap_or(25).min(100),
-    ))
+    wire(&state)
+        .meshapp_search_entities::<Vec<GraphNodeDto>>(
+            &corpus_id,
+            &query,
+            node_type.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.claims(corpusId, limit?)` — gated on `mesh_store_read`.
@@ -421,8 +419,9 @@ pub async fn meshapp_claims(
 ) -> Result<Vec<ClaimDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    sovereign_meshapp::load_claims(&path, limit.unwrap_or(100).min(500))
+    wire(&state)
+        .meshapp_claims::<Vec<ClaimDto>>(&corpus_id, limit)
+        .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
@@ -437,8 +436,9 @@ pub async fn meshapp_questions(
 ) -> Result<Vec<QuestionDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    sovereign_meshapp::load_questions(&path, limit.unwrap_or(100).min(500))
+    wire(&state)
+        .meshapp_questions::<Vec<QuestionDto>>(&corpus_id, limit)
+        .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
@@ -452,8 +452,10 @@ pub async fn meshapp_reconciliation(
 ) -> Result<Vec<ReconciliationMergeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    Ok(sovereign_meshapp::reconciliation(&path))
+    wire(&state)
+        .meshapp_reconciliation::<Vec<ReconciliationMergeDto>>(&corpus_id)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.subgraph(corpusId, nodeType?, limit?)` — gated on
@@ -468,13 +470,10 @@ pub async fn meshapp_subgraph(
 ) -> Result<SubgraphDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::subgraph(
-        &g,
-        node_type.as_deref(),
-        limit.unwrap_or(30).min(80),
-    ))
+    wire(&state)
+        .meshapp_subgraph::<SubgraphDto>(&corpus_id, node_type.as_deref(), limit)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.corpusStats(corpusId)` — gated on `mesh_store_read`.
@@ -487,8 +486,10 @@ pub async fn meshapp_corpus_stats(
 ) -> Result<CorpusStatsDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    Ok(sovereign_meshapp::corpus_stats(&path))
+    wire(&state)
+        .meshapp_corpus_stats::<CorpusStatsDto>(&corpus_id)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.timeline(corpusId)` — gated on `mesh_store_read`.
@@ -501,8 +502,8 @@ pub async fn meshapp_timeline(
 ) -> Result<TimelineDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    sovereign_meshapp::timeline(&path)
+    wire(&state)
+        .meshapp_timeline::<TimelineDto>(&corpus_id)
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
@@ -522,8 +523,8 @@ pub async fn meshapp_read_chunk(
         .trim()
         .parse()
         .map_err(|_| format!("chunk id `{chunk_id}` is not a numeric id"))?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    sovereign_meshapp::read_chunk(&path, id)
+    wire(&state)
+        .meshapp_read_chunk::<ChunkDto>(&corpus_id, id)
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
@@ -542,19 +543,24 @@ pub async fn meshapp_document_feed(
 ) -> Result<sovereign_meshapp::DocumentFeedDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    sovereign_meshapp::document_feed(&path, limit_docs.unwrap_or(14).clamp(1, 90) as usize)
+    wire(&state)
+        .meshapp_document_feed::<sovereign_meshapp::DocumentFeedDto>(
+            &corpus_id,
+            limit_docs.map(|n| n as usize),
+        )
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.wrappedArtifact(corpusId)` — gated on `mesh_store_read`.
-/// The precomputed Wrapped story-card artifact. Desktop-native build
-/// trigger: the lib op returns the cached `wrapped/all-time.json` under the
-/// corpus index dir when fresh, and rebuilds on demand otherwise (a pure
-/// Rust fold — no inference; every quote audited verbatim before serving).
-/// The GLiNER entity cards read the sovereign state db; when it's absent
-/// those cards are simply absent from the deck.
+/// The precomputed Wrapped story-card artifact: the host serves the cached
+/// `wrapped/all-time.json` under the corpus index dir when fresh and
+/// rebuilds on demand otherwise (a pure Rust fold — no inference; every
+/// quote audited verbatim before serving), so this call can be slow on a
+/// cold corpus. The GLiNER entity cards read the daemon's OWN state db —
+/// this command used to name `svrnmesh_root()/sovereign.db` itself, which
+/// on an attached boot is not necessarily the file the daemon writes; when
+/// it is absent those cards are simply absent from the deck.
 #[tauri::command]
 pub async fn meshapp_wrapped_artifact(
     webview: WebviewWindow,
@@ -563,9 +569,8 @@ pub async fn meshapp_wrapped_artifact(
 ) -> Result<sovereign_meshapp::wrapped::WrappedArtifact, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-    let path = resolve_index_path(&state, &corpus_id).await?;
-    let state_db = Some(sovereign_contracts::rebrand::svrnmesh_root().join("sovereign.db"));
-    sovereign_meshapp::wrapped::wrapped_artifact(&path, state_db.as_deref())
+    wire(&state)
+        .meshapp_wrapped_artifact::<sovereign_meshapp::wrapped::WrappedArtifact>(&corpus_id)
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }

@@ -1190,6 +1190,11 @@ impl LocalCorpusManager {
     /// Run a pre-scan for the corpus with the given id. Blocking — the
     /// PDF classifier is CPU-bound, so we hop onto `spawn_blocking`
     /// internally.
+    ///
+    /// Resolving the id is ALL this instance contributes; the scan
+    /// itself reads the folder, not the registry. [`pre_scan_config`]
+    /// is that half on its own, and this method is one call onto it —
+    /// one implementation, not two (§10.6).
     pub async fn pre_scan(
         &self,
         id: &str,
@@ -1200,15 +1205,7 @@ impl LocalCorpusManager {
             .await
             .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
 
-        let progress = progress.unwrap_or_else(noop_progress);
-        tokio::task::spawn_blocking(move || {
-            let scanner = PreScanner::new(&config);
-            scanner.run_blocking(|done, total| {
-                progress(LocalCorpusProgress::Scanning { done, total });
-            })
-        })
-        .await
-        .map_err(|e| Error::Execution(format!("pre_scan task: {e}")))
+        pre_scan_config(config, progress).await
     }
 
     /// Ingest the given corpus.
@@ -2446,6 +2443,34 @@ impl sovereign_core::traits::FolderMetadataOracle for LocalCorpusManager {
         }
         out
     }
+}
+
+/// Pre-scan a corpus config that need not be registered ANYWHERE.
+///
+/// The scan is a function of the folder on disk — `PreScanner` reads
+/// `config.root_path`, `config.extensions` and `config.pre_scan` and
+/// touches no manager state — so it does not need an instance, and a
+/// caller that has the config in hand should not have to obtain one.
+///
+/// Split out 2026-09-10 for the desktop's `lc_pre_scan`, which now
+/// REGISTERS over the wire (into the daemon's manager, the one that
+/// will run the ingest) and scans here. Before the split it registered
+/// locally purely so this lookup would succeed, and on an attached boot
+/// that local registration was the corpus the daemon had never heard
+/// of. [`LocalCorpusManager::pre_scan`] is `get` + this.
+pub async fn pre_scan_config(
+    config: LocalCorpusConfig,
+    progress: Option<ProgressCallback>,
+) -> Result<PreScanResult> {
+    let progress = progress.unwrap_or_else(noop_progress);
+    tokio::task::spawn_blocking(move || {
+        let scanner = PreScanner::new(&config);
+        scanner.run_blocking(|done, total| {
+            progress(LocalCorpusProgress::Scanning { done, total });
+        })
+    })
+    .await
+    .map_err(|e| Error::Execution(format!("pre_scan task: {e}")))
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────

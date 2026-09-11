@@ -23,13 +23,14 @@
 | `clock-gate` | `cargo xtask clock-gate` | hard | F0 | 0.96s | yes |
 | `concept-gate` | `cargo xtask concept-gate` | advisory | F0 | 5s | **no** |
 | `daemon-concurrency-soak` | `scripts/daemon-concurrency-soak.py --minutes 30` | tracked | F3 | 31m | **no** |
-| `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 1s | yes |
+| `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 4s | yes |
 | `desktop-check` | `npm run check` | hard | F0 | 10s | yes |
 | `desktop-invoke-coverage-gate` | `npm run report:coverage:gate` | tracked | F0 | unmeasured | yes |
 | `docs-gate` | `cargo xtask docs-gate` | hard | F0 | 2s | yes |
 | `env-gate` | `cargo xtask env-gate` | hard | F0 | 3s | yes |
 | `feature-matrix` | `cargo hack check --each-feature --no-dev-deps` | advisory | F0 | unmeasured | **no** |
 | `feature-powerset` | `cargo hack check --feature-powerset --depth 2 --no-dev-deps` | advisory | F0 | unmeasured | **no** |
+| `hook-wiring` | `bash .claude/hooks/tests/settings-wiring.sh` | hard | F0 | 0.30s | **no** |
 | `instrument-gate` | `cargo xtask instrument-gate` | hard | F0 | 0.04s | yes |
 | `layer-gate` | `cargo xtask layer-gate` | hard | F0 | 0.10s | yes |
 | `layout-gate` | `cargo xtask layout-gate` | hard | F0 | 3s | yes |
@@ -38,7 +39,7 @@
 | `rustfmt` | `cargo fmt --all --check` | hard | F0 | 6s | yes |
 | `size-gate` | `cargo xtask size-gate` | advisory | F0 | 4s | yes |
 | `sovereign-lint` | `./scripts/sovereign-lint.sh --human --full` | hard | F0 | 27s | **no** |
-| `sovereign-lint-scoped` | `./scripts/sovereign-lint.sh --human` | hard | F0 | 22s | **no** |
+| `sovereign-lint-scoped` | `./scripts/sovereign-lint.sh --human` | hard | F0 | 45s | **no** |
 | `windows-crosscheck` | `scripts/windows-crosscheck.sh` | tracked | F0 | unmeasured | **no** |
 | `wizard-verify` | `scripts/wizard-verify.sh` | hard | F5 | 15m | **no** |
 
@@ -141,7 +142,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -248,7 +249,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -265,7 +266,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (70 of 95)
+### What CI does not run (71 of 96)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -311,6 +312,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `enrichment-f1` — sovereign/bench/literary/README.md · runs in: check
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
+- `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
 - `knowledge-gym` — sovereign/bench/knowledge-gym/RUNBOOK.md · runs in: check
@@ -346,5 +348,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**95 instruments, 11 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
+**96 instruments, 12 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
 

@@ -20,23 +20,11 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          {
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/inject-notes.py",
-            "type": "command",
-            "timeout": 15
-          },
+   
           {
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/split-enforce.py",
             "type": "command",
             "timeout": 5
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .claude/hooks/inject-notes.py"
           }
         ]
       }

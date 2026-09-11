@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! TEACHABLE P0 lesson CRUD — thin wrappers over `AppState.notes`
-//! (`kind = "lesson"`). The payload schema is owned by
+//! TEACHABLE P0 lesson CRUD — thin wrappers over the daemon's notes
+//! routes (`kind = "lesson"`), `POST /v1/notes/query`, `POST /v1/notes`,
+//! `GET|DELETE /v1/notes/{id}` and `PATCH /v1/notes/{id}/payload`. They
+//! read `AppState.notes` — this process's own `NoteStore` — until
+//! sv-surface D6's delete half; on an attached boot that store is not
+//! the one the daemon writes, so the pane answered from the wrong db.
+//! The payload schema is owned by
 //! `sovereign_core::lessons::LessonPayload`; this module never
 //! duplicates it. Save implements the per-rung supersede (one ACTIVE
 //! lesson per enforcement rung — TEACHABLE §6's structural K=1), so
@@ -11,10 +16,11 @@
 
 use std::sync::Arc;
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource};
 use serde::{Deserialize, Serialize};
 use sovereign_core::lessons::{LessonPayload, TaughtFrom, LESSON_KIND};
 use sovereign_core::types::LessonProposedPayload;
+use sovereign_mesh::notes_http::NoteEntry;
 use tauri::State;
 
 use crate::state::AppState;
@@ -54,21 +60,16 @@ pub struct LessonDraft {
     pub drafted_display: Option<String>,
 }
 
-async fn notes_handle(state: &Arc<AppState>) -> Result<Arc<NoteStore>, String> {
-    state
-        .notes
-        .read()
-        .await
-        .as_ref()
-        .map(Arc::clone)
-        .ok_or_else(|| {
-            "Lessons unavailable: notes.db is not open — try restarting the desktop.".to_string()
-        })
+/// The daemon's notes surface — the SAME store in both boot modes,
+/// commissioned in-process on a Local boot and owned by the CLI daemon on
+/// an attached one (sv-surface D6).
+fn notes(state: &Arc<AppState>) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
 use sovereign_core::time::unix_now;
 
-fn row_from_note(row: corpus_engine_notes::Note) -> Option<LessonRow> {
+fn row_from_note(row: NoteEntry) -> Option<LessonRow> {
     let raw = row.payload_json.as_deref()?;
     let payload: LessonPayload = match serde_json::from_str(raw) {
         Ok(p) => p,
@@ -100,9 +101,8 @@ fn row_from_note(row: corpus_engine_notes::Note) -> Option<LessonRow> {
 /// the pane is the trust story and shows the whole chain.
 #[tauri::command]
 pub async fn list_lessons(state: State<'_, Arc<AppState>>) -> Result<Vec<LessonRow>, String> {
-    let notes = notes_handle(&state).await?;
-    let rows = notes
-        .read_notes(None, &[], &[], &[LESSON_KIND.to_string()], 500, true)
+    let rows = notes(&state)
+        .notes_list::<NoteEntry>(None, &[LESSON_KIND], Some(500), true)
         .await
         .map_err(|e| e.to_string())?;
     Ok(rows.into_iter().filter_map(row_from_note).collect())
@@ -115,15 +115,15 @@ pub async fn save_lesson(
     state: State<'_, Arc<AppState>>,
     draft: LessonDraft,
 ) -> Result<String, String> {
-    let notes = notes_handle(&state).await?;
+    let client = notes(&state);
     let mut payload = LessonPayload::from_proposed(&draft.proposal, unix_now());
     payload.drafted_display = draft
         .drafted_display
         .filter(|d| !d.trim().is_empty() && *d != payload.display);
 
     // Per-rung supersede: at most one ACTIVE lesson per rung.
-    let active = notes
-        .read_notes(None, &[], &[], &[LESSON_KIND.to_string()], 20, false)
+    let active = client
+        .notes_list::<NoteEntry>(None, &[LESSON_KIND], Some(20), false)
         .await
         .map_err(|e| e.to_string())?;
     let superseded: Option<String> = active.iter().find_map(|row| {
@@ -133,30 +133,26 @@ pub async fn save_lesson(
     });
 
     let payload_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
-    let new_id = notes
-        .write_note_full_v9(
-            LESSON_KIND,
-            &payload.display,
-            vec![],
-            vec![],
+    let new_id = client
+        .note_create(&serde_json::json!({
+            "kind": LESSON_KIND,
+            "content": payload.display,
             // session_id = provenance conversation (the teaching moment).
-            &payload.taught_from.conversation_id,
-            NoteScope::Global,
-            None,
-            None,
-            NoteSource::Agent,
-            superseded.as_deref(),
-            Some(&payload_json),
+            "session_id": payload.taught_from.conversation_id,
+            "scope": NoteScope::Global.as_str(),
+            "source": NoteSource::Agent.as_str(),
+            "supersedes": superseded,
+            "payload_json": payload_json,
             // Mesh privacy: node-default wiring is P3; P0 lessons are
             // node-local in practice (notes gossip only scope=global
             // non-private — acceptable either way per the plan).
-            false,
-        )
+            "private": false,
+        }))
         .await
         .map_err(|e| e.to_string())?;
     if let Some(old_id) = &superseded {
-        if let Err(e) = notes
-            .retire_by_id(old_id, &format!("superseded by {new_id}"))
+        if let Err(e) = client
+            .note_retire(old_id, &format!("superseded by {new_id}"))
             .await
         {
             tracing::warn!(target: "lessons", old_id = %old_id, error = %e,
@@ -180,9 +176,9 @@ pub async fn set_lesson_enabled(
     id: String,
     enabled: bool,
 ) -> Result<bool, String> {
-    let notes = notes_handle(&state).await?;
-    let Some(row) = notes
-        .read_note_by_id(&id)
+    let client = notes(&state);
+    let Some(row) = client
+        .note_get::<NoteEntry>(&id)
         .await
         .map_err(|e| e.to_string())?
     else {
@@ -193,8 +189,8 @@ pub async fn set_lesson_enabled(
         serde_json::from_str(&raw).map_err(|e| format!("malformed lesson payload: {e}"))?;
     payload.enabled = enabled;
     let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
-    notes
-        .update_note_payload(&id, &json)
+    client
+        .note_set_payload(&id, &json)
         .await
         .map_err(|e| e.to_string())
 }
@@ -202,9 +198,8 @@ pub async fn set_lesson_enabled(
 /// Hard delete — real deletion, no tombstone, no recycle bin.
 #[tauri::command]
 pub async fn delete_lesson(state: State<'_, Arc<AppState>>, id: String) -> Result<bool, String> {
-    notes_handle(&state)
-        .await?
-        .delete_note(&id)
+    notes(&state)
+        .note_delete(&id)
         .await
         .map_err(|e| e.to_string())
 }

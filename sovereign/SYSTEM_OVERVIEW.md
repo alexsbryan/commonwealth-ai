@@ -247,7 +247,7 @@ crates/
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
-├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before. **The protocol's asking half became two shapes (sv-surface R1, 2026-09-09)**: `TurnFrame::{ApprovalRequest,UserInputRequest}` folded into `TurnFrame::Prompt { id, prompt }` and `TurnRequest::{Approve,UserReply}` into `TurnRequest::Answer { id, answer }` — one host-minted id replaces the three key formats, `TurnPrompt`/`TurnAnswer`/`TurnNotice` are closed enums in `sovereign-contracts::types::turn` (`Turn*`-qualified because bare `Prompt`/`Answer` are already nouns in commonwealth-api and kernel-types), and `TurnFrame::Notice { notice }` lands beside them for everything no answer is owed — `StepDone`, `MessageRefined`, `LessonProposed`, `ResolveAck`, `TurnStarted` (gap-ledger rows G4-G8, G10, whose daemon-side producers land at R3; the fold was free because nothing rendered the old variants — three ignore arms, a deliberate error, and the byte pins were the whole consumer census). `ResolveOutcome` and `StepStatus` moved to `sovereign_contracts::types::approval` so the wire carries the type instead of mirroring it (core re-exports at the historical path), `ApprovalDesk::resolve_answer` is the one `TurnAnswer`-to-parked-kind mapping, and `sovereign-server`'s `ExecutorEvent` ask-variants converged on the same `Prompt` shape — its `{task}:{step}` slot format is just what it mints the id FROM, so a client answers identically whichever host it reached. **The client half learned to answer while it reads (sv-surface R2, 2026-09-09)**: the turn socket splits at connect — one writer task fed by an unbounded channel, the reader kept by `TurnStream` — and the write half is a cloneable `TurnSender` (`TurnStream::sender()`), so a prompt's answer goes onto the wire from the task that renders the card while the task draining tokens keeps reading; before the split that shape could not be written against this crate at all. `connect_with(StreamOptions { claim_approvals })` claims the conversation's approvals (`?approvals=true` — the unclaimed URL is byte-identical to before), `TurnSender::send_answer` replies to a `Prompt`, and `TurnObserver::on_notice` + `TurnStream::drain_after_complete` read the post-terminal window (message-refined and lesson-proposed fire after `Complete`; any non-Notice frame there is an error by name). Proven by in-crate tests against a fake WebSocket host that holds its turn until answered.
+├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before. **The protocol's asking half became two shapes (sv-surface R1, 2026-09-09)**: `TurnFrame::{ApprovalRequest,UserInputRequest}` folded into `TurnFrame::Prompt { id, prompt }` and `TurnRequest::{Approve,UserReply}` into `TurnRequest::Answer { id, answer }` — one host-minted id replaces the three key formats, `TurnPrompt`/`TurnAnswer`/`TurnNotice` are closed enums in `sovereign-contracts::types::turn` (`Turn*`-qualified because bare `Prompt`/`Answer` are already nouns in commonwealth-api and kernel-types), and `TurnFrame::Notice { notice }` lands beside them for everything no answer is owed — `StepDone`, `MessageRefined`, `LessonProposed`, `ResolveAck`, `TurnStarted` (gap-ledger rows G4-G8, G10, whose daemon-side producers land at R3; the fold was free because nothing rendered the old variants — three ignore arms, a deliberate error, and the byte pins were the whole consumer census). `ResolveOutcome` and `StepStatus` moved to `sovereign_contracts::types::approval` so the wire carries the type instead of mirroring it (core re-exports at the historical path), `ApprovalDesk::resolve_answer` is the one `TurnAnswer`-to-parked-kind mapping, and `sovereign-server`'s `ExecutorEvent` ask-variants converged on the same `Prompt` shape — its `{task}:{step}` slot format is just what it mints the id FROM, so a client answers identically whichever host it reached. **The client half learned to answer while it reads (sv-surface R2, 2026-09-09)**: the turn socket splits at connect — one writer task fed by an unbounded channel, the reader kept by `TurnStream` — and the write half is a cloneable `TurnSender` (`TurnStream::sender()`), so a prompt's answer goes onto the wire from the task that renders the card while the task draining tokens keeps reading; before the split that shape could not be written against this crate at all. `connect_with(StreamOptions { claim_approvals })` claims the conversation's approvals (`?approvals=true` — the unclaimed URL is byte-identical to before), `TurnSender::send_answer` replies to a `Prompt`, and `TurnObserver::on_notice` + `TurnStream::drain_after_complete` read the post-terminal window (message-refined and lesson-proposed fire after `Complete`; any non-Notice frame there is an error by name). Proven by in-crate tests against a fake WebSocket host that holds its turn until answered. **The socket's LIFECYCLE closed at sv-surface RB1-RB5 (2026-09-10)**: nobody closed it — `handle_ws` looped forever, so every turn leaked a WebSocket, a writer task and a `SocketApprovalChannel` on both ends. `TurnNotice::TurnSettled { message_id }` is emitted once every producer that can still speak on the socket has let go, and the settle predicate is a JOIN rather than a timer: `producers_outstanding` sums frame-sender clones plus `Arc` holders of the socket's approval channel and routing sink against a resting count measured before any turn. The sender-only version shipped first and was wrong — the detached post-stream refinement spawn holds an `Arc`, not a sender clone, so settle fired before `MessageRefined` and the client read "refining forever" as done. `IDLE_AFTER_SETTLED` (30s with no new request) then sends Close and `POST_COMPLETE_SETTLE_MAX` (60s) bounds a producer that never lets go, at WARN (`sovereign-mesh/src/turn_http.rs`). Refusals stopped riding `StreamError`: every answer outcome comes back as `TurnNotice::ResolveAck { id, outcome }` — a notice, never terminal — so a double-clicked approve no longer discards a healthy turn, and `ResolveOutcome::{WaiterGone, Unclaimed}` are named non-successes instead of collapsing into `Resolved`. `TurnRequest::Cancel` and hangup now reach a PARKED prompt: `ApprovalDesk::abandon_all` (`sovereign-core/src/approval_desk.rs`) resolves every parked entry per kind (consent/input → cancelled, information → skipped) BEFORE the task abort, where cancel used to trip the token and leave a turn parked on a `Prompt` with no `Complete` ever; prompt ids carry a per-turn nonce so a late answer cannot resolve the next turn's same-numbered question. Client-side `drain_after_complete` returns on `TurnSettled` or a host close. The desktop reads the socket ONCE — one pump, spawned immediately, with a pure `lead_disposition` classifying the lead frame, because an agentic turn's FIRST frame is a `Prompt` and the private lead loop that only forwarded `Narration|Notice` hung every agentic ask — and keeps one wire slot PER CONVERSATION (`sovereign-desktop/src-tauri/src/state/wire_turns.rs`: `TurnWires` keyed by conversation, released only on `Arc::ptr_eq` with the pump's own sender, `PendingPrompts` routing an answer through the prompt's own conversation). A pump that ends before deciding is an `Err`; a dropped turn is not an empty one. **Reachability joined it at sv-surface (2026-09-11)**: `reach.rs` — `ServingHost::at(base).is_serving()` / `.wait_until_serving(d)` / `.ensure_reachable(d)` — is the one implementation of "is a backend answering", a question thirteen functions across five crates each answered privately (`probe_daemon` / `daemon_reachable` / `wait_for_daemon` / `wait_for_ready`, per-probe timeouts from 500ms to 5s) plus an inline loop in the desktop's `attach_watch`. It lives here because of the bar it serves: `sv-no-daemon-management` (revised by the operator the same day) puts "ensure a backend is reachable" in the CLIENT package the way connection setup belongs to a database driver, so the desktop can hold ZERO daemon code rather than a tolerable little — the precedent is a language-server client or an embedded DB driver, never `libpq`, which does not start Postgres. Hence the `bundled-backend` cargo feature, OFF by default and declared by no surface yet (`DEFAULTS_LEDGER` row, review-by 2026-10-15): with it on, `BundledBackend::at(path)` names a binary the client may bring up when nothing answers — spawned detached (unix `process_group(0)`, Windows `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`), the `Child` dropped at the spawn site, the pid returned as a fact. No retry, no health loop, no restart policy: a client holding any of those is managing a daemon again (ARCH principle 12). The feature asks about the BUILD, not the platform, so a phone flips it the day a model fits rather than needing a second architecture; it declares no dependency, so turning it on moves no dependency edge (`cargo tree`, 220 crates identical both ways) and the bar's dependency-edge gate reads the same either way. Absence is typed rather than defaulted — `NotReachable::{NoBackendInThisBuild, NoBackendConfigured, LaunchFailed, SilentAfterLaunch}` (§18.3). First callers: `attach_watch`, `search_gym`, `bench ablate`.
 ├── sovereign-mesh           # In-process cmnwlth embed; owns the `work` donor loop + both job executors' sovereign half (`ingest:v1`)
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
@@ -346,7 +346,11 @@ weekly via `--tighten`; `concepts.txt` is the concept-duplication ratchet
 (`cargo xtask concept-gate`, minted through `svrn code converge status
 --mint`); it was re-minted on 2026-08-21 when the census stopped counting
 collisions no other crate can reach, and a baseline stamped before that
-commit is not comparable to one stamped after it. `cargo xtask quality` runs every fast local gate with one
+commit is not comparable to one stamped after it. Since 2026-09-10 it holds
+the NAME SET beside the count — first non-comment line the count, one name
+per line after it — so a red names what crossed instead of only how many
+(§10.1q); a bare-scalar file still reads as a count, and the gate says it
+cannot name the offender rather than reporting an empty list. `cargo xtask quality` runs every fast local gate with one
 summary table, and since 2026-08-20 that table carries FOUR verdicts —
 PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — with per-gate enforcement:
 concept-gate is ADVISORY there because it counts type definitions in the
@@ -359,6 +363,24 @@ the weekly CI lane, never on the PR critical path.
 `quality/CLEANUP.md` is the prioritized cleanup backlog derived from
 this instrumentation (arch-report census + lint counts + temporal
 coupling), with per-item done-metrics.
+
+`quality/twin-plants.toml` + `scripts/twin-census.py` are the sabotage
+runner for the one-decider censuses (sv-surface construction 3,
+2026-09-09). One row per family: the census test's crate + full name, a
+plant that is a real second implementation, and the assertion substring
+the red must name. Per family the runner proves the census green on a
+clean tree, applies the plant, requires a FAIL naming that substring,
+restores byte-for-byte and verifies — four verdicts with distinct exit
+codes (proved-red / NOT-A-GATE / could-not-judge / registry error), every
+cargo call through `scripts/with-cargo-lock.sh`, and a refusal to plant
+into a dirty file. 19 families as of 2026-09-10. It earned its keep on
+its first run: `sovereign-mesh`'s `loopback_parity` passed with
+`mesh_router`'s guard middleware DELETED, because both assertions were
+over-determined by the handler's own `enforce_localhost` — the file's own
+claim to catch an unguarded route was falsified by a run. Closed at
+`4c45a1fc9` with a leg no handler can satisfy alone: PUT (a method no
+route registers) at each audited router, spoofed LAN → 403 from the
+layer, real loopback → 405 from axum's fallback.
 
 ### sovereign-recipes
 
@@ -4112,7 +4134,7 @@ stay mesh-side.
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `serving_policy::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore; the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. **Layout is token-driven, not per-component.** `app.css` owns a layout scale (`--gutter` / `--gutter-top` / `--gutter-bottom` / `--measure` / `--measure-prose`) plus three global primitives — **`.page-body`** (the scroll container + gutter every surface body needs), **`.page-measure`** (the centred content column), **`.page-header`** (a header band on the same gutter). These are global rather than Svelte-scoped on purpose: the app's surface hosts (`.library-surface`, `.settings-surface`, `.nb-body`, `.app-chrome-content`) are all `height:100%; overflow:hidden` clipping boxes, so **a body that fails to establish its own scroller is clipped with no way to reach the content past the fold**. A July 2026 audit found exactly that — `ConflictsPanel` hid 2,442px of governance decisions behind an `overflow-y:auto` that could never fire (it sat on an auto-height box), and `AddSheet`'s body rendered flush to both window edges because a `padding:0` "embedded" opt-out outlived the host that used to compensate for it. `tests/e2e/specs/library-layout-audit.spec.ts` is the regression gate: it drives every Library route, measures composited geometry, and fails on unreachable content or a body inside the gutter. Do **not** re-declare padding/overflow on an element carrying `.page-body` — Svelte scoping gives the local rule higher specificity and it wins silently. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
-| `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); Rust core + Svelte UI are written but never compiled — pending the Tauri-mobile-toolchain pass on a Mac (`/sovereign-mobile/HANDOFF.md`). See `docs/specs/MOBILE.md`. |
+| `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). **A Cargo workspace member since 2026-09-09** (`4e1f99f55`; the "written but never compiled" note was stale — the crate compiled before that change) — a census nobody can run is inventory, and `--package sovereign-mobile` resolves now. **It consumes `sovereign-turn-client` and nothing else on the wire** (sv-surface R6): the hand-copied `ServerEvent` mirror in `remote/dto.rs`, its `ProvenanceDto` / `SourceDto` / `CitationDto`, and `remote/client.rs`'s inline `Deserialize` envelopes are deleted, and every frame, prompt, notice, answer and request comes from `sovereign-contracts` through the client crate's re-exports (the direct contract dep is gone and `layer-gate --tighten` banked the fan-in cut 27 → 26 at `4a83373f4`). The `TurnFrame` match is exhaustive with no catch-all, so `Prompt`, `Notice` (`ResolveAck`, `TurnSettled`) and `QueuePosition` are handled — three capabilities the mirror could not represent — and two Tauri commands (`answer_prompt`, `cancel_turn`) plus a `SenderRegistry` give the phone a real answer path. Evidence: `src-tauri/tests/turn_wire.rs` drives a real turn over a real socket against a fixture host serializing contract frames, with the citation and provenance persisted to the cache and the post-`Complete` `ResolveAck` + `TurnSettled` bookend; `src-tauri/tests/census.rs` is the sv-one-client twin census and keeps two permanent plants so its detector stays proven. Named ceiling: the client family has no auth seam (bare `reqwest`, bare `connect_async`), so the phone reaches a DAEMON, not an api-key `sovereign-server` — daemon-first wire compatibility, recorded in `ApiClient::turn`. See `docs/specs/MOBILE.md` and `/sovereign-mobile/HANDOFF.md`. |
 
 Verbs by sibling binary:
 
@@ -5874,6 +5896,44 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
+**What the host mounts on that router** (`sovereign-mesh`, sv-surface rungs
+D2-D8, 2026-09-09/10). The desktop's peripheral commands used to answer from a
+private in-process stack, so an ATTACHED app answered from its own objects
+while the daemon's went unread — the same question answering differently
+depending on which surface asked. Each family below is a door over an object
+the daemon already holds, mounted beside `reading_http` with one posture:
+router-level `from_fn(loopback_only)` **and** per-handler `enforce_localhost`,
+audited by `sovereign-mesh/tests/loopback_parity.rs` (including the PUT leg
+above, which no handler can satisfy alone). None of them is served on the peer
+or guest bind.
+
+| Prefix | What it serves | File |
+|---|---|---|
+| `GET /internal/corpus/status`, `GET /internal/corpus/{corpus}/atoms` | the one corpus-status decider, and `corpus_engine_vocab::AtomsFile`'s `Vec<AtomEnvelope>` verbatim — paged because the installed wikipedia atlas is 846 MB (default 200, hard cap 2,000, an over-large limit served clamped and reported, an explicit `null` `next_offset` at the end, a missing atlas a 404 with a reason) | `reading_http.rs` |
+| `/internal/atlas/{corpus}/…` | `sovereign_tools::atlas_view` types off a `FileAtlasReader` over the daemon's `index_dir`: corpora, report, members, atoms (a POST — the filter carries a `Vec`), subgraph, atom detail. The section→chunk cache policy moved here with them | `atlas_http.rs` |
+| `/internal/atlas/conv/…` | the conversation-tiered browse over `runtime.lane_sources.conv_tiered` (`ConvBrowseReader`, `sovereign-core/src/conv_tiered.rs`): corpora, conversations, detail, entities, aggregate, chunk-entity progress. Absence has three answers — 503 no reader, 501 `NotImplemented`, 404 unknown conversation — never an empty list | `atlas_http.rs` |
+| `/internal/meshapp/{corpus}/…` | the thirteen `sovereign-meshapp` explorer projections (graph, node detail, findings, entities, claims, questions, reconciliation, subgraph, stats, timeline, chunk, documents, wrapped), with the page clamps that used to live in the desktop. 404-vs-500 reads a closed `MeshAppError`, not a phrase table | `meshapp_http.rs` |
+| `/internal/corpus/local/…` | the daemon's OWN local-corpus registry (`watched_folder_runtime::manager()`): list, remove, incomplete jobs, cancel, git check, tags, snapshots + rollback, clean, preview, search, ocr-available, and an ingest job answering 202 + `{job_id, progress_route}` | `lc_http.rs` |
+| `GET /internal/corpus/local/{corpus}/ingest/progress` | `IngestProgress` over an `IngestOutcome` file written by ONE writer (`record_ingest_outcome`, from both ingest sites) carrying `IngestStats` verbatim, kept apart from the phase file so an ingest never stamps Complete on the map. `finished` with neither stats nor error is an error, never a zero-count success | `lc_http.rs` |
+| `/internal/governance/{corpus}/…` | `GovernanceView` plus the tension verbs (resolve / accept / dismiss / undo), seed, post-build seed and recipe render, over `index_dir/{corpus}/atlas`. A missing atlas is a 404 naming the path — the in-process read answered `Ok` + empty, so an unenriched corpus rendered "no conflicts" | `governance_http.rs` |
+| `/v1/insights…` | clip / list / search / delete, `POST /v1/insights/by-id` (`{insights, missing}` — dead ids are named, not silently dropped) and `GET /v1/insights/sinks`, which is the REAL sink registry where the desktop hard-coded an empty vec | `insight_http.rs` |
+| `/v1/notes…` | the daemon's `NoteStore`: create, query (a POST, because the filter carries three `Vec`s and `serde_urlencoded` cannot take a sequence), get, delete, set payload, retire | `notes_http.rs` |
+| `/v1/features/projects…` | the feature-project store's whole surface, over a `ServingCore.features` slot | `features_http.rs` |
+| `/v1/recipe-projects…` | `RecipeProject` composed daemon-side over its stores and data root — list/create, dashboard, TOML write (atomic, under the data root rather than a user path), link-recent-artifact, checkpoint restore, prelude | `recipe_project_http.rs` |
+| `/v1/mcp/servers…` | the daemon's own MCP config and mount: list, test, token PUT/DELETE. `connected`/`error` are always `None` with `mount.reason` stating the absence on every response — the runtime recipe drops the `McpServerManager` after boot, so this host has no source, and `connected = count > 0` was the fabrication refused | `mcp_config_http.rs` |
+| `GET /v1/skills`, `GET /v1/conversations/{id}/provenance` | the runtime's skills (`trust_level` lowercased HERE — the desktop held the only copy) and `Runtime::get_last_turn_provenance` (a null provenance is a 200, not a 404) | `turn_extras_http.rs` |
+| `/v1/documents`, `/v1/documents/legacy` | the document assets and the legacy-document listing + promotion over `ServingCore.state_store` + runtime (D9a; the desktop's nine document reads; upload's per-batch narration and ask-document's turn half stay on the driver) | `sovereign-mesh/src/documents_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
+| `/internal/corpus/catalog`, `/notebooks`, `/diagnose`, `/{corpus}/health`, `/{corpus}/coverage-card`, `/{corpus}/retry-enrichment` | the corpus catalogue and the notebook shelf's five-source fold over `installed_indexes()` (the one decider), the atlas readers and conv-tiered buckets; in-flight state stays on `/internal/corpus/status` (D9a; nine desktop reads in corpus.rs, budget.rs, corpus_install.rs, recipe_testing.rs) | `sovereign-mesh/src/corpus_catalog_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
+
+What could NOT cross is named at the site rather than papered over: a
+user-picked path (governance export, `lc_validate_path`, `lc_pre_scan`), an
+emitter-only output (`lc_cluster`), a config WRITE (`SetupConfig::save` has zero
+call sites in `sovereign-mesh` — every writer is CLI-side, so a
+`POST /v1/admin/config` comes first), and workflow-kind validation
+(`Workflow::parse` is a studio dep the layer map forbids here, so validation is
+`Option` with `validation_unavailable` stated and a `PUT …/toml` on a workflow
+project is a 501 rather than an unvalidated write).
+
 **Internal API — :9742, plaintext (perimeter-trust)**
 
 No per-request auth: the internal routes (gossip, scheduling, model/index
@@ -6748,6 +6808,43 @@ on success it enters Attach mode: inference flows through
 `/v1/admin/reload` so the daemon swaps its `InferenceProvider` in
 place. Smoke test at `sovereign/scripts/smoke-attach-mode.sh`.
 
+**The attach posture, measured** (sv-surface D0-D9 + B3/B4, 2026-09-10). Boot
+is gated on identity, not on a port. `sovereign_mesh::ClientListener`
+(`Pending` / `Bound(addr)` / `Failed`) is a watch the serve task publishes:
+`daemon run` reads it before claiming "is running" and exits 1 on `Failed` or a
+60s `Pending`, and the desktop's Local bootstrap returns a backend error on
+`Failed` or a 30s `Pending`. `/status.process` carries `pid` + `run_id`, so a
+caller can ask WHO answered — the e2e harness's readiness is that identity, not
+a 200. This closed a live defect: a fixture daemon that lost `:9741`, kept
+running and logged success was probed green by the harness, and the app
+ingested into the operator's real daemon. `RunLockError::Held` no longer shrugs
+into "Local with no wiring" either — it re-probes the client port, reads
+`/status.process.pid`, attaches to the holder when a foreign pid answers, and
+is fatal naming root, lock reason and port when nothing does. `is_attach_mode`
+forks went 15 → 0: every peripheral command reads the wire in BOTH modes, where
+Local means the in-process daemon this process commissions. The construction
+floor is 12 of the original 14-needle basis
+(`sovereign-desktop/src-tauri/tests/attach_construction_census.rs`) —
+`WatchedSubsystem::install` was never attach-reachable (a census error) and
+`CompactionWorker::spawn` was a real defect, an attached desktop running a
+second rolling-summary compaction over the daemon's own `sovereign.db`, now
+structurally impossible because the config is `Option`. **The forks were never
+the population that matters**: 49 needle READS across 13 files still run in
+attach with no fork at all, because the spine builds every needle in both modes
+— `conversation.rs` 12, `document_asset.rs` 12, `corpus.rs` 8, `chat.rs` 3, and
+nine more at 1-2 each. `is_backend_ready` reads `state.runtime.is_some()`, so
+hoisting attach out today would hang the splash, and `list_corpora` /
+`notebook_list` would degrade to an empty vec silently. That 49 is what the
+remaining rung drives to zero; `attach_bootstrap()` was deliberately not
+written on the false premise. One rule decides what a local-corpus command may
+cross on: it crosses when its answer is a function of the registry ON DISK —
+state both managers see — and stays PAIRED with its producer when it reads one
+instance's in-memory state (`lc_get_preview` / `lc_write_tags` with the
+app-local `lc_cluster`). That distinction is invisible in Local mode, where
+there is one instance, and is the whole defect in attach, where there are two;
+each pairing is pinned as a conditional census that goes quiet on its own when
+its producer crosses.
+
 `/v1/admin/reload` rebuilds only what changed:
 
 | Changed field                           | Reload action                              |
@@ -6864,8 +6961,10 @@ the selection's workspace-internal dependency closure; the unscoped run still
 gets both flags, so the gate's own coverage is unchanged. That lib also holds
 `crate_for_path` + `keep_members`, shared with `nextest.sh` so the two runners
 cannot drift apart — and `keep_members` is load-bearing: `crate_for_path` can
-resolve a `[package]` dir that is **not** a workspace member (`sovereign-mobile`
-is a standalone Tauri app), and `cargo -p <non-member>` aborts the entire run.
+resolve a `[package]` dir that is **not** a workspace member, and
+`cargo -p <non-member>` aborts the entire run. (`sovereign-mobile` was the
+standing example until it joined the workspace on 2026-09-09 — `keep_members`
+still guards the class.)
 
 Scoped runs share the workspace `target/` unless sccache is genuinely wired
 (`command -v sccache` **and** `RUSTC_WRAPPER`). The isolated
@@ -7036,6 +7135,10 @@ Default ports:
 | Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
+| Serve something a desktop command used to compute in-process | the client-router families in `sovereign-mesh/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |
+| Know what an attached desktop still constructs   | `sovereign-desktop/src-tauri/tests/attach_construction_census.rs` (floor 12) + §6 "Desktop attach mode" |
+| Prove a deleted twin cannot come back            | `scripts/twin-census.py` over `quality/twin-plants.toml` (19 families) — plant, watch the family census name its own rule, restore byte-for-byte |
+| Prove the desktop and the CLI answer one question the same way | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` + `…/journeys/cli-surface.ts` — routed intent, source set as `(corpus_id, chunk_id)` handles and gate action asserted identical on the real harness, with a negative control first |
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
@@ -7054,6 +7157,23 @@ Default ports:
 | Did retrieval / routing / enrichment / synth / chaos / the gym BREAK (not drift)? | **`svrn quality check`** runs all six through `quality lane bench` (`sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs`), which runs each existing verb UNCHANGED and reads the report it writes — no lane prose is parsed. Every one of these that drives the chat pipeline builds an IN-PROCESS session (`bench all` subprocesses `svrn eval run`), and since 2026-09-05 that session is SEALED to the bank's corpus via `sovereign_runtime_recipe::LaneScope::Sealed`: the wikipedia link graph, the cross-corpus meta-atlas and the bridge index are not loaded for a lane that cannot consult them. Measured on the authoring host, chaos-monkey against a 316-chunk corpus: lane startup 23.1 s -> 4.5 s, because 22.3 s of it was a 7.85M-edge graph and a 981 MB meta-atlas JSON. The cost was paid once per LANE, not once per run. HARD on CATASTROPHE ONLY, because at six probes and ten questions a one-item flip is 12-20 points and a band is noise (RUNBOOK §6): an errored item, an empty answer, an all-zero tally, an abstention on an answerable probe, a confabulation on an absent one. Scores are TRACKED with no band. A knowledge-gym replay the daemon REFUSED (a 503 under load) is could-not-judge on its own `replays that ran` row and contributes no tally at all — it used to be folded into `pass_count` as a failure, so three refusals scored `0/3` and tripped the HARD all-zero row exactly like three real predicate failures (ARCH §18.3). `AggregateSummary.per_fixture` carries named fields (`slug`/`passed`/`errored`/`replays`/`pass_rate`) so the distinction survives the wire, and `pass_rate` is over JUDGED replays. Since 2026-09-07 every knowledge-gym fixture DECLARES the surface it drives, in `pass.toml`'s `production_path` (`executor` | `attached-doc` | `raw`, a closed set; a fixture declaring none is refused at load), and `per_fixture` carries `path` plus a `caveat` of `"not-the-product"` on `raw`. The three smoke-subset fixtures now run on `executor` — `Executor::execute_reason_with_tools`, driven through the public `Executor::run` with the REAL `knowledge_lookup` manifest bound to the fixture's canned envelope, so production builds the prompt, parses the inline `<tool_call>` and dispatches through `ToolRegistry::call_cached`. Before that every fixture POSTed an OpenAI `tools[]` array to `/v1/chat/completions` and the predicates read `choices[0].message.tool_calls` — a surface NO product turn reaches (`knowledge_query.rs` passes `tools: None` on both synthesis routes, `:1301` and `:1352`), so a green subset was a fact about the daemon's function-calling adapter that the lane read as a fact about the product. Predicates now read ONE `ToolLedger` (`knowledge_gym_cmd/ledger.rs`) that each driver projects its own record into (ARCH §10.6), and its `path_result_count` row — what the PATH counted in what it handed the model — is what surfaces `! EVIDENCE NOT DELIVERED` when a path dispatches the tool, gets rows, and delivers none. `--raw` keeps the old endpoint reachable for model-only measurement and labels every line; `--sabotage no-tool-offered` builds the step with an empty tool list so the lane can be watched red (ARCH §18.1). A path with no driver, an unknown `production_path` spelling, and a multi-turn fixture on `executor` are all refused AT LOAD exiting non-zero, never turned into per-replay could-not-judge verdicts (ARCH §18.2 as amended, 859185ad0: an abstention nobody has watched be necessary is not rigor, and a fact the loader already knows must not become N unjudged replays that read as a careful lane); every run prints `verdicts: passed N failed N could-not-judge N` in both human and `--json` mode, and `AggregateSummary` carries `total_failed` on the wire beside `total_passes`/`total_errored`. Measured on the retarget (2026-09-07, one binary, one daemon, n=3, model `primary`, ZERO abstentions on all four runs): the subset scored 9/9 on `--raw` and **0/9 through the production path**, and the ledger named two production-side mechanisms — `knowledge_lookup` returns `StepOutput::Json` with no `answer` key while both consumers read exactly that key and substitute a string (`executor.rs` -> `"No results."`, `attached_doc.rs` -> `"(no answer field)"`), so 4 of 9 replays reported `EVIDENCE NOT DELIVERED` and zero evidence ids were cited on any replay; and `build_retrieval_reasoning_prompt` hardcoded `"tool":"search"` in its one worked example whatever `available_tools` held, so 6 of 9 replays emitted `search` first and got `Tool 'search' not available.` **BOTH FIXED 2026-09-08** (`acf4e9944` + `7f2663024`): `crate::tool_loop` is now the crate's ONE tool-call protocol — the `{tool, query}` fork in `executor.rs` and the third parser in `attached_doc_render.rs` are DELETED, `format_step_output` renders a `StepOutput::Json` whole and knows no tool's schema, `result_cardinality` replaces a `matches("[Source")` count that reported zero for every JSON envelope, and the prompt's worked example is generated from `available_tools` (absent entirely when nothing is offered) rather than naming `search`. A third defect surfaced on the way and is the reason the wire fix has its own commit: passing the scoped tools on the wire made the daemon answer with `content: ""` and the call in `choices[0].message.tool_calls`, which `oicp-client` did not deserialise at all — so the response reached every caller as an empty completion, silently, and the delegate + recipe-author loops had the same blind spot since they were written. `ChatMessage::as_text` now renders a native `tool_calls` array back into the shared envelope at the wire boundary. Re-measured the same day, n=3, ONE daemon across both banks (pid 48485, unchanged start-to-end of each), zero replays discarded for a restart: the executor subset goes **0/9 -> 8/9**, `EVIDENCE NOT DELIVERED` 4 replays -> **0**, and evidence ids (`ev-0000`, `ev-0001`) are cited and verified against what the mock returned where none were cited before. The raw control moved 24/24 -> 22/23 judged with one never-ran, named (`daemon http 503 local_queue_full`, ~30s predicted wait on a contended host) and contributing no tally. Verdicts: pre passed 24 / failed 9 / could-not-judge 0 (exit 3); post passed 30 / failed 2 / could-not-judge 1 (exit 0). The two remaining failures are model behaviour the gym exists to catch — one replay read the evidence and answered from it without citing the handles. `BenchOutcome::tally` exists so the ROUTING surface can answer "did this score zero" as data — it is the one surface that carries neither per-item rows nor a count, and put `correct/total` in `note` prose |
 | Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly bench; it composes every lane rather than reinventing one, and is where drift against committed baselines is judged. Its `--quick` tier was deleted 2026-09-04: it down-sampled by COUNT and wrote nothing durable, and `svrn quality check` is the lean tier now. Lane semantics + tiers at §"Bench harnesses" above; entry point `sovereign/bench/README.md`. The workspace lint/test scripts are the *build* gate and never run a model against a question bank |
 | A bench says regressed — is that real, or noise? | `sovereign/docs/RUNBOOK.md` §6 — per-lane noise bands, baseline-age semantics, and the legitimate `--update-baseline` re-mint path |
+
+The `svrn quality check` banks live under
+`sovereign/bench/quality-check/baselines/` and are per STACK. The current one
+is `4dd212fbca5f` (Qwen3.6-35B-A3B primary, Qwopus3.5-4B fast,
+qwen-embedding-0.6b), minted 2026-09-10 at `9e46fc4bf` against a daemon at
+`d51cd2b4c` — the first `check` run on this stack, so a delta claimed against
+anything earlier is not a delta, and the reading is a pre-deletion baseline
+rather than a verdict on the commits before it. Two lane states are known and
+belong to their own owners, not to whatever change is being gated: `chat-ask`
+can fail `per-stage calls` when the audit pass's retry ladder re-extracts and
+re-judges a claim (16 calls against a 12 budget on one run of three; both
+questions passed on re-sample — one run is not a measurement), and
+`chaos-monkey` fails `ungrounded assertion: distract-bomb-maker` on every run
+since `f4b13a68c` added the row: the answer is the gold keyword and 7 of 19
+retrieved chunks carry it, but the released quote does not support it, so the
+citation gate grounds a correct answer on the wrong quote — a grounding-gate
+finding.
 
 ### 8.1 Where configuration and state live
 
@@ -7858,6 +7978,63 @@ declared-type walks as peers, whose condition was met on 2026-09-03 (see
 locally.
 
 
+### 10.1l Fan-in ACCEPTED for `sovereign-service` — 2026-09-11
+
+`layer-gate` reported 0 layer violations and one fan-in tick:
+`sovereign-contracts` 26 → 27. The re-baseline was inspected before it was
+taken and it moves exactly that one line — nothing else was absorbed, which
+is the check CLAUDE.md's rule exists to force.
+
+WHAT THE EDGE BOUGHT. `sovereign-service` is OS service registration
+(launchd / systemd / Windows Task Scheduler), extracted from
+`sovereign-cli-daemon` so a surface can register the daemon WITHOUT LINKING
+ONE — the `sv-no-daemon-management` bar. Its whole in-repo dependency list is
+the crate this row is about, for the data-root SSOT
+(`sovereign_contracts::rebrand::svrnmesh_root`). The narrower alternative was
+the one the code already used — `sovereign_cli_shared::dirs::sovereign_root`,
+a ONE-LINE delegate to that same function — and taking it would have dragged
+clap, tokio and an optional corpus-engine into a crate whose entire purpose
+is being light enough for a thin client to depend on. So the ratchet's own
+advice ("depend on a narrower crate instead") has no candidate here: this IS
+the narrow one.
+
+The accounting is also gentler than the number reads. The code did not gain a
+dependency on `sovereign-contracts`; it KEPT the one it had. One crate became
+two and both name the seam, so fan-in counts an edge where there was already
+a use.
+
+### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
+
+The campaign landed 44 commits in one day (R1 through the dedup pass,
+`quality/campaigns/sv-surface.toml` THE LEDGER). The ratchets were re-pinned in
+a worktree at `origin/main` (4888f733e) — not on the working tree — so what is
+already public is separated from what this branch adds, and then the branch's
+own growth was accepted at a clean HEAD (d9e2577d5 plus the campaign file).
+Net production Rust for the branch: +10,471 (+21,047 / −10,576); the desktop
+is −2,004 net and the daemon carries the routes that serve it. Directive 3 of
+the campaign ("must reduce code") is NOT met, and the campaign file says so
+with the numbers rather than a plan.
+
+What the lines bought, by ratchet finding:
+
+| Finding | Bought |
+|---|---|
+| `sovereign-turn-client/src/lib.rs` 1,614 → 3,655 (+2,041; crate +988 production) | the one client family: every route family's methods (reading, atlas incl. conv-tiered, meshapp, insights, notes, features, local corpus incl. register/ingest-progress, governance, MCP config, recipe projects, skills/provenance/ready, documents, catalogue), now on ONE `exchange` decider (4d91462d1); the re-exports mobile consumes. Split owed: one module per family (ARCH §3.2) |
+| `sovereign-mesh/src/turn_http.rs` 1,421 → 1,875 (+454) | TurnSettled with the producer JOIN, the idle close, cancel reaching a parked prompt, refusals as ResolveAck, per-turn prompt ids (188a9e4e4). Split owed |
+| `sovereign-mesh/src/daemon.rs` 5,330 → 5,517 (+187) | the ClientListener bind outcome (3c7ad5933) and fourteen router mounts. Split long owed (§3.1, 4× the line) |
+| `sovereign-desktop/src-tauri/src/state.rs` 1,894 → 2,195 (+301) | B4 attach-to-the-holder with the pid identity probe and the bind gate (65b92cd15, 3c7ad5933) — the split of `bootstrap_with_progress` is D9b's blocked work |
+| `sovereign-desktop/src-tauri/src/commands/chat.rs` NEW oversized 1,396 | one socket reader, per-conversation wire slots, ResolveAck rendering (759ea5133). Split owed |
+| `sovereign-desktop/src-tauri/src/local_corpus_commands.rs` 1,367 → 1,627 (+260) | the ingest job's follow loop (poll + the same Tauri frames) and the wire register (502304f63, fdaa06937); the census says which pairs stay app-local |
+| `sovereign-cli-llm/src/reading_diag_cmd.rs` 1,213 → 1,327 (+114) | the deref half on the daemon plus the golden module over captured bytes (503aeee43) |
+| `sovereign-contracts/src/skills.rs` 1,469 → 1,525 (+56) | the RwLock active set so a daemon can toggle a skill (2a9a9e91e) |
+| tests: `loopback_parity.rs` 1,829 (new oversized), `turn_surface.rs` 1,479 (new), `store_tests.rs` +283, mesh tests +4,531, core +477, desktop +603, contracts +218 | the PUT-gate loopback census that closed f6a633519's NOT-A-GATE, one e2e per route family watched red, the conv-browse trait tests, the parity journey, the twin censuses. `loopback_parity.rs` still carries 1,114 lines of rung 1/3/6 parity suites under the wrong docstring — a relocation owed |
+
+Twenty-four `size-gate` keys grew; `--tighten` found nothing to bank on either
+gate after acceptance. The dedup pass that preceded this acceptance
+(55a7ff294, 4d91462d1, d9e2577d5) removed 2,487 production lines; the
+scaffolding it removed was 17% of the branch's net, and the rest is daemon
+surface the surfaces now consume.
+
 ### 10.1j Size — a 1,384-line file lost 259 lines and the band counted it as growth (enrichment-as-plugin Step 2, 2026-09-03)
 
 `corpus-engine-vocab` took the taxonomy block out of
@@ -8062,6 +8239,10 @@ collects.
 
 ### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
 
+> **CLOSED 2026-09-10 — see §10.1q.** The defect this row names as "the finding
+> as much as the number is" is fixed: `concepts.txt` now stores the name SET
+> beside the count, and a red names what crossed.
+
 `concept-gate` reports **35 duplicated names against a baseline of 33**. The
 baseline is a bare COUNT, pinned at `27c0fe031` (Noun convergence, #47), and
 `quality/baselines/concepts.txt` holds the single line `33`. That is the
@@ -8095,6 +8276,60 @@ pass. Recorded here so the next reader starts from the blocker rather than
 rediscovering the copies.
 
 Re-pinned to 35. `--tighten` first, as always; it had nothing to bank.
+
+### 10.1q Concept ratchet — the baseline names its offenders now, and was re-pinned once more — 2026-09-10
+
+§10.1j recorded a finding rather than a fix: *"the gate can tell you a noun
+crossed and cannot tell you which, because it stores no name list to diff
+against."* That is closed. `quality/baselines/concepts.txt` was a bare scalar
+— `35`, one line — while every sibling ratchet already stored per-key rows:
+`clock_reads.txt` names the file, `oversized.txt` names the file, `lines.tsv`
+names the crate. It now carries the count on its first non-comment line
+(`instruments.toml` declares it `kind = "count"`) and one name per line after
+it, and `svrn code converge status --json` publishes `duplicated`, `added` and
+`removed` beside the counts.
+
+The set was free: `census()` already ranks the rows the count is drawn from,
+and `duplicate_count` is `census(..).reachable_names` — so the names are the
+same expression the number is. `cmd_status` called `census` TWICE (once
+through `duplicate_count`, once for `colliding_names`), rebuilding the by-name
+map over all 5,796 first-party type defs each time; it calls it once now.
+
+**Both arms watched before the change landed** (§18.1). A synthetic baseline
+with `Admission` and `WorkUnit` removed makes the gate print
+
+```
+added since the baseline:
+  Admission   ->  sovereign code converge noun Admission
+  WorkUnit   ->  sovereign code converge noun WorkUnit
+```
+
+and exit 1; the real bare-scalar baseline makes it print *"this baseline
+predates the name list, so it cannot say WHICH"* and name the re-mint. `added`
+and `removed` are **null**, not empty, on an unnamed baseline — the relay must
+be able to tell "nothing was added" from "this file cannot say" (§18.3), and a
+regression test pins each of the three shapes: named round-trip, bare scalar,
+missing file.
+
+**What was re-pinned, and what could not be dispositioned.** 39 against a
+baseline of 35, pinned 2026-09-02 at `9d6969852`, with 210 commits landed on
+`origin/main` since. Not this branch's rise: `git diff origin/main..HEAD --
+'*.rs'` adds no types at all. Of the four crossers, exactly one is
+recoverable after the fact — **`Admission`** went from one defining crate to
+two (`commonwealth-rail-core/src/admit.rs:237` and
+`corpus-engine/src/enrichment/atlas/ground/select.rs:177`), which a `git grep`
+at both commits can see. The other three crossed the REACHABILITY threshold,
+not the definition count, and that is only visible in a SCIP graph built at
+`9d6969852` — an hour of re-index at a commit nobody is on. So they are
+absorbed, once, and named as absorbed. This is the last time that sentence can
+be written about this ratchet.
+
+`Admission` reads as two different concepts under one name — a rail admission
+decision and an atlas ground-selection admission — so the disposition is
+"rename apart", not "converge". Not done here: it has 31 reference sites
+across 8 crates and belongs to whoever owns those subsystems, not to a
+gate-greening pass. Recorded so the next reader starts from the disposition
+rather than rediscovering the collision.
 
 ### 10.1k Size RE-PINNED on main — 2026-09-03 (the 34-commit branch meets §10.1i's fresh pin)
 

@@ -3,19 +3,13 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 // ─── Document Asset commands ─────────────────────────────────
 
@@ -41,6 +35,19 @@ pub struct DocumentAskResponse {
     /// bubbles lacked the routing-meta bar their reloaded twins had.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// sv-surface D7/G9 — the TYPED projection of `metadata`, carried
+    /// BESIDE it rather than instead of it. `metadata` above stays the
+    /// verbatim blob because the frontend types it as `unknown` and
+    /// reads it with pointers; retyping that contract is a later rung.
+    /// These two are what a wire-attached client receives on a
+    /// `TurnFrame::Complete`, so anything built on them — the answer
+    /// export, the routing footer — renders identically in both boot
+    /// modes. Absent when the blob carries no provenance (the
+    /// documented graceful-degradation contract).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<sovereign_contracts::types::projection::Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<sovereign_contracts::types::projection::Citation>,
 }
 
 /// Upload and ingest a document. The command returns immediately with
@@ -439,11 +446,16 @@ pub async fn ask_document(
 
     let _ = app_handle.emit("conversations:changed", ());
 
+    let metadata = assistant_msg.metadata.clone();
+    let (provenance, citations) =
+        sovereign_contracts::types::projection::project_message_metadata(&metadata);
     Ok(DocumentAskResponse {
         response: final_content,
         operation: Some(operation),
         sources: sources_content,
-        metadata: assistant_msg.metadata.clone(),
+        metadata,
+        provenance,
+        citations,
     })
 }
 
@@ -455,12 +467,14 @@ pub async fn get_document_asset(
     state: State<'_, Arc<AppState>>,
     asset_id: String,
 ) -> Result<Option<sovereign_core::types::DocumentAsset>, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    store
-        .get_document_asset(&asset_id)
+    // sv-surface D9b: the daemon's store is the one that holds the asset,
+    // so the read crosses the wire in BOTH modes. `Ok(None)` is the route's
+    // 404 and only the 404 — "no such asset" and "the store would not
+    // answer" stay different facts (ARCH §18.3), which is what the local
+    // `ok_or("Store not ready")` collapsed the moment this process stopped
+    // owning the store.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .get_document::<sovereign_core::types::DocumentAsset>(&asset_id)
         .await
         .map_err(|e| format!("Load failed: {e}"))
 }
@@ -474,38 +488,21 @@ pub async fn rebuild_document_skeleton(
     state: State<'_, Arc<AppState>>,
     asset_id: String,
 ) -> Result<sovereign_core::types::DocumentAsset, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Inference not ready")?
-    };
-
-    let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(
-        Arc::clone(&inference),
-        store.clone(),
-    );
-    if let Some(extractor) = state.entity_extractor.read().await.as_ref() {
-        manager = manager.with_entity_extractor(Arc::clone(extractor));
-    }
-
-    manager
-        .rebuild_skeleton(&asset_id)
+    // sv-surface D9b — `POST /v1/documents/{id}/skeleton`. The rebuild is
+    // the DocumentAssetManager's, and the manager that matters is the one
+    // sitting on the store the chunks are in. Building a second manager
+    // here over this process's own `inference` + `entity_extractor` meant
+    // an attached desktop rebuilt a skeleton with a different extractor
+    // than the daemon would (the daemon has no `EntityExtractor` on
+    // `ServingCore`, so it takes `build_skeleton`'s documented LLM
+    // fallback — named in 2a9a9e91e, and now the one answer).
+    //
+    // The route answers the REFRESHED record, which is what the reload
+    // below used to ask a second question for.
+    let refreshed = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .rebuild_document_skeleton::<sovereign_core::types::DocumentAsset>(&asset_id)
         .await
         .map_err(|e| format!("Skeleton rebuild failed: {e}"))?;
-
-    // Return the refreshed asset record so the caller can update UI state
-    // in-place (skeleton now Some, document_type set, state Ready).
-    let refreshed = store
-        .get_document_asset(&asset_id)
-        .await
-        .map_err(|e| format!("Reload failed: {e}"))?
-        .ok_or("Asset vanished during rebuild")?;
 
     let _ = app_handle.emit("document:skeleton_rebuilt", &asset_id);
 
@@ -527,54 +524,36 @@ async fn run_turn_via_runtime(
     question: &str,
     conversation_id: &str,
 ) -> Result<DocumentAskResponse, String> {
-    let runtime = {
-        let guard = state.runtime.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Runtime not ready")?
-    };
-
+    // sv-surface R5: a document question is a turn, and every turn rides
+    // the wire — the REST one-shot (same driver the socket serves, through
+    // the client family), exactly as the chat one-shot does.
     state.approval.set_task_id(conversation_id).await;
 
-    // The same driver the chat commands use (TOPOLOGY §10 phase 6). A
-    // document question is a turn; it was calling `handle_turn` directly and
-    // therefore skipping the raw-model check, the document-path decision and
-    // the graceful guards that `serve_turn` applies once for everyone.
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    }
-    .ok_or("Store not ready")?;
-
-    let turn = sovereign_core::runtime::collect_turn(
-        &runtime,
-        store.as_ref(),
-        conversation_id,
-        question,
-        sovereign_contracts::types::TurnMode::Grounded,
-        None,
-    )
-    .await
-    .map_err(|e| format!("Runtime turn failed: {e}"))?;
+    let turn = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .send_message(conversation_id, question)
+        .await
+        .map_err(|e| format!("turn failed: {e}"))?;
 
     // Runtime saved the assistant message itself and spawned auto-title.
     // Emit the list-refresh event the normal send_message command emits.
     let _ = app_handle.emit("conversations:changed", ());
 
+    // The wire's TYPED projection (the Complete frame's provenance /
+    // epistemic metadata) where the in-process read returned the raw
+    // persisted blob — the same named G9 delta the chat one-shot
+    // carries.
+    let metadata = turn
+        .metadata
+        .map(|m| serde_json::to_value(&m).unwrap_or(serde_json::Value::Null));
+    let (provenance, citations) =
+        sovereign_contracts::types::projection::project_message_metadata(&metadata);
     Ok(DocumentAskResponse {
         response: turn.text,
         operation: None,
         sources: Vec::new(),
-        // Carries the runtime's full message metadata — provenance,
-        // retrieved_chunks, and `grounding_gate` (the verification
-        // receipt) — to the live bubble. Read from the persisted row
-        // in-process, the same way the chat commands do it: `collect_turn`
-        // hands back the typed projection for callers across a socket, and
-        // this one owns the store.
-        metadata: sovereign_core::runtime::message_metadata(
-            store.as_ref(),
-            conversation_id,
-            &turn.message_id,
-        )
-        .await,
+        metadata,
+        provenance,
+        citations,
     })
 }
 
@@ -582,12 +561,9 @@ async fn run_turn_via_runtime(
 pub async fn list_document_assets(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<sovereign_core::types::DocumentAsset>, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    store
-        .list_document_assets()
+    // sv-surface D9b — `GET /v1/documents`. One shelf, the daemon's.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_documents::<sovereign_core::types::DocumentAsset>()
         .await
         .map_err(|e| format!("List failed: {e}"))
 }
@@ -597,34 +573,22 @@ pub async fn delete_document_asset(
     state: State<'_, Arc<AppState>>,
     asset_id: String,
 ) -> Result<(), String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Inference not ready")?
-    };
-
-    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
-    manager
-        .delete(&asset_id)
+    // sv-surface D9b — `DELETE /v1/documents/{id}`. The delete removes the
+    // asset row AND its chunks, so it must run against the store that holds
+    // them. Note what the local arm needed to do that: a whole
+    // `DocumentAssetManager` over an `InferenceProvider` — a model handle,
+    // to delete rows — because the manager's constructor demands one. The
+    // route needs no such thing.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .delete_document(&asset_id)
         .await
         .map_err(|e| format!("Delete failed: {e}"))
 }
 
-/// A document from the legacy chunks table (uploaded via the old
-/// paperclip path before DocumentAssetManager existed).
-#[derive(Serialize)]
-pub struct LegacyDocumentEntry {
-    pub source: String,
-    pub filename: String,
-    pub chunk_count: usize,
-    pub word_count: usize,
-}
+/// A document from the legacy chunks table (uploaded via the old paperclip
+/// path before DocumentAssetManager existed) — the route's own type, which
+/// `list_legacy_documents` parses with and returns verbatim.
+pub use sovereign_mesh::documents_http::LegacyDocumentEntry;
 
 /// List documents from the legacy `documents` table that don't have
 /// a corresponding DocumentAsset record. These are shown in the picker
@@ -633,50 +597,15 @@ pub struct LegacyDocumentEntry {
 pub async fn list_legacy_documents(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<LegacyDocumentEntry>, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-
-    let sources = store.list_sources().await.map_err(|e| format!("{e}"))?;
-    let assets = store.list_document_assets().await.unwrap_or_default();
-
-    // Filter out sources that already have a DocumentAsset (including
-    // the "asset:uuid" sources created by DocumentAssetManager).
-    let asset_sources: std::collections::HashSet<String> =
-        assets.iter().map(|a| format!("asset:{}", a.id)).collect();
-
-    let mut entries = Vec::new();
-    for source in &sources {
-        // Skip asset-managed documents and corpus chunks.
-        if source.starts_with("asset:") && asset_sources.contains(source) {
-            continue;
-        }
-        // Skip corpus-sourced chunks (Wikipedia, SEP, etc.).
-        if source.starts_with("corpus:") {
-            continue;
-        }
-
-        let chunks = store.get_chunks_by_source(source).await.unwrap_or_default();
-        if chunks.is_empty() {
-            continue;
-        }
-
-        let word_count: usize = chunks
-            .iter()
-            .map(|c| c.content.split_whitespace().count())
-            .sum();
-        let filename = source.rsplit('/').next().unwrap_or(source).to_string();
-
-        entries.push(LegacyDocumentEntry {
-            source: source.clone(),
-            filename,
-            chunk_count: chunks.len(),
-            word_count,
-        });
-    }
-
-    Ok(entries)
+    // sv-surface D9b — `GET /v1/documents/legacy`. The three skips (asset-
+    // managed sources, `corpus:` chunks, empty sources) and the word count
+    // moved DOWN with the route in 2a9a9e91e; this process held the only
+    // copy of those rules, and running them here as well would have made
+    // two deciders for one shelf (ARCH §10.6).
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_legacy_documents::<LegacyDocumentEntry>()
+        .await
+        .map_err(|e| format!("{e}"))
 }
 
 /// Promote a legacy document (from the old chunks table) into a
@@ -687,48 +616,13 @@ pub async fn promote_legacy_document(
     state: State<'_, Arc<AppState>>,
     source: String,
 ) -> Result<DocumentAssetResponse, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-
-    let chunks = store
-        .get_chunks_by_source(&source)
-        .await
-        .map_err(|e| format!("{e}"))?;
-
-    if chunks.is_empty() {
-        return Err(format!("No chunks found for source: {source}"));
-    }
-
-    let word_count: usize = chunks
-        .iter()
-        .map(|c| c.content.split_whitespace().count())
-        .sum();
-    let filename = source.rsplit('/').next().unwrap_or(&source).to_string();
-    let title = filename
-        .rsplit_once('.')
-        .map(|(name, _)| name)
-        .unwrap_or(&filename)
-        .replace(['_', '-'], " ");
-
-    let asset = sovereign_core::types::DocumentAsset {
-        id: uuid::Uuid::new_v4().to_string(),
-        title,
-        filename,
-        file_size_mb: 0.0, // Unknown for legacy docs.
-        word_count,
-        chunk_count: chunks.len(),
-        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
-        ingested_at: chrono::Utc::now(),
-        index_id: format!("legacy:{source}"),
-        skeleton: None,
-        state: sovereign_core::types::AssetState::PartiallyReady,
-        owner: None,
-    };
-
-    store
-        .save_document_asset(&asset)
+    // sv-surface D9b — `POST /v1/documents/legacy/promote`. The title rule
+    // (strip the extension, `_`/`-` to spaces) went down with the route;
+    // the asset is minted against the store that owns the chunks, so the
+    // `index_id`/`word_count` it records describe rows that are actually
+    // there.
+    let asset = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .promote_legacy_document::<sovereign_core::types::DocumentAsset>(&source)
         .await
         .map_err(|e| format!("{e}"))?;
 

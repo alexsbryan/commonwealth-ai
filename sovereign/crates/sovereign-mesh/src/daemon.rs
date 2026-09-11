@@ -206,6 +206,8 @@ use crate::state::MeshState;
 /// carries a `ProviderFactory`.
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
+    /// Bind outcome of the current serve task — see [`ClientListener`].
+    client_listener: tokio::sync::watch::Sender<ClientListener>,
     /// Where to persist `mesh.json` so the daemon can auto-resume on
     /// app restart. Empty means persistence is off — but it is NOT the
     /// in-memory constructor's spelling any more: the identity key and the
@@ -279,6 +281,30 @@ pub struct EmbeddedDaemon {
     /// answers a different question: have we ever seen a worker here, so that an
     /// unanswered probe is reportable as `unconfirmed` rather than as absence.
     rpc_worker_last_seen: std::sync::RwLock<std::collections::HashMap<NodeId, std::time::Instant>>,
+}
+
+/// What became of the API listeners the serve task binds.
+///
+/// A closed set (ARCH §2) because callers fork on it: `daemon run` refuses
+/// to report itself running until this reads `Bound`, and `Failed` is fatal
+/// there. The bind itself stays best-effort INSIDE the serve task (the
+/// default-port integration tests bind `:9741` under parallel contention and
+/// must not be stranded) — this is how a caller that needs the truth reads
+/// it without changing the task's posture. Minted 2026-09-10: the desktop
+/// e2e harness's fixture daemon lost `:9741` to the operator's
+/// launchd-relaunched daemon, logged "is running" anyway, and the harness's
+/// port probe was answered by the stranger — a fixture ingest landed in the
+/// operator's real home.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientListener {
+    /// The serve task has not reached its bind yet.
+    Pending,
+    /// Both API listeners are bound; this is the client address.
+    Bound(SocketAddr),
+    /// A bind failed after retries. The serve task has exited and this
+    /// process serves NO client API — whatever answers on the port is
+    /// someone else.
+    Failed(String),
 }
 
 enum DaemonState {
@@ -561,6 +587,7 @@ impl EmbeddedDaemon {
         }
         Arc::new_cyclic(|self_weak| Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
+            client_listener: tokio::sync::watch::Sender::new(ClientListener::Pending),
             data_dir,
             _scratch: std::sync::Mutex::new(None),
             self_weak: self_weak.clone(),
@@ -697,6 +724,18 @@ impl EmbeddedDaemon {
             .and_then(|s| s.core.insights.as_ref())
     }
 
+    /// Borrow the recipe-author `RecipeProjectStore` this daemon's
+    /// `features.db` backs (sv-surface D6). `None` on `MeshAdmin` and on a
+    /// serving commission whose `features.db` would not open —
+    /// `features_http` renders that as a named 503, not as a missing route.
+    pub fn features_store(
+        &self,
+    ) -> Option<&Arc<sovereign_store::recipe_project_store::RecipeProjectStore>> {
+        self.services
+            .serving()
+            .and_then(|s| s.core.features.as_ref())
+    }
+
     /// Borrow the `NoteStore` behind this daemon's mounted `/mcp` surface,
     /// when one is mounted (sv-surface rung 6). `None` on `MeshAdmin` and on
     /// a commission whose `notes.db` would not open — the tool-outcome route
@@ -707,6 +746,35 @@ impl EmbeddedDaemon {
             .serving()
             .and_then(|s| s.capability.mcp.mount())
             .map(|m| &m.notes)
+    }
+
+    /// The `[[mcp_servers]]` this daemon actually loaded — its IN-MEMORY
+    /// `SetupConfig`, not a fresh `SetupConfig::load()` (sv-surface D8).
+    ///
+    /// The in-memory copy is the truthful one for the question "what is
+    /// this daemon serving?": it is what the boot-time MCP loader read,
+    /// and it advances on `POST /v1/admin/reload`. A `config.toml` edited
+    /// since boot describes a daemon that does not exist yet, which is the
+    /// state `reload` exists to end — reporting the file here would
+    /// silently answer a different question than the caller asked.
+    pub async fn configured_mcp_servers(
+        &self,
+    ) -> Vec<sovereign_contracts::mcp_config::McpServerConfig> {
+        self.setup_config.read().await.mcp_servers.clone()
+    }
+
+    /// Every tool id in the registry behind this daemon's `/mcp` mount, or
+    /// `None` when no mount was commissioned (sv-surface D8).
+    ///
+    /// `None` and `Some(vec![])` are different facts and both occur: no
+    /// tool surface at all, versus a mounted surface with nothing in it.
+    /// `mcp_config_http` renders the distinction rather than folding it
+    /// into a zero count (ARCH §18.3).
+    pub fn mcp_tool_ids(&self) -> Option<Vec<String>> {
+        self.services
+            .serving()
+            .and_then(|s| s.capability.mcp.mount())
+            .map(|m| m.tools.descriptors().into_iter().map(|d| d.id).collect())
     }
 
     /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
@@ -819,6 +887,24 @@ impl EmbeddedDaemon {
     /// existing members can reconnect without the user recreating.
     /// No-op if no persisted file exists or if persistence is
     /// disabled (the [`in_memory`](Self::in_memory) constructor).
+    /// Await the serve task's bind outcome, bounded by `timeout`.
+    ///
+    /// `Pending` comes back ONLY on timeout — a caller that needs a verdict
+    /// treats it as could-not-judge (§18.1), never as bound. The in-process
+    /// tests never call this, so their best-effort posture is untouched.
+    pub async fn client_listener(&self, timeout: std::time::Duration) -> ClientListener {
+        let mut rx = self.client_listener.subscribe();
+        let settled = rx.wait_for(|s| !matches!(s, ClientListener::Pending));
+        let outcome = match tokio::time::timeout(timeout, settled).await {
+            Ok(Ok(state)) => state.clone(),
+            // The sender lives in `self`, so this arm is unreachable while
+            // `&self` is borrowed; named rather than unwrapped.
+            Ok(Err(_)) => ClientListener::Failed("daemon dropped before its listener bound".into()),
+            Err(_) => ClientListener::Pending,
+        };
+        outcome
+    }
+
     pub async fn try_resume(&self) -> Result<bool, MeshError> {
         if !self.persistence_enabled() {
             return Ok(false);
@@ -1050,7 +1136,12 @@ impl EmbeddedDaemon {
 
     /// Where mesh state + setup are persisted. Needed by the HTTP
     /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
-    /// directly rather than going through a daemon method.
+    /// directly rather than going through a daemon method — and by
+    /// `meshapp_http`'s Wrapped route, whose GLiNER entity cards read
+    /// `<data_dir>/sovereign.db` (the desktop passed
+    /// `svrnmesh_root()/sovereign.db`; same file whenever the daemon owns
+    /// that root, which is what the one-writer rule on
+    /// `ServingCore::state_store` makes true).
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
     }
@@ -3239,12 +3330,101 @@ impl EmbeddedDaemon {
             // cannot come up unable to serve a turn.
             mounted.push(crate::turn_http::turn_router(Arc::clone(&self_arc)));
             mount_names.push("turn_http");
+            // sv-surface D9 — the two reads a turn leaves behind (the
+            // skill registry, the last turn's provenance frame). Beside
+            // `turn_http` rather than inside it: that file is the DRIVER's
+            // surface, and these are reads over the serving Runtime's own
+            // registers. Unconditional for the reason the routers below
+            // give: a daemon with no Runtime answers a named 503, which is
+            // a different fact from an unmounted route's 404 (ARCH §18.3).
+            mounted.push(crate::turn_extras_http::turn_extras_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("turn_extras_http");
+            // sv-surface D9a — the document-asset family. Six of
+            // `commands/document_asset.rs`'s eight commands are CRUD over
+            // the store a turn writes to, and read the DESKTOP's handle.
+            // Unconditional for the reason the siblings give: a commission
+            // with no store answers a named 503, which is a different fact
+            // from an unmounted router's 404 (ARCH §18.3).
+            mounted.push(crate::documents_http::documents_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("documents_http");
+            // sv-surface D9a — the corpus catalogue and the notebook shelf,
+            // beside `reading_http`'s status route (rung 1) rather than
+            // inside it: that file is the READING surface and is within
+            // sight of the §3.1 split line.
+            mounted.push(crate::corpus_catalog_http::corpus_catalog_router(
+                Arc::clone(&self_arc),
+            ));
+            mount_names.push("corpus_catalog_http");
             // sv-surface rung 6 — the insight surface. Mounted
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these
             // paths, which `mount_names` below still reports as mounted.
-            mounted.push(crate::insight_http::insight_router(self_arc));
+            mounted.push(crate::insight_http::insight_router(Arc::clone(&self_arc)));
             mount_names.push("insight_http");
+            // sv-surface D4 — the atlas-browse surface, beside reading_http
+            // and on the same loopback posture. Unconditional for the same
+            // reason: a daemon with no corpus engine answers 503 with that
+            // named reason, which is a different fact from an unmounted
+            // router's 404 (ARCH §18.3).
+            mounted.push(crate::atlas_http::atlas_router(Arc::clone(&self_arc)));
+            mount_names.push("atlas_http");
+            // sv-surface D3 — the MeshApp explorer surface. Same posture and
+            // the same unconditional reason as the two above: thirteen desktop
+            // commands read the daemon's OWN index dir out of a second
+            // process today, and a 503 naming the missing corpus engine is a
+            // different fact from an unmounted route's 404.
+            mounted.push(crate::meshapp_http::meshapp_router(Arc::clone(&self_arc)));
+            mount_names.push("meshapp_http");
+            // sv-surface D6 — notes CRUD over the store the `/mcp` surface and
+            // `/v1/notes/tool-outcome` already write to. Unconditional; a
+            // commission whose `notes.db` would not open answers 503 naming
+            // that, which is not the same fact as "no route".
+            mounted.push(crate::notes_http::notes_router(Arc::clone(&self_arc)));
+            mount_names.push("notes_http");
+            // sv-surface D6 — the recipe-author project store. Same reason
+            // again: `features.db` failing to open was a warn-and-skip the
+            // daemon only wrote to a log, and this makes it a 503 a caller
+            // can read.
+            mounted.push(crate::features_http::features_router(Arc::clone(&self_arc)));
+            mount_names.push("features_http");
+            // sv-surface D8 — the living-governance surface over the
+            // daemon's OWN atlas dir. Nine desktop commands opened that
+            // directory's oplog from a second process, each holding its own
+            // append mutex; this makes the daemon the writer. Unconditional
+            // for the reason above it: no corpus engine is a named 503.
+            mounted.push(crate::governance_http::governance_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("governance_http");
+            // sv-surface D8 — the daemon's own external-MCP configuration
+            // and the live tool counts behind its `/mcp` mount. A daemon
+            // with no mount answers 200 with `mount.mounted: false`, which
+            // is an ANSWER to the question rather than a failure to answer
+            // it — the two config WRITE commands stay app-local, and the
+            // module header records that this daemon owns no config-write
+            // path to serve them over.
+            mounted.push(crate::mcp_config_http::mcp_config_router(Arc::clone(
+                &self_arc,
+            )));
+            mount_names.push("mcp_config_http");
+            // sv-surface D8 — the recipe-author project COMPOSITION over
+            // notes + features + the daemon's own artifact tree, the rung
+            // `features_http` named and declined in D6. Unconditional; a
+            // commission missing either store answers 503 naming which.
+            mounted.push(crate::recipe_project_http::recipe_project_router(self_arc));
+            mount_names.push("recipe_project_http");
+            // sv-surface D5 — the non-watch half of `LocalCorpusManager`,
+            // beside the seventeen watch routes that already serve the SAME
+            // singleton. Takes no `Arc<Self>`: the manager is process state
+            // (`watched_folder_runtime`), not a daemon field, which is why
+            // this is the one router here built from nothing. A daemon whose
+            // runtime was never installed answers 503 naming that.
+            mounted.push(crate::lc_http::lc_router());
+            mount_names.push("lc_http");
             for (router, name) in self
                 .services
                 .host_routers()
@@ -3344,6 +3524,10 @@ impl EmbeddedDaemon {
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
         // in-process re-create (`leave_to_solo`) rebinds the same ports.
         let app_state_clone = app_state.clone();
+        // Each start (including an in-process re-create) answers the bind
+        // question afresh; the serve task publishes the outcome below.
+        self.client_listener.send_replace(ClientListener::Pending);
+        let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
             let mut client_router =
                 commonwealth_api::server::client_router(app_state_clone.clone());
@@ -3405,6 +3589,7 @@ impl EmbeddedDaemon {
                 Ok(l) => l,
                 Err(e) => {
                     warn!("{e}");
+                    listener_outcome.send_replace(ClientListener::Failed(e.to_string()));
                     return;
                 }
             };
@@ -3413,11 +3598,13 @@ impl EmbeddedDaemon {
                     Ok(l) => l,
                     Err(e) => {
                         warn!("{e}");
+                        listener_outcome.send_replace(ClientListener::Failed(e.to_string()));
                         return;
                     }
                 };
 
             info!("Commonwealth daemon started (client: {client_addr}, internal: {internal_addr})");
+            listener_outcome.send_replace(ClientListener::Bound(client_addr));
 
             // Enumerate local non-loopback IPs so the founder can copy one
             // into a `?relay=<IP>` query param if mDNS doesn't reach the

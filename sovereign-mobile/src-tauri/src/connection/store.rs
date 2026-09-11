@@ -205,8 +205,8 @@ mod tests {
         // A REAL key — arbitrary 32 bytes are not a valid Ed25519
         // point and parse_dial_string rightly rejects them.
         let pk = SecretKey::from_bytes(&[7u8; 32]).public();
-        let addr = EndpointAddr::new(pk)
-            .with_relay_url("https://relay.example.com/".parse().unwrap());
+        let addr =
+            EndpointAddr::new(pk).with_relay_url("https://relay.example.com/".parse().unwrap());
         let pairing = format_dial_string(&addr).unwrap();
 
         let mut h = host("iroh-host");

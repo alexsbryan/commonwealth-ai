@@ -331,6 +331,30 @@ pub enum TurnNotice {
         /// The assistant message this turn is about to stream.
         message_id: String,
     },
+    /// The turn is over AND the host has nothing further to say about it:
+    /// the bookend to [`TurnNotice::TurnStarted`] (sv-surface RB1).
+    ///
+    /// `Complete` is the terminal frame of the TURN. It is not the end of
+    /// the host's talking, because `MessageRefined` and `LessonProposed`
+    /// fire after it from a detached post-stream spawn (E1) — so before
+    /// this variant existed there was no moment at which a client could
+    /// know the socket had finished being useful, and both ends held the
+    /// connection, its writer task and its approval channel open forever
+    /// (RB1: one leak per turn, on both ends).
+    ///
+    /// The host emits this when every producer that could still speak on
+    /// the socket has finished, and closes the socket a bounded idle later
+    /// unless another turn starts. A client that wants another turn simply
+    /// sends the next request; a client that is done stops reading.
+    ///
+    /// Says nothing about HOW the turn ended — `Complete` and
+    /// `StreamError` both settle.
+    TurnSettled {
+        /// The assistant message the turn produced. Empty when it produced
+        /// none (the turn failed before acquiring one), never `null`.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        message_id: String,
+    },
     /// A step of the in-flight task finished (sv-surface G6). The
     /// daemon TRACES AND DROPS this today; the desktop renders it as a
     /// `step-done` Tauri event and the server as an `ExecutorEvent`.
@@ -504,4 +528,17 @@ pub enum TurnRequest {
         /// `Resume`'s hint has.
         intent_hint: String,
     },
+    /// Cancel the in-flight turn (sv-surface G2). The host aborts the
+    /// turn task and the turn ends the way a sampler-cancelled turn
+    /// always ended — its terminal `Complete` carries
+    /// `finish_reason: "cancelled"` — so the reply is the ordinary
+    /// terminal frame, not a new one. No-op when nothing is in flight:
+    /// a user's "stop" on an already-finished turn is satisfied, not an
+    /// error.
+    ///
+    /// This also reaches the PRE-REGISTRATION window the in-process host
+    /// called `cancel_preparing`: over the wire the preparing window is
+    /// inside the host's turn task, so the abort lands either way —
+    /// there is no separate race to win.
+    Cancel {},
 }

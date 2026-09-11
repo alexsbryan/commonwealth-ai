@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
         return 0
     fi
 
@@ -197,6 +197,15 @@ if "commonwealth-transport" in seen:
     # commonwealth-transport` run would compile the module — and its three
     # gauge/row tests — to nothing. Same value in sovereign-lint.sh.
     want.append("commonwealth-transport/fanout")
+if "sovereign-turn-client" in seen:
+    # `bundled-backend` is the named reachability capability (src/reach.rs):
+    # off by default, so without this flag its bring-up tests are compiled by
+    # nothing and run by nothing — the never-ran verdict ARCH principle 5
+    # says is owed rather than free. Safe to unify: the feature declares no
+    # dependency, so turning it on cannot move a dependency edge, and the
+    # `sv-no-daemon-management` gate (cargo tree over the desktop) reads the
+    # same either way.
+    want.append("sovereign-turn-client/bundled-backend")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:

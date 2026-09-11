@@ -60,6 +60,13 @@ CAMPAIGNS_DIR = REPO / "quality" / "campaigns"
 FEATURES = REPO / ".sovereign" / "features"
 CO_DIR = Path.home() / ".sovereign" / "comaintainer"
 STORE = CO_DIR / "bar-measurements.jsonl"
+
+# Campaigns declared on or after this date must carry a `[predicate]`, and
+# every bar in them a `goodhart` line. A DATED ratchet, not a retrofit: the
+# eight campaigns already active were written under the old contract and
+# close out under it. Authoring someone else's predicate for them is exactly
+# the paraphrase this mechanism exists to stop.
+PREDICATE_REQUIRED_FROM = "2026-09-11"
 DRIFT_STORE = CO_DIR / "verdicts.jsonl"
 MEASURE_LOG_DIR = CO_DIR / "measure"
 
@@ -107,6 +114,8 @@ class Bar:
     instrument: str = ""
     timeout_s: int | None = None    # presence = run-tier + kill deadline
     kill: str = ""
+    goodhart: str = ""              # how this can read GREEN while the
+                                    # campaign predicate is still FALSE
 
     @property
     def run_tier(self) -> bool:
@@ -122,6 +131,11 @@ class Campaign:
     status: str
     path: Path
     bars: list[Bar] = field(default_factory=list)
+    # THE PREDICATE — one sentence about the SYSTEM that a program can call
+    # true or false, with no partial credit. Bars are instruments; this is the
+    # objective. A campaign closes on this and on nothing else.
+    predicate: str = ""
+    predicate_check: str = ""       # shell; exit 0 = TRUE
 
 
 @dataclass
@@ -176,6 +190,22 @@ def load_campaign_file(path: Path) -> Campaign:
         raise DataError(f"{where}: declared {camp.declared!r} is not YYYY-MM-DD")
     if camp.status not in CAMPAIGN_STATUS:
         raise DataError(f"{where}: status {camp.status!r} not in {CAMPAIGN_STATUS}")
+    pred = raw.get("predicate", {})
+    camp.predicate = str(pred.get("statement", ""))
+    camp.predicate_check = str(pred.get("check", ""))
+    if camp.declared >= PREDICATE_REQUIRED_FROM and camp.status != "closed":
+        if not camp.predicate or not camp.predicate_check:
+            raise DataError(
+                f"{where}: no [predicate] with both `statement` and `check`. A "
+                "campaign's bars are INSTRUMENTS — each one can read green "
+                "while the objective is false, and on sv-surface every bar did "
+                "(forks 15->0, twins 6->0, census 14->12) while the desktop "
+                "still named sovereign-cli-daemon in [dependencies]. Declare "
+                "the sentence a program can falsify, and the command that "
+                "does it (exit 0 = true).")
+    if camp.predicate_check and not camp.predicate:
+        raise DataError(f"{where}: [predicate] has a `check` and no `statement` "
+                        "— a command nobody can read is not an objective")
     bars_raw = raw.get("bar", [])
     if len(bars_raw) > MAX_BARS:
         raise DataError(
@@ -223,6 +253,18 @@ def load_campaign_file(path: Path) -> Campaign:
                                 "tier is inferred from timeout_s, and there is "
                                 "nothing here to time out")
             bar.timeout_s = t
+        bar.goodhart = str(b_raw.get("goodhart", ""))
+        if (camp.declared >= PREDICATE_REQUIRED_FROM and camp.status != "closed"
+                and bar.status == "open" and not bar.goodhart
+                and (bar.floor is not None or bar.target is not None)):
+            raise DataError(
+                f"{bwhere}: no `goodhart` line. One sentence completing "
+                "\"this can hit target while the predicate is still false "
+                "if ___\". If you cannot complete it you do not yet know what "
+                "this bar measures; if you can, you have just written the "
+                "thing to watch for. sv-surface's fork bar could have said "
+                "\"...if construction is unconditional\" — which is what "
+                "happened, four rungs and 10k lines later.")
         if bar.instrument and bar.floor is None and bar.target is None:
             raise DataError(
                 f"{bwhere}: instrument declared with neither floor nor target — a "
@@ -775,6 +817,46 @@ def _measured_lines(bar: Bar, camp: Campaign, rows: list[dict],
 # --------------------------------------------------------------------------
 
 
+def evaluate_predicate(camp: Campaign, timeout: int = 120) -> tuple[str, str]:
+    """-> (verdict, detail). THREE verdicts, never two (ARCH SS18.2): TRUE,
+    FALSE, and COULD-NOT-RUN — which is owed, not free, and must never render
+    as green. The check's EXIT CODE is the verdict; its output is detail."""
+    if not camp.predicate_check:
+        return "NOT-DECLARED", ("no [predicate] — this campaign predates "
+                                f"{PREDICATE_REQUIRED_FROM}")
+    try:
+        r = subprocess.run(camp.predicate_check, shell=True, cwd=str(REPO),
+                           capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "COULD-NOT-RUN", f"check exceeded {timeout}s"
+    except OSError as e:
+        return "COULD-NOT-RUN", str(e)
+    detail = (r.stdout + r.stderr).strip().split("\n")[0][:160]
+    if r.returncode == 0:
+        return "TRUE", detail
+    if r.returncode == 1:
+        return "FALSE", detail
+    # A check that neither passed nor cleanly failed has made no claim.
+    return "COULD-NOT-RUN", f"check exited {r.returncode}: {detail}"
+
+
+def render_predicates(camps: list[Campaign]) -> int:
+    """The objective, for every campaign, as a boolean. Bars are deliberately
+    NOT shown: the whole failure this answers is an agent reading an
+    instrument's number as the goal."""
+    worst = 0
+    for c in camps:
+        v, detail = evaluate_predicate(c)
+        print(f"{c.id:22} OBJECTIVE: {v}")
+        if c.predicate:
+            print(f"{'':22}   {c.predicate}")
+        if detail:
+            print(f"{'':22}   {detail}")
+        if v in ("FALSE", "COULD-NOT-RUN"):
+            worst = 1
+    return worst
+
+
 def read_drift_rows(store: Path = DRIFT_STORE) -> list[dict]:
     rows: list[dict] = []
     if not store.exists():
@@ -1028,6 +1110,42 @@ def self_test() -> int:  # noqa: C901 — a flat checklist reads better than a f
                  FIXTURE_CAMPAIGN.replace('"active"', '"zombie"') + _bar_toml(), "status")
     expect_error("a floor with no floor_basis is rejected",
                  FIXTURE_CAMPAIGN + _bar_toml(floor_basis=""), "floor_basis")
+
+    # ---- the predicate + goodhart ratchet, both directions ---------------
+    NEW = FIXTURE_CAMPAIGN.replace('"2026-01-01"',
+                                   f'"{PREDICATE_REQUIRED_FROM}"')
+    PRED = ('[predicate]\nstatement = "the thing is true"\ncheck = "true"\n')
+    GH = 'goodhart = "can read green if the list is short"'
+    expect_error("a campaign declared under the new contract needs a predicate",
+                 NEW + _bar_toml(), "[predicate]")
+    expect_error("a check with no statement is rejected",
+                 NEW + '[predicate]\ncheck = "true"\n' + _bar_toml(),
+                 "statement")
+    expect_error("a bar under the new contract needs a goodhart line",
+                 NEW + PRED + _bar_toml(), "goodhart")
+    # ...and the clean controls: a rule that fires on everything is not a rule.
+    ok = load_text(NEW + PRED + _bar_toml().replace(
+        'one_line = "x"', 'one_line = "x"\n' + GH))
+    check("a complete new-contract campaign loads", ok.predicate != "", ok.predicate)
+    check("its goodhart line survives the load", ok.bars[0].goodhart != "",
+          ok.bars[0].goodhart)
+    old_ok = load_text(FIXTURE_CAMPAIGN + _bar_toml())
+    check("a campaign declared BEFORE the date is grandfathered",
+          old_ok.predicate == "", "no predicate required")
+    closed = load_text(NEW.replace('"active"', '"closed"') + _bar_toml())
+    check("a closed campaign is not retro-fitted", closed.predicate == "", "closed")
+
+    # the evaluator's three verdicts, each watched (SS18.2)
+    for cmd, want in (("true", "TRUE"), ("false", "FALSE"),
+                      ("exit 7", "COULD-NOT-RUN")):
+        c = load_text(NEW + PRED.replace('check = "true"', f'check = "{cmd}"')
+                      + _bar_toml().replace('one_line = "x"',
+                                            'one_line = "x"\n' + GH))
+        v, _ = evaluate_predicate(c)
+        check(f"predicate check `{cmd}` -> {want}", v == want, v)
+    nd = load_text(FIXTURE_CAMPAIGN + _bar_toml())
+    check("an undeclared predicate is NOT-DECLARED, never TRUE",
+          evaluate_predicate(nd)[0] == "NOT-DECLARED", evaluate_predicate(nd)[0])
     expect_error("an instrument with neither floor nor target is rejected",
                  FIXTURE_CAMPAIGN + _bar_toml(floor=None, target=None,
                                               instrument="echo 1"), "neither floor nor target")
@@ -1313,7 +1431,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="co-lineage.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", nargs="?",
-                    choices=["coverage", "postmortem", "list", "measure"])
+                    choices=["predicate", "coverage", "postmortem", "list", "measure"])
     ap.add_argument("campaign", nargs="?", help="campaign id (see `list`)")
     ap.add_argument("--all-active", action="store_true",
                     help="measure: every active campaign")
@@ -1333,6 +1451,14 @@ def main(argv: list[str]) -> int:
     except DataError as exc:
         print(f"co-lineage: {exc}", file=sys.stderr)
         return 3
+
+    if args.command == "predicate":
+        targets = ([c for c in camps if c.id == args.campaign] if args.campaign
+                   else [c for c in camps if c.status != "closed"])
+        if args.campaign and not targets:
+            print(f"co-lineage: no campaign {args.campaign!r}", file=sys.stderr)
+            return 2
+        return render_predicates(targets)
 
     if args.command == "list":
         closed_dir = CAMPAIGNS_DIR / "closed"

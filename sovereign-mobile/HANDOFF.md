@@ -4,7 +4,10 @@ You're picking up a **scaffolded Tauri 2 mobile client** authored on Linux
 without the Apple toolchain. The goal of your pass is to get it building and
 running on a **physical iOS device via internal TestFlight** and validate it
 against the `MOBILE.md` acceptance criteria. The host-side server it talks to is
-**done and tested**; the mobile app is **written but never compiled**.
+**done and tested**. The mobile app's **Rust core compiles and its tests are
+green** (workspace member since 2026-09-10, sv-surface R6); what remains
+unverified is the SVELTE UI and everything native — `tauri {ios,android} init`,
+signing, icons, and the keychain, which is still a dev stub.
 
 - Spec: [`sovereign/docs/specs/MOBILE.md`](../sovereign/docs/specs/MOBILE.md)
 - Architecture + per-file map: [`README.md`](./README.md) (read this first)
@@ -17,14 +20,21 @@ against the `MOBILE.md` acceptance criteria. The host-side server it talks to is
 |---|---|---|
 | Host `sovereign-server` (WS token streaming, provenance+citations on REST, `GET /v1/corpora` w/ `scope`/`mesh_shared`, `503+Retry-After`) | **Done, tested** (46 crate tests green incl. a real WS stream) | `sovereign/crates/sovereign-server/` |
 | `@sovereign/chat-ui` shared package (leaf components + parser + buffer + types) | **Done**, desktop regression green (svelte-check 0 errors, vitest 147/147) | `packages/chat-ui/` |
-| Mobile Rust core (transport, cache, connectivity, commands) | **Written, NOT compiled** | `sovereign-mobile/src-tauri/src/` |
+| Mobile Rust core (transport, cache, connectivity, commands) | **Compiles + 12 tests green** (workspace member since 2026-09-10) | `sovereign-mobile/src-tauri/src/` |
 | Mobile Svelte UI (pairing, chat, citations, connectivity banner) | **Written, NOT compiled** | `sovereign-mobile/src/` |
 | iOS/Android project (`gen/`), signing, icons | **Not generated** — your `tauri {ios,android} init` step | — |
 | Keychain (OS-backed token store) | **DEV STUB** — must replace before ship | `src-tauri/src/connection/keychain.rs` |
 
-The mobile crate is **detached from the Cargo workspace** (its own `[workspace]`
-in `src-tauri/Cargo.toml`) so its unverified mobile deps can't break the main
-build. Expect to iterate on it; it has not type-checked or compiled.
+**The mobile crate is a WORKSPACE MEMBER as of 2026-09-10** (sv-surface R6).
+It was detached — "its unverified mobile deps can't break the main build" — and
+the cost of that was the thing R6 deleted: an unwatched crate grew a hand-copied
+mirror of the turn protocol (`remote/dto.rs::ServerEvent`, plus two inline
+`Deserialize` envelopes in `remote/client.rs`) and nothing in the build could see
+it drift. The turn now rides `sovereign-turn-client` + `sovereign-contracts`, and
+`tests/census.rs` goes red if any type here re-declares a wire variant set.
+
+Run `cargo` from the REPO ROOT with `-p sovereign-mobile`, not from inside
+`src-tauri`. `tauri ios|android` still runs from `sovereign-mobile/`.
 
 ---
 
@@ -59,12 +69,12 @@ npx tauri android init
 npx tauri android build
 ```
 
-`cargo check` the core in isolation (it has its own workspace):
+Check + test the Rust core from the repo root (it is a workspace member):
 ```bash
-cd sovereign-mobile/src-tauri && cargo check
+./scripts/sovereign-lint.sh --human            # compiles
+./scripts/sovereign-test.sh --human --package sovereign-mobile
 ```
-This pulls `tauri` + system webview deps; on the Mac that's via Xcode. Fix the
-inevitable first-compile errors here before `tauri ios build`.
+This pulls `tauri` + system webview deps; on the Mac that's via Xcode.
 
 ---
 
@@ -158,9 +168,14 @@ first WS token to create the streaming placeholder), `message-chunk`,
 `message-start`→`SEND_START` wiring is the first place to look (the FSM's
 `MESSAGE_CHUNK` is guarded on `messageId === streamingMessageId`).
 
-- **Transport:** `remote/client.rs` (HTTP, parses `503`→`HostBusy`),
-  `remote/stream.rs` (WS), `remote/dto.rs` (wire types), `remote/map.rs`
-  (server provenance/citations → the `metadata` blob `RoutingMeta` reads).
+- **Transport:** the turn rides **`sovereign-turn-client`** — `remote/stream.rs`
+  drives a `TurnStream`, reads `TurnFrame`s and sends `TurnRequest`s, and
+  `remote/client.rs` delegates conversation CRUD to `TurnClient`. `remote/dto.rs`
+  holds only the phone's cache-and-view shapes; the wire types are the
+  contract's. `remote/map.rs` maps provenance/citations → the `metadata` blob
+  `RoutingMeta` reads. The one thing still hand-rolled in `client.rs` is the
+  tenant BEARER TOKEN, which `TurnClient` has no seam for (see `ApiClient::turn`)
+  — so the family reaches a daemon, not an api-key `sovereign-server`.
 - **Cache:** `cache/schema.rs` (the ERD tables), `cache/store.rs` (cache-first
   reads + reconcile; stream completion writes message+provenance+citations in
   one transaction).
@@ -221,9 +236,12 @@ camelCase.
 - **Cache reconcile is `updated_at`-based** — the Phase-1 REST projection
   doesn't surface the Lamport `version`. Add `version` to the server's
   `MessageEntry` + a `synced_version` on conversations for precise reconcile.
-- **WS reconnect on backgrounding** — iOS suspends sockets; `stream.rs` marks an
-  interrupted message `streaming` and the design is "re-fetch via
-  `get_conversation` on reconnect." Wire/verify the reconnect trigger.
+- **WS reconnect on backgrounding** — iOS suspends sockets. `stream.rs` now
+  marks an interrupted message `streaming` on BOTH hangup shapes (clean close
+  and the abrupt reset iOS actually produces — before R6 the reset took an
+  error path that skipped the mark, so reconnect never re-fetched it;
+  `a_dropped_socket_is_reported_not_completed` pins it). The remaining half is
+  the reconnect TRIGGER: nothing yet re-calls `get_conversation` on resume.
 - **Fuller sharing via npm workspace** — to share the FSM + markdown too (not
   just leaves), convert the repo's JS to an npm workspace so `packages/chat-ui`
   resolves its npm deps from a hoisted `node_modules`. Deferred to protect the
@@ -237,8 +255,12 @@ camelCase.
   workspace change above.
 - **Dev keychain stub** writes tokens to a plaintext file — replace before any
   real install (see §4.1).
-- **Detached workspace:** run `cargo` from inside `sovereign-mobile/src-tauri`,
-  not the repo root (the root workspace deliberately excludes it).
+- **Workspace member (since 2026-09-10):** run `cargo` from the repo root with
+  `-p sovereign-mobile`. The old "detached, run from src-tauri" rule is gone.
+- **Do not re-declare a wire type.** `tests/census.rs` fails on any local
+  `enum`/`struct` that re-declares two or more variants of `TurnFrame`,
+  `TurnPrompt`, `TurnAnswer`, `TurnNotice` or `TurnRequest`. Import the
+  contract's type instead — that is the `sv-one-client` bar.
 - **Don't re-upload history or embed on the client** — long-context is host-side
   by design; adding client-side context management breaks the thin-client
   invariant (§8) and the `.ipa` cleanliness (§3).

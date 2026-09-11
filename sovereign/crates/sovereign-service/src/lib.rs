@@ -1,10 +1,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Cross-platform service registration for the svrn daemon.
+//! Cross-platform service registration for the svrn daemon — the one
+//! decider for "is this daemon owned by the operating system, and how do I
+//! ask it to start, stop or restart".
 //!
-//! On macOS, writes a launchd plist to `~/Library/LaunchAgents/` and
-//! invokes `launchctl load`. On Linux, writes a systemd user unit to
-//! `~/.config/systemd/user/` and invokes `systemctl --user
-//! daemon-reload` + `enable --now`.
+//! # Why this is a crate and not a module in the daemon
+//!
+//! sv-surface's `sv-no-daemon-management` bar: the desktop must not be able
+//! to BECOME a daemon, which means it must not link one. But it does need to
+//! register one — the app installs the service at setup instead of spawning
+//! a child of itself. Those two facts only fit together if registration
+//! lives somewhere neither the daemon nor a surface owns.
+//!
+//! Hence the dependency list: `sovereign-contracts` for the data-root SSOT,
+//! `dirs` for the user directories, `libc` on unix for the launchd domain's
+//! uid. Nothing that can serve a turn, hold a store or assemble a Runtime. A
+//! crate a thin client can depend on stops being one the moment it pulls in
+//! the thing it was extracted to avoid, so additions here are reviewed
+//! against that sentence rather than against convenience.
+//!
+//! # The three backends
+//!
+//! Every one is PER-USER and needs no elevation, because the daemon serves
+//! one person's data root and a machine-wide service would be the wrong
+//! grain:
+//!
+//! - **macOS** — a launchd LaunchAgent in `~/Library/LaunchAgents/`, loaded
+//!   with `launchctl`.
+//! - **Linux** — a systemd user unit in `~/.config/systemd/user/`, enabled
+//!   with `systemctl --user`.
+//! - **Windows** — a Scheduled Task registered with `schtasks /Create /XML`.
+//!   Not a Windows Service: the SCM requires administrator rights and
+//!   registers machine-wide, which is the wrong grain twice over. A logon-
+//!   triggered task is the per-user analogue of the other two, and Task
+//!   Scheduler's own restart policy is the analogue of `KeepAlive` /
+//!   `Restart=on-failure`.
 //!
 //! Templates are bundled at compile time via `include_str!` — see
 //! `contrib/launchd/` and `contrib/systemd/`. `{BINARY}` and `{HOME}`
@@ -22,6 +51,14 @@ const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.svrnme
 
 #[cfg(target_os = "linux")]
 const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/svrnmesh.service");
+
+#[cfg(target_os = "windows")]
+const SCHTASKS_TEMPLATE: &str = include_str!("../../../contrib/windows/SvrnmeshDaemon.xml");
+
+/// The Scheduled Task name on Windows — the analogue of the launchd label
+/// and the systemd unit name, and it must match `CANDIDATE_SERVICES`.
+#[cfg(target_os = "windows")]
+const TASK_NAME: &str = "SvrnmeshDaemon";
 
 /// Install and enable the svrn daemon service for the current
 /// user. `bin_path` must be absolute and point to the `sovereign`
@@ -43,7 +80,12 @@ pub fn install_service(bin_path: &Path) -> Result<(), String> {
         install_systemd(&bin_path)
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        install_schtasks(&bin_path)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = bin_path;
         Err(format!(
@@ -112,7 +154,35 @@ pub fn stop_service() -> Result<(), String> {
         }
         Ok(())
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        // `schtasks /End` asks the task to stop its running instance. A task
+        // that is not running answers with an error we read as success, the
+        // same shape the launchd arm above gives "No such process" — "it is
+        // already stopped" is the outcome the caller asked for, not a
+        // failure to report (§18.3 cuts the other way here: reporting an
+        // error would be the substitution).
+        use std::process::Command;
+        let out = Command::new("schtasks")
+            .args(["/End", "/TN", TASK_NAME])
+            .output()
+            .map_err(|e| format!("spawn schtasks: {e}"))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let combined = format!("{stderr}{}", String::from_utf8_lossy(&out.stdout));
+            let lowered = combined.to_lowercase();
+            if lowered.contains("not running") || lowered.contains("cannot find") {
+                return Ok(());
+            }
+            return Err(format!(
+                "schtasks /End {TASK_NAME} failed: {}\n\
+                 hint: if the daemon isn't registered, run `svrn install-service` first.",
+                combined.trim()
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         Err(format!(
             "service stop is not supported on this platform (os={}). \
@@ -135,7 +205,12 @@ pub fn uninstall_service() -> Result<(), String> {
         uninstall_systemd()
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        uninstall_schtasks()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         Ok(())
     }
@@ -181,6 +256,12 @@ fn migrate_legacy_service() {
         eprintln!("svrnmesh: removed legacy launchd service com.sovereign.daemon");
     }
 }
+
+/// Windows had NO service backend before sv-surface, so there is no
+/// pre-rebrand registration anywhere to clean up. An empty body that says
+/// why beats omitting the function and letting the call site grow a `cfg`.
+#[cfg(target_os = "windows")]
+fn migrate_legacy_service() {}
 
 #[cfg(target_os = "linux")]
 fn migrate_legacy_service() {
@@ -230,7 +311,11 @@ fn captured_path() -> String {
         .unwrap_or_else(|| "/usr/local/bin:/usr/bin:/bin".to_string())
 }
 
-#[cfg(target_os = "macos")]
+// Both XML-carrying backends need this: the launchd plist and the Windows
+// task definition break identically on a path containing `&`. Gated to
+// macOS alone until the Windows backend landed, and the cross-compile gate
+// is what said so rather than a Windows user.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -251,7 +336,7 @@ fn install_launchd(bin_path: &Path) -> Result<(), String> {
     // legacy ~/.sovereign). Using the resolved root for the daemon's logs +
     // working dir means we never pre-create an empty ~/.svrnmesh here, which
     // would otherwise defeat the startup data-dir migration's existence guard.
-    let data_dir = sovereign_cli_shared::dirs::sovereign_root();
+    let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
 
     // Make sure logs directory exists — launchd refuses to start if
     // StandardOutPath's parent is missing.
@@ -357,6 +442,131 @@ fn install_systemd(bin_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Where the task XML is staged before `schtasks /Create /XML` reads it.
+///
+/// A real file rather than stdin: `schtasks` has no stdin form for `/XML`,
+/// and the XML must be UTF-16LE with a BOM — Task Scheduler rejects UTF-8
+/// with a bare "The task XML is malformed", which names nothing useful.
+#[cfg(target_os = "windows")]
+fn schtasks_xml_path() -> Result<PathBuf, String> {
+    let dir = dirs::data_local_dir()
+        .ok_or_else(|| "cannot resolve local app-data directory".to_string())?;
+    Ok(dir.join("svrnmesh").join("SvrnmeshDaemon.xml"))
+}
+
+/// Encode as UTF-16LE with a byte-order mark. `schtasks /Create /XML`
+/// requires it; the declaration in the template says `encoding="UTF-16"`
+/// and Task Scheduler believes the BOM over the declaration.
+#[cfg(target_os = "windows")]
+fn utf16le_with_bom(s: &str) -> Vec<u8> {
+    let mut out = vec![0xFF, 0xFE];
+    for unit in s.encode_utf16() {
+        out.extend_from_slice(&unit.to_le_bytes());
+    }
+    out
+}
+
+/// XML-escape for the task file. The same five entities the launchd plist
+/// needs — `xml_escape` is shared rather than re-derived, because a path
+/// with an `&` in it breaks both files identically (§10.6).
+#[cfg(target_os = "windows")]
+fn install_schtasks(bin_path: &Path) -> Result<(), String> {
+    // Same first move as the other two: clear any pre-rebrand registration
+    // before adding this one, so an upgrading user does not end up with two
+    // daemons fighting over the client port.
+    migrate_legacy_service();
+
+    let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
+    // The daemon writes its own logs under the data root; unlike launchd
+    // there is no StandardOutPath to point at a file, so Task Scheduler
+    // discards the child's stdio and the daemon's log files are the record.
+    let logs_dir = data_dir.join("logs");
+    std::fs::create_dir_all(&logs_dir)
+        .map_err(|e| format!("create {}: {e}", logs_dir.display()))?;
+
+    let content = SCHTASKS_TEMPLATE
+        .replace("{BINARY}", &xml_escape(&bin_path.to_string_lossy()))
+        .replace("{WORKDIR}", &xml_escape(&data_dir.to_string_lossy()));
+
+    let xml_path = schtasks_xml_path()?;
+    if let Some(parent) = xml_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    std::fs::write(&xml_path, utf16le_with_bom(&content))
+        .map_err(|e| format!("write {}: {e}", xml_path.display()))?;
+
+    // `/F` overwrites an existing registration, which makes install
+    // IDEMPOTENT the way `launchctl load` after `unload` and `systemctl
+    // enable --now` already are — and is what an app upgrade needs when the
+    // binary path changed.
+    let out = std::process::Command::new("schtasks")
+        .args([
+            "/Create",
+            "/TN",
+            TASK_NAME,
+            "/XML",
+            &xml_path.to_string_lossy(),
+            "/F",
+        ])
+        .output()
+        .map_err(|e| format!("spawn schtasks: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "schtasks /Create {TASK_NAME} failed: {}{}",
+            String::from_utf8_lossy(&out.stderr).trim(),
+            String::from_utf8_lossy(&out.stdout).trim()
+        ));
+    }
+
+    // The logon trigger fires at the NEXT logon; the other two platforms
+    // start the daemon as part of installing it (`launchctl load` honours
+    // RunAtLoad, `systemctl enable --now` has the --now), so this one runs
+    // it too rather than leaving the caller a service that exists and is
+    // not serving.
+    let out = std::process::Command::new("schtasks")
+        .args(["/Run", "/TN", TASK_NAME])
+        .output()
+        .map_err(|e| format!("spawn schtasks: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "schtasks /Run {TASK_NAME} failed: {}{}",
+            String::from_utf8_lossy(&out.stderr).trim(),
+            String::from_utf8_lossy(&out.stdout).trim()
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn uninstall_schtasks() -> Result<(), String> {
+    // Idempotent, like the other two: a task that was never registered is
+    // not an error, it is the state the caller asked for.
+    let out = std::process::Command::new("schtasks")
+        .args(["/Delete", "/TN", TASK_NAME, "/F"])
+        .output()
+        .map_err(|e| format!("spawn schtasks: {e}"))?;
+    if !out.status.success() {
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stderr),
+            String::from_utf8_lossy(&out.stdout)
+        );
+        if !combined.to_lowercase().contains("cannot find") {
+            return Err(format!(
+                "schtasks /Delete {TASK_NAME} failed: {}",
+                combined.trim()
+            ));
+        }
+    }
+    // The staged XML is ours; leaving it behind would make a later
+    // `service_installed()` reading of the filesystem lie.
+    if let Ok(xml_path) = schtasks_xml_path() {
+        let _ = std::fs::remove_file(xml_path);
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn uninstall_systemd() -> Result<(), String> {
     let unit_path = systemd_unit_path()?;
@@ -395,6 +605,13 @@ pub(crate) const CANDIDATE_SERVICES: [&str; 2] = ["svrnmesh.service", "sovereign
 #[cfg(target_os = "macos")]
 pub(crate) const CANDIDATE_SERVICES: [&str; 2] = ["com.svrnmesh.daemon", "com.sovereign.daemon"];
 
+// Windows has no pre-rebrand registration to find — the platform had no
+// service backend at all before sv-surface — so the legacy slot repeats the
+// current name rather than inventing a name no host has ever carried. The
+// array shape is shared so `managing_service` walks one loop (§10.6).
+#[cfg(target_os = "windows")]
+pub(crate) const CANDIDATE_SERVICES: [&str; 2] = ["SvrnmeshDaemon", "SvrnmeshDaemon"];
+
 /// A service manager that is RUNNING the daemon right now.
 ///
 /// Distinct from [`service_installed`], which probes `is-enabled` and
@@ -422,10 +639,21 @@ pub struct ManagingService {
 }
 
 /// Which service manager a candidate name belongs to.
+///
+/// All three variants exist on all three platforms on purpose — the argv
+/// deciders below are not `cfg`-gated, so a Mac can type-check and unit-test
+/// the `schtasks` command lines and a Windows box can do the same for
+/// `launchctl`. The cost is that two of the three are never CONSTRUCTED in
+/// any single build, which is what the allow names.
+#[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Manager {
     Systemd,
     Launchd,
+    /// Windows Task Scheduler. The odd one out in exactly one way: it has no
+    /// atomic restart verb, so [`ManagingService::restart`] runs stop then
+    /// start for it rather than pretending one command exists.
+    Schtasks,
 }
 
 impl Manager {
@@ -434,6 +662,7 @@ impl Manager {
         match self {
             Manager::Systemd => "systemctl",
             Manager::Launchd => "launchctl",
+            Manager::Schtasks => "schtasks",
         }
     }
 }
@@ -450,6 +679,18 @@ impl Manager {
 pub(crate) fn lifecycle_argv(mgr: Manager, verb: &str, name: &str, uid: u32) -> Vec<String> {
     match mgr {
         Manager::Systemd => vec!["--user".into(), verb.into(), name.into()],
+        // Task Scheduler names the two verbs differently and has no third.
+        // `restart` never reaches here — `ManagingService::restart` runs stop
+        // then start for this manager, because pretending an atomic restart
+        // exists is how a caller ends up believing a job cycled when it did
+        // not.
+        Manager::Schtasks => {
+            let verb = match verb {
+                "stop" => "/End",
+                _ => "/Run",
+            };
+            vec![verb.into(), "/TN".into(), name.into()]
+        }
         Manager::Launchd => {
             // launchd has no `restart` verb; `kickstart -k` IS the
             // documented equivalent — it kills a running job and
@@ -506,6 +747,17 @@ pub(crate) fn diagnose_argv(mgr: Manager, name: &str, uid: u32) -> Vec<String> {
             "--property=ActiveState,Result,ExecMainStatus,NeedDaemonReload".into(),
         ],
         Manager::Launchd => vec!["print".into(), format!("gui/{uid}/{name}")],
+        // `/Query /V /FO LIST` is the only schtasks form that prints "Last
+        // Result" and "Scheduled Task State" — the two facts the other
+        // managers answer with `show` and `print`.
+        Manager::Schtasks => vec![
+            "/Query".into(),
+            "/TN".into(),
+            name.into(),
+            "/V".into(),
+            "/FO".into(),
+            "LIST".into(),
+        ],
     }
 }
 
@@ -532,6 +784,21 @@ pub(crate) fn reregister_argv(
         Manager::Launchd => vec![
             vec!["bootout".into(), format!("gui/{uid}/{name}")],
             vec!["bootstrap".into(), format!("gui/{uid}"), unit_path.into()],
+        ],
+        // The same two steps in Task Scheduler's vocabulary: drop the
+        // registration, then create it again from the XML on disk. `/F` on
+        // the create is what makes the second step survive the first having
+        // been a no-op.
+        Manager::Schtasks => vec![
+            vec!["/Delete".into(), "/TN".into(), name.into(), "/F".into()],
+            vec![
+                "/Create".into(),
+                "/TN".into(),
+                name.into(),
+                "/XML".into(),
+                unit_path.into(),
+                "/F".into(),
+            ],
         ],
     }
 }
@@ -575,12 +842,31 @@ pub(crate) fn diagnosis_needs_reregister(mgr: Manager, text: &str) -> bool {
             !text.contains("pid = ")
                 && (text.contains("needs LWCR update") || text.contains("last exit code = 78"))
         }
+        // Task Scheduler has no code-identity pinning and no start limit, so
+        // the class this predicate names does not exist on Windows: a task
+        // that will not run says so in its Last Result and retrying is the
+        // repair, not re-registering. Answering `false` is a MEASUREMENT of
+        // that, not a stub — the Windows arm of `needs_reregister` therefore
+        // never fires and the caller falls through to its ordinary timeout.
+        Manager::Schtasks => false,
     }
 }
 
 impl ManagingService {
     /// Restart in place, letting the manager re-apply the unit.
     pub fn restart(&self) -> Result<(), String> {
+        // Task Scheduler has no restart verb. The other two DO, and the
+        // reason to prefer theirs is not brevity — `launchctl kickstart -k`
+        // and `systemctl --user restart` are atomic, so no window exists in
+        // which the manager's own restart policy races ours. Windows has no
+        // such window to close because a task that is `/End`ed has exited
+        // cleanly and its RestartOnFailure policy does not fire on a clean
+        // exit — the same reasoning as the launchd plist's
+        // `KeepAlive.SuccessfulExit=false`.
+        if self.mgr == Manager::Schtasks {
+            self.act("stop")?;
+            return self.act("start");
+        }
         self.act("restart")
     }
 
@@ -620,6 +906,12 @@ impl ManagingService {
                     (NeedDaemonReload / start-limit-hit): the unit on disk and the one \
                     systemd will run are not the same"
                     .to_string(),
+                // Unreachable: `diagnosis_needs_reregister` answers false for
+                // Schtasks, because the failure class does not exist there.
+                // Spelled out rather than wildcarded so ADDING a manager is a
+                // compile error here, which is the only reason this match is
+                // exhaustive by hand (ARCH §2.1).
+                Manager::Schtasks => return None,
             })
         } else {
             None
@@ -670,6 +962,19 @@ impl ManagingService {
                 }
             }
             Manager::Systemd => None,
+            // schtasks re-creates from the XML `install_schtasks` staged, so
+            // the path IS needed here — unlike systemd, Task Scheduler does
+            // not keep its own copy to reload.
+            Manager::Schtasks => {
+                #[cfg(target_os = "windows")]
+                {
+                    schtasks_xml_path().ok().map(|p| p.display().to_string())
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    None
+                }
+            }
         }
     }
 
@@ -712,6 +1017,7 @@ pub(crate) fn probe_argv(mgr: Manager, name: &str) -> Vec<String> {
     match mgr {
         Manager::Systemd => vec!["--user".into(), "cat".into(), name.into()],
         Manager::Launchd => vec!["list".into(), name.into()],
+        Manager::Schtasks => vec!["/Query".into(), "/TN".into(), name.into()],
     }
 }
 
@@ -748,18 +1054,27 @@ pub(crate) fn probe_argv(mgr: Manager, name: &str) -> Vec<String> {
 /// daemon from a sandbox; wrongly declining sends SIGTERM to a pid we own and
 /// leaves the manager's restart policy to notice — which is what every version
 /// before 2026-07-29 did.
-fn service_manager_is_addressed() -> bool {
-    // One reader, in `lifecycle` — see its docs. This site used to carry its
-    // own copy of the parse.
-    if crate::daemon_cmd::lifecycle::stop_sandboxed() {
-        return false;
-    }
-    use crate::setup_config::{DaemonSection, SetupConfig};
-    let default_port = DaemonSection::default().client_port;
-    let configured = SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(default_port);
-    configured == default_port
+/// Whether this invocation speaks for the operator's installed unit.
+///
+/// It used to be computed HERE, from the daemon's sandbox flag and its
+/// `SetupConfig` port. Both are daemon-side facts, and a crate a desktop can
+/// depend on must not know either — so the decision is the caller's and this
+/// type is how it arrives. An argument rather than ambient state, because
+/// the two answers have opposite failure modes and a default would silently
+/// pick one (ARCH §7, §18.3).
+///
+/// The asymmetry that sets the bias: wrongly delegating kills a production
+/// daemon from a sandbox; wrongly declining sends SIGTERM to a pid we own
+/// and leaves the manager's restart policy to notice. So a caller that is
+/// not sure says [`Addressing::SomethingElse`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Addressing {
+    /// This process is addressing the unit the operator installed — the
+    /// default data root, the default client port, no sandbox.
+    TheInstalledUnit,
+    /// A sandbox, a non-default port, or anything else that must not drive
+    /// the operator's service manager.
+    SomethingElse,
 }
 
 /// The service manager currently running the daemon, if any.
@@ -773,17 +1088,19 @@ fn service_manager_is_addressed() -> bool {
 /// Both platforms walk [`CANDIDATE_SERVICES`] in order, so a host
 /// still registered under the pre-rebrand name is recognised rather
 /// than silently treated as unmanaged.
-pub fn managing_service() -> Option<ManagingService> {
+pub fn managing_service(addressing: Addressing) -> Option<ManagingService> {
     #[cfg(target_os = "macos")]
     let mgr = Manager::Launchd;
     #[cfg(target_os = "linux")]
     let mgr = Manager::Systemd;
+    #[cfg(target_os = "windows")]
+    let mgr = Manager::Schtasks;
 
-    if !service_manager_is_addressed() {
+    if addressing == Addressing::SomethingElse {
         return None;
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
         CANDIDATE_SERVICES.iter().find_map(|name| {
             let out = std::process::Command::new(mgr.program())
@@ -796,7 +1113,7 @@ pub fn managing_service() -> Option<ManagingService> {
             })
         })
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         None
     }
@@ -840,7 +1157,17 @@ pub fn service_installed() -> bool {
             .map(|o| o.status.success())
             .unwrap_or(false)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        // Registration, not liveness — the same question the other two ask.
+        // `/Query` exits non-zero when the task does not exist.
+        std::process::Command::new("schtasks")
+            .args(["/Query", "/TN", TASK_NAME])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         false
     }
@@ -937,6 +1264,152 @@ mod service_ownership_tests {
             probe_argv(Manager::Launchd, "com.svrnmesh.daemon"),
             ["list", "com.svrnmesh.daemon"],
             "`launchctl list` exits 0 for a loaded job whether or not it is running"
+        );
+    }
+
+    // ── The Windows backend, tested on every platform ──────────────
+    //
+    // The argv deciders are deliberately not `cfg`-gated (see
+    // `lifecycle_argv`), which is what lets a Scheduled Task's command
+    // lines be checked on a Mac. That matters more here than for the
+    // other two: nobody on this project can run Windows on demand, so an
+    // untested `schtasks` spelling would ship as a guess. What these do
+    // NOT prove is that Task Scheduler accepts the XML — that is a real
+    // run on a real Windows host and it is owed.
+
+    #[test]
+    fn schtasks_start_and_stop_are_run_and_end() {
+        assert_eq!(
+            lifecycle_argv(Manager::Schtasks, "start", "SvrnmeshDaemon", 0),
+            ["/Run", "/TN", "SvrnmeshDaemon"],
+        );
+        assert_eq!(
+            lifecycle_argv(Manager::Schtasks, "stop", "SvrnmeshDaemon", 0),
+            ["/End", "/TN", "SvrnmeshDaemon"],
+        );
+    }
+
+    /// The asymmetry worth pinning: Task Scheduler has NO restart verb, so
+    /// `lifecycle_argv` must not invent one. `ManagingService::restart`
+    /// runs stop-then-start for this manager instead, and a future edit
+    /// that quietly maps "restart" onto `/Run` alone would cycle nothing
+    /// while reporting success (§18.3).
+    #[test]
+    fn schtasks_has_no_restart_verb_and_does_not_fake_one() {
+        assert_eq!(
+            lifecycle_argv(Manager::Schtasks, "restart", "SvrnmeshDaemon", 0),
+            ["/Run", "/TN", "SvrnmeshDaemon"],
+            "an unrecognised verb falls through to /Run; `restart` never \
+             reaches here because ManagingService::restart intercepts it"
+        );
+        assert_ne!(
+            lifecycle_argv(Manager::Schtasks, "restart", "SvrnmeshDaemon", 0),
+            lifecycle_argv(Manager::Schtasks, "stop", "SvrnmeshDaemon", 0),
+            "if these ever coincide, restart would stop the daemon and \
+             report that it restarted it"
+        );
+    }
+
+    #[test]
+    fn schtasks_probes_registration_not_liveness() {
+        assert_eq!(
+            probe_argv(Manager::Schtasks, "SvrnmeshDaemon"),
+            ["/Query", "/TN", "SvrnmeshDaemon"],
+            "`/Query` on a name exits 0 for a registered task whether or not \
+             an instance is running — the same question `launchctl list` and \
+             `systemctl cat` answer"
+        );
+    }
+
+    /// Re-registration is two steps on every manager, and on Windows the
+    /// first is allowed to fail the same way the other two are: deleting a
+    /// task that is not there is the state the caller wanted. `/F` on the
+    /// create is what makes the second step independent of the first.
+    #[test]
+    fn schtasks_reregisters_by_delete_then_create_from_the_staged_xml() {
+        let steps = reregister_argv(Manager::Schtasks, "SvrnmeshDaemon", 0, "C:\\x\\task.xml");
+        assert_eq!(steps.len(), 2, "delete, then create");
+        assert_eq!(steps[0], ["/Delete", "/TN", "SvrnmeshDaemon", "/F"]);
+        assert_eq!(
+            steps[1],
+            [
+                "/Create",
+                "/TN",
+                "SvrnmeshDaemon",
+                "/XML",
+                "C:\\x\\task.xml",
+                "/F"
+            ],
+            "the XML path is load-bearing: unlike systemd, Task Scheduler \
+             keeps no copy of the definition to reload"
+        );
+    }
+
+    /// The launchd code-identity wedge and the systemd start-limit lockout
+    /// are platform failure classes that Windows does not have. Answering
+    /// `false` is a measurement, and the test says so — a future edit that
+    /// makes this `true` would send every Windows user through a repair
+    /// path for a condition that cannot occur.
+    #[test]
+    fn schtasks_never_reports_the_reregister_wedge() {
+        for text in [
+            "Last Result: 267011",
+            "Scheduled Task State: Disabled",
+            "needs LWCR update",
+            "last exit code = 78",
+            "Result=start-limit-hit",
+            "",
+        ] {
+            assert!(
+                !diagnosis_needs_reregister(Manager::Schtasks, text),
+                "no Windows diagnosis is a re-register wedge; got one for {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_manager_names_its_own_program() {
+        assert_eq!(Manager::Systemd.program(), "systemctl");
+        assert_eq!(Manager::Launchd.program(), "launchctl");
+        assert_eq!(Manager::Schtasks.program(), "schtasks");
+    }
+
+    /// The XML template must carry the two substitutions the installer
+    /// makes and the settings that make it a DAEMON registration rather
+    /// than a scheduled job — checked against the file itself, on every
+    /// platform, because a template edit is the likeliest way to break a
+    /// backend nobody here can run.
+    #[test]
+    fn the_windows_task_template_is_a_daemon_registration() {
+        let xml = include_str!("../../../contrib/windows/SvrnmeshDaemon.xml");
+        assert!(xml.contains("{BINARY}"), "installer substitutes the binary");
+        assert!(
+            xml.contains("{WORKDIR}"),
+            "installer substitutes the workdir"
+        );
+        assert!(
+            xml.contains("<LogonTrigger>"),
+            "per-user, starts at logon — the analogue of RunAtLoad and \
+             WantedBy=default.target"
+        );
+        assert!(
+            xml.contains("<RunLevel>LeastPrivilege</RunLevel>"),
+            "no elevation, like the LaunchAgent and the systemd --user unit"
+        );
+        assert!(
+            xml.contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>"),
+            "Task Scheduler's DEFAULT is to kill a task after three days; a \
+             long-lived daemon must opt out or it is SIGKILLed while healthy"
+        );
+        assert!(
+            xml.contains("<RestartOnFailure>"),
+            "the analogue of KeepAlive / Restart=on-failure — without it the \
+             task is registered and unsupervised, which is the state \
+             install-service exists to leave behind"
+        );
+        assert!(
+            xml.contains("<Count>5</Count>"),
+            "the crash-loop brake, matching systemd's StartLimitBurst=5"
         );
     }
 

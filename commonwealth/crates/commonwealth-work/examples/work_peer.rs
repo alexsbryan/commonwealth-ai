@@ -49,6 +49,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use commonwealth_core::clock::unix_now_millis;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, SigningKey};
 use commonwealth_work::executor::{subject_of, JobContext, JobExecutor, JobExecutorRegistry};
@@ -179,10 +180,6 @@ impl PeerArgs {
 /// second content-hash implementation here (ARCH §10.6).
 fn key_of(label: &str) -> SigningKey {
     SigningKey::from_bytes(ContentHash::of_str(label).as_bytes())
-}
-
-fn now_ms() -> u64 {
-    commonwealth_core::clock::unix_now_millis()
 }
 
 // The host half of consent is `commonwealth_work::refusal::host_satisfies`
@@ -345,13 +342,13 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
                 proj.gaps, proj.unreadable
             ));
         }
-        let takeable = proj.takeable_at(now_ms());
+        let takeable = proj.takeable_at(unix_now_millis());
         if takeable.is_empty() {
             break;
         }
         let mut progressed = false;
         for unit_ref in takeable {
-            if may_take(&proj, &me, &offer, &unit_ref, now_ms()).is_err() {
+            if may_take(&proj, &me, &offer, &unit_ref, unix_now_millis()).is_err() {
                 continue;
             }
             let Some(unit) = proj.unit(&unit_ref).map(|p| p.unit.clone()) else {
@@ -431,7 +428,7 @@ async fn run_unit(
                     // because obtaining the fold is what differs between a
                     // peer with a journal and a daemon with an AppState.
                     let state = match fold(journal, roster) {
-                        Ok(p) => lease_state(&p, unit_ref, me, now_ms()),
+                        Ok(p) => lease_state(&p, unit_ref, me, unix_now_millis()),
                         Err(e) => {
                             eprintln!("work_peer: the fold was unreadable this heartbeat, holding ({e})");
                             LeaseState::Unknown
@@ -497,7 +494,7 @@ fn report(
         let (status, attempts, verdict) = match h
             .units
             .get(&p.unit.unit_hash)
-            .map(|u| u.status_at(now_ms()))
+            .map(|u| u.status_at(unix_now_millis()))
         {
             Some(WorkUnitStatus::Complete {
                 attempts, outcome, ..

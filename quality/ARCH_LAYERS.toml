@@ -109,6 +109,14 @@ crates = [
     # Runtime, a store or a corpus, which is what lets a surface depend on it
     # without dragging a serving host's world along (TOPOLOGY §10 phase 6).
     "sovereign-turn-client",
+    # OS service registration (launchd / systemd / Task Scheduler), here for
+    # EXACTLY the reason `sovereign-turn-client` is. The desktop must be able
+    # to register the daemon without linking one — `sv-no-daemon-management`
+    # — and a registrar that reached for a SetupConfig or a sandbox flag
+    # would not be a crate a thin surface could depend on. Its whole in-repo
+    # dep list is `sovereign-contracts` (the data-root SSOT); the addressing
+    # decision it used to compute is now an argument its callers supply.
+    "sovereign-service",
     "arch-layers",
     "sovereign-time",
     # Serving policy — fair-share scheduling + pipeline alias resolution.
@@ -282,6 +290,7 @@ crates = [
     "sovereign-cli*",
     "sovereign-server",
     "sovereign-desktop",
+    "sovereign-mobile",
     "sovereign-pipeline",
     "sovereign-agent-bench",
     "sovereign-studio",

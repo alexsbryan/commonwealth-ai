@@ -47,6 +47,7 @@
 // Nothing below may reference a `workbench`-gated dependency. That rule is
 // what keeps `sovereign-cli` free of the workbench's dependency tree, and the
 // build breaks loudly if it is broken.
+mod converge_baseline;
 mod converge_cmd;
 
 // ── The workbench proper — `workbench` feature ──────────────────────

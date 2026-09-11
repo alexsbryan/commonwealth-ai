@@ -105,6 +105,47 @@ impl Runtime {
         Ok(())
     }
 
+    /// Replace the per-conversation retrieval allow-list AFTER the row
+    /// exists — the wire form of the desktop's corpus-chip strip, and the
+    /// other half of [`Self::seed_conversation`]'s `enabled_corpora`.
+    ///
+    /// `None` clears the column (retrieval searches every installed
+    /// corpus); `Some` REPLACES it. A `Some` is validated against
+    /// [`Self::allow_list_universe`] by the same
+    /// [`corpus_allow_list_verdict`] the seed path runs — one validator
+    /// for the one column, because the failure it prevents is identical
+    /// whichever write reached it: `apply_corpus_allow_list` intersects
+    /// SILENTLY, so an id that matches nothing yields an empty fan-out
+    /// and an answer that says the corpus does not cover the question,
+    /// which is the §18.3 substitution wearing a result's clothes.
+    ///
+    /// Until sv-surface this had no wire form and the desktop wrote the
+    /// column through its own store handle. In attach mode that store is
+    /// not the one the turn reads, so every chip the user toggled was
+    /// written where the retrieval that honours it never looked.
+    pub async fn set_conversation_allow_list(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<&[String]>,
+    ) -> Result<()> {
+        if let Some(allow) = enabled_corpora {
+            let installed = self.allow_list_universe().await;
+            corpus_allow_list_verdict(allow, &installed).map_err(Error::InvalidInput)?;
+        }
+        self.store
+            .set_conversation_enabled_corpora(
+                conversation_id,
+                enabled_corpora.map(<[String]>::to_vec),
+            )
+            .await?;
+        tracing::info!(
+            conversation_id,
+            enabled_corpora = ?enabled_corpora,
+            "set_conversation_allow_list: corpus allow-list written"
+        );
+        Ok(())
+    }
+
     /// Every id an allow-list entry may legitimately name: each installed
     /// index's `corpus_id`, plus the `parent_corpus_id`s that satellite /
     /// layer corpora follow (`apply_corpus_allow_list` keeps an index whose

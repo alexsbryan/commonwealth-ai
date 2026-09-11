@@ -19,7 +19,6 @@ pub(crate) mod log_rotation;
 mod memory_watch;
 mod model_cmd;
 mod panic_hook;
-mod service_install;
 mod setup_cmd;
 mod setup_config;
 pub(crate) mod supervise;

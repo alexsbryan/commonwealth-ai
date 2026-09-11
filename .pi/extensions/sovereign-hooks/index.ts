@@ -107,7 +107,6 @@ export default function (pi: ExtensionAPI) {
 
     const blocks = [
       pendingBoot,
-      runHook(ctx.cwd, "inject-notes.py", envelope, isSeat),
       runHook(ctx.cwd, "split-enforce.py", envelope, isSeat),
     ].filter((b) => b.length > 0);
 

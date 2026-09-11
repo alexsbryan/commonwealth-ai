@@ -12,14 +12,6 @@ use sovereign_core::types::*;
 // ─── Event Payloads ──────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize)]
-#[allow(dead_code)]
-pub struct StepStartedPayload {
-    pub task_id: String,
-    pub step_id: usize,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
 pub struct StepDonePayload {
     pub task_id: String,
     pub step_id: usize,

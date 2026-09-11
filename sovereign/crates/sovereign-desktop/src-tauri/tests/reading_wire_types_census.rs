@@ -15,10 +15,20 @@
 //! the mirrors existed to prevent. Hand-kept compatibility is not
 //! compatibility; importing the one type is.
 //!
-//! Watched to fail: define any struct or enum in `commands/reading.rs`
-//! (the old mirrors were `*Dto`, but a mirror can be named anything) and
-//! this goes red naming the rule. Sabotage-verified at landing
-//! (a planted mirror struct, watched red, reverted).
+//! sv-surface D1 widened this from "no second SPELLING" to "no second
+//! PATH". The four commands used to fork on `is_attach_mode()` and keep a
+//! full local reader behind the Local arm — nine private DTO helpers over
+//! `corpus_engine` — which is a mirror of the ROUTE rather than of its
+//! types, and drifts the same way. They are deleted: the commands return
+//! the daemon's bytes verbatim in both boot modes, because Local means the
+//! daemon is in-process (same `corpus_engine`, same `state_store`, bound on
+//! `client_port` before bootstrap returns).
+//!
+//! Watched to fail: define any struct or enum in `commands/reading.rs` (the
+//! old mirrors were `*Dto`, but a mirror can be named anything), or bring
+//! back a boot-mode fork or a direct `corpus_engine` read, and this goes red
+//! naming the rule. Sabotage-verified at landing (a planted mirror struct,
+//! watched red, reverted).
 
 use std::path::Path;
 
@@ -42,7 +52,7 @@ fn is_definition(line: &str) -> bool {
 }
 
 #[test]
-fn the_reading_surface_serializes_the_wire_types_not_a_mirror() {
+fn the_reading_surface_has_one_path_and_no_mirror() {
     let src = reading_source();
     let definitions: Vec<&str> = src.lines().filter(|l| is_definition(l)).collect();
     assert!(
@@ -53,8 +63,34 @@ fn the_reading_surface_serializes_the_wire_types_not_a_mirror() {
          or otherwise) is a second spelling of a wire shape, and the last \
          one had already drifted when it was deleted."
     );
+    // D1: one path in both boot modes. The desktop no longer SERIALIZES a
+    // reading shape at all — it returns the daemon's response bytes verbatim
+    // — so "imports the wire types" is no longer the property to pin. These
+    // two are: no boot-mode fork, and no local reader to fork to.
+    //
+    // CODE lines only. The first cut of these two scanned the whole file and
+    // went red on this module's own comment — the one that explains WHY the
+    // local reader is gone names `corpus_engine` to do so (§18.1: the failing
+    // input was its own documentation). Prose that mentions a needle is
+    // documentation; only a real read is a second path. Same calibration
+    // `conversation_wire_census`'s URL needle already uses.
+    let code: String = src
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
-        src.contains("use sovereign_mesh::reading_http::"),
-        "the reading surface must import the wire types it serializes"
+        !code.contains("is_attach_mode"),
+        "sv-surface D1: commands/reading.rs forks on the boot mode again. \
+         The reading surface is ONE path — `daemon_reading_get` over \
+         reading_http's four routes — in both modes; Local means the daemon \
+         is in-process, not that there is a second reader."
+    );
+    assert!(
+        !code.contains("corpus_engine"),
+        "sv-surface D1: commands/reading.rs reads corpus_engine directly \
+         again. That is a mirror of the ROUTE rather than of its types, and \
+         drifts the same way the nine deleted *Dto helpers did — the decider \
+         is reading_http's handler, reached over client_base_url()."
     );
 }

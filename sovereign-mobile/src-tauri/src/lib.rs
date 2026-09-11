@@ -9,14 +9,18 @@
 //! re-embed a changed dist. Bump this marker (or touch any .rs) to force it.
 //! frontend-embed-rev: 7
 
-mod cache;
-mod commands;
-mod connection;
-mod connectivity;
-mod error;
-mod iroh_bridge;
-mod remote;
-mod state;
+// `pub` since sv-surface R6: `tests/turn_wire.rs` drives the REAL turn
+// drive against a real socket, and `tests/census.rs` reads this crate's
+// own source. An integration test is the only place a mobile turn can be
+// proven without a phone, and it cannot reach a private module.
+pub mod cache;
+pub mod commands;
+pub mod connection;
+pub mod connectivity;
+pub mod error;
+pub mod iroh_bridge;
+pub mod remote;
+pub mod state;
 
 use std::time::Duration;
 
@@ -39,8 +43,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).ok();
 
             // SQLite cache (client-owned records + cached projections).
-            let db = Connection::open(data_dir.join("sovereign-mobile.db"))
-                .expect("open cache db");
+            let db = Connection::open(data_dir.join("sovereign-mobile.db")).expect("open cache db");
             cache::schema::migrate(&db).expect("migrate cache schema");
 
             // CREDENTIAL store. DEV-ONLY file backing for now — replace
@@ -84,9 +87,7 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<AppState>();
-                if let (Ok(client), Ok(host)) =
-                    (state.active_client().await, state.active_host())
-                {
+                if let (Ok(client), Ok(host)) = (state.active_client().await, state.active_host()) {
                     ConnectivityMonitor::spawn(
                         handle.clone(),
                         client,
@@ -111,6 +112,8 @@ pub fn run() {
             commands::conversation::get_conversation,
             commands::conversation::delete_conversation,
             commands::chat::send_message_stream,
+            commands::chat::answer_prompt,
+            commands::chat::cancel_turn,
             commands::corpus::list_corpora,
             commands::corpus::resolve_citation,
             commands::corpus::read_citation,

@@ -31,6 +31,26 @@ pub enum ResolveOutcome {
     /// alone: a wrong-kind answer must not consume the question the right one
     /// is still coming for.
     WrongKind,
+    /// The question was found and taken, and nobody was still waiting on it
+    /// — the executor's receiver had already gone (the turn was aborted, the
+    /// task cancelled). The answer reached the desk and changed nothing.
+    ///
+    /// Split out of [`Self::Resolved`] by sv-surface RB2: the desk's three
+    /// resolve arms ended `let _ = tx.send(v); Ok(())`, so a send into a
+    /// dropped receiver reported "the executor is running again" — the
+    /// success-shaped `Err` ARCH §18.3 names, and the one outcome an
+    /// answerer most needs to tell apart from a real resolve.
+    WaiterGone,
+    /// The answerer holds no desk at all — this socket never CLAIMED the
+    /// turn's approvals (`?approvals=true` on the stream upgrade), so there
+    /// was never anything here for an answer to reach.
+    ///
+    /// Distinct from [`Self::NoSuchPending`], which is a socket that could
+    /// have answered and had nothing parked: this one names a claim the
+    /// client can go and make, and a client that cannot tell the two apart
+    /// reconnects for nothing or waits forever for a card that will never
+    /// arrive.
+    Unclaimed,
 }
 
 impl ResolveOutcome {

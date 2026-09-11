@@ -172,6 +172,47 @@ impl ConversationStore for InMemoryStateStore {
         Ok(list.into_iter().skip(offset).take(limit).collect())
     }
 
+    async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let convos = self.conversations.read().await;
+        let mut list: Vec<Conversation> = convos
+            .values()
+            .filter(|c| c.skill_id.as_deref() == surface_skill_id)
+            .cloned()
+            .collect();
+        list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        Ok(list.into_iter().skip(offset).take(limit).collect())
+    }
+
+    async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let convos = self.conversations.read().await;
+        // The three clauses the sqlite statement carries, in the same
+        // order: default surface only, an allow-list that EXISTS (a null
+        // one is everything-scoped and a notebook must not claim it), and
+        // this corpus named in it.
+        let mut list: Vec<Conversation> = convos
+            .values()
+            .filter(|c| c.skill_id.is_none())
+            .filter(|c| {
+                c.enabled_corpora
+                    .as_ref()
+                    .is_some_and(|ids| ids.iter().any(|id| id == corpus_id))
+            })
+            .cloned()
+            .collect();
+        list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        Ok(list.into_iter().skip(offset).take(limit).collect())
+    }
+
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>> {
         let msgs = self.messages.read().await;
         let query_lower = query.to_lowercase();

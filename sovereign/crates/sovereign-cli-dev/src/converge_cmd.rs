@@ -21,9 +21,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
+use crate::converge_baseline::{read_baseline, write_baseline};
 use corpus_engine_scip::converge::{
-    census, crate_dag, cross_crate_reached, dossier, duplicate_count, render_census,
-    render_dossier, type_defs, SourceScope,
+    census, crate_dag, cross_crate_reached, dossier, render_census, render_dossier, type_defs,
+    SourceScope,
 };
 use corpus_engine_scip::roles::{reach_index, render_roles, roles, type_fields};
 use corpus_engine_scip::shape::{field_signatures, render_shape, shape_census, ShapeOptions};
@@ -808,14 +809,43 @@ fn cmd_status(
     lag: &Lag,
     corpus_id: &str,
 ) -> i32 {
-    let n = duplicate_count(defs, reached, scope);
+    // ONE census. This called it twice — once through `duplicate_count`, once
+    // for `colliding_names` — and each call rebuilds the by-name map over
+    // every first-party type def in the workspace (5,796 of them here).
+    let c = census(defs, reached, scope, false);
+    let n = c.reachable_names;
     // The wider number travels with the narrow one, always. The ratchet counts
     // only collisions another crate can reach; a reader who sees `34` without
     // `265` beside it cannot tell a narrowing from an improvement (§18.6).
-    let colliding = census(defs, reached, scope, false).colliding_names;
-    let prior: Option<usize> = std::fs::read_to_string(baseline)
-        .ok()
-        .and_then(|s| s.split_whitespace().next()?.parse().ok());
+    let colliding = c.colliding_names;
+    // The rows behind the count, which the census already ranked. `n` is
+    // `reachable_names`, so this filter selects exactly the counted set —
+    // `duplicate_count` is that same expression and stays for other callers.
+    let names: Vec<&str> = c
+        .rows
+        .iter()
+        .filter(|r| r.is_reachable())
+        .map(|r| r.name.as_str())
+        .collect();
+
+    let base = read_baseline(baseline);
+    let prior = base.count;
+    // What a rise actually added, when the baseline can say. `None` means the
+    // baseline predates the name list — reported as that, never as "nothing".
+    let added: Option<Vec<&str>> = base.named.then(|| {
+        names
+            .iter()
+            .copied()
+            .filter(|nm| !base.names.contains(*nm))
+            .collect()
+    });
+    let removed: Option<Vec<&str>> = base.named.then(|| {
+        base.names
+            .iter()
+            .map(String::as_str)
+            .filter(|nm| !names.contains(nm))
+            .collect()
+    });
 
     if mint {
         // Minting from a graph that cannot speak for this commit freezes the
@@ -831,7 +861,7 @@ fn cmd_status(
         if let Some(parent) = baseline.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if let Err(e) = std::fs::write(baseline, format!("{n}\n")) {
+        if let Err(e) = write_baseline(baseline, n, &names) {
             eprintln!("error: writing {}: {e}", baseline.display());
             return 1;
         }
@@ -849,7 +879,15 @@ fn cmd_status(
             // Every colliding name, reachable or not — the population the
             // ratchet number is drawn from.
             ("colliding_names", serde_json::json!(colliding)),
+            // The counted SET, and what a rise added relative to the baseline's
+            // set. `added`/`removed` are null when the baseline predates the
+            // name list, which is why the relay can distinguish "nothing was
+            // added" from "this file cannot say".
+            ("duplicated", serde_json::json!(names)),
+            ("added", serde_json::json!(added)),
+            ("removed", serde_json::json!(removed)),
             ("baseline", serde_json::json!(prior)),
+            ("baseline_unreadable", serde_json::json!(base.unreadable)),
             (
                 "delta",
                 serde_json::json!(prior.map(|p| n as i64 - p as i64)),
@@ -877,10 +915,18 @@ fn cmd_status(
                           unreachable from any other crate)"
                 );
                 print!("{}", lag.render(corpus_id));
-                println!(
-                    "baseline: none — mint one with `svrn code converge status --mint`\n\
-                     (four verdicts, not two: this is NEVER-RAN, not a pass)"
-                );
+                match base.unreadable.as_deref() {
+                    // The file is THERE and this gate could not read a count
+                    // out of it. `--mint` does not fix that, so do not name it.
+                    Some(why) => println!(
+                        "baseline: UNREADABLE — {why}\n\
+                         (four verdicts, not two: this is NEVER-RAN, not a pass)"
+                    ),
+                    None => println!(
+                        "baseline: none — mint one with `svrn code converge status --mint`\n\
+                         (four verdicts, not two: this is NEVER-RAN, not a pass)"
+                    ),
+                }
             }
             // No baseline is not a pass. ARCH §18.2.
             4
@@ -903,6 +949,21 @@ fn cmd_status(
                         "\nRATCHET BROKEN — {delta} concept(s) added. Either converge the new \
                          duplicate,\nor rename it apart and say which in the landing verdict."
                     );
+                    // Which ones. Before the baseline recorded its set this
+                    // line could not exist, and a red said only that some
+                    // number of somethings crossed.
+                    match added.as_deref() {
+                        Some([]) | None => println!(
+                            "  (this baseline predates the name list, so it cannot say WHICH.\n\
+                             \x20  `--mint` once to record the set; the next rise will name itself.)"
+                        ),
+                        Some(added) => {
+                            println!("\nadded since the baseline:");
+                            for nm in added {
+                                println!("  {nm}   ->  svrn code converge noun {nm}");
+                            }
+                        }
+                    }
                 }
                 1
             } else if lag.can_judge() {

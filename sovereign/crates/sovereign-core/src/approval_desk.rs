@@ -129,20 +129,33 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
         Parked { rx }
     }
 
+    /// Park under `key`, and SAY SO when that key already held a question.
+    ///
+    /// The overwrite is kept — the newer question is the live one, and the
+    /// displaced waiter learns of it as `Cancelled` when its sender drops,
+    /// which is the honest report of what happened to it (§18.3). What was
+    /// missing was the trace: a host whose ids collide (a step counter
+    /// reused across turns) silently loses a question, and the executor it
+    /// belonged to blocks with no record of why (sv-surface S3).
     fn insert(&self, key: K, pending: Pending) {
-        self.pending
+        let displaced = self
+            .pending
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(key, pending);
+        if let Some(displaced) = displaced {
+            tracing::warn!(
+                displaced_kind = displaced.kind(),
+                "approval_desk: a new question reused a parked id — the displaced \
+                 question's waiter is cancelled"
+            );
+        }
     }
 
     /// Answer a parked approval.
     pub fn resolve_approval(&self, key: &K, approved: bool) -> ResolveOutcome {
         self.resolve(key, |pending| match pending {
-            Pending::Approval(tx) => {
-                let _ = tx.send(approved);
-                Ok(())
-            }
+            Pending::Approval(tx) => Ok(tx.send(approved).is_ok()),
             other => Err(other),
         })
     }
@@ -150,10 +163,7 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
     /// Answer a parked `ask_user` question.
     pub fn resolve_input(&self, key: &K, content: String) -> ResolveOutcome {
         self.resolve(key, |pending| match pending {
-            Pending::Input(tx) => {
-                let _ = tx.send(content);
-                Ok(())
-            }
+            Pending::Input(tx) => Ok(tx.send(content).is_ok()),
             other => Err(other),
         })
     }
@@ -162,17 +172,29 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
     /// hands it BACK. One decision about kind, made in the closure that owns
     /// the value, and the lock held across it so a restore cannot race a
     /// cancel.
+    ///
+    /// `answer` reports `Ok(true)` when the parked waiter actually received
+    /// the value and `Ok(false)` when its receiver had already gone. Both
+    /// took the entry; only the first restarted an executor, and collapsing
+    /// them into one success was the §18.3 defect sv-surface RB2 names.
     fn resolve(
         &self,
         key: &K,
-        answer: impl FnOnce(Pending) -> std::result::Result<(), Pending>,
+        answer: impl FnOnce(Pending) -> std::result::Result<bool, Pending>,
     ) -> ResolveOutcome {
         let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         let Some(entry) = pending.remove(key) else {
             return ResolveOutcome::NoSuchPending;
         };
         match answer(entry) {
-            Ok(()) => ResolveOutcome::Resolved,
+            Ok(true) => ResolveOutcome::Resolved,
+            Ok(false) => {
+                drop(pending);
+                tracing::debug!(
+                    "approval_desk: the answer took the question but its waiter was already gone"
+                );
+                ResolveOutcome::WaiterGone
+            }
             Err(entry) => {
                 // Glassbox: a wrong-kind answer means a client aimed a reply
                 // at the wrong question, and the outcome it gets back reads
@@ -192,10 +214,7 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
     /// Answer a parked information request. `None` is the skip.
     pub fn resolve_information(&self, key: &K, content: Option<String>) -> ResolveOutcome {
         self.resolve(key, |pending| match pending {
-            Pending::Information(tx) => {
-                let _ = tx.send(content);
-                Ok(())
-            }
+            Pending::Information(tx) => Ok(tx.send(content).is_ok()),
             other => Err(other),
         })
     }
@@ -252,6 +271,51 @@ impl<K: Eq + Hash + Clone> ApprovalDesk<K> {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(key);
+    }
+
+    /// Resolve EVERY parked question the way a vanished answerer resolves
+    /// it — the hangup policy, applied per prompt KIND (sv-surface E2).
+    ///
+    /// An approval and an `ask_user` are CANCELLED: their sender drops and
+    /// the waiter reads `Err(Cancelled)`, because inventing a consent or a
+    /// reply on behalf of somebody who is not there is the §18.3
+    /// substitution this whole file exists to remove. An information
+    /// request reads as the user's SKIP (`None`) — a real answer, and
+    /// `Pending::Information`'s own doc already said so: the executor falls
+    /// through to corpus-only synthesis whether the card was skipped or
+    /// never seen.
+    ///
+    /// Called when the answerer is gone for good: the client cancelled the
+    /// turn, or the socket hung up. Without it a turn parked on a consent
+    /// card never returns and no terminal frame is ever emitted — the
+    /// executor is blocked on a `oneshot` nobody holds the other end of
+    /// (sv-surface RB2).
+    ///
+    /// Returns how many questions were resolved, for the trace.
+    pub fn abandon_all(&self) -> usize {
+        let taken: Vec<(K, Pending)> = {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            pending.drain().collect()
+        };
+        for (_key, entry) in &taken {
+            tracing::debug!(
+                kind = entry.kind(),
+                "approval_desk: abandoning a parked question — nobody is left to answer it"
+            );
+        }
+        let count = taken.len();
+        for (_key, entry) in taken {
+            match entry {
+                // Dropped, not answered: `Parked::answered` reads the drop as
+                // `Err(Cancelled)`, which is what actually happened.
+                Pending::Approval(_) | Pending::Input(_) => {}
+                // The one kind whose absent answer IS an answer.
+                Pending::Information(tx) => {
+                    let _ = tx.send(None);
+                }
+            }
+        }
+        count
     }
 }
 
@@ -311,6 +375,46 @@ mod tests {
         // NOT `Ok(false)`: a cancelled consent question was never answered,
         // and a `false` here would be an invented refusal (ARCH §18.3).
         assert!(matches!(parked.answered().await, Err(Error::Cancelled)));
+    }
+
+    /// sv-surface RB2 (review finding C1): an answer that reached the desk
+    /// and found nobody waiting is NOT "the executor is running again".
+    ///
+    /// The three resolve arms ended `let _ = tx.send(v); Ok(())`, so a send
+    /// into a dropped receiver — the turn was aborted, the task cancelled —
+    /// reported `Resolved`, the success-shaped `Err` ARCH §18.3 names. It is
+    /// the one outcome an answerer most needs to tell from a real resolve.
+    #[tokio::test]
+    async fn an_answer_whose_waiter_is_gone_is_not_reported_as_resolved() {
+        let desk = ApprovalDesk::<String>::new();
+        let parked = desk.park_approval("t1:3".to_string());
+        drop(parked); // the executor went away
+        assert_eq!(
+            desk.resolve_approval(&"t1:3".to_string(), true),
+            ResolveOutcome::WaiterGone
+        );
+        assert_eq!(desk.parked(), 0, "the answer still consumed the question");
+    }
+
+    /// The hangup policy, per prompt KIND (E2): a consent question and an
+    /// `ask_user` are CANCELLED, an information request reads as the SKIP.
+    #[tokio::test]
+    async fn abandon_all_cancels_consents_and_skips_information_requests() {
+        let desk = ApprovalDesk::<String>::new();
+        let consent = desk.park_approval("t1:0".to_string());
+        let asked = desk.park_input("t1:input".to_string());
+        let info = desk.park_information("t1:info:0".to_string());
+
+        assert_eq!(desk.abandon_all(), 3);
+        assert_eq!(desk.parked(), 0);
+
+        assert!(matches!(consent.answered().await, Err(Error::Cancelled)));
+        assert!(matches!(asked.answered().await, Err(Error::Cancelled)));
+        assert_eq!(
+            info.answered_or_skipped().await,
+            None,
+            "the one kind whose absent answer IS an answer"
+        );
     }
 
     #[test]

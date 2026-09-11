@@ -3,19 +3,15 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
+use serde::Serialize;
+use tauri::State;
 
-use crate::state::{self, AppState, DesktopConfig};
+use crate::state::AppState;
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────
 
@@ -270,53 +266,53 @@ pub(crate) async fn start_tier_installs(
     state: &Arc<AppState>,
     tier: &str,
 ) {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => {
-            tracing::warn!("start_tier_installs: corpus engine not initialized");
-            return;
-        }
-    };
-    drop(engine_guard);
-
-    let builtins = engine.builtin_corpora();
-    for b in &builtins {
-        if !tiers_for(&b.id).iter().any(|t| t == tier) {
-            continue;
-        }
-        tracing::info!("Queuing corpus install for tier '{tier}': {}", b.id);
-        // Reuse the install command's spawn-and-emit logic by calling it
-        // directly. Each install runs in its own task; they don't block
-        // each other but compete for download bandwidth.
-        let app = app_handle.clone();
-        let state_clone = Arc::clone(state);
-        let cid = b.id.clone();
-        // Synthesize a State<'_, Arc<AppState>> isn't possible here; just
-        // duplicate the spawn pattern inline.
-        tokio::spawn(async move {
-            let engine_guard = state_clone.corpus_engine.read().await;
-            let engine = match engine_guard.as_ref() {
-                Some(e) => Arc::clone(e),
-                None => return,
-            };
-            drop(engine_guard);
-
-            let progress_cid = cid.clone();
-            let progress_handle = app.clone();
-            let progress_state = Arc::clone(&state_clone);
-            let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
-                let payload = ingest_progress_to_payload(&progress_cid, &p);
-                if let Ok(mut map) = progress_state.install_progress.try_write() {
-                    map.insert(payload.corpus_id.clone(), payload.clone());
-                }
-                let _ = progress_handle.emit("corpus-progress", payload);
-            });
-
-            let spec = corpus_engine::CorpusSpec::Builtin(cid.clone());
-            if let Err(e) = engine.ingest(&spec, Some(progress_cb)).await {
-                tracing::warn!("Tier install for '{cid}' failed: {e}");
+    // sv-surface D9b. Two things were wrong here and they are the same
+    // shape: this process answering a question the daemon owns.
+    //
+    // The TIER lookup read `state.corpus_engine`'s built-in catalogue and
+    // ran `tiers_for` locally; the catalogue row carries `tiers` (the
+    // daemon holds `tiers_for` since 2a9a9e91e), so tier membership here
+    // and the picker's tier chips can no longer disagree.
+    //
+    // The INSTALL ran `CorpusEngine::ingest` INLINE, in this process,
+    // "duplicating the spawn pattern" of `install_corpus` — which does not
+    // ingest at all, it asks the daemon. So the wizard's tier install and
+    // the picker's single install were two different pipelines writing the
+    // same index directory, and in attach the wizard's was the one the
+    // daemon never heard about. Both go through `request_daemon_install`
+    // now: idempotent, and the existing `corpus-progress` poller narrates
+    // whichever ingests the daemon is actually running.
+    let rows: Vec<CorpusEntry> =
+        match sovereign_turn_client::TurnClient::new(state.client_base_url())
+            .corpus_catalog::<CorpusEntry>()
+            .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    tier,
+                    "start_tier_installs: the daemon catalogue did not answer"
+                );
+                return;
             }
-        });
+        };
+
+    for row in rows.iter().filter(|r| r.tiers.iter().any(|t| t == tier)) {
+        tracing::info!(tier, corpus_id = %row.id, "start_tier_installs: queuing install");
+        if let Err(e) = crate::commands::corpus_install::request_daemon_install(
+            app_handle,
+            state.as_ref(),
+            &row.id,
+        )
+        .await
+        {
+            tracing::warn!(
+                tier,
+                corpus_id = %row.id,
+                error = %e,
+                "start_tier_installs: the daemon refused the install request"
+            );
+        }
     }
 }

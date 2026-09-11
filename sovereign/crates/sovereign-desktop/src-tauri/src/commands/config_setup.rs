@@ -3,17 +3,10 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-#![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
 use crate::state::{self, AppState, DesktopConfig};
 
@@ -674,13 +667,53 @@ pub async fn is_setup_complete(state: State<'_, Arc<AppState>>) -> Result<bool, 
 /// no timeout or re-probe). The command-bridge sticky buffer only
 /// covers the Playwright harness, not the real webview.
 ///
-/// `state.runtime` is set to `Some` inside `bootstrap_with_progress`
-/// immediately before that emit, so `is_some()` is true exactly when
-/// (or after) the event fired. The frontend calls this on mount, after
-/// wiring its listeners, to catch a `backend-ready` it may have missed.
+/// sv-surface D9b — the fact this answers is `GET /v1/ready` on the
+/// client port, not `state.runtime.is_some()`.
+///
+/// The old read asked "did THIS process finish commissioning a Runtime",
+/// which stopped being the splash's question at R5: the turn rides the
+/// wire in both boot modes, so "can I chat" is "does the port serve
+/// turns". In attach the two answers actively disagreed — this process's
+/// Runtime is commissioned over a remote provider and reports `Some`
+/// whether or not anything is serving — and it is the needle D9 wants to
+/// delete, at which point `is_some()` would hang the splash forever. The
+/// sharpest of the three no-fork degradations the D9 correction named.
+///
+/// WHO is on that port is not asked here: B4 settled it at boot
+/// (`/status.process.pid`, 3c7ad5933) and folded it into
+/// `is_attach_mode()`. This composes with that answer rather than
+/// growing a second identity probe.
+///
+/// The substitution, named rather than silent (ARCH §18.3): a transport
+/// failure becomes `Ok(false)`, not an `Err`. During boot "nothing is on
+/// the port yet" IS "not ready" — the splash's correct behaviour is to
+/// keep waiting — and the reason is traced at every probe, so the
+/// collapse is visible at `RUST_LOG=sovereign_desktop=info` rather than
+/// inferred from a spinner.
 #[tauri::command]
 pub async fn is_backend_ready(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
-    Ok(state.runtime.read().await.is_some())
+    match sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .backend_ready()
+        .await
+    {
+        Ok(ready) => {
+            tracing::info!(
+                ready,
+                attach = state.is_attach_mode(),
+                "is_backend_ready: the serving port answered"
+            );
+            Ok(ready)
+        }
+        Err(e) => {
+            tracing::info!(
+                error = %e,
+                attach = state.is_attach_mode(),
+                "is_backend_ready: nothing answered on the client port yet — reporting \
+                 not-ready so the splash keeps waiting"
+            );
+            Ok(false)
+        }
+    }
 }
 
 /// Auto-config first-launch flow. Takes no input — runs hardware

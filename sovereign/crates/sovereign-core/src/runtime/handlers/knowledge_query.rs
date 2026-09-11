@@ -114,7 +114,7 @@ impl Runtime {
         };
         self.store.save_message(&assistant_msg).await?;
 
-        self.routing_events
+        self.turn_routing_events()
             .emit_clarification_request(clarification_payload)
             .await;
 
@@ -240,7 +240,7 @@ impl Runtime {
         self.store.save_message(&assistant_msg).await?;
         let response_msg = assistant_msg.clone();
 
-        self.routing_events
+        self.turn_routing_events()
             .emit_clarification_request(clarification_payload)
             .await;
 

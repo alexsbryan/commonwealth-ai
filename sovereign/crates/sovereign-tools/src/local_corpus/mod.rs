@@ -45,7 +45,9 @@ pub use config::{
     WatchedFolderConfig, WatcherConfig, WriteBackConfig,
 };
 pub use humanise::humanise_display_name;
-pub use manager::{IncompleteJob, IngestStats, LocalCorpusManager, WatchedIncompleteJob};
+pub use manager::{
+    pre_scan_config, IncompleteJob, IngestStats, LocalCorpusManager, WatchedIncompleteJob,
+};
 pub use pre_scanner::{FileMeta, PdfClass, PreScanResult, PreScanner};
 pub use progress::{ClusterStage, CompletionResult, ExcerptChunk, LocalCorpusProgress};
 pub use watched::{

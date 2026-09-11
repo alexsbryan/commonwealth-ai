@@ -5,14 +5,15 @@
 //!
 //! # The state this makes unrepresentable
 //!
-//! A turn-shaped command that drains its own stream handle. The one driver
-//! owns the drain — `serve_turn` for a plain turn, `drive_stream_handle`
-//! for a caller that acquires through a richer path (redirect/resume) —
-//! and the desktop renders the resulting frames through the ONE renderer
-//! (`render_turn_frames`). A hand-rolled drain loop is how the desktop's
-//! `redirect_turn` and `resume_session` shipped WITHOUT `present_answer`
-//! envelope stripping and the graceful-guard render the plain path had:
-//! a re-derived loop reproduces the gaps of the loop it re-derives.
+//! A turn-shaped command that drains its own stream handle. Since R5 the
+//! drain is `pump_wire_frames` reading the daemon's turn socket through
+//! the client family, and the desktop renders the frames it forwards
+//! through the ONE renderer (`render_turn_frames`). A hand-rolled drain
+//! loop is how the desktop's `redirect_turn` and `resume_session` shipped
+//! WITHOUT `present_answer` envelope stripping and the graceful-guard
+//! render the plain path had: a re-derived loop reproduces the gaps of the
+//! loop it re-derives — and a drain that owns only PART of the frame
+//! stream drops the kinds it does not know about (RB3).
 //!
 //! # Named, not silently ignored
 //!
@@ -22,10 +23,9 @@
 //! (the models one-decider rung), where it is enumerated. This census
 //! scopes to turn streams in `commands/chat.rs`.
 //!
-//! Watched to fail: reintroduce a `stream.next().await` drain in chat.rs, or
-//! drop a `drive_stream_handle` call site, and this goes red naming the
-//! offender. Sabotage-verified at landing (a planted drain, watched red,
-//! reverted).
+//! Watched to fail: add a second reader of the turn socket in chat.rs, or
+//! drop a wire-drive call site, and this goes red naming the offender.
+//! Sabotage-verified at landing (a planted drain, watched red, reverted).
 
 use std::path::Path;
 
@@ -34,59 +34,106 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
+/// The census pinned `stream.next().await` — a spelling the WIRE client
+/// cannot produce (its reader is `TurnStream::next_frame`). So it stayed
+/// green while chat.rs held TWO readers of one socket: `finish_wire_turn`
+/// ran a private lead loop to `TurnStarted` and `pump_wire_frames` read
+/// everything after. That split is exactly what dropped a `Prompt`
+/// preceding `TurnStarted` (review RB3/T4). Pinning the reader the client
+/// actually has is what makes a planted second drain go red.
 #[test]
-fn no_hand_drained_turn_streams_in_chat_commands() {
+fn exactly_one_reader_of_the_turn_socket_in_chat_commands() {
     let src = read("src/commands/chat.rs");
+    assert_eq!(
+        src.match_indices("next_frame().await").count(),
+        1,
+        "sv-surface rung 0 / RB3: the turn socket has exactly ONE reader \
+         in commands/chat.rs — the loop in `pump_wire_frames`, which \
+         raises every card and decides the sync id in the same pass. A \
+         second reader splits the frame stream, and whichever half does \
+         not own a frame kind silently drops it: that is how a leading \
+         `Prompt` reached a renderer that ignores prompts and every \
+         agentic ask hung."
+    );
     assert_eq!(
         src.match_indices("stream.next().await").count(),
         0,
-        "sv-surface rung 0: a hand-drained turn stream is back in \
-         commands/chat.rs. The one driver owns the drain — `serve_turn` for a \
-         plain turn, `drive_stream_handle` for a richer acquire — and this \
-         surface renders through `render_turn_frames`. A private drain loop \
-         re-derives the driver AND its gaps."
+        "a raw futures drain is back in commands/chat.rs; the client \
+         family's `next_frame` is the reader"
+    );
+    // The one reader is inside the pump, not inside the command that
+    // waits for the id: `finish_wire_turn` learns the sync id over a
+    // channel, it does not read the socket itself.
+    let pump = src
+        .split_once("async fn pump_wire_frames(")
+        .expect("pump_wire_frames is the reader")
+        .1;
+    assert_eq!(
+        pump.match_indices("next_frame().await").count(),
+        1,
+        "the ONE reader lives in `pump_wire_frames`"
     );
 }
 
 #[test]
 fn the_richer_acquires_go_through_the_one_drive() {
     let src = read("src/commands/chat.rs");
+    // sv-surface R5: the richer acquires (redirect, resume) cross the WIRE
+    // now — one `send_redirect` and one `send_resume`, each through the
+    // shared `finish_wire_turn` driver. The in-process `drive_stream_handle`
+    // call sites are gone with the local drive; the daemon side of both
+    // acquires is pinned by sovereign-mesh's turn_surface tests.
+    assert_eq!(
+        src.match_indices("send_redirect(").count(),
+        1,
+        "exactly one redirect, through the wire"
+    );
+    assert_eq!(
+        src.match_indices("send_resume(").count(),
+        1,
+        "exactly one resume, through the wire"
+    );
     assert_eq!(
         src.match_indices("drive_stream_handle(").count(),
-        2,
-        "sv-surface rung 0: expected exactly the redirect + resume call \
-         sites driving through `drive_stream_handle`. More means a new \
-         richer-acquire flow landed without the campaign recording it; fewer \
-         means one of the two fell back to a private drain."
+        0,
+        "the in-process richer-acquire drive is deleted from this surface"
     );
 }
 
 #[test]
 fn every_turn_shaped_command_renders_through_the_one_renderer() {
     let src = read("src/commands/chat.rs");
+    // sv-surface R5: ALL FOUR turn-shaped commands (send_message_stream,
+    // send_message, redirect_turn, resume_session) drive the WIRE through
+    // `finish_wire_turn` — the daemon's turn socket via the client family,
+    // in BOTH boot modes ("Local" means the daemon happens to be
+    // in-process). The renderer spawns exactly once, inside the shared
+    // driver: a command spawning its own `render_turn_frames` is a second
+    // driver wearing a command's name.
     assert_eq!(
         src.match_indices("spawn(render_turn_frames(").count(),
-        3,
-        "sv-surface rung 0: expected send_message_stream, redirect_turn and \
-         resume_session each rendering through `render_turn_frames`. The \
-         renderer is the surface's half of the driver contract — a command \
-         that emits `message-chunk`/`message-complete` events any other way \
-         is a second renderer wearing a command's name."
+        1,
+        "the ONE renderer spawn lives in finish_wire_turn; per-command \
+         spawns are the rung-0 regression"
     );
-    // sv-surface R5: send_message_stream drives the WIRE now — the daemon's
-    // turn socket through the client family, in BOTH boot modes ("Local"
-    // means the daemon happens to be in-process). redirect_turn and
-    // resume_session still drive `serve_turn`'s post-acquire half
-    // in-process and convert on the same pattern; when they do, the
-    // `serve_turn` pin below retires with them.
+    assert_eq!(
+        src.match_indices("finish_wire_turn(").count(),
+        4,
+        "the definition plus three streaming callers (send_message_stream, \
+         redirect_turn, resume_session) — the one-shot send_message rides \
+         the REST turn and needs no stream"
+    );
+    assert!(
+        !src.contains("sovereign_core::runtime::serve_turn(")
+            && !src.contains("drive_stream_handle(")
+            && !src.contains("struct DesktopTurnSink")
+            && !src.contains("DesktopTurnSink {"),
+        "the in-process drive is deleted from this surface; `cancel_stream`'s \
+         session cancel remains in-process until the wire grows a cancel \
+         (G2), and it is not a turn driver"
+    );
     assert!(
         src.contains("connect_with("),
-        "send_message_stream must open the turn socket through the client family"
-    );
-    assert!(
-        src.contains("sovereign_core::runtime::serve_turn(")
-            || src.contains("drive_stream_handle("),
-        "redirect_turn / resume_session keep the one in-process driver until \
-         they convert — a private drain here is the rung-0 regression"
+        "the streaming commands open the turn socket through the client family"
     );
 }

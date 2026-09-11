@@ -116,8 +116,17 @@ members = [
     # native lossless wire + child server/entrypoint + daemon-side provider
     # facade & replica pool.
     "sovereign/crates/sovereign-compute",
+    "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
+    # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
+    # it was detached so that unverified mobile deps could not break the main
+    # build, for as long as it hand-rolled its OWN copy of the turn protocol. It now
+    # consumes `sovereign-turn-client`, and the only thing that keeps a mirror
+    # from growing back is a gate that actually compiles and tests it. `tauri`
+    # was already a workspace dependency via sovereign-desktop, so this adds no
+    # new third-party tree.
+    "sovereign-mobile/src-tauri",
     "sovereign/crates/sovereign-cli",
     "sovereign/crates/sovereign-cli-shared",
     "sovereign/crates/sovereign-cli-dev",
@@ -286,6 +295,7 @@ sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
+sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }

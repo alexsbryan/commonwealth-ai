@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Serde mirror of the Phase-1 `sovereign-server` JSON. Kept in one
-//! place so the wire contract has a single definition on the client.
-//! The data DTOs are also `Serialize` so commands can return them
-//! across the Tauri boundary to the WebView.
+//! The phone's CACHE-AND-VIEW shapes — what a Tauri command hands the
+//! WebView, and what the SQLite cache rows deserialize into.
+//!
+//! These are deliberately NOT the wire. The turn protocol lives in
+//! `sovereign-contracts` and is consumed through `sovereign-turn-client`
+//! (see the note at the bottom of this file); what remains here is the
+//! projection the mobile UI reads, plus the handful of REST envelopes the
+//! tenant-front `sovereign-server` serves that the turn client does not.
 //!
 //! Version fields (`synced_version`/`server_version`) are `Option` and
 //! currently absent on the wire — the Phase-1 projection doesn't yet
@@ -45,9 +49,9 @@ pub struct MessageDto {
     #[serde(default)]
     pub server_version: Option<i64>,
     #[serde(default)]
-    pub provenance: Option<ProvenanceDto>,
+    pub provenance: Option<Provenance>,
     #[serde(default)]
-    pub citations: Vec<CitationDto>,
+    pub citations: Vec<Citation>,
     /// The chat-UI `metadata` blob (`{provenance, retrieved_chunks}`),
     /// built host-client-side from `provenance`/`citations` so a
     /// reopened (hydrated) message renders citations and resolves
@@ -58,54 +62,21 @@ pub struct MessageDto {
     pub metadata: Option<serde_json::Value>,
 }
 
-/// The spec's `RESPONSE_PROVENANCE` (server's reduced projection).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProvenanceDto {
-    pub inference_backend: String,
-    #[serde(default)]
-    pub routing_tier: Option<String>,
-    #[serde(default)]
-    pub ttft_ms: Option<i64>,
-    #[serde(default)]
-    pub total_ms: Option<i64>,
-    /// OpenAI finish reason ("stop"/"length"/…). `"length"` drives the
-    /// cutoff chip + Continue affordance. `#[serde(default)]` so older
-    /// hosts that don't send it deserialize as `None`.
-    #[serde(default)]
-    pub finish_reason: Option<String>,
-    /// `max_tokens` budget the turn ran under (cutoff chip detail).
-    #[serde(default)]
-    pub max_tokens_budget: Option<i64>,
-    /// Completion tokens generated (cutoff chip detail).
-    #[serde(default)]
-    pub completion_tokens: Option<i64>,
-    #[serde(default)]
-    pub sources: Vec<SourceDto>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceDto {
-    pub origin: String,
-    #[serde(default)]
-    pub count: i64,
-    #[serde(default)]
-    pub from_peer: Option<String>,
-}
-
-/// The spec's `CITATION` — the `(corpus_id, chunk_id)` handle.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CitationDto {
-    pub corpus_id: String,
-    pub chunk_id: String,
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub snippet: String,
-    #[serde(default)]
-    pub score: f64,
-    #[serde(default)]
-    pub rank: i64,
-}
+/// The spec's `RESPONSE_PROVENANCE` and `CITATION` — taken from the
+/// contract, not re-declared here.
+///
+/// Until 2026-09-10 this file carried `ProvenanceDto` / `SourceDto` /
+/// `CitationDto`, hand-copied field by field from the same projection the
+/// host serializes. They were byte-compatible on the day they were written
+/// and had already fallen behind by two fields (`Citation::url`,
+/// `Citation::provenance_tier`) — the phone could not render a source URL
+/// the wire had been carrying for weeks, and nothing reported it, because a
+/// mirror cannot fail: it just quietly describes less than arrives.
+///
+/// Re-exported rather than imported at each site so the `remote::dto` path
+/// every caller already spells keeps working, and so the ONE line that says
+/// where these types come from is here.
+pub use sovereign_turn_client::{Citation, Provenance};
 
 /// One chunk in a reading window — the full passage text (not the
 /// truncated citation snippet) served by the host's corpus engine.
@@ -159,48 +130,19 @@ pub struct CorpusRefDto {
     pub mesh_shared: bool,
 }
 
-// ─── WebSocket ServerEvent ────────────────────────────────────
+// ─── The turn protocol ────────────────────────────────────────
 //
-// Mirrors `sovereign_server::approval::ServerEvent` — tagged
-// `{ "type": "...", "data": { ... } }`, snake_case. v1 consumes the
-// streaming variants; the approval/step variants are accepted-and-
-// ignored (tool approvals are out of scope). Deserialize-only:
-// `#[serde(other)]` is not valid for serialization.
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", content = "data", rename_all = "snake_case")]
-pub enum ServerEvent {
-    Token {
-        message_id: String,
-        chunk: String,
-    },
-    Complete {
-        message_id: String,
-        #[serde(default)]
-        provenance: Option<ProvenanceDto>,
-        #[serde(default)]
-        citations: Vec<CitationDto>,
-    },
-    StreamError {
-        message: String,
-        #[serde(default)]
-        retry_after_secs: Option<u64>,
-    },
-    /// A glassbox progress signal for the in-flight turn — the host
-    /// narrating its real work (retrieval, synthesis, gap check, tool
-    /// call). Surfaced as live progress chips while the answer is
-    /// prepared. `phase` is `NarrationPhase` (snake_case string or a
-    /// single-key object); `text` is the human-readable line.
-    Narration {
-        #[serde(default)]
-        message_id: String,
-        #[serde(default)]
-        phase: serde_json::Value,
-        #[serde(default)]
-        text: String,
-        #[serde(default)]
-        elapsed_ms: u64,
-    },
-    #[serde(other)]
-    Ignored,
-}
+// NOT HERE, and that is the point of sv-surface R6. This file used to end
+// with a `ServerEvent` enum hand-copied from `sovereign_server::approval`
+// — four variants plus `#[serde(other)] Ignored`, which is a catch-all that
+// makes every frame the phone does not understand look exactly like a frame
+// that does not exist.
+//
+// The wire vocabulary is `sovereign_turn_client::{TurnFrame, TurnPrompt,
+// TurnAnswer, TurnNotice, TurnRequest}` — the contract's own types, re-exported
+// by the client that speaks them, so the phone declares ONE dependency for the
+// whole family. `remote::stream` consumes it directly, so the
+// phone gains `Prompt`, `Notice::ResolveAck` and `Notice::TurnSettled` by
+// construction rather than by someone remembering to copy them across.
+//
+// `tests/census.rs` fails if a mirror grows back.

@@ -1008,6 +1008,41 @@ pub trait ConversationStore: Send + Sync {
     async fn get_conversation(&self, id: &str) -> Result<Conversation>;
     /// Page through stored conversations (`limit`/`offset`).
     async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>>;
+    /// Page through the conversations belonging to ONE SURFACE, newest
+    /// first — the default chat sidebar passes `None` and sees only rows
+    /// whose `skill_id IS NULL`; Inner Work passes `Some("inner-work")`;
+    /// Recipe Author passes `Some("recipe-author")`.
+    ///
+    /// Exact match, and deliberately no "all surfaces" affordance:
+    /// cross-surface visibility is a structural restriction (the 2026-05-24
+    /// redesign), so widening it has to be a new method someone writes on
+    /// purpose rather than a `None` that quietly means everything.
+    ///
+    /// On the trait rather than on one concrete store since sv-surface: the
+    /// daemon serves this listing at `GET /v1/conversations?skill_id=`, and
+    /// the desktop reached its own `SqliteStateStore` for it — which in
+    /// attach is not the store `create`, `rename` and `delete` write.
+    async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>>;
+
+    /// Page through the DEFAULT-CHAT conversations whose retrieval
+    /// allow-list names `corpus_id` — a notebook's Ask-tab history.
+    ///
+    /// Everything-scoped conversations (a null `enabled_corpora`) are
+    /// excluded, so a notebook shows only threads the user actually had
+    /// while scoped to it, and `skill_id IS NULL` keeps it to the default
+    /// surface. Same sv-surface reason as above for living here.
+    async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>>;
+
     /// Full-text search across messages in all conversations.
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>>;
     /// Soft-delete a conversation (tombstoned for sync-readiness, not physically removed).

@@ -71,6 +71,30 @@ else:
 w(f"CAMPAIGN {ID}" + (f"  [{status}]" if status else "  [NO quality/campaigns/%s.toml]" % ID))
 if objective:
     w(f"  {objective}")
+
+# ── THE PREDICATE, first and alone ───────────────────────────────────────
+# Bar numbers are deliberately NOT printed here. The failure this answers is
+# an agent picking a campaign up, reading `census 12, target 0`, and
+# optimising the instrument — on sv-surface every bar sat at or near target
+# while the objective was false for the whole initiative. Whatever is closest
+# to hand at 2am is what gets worked on, so the only number in the header is
+# a boolean about the SYSTEM.
+import subprocess
+if os.path.exists(bars):
+    r = subprocess.run(
+        [os.environ.get("PY", "python3"),
+         os.path.join(os.environ["REPO"], "scripts", "co-lineage.py"),
+         "predicate", ID],
+        capture_output=True, text=True, cwd=os.environ["REPO"])
+    lines = [l for l in (r.stdout or "").rstrip().split("\n") if l.strip()]
+    if lines:
+        w()
+        for l in lines:
+            w("  " + l.strip() if not l.startswith(" ") else "  " + l.strip())
+    else:
+        # Absence is reported, never defaulted (§18.3).
+        w()
+        w("  OBJECTIVE: COULD-NOT-RUN — co-lineage.py predicate gave no verdict")
 w()
 
 camp = os.environ["CAMPAIGN_MD"]

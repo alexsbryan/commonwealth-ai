@@ -87,6 +87,20 @@ pub struct ProvenanceSource {
     /// a mesh peer (e.g. `"mac-peer"`); `None` for locally-hosted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from_peer: Option<String>,
+    /// Folder-ingest v1 §6.3: the user-typed name of a watched folder
+    /// (e.g. `"Case Files"`), which every surface renders INSTEAD of the
+    /// opaque `origin` slug. Mirrors
+    /// [`crate::types::SourceSummary::display_name`]; `None` for
+    /// non-folder corpora (SEP, Wikipedia, mesh hits), which keep
+    /// rendering `origin`.
+    ///
+    /// Projected as of sv-surface D7/G9. Before that the typed
+    /// projection dropped it, so anything fed from the wire — the
+    /// answer-export renderer above all — degraded a folder's name to
+    /// its slug. That was the one named byte of feature loss on the
+    /// export path; this field closes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 
 /// Client-facing citation — the spec's `CITATION`. Carries the host's
@@ -347,10 +361,16 @@ fn project_source(v: &Value) -> Option<ProvenanceSource> {
         .get("from_peer")
         .and_then(Value::as_str)
         .map(str::to_string);
+    // `/provenance/sources[]/display_name` — the folder's user-typed name.
+    // Empty string is treated as absent: the runtime falls back to
+    // `corpus_id` when the folder oracle has no entry, and a blank name
+    // must render as the slug, not as nothing.
+    let display_name = non_empty_str(v.get("display_name"));
     Some(ProvenanceSource {
         origin,
         count,
         from_peer,
+        display_name,
     })
 }
 
@@ -455,6 +475,9 @@ mod tests {
         assert_eq!(prov.sources[0].origin, "sep");
         assert_eq!(prov.sources[0].from_peer.as_deref(), Some("mac-peer"));
         assert_eq!(prov.sources[1].from_peer, None);
+        // Neither source in this fixture is a watched folder.
+        assert_eq!(prov.sources[0].display_name, None);
+        assert_eq!(prov.sources[1].display_name, None);
 
         assert_eq!(cites.len(), 2);
         assert_eq!(cites[0].corpus_id, "sep");
@@ -492,6 +515,43 @@ mod tests {
         assert_eq!(prov.routing_tier.as_deref(), Some("SimpleQuery"));
         assert_eq!(prov.total_ms, None);
         assert!(prov.sources.is_empty());
+    }
+
+    /// sv-surface D7/G9. The folder's user-typed name reaches the typed
+    /// surface. Watched red by pointing the projection at
+    /// `"display_nam3"`: `Some("Case Files")` came back `None`.
+    #[test]
+    fn folder_source_projects_its_display_name() {
+        let meta = json!({
+            "provenance": {
+                "inference_backend": "local",
+                "sources": [
+                    {"origin": "case-files-7f2a", "count": 4, "display_name": "Case Files"},
+                    {"origin": "sep", "count": 2}
+                ]
+            }
+        });
+        let (prov, _) = project_message_metadata(&Some(meta));
+        let prov = prov.unwrap();
+        assert_eq!(prov.sources[0].display_name.as_deref(), Some("Case Files"));
+        // A non-folder corpus has no name to show: the surface keeps
+        // rendering `origin`, so the field must be absent, not empty.
+        assert_eq!(prov.sources[1].display_name, None);
+    }
+
+    /// The blank case is `None`, not `Some("")` — the runtime falls back
+    /// to `corpus_id` when the folder oracle has no entry, and a renderer
+    /// that took `Some("")` would print an empty source name.
+    #[test]
+    fn blank_display_name_projects_as_absent() {
+        let meta = json!({
+            "provenance": {
+                "inference_backend": "local",
+                "sources": [{"origin": "sep", "count": 1, "display_name": ""}]
+            }
+        });
+        let (prov, _) = project_message_metadata(&Some(meta));
+        assert_eq!(prov.unwrap().sources[0].display_name, None);
     }
 
     #[test]

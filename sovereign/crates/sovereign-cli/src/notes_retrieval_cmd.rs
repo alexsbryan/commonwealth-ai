@@ -1,13 +1,21 @@
 //! `sovereign notes retrieval-audit` — the measurement half of the E2/P4
 //! rational-forgetting instrument (MEMORY_MODEL §5 E2, principle P4).
 //!
-//! The `inject-notes` UserPromptSubmit hook surfaces a one-line index of
-//! notes (id, kind, claim line) with per-session dedupe and a hard budget,
-//! plus the frame-cited bodies, and logs every injection — with **zero**
-//! measurement of whether any injected note was ever actually used until E2.
-//! E2's mandate is "measure before tuning": establish the current injection
+//! E2's mandate was "measure before tuning": establish the injection
 //! **hit-rate** as a baseline before replacing the policy with a
 //! need-probability (recency × retrieval-frequency) ranker.
+//!
+//! THE MEASUREMENT RAN, 2026-09-11, and the ranker was never needed. Joining
+//! this log against 179 transcripts: 146 sessions carried both, 29 of them
+//! (20%) ever issued a notes tool call, and **zero** of the 93 calls cited an
+//! id the injection had delivered — against 2,976 injections costing ~1.33M
+//! tokens. The `inject-notes` UserPromptSubmit hook was cut rather than
+//! retuned (c5e5affa5), and `svrn init` stopped scaffolding it into new
+//! projects. A hit-rate of zero is not a ranking problem.
+//!
+//! The command stays because the LOG stays: `co-boot-block.sh` writes rows
+//! here too, and this is the join that judged the hook. Point it at any
+//! producer's rows.
 //!
 //! This command is the read side. It joins two purely-local sources:
 //!   1. the retrieval log the hook appends per injection
@@ -425,7 +433,7 @@ fn collect_log_files(log_dir: &Path, session: Option<&str>) -> Result<Vec<PathBu
     let entries = std::fs::read_dir(log_dir).map_err(|e| {
         format!(
             "no retrieval logs at {} ({e}).\n\
-             The inject-notes hook writes them per injection; run some prompts first, \
+             co-boot-block.sh writes them per boot; run some sessions first, \
              or pass --log-dir <path>.",
             log_dir.display()
         )
@@ -680,7 +688,7 @@ fn print_json(audits: &[SessionAudit]) {
 fn print_help() {
     println!(
         "sovereign notes retrieval-audit — injected-note hit-rate (E2/P4 baseline)\n\n\
-         Joins the inject-notes retrieval log (~/.svrnmesh/retrieval-log/<session>.jsonl)\n\
+         Joins the retrieval log (~/.svrnmesh/retrieval-log/<session>.jsonl)\n\
          against Claude Code transcripts to measure whether injected notes are actually\n\
          used downstream. Reads only local files — no daemon, no network.\n\n\
          USAGE:\n\

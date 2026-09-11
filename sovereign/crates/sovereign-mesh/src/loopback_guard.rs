@@ -14,9 +14,16 @@
 //! check at the `Router::layer` level, so every current and future
 //! route inherits it.
 //!
-//! Keep the per-handler `enforce_localhost` calls too — belt and
-//! suspenders. If the middleware is ever accidentally stripped off a
-//! router, the per-handler check still denies the request.
+//! Keep the per-handler check too — belt and suspenders. If the
+//! middleware is ever accidentally stripped off a router, the
+//! per-handler check still denies the request. Since 2026-09-10 that
+//! check is the [`LocalOnly`] EXTRACTOR rather than a hand-written
+//! three-line guard in every handler: 142 handlers carried the guard
+//! beside a `ConnectInfo<SocketAddr>` param they used for nothing else,
+//! and a handler that forgot it was invisible. `_: LocalOnly` cannot be
+//! forgotten silently — it is in the signature (ARCH §7: make it
+//! structural, not remembered) — and it answers with the SAME bytes
+//! [`enforce_localhost`] does, because it calls it.
 //!
 //! Relies on `axum::serve(listener,
 //! router.into_make_service_with_connect_info::<SocketAddr>())`
@@ -26,11 +33,12 @@
 
 use std::net::SocketAddr;
 
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::{ConnectInfo, Extension, FromRequestParts, Request};
+use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+use axum::{Json, Router};
 
 /// Per-handler loopback check. Returns `Ok(())` if `addr` is a
 /// loopback peer; otherwise a pre-built 403 `Response` ready to
@@ -55,6 +63,86 @@ pub(crate) fn enforce_localhost(addr: &SocketAddr) -> Result<(), Response> {
             Json(serde_json::json!({ "error": "local-only" })),
         )
             .into_response())
+    }
+}
+
+/// The per-handler half of the guard, as an EXTRACTOR.
+///
+/// Take it as `_: LocalOnly` and the handler cannot run for a
+/// non-loopback caller. It is exactly [`enforce_localhost`] over the
+/// request's own `ConnectInfo`, so the refusal bytes are the same
+/// `403 {"error":"local-only"}` the 142 hand-written guards produced;
+/// this type replaced them, it did not re-decide anything.
+///
+/// Fails CLOSED when `ConnectInfo` is absent, with the same 500 the
+/// [`loopback_only`] middleware answers. In a mounted router that branch
+/// is unreachable — the middleware runs first and refuses — so it exists
+/// for the handler someone mounts on a bare `axum::serve`.
+///
+/// Not [`crate::local_only::LocalOnlyProfile`], which is the DAEMON's
+/// network posture (which background loops exist at all). This is one
+/// request's peer.
+pub struct LocalOnly;
+
+impl<S> FromRequestParts<S> for LocalOnly
+where
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<ConnectInfo<SocketAddr>>() {
+            Some(ConnectInfo(addr)) => enforce_localhost(addr).map(|()| LocalOnly),
+            None => {
+                tracing::error!(
+                    path = %parts.uri.path(),
+                    "LocalOnly: no ConnectInfo on request — check listener wiring"
+                );
+                Err(missing_connect_info())
+            }
+        }
+    }
+}
+
+/// The one 500 both halves of the guard answer when the listener forgot
+/// `into_make_service_with_connect_info` (ARCH §10.6 — one body, not two).
+fn missing_connect_info() -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+            "error": "listener misconfigured: missing connect_info"
+        })),
+    )
+        .into_response()
+}
+
+/// The router tail every loopback-only family in this crate repeats.
+///
+/// Nineteen `*_router` builders ended in the same two `.layer(...)` calls
+/// — the guard, then the one `Extension` their handlers resolve their
+/// object from. A router that grew a route and lost the guard was a
+/// four-line diff nobody reads; this makes it one call that names what it
+/// does.
+pub(crate) trait LoopbackRouter {
+    /// Seal the router as loopback-only. Nothing else is layered.
+    fn localhost_only(self) -> Self;
+
+    /// Seal it and hand the handlers `ext` — the common shape.
+    fn localhost_only_with<T>(self, ext: T) -> Self
+    where
+        T: Clone + Send + Sync + 'static;
+}
+
+impl LoopbackRouter for Router {
+    fn localhost_only(self) -> Self {
+        self.layer(axum::middleware::from_fn(loopback_only))
+    }
+
+    fn localhost_only_with<T>(self, ext: T) -> Self
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self.localhost_only().layer(Extension(ext))
     }
 }
 
@@ -101,13 +189,7 @@ pub async fn loopback_only(request: Request, next: Next) -> Response {
                 path = %request.uri().path(),
                 "loopback_only: no ConnectInfo on request — check listener wiring"
             );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "listener misconfigured: missing connect_info"
-                })),
-            )
-                .into_response()
+            missing_connect_info()
         }
     }
 }

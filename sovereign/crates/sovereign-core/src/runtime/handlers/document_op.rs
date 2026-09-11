@@ -230,7 +230,7 @@ impl Runtime {
             .and_then(|n| n.to_str())
             .unwrap_or(resolved_source.as_str())
             .to_string();
-        self.routing_events
+        self.turn_routing_events()
             .emit_turn_narration(TurnNarration {
                 session_id: session_id.clone(),
                 conversation_id: conversation_id.to_string(),
@@ -265,7 +265,7 @@ impl Runtime {
             }
             Err(e) => (false, format!("Document analysis failed: {e}")),
         };
-        self.routing_events
+        self.turn_routing_events()
             .emit_turn_narration(TurnNarration {
                 session_id: session_id.clone(),
                 conversation_id: conversation_id.to_string(),
