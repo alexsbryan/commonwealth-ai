@@ -362,23 +362,27 @@ pub async fn run(
             .map_err(|e| failed(&app, false, format!("save config: {e}")))?;
     }
 
-    // ── 5b. First-session supervision (DAEMON_RESILIENCE.md P0.1) ──
+    // ── 5b. Relaunch into a session that has a daemon ──────────────
     // Mirror the wizard's picks into the shared `SetupConfig` (this
     // flow historically relied on a later `save_config` to do it — but
-    // the relaunched instance needs it NOW to take the supervised
-    // path), write the first-run marker + setup report (they must
-    // survive the relaunch), then restart the app so it boots straight
-    // into the supervised child daemon. This session has never bound
-    // :9741, so the fresh instance finds a free port and a complete
-    // config. Falls through to the legacy in-process bootstrap when
-    // supervision is disabled (FORCE_LOCAL harnesses / kill-switch).
+    // the relaunched instance needs it NOW), write the first-run marker
+    // + setup report (they must survive the relaunch), then restart so
+    // the fresh instance boots with a complete config on disk.
+    //
+    // Why relaunch at all, now that nothing here supervises: the app
+    // reaches a serving host exactly once, in `serving_host::
+    // ensure_reachable`, which runs at startup — BEFORE this wizard
+    // wrote `config.toml`, so this session found no config and brought
+    // nothing up. The fresh instance finds the config, reaches (or
+    // brings up) the daemon, and attaches. Same user-visible outcome as
+    // the supervised relaunch it replaces; no process is held.
     {
         let desktop_cfg = state.config.read().await.clone();
         if let Err(e) = crate::commands::mirror_to_setup_config(&desktop_cfg).await {
             tracing::warn!("setup_flow: could not mirror to SetupConfig: {e}");
         }
     }
-    if crate::supervisor_setup::is_enabled() {
+    if daemon_runs_elsewhere() {
         if let Err(e) = write_first_run_marker() {
             tracing::warn!(error = %e, "could not write first_run_complete marker");
         }
@@ -402,7 +406,7 @@ pub async fn run(
                 indeterminate: false,
             },
         );
-        if crate::supervisor_setup::maybe_restart_into_supervised(&app).await {
+        if relaunch_after_setup(&app).await {
             return Ok(());
         }
         // Restart didn't take (spawn failure) — continue in-process;
@@ -610,6 +614,63 @@ fn failed(app: &AppHandle, recoverable: bool, message: String) -> String {
         },
     );
     message
+}
+
+/// Does this launch expect the daemon to be a SEPARATE process?
+///
+/// True by default, and false only when the launch-topology environment asked
+/// THIS process to run the weights (`SOVEREIGN_FORCE_LOCAL=1`, or the
+/// `SOVEREIGN_USE_SUPERVISOR=0` kill-switch) — the real-mode desktop harnesses
+/// and the run-local-while-a-daemon-is-up case.
+///
+/// One reader of one already-resolved decision (`launch_mode::daemon_host`,
+/// published by `main` beside `Launch::parse`), not a fresh parse of the
+/// environment: two sites deciding what those flags mean is exactly the §10.6
+/// duplicate TOPOLOGY Phase 10 closed. `is_supervised` keeps the name it had
+/// when the separate process was a supervised child; the predicate is
+/// unchanged and so is every harness that sets those vars.
+pub(crate) fn daemon_runs_elsewhere() -> bool {
+    crate::launch_mode::daemon_host().is_supervised()
+}
+
+/// Relaunch the app so the next session starts with a config on disk.
+///
+/// Returns `true` when the relaunch was initiated — the process is on its way
+/// out and the caller must NOT bootstrap in-process. `false` when the spawn
+/// failed, in which case the caller keeps the in-process completion.
+///
+/// This was `supervisor_setup::maybe_restart_into_supervised` and it relaunched
+/// into a SUPERVISED topology; the reason it still exists without a supervisor
+/// is that the app's one look for a serving host (`serving_host::
+/// ensure_reachable`) happens at startup, before the wizard has written
+/// `config.toml`. The wizard session therefore has no daemon and cannot
+/// acquire one; the fresh instance can.
+pub(crate) async fn relaunch_after_setup(app_handle: &AppHandle) -> bool {
+    let exe = match std::env::current_exe() {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-restart: current_exe failed — finishing in-process");
+            return false;
+        }
+    };
+    // Let the wizard UI say why the window is about to close, and give the
+    // webview a beat to paint it.
+    let _ = app_handle.emit(
+        "setup-restarting",
+        serde_json::json!({ "reason": "connecting to your local backend" }),
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    match std::process::Command::new(&exe).spawn() {
+        Ok(_) => {
+            tracing::info!("setup complete — relaunching so the new config is read at startup");
+            app_handle.exit(0);
+            true
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-restart: relaunch spawn failed — finishing in-process");
+            false
+        }
+    }
 }
 
 /// Write `~/.svrnmesh/first_run_complete` with an ISO-8601

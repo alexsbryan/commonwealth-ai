@@ -257,7 +257,7 @@ crates/
 ├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
 ├── serving-policy           # Fair-share scheduling (SchedCore/EtaEwma/reciprocity) + pipeline alias resolution — tier-0, empty in-repo dep list, forbidden from naming either family
 ├── oplog                    # Op/OpId/Oplog/Journaled/SkippedLine — the append-only JSONL journal; tier-0, kernel-types its only in-repo dep, forbidden from naming corpus-engine* OR either family
-├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib — the desktop's --daemon-child re-enters via daemon_child_main)
+├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib. The desktop's --daemon-child re-entry was deleted 2026-09-11 — sv-surface svt-2 — and the crate is no longer a desktop dependency)
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
 ├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
@@ -6390,67 +6390,66 @@ A coordinated stack supporting the friends-and-family launch.
 Failure modes addressed: daemon crash drops the whole UI, peer
 work pins the GPU while the user is chatting. Components:
 
-- **W1 — child-process daemon supervisor**
-  (`sovereign-desktop/src-tauri/src/supervisor.rs`) — Tauri-free,
-  broadcast-driven, heartbeat, exponential backoff
-  (1s→5s→30s→2min), crash-loop ceiling, bounded stderr buffer,
-  crash-log persistence to `<data_dir>/crash-logs/`. The
-  implementation actually lives in `sovereign-compute/src/supervisor.rs`
-  and is re-exported here (moved 2026-07-20) so the daemon's
-  compute-child manager shares one state machine.
-  **The crash-loop ceiling counts CONSECUTIVE crashes and resets only
-  on proof — a generation that stayed healthy for
-  `healthy_reset_after` (60s in both production configs). It is not a
-  sliding wall-clock window** (changed 2026-08-03): a window is
-  unreachable for any child whose spawn→crash cycle is longer than the
-  window is wide, which is exactly what let a 148 GB distributed
-  primary — 4m36s to load, 13s serving, dead — respawn without limit
-  until amdgpu ran out of GPU address space and took the desktop with
-  it. Backoff is additionally floored at the previous generation's
-  measured load time, so an expensive child can never re-enter a load
-  back-to-back. **Default ON
-  since the 2026-07-18 flip** (DAEMON_RESILIENCE.md P0.1):
-  `supervisor_setup.rs` spawns **this very desktop binary** as
-  `current_exe() --daemon-child` — the argv arm calls
-  `sovereign_cli_daemon::daemon_child_main()` (the crate is bin+lib),
-  so the child is the REAL daemon with all its defenses and zero
-  sidecar bytes in the bundle. Opt-outs: `SOVEREIGN_USE_SUPERVISOR=0`
-  (kill-switch back to in-process `EmbeddedDaemon`) and
-  `SOVEREIGN_FORCE_LOCAL=1` ("this process runs the weights" — the
-  real-mode harnesses). Falling back to in-process is surfaced via the
-  `supervisor-fallback` event (rendered by ReconnectBanner), never
-  silent; `supervisor_reconnect` / `supervisor_active` commands back
-  the banner's Reconnect button. The child-process boundary makes
-  "daemon crashed → click Reconnect" a recoverable UI state instead
-  of a dead window. Motivated by ggml/llama.cpp SIGSEGVs an
-  in-process supervisor can't catch. First-session coverage: both
-  wizard completion paths finish by mirroring the config and
-  relaunching the app (`maybe_restart_into_supervised` — the wizard
-  session never binds `:9741`), so a fresh install is supervised from
-  its first post-wizard minute; `SOVEREIGN_FORCE_LOCAL=1` and the
-  kill-switch keep the legacy in-process completion for harnesses.
-  **Shutdown is explicit, not incidental** (2026-08-05): `RunEvent::Exit`
-  calls `main.rs::stop_daemon_child` → `supervisor_setup::shutdown`,
-  which signals `Supervisor::terminate()` and then AWAITS the run loop
-  (bounded by `SHUTDOWN_BUDGET`, 5s) so the child is SIGTERM'd, reaped,
-  and gone before the desktop exits. This is load-bearing because the
-  desktop leaves through `fast_exit_skip_destructors(0)` (raw `_exit`,
-  to dodge the ggml-metal `__cxa_finalize` SIGABRT) — no destructor
-  runs, so the supervisor's `kill_on_drop(true)` never fires. Before
-  this the child was orphaned to launchd on every quit, then aborted
-  when it next logged: it is spawned with `Stdio::piped()`, so both its
-  fds died with the parent, `tracing_subscriber`'s fmt layer reported
-  the failed stdout write with `eprintln!` (fmt_layer.rs:1053), that
-  panicked on the equally-dead stderr, and the daemon panic hook's own
-  `eprintln!` panicked again — a nested panic, `abort()`, and a macOS
-  crash report on every voluntary quit. The hook now writes fd 2 through
-  a non-panicking path and emits no tracing event
-  (`sovereign-cli-daemon/src/panic_hook.rs::eprint_best_effort`), so it
-  reaches `write_crash_record` instead of aborting; the daemon's crash
-  records (`<data_dir>/crashes/`) had never been written on macOS
-  desktop installs for this reason. The two startup fall-back arms in
-  `maybe_start` likewise stop the child before returning `None`, so
-  "unsupervised" can't mean "still running and racing `:9741`".
+- **W1 — child-process daemon supervisor — DELETED 2026-09-11** (sv-surface
+  svt-2). The desktop no longer starts, supervises, restarts or stops a
+  daemon. `supervisor_setup.rs` (530 lines) and the `supervisor.rs`
+  re-export are gone, and with them `AppState.supervisor`, the
+  `supervisor-state` / `supervisor-fallback` events, the
+  `supervisor_reconnect` / `supervisor_active` commands, and
+  `main.rs::stop_daemon_child`. `main.rs` no longer carries
+  `Launch::Daemon => exit(sovereign_cli_daemon::daemon_child_main())` — the
+  desktop binary re-entering itself as the real daemon — nor the
+  `ComputeChild`/`RpcWorker`/`Worker` arms that existed only because that
+  in-process daemon re-exec'd `current_exe()` for its own children. All four
+  now print `NOT_A_DAEMON` and exit non-zero: a GUI is not a daemon, and a
+  window opening for `--daemon-child` looked like a hung service rather than
+  a refused one (ARCH principle 6).
+
+  **The deletion is structural, not a convention.** `sovereign-cli-daemon`
+  and `sovereign-compute` leave `src-tauri/Cargo.toml`, so those arms cannot
+  be rewritten without re-adding a dependency — the ability is gone, not
+  merely unused (ARCH principle 12: look where the ability is GRANTED, and
+  `cargo tree` is the check that works). `tests/no_daemon_role_census.rs`
+  pins it at the source level.
+
+  What the desktop does instead, and where each piece lives:
+
+  * **Getting a daemon at all** — `serving_host::ensure_reachable` (svt-1),
+    one call at startup that probes the client port and, in a
+    `bundled-backend` build, brings the shipped sidecar up. It retains no
+    handle, no restart policy and no shutdown budget.
+  * **Noticing one is down** — `attach_watch` polls `/v1/models` through
+    `sovereign_turn_client::ServingHost` and emits `attach-daemon-state`.
+    Armed for EVERY Attach boot now, not just the subset that had no
+    supervisor.
+  * **Recovering** — `attach_restart_daemon`
+    (`commands/supervisor_ctl.rs`) asks the OS service manager that owns the
+    daemon to restart it. That is the one move a client can honestly make
+    about a process it does not own.
+  * **First post-wizard session** — both wizard completion paths still
+    mirror the config and relaunch (`setup_flow::relaunch_after_setup`,
+    gated on `setup_flow::daemon_runs_elsewhere`). The reason changed: the
+    app looks for a serving host exactly once, at startup, BEFORE the wizard
+    has written `config.toml`, so the wizard session cannot acquire one and
+    the fresh instance can. `SOVEREIGN_FORCE_LOCAL=1` and the
+    `SOVEREIGN_USE_SUPERVISOR=0` kill-switch still mean "this process runs
+    the weights" and still skip the relaunch — unchanged for the real-mode
+    harnesses.
+
+  `sovereign-compute/src/supervisor.rs` (the shared state machine: heartbeat,
+  backoff 1s→5s→30s→2min, crash-loop ceiling counting CONSECUTIVE crashes and
+  resetting only on a generation that stayed healthy for `healthy_reset_after`,
+  bounded stderr ring, crash-log persistence) **stays** — `sovereign-cli-daemon`
+  consumes it for the daemon's OWN compute children. A daemon supervising its
+  compute children is right; a window supervising a daemon is not. Only the
+  desktop CALLER was deleted.
+
+  **Still in-process, and NOT this rung's work:** the desktop's
+  `BootstrapMode::Local` branch still commissions a `sovereign_mesh::EmbeddedDaemon`,
+  still claims the data root's `RunLock`, and `state/builders/inference.rs` still
+  loads GGUFs in-process on every boot — which is why `smoketest.rs` and the
+  `Launch::Smoketest` crash-isolation re-exec survive. See svt-3.
+
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port
   `/v1/chat/completions` + internal-port
@@ -8065,8 +8064,8 @@ daemon interaction is then one line in the Tauri setup closure:
 `serving_host::ensure_reachable()` (`src-tauri/src/serving_host.rs`), called
 immediately BEFORE `bootstrap::detect` — which already attaches to any daemon
 that answers, whoever started it, so svt-1 changes no line of `bootstrap`. The
-budget is 60 s when there is a backend to bring up (`supervisor_setup`'s own
-`healthy_deadline`, so no wait a user feels changed) and ZERO when there is
+budget is 60 s when there is a backend to bring up (the `healthy_deadline` the
+now-deleted `supervisor_setup` waited, so no wait a user feels changed) and ZERO when there is
 not, because `ensure_reachable` spends its whole window polling with no backend
 configured and a non-zero value there would make every daemonless launch stare
 at a dead port before the window appeared. The module holds no `Child`, no

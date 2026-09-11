@@ -756,8 +756,6 @@ export interface CommandArgs {
     response: unknown;
   };
   suggest_node_name: Record<string, never>;
-  supervisor_active: Record<string, never>;
-  supervisor_reconnect: Record<string, never>;
   toggle_skill: {
     skillId: unknown;
     active: unknown;

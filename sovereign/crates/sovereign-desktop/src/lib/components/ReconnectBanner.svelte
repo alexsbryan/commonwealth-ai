@@ -20,86 +20,36 @@
 
   let { onOpenDiagnostics }: Props = $props();
 
-  // Mirrors `crate::supervisor::SupervisorState`. The Rust side
-  // emits `#[serde(tag = "kind", rename_all = "snake_case")]` so we
-  // get a discriminant in `kind`.
-  type SupervisorState =
-    | { kind: "starting" }
-    | { kind: "healthy"; pid: number; since_unix: number }
-    | { kind: "unhealthy"; pid: number; consecutive_failures: number }
-    | {
-        kind: "restarting";
-        attempt: number;
-        after_secs: number;
-        reason: string;
-      }
-    | { kind: "failed"; reason: string; last_crash_log: string | null };
-
-  // Mirrors `crate::attach_watch::AttachDaemonState` — health of an
-  // EXTERNALLY-owned daemon in Attach mode (no supervisor).
+  // Mirrors `crate::attach_watch::AttachDaemonState` — health of the daemon
+  // this app talks to, which it does not own.
+  //
+  // There used to be a second source here: `supervisor-state`, emitted by a
+  // supervisor the desktop ran over a daemon CHILD it had spawned, with its
+  // own banner, its own Reconnect button (`supervisor_reconnect`) and a
+  // `supervisor-fallback` notice for "running without crash protection this
+  // session". All three are gone with the supervisor (sv-surface svt-2): the
+  // app starts no daemon, so there is no child to be unhealthy, to wake, or
+  // to fail over from. One daemon, one health signal, one recovery button.
   type AttachDaemonState =
     | { kind: "healthy"; client_port: number }
     | { kind: "down"; client_port: number; consecutive_failures: number };
 
-  let current: SupervisorState | null = $state(null);
   let attach: AttachDaemonState | null = $state(null);
   let attachDismissed = $state(false);
   let restartBusy = $state(false);
   let restartError: string | null = $state(null);
-  let unlisten: UnlistenFn | null = null;
   let unlistenAttach: UnlistenFn | null = null;
-  let unlistenFallback: UnlistenFn | null = null;
   let sendBusy = $state(false);
-  let reconnectBusy = $state(false);
-  let reconnectError: string | null = $state(null);
   let lastReportPath: string | null = $state(null);
   let lastReportError: string | null = $state(null);
-  // Set when the backend fell back to the in-process daemon (crash
-  // isolation off) — surfaced instead of the old silent revert.
-  let fallbackReason: string | null = $state(null);
-
-  // Visible only for non-healthy states. Starting + Healthy stay
-  // silent — banners that pop up for normal operations train users
-  // to dismiss them, which is the worst outcome.
-  let visible: boolean = $derived.by(() => {
-    const s = current;
-    if (s === null) return false;
-    return s.kind !== "starting" && s.kind !== "healthy";
-  });
-
-  let summary: string = $derived.by(() => {
-    const s = current;
-    if (s === null) return "";
-    if (s.kind === "unhealthy") {
-      return `Daemon not responding (${s.consecutive_failures} failed checks)`;
-    }
-    if (s.kind === "restarting") {
-      return `Restarting daemon — attempt ${s.attempt}, retrying in ${s.after_secs}s`;
-    }
-    if (s.kind === "failed") {
-      return `Daemon stopped: ${s.reason}`;
-    }
-    return "";
-  });
-
-  let isFailed: boolean = $derived.by(() => current?.kind === "failed");
 
   onMount(async () => {
-    unlisten = await listen<SupervisorState>("supervisor-state", (event) => {
-      current = event.payload;
-      if (event.payload.kind === "healthy") reconnectError = null;
-    });
-    unlistenFallback = await listen<{ reason: string }>(
-      "supervisor-fallback",
-      (event) => {
-        fallbackReason = event.payload.reason;
-      },
-    );
     unlistenAttach = await listen<AttachDaemonState>(
       "attach-daemon-state",
       (event) => {
         if (event.payload.kind === "healthy") {
-          // Recovery is automatic in attach mode — clear everything.
+          // Recovery is automatic — attach-mode calls are stateless HTTP, so
+          // the moment the daemon answers again everything works.
           attach = null;
           attachDismissed = false;
           restartError = null;
@@ -111,9 +61,7 @@
   });
 
   onDestroy(() => {
-    if (unlisten) unlisten();
     if (unlistenAttach) unlistenAttach();
-    if (unlistenFallback) unlistenFallback();
   });
 
   async function handleReportProblem() {
@@ -139,30 +87,10 @@
     }
   }
 
-  async function handleReconnect() {
-    // Wake the crash-loop-latched supervisor for another spawn
-    // attempt. The banner stays up until the supervisor emits a
-    // healthy state (which hides it via `visible`).
-    if (reconnectBusy) return;
-    reconnectBusy = true;
-    reconnectError = null;
-    try {
-      await invoke("supervisor_reconnect");
-    } catch (e) {
-      reconnectError = e instanceof Error ? e.message : String(e);
-    } finally {
-      reconnectBusy = false;
-    }
-  }
-
-  function handleDismiss() {
-    current = null;
-  }
-
   async function handleAttachRestart() {
-    // Best-effort service-manager restart of the external daemon.
-    // The banner clears on the attach watcher's healthy transition,
-    // not here — restart success is judged by the daemon answering.
+    // Best-effort service-manager restart of the daemon. The banner clears on
+    // the attach watcher's healthy transition, not here — restart success is
+    // judged by the daemon answering.
     if (restartBusy) return;
     restartBusy = true;
     restartError = null;
@@ -180,51 +108,7 @@
   );
 </script>
 
-{#if visible}
-  <div class="banner" class:banner-failed={isFailed} role="status">
-    <span class="banner-text">{summary}</span>
-    <div class="banner-actions">
-      {#if isFailed}
-        <button
-          class="action action-primary"
-          onclick={handleReconnect}
-          disabled={reconnectBusy}
-        >
-          {reconnectBusy ? "Reconnecting…" : "Reconnect"}
-        </button>
-        {#if onOpenDiagnostics}
-          <button class="action" onclick={() => onOpenDiagnostics?.()}>
-            Check my setup
-          </button>
-        {/if}
-        <button class="action" onclick={handleReportProblem} disabled={sendBusy}>
-          {sendBusy ? "Preparing…" : "Report problem"}
-        </button>
-        <button class="action" onclick={handleDismiss}>Dismiss</button>
-      {/if}
-    </div>
-  </div>
-
-  {#if reconnectError}
-    <div class="report-info report-error">
-      Reconnect failed: {reconnectError}
-    </div>
-  {/if}
-
-  {#if lastReportPath}
-    <div class="report-info">
-      Crash report saved at: <code>{lastReportPath}</code> — attach it to
-      the GitHub issue that just opened.
-    </div>
-  {/if}
-  {#if lastReportError}
-    <div class="report-info report-error">
-      Couldn't prepare report: {lastReportError}
-    </div>
-  {/if}
-{/if}
-
-{#if attachVisible && !visible}
+{#if attachVisible}
   <div class="banner banner-failed" role="status">
     <span class="banner-text">
       <!-- This used to end with "or run `svrn daemon restart`", which
@@ -248,6 +132,14 @@
           Check my setup
         </button>
       {/if}
+      <!-- The crash-report affordance used to hang off the supervisor's
+           Failed banner, which is gone. It moved here rather than out:
+           this is now the only banner a user sees when the backend is
+           unreachable, and "Report problem" is the move that survives
+           when "Restart the engine" did not help. -->
+      <button class="action" onclick={handleReportProblem} disabled={sendBusy}>
+        {sendBusy ? "Preparing…" : "Report problem"}
+      </button>
       <button class="action" onclick={() => (attachDismissed = true)}>
         Dismiss
       </button>
@@ -258,26 +150,23 @@
       Couldn't restart via the service manager: {restartError}
     </div>
   {/if}
-{/if}
-
-{#if fallbackReason && !visible && !attachVisible}
-  <div class="banner" role="status">
-    <span class="banner-text">
-      Running without crash protection this session ({fallbackReason}) — a
-      model crash would close the app. Restarting the app retries.
-    </span>
-    <div class="banner-actions">
-      <button class="action" onclick={() => (fallbackReason = null)}>
-        Dismiss
-      </button>
+  {#if lastReportPath}
+    <div class="report-info">
+      Crash report saved at: <code>{lastReportPath}</code> — attach it to
+      the GitHub issue that just opened.
     </div>
-  </div>
+  {/if}
+  {#if lastReportError}
+    <div class="report-info report-error">
+      Couldn't prepare report: {lastReportError}
+    </div>
+  {/if}
 {/if}
 
 <style>
   /* Banner sits at the top of the viewport without pushing layout
-     around (fixed position). Subtle by default; intensifies once
-     the supervisor latches Failed. */
+     around (fixed position). Subtle by default; `banner-failed`
+     intensifies it for the unreachable-daemon case. */
   .banner {
     position: fixed;
     top: 0;

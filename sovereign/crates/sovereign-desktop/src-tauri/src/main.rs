@@ -32,8 +32,6 @@ mod serving_host;
 mod setup_flow;
 mod smoketest;
 mod state;
-mod supervisor;
-mod supervisor_setup;
 mod tray;
 mod turn_report;
 mod update_commands;
@@ -64,6 +62,15 @@ use tauri::{Emitter, Manager};
 use crate::approval::TauriApprovalChannel;
 use crate::state::AppState;
 
+/// What the app says when it is handed a daemon role it can no longer fill.
+///
+/// A named constant so `tests/no_daemon_role_census.rs` can assert the arm
+/// exists at all: the alternative to this message is the silent one — falling
+/// through to `Launch::Desktop` and opening a window for `--daemon-child`,
+/// which looks like a hung service rather than a refused one.
+const NOT_A_DAEMON: &str = "svrnmesh desktop: this is the app window. It cannot BE a daemon — \
+                            run `svrn daemon run` (or start the service) and launch the app again.";
+
 #[cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 fn main() -> ExitCode {
     // Rebrand bridges, FIRST — before argv dispatch, before any path is
@@ -86,34 +93,24 @@ fn main() -> ExitCode {
     sovereign_contracts::rebrand::promote_legacy_env();
     sovereign_contracts::rebrand::run_startup_migration();
 
-    // Smoketest mode: when invoked with `--smoketest --model <gguf>
-    // [--gpu-layers N] [--ctx M]`, skip Tauri entirely and run a
-    // minimal load + 1-token decode, then exit. The parent desktop
-    // process spawns this mode in a subprocess to detect ggml
-    // backend crashes (e.g., the Gemma 4 Metal SIGSEGV) before
-    // loading models in the user-facing slot. See `smoketest.rs`.
-    // ONE decision about what this process becomes (ARCH §2.1, §10.6).
+    // What this process becomes, decided ONCE (`Launch::parse`) and dispatched
+    // once. Two roles remain: a window, and the crash-isolation probe that
+    // window spawns before it loads a GGUF in-process.
     //
-    // This used to be three independent argv scans in this function, and
-    // `sovereign-cli-daemon` kept a fourth list that DISAGREED with it: this
-    // binary found `--compute-child` at any position, that one only at
-    // `args[0]`. `Launch::parse` is now the single decider for both, so they
-    // cannot drift apart again. `quality/TOPOLOGY.md §1` records what that
-    // divergence cost — a reader concluding the desktop was a separate
-    // runtime, when `--daemon-child` IS `daemon run`.
-    //
-    // ORDERING NOTE: the old code tested smoketest -> daemon-child ->
-    // compute-child. `Launch::parse` tests the child re-execs first and
-    // smoketest last, deliberately (a child re-exec must never be mistaken for
-    // a CLI invocation). The flags do not co-occur in any spawn site, so this
-    // is a theoretical reordering — but it is now ONE documented order rather
-    // than two accidental ones.
+    // Every DAEMON role is gone (sv-surface svt-2). `Launch::Daemon` used to
+    // read `exit(sovereign_cli_daemon::daemon_child_main())` — this binary
+    // re-entering itself as the real daemon, same entry as `svrn daemon run`,
+    // Tauri never initialized — and `ComputeChild`/`RpcWorker`/`Worker`
+    // existed only because that in-process daemon re-exec'd `current_exe()`
+    // for its own children. The desktop no longer depends on
+    // `sovereign-cli-daemon` at all, so those arms cannot be rewritten
+    // without re-adding a dependency: the ability is gone, not merely
+    // unused (ARCH principle 12 — look where the ability is GRANTED).
     let argv: Vec<String> = std::env::args().collect();
     let args: Vec<String> = argv.iter().skip(1).cloned().collect();
     let launch = Launch::parse(&args, Launch::Desktop);
-    // Publish it before dispatching: `state::bootstrap` commissions the
-    // in-process daemon through `sovereign_mesh::assemble` and must name the
-    // SAME launch this match saw, not re-derive one.
+    // Publish it before dispatching: `state::bootstrap` names the SAME launch
+    // this match saw rather than re-deriving one.
     launch_mode::publish(launch.clone());
     match launch {
         // Skip Tauri entirely: load one model, decode one token, exit. The
@@ -128,26 +125,18 @@ fn main() -> ExitCode {
             }
         }
 
-        // Supervised child-daemon mode (DAEMON_RESILIENCE.md P0.1): this
-        // process IS the daemon — the identical entry `sovereign-cli-daemon
-        // daemon run` uses (panic hook, run lock, RAM-derived OOM limits,
-        // listener watchdog and all) — and never initializes Tauri. The parent
-        // spawns + supervises it (`supervisor_setup.rs`); a ggml SEGV kills
-        // only this child, and the supervisor restarts it behind the reconnect
-        // surface instead of the whole window dying.
-        Launch::Daemon { .. } => {
-            std::process::exit(sovereign_cli_daemon::daemon_child_main());
-        }
-
-        // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): the
-        // in-process daemon's ComputeChildManager spawns `current_exe()
-        // --compute-child …`, and `current_exe` is THIS binary. Route to the
-        // daemon lib's dispatcher and never initialize Tauri, so a ggml SEGV
-        // kills only this child and not the window. `Worker` cannot be reached
-        // through this binary today (it needs the `daemon` verb) but routes
-        // with it rather than silently opening a window.
-        Launch::ComputeChild { .. } | Launch::RpcWorker { .. } | Launch::Worker { .. } => {
-            std::process::exit(sovereign_cli_daemon::run_with_args(args));
+        // The daemon roles this binary can no longer fill. Nothing in the tree
+        // spawns them at the desktop any more, so reaching here means a stale
+        // service definition, a stale script, or a habit — and the answer is
+        // to SAY SO, not to open a window (ARCH principle 6: never silently
+        // substitute; a GUI is not a daemon). Named individually rather than
+        // wildcarded so a new `Launch` variant still has to be decided.
+        Launch::Daemon { .. }
+        | Launch::ComputeChild { .. }
+        | Launch::RpcWorker { .. }
+        | Launch::Worker { .. } => {
+            eprintln!("{NOT_A_DAEMON}");
+            return ExitCode::FAILURE;
         }
 
         // Fall through to Tauri. `Verb` and `Bare` land here because that is
@@ -359,36 +348,17 @@ fn main() -> ExitCode {
             let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
-            // Supervised-child mode is the DEFAULT (the W1 flip): bring the
-            // daemon up as a child and switch to Attach against it. Returns
-            // the original mode + None when the kill-switch is set
-            // (`SOVEREIGN_USE_SUPERVISOR=0`, `SOVEREIGN_FORCE_LOCAL=1`) or
-            // startup fails — the in-process EmbeddedDaemon fall-back, which
-            // is the one path where THIS process claims the data root's run
-            // lock. See supervisor_setup.rs.
-            let (bootstrap_mode, supervisor) = tauri::async_runtime::block_on(
-                supervisor_setup::maybe_start(bootstrap_mode, handle.clone()),
-            );
-            if supervisor.is_some() {
-                tracing::info!(
-                    ?bootstrap_mode,
-                    "supervisor: bootstrap mode after supervision"
-                );
-            }
-
-            // Attach-mode daemon health watch (DAEMON_RESILIENCE.md
-            // P0.2): only for an EXTERNALLY-owned daemon — true Attach
-            // with no supervisor. The supervised child has its own 2s
-            // heartbeat; in-process Local has nothing to poll.
-            if supervisor.is_none() {
-                if let bootstrap::BootstrapMode::Attach { client_port, .. } = &bootstrap_mode {
-                    attach_watch::spawn(handle.clone(), *client_port);
-                }
+            // Daemon health watch (DAEMON_RESILIENCE.md P0.2). Every daemon
+            // this app talks to is now externally owned — there is no
+            // supervised child to have its own heartbeat — so the watch is
+            // armed for EVERY Attach boot rather than for the subset that had
+            // no supervisor. In-process Local still has nothing to poll.
+            if let bootstrap::BootstrapMode::Attach { client_port, .. } = &bootstrap_mode {
+                attach_watch::spawn(handle.clone(), *client_port);
             }
 
             // Create app state (loads config, no Runtime yet).
-            let app_state =
-                AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode, supervisor);
+            let app_state = AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode);
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
@@ -512,8 +482,8 @@ fn main() -> ExitCode {
                         // the unhappy one (bind failed) the user hears
                         // `backend-error`, not a ready event about a port
                         // that never answers (B3). `GET /v1/models` is the
-                        // same shape the supervisor's health loop and
-                        // supervisor_setup's cold-boot measurement use.
+                        // same shape `attach_watch`'s health poll and
+                        // `serving_host`'s bring-up wait use.
                         // This is also the cold-boot measurement the
                         // campaign said this pass mints: first_ready_ms.
                         let probe_base = state_clone.client_base_url();
@@ -731,8 +701,6 @@ fn main() -> ExitCode {
                 commands::slot_recommendation,
                 commands::list_daemon_models,
                 commands::get_runtime_status,
-                commands::supervisor_reconnect,
-                commands::supervisor_active,
                 commands::attach_restart_daemon,
                 commands::download_model,
                 commands::list_corpora,
@@ -956,15 +924,15 @@ fn main() -> ExitCode {
         })
         .build(tauri::generate_context!())
         .expect("error building svrnmesh")
-        .run(|app_handle, event| {
+        .run(|_app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                // Stop the supervised daemon child BEFORE the fast exit
-                // below. `_exit` runs no destructors, so the supervisor's
-                // `kill_on_drop(true)` never fires — without this the child
-                // is orphaned to launchd, discovers its stdout/stderr pipes
-                // died with us, and aborts on its next log line. That is the
-                // "crash report on every quit" users saw (2026-08-05).
-                stop_daemon_child(app_handle);
+                // Nothing to stop, which is the point. Quitting used to have
+                // to kill a daemon child first — `_exit` runs no destructors,
+                // so the supervisor's `kill_on_drop` never fired, the child
+                // was orphaned to launchd, and it aborted on its next log line
+                // and filed a crash report on every voluntary quit
+                // (2026-08-05). The app starts no daemon now, so closing it
+                // stops none: the daemon owns its own lifetime (principle 12).
 
                 // Graceful shutdown: skip C++ static destructors so ggml-metal's
                 // device sweeper can't abort under `__cxa_finalize` at process
@@ -974,27 +942,4 @@ fn main() -> ExitCode {
             }
         });
     ExitCode::SUCCESS
-}
-
-/// Stop the supervised daemon child on the way out, blocking the quit
-/// until it is reaped (bounded — see `supervisor_setup::SHUTDOWN_BUDGET`).
-///
-/// A no-op in the two sessions that have no child: in-process Local mode
-/// and Attach against an externally-owned daemon, where `AppState`'s
-/// supervisor slot is `None`. Takes the [`SupervisedDaemon`] out of the
-/// slot rather than borrowing it — stopping consumes the run-loop handle,
-/// and a second `RunEvent::Exit` must not try to stop it twice.
-fn stop_daemon_child(app_handle: &tauri::AppHandle) {
-    let Some(state) = app_handle.try_state::<Arc<state::AppState>>() else {
-        // Exit before `setup` managed the state — nothing was spawned.
-        return;
-    };
-    let state = Arc::clone(&state);
-    tauri::async_runtime::block_on(async move {
-        let Some(daemon) = state.supervisor.write().await.take() else {
-            return;
-        };
-        tracing::info!("shutdown: stopping supervised daemon child");
-        supervisor_setup::shutdown(daemon).await;
-    });
 }
