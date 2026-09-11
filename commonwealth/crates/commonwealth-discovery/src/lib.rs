@@ -73,6 +73,7 @@
 //! the crate is three modules now, and its `Cargo.toml` description was
 //! updated to match on 2026-09-04.
 
+pub mod deep_link;
 pub mod hardware;
 pub mod mdns;
 pub mod membership;

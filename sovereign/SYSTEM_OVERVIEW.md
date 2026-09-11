@@ -4265,9 +4265,13 @@ launchd-held FDs.
 
 ### Deep-link handler
 
-`sovereign-mesh/deep_link.rs` parses `sovereign://create?name=<name>`
-and `sovereign://join?key=<key>` (with relay hints for NAT
-traversal). The desktop app registers as the system handler.
+`commonwealth-discovery/src/deep_link.rs` parses
+`sovereign://create?name=<name>` and `sovereign://join?key=<key>` (with
+relay hints for NAT traversal); it moved down from `sovereign-mesh` on
+2026-09-11 so a lifted process can read an invite, and
+`sovereign-mesh/src/deep_link.rs` re-exports it plus
+`join_confirmation_from_link`. The desktop app registers as the system
+handler.
 
 ### Subsystems with their own docs
 
