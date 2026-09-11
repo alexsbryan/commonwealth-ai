@@ -884,14 +884,14 @@ purpose = "Session-frame storage override (session continuity; read dynamically 
 name = "SOVEREIGN_FIRST_PROMPT_NOTES_BUDGET"
 cluster = "notes-hook"
 default = "3200"
-status = "shipped"
+status = "deprecated"
 purpose = "First-prompt notes budget in chars (MEMORY_MODEL §5 E5): the session frame already fills the window, so cited bodies + index are capped tighter than the steady-state budget; overflow degrades to dereferenceable pointers, never silent truncation."
 
 [[flag]]
 name = "SOVEREIGN_NOTES_BUDGET_CHARS"
 cluster = "notes-hook"
 default = "6000"
-status = "shipped"
+status = "deprecated"
 purpose = "Steady-state per-prompt notes budget in chars for the inject-notes.py index; the same cap that ended the 15KB full-body spill (E5 R2)."
 
 [[flag]]
@@ -905,7 +905,7 @@ purpose = "Per-note body cap for frame-cited notes in inject-notes.py; a longer 
 name = "SOVEREIGN_INJECT_NOTE_LIMIT"
 cluster = "notes-hook"
 default = "20"
-status = "shipped"
+status = "deprecated"
 purpose = "read_notes limit for the inject-notes hook a fresh `svrn init` project scaffolds (one-line index, budgeted — never the full-body dump)."
 
 [[flag]]

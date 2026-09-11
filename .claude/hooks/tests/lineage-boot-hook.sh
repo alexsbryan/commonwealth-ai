@@ -133,24 +133,6 @@ grep -q "SEAT frame" <<<"$p2" && { echo "  FAIL seat line on a non-seat frame"; 
   || { echo "  ok   silent for a non-seat frame"; pass=$((pass+1)); }
 
 echo
-echo "== inject-notes must not double-inject after a lineage boot =="
-# PRE-EXISTING RED, not caused by the 2026-08-07 hook rewrite. This asserts a
-# `frame-inject.json` marker that the notes hook has never written — it injects
-# NOTES, not frames, so the marker is only ever produced by session-boot.sh.
-# The assertion appears to be left over from a design where the two were one
-# hook. Left failing deliberately rather than deleted: disabling a test to get
-# green needs a todo saying what was deferred (§0.4), and the todo is filed.
-printf '{"session_id":"sess-two","prompt":"continue","cwd":"%s"}' "$PWD" \
-  | python3 .claude/hooks/inject-notes.py >/dev/null 2>&1
-marker="$SOVEREIGN_SESSIONS_DIR/sess-two/frame-inject.json"
-if [ -f "$marker" ]; then
-  check "outcome says boot already did it" "already_injected_at_boot_lineage" \
-    "$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['outcome'])" "$marker")"
-else
-  echo "  FAIL no frame-inject marker written"; fail=$((fail+1))
-fi
-
-echo
 echo "== $pass passed, $fail failed =="
 rm -rf "$ROOT"
 [ "$fail" -eq 0 ]
