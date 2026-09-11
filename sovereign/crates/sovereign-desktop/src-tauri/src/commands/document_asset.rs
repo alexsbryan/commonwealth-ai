@@ -15,7 +15,7 @@ use crate::state::AppState;
 
 #[derive(Serialize)]
 pub struct DocumentAssetResponse {
-    pub asset: sovereign_core::types::DocumentAsset,
+    pub asset: sovereign_contracts::types::DocumentAsset,
 }
 
 #[derive(Serialize)]
@@ -25,7 +25,7 @@ pub struct DocumentAskResponse {
     /// `None` when the question was off-topic and the runtime's normal
     /// conversation pipeline answered it instead (no operation badge shown).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub operation: Option<sovereign_core::types::DocumentAssetOperation>,
+    pub operation: Option<sovereign_contracts::types::DocumentAssetOperation>,
     pub sources: Vec<String>,
     /// The PERSISTED assistant-message metadata, returned verbatim so the
     /// live bubble renders identically to a reload from the store —
@@ -232,10 +232,10 @@ pub async fn ask_document(
     // Persist the user's question first. This also upserts the conversations
     // row so the conversation survives navigation and restart, and lets the
     // runtime pipeline (below) see the question when it builds context.
-    let user_msg = sovereign_core::types::Message {
+    let user_msg = sovereign_contracts::types::Message {
         id: uuid::Uuid::new_v4().to_string(),
         conversation_id: conversation_id.clone(),
-        role: sovereign_core::types::Role::User,
+        role: sovereign_contracts::types::Role::User,
         content: question.clone(),
         created_at: now_epoch(),
         metadata: Some(serde_json::json!({
@@ -273,7 +273,7 @@ pub async fn ask_document(
     // preserving "this turn had a document attached" context).
     if matches!(
         operation,
-        sovereign_core::types::DocumentAssetOperation::OffTopic { .. }
+        sovereign_contracts::types::DocumentAssetOperation::OffTopic { .. }
     ) {
         return run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await;
     }
@@ -294,7 +294,7 @@ pub async fn ask_document(
     // ExecutionOutput.
     if matches!(
         operation,
-        sovereign_core::types::DocumentAssetOperation::Rag { .. }
+        sovereign_contracts::types::DocumentAssetOperation::Rag { .. }
     ) && output.citations.is_empty()
         && output.text.is_empty()
     {
@@ -326,13 +326,13 @@ pub async fn ask_document(
         })
         .collect();
 
-    let provenance = sovereign_core::types::ResponseProvenance {
+    let provenance = sovereign_contracts::types::ResponseProvenance {
         // A document-asset op is not a routed turn — no router decided it, and
         // `None` says exactly that rather than claiming a degraded one.
         router: None,
         intent: format!("DocumentAsk:{}", operation.label()),
         search_method: Some("document".to_string()),
-        sources: vec![sovereign_core::types::SourceSummary {
+        sources: vec![sovereign_contracts::types::SourceSummary {
             origin: asset.title.clone(),
             count: output.citations.len(),
             from_peer: None,
@@ -395,10 +395,10 @@ pub async fn ask_document(
     // (legacy `operation` / `sources` fields) plus the new rich
     // `provenance` / `retrieved_chunks` shape the AssistantMessage
     // component reads for the routing-meta bar and citation popovers.
-    let assistant_msg = sovereign_core::types::Message {
+    let assistant_msg = sovereign_contracts::types::Message {
         id: assistant_message_id.clone(),
         conversation_id: conversation_id.clone(),
-        role: sovereign_core::types::Role::Assistant,
+        role: sovereign_contracts::types::Role::Assistant,
         content: final_content.clone(),
         created_at: now_epoch(),
         metadata: Some(serde_json::json!({
@@ -466,7 +466,7 @@ pub async fn ask_document(
 pub async fn get_document_asset(
     state: State<'_, Arc<AppState>>,
     asset_id: String,
-) -> Result<Option<sovereign_core::types::DocumentAsset>, String> {
+) -> Result<Option<sovereign_contracts::types::DocumentAsset>, String> {
     // sv-surface D9b: the daemon's store is the one that holds the asset,
     // so the read crosses the wire in BOTH modes. `Ok(None)` is the route's
     // 404 and only the 404 — "no such asset" and "the store would not
@@ -474,7 +474,7 @@ pub async fn get_document_asset(
     // `ok_or("Store not ready")` collapsed the moment this process stopped
     // owning the store.
     sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .get_document::<sovereign_core::types::DocumentAsset>(&asset_id)
+        .get_document::<sovereign_contracts::types::DocumentAsset>(&asset_id)
         .await
         .map_err(|e| format!("Load failed: {e}"))
 }
@@ -487,7 +487,7 @@ pub async fn rebuild_document_skeleton(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     asset_id: String,
-) -> Result<sovereign_core::types::DocumentAsset, String> {
+) -> Result<sovereign_contracts::types::DocumentAsset, String> {
     // sv-surface D9b — `POST /v1/documents/{id}/skeleton`. The rebuild is
     // the DocumentAssetManager's, and the manager that matters is the one
     // sitting on the store the chunks are in. Building a second manager
@@ -500,7 +500,7 @@ pub async fn rebuild_document_skeleton(
     // The route answers the REFRESHED record, which is what the reload
     // below used to ask a second question for.
     let refreshed = sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .rebuild_document_skeleton::<sovereign_core::types::DocumentAsset>(&asset_id)
+        .rebuild_document_skeleton::<sovereign_contracts::types::DocumentAsset>(&asset_id)
         .await
         .map_err(|e| format!("Skeleton rebuild failed: {e}"))?;
 
@@ -560,10 +560,10 @@ async fn run_turn_via_runtime(
 #[tauri::command]
 pub async fn list_document_assets(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<sovereign_core::types::DocumentAsset>, String> {
+) -> Result<Vec<sovereign_contracts::types::DocumentAsset>, String> {
     // sv-surface D9b — `GET /v1/documents`. One shelf, the daemon's.
     sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .list_documents::<sovereign_core::types::DocumentAsset>()
+        .list_documents::<sovereign_contracts::types::DocumentAsset>()
         .await
         .map_err(|e| format!("List failed: {e}"))
 }
@@ -622,7 +622,7 @@ pub async fn promote_legacy_document(
     // `index_id`/`word_count` it records describe rows that are actually
     // there.
     let asset = sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .promote_legacy_document::<sovereign_core::types::DocumentAsset>(&source)
+        .promote_legacy_document::<sovereign_contracts::types::DocumentAsset>(&source)
         .await
         .map_err(|e| format!("{e}"))?;
 

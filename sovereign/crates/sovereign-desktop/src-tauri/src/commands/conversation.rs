@@ -509,10 +509,14 @@ pub async fn submit_information_search(
     let orchestrator = SearchOrchestrator::new(Arc::new(crate::state::effective_search_registry()));
 
     // The ONE egress boundary (order deep-research-t2a): the client is
-    // built by sovereign-core's egress module (the F26 census enforces
-    // that this file constructs no reqwest client of its own), and the
-    // query egress passes the boundary's release gate BEFORE it leaves.
-    let client = sovereign_core::egress::search_client()
+    // built by the egress module, and the F26 census enforces that this
+    // file constructs no reqwest client of its own. The module lives in
+    // `sovereign-contracts` (`sovereign-contracts/src/egress.rs`);
+    // `sovereign_core::egress` is only a re-export of it
+    // (`sovereign-core/src/lib.rs:36`), so naming the owner here is the
+    // same boundary under its own name. The query egress passes the
+    // boundary's release gate BEFORE it leaves.
+    let client = sovereign_contracts::egress::search_client()
         .map_err(|e| format!("egress boundary search client build: {e}"))?;
     let provider_static: &'static str = match config_snapshot.search_backend.provider.as_str() {
         "tavily" => "tavily",
@@ -522,8 +526,8 @@ pub async fn submit_information_search(
     // The click IS the user's action and the query IS the user's own
     // words — the release rule's user-formed-query clause (what=="query"
     // && user_formed) covers this egress without a grant.
-    sovereign_core::egress::verify(
-        &sovereign_core::egress::EgressPayload {
+    sovereign_contracts::egress::verify(
+        &sovereign_contracts::egress::EgressPayload {
             privacy: SearchPrivacy::External {
                 provider: provider_static,
             },
@@ -640,7 +644,7 @@ pub async fn submit_information_search(
         // Owed with the enabled-corpora write above, or delete the arm once
         // the daemon's fold is proven to be the only one.
         if !state.turn_wire.has(cid).await {
-            let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
+            let store_arc: Option<Arc<dyn sovereign_contracts::traits::StateStore>> = {
                 let guard = state.store.read().await;
                 guard.as_ref().map(Arc::clone)
             };
@@ -694,13 +698,13 @@ pub async fn submit_information_search(
         None => None,
     };
     if let Some(sender) = wire_sender {
-        let wire_sources: Vec<sovereign_core::types::SearchedSourceEntry> = sources
+        let wire_sources: Vec<sovereign_contracts::types::SearchedSourceEntry> = sources
             .iter()
             .map(|s| {
                 // Turn stamps are placeholders — the daemon's merge stamps
                 // the conversation's REAL current turn (pinned by the G3b
                 // e2e); the client cannot know it and must not pretend.
-                sovereign_core::types::SearchedSourceEntry {
+                sovereign_contracts::types::SearchedSourceEntry {
                     url: s.url.clone(),
                     title: s.title.clone(),
                     first_seen_turn: 0,

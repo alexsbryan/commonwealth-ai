@@ -3,13 +3,13 @@
 
 use super::report::constitution_check;
 use super::*;
+use sovereign_contracts::egress::ConsentGrant;
+use sovereign_contracts::types::Custody;
 use sovereign_core::deep_research::icd::{
     BudgetAllowance, CharterValues, ContainmentConfig, CorroborationRecord, CustodyPolicy,
     EmptyWindow, EvidenceWindow as Ew, FinalClaim, Gap, TriageConfig, UrlConstraintPolicy,
     WindowChunk,
 };
-use sovereign_core::egress::ConsentGrant;
-use sovereign_core::types::Custody;
 
 fn write_json(dir: &Path, name: &str, value: &impl Serialize) {
     std::fs::write(dir.join(name), serde_json::to_vec(value).unwrap()).unwrap();

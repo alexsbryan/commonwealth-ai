@@ -33,10 +33,10 @@ pub async fn search_web(
     let store = state.store().await?;
 
     // Save user message.
-    let user_msg = sovereign_core::types::Message {
+    let user_msg = sovereign_contracts::types::Message {
         id: uuid::Uuid::new_v4().to_string(),
         conversation_id: conversation_id.clone(),
-        role: sovereign_core::types::Role::User,
+        role: sovereign_contracts::types::Role::User,
         content: query.clone(),
         created_at: now_epoch(),
         metadata: None,
@@ -55,7 +55,7 @@ pub async fn search_web(
         .map_err(|_| DesktopError::invalid_request("Search tool is not enabled."))?;
 
     let params = serde_json::json!({ "query": query });
-    let ctx = sovereign_core::types::ToolContext {
+    let ctx = sovereign_contracts::types::ToolContext {
         conversation_id: conversation_id.clone(),
         task_id: None,
         working_directory: None,
@@ -71,22 +71,22 @@ pub async fn search_web(
         .map_err(|e| DesktopError::upstream(format!("Web search failed: {e}")))?;
 
     let content = match output {
-        sovereign_core::types::StepOutput::Text(t) => t,
-        sovereign_core::types::StepOutput::Json(ref v) => v
+        sovereign_contracts::types::StepOutput::Text(t) => t,
+        sovereign_contracts::types::StepOutput::Json(ref v) => v
             .get("answer")
             .and_then(|a| a.as_str())
             .unwrap_or("No results found.")
             .to_string(),
-        sovereign_core::types::StepOutput::ReasonWithToolsResult { text, .. } => text,
+        sovereign_contracts::types::StepOutput::ReasonWithToolsResult { text, .. } => text,
         _ => "No results found.".to_string(),
     };
 
     // Save assistant message.
     let msg_id = uuid::Uuid::new_v4().to_string();
-    let assistant_msg = sovereign_core::types::Message {
+    let assistant_msg = sovereign_contracts::types::Message {
         id: msg_id.clone(),
         conversation_id,
-        role: sovereign_core::types::Role::Assistant,
+        role: sovereign_contracts::types::Role::Assistant,
         content: content.clone(),
         created_at: now_epoch(),
         metadata: None,

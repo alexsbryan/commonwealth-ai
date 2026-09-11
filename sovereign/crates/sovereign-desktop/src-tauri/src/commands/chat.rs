@@ -270,7 +270,7 @@ async fn finish_wire_turn(
     stream: sovereign_turn_client::TurnStream,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
 ) -> Result<String, String> {
     // Park the write half FIRST, keyed by conversation (RB5): a prompt can
     // arrive before the id does, and `cancel_stream` / the submit commands
@@ -632,7 +632,7 @@ async fn render_turn_frames(
     mut frame_rx: tokio::sync::mpsc::UnboundedReceiver<TurnFrame>,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
 ) {
     let mut full_text = String::new();
     let mut real_message_id: Option<String> = None;

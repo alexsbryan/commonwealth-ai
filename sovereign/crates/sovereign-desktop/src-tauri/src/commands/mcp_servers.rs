@@ -51,8 +51,8 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_tools::mcp::secret_store;
 use tauri::State;
 

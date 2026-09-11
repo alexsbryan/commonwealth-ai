@@ -154,7 +154,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
             ..Default::default()
         }));
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .ok()
         .map(|c| c.data.dir)
         .or_else(|| Some(sovereign_contracts::rebrand::svrnmesh_root()));
@@ -255,7 +255,7 @@ async fn write_report(
 ) -> Result<super::CrashReportInfo, String> {
     let health = health::evaluate(&gather_health_facts(state).await);
 
-    let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let cfg = sovereign_contracts::setup_config::SetupConfig::load().ok();
     let app_version = env!("CARGO_PKG_VERSION");
     let data_dir = cfg
         .as_ref()
