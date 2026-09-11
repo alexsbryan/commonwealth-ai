@@ -152,47 +152,10 @@ pub async fn gossip(
     }))
 }
 
-/// Derives BOTH halves. `sovereign-mesh` declared a `GossipRequestWire` mirror
-/// because this side offered only `Deserialize`; the two were minted 14
-/// seconds apart on 2026-04-14 (`16838feca`, `50a7a03a3`). The
-/// `skip_serializing_if` attributes below were already here and INERT under a
-/// Deserialize-only derive — they become load-bearing now, and they are what
-/// makes the bytes identical to what the mirror wrote.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GossipRequest {
-    pub mesh: MeshWire,
-    /// Who is sending. Absent on a pre-proof peer.
-    ///
-    /// Closes two gaps at once. It binds [`GossipRequest::mesh_proof`] to a
-    /// sender, so a captured proof cannot be presented by another node; and it
-    /// is the attribution the inbound path never had, which is why the rotate
-    /// guard could only ever confirm peers this node dialled outbound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub from: Option<commonwealth_core::ids::NodeId>,
-    /// Proof of `mesh_secret` possession — see `Mesh::mesh_proof`. Lets an
-    /// upgraded pair authorize without the raw credential ever crossing the
-    /// wire. Absent on a pre-proof peer, which falls through to comparing raw
-    /// secrets exactly as before.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mesh_proof: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GossipResponse {
-    pub mesh: MeshWire,
-    /// The responder's identity and proof. The CALLER merges this response, so
-    /// it is an authorization boundary in its own direction and needs the same
-    /// evidence — a reply is not trusted just because we initiated.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub from: Option<commonwealth_core::ids::NodeId>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mesh_proof: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct GossipRejection {
-    pub reason: String,
-}
+// The wire shapes are `commonwealth_core::mesh::wire` — one definition for
+// every process that speaks them, including a package-only member that never
+// links this crate. Re-exported so this module's callers are unchanged.
+pub use commonwealth_core::mesh::wire::{GossipRejection, GossipRequest, GossipResponse};
 
 /// POST /internal/scheduling/intent — scheduling lock acquisition.
 pub async fn scheduling_intent(

@@ -592,75 +592,15 @@ pub async fn storage_budget_set(
 //     at rest via `Mesh::invite_key_hash`.
 //   - Timing-attack-resistant equality lives in `membership::verify_join_key`.
 
-/// A node asking to join. Derives BOTH halves: `sovereign-mesh` declared a
-/// `JoinRequestWire` mirror of it — same fields, same doc comments,
-/// copy-edited — purely because this side offered only `Deserialize`. The two
-/// were minted 28 seconds apart on 2026-04-14 (`1f5694e8f`, `8f3f00c17`).
-///
-/// The three optionals carry `skip_serializing_if` as well as `default`, so
-/// the bytes this now WRITES are identical to what the mirror wrote: omitted
-/// rather than nulled, which is what keeps a pre-identity founder's serde
-/// seeing exactly the input it saw before.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JoinRequest {
-    pub join_key: String,
-    pub joining_node_name: String,
-    pub joining_node_addresses: Vec<SocketAddr>,
-    /// Stable `NodeId` the joiner persists at
-    /// `<data_dir>/node_id`. When present and not already claimed
-    /// under a different name, the founder admits the joiner under
-    /// this exact ID so rejoins don't leave zombies.
-    ///
-    /// Backward-compatible: older joiners don't send this field;
-    /// `#[serde(default)]` makes the founder accept those requests
-    /// unchanged.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proposed_node_id: Option<NodeId>,
-    /// The joiner's Ed25519 identity pubkey (the future dial-by-key
-    /// transport identity). Optional and serde-defaulted: pre-identity
-    /// joiners omit it and are admitted exactly as before.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
-    /// Hex Ed25519 proof of possession over
-    /// `"cwth-join-pubkey-binding:" || proposed_node_id || name`.
-    /// Required whenever `node_pubkey` is present; a bad or missing
-    /// proof is a loud 401, never a silent admit-without-key.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pubkey_proof: Option<String>,
-}
+// `JoinRequest` / `JoinResponse` / `JoinRejection` are
+// `commonwealth_core::mesh::wire` — one definition for every process that
+// speaks them, including a package-only member that never links this crate.
+// Re-exported so this module's callers are unchanged.
+pub use commonwealth_core::mesh::wire::{JoinRejection, JoinRequest, JoinResponse};
 
-/// Wire shape for the full mesh snapshot. The Rust `Mesh` stores
-/// members as `HashMap<NodeId, MemberRecord>`; JSON requires object
-/// keys be strings, and `NodeId` serialises as a byte-array by
-/// default — which crashes `serde_json` with "key must be a string".
-/// We flatten to a Vec at the transport boundary, then reassemble
-/// on the joiner side in `sovereign-mesh::join`.
-// `MeshWire` was one of FOUR declarations of this shape, each with its own
-// hand-written `From<&Mesh>` — and those conversions are where it failed
-// twice (a zero-filled `mesh_secret` on 2026-08-26, and an `invite_version`
-// that pinned every peer's invite at 0). It is now the one projection in
-// `commonwealth_core::mesh`, and the redaction that used to be a `pub` field
-// mutation after the fact is an argument to `MeshSnapshot::for_peer`.
+/// Wire shape for the full mesh snapshot: the one projection in
+/// `commonwealth_core::mesh` (it had four declarations once — see its docs).
 pub use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
-
-/// The founder's reply to a join.
-///
-/// Derives BOTH halves: `sovereign-mesh` declared a `JoinResponseWire` mirror
-/// of it purely because this side offered only `Serialize`.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JoinResponse {
-    /// Freshly-assigned id for the joining node.
-    pub assigned_node_id: NodeId,
-    /// Full authoritative mesh snapshot. Joiner replaces its local
-    /// placeholder with this so member lists, peers, and the canonical
-    /// mesh_id all match the founder's view.
-    pub mesh: MeshWire,
-}
-
-#[derive(Debug, Serialize)]
-pub struct JoinRejection {
-    pub reason: String,
-}
 
 /// POST /internal/join — verify a join_key and (on match) admit the caller.
 pub async fn join(

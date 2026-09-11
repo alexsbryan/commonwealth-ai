@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::mesh_identity::{aliased_endpoint_keys, AliasedEndpointKey, EndpointClaim};
 
+pub mod wire;
+
 use crate::capabilities::NodeCapabilities;
 use crate::ids::{MeshId, NodeId, NodePubkey};
 
