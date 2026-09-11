@@ -173,9 +173,23 @@ def load_profile(path=None) -> dict:
                 "max_symbols": int(d.get("max_symbols", 12)),
                 "message": d.get("message", "named in the message, absent from the tree"),
             })
+        elif kind == "comment_ratio":
+            deciders.append({
+                "id": d["id"], "sec": d["anchor"], "kind": "comment_ratio",
+                "max_ratio": float(d.get("max_ratio", 0.5)),
+                "min_comments": int(d.get("min_comments", 8)),
+                "message": d.get("message", "comment lines per code line"),
+            })
+        elif kind == "dead_citation":
+            deciders.append({
+                "id": d["id"], "sec": d["anchor"], "kind": "dead_citation",
+                "max": int(d.get("max", 0)),
+                "message": d.get("message", "cited path is in neither tree"),
+            })
         else:
             raise ProfileError(f"decider {d.get('id', '?')}: unknown kind "
-                               f"{kind!r} (known: count, message_symbols)")
+                               f"{kind!r} (known: count, message_symbols, "
+                               f"comment_ratio, dead_citation)")
     ids = [r["id"] for r in rules] + [d["id"] for d in deciders]
     if len(ids) != len(set(ids)):
         raise ProfileError(f"duplicate rule ids in {path}: {ids}")
@@ -252,6 +266,116 @@ def _in_tree(needle: str, tree: str):
     return {0: True, 1: False}.get(rc)
 
 
+# --------------------------------------------------------------------------
+# comment-shaped deciders (ARCH SS15, SS11.1)
+# --------------------------------------------------------------------------
+# `size_gate.rs` counting rule 1 deliberately does not count comments, so
+# stripping documentation buys no room under a ceiling. The consequence is
+# that comments are the one dimension nine ratchets leave unmetered, and the
+# workspace runs 287k comment lines against 860k of code. These three meter
+# it in the DIFF instead of on the stock: deleting an old comment cannot buy
+# room here either, so rule 1's incentive is preserved and the growth is
+# still priced at the moment it is written.
+
+_COMMENT_RX = re.compile(r"^\s*//")
+_PATH_TICK = re.compile(
+    r"`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]*"
+    r"\.(?:rs|md|toml|py|sh|mjs|ts|svelte))(?:[:#][0-9A-Za-z_.-]*)?`")
+# An illustrative name is not a citation. `tests/foo.rs` in a doc block is a
+# worked example; flagging it would train the reader to skip the finding.
+_PLACEHOLDER = re.compile(
+    r"(?:^|/)(?:foo|bar|baz|qux|x|y|example|sub)\.\w+$|\.\.\.|[<>{}]")
+_TREE_CACHE: dict = {}
+
+
+def split_comment_code(added) -> dict:
+    """-> {path: (n_comment, n_code)} over ADDED lines. Blank lines count as
+    neither: a ratio a blank line can move is a ratio you can pad past."""
+    out: dict = {}
+    for path, line in added:
+        if not line.strip():
+            continue
+        c, k = out.get(path, (0, 0))
+        out[path] = (c + 1, k) if _COMMENT_RX.match(line) else (c, k + 1)
+    return out
+
+
+def _decide_comment_ratio(dec: dict, added) -> tuple:
+    """Comment lines added per code line added, per file. `min_comments`
+    keeps it off small edits, where the ratio is noise rather than a habit."""
+    cites = []
+    for path, (c, k) in sorted(split_comment_code(added).items()):
+        if c < dec["min_comments"]:
+            continue
+        ratio = c / max(k, 1)
+        if ratio > dec["max_ratio"]:
+            cites.append(f"{path}: +{c} comment / +{k} code = {ratio:.2f} "
+                         f"{dec['message']}")
+    return ("B", cites) if cites else ("A", [])
+
+
+def _tree_paths(tree: str):
+    """Every path in `tree` ("--cached" = the index). None = git could not
+    answer, which the caller reports as could-not-judge, never as clean."""
+    if tree not in _TREE_CACHE:
+        out = (_git("ls-files") if tree == "--cached"
+               else _git("ls-tree", "-r", "--name-only", tree))
+        _TREE_CACHE[tree] = (set(out.split("\n")) - {""}) or None
+    return _TREE_CACHE[tree]
+
+
+def _cited_paths(added) -> list:
+    """-> [(citing file, cited path)] for repo-shaped paths named in ADDED
+    comment lines."""
+    out: list = []
+    for path, line in added:
+        if not _COMMENT_RX.match(line):
+            continue
+        for m in _PATH_TICK.finditer(line):
+            cited = m.group(1).lstrip("./")
+            if _PLACEHOLDER.search(cited) or (path, cited) in out:
+                continue
+            out.append((path, cited))
+    return out
+
+
+def _resolves(cited: str, from_file: str, tree: set) -> bool:
+    """A comment writes a path from the repo root, from its own directory, or
+    from any ancestor of it (a crate root, most often) -- all three resolve.
+    The trailing suffix match keeps recall low on purpose: this decider is
+    only allowed to report a path that exists NOWHERE."""
+    if cited in tree:
+        return True
+    parts = from_file.split("/")[:-1]
+    while True:
+        base = "/".join(parts)
+        if os.path.normpath(f"{base}/{cited}" if base else cited) in tree:
+            return True
+        if not parts:
+            break
+        parts = parts[:-1]
+    return any(t.endswith("/" + cited) for t in tree)
+
+
+def _decide_dead_citation(dec: dict, added, files) -> tuple:
+    """ARCH SS11.1 -- cite, don't recall -- at the one place code can check a
+    COMMENT: a path a comment names must exist in the tree the commit
+    produces, or the one it started from (citing a file the commit deletes is
+    legitimate). In neither, the comment was already wrong the day it landed.
+    `files["trees"]` = (after, before); collect()/collect_staged() set it."""
+    trees = files.get("trees")
+    if not trees:
+        return "C", ["no tree refs supplied; comment citations not checked"]
+    after, before = trees
+    listings = [t for t in (_tree_paths(after), _tree_paths(before)) if t]
+    if not listings:
+        return "C", [f"neither tree ({after}, {before}) could be listed"]
+    cites = [f"{src}: `{cited}` -- {dec['message']}"
+             for src, cited in _cited_paths(added)
+             if not any(_resolves(cited, src, t) for t in listings)]
+    return ("B", cites) if len(cites) > dec["max"] else ("A", [])
+
+
 def _decide_message_symbols(dec: dict, files: dict, msg: str) -> tuple:
     """ARCH SS11.1, cite-don't-recall, at the one place code can check it: a
     symbol the message names in backticks must exist in the tree the commit
@@ -276,6 +400,10 @@ def run_decider(dec: dict, added, files, msg: str = "") -> tuple:
     `msg` is only read by message-shaped deciders; line-shaped ones ignore it."""
     if dec["kind"] == "message_symbols":
         return _decide_message_symbols(dec, files, msg)
+    if dec["kind"] == "comment_ratio":
+        return _decide_comment_ratio(dec, added)
+    if dec["kind"] == "dead_citation":
+        return _decide_dead_citation(dec, added, files)
     groups: dict = {}
     for path, line in added:
         if dec["rx"].search(line):
@@ -646,6 +774,57 @@ def self_test(profile_path=None) -> int:
     def gate_of(rid):
         return next(r for r in prof["rules"] if r["id"] == rid)
 
+    # Comment-shaped deciders. Each gets a planted violation AND a planted
+    # clean case: a check with no input that makes it fail is not a check
+    # (ARCH SS18.1), and the clean case is what stops a rule that fires on
+    # everything from reading as a working gate.
+    if has("comment-ratio"):
+        dec = next(d for d in prof["deciders"] if d["id"] == "comment-ratio")
+        essay = [("r.rs", "//! line") for _ in range(20)] + \
+                [("r.rs", "let x = 1;") for _ in range(4)]
+        v, cites = run_decider(dec, essay, {})
+        if v != "B" or not cites:
+            bad.append(f"comment-ratio missed a 20:4 essay: {v} {cites}")
+        documented = [("r.rs", "/// doc") for _ in range(10)] + \
+                     [("r.rs", "let x = 1;") for _ in range(40)]
+        v, _ = run_decider(dec, documented, {})
+        if v != "A":
+            bad.append(f"comment-ratio flagged documented code at 0.25: {v}")
+        v, _ = run_decider(dec, [("r.rs", "// one"), ("r.rs", "// two")], {})
+        if v != "A":
+            bad.append("comment-ratio fired under min_comments")
+
+    if has("inline-comment"):
+        dec = next(d for d in prof["deciders"] if d["id"] == "inline-comment")
+        v, cites = run_decider(dec, [("r.rs", "    // step")] * 11, {})
+        if v != "B" or not cites:
+            bad.append(f"inline-comment missed 11 body comments: {v} {cites}")
+        exempt = [("r.rs", "// SPDX-License-Identifier: AGPL-3.0-or-later")] + \
+                 [("r.rs", "        // SAFETY: the pointer is owned")] * 11 + \
+                 [("r.rs", "/// doc")] * 11 + [("r.rs", "//! module")] * 11
+        v, _ = run_decider(dec, exempt, {})
+        if v != "A":
+            bad.append(f"inline-comment flagged SPDX/SAFETY/doc lines: {v}")
+
+    if has("dead-citation"):
+        dec = next(d for d in prof["deciders"] if d["id"] == "dead-citation")
+        trees = {"trees": ("HEAD", "HEAD")}
+        v, cites = run_decider(
+            dec, [("a/b.rs", "//! see `quality/no_such_file_here.toml`")],
+            trees)
+        if v != "B" or not cites:
+            bad.append(f"dead-citation missed an absent path: {v} {cites}")
+        v, _ = run_decider(
+            dec, [("a/b.rs", "//! see `quality/arch-probes.toml`")], trees)
+        if v != "A":
+            bad.append("dead-citation flagged a path that exists")
+        v, _ = run_decider(dec, [("a/b.rs", "//! see `tests/foo.rs`")], trees)
+        if v != "A":
+            bad.append("dead-citation flagged an illustrative placeholder")
+        v, cites = run_decider(dec, [("a/b.rs", "//! `x/y.rs`")], {})
+        if v != "C":
+            bad.append(f"dead-citation claimed clean with no tree refs: {v}")
+
     if has("stringly"):
         dec = next(d for d in prof["deciders"] if d["id"] == "stringly")
         v, cites = run_decider(dec, PLANTED_B, {})
@@ -796,6 +975,56 @@ def rollup(hours: int, log: Path = VERDICTS_LOG) -> int:
     return 0
 
 
+def sweep(rng: str, limit: int, prof: dict) -> int:
+    """Report-only: the CODE deciders over a commit range, nothing persisted
+    and no model call. This is how a new decider earns a place in the live
+    profile -- its false-positive rate is measured against real history
+    first, because a gate nobody has watched fire is not a gate (ARCH
+    SS18.1). The commits it fires on ARE the negative control: they were
+    written before the rule existed, so a B here is a hit the rule could not
+    have been fitted to."""
+    shas = _git("rev-list", "--no-merges", rng).split()[:limit]
+    if not shas:
+        print(f"co-arch --range {rng}: no commits", file=sys.stderr)
+        return 4
+    tally: dict = {d["id"]: {"A": 0, "B": 0, "C": 0} for d in prof["deciders"]}
+    sites: dict = {d["id"]: [] for d in prof["deciders"]}
+    fired_commits: dict = {d["id"]: set() for d in prof["deciders"]}
+    n_touched = 0
+    for sha in shas:
+        added, files, msg = collect(sha, prof["globs"])
+        if not added:
+            continue
+        n_touched += 1
+        for d in prof["deciders"]:
+            v, cites = run_decider(d, added, files, msg)
+            tally[d["id"]][v] += 1
+            if v == "B":
+                fired_commits[d["id"]].add(sha)
+                sites[d["id"]].extend(f"{sha[:9]} {c}" for c in cites)
+    print(f"co-arch --range {rng} (profile {prof['id']}, deciders only): "
+          f"{len(shas)} commit(s), {n_touched} touching the profile globs\n")
+    print(f"  {'decider':18} {'commits B':>9} {'rate':>7} {'sites':>7}   anchor")
+    for d in prof["deciders"]:
+        i = d["id"]
+        n = len(fired_commits[i])
+        rate = n / max(n_touched, 1)
+        print(f"  {i:18} {n:9d} {rate:6.0%} {len(sites[i]):7d}   {d['sec']}")
+        if tally[i]["C"]:
+            # NEVER let could-not-judge read as clean (ARCH SS18.2).
+            print(f"  {'':18} {tally[i]['C']} commit(s) NOT judged -- deferred,"
+                  f" not clean")
+    for d in prof["deciders"]:
+        if not sites[d["id"]]:
+            continue
+        print(f"\n  --- {d['id']} ({len(sites[d['id']])} site(s)) ---")
+        for line in sites[d["id"]][:12]:
+            print(f"    {line[:150]}")
+        if len(sites[d["id"]]) > 12:
+            print(f"    ... {len(sites[d['id']]) - 12} more")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("sha", nargs="?")
@@ -803,6 +1032,12 @@ def main() -> int:
     ap.add_argument("--self-test-live", action="store_true")
     ap.add_argument("--rollup", action="store_true",
                     help="seat-facing summary of recent arch rows")
+    ap.add_argument("--range", dest="rng", default=None,
+                    help="deciders-only sweep over a commit range (A..B): "
+                         "what the code-decided rules would have said on "
+                         "real history. No model call, nothing persisted.")
+    ap.add_argument("--limit", type=int, default=200,
+                    help="with --range: most commits to sweep (default 200)")
     ap.add_argument("--hours", type=int, default=24)
     ap.add_argument("--profile", default=None,
                     help="rule set TOML (default: <repo>/quality/arch-probes.toml, "
@@ -822,8 +1057,8 @@ def main() -> int:
         return self_test_live(a.profile)
     if a.rollup:
         return rollup(a.hours)
-    if not a.sha and not a.staged:
-        ap.error("a commit sha or --staged is required")
+    if not a.sha and not a.staged and not a.rng:
+        ap.error("a commit sha, --range or --staged is required")
 
     try:
         prof = load_profile(a.profile)
@@ -831,6 +1066,9 @@ def main() -> int:
         # Refused, named, and NOT replaced by a second copy of the rules.
         print(f"co-arch: {e}", file=sys.stderr)
         return 0
+
+    if a.rng:
+        return sweep(a.rng, a.limit, prof)
 
     if a.staged:
         added, files = collect_staged(prof["globs"])

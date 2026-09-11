@@ -1,0 +1,71 @@
+# comment-probes.toml — the comment-shaped deciders, ON MEASUREMENT.
+#
+# A separate profile, not new rows in `arch-probes.toml`, and deliberately:
+# `commit-smells.py` runs the default profile at every `git commit`, so a row
+# landing there blocks work from the moment it is written. These three have
+# never been watched fire. They stay here, reachable only through
+# `--profile`, until a sweep over real history says what their
+# false-positive rate actually is (ARCH §18.1). Promotion is a move of the
+# three `[[decider]]` blocks into `arch-probes.toml` and nothing else — the
+# mechanism in `co-arch.py` is already shared.
+#
+# WHAT THEY MEASURE, AND WHY NOTHING ELSE DOES
+#
+# Nine ratchets meter this workspace and every one of them meters code.
+# `size_gate.rs` counting rule 1 excludes comments on purpose: "Stripping
+# documentation to get under a ceiling is worth exactly zero." That is the
+# right call for a gate on the STOCK, and its consequence is that comments
+# are the only unmetered dimension in the repo. Measured 2026-09-10:
+# 146,060 lines of `///`, 93,727 of `//`, 47,396 of `//!` against 860,372 of
+# code — 33 comment lines per 100 code lines, and 265 of the 1,411 repo-path
+# citations inside comments already point at files that do not exist.
+#
+# These meter the DIFF, which keeps rule 1's incentive intact: deleting an
+# old comment cannot buy room under a ratio on lines you just added.
+
+[profile]
+id = "commonwealth-comments"
+description = "Comment growth, inline narration, and dead citations — the dimension size-gate excludes"
+globs = ["*.rs"]
+
+# --------------------------------------------------------------------------
+# Code-decided rules — these never reach a model (ARCH §7.6)
+# --------------------------------------------------------------------------
+
+[[decider]]
+id = "comment-ratio"
+anchor = "ARCH §15"
+kind = "comment_ratio"
+# The workspace stock sits at 0.33 and the crates that grew fastest sit at
+# 0.42-0.44, so 0.50 is above everything the repo has normalised — it fires
+# on the shape that produced the 64-line module essays, not on documented
+# code. Tighten toward 0.35 once the sweep says what 0.50 costs.
+max_ratio = 0.5
+# Off small edits: on a 3-line change the ratio is noise, not a habit.
+min_comments = 8
+message = "added — comments are the dimension size-gate does not count"
+
+[[decider]]
+id = "inline-comment"
+anchor = "ARCH §15"
+kind = "count"
+# `//` inside a body, which no tool reads: `symbols` returns `///` and `//!`
+# and neither returns these. The only reader is someone already in the file
+# with the code in front of them — the reader the house rule says should be
+# reading the code. SPDX (2,321 files) and SAFETY (72 against 901 `unsafe`
+# sites) are load-bearing and exempt; so are lint directives.
+pattern = '^\s*//(?![/!])(?!\s*(?:SPDX|SAFETY|clippy::|rustfmt|noqa))'
+per = "file"
+max = 10
+message = "inline comment line(s) added — no tool reads these"
+
+[[decider]]
+id = "dead-citation"
+anchor = "ARCH §11.1"
+kind = "dead_citation"
+# Cite, don't recall, applied to comments. A path a comment names must be in
+# the tree the commit produces or the one it started from; citing a file the
+# commit deletes is legitimate, citing one that never existed is not.
+# Illustrative names (`tests/foo.rs`) are skipped in the extractor, not here.
+max = 0
+message = "cited from a comment, present in neither tree"
