@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::HandoffId;
 use commonwealth_rail::{Ed25519Verifier, Person, RailAct, RingJournal, Roster, SigningKey};
@@ -182,9 +182,7 @@ fn key_of(label: &str) -> SigningKey {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
+    commonwealth_core::clock::unix_now_millis()
 }
 
 // The host half of consent is `commonwealth_work::refusal::host_satisfies`
@@ -338,7 +336,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
     append(&journal, &key, &roster, &WorkAct::Offer(offer.clone()))?;
     let (os, arch, root) = (&offer.os, &offer.arch, cfg.root.display());
     eprintln!("work_peer: {me} offers {PROCESS_KIND} on {os}/{arch}, rail at {root}");
-    let started = SystemTime::now();
+    let started = Instant::now();
     loop {
         let proj = fold(&journal, &roster)?;
         if proj.gaps > 0 || proj.unreadable > 0 {
@@ -388,7 +386,7 @@ async fn run(cfg: &PeerArgs) -> Result<bool, String> {
         if !progressed {
             break;
         }
-        if started.elapsed().map(|e| e > DEADLINE).unwrap_or(false) {
+        if started.elapsed() > DEADLINE {
             return Err(format!("the run passed its {DEADLINE:?} deadline"));
         }
     }
@@ -462,8 +460,7 @@ async fn run_unit(
     // answer is this peer's actual compiler — a lifted peer runs the unit, so
     // its rustc is the one that matters. One reader now, in the crate the peer
     // already links.
-    let provenance =
-        executor.attribution(&unit.requirements.repo_rev.clone().unwrap_or_default());
+    let provenance = executor.attribution(&unit.requirements.repo_rev.clone().unwrap_or_default());
     match outcome {
         Ok((outcome, result)) => WorkAct::Complete(Completion {
             handoff: unit_ref.handoff,

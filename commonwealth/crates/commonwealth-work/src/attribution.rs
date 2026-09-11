@@ -169,8 +169,14 @@ mod tests {
     /// failing input for the first assertion is a reader that trusts exit 0.
     #[test]
     fn only_a_non_empty_reading_is_a_toolchain() {
-        assert_eq!(toolchain_from(Some("rustc 1.97.1 (c980f4866)".into())), "rustc 1.97.1 (c980f4866)");
-        assert_eq!(toolchain_from(Some("  rustc 1.95.0  \n".into())), "rustc 1.95.0");
+        assert_eq!(
+            toolchain_from(Some("rustc 1.97.1 (c980f4866)".into())),
+            "rustc 1.97.1 (c980f4866)"
+        );
+        assert_eq!(
+            toolchain_from(Some("  rustc 1.95.0  \n".into())),
+            "rustc 1.95.0"
+        );
         assert_eq!(toolchain_from(None), ABSENT_TOOLCHAIN);
         assert_eq!(toolchain_from(Some("   ".into())), ABSENT_TOOLCHAIN);
         assert!(kernel_types::is_absent_marker(&toolchain_from(None)));

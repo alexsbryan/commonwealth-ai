@@ -280,7 +280,11 @@ pub(super) fn head_rev(repo: &Path) -> Result<String, String> {
              the tree in front of it",
             dirt.len(),
             shown.join(", "),
-            if dirt.len() > shown.len() { ", …" } else { "" },
+            if dirt.len() > shown.len() {
+                ", …"
+            } else {
+                ""
+            },
             &rev[..rev.len().min(12)]
         ));
     }
@@ -912,7 +916,11 @@ mod tests {
                 .current_dir(repo)
                 .output()
                 .expect("git runs");
-            assert!(ok.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&ok.stderr));
+            assert!(
+                ok.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&ok.stderr)
+            );
         };
         git(&["init", "--quiet"]);
         git(&["config", "user.email", "t@example.invalid"]);

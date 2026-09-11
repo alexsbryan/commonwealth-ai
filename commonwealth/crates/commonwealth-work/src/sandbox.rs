@@ -334,7 +334,13 @@ fn is_rootless(runtime: &str) -> bool {
 fn image_platform(runtime: &str, image: &str) -> Option<(String, String)> {
     let out = run_ok(
         runtime,
-        ["image", "inspect", "--format", "{{.Os}} {{.Architecture}}", image],
+        [
+            "image",
+            "inspect",
+            "--format",
+            "{{.Os}} {{.Architecture}}",
+            image,
+        ],
     )?;
     let mut parts = out.split_whitespace();
     let os = parts.next()?.to_string();
@@ -374,7 +380,14 @@ fn rust_arch(oci: &str) -> String {
 /// donor HAS and an image a donor can USE.
 fn image_runs(runtime: &str, image: &str) -> Result<(), String> {
     let out = std::process::Command::new(runtime)
-        .args(["run", "--rm", "--entrypoint=", "--network=none", image, "true"])
+        .args([
+            "run",
+            "--rm",
+            "--entrypoint=",
+            "--network=none",
+            image,
+            "true",
+        ])
         .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("`{runtime} run` could not be spawned: {e}"))?;
