@@ -63,6 +63,7 @@ pub(crate) fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
                 inference_availability: 1.0,
                 inference_capable: false,
                 loaded_models: vec![],
+                origins: Vec::new(),
                 embed_model: None,
                 benchmark: None,
                 current_in_flight: None,

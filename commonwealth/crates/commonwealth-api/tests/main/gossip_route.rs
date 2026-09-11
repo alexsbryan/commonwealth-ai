@@ -47,6 +47,7 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,

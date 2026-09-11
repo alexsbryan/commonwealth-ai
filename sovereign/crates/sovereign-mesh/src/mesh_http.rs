@@ -368,6 +368,11 @@ pub struct MemberDto {
     /// pod-deployment workflows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// The local origins this member serves over the mesh — `["media"]` when
+    /// its `[iroh] media_origin` is live. What `svrn mesh media` (no peer)
+    /// lists; empty for a daemon that predates the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origins: Vec<commonwealth_core::capabilities::OriginKind>,
     /// The endpoint key this member is dialed on, lowercase hex. See
     /// [`crate::types::MeshMember::node_pubkey`] — two ACTIVE members sharing
     /// one is the roster's identity collision, and this is the read surface
@@ -511,6 +516,7 @@ async fn mesh_status(
             vram_gb: m.vram_gb,
             can_anchor: m.can_anchor,
             addresses: m.addresses.clone(),
+            origins: m.origins.clone(),
             node_pubkey: m.node_pubkey.clone(),
             active: m.active,
             hw_fingerprint: m.hw_fingerprint,

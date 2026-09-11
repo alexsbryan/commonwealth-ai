@@ -187,6 +187,7 @@ pub async fn build_local_capabilities(
         inference_availability,
         inference_capable: false,
         loaded_models: Vec::new(),
+        origins: Vec::new(),
         // The collaborative-ingestion planner filters candidates by
         // exact match against this field. `None` means "don't include
         // me in distribution" — safe default for nodes that haven't

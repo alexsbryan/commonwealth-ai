@@ -86,6 +86,15 @@ pub enum MediaReachRefusal {
     /// The peer runs a pre-identity build; there is no key to dial.
     #[error("'{0}' has no iroh identity (pre-identity daemon) — nothing to dial by key")]
     NoIdentity(String),
+    /// The peer advertises no media origin. A bridge to it would accept and
+    /// then be closed at the far end (`MEDIA_ALPN` is not served), which a
+    /// player reports as a stall. The roster already knows; say it — and say
+    /// the one case where the roster can be behind.
+    #[error(
+        "'{0}' advertises no media origin — it declares no [iroh] media_origin, or its daemon \
+         predates the advertisement and needs a restart; `svrn mesh media` lists who offers one"
+    )]
+    NoOrigin(String),
     /// The transport composed here has no iroh path for this class —
     /// `[iroh] enabled = false` locally, or the peer gossips no relay and no
     /// direct address. Says which side, because the fixes differ.
@@ -106,6 +115,37 @@ pub struct MediaCandidate {
     pub status: NodeStatus,
     pub has_identity: bool,
     pub active: bool,
+    /// `NodeCapabilities::origins` contains `Media` — the member's live
+    /// acceptor routes the media ALPN to a local origin.
+    pub offers_media: bool,
+}
+
+/// One row of `svrn mesh media` with no peer: a member that serves a media
+/// origin, as the roster knows it right now.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaOffer {
+    pub peer: String,
+    pub node_id: String,
+    /// `online` | `busy` | `away` | `offline`, the roster's word.
+    pub status: NodeStatus,
+    /// The live QUIC path to this peer, when the endpoint holds one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PeerTransportPath>,
+}
+
+/// The members that offer a media origin — every active member other than
+/// this node whose gossiped capabilities carry `Media`. Offline members are
+/// listed with their status rather than dropped: a person deciding what to
+/// play wants to know a library exists and is away, not that it does not
+/// exist. Self is excluded for the reason `pick_member` refuses it.
+pub fn offering_members(candidates: &[MediaCandidate], self_id: NodeId) -> Vec<MediaCandidate> {
+    let mut rows: Vec<MediaCandidate> = candidates
+        .iter()
+        .filter(|c| c.active && c.offers_media && c.node_id != self_id)
+        .cloned()
+        .collect();
+    rows.sort_by(|a, b| a.name.cmp(&b.name));
+    rows
 }
 
 /// Pick the one member `query` names, or say why there is not one.
@@ -146,6 +186,9 @@ pub fn pick_member(
     if !picked.has_identity {
         return Err(MediaReachRefusal::NoIdentity(picked.name));
     }
+    if !picked.offers_media {
+        return Err(MediaReachRefusal::NoOrigin(picked.name));
+    }
     Ok(picked)
 }
 
@@ -177,6 +220,50 @@ impl EmbeddedDaemon {
     /// peer's gossip status is the liveness evidence, and the CLI does one
     /// real `GET /` through the bridge so the person sees an HTTP status
     /// rather than a port.
+    /// The members offering a media origin, with the live path to each. The
+    /// read behind `svrn mesh media` with no peer; nothing is dialed.
+    pub async fn media_offers(&self) -> Result<Vec<MediaOffer>, MediaReachRefusal> {
+        let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
+        let self_id = app_state.self_node_id();
+        let candidates: Vec<MediaCandidate> = {
+            let mesh = app_state.inner.mesh.read().await;
+            mesh.members
+                .values()
+                .map(|m| MediaCandidate {
+                    node_id: m.node_id,
+                    name: m.name.clone(),
+                    status: m.status,
+                    has_identity: m.node_pubkey.is_some(),
+                    active: m.is_active(),
+                    offers_media: m
+                        .capabilities
+                        .origins
+                        .contains(&commonwealth_core::capabilities::OriginKind::Media),
+                })
+                .collect()
+        };
+        let paths = self.iroh_transport_snapshot().await;
+        let offers: Vec<MediaOffer> = offering_members(&candidates, self_id)
+            .into_iter()
+            .map(|c| MediaOffer {
+                path: paths
+                    .iter()
+                    .find(|p| p.node_id == c.node_id)
+                    .and_then(|p| p.path.clone()),
+                peer: c.name,
+                node_id: c.node_id.to_string(),
+                status: c.status,
+            })
+            .collect();
+        tracing::info!(
+            target: "transport",
+            offering = offers.len(),
+            roster = candidates.len(),
+            "media offers: listed from gossiped origins, nothing dialed"
+        );
+        Ok(offers)
+    }
+
     pub async fn media_reach(&self, query: &str) -> Result<MediaReach, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
@@ -191,6 +278,10 @@ impl EmbeddedDaemon {
                     status: m.status,
                     has_identity: m.node_pubkey.is_some(),
                     active: m.is_active(),
+                    offers_media: m
+                        .capabilities
+                        .origins
+                        .contains(&commonwealth_core::capabilities::OriginKind::Media),
                 })
                 .collect();
             let picked = pick_member(&candidates, self_id, query)?;
@@ -255,7 +346,9 @@ impl EmbeddedDaemon {
 #[derive(Debug, Deserialize)]
 pub struct MediaQuery {
     /// Member name or node-id prefix (≥4 chars), as `svrn mesh status` shows.
-    pub peer: String,
+    /// Absent: list the members that offer a media origin instead.
+    #[serde(default)]
+    pub peer: Option<String>,
 }
 
 /// `GET /v1/mesh/media?peer=<name-or-id>` — the loopback URL that reaches
@@ -269,7 +362,21 @@ pub async fn mesh_media(
     if let Err(r) = enforce_localhost(&caller) {
         return r;
     }
-    match daemon.media_reach(&q.peer).await {
+    let Some(peer) = q.peer.as_deref().map(str::trim).filter(|p| !p.is_empty()) else {
+        return match daemon.media_offers().await {
+            Ok(offers) => (
+                StatusCode::OK,
+                Json(serde_json::json!({ "offering": offers })),
+            )
+                .into_response(),
+            Err(e) => (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        };
+    };
+    match daemon.media_reach(peer).await {
         Ok(reach) => (StatusCode::OK, Json(serde_json::json!(reach))).into_response(),
         Err(e @ MediaReachRefusal::UnknownMember(_)) => (
             StatusCode::NOT_FOUND,
@@ -297,6 +404,7 @@ mod tests {
             status,
             has_identity: true,
             active: true,
+            offers_media: true,
         }
     }
 
@@ -308,6 +416,42 @@ mod tests {
             cand(0xB0B, "LittleMac", NodeStatus::Online),
             cand(0xB0B0, "BeefyMac", NodeStatus::Offline),
         ]
+    }
+
+    /// **The refusal the catalogue is built on.** A member whose gossiped
+    /// capabilities carry no `media` origin would still accept a bridge —
+    /// the far end closes the dial and the player stalls. The failing input
+    /// is `pick_member` returning `Ok` for it.
+    #[test]
+    fn a_member_that_advertises_no_media_origin_is_refused_by_name() {
+        let mut roster = roster();
+        roster[1].offers_media = false;
+        let err = pick_member(&roster, NodeId::from_u128(ME), "LittleMac").unwrap_err();
+        assert_eq!(err, MediaReachRefusal::NoOrigin("LittleMac".into()));
+        assert!(
+            err.to_string().contains("advertises no media origin"),
+            "{err}"
+        );
+    }
+
+    /// The list is the roster's `media` origins minus this node; a member
+    /// offering nothing is not a row, and an offline member that offers IS a
+    /// row, carrying its status, so a person learns the library exists.
+    #[test]
+    fn the_offer_list_is_offering_members_other_than_self_with_their_status() {
+        let mut roster = roster();
+        roster.push(cand(0xC0DE, "Quiet", NodeStatus::Online));
+        roster[3].offers_media = false;
+        let rows = offering_members(&roster, NodeId::from_u128(ME));
+        let names: Vec<(&str, NodeStatus)> =
+            rows.iter().map(|c| (c.name.as_str(), c.status)).collect();
+        assert_eq!(
+            names,
+            vec![
+                ("BeefyMac", NodeStatus::Offline),
+                ("LittleMac", NodeStatus::Online)
+            ]
+        );
     }
 
     /// The happy path, and the one that makes the refusals below mean

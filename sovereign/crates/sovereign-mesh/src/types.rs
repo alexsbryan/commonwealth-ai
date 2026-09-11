@@ -64,6 +64,11 @@ pub struct MeshMember {
     /// round, or when the member crashed without graceful shutdown).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// The local origins this member serves to the mesh
+    /// (`NodeCapabilities::origins`) — `media` when its `[iroh] media_origin`
+    /// is live. Empty for a member whose daemon predates the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origins: Vec<commonwealth_core::capabilities::OriginKind>,
     /// Stable hash of this member's advertised hardware
     /// (`sovereign_core::mesh_measurements::hardware_fingerprint`).
     ///

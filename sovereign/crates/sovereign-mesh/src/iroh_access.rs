@@ -314,6 +314,9 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`RPC_ALPN`] to a local ggml
     /// rpc-server — the truth behind `/status`'s `rpc_worker.iroh` flag.
     rpc_route_active: bool,
+    /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
+    /// the fact the gossip self-stamp advertises as `origins: [media]`.
+    media_route_active: bool,
 }
 
 /// The four local listeners an accepted iroh connection can be forwarded to.
@@ -588,6 +591,7 @@ impl MeshIrohAccess {
             endpoint,
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
+            media_route_active: media_origin.is_some(),
         })
     }
 
@@ -619,6 +623,11 @@ impl MeshIrohAccess {
         &self,
     ) -> std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync> {
         let endpoint = self.endpoint.clone();
+        let origins = if self.media_route_active {
+            vec![commonwealth_core::capabilities::OriginKind::Media]
+        } else {
+            Vec::new()
+        };
         std::sync::Arc::new(move || {
             let addr = endpoint.addr();
             // Bind to locals (statements) so the transient `relay_urls`
@@ -629,6 +638,7 @@ impl MeshIrohAccess {
             commonwealth_core::mesh::IrohDialInfo {
                 relay_url,
                 direct_addrs,
+                origins: origins.clone(),
             }
         })
     }

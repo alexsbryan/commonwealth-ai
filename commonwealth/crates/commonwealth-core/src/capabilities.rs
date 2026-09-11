@@ -51,6 +51,17 @@ pub struct NodeCapabilities {
     #[serde(default)]
     pub loaded_models: Vec<String>,
 
+    /// The local origins this node SERVES to members over the mesh, by kind.
+    /// Gossiped so a member can list who offers what without dialing every
+    /// peer and reading the refusal — the difference between a catalogue and
+    /// a guessing game. Stamped each round from the live iroh acceptor (a
+    /// declared `[iroh] media_origin` whose endpoint failed to bind is not
+    /// an offer), so it is a fact about what answers, not about config.
+    /// Empty from a peer whose build predates the field, which reads as
+    /// "advertises none" — absence reported, never defaulted to an offer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origins: Vec<OriginKind>,
+
     /// Advertised embedding model for this node. Populated when the
     /// daemon has an embed slot loaded; `None` before bootstrap
     /// completes or on nodes that run no embed model at all.
@@ -119,6 +130,16 @@ pub struct NodeCapabilities {
 /// A node's shared-model anchor-tier advertisement. Gossiped so the host (and
 /// any anchor that may become host on failover) can build the eligible-anchor
 /// set and sum pooled VRAM without probing every peer.
+/// A kind of local origin a node can serve to members over the mesh. A
+/// closed set (ARCH §2): every kind has one ALPN and one acceptor route, so a
+/// new kind is a new variant beside a new route, never a string.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum OriginKind {
+    /// An HTTP media origin (`[iroh] media_origin`), served on `MEDIA_ALPN`.
+    Media,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AnchorProfile {
     /// True when this node is configured to hold a shard of the shared model
@@ -347,6 +368,24 @@ mod tests {
         );
     }
 
+    /// A peer whose build predates `origins` advertises none — absence,
+    /// not an offer — and a payload that carries `["media"]` reads as the
+    /// enum, so the list route never has to parse a string.
+    #[test]
+    fn origins_default_to_none_when_absent_and_read_the_kind_when_present() {
+        let json = minimal_capabilities_json(None, None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(caps.origins.is_empty(), "old peers advertise no origins");
+        let mut v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        v["origins"] = serde_json::json!(["media"]);
+        let caps: NodeCapabilities = serde_json::from_value(v).unwrap();
+        assert_eq!(caps.origins, vec![OriginKind::Media]);
+        // And the empty case stays off the wire, so new→old bytes are unchanged.
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        let out = serde_json::to_value(&caps).unwrap();
+        assert!(out.get("origins").is_none());
+    }
+
     #[test]
     fn embed_model_defaults_to_none_when_absent() {
         // Old peers (pre-field) don't include embed_model. Must
@@ -380,6 +419,7 @@ mod tests {
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
+            origins: Vec::new(),
             embed_model: Some(EmbedModelInfo {
                 model_id: "qwen3-embedding-0.6b".into(),
                 dimensions: 1024,

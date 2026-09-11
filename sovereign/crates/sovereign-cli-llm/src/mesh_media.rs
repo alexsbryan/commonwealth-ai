@@ -13,9 +13,11 @@ use std::time::{Duration, Instant};
 use crate::mesh_cmd::daemon_client_port;
 
 pub(crate) async fn cmd_media(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
-        eprintln!("Usage: svrn mesh media <peer> [--json] [--no-probe]");
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
         eprintln!();
+        eprintln!("With no <peer>: list the members that offer a media origin, as gossip");
+        eprintln!("knows them — nothing is dialed. With a <peer>:");
         eprintln!("Print a localhost URL that reaches <peer>'s media origin over the mesh —");
         eprintln!("dialed by its key, no VPN, no port forwarded. Point a player or a browser");
         eprintln!("at it. <peer> is a member name or a node-id prefix of at least 4 chars;");
@@ -29,14 +31,11 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         eprintln!("Flags:");
         eprintln!("  --json       Raw JSON from the daemon (peer, node_id, url, via, path).");
         eprintln!("  --no-probe   Skip the GET / through the bridge; print the URL only.");
-        return if args.is_empty() { 1 } else { 0 };
+        return 0;
     }
     let json_out = args.iter().any(|a| a == "--json");
     let probe = !args.iter().any(|a| a == "--no-probe");
-    let Some(peer) = args.iter().find(|a| !a.starts_with("--")) else {
-        eprintln!("Which peer? `svrn mesh media <name-or-node-id>`");
-        return 1;
-    };
+    let peer = args.iter().find(|a| !a.starts_with("--"));
 
     let port = daemon_client_port();
     let url = format!("http://127.0.0.1:{port}/v1/mesh/media");
@@ -49,6 +48,9 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
             eprintln!("Failed to build HTTP client: {e}");
             return 1;
         }
+    };
+    let Some(peer) = peer else {
+        return list_offers(&client, &url, json_out).await;
     };
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
@@ -158,4 +160,68 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
 struct ProbeOutcome {
     ok: bool,
     detail: String,
+}
+
+/// `svrn mesh media` with no peer: the members offering a media origin, from
+/// gossip. One line per member — name, node id, status, path — so a person
+/// can pick one and run the verb again with it.
+async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32 {
+    let resp = match client.get(url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("mesh media: daemon at {url} not reachable: {e}");
+            eprintln!("The roster lives in the running daemon — `svrn daemon start`.");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        let msg = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+            .unwrap_or(body);
+        eprintln!("{msg}");
+        return 1;
+    }
+    if json_out {
+        println!("{body}");
+        return 0;
+    }
+    #[derive(serde::Deserialize)]
+    struct Offers {
+        offering: Vec<sovereign_mesh::media_reach::MediaOffer>,
+    }
+    let offers: Offers = match serde_json::from_str(&body) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("mesh media: response shape mismatch ({e}): {body}");
+            return 1;
+        }
+    };
+    if offers.offering.is_empty() {
+        println!(
+            "No member offers a media origin. A holder declares one with \
+             `[iroh] media_origin = \"127.0.0.1:8096\"` and restarts its daemon; it shows \
+             here within one gossip round."
+        );
+        return 0;
+    }
+    println!("Members offering a media origin:");
+    for o in &offers.offering {
+        // The roster's word, lowercased — total, so a row never renders blank.
+        let status = format!("{:?}", o.status).to_ascii_lowercase();
+        let path = o
+            .path
+            .as_ref()
+            .map(|p| match &p.relay {
+                Some(r) => format!("{} via {r}", p.path),
+                None => p.path.clone(),
+            })
+            .unwrap_or_else(|| "no path yet (nothing dialed)".to_string());
+        println!("  {:<16} {}  {:<8} {}", o.peer, o.node_id, status, path);
+    }
+    println!();
+    println!("Play one:  svrn mesh media <peer>");
+    0
 }

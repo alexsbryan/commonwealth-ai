@@ -341,6 +341,11 @@ impl MemberRecord {
 pub struct IrohDialInfo {
     pub relay_url: Option<String>,
     pub direct_addrs: Vec<SocketAddr>,
+    /// What the live acceptor routes to a local origin — see
+    /// [`crate::capabilities::NodeCapabilities::origins`]. Read off the
+    /// acceptor, not the config, so a declared origin whose endpoint never
+    /// bound is not advertised.
+    pub origins: Vec<crate::capabilities::OriginKind>,
 }
 
 /// Current status of a node as observed by the mesh.

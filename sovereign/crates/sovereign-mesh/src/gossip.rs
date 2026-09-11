@@ -546,6 +546,11 @@ pub async fn run_one_round(
                     me.relay_url != info.relay_url || me.iroh_direct_addrs != info.direct_addrs;
                 me.relay_url = info.relay_url;
                 me.iroh_direct_addrs = info.direct_addrs;
+                // What this node SERVES rides beside how it is reached, and
+                // from the same live source: `fresh_caps` above was built
+                // from hardware and corpora and knows nothing about the
+                // acceptor, so the origins are stamped here, after it.
+                me.capabilities.origins = info.origins;
                 // WS-D anti-downgrade: SIGN our dial info so peers can
                 // verify only we changed it (a gossip-strip attacker past
                 // the join-key gate can't force us unreachable / downgrade

@@ -5663,9 +5663,9 @@ bridge is `tokio::io::copy` both ways and never parses HTTP, which is why
 `[iroh.transport]` entry: it has exactly one transport (the IP overlay returns
 no candidates for it — there is no port to guess and a guess would be the
 library over plaintext), so there is nothing to opt it out to. What the read
-refuses it names — unknown, ambiguous, offline, no identity, no iroh path,
-non-loopback endpoint — rather than handing out a port that accepts and never
-answers; the CLI then does one real `GET /` through the bridge so the person
+refuses it names — unknown, ambiguous, offline, no identity, no origin, no
+iroh path, non-loopback endpoint — rather than handing out a port that accepts
+and never answers; the CLI then does one real `GET /` through the bridge so the person
 sees an HTTP status, not a port. The response also says which KIND of number a
 play would be: `path.relayed_reading` is true only for `relayed`, decided once
 by `PeerPath::is_relayed_reading` — `mixed` (a direct leg and a relay both
@@ -5676,6 +5676,25 @@ measured through the SAME URL: `media_bridge_bench pull --url <it>
 leaves the path kind to that field. Watched failing:
 `iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
 and `media_reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
+
+**What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
+`OriginKind`, 2026-09-11). The acceptor knows whether it routes `cwth/media/0`
+to a local origin (`MeshIrohAccess::media_route_active`); the dial-info provider
+carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
+into this node's own capabilities each round, after the hardware/corpora
+snapshot replaces them — so the advertisement is a fact about the LIVE acceptor,
+not about config, and a declared origin whose endpoint never bound is not
+offered. A closed enum, serde-defaulted and skipped when empty: a peer on an
+older build reads as advertising none (absence, never an offer), and new→old
+wire bytes are unchanged. Two reads consume it. `GET /v1/mesh/media` with no
+`peer` — `svrn mesh media` bare — lists every active member other than self
+whose origins carry `media`, with status and live path, dialing nothing
+(`EmbeddedDaemon::media_offers`, `offering_members`); offline members are rows
+with their status, because a person wants to know the library exists. And
+`pick_member` refuses a named member that advertises none
+(`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
+close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
+failing: `media_reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing

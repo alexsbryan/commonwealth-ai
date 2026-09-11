@@ -79,7 +79,7 @@ Manage the local Commonwealth mesh.
 | `switch <mesh>` | Park the active mesh and bring another joined one up |
 | `forget <mesh>` | Drop a parked mesh from this node (refuses on the active one) |
 | `status` | Show mesh members, hosted knowledge, loaded models |
-| `media <peer> [--json] [--no-probe]` | Print a localhost URL that reaches a member's media server (Jellyfin) by mesh key — no VPN, no port forwarded — then GET / through it once |
+| `media [<peer>] [--json] [--no-probe]` | With no peer: list the members whose gossiped capabilities advertise a media origin, with the live path to each (nothing dialed). With a peer: print a localhost URL that reaches its media server by mesh key — no VPN, no port forwarded — then GET / through it once |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
 | `leave` | Leave the current mesh |
 | `logs` | Show mesh daemon logs |
