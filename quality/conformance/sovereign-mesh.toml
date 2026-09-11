@@ -63,12 +63,12 @@ asserts = 3
 requirement = "FE-8"
 test = "sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer"
 file = "sovereign/crates/sovereign-mesh/src/persist.rs"
-line = 1086
+line = 1087
 asserts = 3
 
 [[claim]]
 requirement = "UI-22"
 test = "sovereign-mesh::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-mesh/src/daemon.rs"
-line = 5029
+line = 5039
 asserts = 21

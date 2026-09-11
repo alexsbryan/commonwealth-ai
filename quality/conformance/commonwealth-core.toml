@@ -35,19 +35,19 @@ asserts = 2
 requirement = "FE-23"
 test = "commonwealth-core::mesh::tests::dial_info_strip_attack_is_rejected_and_pinned"
 file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
-line = 239
+line = 240
 asserts = 4
 
 [[claim]]
 requirement = "FE-24"
 test = "commonwealth-core::mesh::tests::encryption_policy_never_downgrades"
 file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
-line = 389
+line = 390
 asserts = 1
 
 [[claim]]
 requirement = "FE-6"
 test = "commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it"
 file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
-line = 586
+line = 587
 asserts = 3
