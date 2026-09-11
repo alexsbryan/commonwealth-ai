@@ -57,6 +57,26 @@ budget: (none)           # sessions / wall-clock / spend
 
 # Campaign: $TITLE
 
+## Predicate
+
+One sentence about the SYSTEM that a program can call true or false, with no
+partial credit — plus the command that decides it (exit 0 = true). Copy both
+into \`quality/campaigns/$ID.toml\` as \`[predicate] statement / check\`; the
+loader refuses a campaign declared without them.
+
+The test for a good one: could every bar you are about to write sit at target
+while this sentence stays false? On sv-surface the answer was yes, and it was
+— forks 15->0, twins 6->0, census 14->12, and the desktop still named
+sovereign-cli-daemon in [dependencies] the whole time. Bars are instruments.
+This is the objective.
+
+Prefer a denominator you do not author: the dependency graph, the compiler,
+the process table, a wire trace. A count over a list of known spellings is
+finished when the LIST is finished.
+
+- statement: (none)
+- check: (none)
+
 ## Demos
 
 <!-- WHAT A PERSON WATCHES, in the order a person cares. Draft this FIRST and

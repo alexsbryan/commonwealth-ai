@@ -11,6 +11,27 @@ register  = "quality/CONCEPTS.toml"
 declared  = "2026-09-08"
 status    = "active"
 
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Added 2026-09-11, retro-fitted deliberately: this campaign IS the case that
+# minted the mechanism. Every bar below was at or near target — is_attach_mode
+# forks 15->0, capability twins 6->0 "HOLDING at 0", the construction census
+# 14->12 — and the objective was false the whole time, because the desktop
+# names sovereign-cli-daemon and sovereign-mesh directly in [dependencies].
+#
+# The bars are countable because an author listed the needles. The file says so
+# itself at sv-attach-pure-client: "The needle list cannot see an UNLISTED new
+# construction." A denominator the worker writes is a map. This denominator is
+# cargo's.
+#
+# DIRECT EDGES ONLY, and stated so rather than discovered later: the five names
+# below are what sovereign-desktop declares. The transitive closure (53 crates,
+# six of which bind a listener) collapses when these go, so the direct form is
+# the honest cheap check, not a weaker one wearing the same sentence.
+[predicate]
+statement = "sovereign-desktop depends on no crate that can assemble or host a daemon — it names none of sovereign-mesh, sovereign-cli-daemon, sovereign-compute, sovereign-workflow-host, sovereign-tools in [dependencies]"
+check = "! grep -qE '^(sovereign-mesh|sovereign-cli-daemon|sovereign-compute|sovereign-workflow-host|sovereign-tools) *=' sovereign/crates/sovereign-desktop/src-tauri/Cargo.toml"
+
+
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
 #
 # Turns already landed the destination shape: ONE driver (`serve_turn`), with
@@ -1437,6 +1458,7 @@ floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2d
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo tree -p sovereign-desktop --edges normal --depth 1, gated by cargo xtask layer over quality/ARCH_LAYERS.toml - a dependency bar, not a needle count, so it goes red when the edge comes back rather than when someone re-derives a construction"
+goodhart     = "a surface can stop MANAGING a daemon while still LINKING one — the management calls go and the crate edge stays, which is exactly the state the predicate caught on 2026-09-11"
 kill         = "K3 - if a capability genuinely cannot be served by a daemon the app does not own, it goes to the operator as a DECLARED per-platform exception with a DEFAULTS_LEDGER row and a review-by date. Windows is the first and currently the only such row."
 
 [[bar]]
@@ -1484,6 +1506,7 @@ floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needl
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"
+goodhart     = "the census counts needles an author listed, so it reaches 0 when the LIST is exhausted, not when construction is. It also moved 14->12 by re-measuring with no code change — a number that moves when you look again is an opinion with a number attached"
 kill         = "K1 - a capability that genuinely cannot cross without a shim wider than a route goes to the operator as a DECLARED closed-set addition with a ledger row, never a silent in-process fallback. The K2/cw-lift precedent: the honest deliverable may be a profile, and the objective sentence survives it."
 
 [[bar]]
@@ -1534,6 +1557,7 @@ floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus sta
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
+goodhart     = "twins are counted per FAMILY and families are enumerated by hand, so a capability nobody enumerated is twinned for free; 'HOLDING at 0' says the known six stayed dead, not that no seventh exists"
 kill         = "K2 - if parity cannot assert because the surfaces render different GRANULARITIES (not different answers), the instrument is re-derived, not the divergence forgiven."
 
 [[bar]]
@@ -1586,6 +1610,7 @@ floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
 target       = 4.0
 direction    = "higher_is_better"
 instrument   = "scripts/twin-census.py over quality/twin-plants.toml (the runner refuses a dirty tree by its own rule, so a landing on an unclean tree records the by-hand plant -> red -> md5-verified restore instead)"
+goodhart     = "each control plants the spelling its own census knows, so green means 'the planted twin is caught', never 'a twin cannot return' — the inherited needle-list weakness, recorded in the bar and still true"
 kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
 
 [[bar]]
@@ -1613,4 +1638,5 @@ floor_basis  = "sovereign-mobile src-tauri/tests/census.rs, 2026-09-09: no wire 
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-mobile --test census; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+goodhart     = "counting client families reaches 1 when the SPELLINGS converge; a single named client that still assembles the stack in-process satisfies it while the predicate stays false"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."
