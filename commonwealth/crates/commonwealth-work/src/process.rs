@@ -139,7 +139,9 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 900;
 /// `scripts/sovereign-test.sh` already defines — a run that resolved zero
 /// tests, and a run whose results could not be attributed to it. Both exit
 /// non-zero and neither is a statement about the code under test. Any other
-/// non-zero code is a real failure and stays one.
+/// non-zero code the UNIT chose is a real failure and stays one; a code a
+/// container runtime relays for a signal death (`128 + n`) is not one the
+/// unit chose, and [`relayed_signal`] takes it out before this list is read.
 pub const COULD_NOT_JUDGE_EXITS: [i32; 2] = [4, 5];
 
 // -----------------------------------------------------------------
@@ -406,6 +408,11 @@ fn cap_tail(s: &str, limit: usize) -> String {
 struct RunOutcome {
     /// `None` when the process was killed by a signal and left no code at all.
     exit_code: Option<i32>,
+    /// The signal that ended it, when one did — read off the wait status
+    /// under [`Sandbox::Direct`], and decoded from the runtime's `128 + n`
+    /// relay under [`Sandbox::Container`], where the child the donor waits on
+    /// is the runtime client and the unit's own death arrives as a code.
+    signal: Option<i32>,
     stdout: String,
     stderr: String,
     duration_ms: u128,
@@ -593,6 +600,7 @@ impl ProcessExecutor {
         match stop {
             Stop::Finished(Ok(output)) => Ok(RunOutcome {
                 exit_code: output.status.code(),
+                signal: signal_of(&output.status, &self.sandbox),
                 stdout: cap_tail(&String::from_utf8_lossy(&output.stdout), TAIL_CAP_BYTES),
                 stderr: cap_tail(&String::from_utf8_lossy(&output.stderr), TAIL_CAP_BYTES),
                 duration_ms: started.elapsed().as_millis(),
@@ -692,8 +700,30 @@ fn judge(
 ) -> Result<(Judgement, Value), JobError> {
     let subject = crate::executor::subject_of(unit);
 
-    // No exit code at all: killed by a signal we did not send. It ran and we
-    // cannot tell what it decided.
+    // Ended by a signal we did not send — `podman stop`, an OOM kill, an
+    // operator's ^C on the donor. It ran and we cannot tell what it decided,
+    // and that holds whether the signal reached us as no code (a direct
+    // child) or as the runtime's `128 + n` (a container). Watched 2026-09-11:
+    // a `dst-scenarios` unit stopped from outside landed as `failed — the
+    // unit exited 137`, a red on code that never reached a verdict (§18.3).
+    if let Some(sig) = outcome.signal {
+        return Err(JobError::NoVerdict {
+            reason: format!(
+                "`{}` was killed by signal {sig} ({}) after {}ms{} — nothing it was asked to \
+                 judge reached a verdict",
+                payload.argv[0],
+                signal_name(sig),
+                outcome.duration_ms,
+                match outcome.exit_code {
+                    Some(code) => format!(", relayed by the runtime as exit {code}"),
+                    None => String::new(),
+                }
+            ),
+        });
+    }
+
+    // No exit code at all and no signal either: the wait status is one this
+    // platform cannot name. It ran and we cannot tell what it decided.
     let Some(code) = outcome.exit_code else {
         return Err(JobError::NoVerdict {
             reason: format!(
@@ -768,9 +798,52 @@ fn judge(
     }
 }
 
-/// Exit 0 is passed, anything else is failed — after the declared
-/// could-not-judge codes have already been taken out above. One place, so the
-/// three exit-code arms cannot drift apart.
+/// The signal that ended a child, if one did.
+///
+/// Under [`Sandbox::Direct`] the wait status says so itself. Under
+/// [`Sandbox::Container`] the child is the runtime client, which exits 0..=255
+/// no matter how the unit died and relays a signal death as `128 + n` — the
+/// shell convention podman and docker both follow. A direct child that exits
+/// 137 on purpose keeps its 137: the relay is only decoded where a runtime
+/// stood between us and the unit.
+fn signal_of(status: &std::process::ExitStatus, sandbox: &crate::sandbox::Sandbox) -> Option<i32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return Some(sig);
+        }
+    }
+    match sandbox {
+        crate::sandbox::Sandbox::Direct => None,
+        crate::sandbox::Sandbox::Container { .. } => status.code().and_then(relayed_signal),
+    }
+}
+
+/// `128 + n` for the 31 classic signals, and nothing else: a runtime's own
+/// exits (125 cannot run, 126 not executable, 127 not found) and every code a
+/// unit can choose below 128 pass through untouched.
+fn relayed_signal(code: i32) -> Option<i32> {
+    (129..=159).contains(&code).then(|| code - 128)
+}
+
+/// The name a reader greps for. Only the ones a stopped unit actually dies
+/// of; the rest are reported by number, which is still a name.
+fn signal_name(sig: i32) -> &'static str {
+    match sig {
+        1 => "SIGHUP",
+        2 => "SIGINT",
+        6 => "SIGABRT",
+        9 => "SIGKILL",
+        11 => "SIGSEGV",
+        15 => "SIGTERM",
+        _ => "unnamed",
+    }
+}
+
+/// Exit 0 is passed, anything else is failed — after the signal deaths and
+/// the declared could-not-judge codes have already been taken out above. One
+/// place, so the three exit-code arms cannot drift apart.
 fn exit_code_judgement(subject: String, code: i32, outcome: &RunOutcome) -> Judgement {
     let ms = outcome.duration_ms;
     if code == 0 {
