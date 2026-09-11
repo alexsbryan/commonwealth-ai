@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+# sovereign work-donor image — the boundary a `process:v1` unit runs inside.
+#
+# ── build (from the workspace root):
+#     podman build -t localhost/sovereign-work:latest \
+#                  -f sovereign/container/Containerfile.work-donor .
+#
+# ── declare it, on the node that will donate:
+#     [compute.work_offer] image = "localhost/sovereign-work:latest"
+#
+# The image is the DONOR OPERATOR's declaration, never the submitter's and never
+# the package's: `commonwealth_work::sandbox` ships none and refuses to guess
+# one. This file is the monorepo's own answer for its own donors, and
+# `Sandbox::probe` still has to find it locally before this node may claim
+# `Isolation::RootlessContainer`.
+#
+# ── why it derives rather than installs
+#
+# The desktop Linux build image already carries the toolchain a CI shard needs
+# (cargo, rustc, python3, clang, protoc) and this monorepo's container cargo
+# cache layout (CARGO_HOME=/work/.cargo-container, CARGO_TARGET_DIR=
+# /work/target-container-linux — both inside the unit's workdir, which is the
+# ONE directory the boundary mounts). Re-installing that here would be a second
+# copy of a 3 GB answer.
+#
+# ── the one thing it has to change, and it was MEASURED
+#
+# A unit runs under `--userns=keep-id`: as the donor's own uid, not root. The
+# base image installs rust through rustup at /usr/local/rustup owned by
+# root:root 0755, and the rustup PROXY writes a temp file into $RUSTUP_HOME on
+# every invocation. So on 2026-09-11 the first real donated CI units came back
+# `exited 1 after 899ms — error: could not create temp file
+# /usr/local/rustup/tmp/9s7k36ngcaqhl762_file: Permission denied`, before
+# compiling a line. Two of the four units in that run died on it; the one that
+# needed no toolchain passed.
+#
+# The fix is NOT a chmod over a 3 GB tree — that rewrites the whole layer. Put
+# the toolchain's own bin directory first on PATH, so `cargo` and `rustc` are
+# the real binaries and the proxy is never invoked. One ENV layer, no bytes
+# copied. Verified as uid 1000 inside the boundary: cargo 1.97.1, rustc 1.97.1,
+# git 2.34.1.
+FROM localhost/sovereign-desktop-linux-build:latest
+
+ENV PATH=/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# The unit's argv is the unit. `Sandbox::command_line` passes `--entrypoint=`
+# for exactly this reason — an image ENTRYPOINT would take the submitter's argv
+# as ARGUMENTS and the donor would report a verdict about a program nobody
+# sealed — and this makes the image itself honest rather than relying on the
+# flag.
+ENTRYPOINT []
