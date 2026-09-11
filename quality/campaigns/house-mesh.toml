@@ -1,0 +1,84 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER in campaign.md carries the rung list, so
+# the plan survives without them.
+id        = "house-mesh"
+objective = "A housemate publishes a local service and another housemate reaches it without either of them hand-editing a config file or sharing a credential - so a 25-person coliving house builds on the mesh instead of a home server, proven on the real two-daemon wire rather than on a list of spellings"
+spec      = "docs/internal/DILETTANTE_MESH_DEMO.md (gitignored) - the friction rows F1-F7 and the primitives P1-P6 come from building and running ~/dev/house-mesh, not from imagining the flow"
+declared  = "2026-09-11"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Deliberately end-to-end. Every bar below can sit at target while this is
+# false: `svrn publish` can exist, the version handshake can be perfect, and
+# the sentence breaks the moment a declared header does not actually reach the
+# origin. Only a run across two daemons can say.
+#
+# The denominator is the wire between two real daemons, not a needle list an
+# author wrote. That is the sv-surface lesson applied before the fact rather
+# than after it.
+[predicate]
+statement = "On a two-node mesh, a service published via `svrn publish` on node A is returned as a `served` row by node B's media fanout, where A's origin required an auth header that B never held and neither node's config.toml was edited by hand"
+check     = "cargo test -p commonwealth-rails --test two_daemons house_mesh_publish_roundtrip"
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id       = "hm-no-shared-credentials"
+demo     = "Someone else's library, and I hold none of their keys"
+rung     = "hm-1"
+statement = "library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
+target   = "catalogue non-empty; tokens.json absent"
+status   = "never-ran"
+# Why this is the first rung despite P1 being the more visible verb: it deletes
+# a PRACTICE (25 people mailing each other API keys), and `Forward::Http` at
+# commonwealth-media/src/identity.rs:106-109 already carries the header vec.
+# P1 only deletes typing.
+
+[[bar]]
+id       = "hm-publish-no-config-edit"
+demo     = "I published my Jellyfin and never opened a config file"
+rung     = "hm-2"
+statement = "A node publishes and unpublishes an origin with no hand edit to config.toml, and `svrn publish` lists it with the header value redacted"
+target   = "round-trip clean; no secret in stdout"
+status   = "never-ran"
+# The hand-edit is not merely tedious: this dev host already carries an [iroh]
+# section, so the obvious `>>` append produces invalid TOML. Twenty-five
+# newcomers would hit that, and the failure reads as "the software is broken".
+
+[[bar]]
+id       = "hm-version-skew-legible"
+demo     = "It told me what was wrong"
+rung     = "hm-3"
+statement = "A mesh verb against a daemon older than the CLI names the skew rather than surfacing a bare 404"
+target   = "message names the skew and the fix"
+status   = "never-ran"
+# Reproduced by hand 2026-09-11: daemon process started 09-10 23:06, the
+# /v1/mesh/media/fanout route landed 09-11 12:54, binary rebuilt 15:22. The
+# route 404s on a running, healthy daemon with nothing explaining why.
+# library.py currently maps that 404 by hand — a workaround standing in for a
+# missing primitive.
+
+[[bar]]
+id       = "hm-week-1-publishers"
+demo     = "The house evening"
+rung     = "none — this is the adoption bar, not a code rung"
+statement = "Members of the house with a media origin published and visible in `svrn mesh media`, one week after the install evening"
+target   = ">= 8 of 25"
+floor    = "4 of 25 — below this the install story is the problem, not the pitch"
+status   = "never-ran"
+
+[[bar]]
+id       = "hm-month-1-second-app"
+demo     = "The house evening"
+rung     = "none — the real conversion"
+statement = "Apps published to the house that are NOT about media, written by someone outside this project"
+target   = ">= 1 within a month of the install evening"
+status   = "never-ran"
+# THE bar that separates a substrate from a feature. If it never moves, we
+# shipped a Jellyfin feature and should say so rather than keep calling it a
+# platform. Kill condition for the campaign: the house still routes media
+# through one box at month 2 — federation lost on its merits and the
+# interesting question is why, not how to evangelise harder.
