@@ -11,11 +11,9 @@
 //!
 //! The actual platform-specific registration (writing the plist on
 //! macOS, the unit file on Linux, then loading it) lives in
-//! `service_install.rs`. This module is the CLI surface — it
+//! `sovereign_service.rs`. This module is the CLI surface — it
 //! resolves the binary path, calls `install_service`, and prints
 //! human-readable feedback.
-
-use crate::service_install;
 
 pub async fn run(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
@@ -56,7 +54,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     eprintln!("Registering {} as a system service…", bin_path.display());
-    match service_install::install_service(&bin_path) {
+    match sovereign_service::install_service(&bin_path) {
         Ok(()) => {
             eprintln!("\u{2713} service registered.");
             // The service manager spawns `svrn daemon run` in

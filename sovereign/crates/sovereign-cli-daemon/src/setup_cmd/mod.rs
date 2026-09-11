@@ -32,7 +32,6 @@ use sovereign_inference::setup_planner::{hf_token, tier_rank};
 #[cfg(test)]
 use std::path::Path;
 
-use crate::service_install;
 use crate::setup_config::SetupConfig;
 
 // §3.2 split: the wizard's phases live in focused submodules; the shared
@@ -172,7 +171,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // ── --reset: tear down existing setup ─────────────────────────
     if opts.reset {
         eprintln!("  Resetting sovereign...");
-        if let Err(e) = service_install::uninstall_service() {
+        if let Err(e) = sovereign_service::uninstall_service() {
             eprintln!("  warning: could not uninstall service: {e}");
         } else {
             eprintln!("    \u{2713} Service uninstalled");

@@ -1051,7 +1051,7 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
 }
 
 pub(super) fn check_daemon_supervised() -> CheckResult {
-    if crate::service_install::service_installed() {
+    if sovereign_service::service_installed() {
         CheckResult {
             name: "daemon_supervised",
             layer: Layer::Commonwealth,

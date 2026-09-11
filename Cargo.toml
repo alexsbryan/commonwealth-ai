@@ -116,6 +116,7 @@ members = [
     # native lossless wire + child server/entrypoint + daemon-side provider
     # facade & replica pool.
     "sovereign/crates/sovereign-compute",
+    "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
@@ -280,6 +281,7 @@ sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
+sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }

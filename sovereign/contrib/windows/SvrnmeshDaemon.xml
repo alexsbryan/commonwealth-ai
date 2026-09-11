@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Scheduled Task registration for the svrnmesh daemon — the Windows
+  counterpart of contrib/launchd/com.svrnmesh.daemon.plist and
+  contrib/systemd/svrnmesh.service.
+
+  WHY A TASK AND NOT A WINDOWS SERVICE. The SCM needs administrator rights
+  and registers machine-wide. The daemon serves ONE person's data root
+  (~/.svrnmesh), so a machine-wide service is the wrong grain twice: it asks
+  for elevation the other two platforms never ask for, and it would have to
+  pick a user to run as. A logon-triggered task in the current user's folder
+  is the exact analogue of a launchd LaunchAgent and a `systemctl --user`
+  unit — per-user, no elevation, starts at logon.
+
+  {BINARY} and {WORKDIR} are substituted at install time with absolute paths
+  by sovereign-service; they are not environment expansions.
+
+  The restart policy mirrors the other two: RestartOnFailure count/interval
+  is the analogue of launchd's KeepAlive.SuccessfulExit=false and systemd's
+  Restart=on-failure + RestartSec. Unlike launchd, Task Scheduler HAS a
+  crash-loop brake (RestartCount), so this file carries the equivalent of
+  systemd's StartLimitBurst rather than launchd's documented gap.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Sovereign/svrnmesh local inference and knowledge daemon (per-user).</Description>
+    <URI>\SvrnmeshDaemon</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <!-- The crash-restart policy. PT1M matches systemd's RestartSec=10 in
+         spirit (Task Scheduler's minimum is one minute) and 5 restarts
+         matches StartLimitBurst=5. -->
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>5</Count>
+    </RestartOnFailure>
+    <!-- A long-lived daemon must never be killed for running too long.
+         The default is 3 days, which would SIGKILL a healthy daemon. -->
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{BINARY}</Command>
+      <Arguments>daemon run</Arguments>
+      <WorkingDirectory>{WORKDIR}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

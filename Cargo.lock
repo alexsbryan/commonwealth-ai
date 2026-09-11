@@ -12213,6 +12213,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-runtime-recipe",
+ "sovereign-service",
  "sovereign-store",
  "sovereign-tdd",
  "sovereign-tools",
@@ -12812,6 +12813,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-service"
+version = "0.6.0"
+dependencies = [
+ "dirs 5.0.1",
+ "libc",
+ "sovereign-contracts",
 ]
 
 [[package]]

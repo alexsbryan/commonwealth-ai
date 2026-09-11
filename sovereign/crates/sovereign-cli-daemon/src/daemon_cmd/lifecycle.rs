@@ -54,7 +54,7 @@ pub(super) async fn stop_daemon() -> i32 {
     // under it and the manager's restart policy races whatever starts
     // next. The service-manager leg further down is a FALLBACK for a
     // missing pidfile; it fires too late to prevent that.
-    if let Some(svc) = crate::service_install::managing_service() {
+    if let Some(svc) = sovereign_service::managing_service(service_addressing()) {
         eprintln!(
             "  {} is registered — stopping via the service manager",
             svc.name
@@ -143,7 +143,7 @@ pub(super) async fn stop_daemon() -> i32 {
                 return await_exit_or_sigkill(pid, "").await;
             }
             // kill() failed — pid likely stale. Clean up and fall
-            // through to service_install so a service-managed instance
+            // through to sovereign_service so a service-managed instance
             // (if any) still gets stopped.
             let _ = std::fs::remove_file(daemon_pid_path());
         }
@@ -198,7 +198,7 @@ pub(super) async fn stop_daemon() -> i32 {
         );
         return 1;
     }
-    match crate::service_install::stop_service() {
+    match sovereign_service::stop_service() {
         Ok(()) => {
             eprintln!("✓ stop signal sent — daemon will exit after draining in-flight requests");
             0
@@ -315,12 +315,70 @@ async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
 /// hatch confining stop to the pidfile legs.
 ///
 /// THE reader of `SOVEREIGN_STOP_SANDBOXED` (TOPOLOGY §10 phase 10, ARCH
-/// §10.6). `service_install::service_manager_is_addressed` had its own copy of
+/// §10.6). `sovereign_service`'s addressing check had its own copy of
 /// this parse; two spellings of "is this an isolated daemon" is exactly the
 /// shape that let the service-manager leg get added ABOVE the guard in the
 /// first place.
 pub(crate) fn stop_sandboxed() -> bool {
     std::env::var("SOVEREIGN_STOP_SANDBOXED").ok().as_deref() == Some("1")
+}
+
+/// Is THIS invocation addressing the unit the operator installed?
+///
+/// The two facts are both daemon-side — a sandbox env flag and the resolved
+/// client port — which is why the decision lives here and travels to
+/// `sovereign_service` as a value. That crate is depended on by surfaces
+/// that have no `SetupConfig` and no sandbox flag; a registrar that reached
+/// for either would not be one they could link (`sv-no-daemon-management`).
+///
+/// The bias, unchanged from when this lived there: wrongly delegating kills
+/// a production daemon from a sandbox, wrongly declining sends SIGTERM to a
+/// pid we own and lets the manager's restart policy notice. So anything
+/// unusual answers `SomethingElse`.
+pub(crate) fn service_addressing() -> sovereign_service::Addressing {
+    use sovereign_service::Addressing;
+    if stop_sandboxed() {
+        tracing::debug!(
+            target: "service",
+            reason = "SOVEREIGN_STOP_SANDBOXED=1",
+            "service addressing: declining to drive the operator's service manager"
+        );
+        return Addressing::SomethingElse;
+    }
+    use sovereign_core::setup_config::{DaemonSection, SetupConfig};
+    let default_port = DaemonSection::default().client_port;
+    // NAMED WEAKNESS, inherited verbatim from when this lived in
+    // service_install.rs: an unreadable config falls back to the DEFAULT
+    // port, which then reads as "we are the installed unit" — the permissive
+    // direction, against the bias the doc above states. Left as-is here
+    // because changing it changes what `daemon stop` does on a host with no
+    // config, which is a measurement this move did not make. Traced, so the
+    // fallback is visible rather than inferred.
+    let configured = match SetupConfig::load() {
+        Ok(c) => c.daemon.client_port,
+        Err(e) => {
+            tracing::debug!(
+                target: "service",
+                error = %e,
+                default_port,
+                "service addressing: no readable config — assuming the default port"
+            );
+            default_port
+        }
+    };
+    let addressing = if configured == default_port {
+        Addressing::TheInstalledUnit
+    } else {
+        Addressing::SomethingElse
+    };
+    tracing::debug!(
+        target: "service",
+        ?addressing,
+        configured,
+        default_port,
+        "service addressing resolved"
+    );
+    addressing
 }
 
 /// Find the PID listening on `port` on localhost. Used by `daemon stop`
@@ -521,7 +579,7 @@ pub(crate) async fn start_daemon(args: &[String]) -> i32 {
     // ubatch vars that exist nowhere else). Starting one alongside a
     // registered service silently produces a differently-configured
     // daemon. Defer.
-    if let Some(svc) = crate::service_install::managing_service() {
+    if let Some(svc) = sovereign_service::managing_service(service_addressing()) {
         eprintln!(
             "  {} is registered — starting via the service manager",
             svc.name
@@ -583,7 +641,7 @@ pub(crate) async fn start_daemon(args: &[String]) -> i32 {
     // Derive from the resolved runtime root (`~/.svrnmesh`, falling back to a
     // populated legacy `~/.sovereign`) — NOT a hardcoded `~/.sovereign`. This
     // keeps manual `svrn daemon start` writing to the same `logs/daemon.err`
-    // the service path uses (service_install.rs) and every reader expects.
+    // the service path uses (sovereign_service) and every reader expects.
     // The bare `.sovereign` hardcode survived the `svrnmesh` rename and sent
     // manual-start logs to a stale dir, which is what made an alignment
     // ingest's progress invisible on 2026-07-24.
@@ -723,7 +781,7 @@ pub(crate) async fn start_daemon(args: &[String]) -> i32 {
         // service manager behind it — a crash/jetsam leaves it down
         // until someone notices. One line, once, at the moment the
         // operator is already looking.
-        if !crate::service_install::service_installed() {
+        if !sovereign_service::service_installed() {
             eprintln!(
                 "note: this daemon is unsupervised (no restart on crash). \
                  For auto-restart: svrn install-service"
@@ -765,7 +823,7 @@ async fn finish_service_start(unit: &str) -> i32 {
     // 0, the daemon log keeps a timestamp from hours ago because the process
     // dies before opening it, and this function blames slow model loading.
     // Diagnose before blaming (ARCH §18.3).
-    if let Some(svc) = crate::service_install::managing_service() {
+    if let Some(svc) = sovereign_service::managing_service(service_addressing()) {
         if let Some(reason) = svc.needs_reregister() {
             eprintln!("✗ {unit} will not start as registered: {reason}.\n  Re-registering …");
             match svc.reregister() {
@@ -891,7 +949,7 @@ pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
     // how a host ends up with two daemons, one of which loses the bind
     // and runs on with no listener (observed here 2026-07-29: a
     // 17-hour orphan serving nothing).
-    if let Some(svc) = crate::service_install::managing_service() {
+    if let Some(svc) = sovereign_service::managing_service(service_addressing()) {
         eprintln!(
             "  {} is registered — restarting via the service manager",
             svc.name

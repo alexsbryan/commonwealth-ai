@@ -7824,6 +7824,31 @@ declared-type walks as peers, whose condition was met on 2026-09-03 (see
 locally.
 
 
+### 10.1l Fan-in ACCEPTED for `sovereign-service` — 2026-09-11
+
+`layer-gate` reported 0 layer violations and one fan-in tick:
+`sovereign-contracts` 26 → 27. The re-baseline was inspected before it was
+taken and it moves exactly that one line — nothing else was absorbed, which
+is the check CLAUDE.md's rule exists to force.
+
+WHAT THE EDGE BOUGHT. `sovereign-service` is OS service registration
+(launchd / systemd / Windows Task Scheduler), extracted from
+`sovereign-cli-daemon` so a surface can register the daemon WITHOUT LINKING
+ONE — the `sv-no-daemon-management` bar. Its whole in-repo dependency list is
+the crate this row is about, for the data-root SSOT
+(`sovereign_contracts::rebrand::svrnmesh_root`). The narrower alternative was
+the one the code already used — `sovereign_cli_shared::dirs::sovereign_root`,
+a ONE-LINE delegate to that same function — and taking it would have dragged
+clap, tokio and an optional corpus-engine into a crate whose entire purpose
+is being light enough for a thin client to depend on. So the ratchet's own
+advice ("depend on a narrower crate instead") has no candidate here: this IS
+the narrow one.
+
+The accounting is also gentler than the number reads. The code did not gain a
+dependency on `sovereign-contracts`; it KEPT the one it had. One crate became
+two and both name the seam, so fan-in counts an edge where there was already
+a use.
+
 ### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
 
 The campaign landed 44 commits in one day (R1 through the dedup pass,

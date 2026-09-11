@@ -1,0 +1,26 @@
+[package]
+name = "sovereign-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# DELIBERATELY THIN. This crate exists so a surface can register the daemon
+# with the OS without linking the daemon — a desktop that pulls in
+# `sovereign-cli-daemon` to install a service has not stopped being a daemon,
+# it has only stopped spawning one (sv-surface `sv-no-daemon-management`).
+# Every dependency here is a decision, not a convenience.
+[dependencies]
+# The data-root SSOT. This module called `sovereign_cli_shared::dirs::
+# sovereign_root()`, which is a ONE-LINE delegate to the function below — and
+# sovereign-cli-shared carries clap, tokio and an optional corpus-engine,
+# none of which a service registrar needs. One hop fewer, and it names the
+# owner (ARCH §10.6).
+sovereign-contracts = { workspace = true }
+dirs = "5"
+
+[target.'cfg(unix)'.dependencies]
+# `current_uid` only — the launchd domain target is `gui/<uid>`.
+libc = "0.2"
+
+[lints]
+workspace = true
