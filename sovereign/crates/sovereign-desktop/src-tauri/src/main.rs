@@ -28,6 +28,7 @@ mod mobile_host_setup;
 mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
+mod serving_host;
 mod setup_flow;
 mod smoketest;
 mod state;
@@ -342,6 +343,19 @@ fn main() -> ExitCode {
             // inevitable) and route inference + mesh mutations over
             // HTTP instead. `detect()` is a ≤4s worst-case probe so
             // it's fine to block app setup on it.
+            // sv-surface `sv-no-daemon-management`: the desktop's ENTIRE daemon
+            // interaction, and it is this one line. `ensure_reachable` probes
+            // the client port and, in a build carrying the `bundled-backend`
+            // feature (this one — see `Cargo.toml`), brings the shipped
+            // sidecar up if nothing answers. It retains no handle: the daemon
+            // owns its own lifetime (ARCH principle 12).
+            //
+            // Before `detect()`, deliberately. `detect()` already attaches to
+            // any daemon that answers, whoever started it, so a host reached
+            // here is a host it attaches to — which is why svt-1 changes no
+            // line of `bootstrap`.
+            tauri::async_runtime::block_on(serving_host::ensure_reachable());
+
             let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 

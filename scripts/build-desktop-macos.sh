@@ -169,6 +169,28 @@ else
     bash scripts/fetch-desktop-binaries.sh "$TARGET"
 fi
 
+# ─── Stage the daemon sidecar ────────────────────────────────────────
+# svt-1: the installer carries `sovereign-cli-daemon`, so a machine with no
+# `svrn` on PATH still gets a working app. Separate from the fetch above
+# because this one BUILDS (see the script header); it must therefore come
+# after the toolchain/cross-compile setup this script does below.
+SIDECAR="sovereign/crates/sovereign-desktop/src-tauri/binaries/sovereign-cli-daemon"
+if (( UNIVERSAL )); then
+    bash scripts/stage-daemon-sidecar.sh "aarch64-apple-darwin"
+    bash scripts/stage-daemon-sidecar.sh "x86_64-apple-darwin"
+    # Belt and braces for the universal bundle. tauri-cli lipos externalBins
+    # for `universal-apple-darwin` from the two arch files, which are staged
+    # above; producing the universal spelling as well costs one lipo and
+    # means the bundle works whichever name it reaches for. UNVERIFIED on
+    # this host — the universal leg is a local convenience and CI ships
+    # per-arch, so this path has not been run end to end.
+    lipo -create -output "${SIDECAR}-universal-apple-darwin" \
+        "${SIDECAR}-aarch64-apple-darwin" "${SIDECAR}-x86_64-apple-darwin"
+    log "  Staged daemon sidecar for both arches + universal"
+else
+    bash scripts/stage-daemon-sidecar.sh "$TARGET"
+fi
+
 # ─── Frontend deps ────────────────────────────────────────────────────
 log "Installing npm deps..."
 (cd sovereign/crates/sovereign-desktop && npm ci --no-audit --no-fund)

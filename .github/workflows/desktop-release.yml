@@ -430,6 +430,19 @@ jobs:
         shell: bash
         run: scripts/fetch-desktop-binaries.sh ${{ matrix.platform.target }}
 
+      # svt-1 (sv-surface): the installer carries the daemon, so a machine
+      # with no `svrn` on PATH still gets a working app. This is a cargo
+      # BUILD rather than a download — and it adds no dependency to this job:
+      # sovereign-desktop already path-depends on sovereign-cli-daemon, so
+      # the crate and its tree are compiled here either way. What this adds
+      # is the [[bin]] link step, into the same target dir the Tauri build
+      # below then reuses.
+      - name: Stage the daemon sidecar
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+        run: scripts/stage-daemon-sidecar.sh ${{ matrix.platform.target }}
+
       - name: Tauri build
         working-directory: sovereign/crates/sovereign-desktop
         shell: bash

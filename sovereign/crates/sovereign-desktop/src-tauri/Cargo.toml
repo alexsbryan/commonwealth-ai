@@ -10,7 +10,15 @@ sovereign-contracts = { workspace = true }
 # The one client family for the daemon's wire (sv-one-client). Attach mode
 # routes conversation search / memory / insight surfaces through it rather
 # than re-deriving local deciders (sv-surface rung 6).
-sovereign-turn-client = { workspace = true }
+# `bundled-backend` is the desktop's half of sv-surface's
+# `sv-no-daemon-management` bar: this build SHIPS a daemon (the
+# `sovereign-cli-daemon` Tauri sidecar, staged by
+# `scripts/stage-daemon-sidecar.sh` and declared in
+# `tauri.release.conf.json`), so `ServingHost` may bring one up when nothing
+# answers. Declaring it here is what flipped the DEFAULTS_LEDGER row out of
+# DARK. It gates code only — no dependency hangs off it, so it cannot move a
+# dependency edge.
+sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
 # The enrichment store the CLI and the daemon also read — `enrich_commands`
 # lists it rather than re-deriving the layout and the schema (rung
 # nc-16-shared-capability).

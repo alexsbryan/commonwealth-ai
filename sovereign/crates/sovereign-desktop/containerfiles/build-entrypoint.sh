@@ -42,6 +42,15 @@ else
     log "Skipping PDFium + tessdata fetch (SOVEREIGN_DESKTOP_SKIP_BINARIES_FETCH=1)"
 fi
 
+# ─── Stage the daemon sidecar ────────────────────────────────────────
+# svt-1: `sovereign-cli-daemon` ships inside the installer (externalBin in
+# tauri.release.conf.json) so a machine with no CLI still gets a daemon. A
+# BUILD, not a fetch — hence a separate script and no
+# SOVEREIGN_DESKTOP_SKIP_BINARIES_FETCH opt-out (staging a stale daemon is
+# worse than paying for the link step).
+log "Staging the daemon sidecar for $TARGET..."
+bash scripts/stage-daemon-sidecar.sh "$TARGET"
+
 # ─── Frontend deps ────────────────────────────────────────────────────
 log "Installing npm deps..."
 (cd sovereign/crates/sovereign-desktop && npm ci --no-audit --no-fund)

@@ -201,6 +201,16 @@ else
     log "         \"could not open 'SomeLib.lib'\", re-run and the aliases will be made."
 fi
 
+# ─── Stage the daemon sidecar ────────────────────────────────────────
+# svt-1: `sovereign-cli-daemon.exe` ships inside the NSIS installer. This is
+# a cargo BUILD, so it lands HERE — after the xwin CXXFLAGS/CMake [env] file,
+# the canonical-case lib aliases and the symlink hygiene above, all of which
+# it needs. It uses the same cross runner the desktop build does; a plain
+# `cargo build --target x86_64-pc-windows-msvc` on this Linux host would not
+# link.
+log "Staging the daemon sidecar for $TARGET (cargo-xwin)..."
+SOVEREIGN_DESKTOP_CARGO_RUNNER=cargo-xwin bash scripts/stage-daemon-sidecar.sh "$TARGET"
+
 # --bundles nsis: the one Windows bundle type buildable off-Windows
 # (makensis is cross-platform; WiX/.msi is not). Tauri downloads its
 # NSIS plugins into the mounted tauri cache on first run.

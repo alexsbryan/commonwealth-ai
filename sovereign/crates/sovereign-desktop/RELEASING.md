@@ -108,6 +108,11 @@ Run before tagging. None are automated — that's the next iteration.
 - [ ] Manual smoke test on your dev machine: launch the app, drop a
       folder, confirm ingest completes, ask one question, confirm
       response. Five-minute test.
+- [ ] If you touched the daemon: the installer carries it as a sidecar, so a
+      release ships whatever `sovereign-cli-daemon` is at the tag. Confirm the
+      built app's `Contents/MacOS/sovereign-cli-daemon` exists and that the
+      boot log says `reach: brought up a backend and it is serving` on a host
+      with no `svrn` on PATH.
 - [ ] If you touched OCR: run a folder containing a real scanned PDF,
       confirm the offer surfaces and works end-to-end. No env setup —
       the bundled PaddleOCR models + pdfium resolve automatically (boot
@@ -284,12 +289,60 @@ missing the OCR button hides itself and ingest is unaffected.
 |-------|---------|--------|------|
 | `paddle-ocr/ppocr-en-v4v5/{det,rec}.onnx` + `dict.txt` | **OCR engine** (PaddleOCR via the ONNX Runtime already linked for GLiNER) | HF: `SWHL/RapidOCR` (det) + `monkt/paddleocr-onnx` (rec/dict), Apache-2.0 | ~13 MB |
 | `pdfium/libpdfium.dylib` / `pdfium.dll` / `libpdfium.so` | PDF page → image rasterization (engine-independent) | `bblanchon/pdfium-binaries` releases | ~7 MB |
+| `sovereign-cli-daemon-<triple>[.exe]` | **The daemon itself**, as a Tauri sidecar | built from this workspace | ~200 MB |
 
 PaddleOCR runs **in-process** through `ort` (no second ML runtime —
 it reuses GLiNER's onnxruntime) and needs **no platform install**,
 which is the whole reason it replaced tesseract (see below). The
 desktop selects it automatically: `install_ocr_ctx_for_app` resolves
 the bundled models + pdfium and sets `OcrCtx.engine = Paddle`.
+
+### The daemon sidecar
+
+The desktop **ships a daemon** (svt-1, campaign `sv-surface`). A machine that
+has never installed the CLI gets a working app: at startup the desktop asks
+`sovereign_turn_client`'s `ServingHost` whether a host is serving and, if not,
+brings the sidecar up detached — one call, no handle, no restart policy. The
+capability is the `bundled-backend` cargo feature, which `src-tauri/Cargo.toml`
+declares (`sovereign/DEFAULTS_LEDGER.md` records the flip).
+
+Three names have to agree, and only two of them are checked by the compiler:
+
+| Where | Spelling |
+|---|---|
+| `src-tauri/src/daemon_binary.rs` | `SIDECAR_BINARY = "sovereign-cli-daemon"` |
+| `src-tauri/tauri.release.conf.json` | `bundle.externalBin: ["binaries/sovereign-cli-daemon"]` |
+| `scripts/stage-daemon-sidecar.sh` | `SIDECAR_NAME="sovereign-cli-daemon"` |
+
+`daemon_binary::tests::packaging::the_sidecar_name_matches_the_release_config`
+reads the JSON and asserts the first two agree; the script fails loudly if its
+build produces nothing. Nothing else would notice a rename — the app would
+simply resolve no binary and lose the ability to bring a backend up, silently.
+
+The same test asserts the entry is NOT in the base `tauri.conf.json`: see
+"Tauri config split" below — `tauri-build` errors when `externalBin` names
+files that do not exist, which is every plain `cargo check` and
+`cargo tauri dev`.
+
+Staging is `scripts/stage-daemon-sidecar.sh <triple>`, a BUILD rather than a
+download, which is why it is a separate script from `fetch-desktop-binaries.sh`
+and why it runs later: each build path must have finished setting up its
+toolchain first (the Windows leg writes its cargo-xwin `CXXFLAGS`/CMake `[env]`
+file immediately before its build, so the sidecar build has to come after it
+and use `SOVEREIGN_DESKTOP_CARGO_RUNNER=cargo-xwin`). It is wired into all four
+paths: the CI matrix, `build-desktop-macos.sh`, and both container entrypoints.
+
+It adds no build dependency to the desktop job — `src-tauri/Cargo.toml` already
+path-depends on `sovereign-cli-daemon` for the `--daemon-child` re-exec, so the
+crate and its whole tree compile in that job either way; what the script adds
+is the `[[bin]]` link step into the same `CARGO_TARGET_DIR`. **If svt-2 removes
+that path dependency along with the in-process daemon, this becomes a genuinely
+separate compile in the same job — re-price it then.**
+
+At runtime the sidecar lands beside the app executable (`Contents/MacOS/` in
+the `.app`, the install dir on Windows, `/usr/bin` in the deb) and the desktop
+installs a copy under `<branded root>/bin` on first launch, because a path
+inside a bundle breaks the moment the user moves, updates or removes the app.
 
 ### Staging the binaries
 

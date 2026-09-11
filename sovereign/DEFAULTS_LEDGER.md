@@ -30,52 +30,53 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### `sovereign-turn-client/bundled-backend` — reachability is named, and no surface has a backend to bring up yet
+### `sovereign-turn-client/bundled-backend` — a surface now ships a backend → **GRADUATED 2026-09-11** (declared by `sovereign-desktop`; the crate default stays OFF)
 
-**What ships now.** `sovereign_turn_client::reach` — `ServingHost::at(base)`
-answers "is a host serving" for every surface (the desktop's `attach_watch`,
-`search_gym` and `bench ablate` now ask it rather than each holding a probe),
-and `ensure_reachable` reports absence as a typed `NotReachable` instead of a
-default. The `bundled-backend` feature is the other half: with it on, a caller
-can name a `BundledBackend` binary the client may bring up when nothing
-answers — detached, handle dropped at the spawn site, no retry and no
-lifecycle. It is OFF by default and nothing in the workspace turns it on.
+**What ships NOW.** `sovereign-desktop` declares
+`sovereign-turn-client = { features = ["bundled-backend"] }`
+(`src-tauri/Cargo.toml`) and ships the backend that declaration promises: a
+Tauri sidecar of `sovereign-cli-daemon`, built by
+`scripts/stage-daemon-sidecar.sh` into `src-tauri/binaries/` and declared as
+`bundle.externalBin` in `tauri.release.conf.json` — the release overlay, never
+the base config (RELEASING.md "Tauri config split"). At startup
+`serving_host::ensure_reachable` resolves that sidecar via
+`daemon_binary::stable_daemon_binary`, installs it under `<branded root>/bin`
+so the path outlives the `.app`, and hands it to `ServingHost::bringing_up`.
+That is the desktop's ENTIRE daemon interaction: one call, no handle, no retry,
+no health loop. A machine with no `svrn` on PATH now has a daemon to reach.
 
-**Why dark.** The capability is the client's half of sv-surface's
-`sv-no-daemon-management` bar (revised 2026-09-11): "ensure a backend is
-reachable" belongs to the client package, so the desktop can hold zero daemon
-code. But no surface yet ships a backend it could bring up — the daemon is not
-packaged as a sidecar, `tauri.conf.json` still has `externalBin: null`. An
-on-by-default capability here would compile a bring-up path with no caller,
-which is inventory (ARCH principle 11). It stays dark for a second reason
-after the same day's amendment: the default topology is an OS-installed
-service, so the fallback this serves is the exception, and an exception that
-is on everywhere is not one.
+**Why the crate default stays OFF.** The feature asks "does THIS BUILD ship a
+backend?", and only the desktop does. A CLI, a bench harness or a server build
+that turned it on would compile a bring-up path with no binary behind it —
+inventory (ARCH principle 11), and an ability `CAN_BRING_UP_A_BACKEND` would
+then report the build as having when it does not.
 
-**Flip condition, falsifiable — REVISED the same day.** The first version of
-this row assumed the sidecar was the destination. The operator settled
-otherwise hours later: the daemon is a mesh node and must be available to
-peers while the app is closed, so setup INSTALLS THE SERVICE by default and
-the OS owns the daemon (sv-surface bar, "AMENDED 2026-09-11"). That makes
-this feature the FALLBACK rather than the main topology, and the flip
-condition is the fallback's own moment: a surface ships a backend binary and
-declares `features = ["bundled-backend"]` to cover the two cases a service
-cannot — the first-run window before registration succeeds, and a host that
-refuses or declines to register one (managed machines; the user who wants
-nothing in their login items). Recovery is NOT one of those cases: the
-service manager restarts a crashed daemon, and a client may bring one up
-only at a moment a user action asks for it, never on a timer or a health
-signal. This row moves to REJECTED and the feature is deleted if setup's
-service install proves reliable enough on all three platforms that no
-surface ever needs a backend of its own.
+**Which of the two named cases this covers.** The flip condition (revised
+2026-09-11, after the operator settled that the DEFAULT topology is an
+OS-installed service) named the fallback's own moment: "a surface ships a
+backend binary and declares `features = ["bundled-backend"]` to cover the two
+cases a service cannot — the first-run window before registration succeeds,
+and a host that refuses or declines to register one (managed machines; the
+user who wants nothing in their login items)." Both. And the desktop no longer
+registers anything itself: svt-0 cut `adopt_service` and the `stop_service`
+rollback, so service registration lives only in `svrn install-service`.
+Recovery is still NOT one of the covered cases — nothing here restarts a
+crashed daemon, and the bring-up runs once, at startup, never on a timer or a
+health signal.
 
-**What settles it.** sv-surface next items (2) sidecar packaging and (3)
-desktop supervision deletion — `quality/campaigns/sv-surface.toml`,
-`sv-no-daemon-management`.
+**What is NOT settled by this graduation.** The `Reached::BroughtUp` path has
+been exercised on unix only. Detached survival on unix is proven by a
+process-group assertion (`sovereign-turn-client/src/reach.rs`,
+`the_brought_up_process_is_in_its_own_process_group`); the Windows
+`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` spawn compiles and has still
+never been RUN. A packaged release build carrying the sidecar has not been
+produced on this host either — see svt-1's report.
 
-**Review by 2026-10-15.** If neither (2) nor (3) has landed by then, the
-question to put to the operator is which topology the desktop actually ships,
-not whether to extend the date.
+**Superseded by, not withering into.** This row closes because a surface
+reached for the capability, which is what the row asked for. If the desktop
+ever stops shipping the sidecar, the honest move is a new row, not a silent
+`default-features` edit: `serving_host.rs` does not compile without the
+feature, so the removal cannot pass unnoticed.
 
 ### `process:v1` donation — a BOUNDARY, not a refusal → **GRADUATED 2026-09-10** for the package donor (the daemon path is built, not measured)
 

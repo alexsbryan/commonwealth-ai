@@ -5,6 +5,7 @@ pipeline (folder-drop flow on scanned PDFs):
 
 ```
 binaries/
+├── sovereign-cli-daemon-<triple>[.exe]         ← THE DAEMON, as a Tauri sidecar
 ├── tesseract-aarch64-apple-darwin              ← macOS arm64 (host or CI-built)
 ├── tesseract-x86_64-apple-darwin               ← macOS x86_64
 ├── tesseract-x86_64-unknown-linux-gnu          ← Linux x86_64
@@ -22,12 +23,22 @@ blobs, not source) — every clone needs to populate it before bundling.
 
 ## Populating the directory
 
-Run the fetch script. Idempotent — safe to re-run.
+Two scripts, because one downloads and the other builds. Both take an
+optional target triple and default to the host's.
 
 ```sh
-scripts/fetch-desktop-binaries.sh                 # auto-detects host triple
-scripts/fetch-desktop-binaries.sh aarch64-apple-darwin   # explicit
+scripts/fetch-desktop-binaries.sh                 # PaddleOCR models + PDFium
+scripts/stage-daemon-sidecar.sh                   # sovereign-cli-daemon
 ```
+
+`stage-daemon-sidecar.sh` compiles `sovereign-cli-daemon` out of this
+workspace and stages it under the per-triple name Tauri's `externalBin`
+expects. That name must equal `daemon_binary::SIDECAR_BINARY` and the
+`externalBin` entry in `tauri.release.conf.json`; a Rust test asserts the
+latter two agree. See [`../RELEASING.md`](../../RELEASING.md) §"The daemon
+sidecar". It is NOT needed for `cargo tauri dev` — the base config declares
+no `externalBin`, and in dev the desktop finds a daemon through
+`SVRNMESH_DAEMON_BINARY` or `~/.local/bin/svrn` instead.
 
 This fetches PDFium and tessdata automatically; Tesseract is
 platform-installed in v1 (the script prints the exact `brew` /

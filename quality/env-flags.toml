@@ -818,7 +818,7 @@ name = "SOVEREIGN_DAEMON_BINARY"
 cluster = "infra-paths"
 default = "unset — the app searches beside its own executable, then ~/.local/bin, then /usr/local/bin"
 status = "shipped"
-purpose = "Absolute path to the daemon binary the desktop hands to the OS service manager at the end of setup (sovereign-desktop/src-tauri/src/service_adoption.rs). Setup registers the daemon as a launchd agent / systemd user unit / Scheduled Task so the node stays available to the mesh while the app is closed — availability is a property of the NODE, not a convenience for the app (sv-surface `sv-no-daemon-management`, amended 2026-09-11). The search order below the override is the order a real install produces: beside this executable (where a Tauri sidecar would land — `externalBin` is unset today, see sovereign-desktop/RELEASING.md), then the directories `landing/install.sh` writes `svrn` into. Set this when the CLI lives somewhere else, or to point a test at a stand-in. A path that is not a file is IGNORED with a warning rather than handed to the service manager as an ExecStart that can never run."
+purpose = "Absolute path to the daemon binary this build may bring up, resolved by sovereign-desktop/src-tauri/src/daemon_binary.rs and handed to sovereign_turn_client::ServingHost (the bundled-backend capability). The search order below the override is the order a real install produces: beside this executable, where the sovereign-cli-daemon Tauri sidecar lands since svt-1 (externalBin in tauri.release.conf.json; see the RELEASING.md section on the daemon sidecar), then the directories landing/install.sh writes svrn into. Set this when the CLI lives somewhere else, or to point a test at a stand-in. A path that is not a file is IGNORED with a warning rather than returned as a path nothing can execute. This resolver does NOT register, start, supervise or stop anything - service registration is svrn install-service (sv-surface svt-0)."
 
 [[flag]]
 name = "SOVEREIGN_CONCEPT_CORPUS"
@@ -1620,3 +1620,17 @@ cluster = "desktop-e2e"
 default = "unset (off entirely)"
 status = "experiment"
 purpose = "Record which of the 260 Tauri commands a run actually reached, as JSONL (`{\"cmd\": \"<name>\"}`), first sighting only. Read it with `npm run report:coverage`. A run that read no ledger rows exits 3 as could-not-judge rather than reporting 0% — a missing ledger is an absence, not a measurement. Deliberately coverage-of-surface rather than an assertion count: assertion counts inflate for free, surface reach cannot move without reaching a new command."
+
+[[flag]]
+name = "SOVEREIGN_DESKTOP_CARGO_RUNNER"
+cluster = "dev-gates"
+default = "cargo"
+status = "shipped"
+purpose = "Which cargo command scripts/stage-daemon-sidecar.sh invokes to build the sovereign-cli-daemon Tauri sidecar. The Windows container leg sets `cargo-xwin`, matching the `--runner cargo-xwin` its `cargo tauri build` already uses — a plain `cargo build --target x86_64-pc-windows-msvc` on that Linux host would not link. Every other leg leaves it at the default. Not a fallback: an unset value means `cargo`, and a runner that cannot build is a build failure the script refuses to stage past, never a silently skipped sidecar."
+
+[[flag]]
+name = "SOVEREIGN_DESKTOP_SIDECAR_PROFILE"
+cluster = "dev-gates"
+default = "release"
+status = "shipped"
+purpose = "Cargo profile for the daemon sidecar scripts/stage-daemon-sidecar.sh stages. Release by default because the artifact ships inside an installer and `cargo tauri build` is itself a release build; `debug` exists so a local rehearsal of the PACKAGING can skip the release compile. A debug sidecar in a shipped bundle is roughly 3x the size and materially slower, so this is a dev-loop lever, not a supported release configuration."

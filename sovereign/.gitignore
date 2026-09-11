@@ -16,6 +16,9 @@ crates/sovereign-desktop/src-tauri/binaries/tesseract-*
 crates/sovereign-desktop/src-tauri/binaries/pdfium/
 crates/sovereign-desktop/src-tauri/binaries/tessdata/
 crates/sovereign-desktop/src-tauri/binaries/paddle-ocr/
+# The daemon sidecar (svt-1), BUILT by scripts/stage-daemon-sidecar.sh
+# rather than fetched — a ~200 MB release artifact of this very workspace.
+crates/sovereign-desktop/src-tauri/binaries/sovereign-cli-daemon-*
 
 # Sovereign code intelligence
 .sovereign/project.json

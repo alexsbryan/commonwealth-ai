@@ -1501,6 +1501,41 @@ status       = "open"
 # one, deliberately, so the census has standing to refuse steps two and
 # three.
 #
+# ── CUT 2026-09-11, LATER STILL (svt-0) ───────────────────────────────────
+#
+# THE DESKTOP DOES NOT INSTALL THE SERVICE. The amendment above was right
+# that availability belongs to the node and wrong that the desktop should be
+# the one to arrange it. The operator, restating the objective:
+#
+#   "Desktop is thin and a dumb client. Daemon logic lives in one place, is
+#    reused by all the clients (CLI + desktop + mobile). No more complicated
+#    stories."
+#
+# A desktop that registers a service is a second story about who starts a
+# daemon, and it rested on a Windows Scheduled Task backend that compiles
+# (`cargo xwin check`) and has never been RUN on a Windows host. Worse, the
+# implementation had the app calling `stop_service` on a registered-but-
+# silent daemon — the app deciding a daemon should stop, which is precisely
+# what this bar exists to remove, reason or no reason.
+#
+# WHAT ACTUALLY CARRIES THE REQUIREMENT, and it is OS-agnostic: the client's
+# bring-up spawns DETACHED (`process_group(0)` on unix, `DETACHED_PROCESS |
+# CREATE_NEW_PROCESS_GROUP` on Windows — `sovereign-turn-client/src/reach.rs`),
+# so a daemon it starts SURVIVES the app quitting. "Available to the mesh
+# after you close the window" is therefore one code path on all three
+# platforms. The OS service adds only the last mile — availability across
+# REBOOT and LOGOUT without anyone opening the app — and it stays a user
+# action through `svrn install-service`, where it already lived.
+#
+# THE ORDERS THAT FOLLOW: svt-0 (this cut), svt-1 (sidecar + one
+# `ensure_reachable` at startup), svt-2 (delete 1,990 lines of supervision;
+# buys sovereign-cli-daemon, sovereign-runtime-recipe, sovereign-store —
+# measured zero callers outside lifecycle files), svt-3 (the route
+# migration, which is the real body: sovereign-core in 21 desktop files,
+# sovereign-mesh 11, sovereign-tools 8, corpus-engine 7, sovereign-inference
+# 3, gliner/commonwealth-core/commonwealth-state 1 each), svt-4 (both halves
+# of the instrument). Under `.sovereign/features/svt-*`.
+#
 # THE PLATFORM CEILING, NAMED RATHER THAN DISCOVERED LATER. All three
 # backends are SESSION-scoped: the launchd agent loads into `gui/<uid>`, the
 # Windows task is logon-triggered, the systemd unit is a user unit
