@@ -8,6 +8,26 @@
 # ── declare it, on the node that will donate:
 #     [compute.work_offer] image = "localhost/sovereign-work:latest"
 #
+# ── warm the donor's workdir ONCE, with network (then every unit runs without):
+#     podman run --rm --userns=keep-id --entrypoint= \
+#                -v <donor-root>/work-donor/worktrees/<repo>:/work:Z -w /work \
+#                localhost/sovereign-work:latest cargo fetch --locked
+#
+# A unit runs with `--network=none` and ONE mount, so a unit that compiles
+# needs its inputs inside that mount. The base image's layout already says
+# where: `CARGO_HOME=/work/.cargo-container`, i.e. the registry lives in the
+# workdir, which persists across units (the donor's clean omits `-x`). What
+# nobody had done was put anything there. On 2026-09-11 two `dst-scenarios`
+# attempts reported could-not-judge after 360 s and 2107 s, read as compile
+# time; `podman logs` on the third said what they were doing the whole time —
+# `Updating crates.io index … Could not resolve host: index.crates.io`, cargo
+# retrying a network that is not there. The image's own /usr/local/cargo
+# registry is not the answer either: it holds 624 crates against the
+# lockfile's 1,328. So the registry is fetched into the workdir once, with
+# network, by the operator — the same standing as building this image — and
+# `CARGO_NET_OFFLINE` below makes a unit that lacks an input fail in
+# milliseconds by name instead of spending its budget on retries.
+#
 # The image is the DONOR OPERATOR's declaration, never the submitter's and never
 # the package's: `commonwealth_work::sandbox` ships none and refuses to guess
 # one. This file is the monorepo's own answer for its own donors, and
@@ -42,6 +62,13 @@
 FROM localhost/sovereign-desktop-linux-build:latest
 
 ENV PATH=/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# There is no network inside the boundary, and cargo should not act as if
+# there might be: with this set, a missing crate is `error: no matching
+# package named …` at once, attributable to the workdir's inputs, rather than
+# minutes of `spurious network error` retries that expire the unit's budget and
+# read as "still compiling" from outside.
+ENV CARGO_NET_OFFLINE=true
 
 # The unit's argv is the unit. `Sandbox::command_line` passes `--entrypoint=`
 # for exactly this reason — an image ENTRYPOINT would take the submitter's argv
