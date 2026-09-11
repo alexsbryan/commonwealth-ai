@@ -64,6 +64,7 @@ pub mod loopback_guard;
 pub mod lsp_tier;
 pub mod mcp_router;
 pub mod measurements_rail;
+pub mod media_fanout;
 pub mod media_reach;
 pub mod mesh_discovery;
 pub mod mesh_http;

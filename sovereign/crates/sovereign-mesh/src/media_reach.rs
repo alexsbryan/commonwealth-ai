@@ -65,7 +65,7 @@ pub struct MediaReach {
 
 /// Why no URL was handed out. Each is a fact about the roster or the
 /// transport, named so the CLI can say it; none is a guess.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum MediaReachRefusal {
     /// The daemon is not running, or runs solo with no mesh to look in.
     #[error("no mesh is running here — `svrn mesh status`")]
@@ -104,11 +104,43 @@ pub enum MediaReachRefusal {
     /// misroute can do. Refused rather than handed to a player.
     #[error("transport handed back a non-loopback endpoint for '{0}' ({1}) — refusing")]
     NotLoopback(String, String),
+    /// A fan-out request that cannot be sent as given — a path that is not
+    /// origin-relative, a method HTTP does not know. Named, never defaulted.
+    #[error("bad request: {0}")]
+    BadRequest(String),
+}
+
+/// The roster as the media reads see it — every member as a
+/// [`MediaCandidate`] beside the contact the transport dials — cloned out
+/// of the mesh lock in one place, for the reads that need it.
+pub(crate) async fn roster_candidates(
+    app_state: &commonwealth_api::state::AppState,
+) -> Vec<(MediaCandidate, commonwealth_transport::PeerContact)> {
+    let mesh = app_state.inner.mesh.read().await;
+    mesh.members
+        .values()
+        .map(|m| {
+            (
+                MediaCandidate {
+                    node_id: m.node_id,
+                    name: m.name.clone(),
+                    status: m.status,
+                    has_identity: m.node_pubkey.is_some(),
+                    active: m.is_active(),
+                    offers_media: m
+                        .capabilities
+                        .origins
+                        .contains(&commonwealth_core::capabilities::OriginKind::Media),
+                },
+                peer_contact(m),
+            )
+        })
+        .collect()
 }
 
 /// The roster facts the resolver reads — projected so the decision can be
 /// tested without a `MemberRecord` (fourteen fields, most irrelevant here).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaCandidate {
     pub node_id: NodeId,
     pub name: String,
@@ -225,23 +257,11 @@ impl EmbeddedDaemon {
     pub async fn media_offers(&self) -> Result<Vec<MediaOffer>, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
-        let candidates: Vec<MediaCandidate> = {
-            let mesh = app_state.inner.mesh.read().await;
-            mesh.members
-                .values()
-                .map(|m| MediaCandidate {
-                    node_id: m.node_id,
-                    name: m.name.clone(),
-                    status: m.status,
-                    has_identity: m.node_pubkey.is_some(),
-                    active: m.is_active(),
-                    offers_media: m
-                        .capabilities
-                        .origins
-                        .contains(&commonwealth_core::capabilities::OriginKind::Media),
-                })
-                .collect()
-        };
+        let candidates: Vec<MediaCandidate> = roster_candidates(&app_state)
+            .await
+            .into_iter()
+            .map(|(c, _)| c)
+            .collect();
         let paths = self.iroh_transport_snapshot().await;
         let offers: Vec<MediaOffer> = offering_members(&candidates, self_id)
             .into_iter()

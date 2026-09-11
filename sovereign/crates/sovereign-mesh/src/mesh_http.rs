@@ -48,6 +48,12 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         // member's `[iroh] media_origin`. The holder half is the acceptor's
         // MEDIA_ALPN slot in `iroh_access`.
         .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
+        // The catalogue half: one request to every offering member, one
+        // attributed row each (`commonwealth_api::fanout` underneath).
+        .route(
+            "/v1/mesh/media/fanout",
+            post(crate::media_fanout::mesh_media_fanout),
+        )
         .route(
             "/v1/mesh/measurements",
             post(publish_measurement).get(peer_measurements),

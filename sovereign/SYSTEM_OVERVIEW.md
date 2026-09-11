@@ -5743,6 +5743,24 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 (verdict collapsed to failed); the extraction's guard is the unchanged
 `knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
 
+**Federated media, the catalogue half** (`sovereign-mesh/src/media_fanout.rs`,
+`POST /v1/mesh/media/fanout`, `svrn mesh media fanout <path>`, 2026-09-11).
+The same origin-relative request to every member that offers a media origin,
+each through its own bridge (the URL `svrn mesh media <peer>` prints, so the
+holder's identity headers ride along), concurrently under a per-member cap,
+returned as one document: `asked` and one `PeerRow<MediaAnswer>` per target —
+status, content type, body (lossy text, cut at 4 MiB with `truncated` set),
+bytes, elapsed — or `failed` / `never_asked` with the reason. `peers` names
+members exactly as the verb resolves them, and a name the roster refuses is
+a `never_asked` row carrying that refusal, never a dropped name
+(`select_targets`); without `peers`, the targets are what the bare verb
+lists. `roster_candidates` is now the one projection all three media reads
+share. Deliberately absent: merge, dedup, item schema (the origin's), and
+streams (the per-member URL's). Watched failing:
+`media_fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
+(refused names filtered out) and
+`an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
+
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
 `cwth/client/0` from "any dial-string holder" to "any member" was a reduction,

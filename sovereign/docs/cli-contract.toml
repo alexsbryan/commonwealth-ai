@@ -258,6 +258,21 @@ flags = [{ name = "--json" }, { name = "--no-probe" }]
 args = ["mesh", "media", "--help"]
 expect_exit = 0
 [[command]]
+# The catalogue half of federated media: `POST /v1/mesh/media/fanout` — the
+# same request to every offering member, one attributed row each, on
+# `commonwealth_api::fanout`. Smoked on `--help` for the reason `mesh media`
+# is: it needs members that declare a media origin. Proven by
+# `media_fanout::tests` (selection: every named member a row; the body cap)
+# and `fanout::tests` (the core: slow peer isolated, never-asked is a row).
+path = "mesh media fanout"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" }, { name = "--json" }]
+[command.smoke]
+args = ["mesh", "media", "fanout", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh balance"
 binary = "llm"
 visibility = "public"

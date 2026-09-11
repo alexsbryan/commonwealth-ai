@@ -13,11 +13,16 @@ use std::time::{Duration, Instant};
 use crate::mesh_cmd::daemon_client_port;
 
 pub(crate) async fn cmd_media(args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("fanout") {
+        return cmd_media_fanout(&args[1..]).await;
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
+        eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!();
         eprintln!("With no <peer>: list the members that offer a media origin, as gossip");
-        eprintln!("knows them — nothing is dialed. With a <peer>:");
+        eprintln!("knows them — nothing is dialed. `fanout <path>` asks every offering member");
+        eprintln!("the same request and prints one row each. With a <peer>:");
         eprintln!("Print a localhost URL that reaches <peer>'s media origin over the mesh —");
         eprintln!("dialed by its key, no VPN, no port forwarded. Point a player or a browser");
         eprintln!("at it. <peer> is a member name or a node-id prefix of at least 4 chars;");
@@ -223,5 +228,153 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     }
     println!();
     println!("Play one:  svrn mesh media <peer>");
+    0
+}
+
+/// `svrn mesh media fanout <path>` — the same request to every member that
+/// offers a media origin, one attributed row each. The catalogue half of
+/// federated media; a title is still played through the per-member URL.
+async fn cmd_media_fanout(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
+        eprintln!();
+        eprintln!("Ask every member that offers a media origin the same request — <path> is");
+        eprintln!("origin-relative, e.g. /System/Info/Public or '/Items?Recursive=true' — through");
+        eprintln!("each member's own mesh bridge, concurrently, and print one row per member:");
+        eprintln!("what its origin answered, or why it was not asked. Bodies are capped (4 MiB)");
+        eprintln!("and never merged: item semantics are the origin's. Play a title through");
+        eprintln!("`svrn mesh media <peer>`.");
+        eprintln!();
+        eprintln!("Flags:");
+        eprintln!("  --peers a,b     Only these members (name or ≥4-char id prefix). A member the");
+        eprintln!("                  roster refuses is still a row, carrying the refusal.");
+        eprintln!("  --method M      HTTP method (default GET).");
+        eprintln!(
+            "  --timeout-ms N  Per-member cap (default 10000); a slower member is a failed row."
+        );
+        eprintln!("  --json          The daemon's document: path, asked, rows[].");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let json_out = args.iter().any(|a| a == "--json");
+    let mut path: Option<&str> = None;
+    let mut peers: Option<Vec<String>> = None;
+    let mut method: Option<String> = None;
+    let mut timeout_ms: Option<u64> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => {}
+            "--peers" => {
+                i += 1;
+                peers = args.get(i).map(|v| {
+                    v.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                });
+            }
+            "--method" => {
+                i += 1;
+                method = args.get(i).cloned();
+            }
+            "--timeout-ms" => {
+                i += 1;
+                timeout_ms = args.get(i).and_then(|v| v.parse().ok());
+            }
+            other if other.starts_with("--") => {
+                eprintln!("unknown flag {other}");
+                return 1;
+            }
+            other => path = Some(other),
+        }
+        i += 1;
+    }
+    let Some(path) = path else {
+        eprintln!("Which path? `svrn mesh media fanout /System/Info/Public`");
+        return 1;
+    };
+    let port = daemon_client_port();
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/media/fanout");
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    let mut body = serde_json::json!({ "path": path });
+    if let Some(p) = &peers {
+        body["peers"] = serde_json::json!(p);
+    }
+    if let Some(m) = &method {
+        body["method"] = serde_json::json!(m);
+    }
+    if let Some(t) = timeout_ms {
+        body["timeout_ms"] = serde_json::json!(t);
+    }
+    let resp = match client.post(&url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("mesh media fanout: daemon at {url} not reachable: {e}");
+            eprintln!("The bridges live in the running daemon — `svrn daemon start`.");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        let msg = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+            .unwrap_or(text);
+        eprintln!("{msg}");
+        return 1;
+    }
+    if json_out {
+        println!("{text}");
+        return 0;
+    }
+    let doc: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("mesh media fanout: response shape mismatch ({e}): {text}");
+            return 1;
+        }
+    };
+    let rows = doc["rows"].as_array().cloned().unwrap_or_default();
+    println!(
+        "{} → {} member(s) asked",
+        doc["path"].as_str().unwrap_or(path),
+        doc["asked"].as_u64().unwrap_or(rows.len() as u64)
+    );
+    for r in &rows {
+        let name = r["name"].as_str().unwrap_or("?");
+        let node = r["node_id"].as_str().unwrap_or("?");
+        let ms = r["elapsed_ms"].as_u64().unwrap_or(0);
+        let line = match r["verdict"].as_str().unwrap_or("?") {
+            "served" => format!(
+                "{} {}B{}{}",
+                r["status"].as_u64().unwrap_or(0),
+                r["bytes"].as_u64().unwrap_or(0),
+                if r["truncated"].as_bool().unwrap_or(false) {
+                    " (truncated)"
+                } else {
+                    ""
+                },
+                r["content_type"]
+                    .as_str()
+                    .map(|c| format!("  {c}"))
+                    .unwrap_or_default()
+            ),
+            "failed" => format!("failed — {}", r["reason"].as_str().unwrap_or("")),
+            "never_asked" => format!("not asked — {}", r["reason"].as_str().unwrap_or("")),
+            other => other.to_string(),
+        };
+        println!("  {name:<16} {node}  {ms:>5} ms  {line}");
+    }
     0
 }

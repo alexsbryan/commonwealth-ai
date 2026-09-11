@@ -80,6 +80,7 @@ Manage the local Commonwealth mesh.
 | `forget <mesh>` | Drop a parked mesh from this node (refuses on the active one) |
 | `status` | Show mesh members, hosted knowledge, loaded models |
 | `media [<peer>] [--json] [--no-probe]` | With no peer: list the members whose gossiped capabilities advertise a media origin, with the live path to each (nothing dialed). With a peer: print a localhost URL that reaches its media server by mesh key — no VPN, no port forwarded — then GET / through it once |
+| `media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]` | Ask every member that offers a media origin the same request through its own mesh bridge, concurrently, and print one row per member — what its origin answered (status, bytes, type), or why it was not asked. Bodies capped, never merged; play a title through `media <peer>` |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
 | `leave` | Leave the current mesh |
 | `logs` | Show mesh daemon logs |
