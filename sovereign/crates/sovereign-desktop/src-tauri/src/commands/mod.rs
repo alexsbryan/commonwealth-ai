@@ -136,7 +136,11 @@ pub struct SetupConfig {
 /// NOT `sovereign_core::deep_research::icd::CorpusEntry` (an estate row:
 /// `{corpus_id, kind, chunks_count, searchable, custody}`); this is the
 /// catalog-browser card the UI renders.
-#[derive(Serialize)]
+// sv-surface D9b: `Deserialize` too, so this ONE type is both what the
+// frontend receives and how the catalogue row the daemon serves (`GET /internal/corpus/catalog`) is read.
+// Deserializing into a private mirror would have minted the twin the
+// campaign exists to retire (ARCH §10.6).
+#[derive(Serialize, Deserialize)]
 pub struct CorpusEntry {
     pub id: String,
     pub name: String,
@@ -199,7 +203,11 @@ pub struct CorpusEntry {
 /// It deliberately carries only the fields the shelf renders; the rich
 /// per-surface DTOs (`CorpusEntry`, `LocalCorpusConfig`,
 /// `AtlasCorpusSummary`) remain the source for their detail views.
-#[derive(Serialize)]
+// sv-surface D9b: `Deserialize` too, so this ONE type is both what the
+// frontend receives and how the shelf row the daemon serves (`GET /internal/corpus/notebooks`) is read.
+// Deserializing into a private mirror would have minted the twin the
+// campaign exists to retire (ARCH §10.6).
+#[derive(Serialize, Deserialize)]
 pub struct NotebookSummary {
     /// Corpus id — the citation handle, structurally unique.
     pub id: String,
@@ -231,7 +239,11 @@ pub struct NotebookSummary {
 
 /// Detailed health report for a single installed corpus, loaded on demand
 /// (avoids opening every LanceDB index on every `list_corpora` call).
-#[derive(Serialize)]
+// sv-surface D9b: `Deserialize` too, so this ONE type is both what the
+// frontend receives and how the health row the daemon serves (`GET /internal/corpus/{corpus}/health`) is read.
+// Deserializing into a private mirror would have minted the twin the
+// campaign exists to retire (ARCH §10.6).
+#[derive(Serialize, Deserialize)]
 pub struct CorpusHealthDetail {
     pub corpus_id: String,
     /// Number of extracted claims (0 if no claims table).
@@ -272,35 +284,6 @@ pub struct CorpusProgressPayload {
     /// Optional human-readable status line for the more verbose phases.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
-}
-
-/// Tier groupings for the desktop knowledge picker. Pure UI metadata —
-/// the engine doesn't care about tiers.
-fn tiers_for(corpus_id: &str) -> Vec<String> {
-    match corpus_id {
-        // Wikipedia Core ships in every tier — its scoped 100K + Vital
-        // Articles is the baseline general-knowledge corpus.
-        "wikipedia" => vec![
-            "essential".into(),
-            "research".into(),
-            "technical".into(),
-            "full".into(),
-        ],
-        // Simple English ships alongside Core in every tier — Layer 0 of
-        // the layered Wikipedia stack, ready for chat in 2-3 min.
-        "wikipedia-simple" => vec![
-            "essential".into(),
-            "research".into(),
-            "technical".into(),
-            "full".into(),
-        ],
-        "sep" => vec!["research".into(), "full".into()],
-        "openalex" => vec!["research".into(), "full".into()],
-        "stackexchange" => vec!["technical".into(), "full".into()],
-        "gutenberg" => vec!["full".into()],
-        "crs_reports" => vec!["research".into(), "full".into()],
-        _ => vec!["full".into()],
-    }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -378,224 +361,3 @@ pub use supervisor_ctl::*;
 pub(crate) use config_setup::mirror_to_setup_config;
 
 // ─── Tests ───────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use corpus_engine::IngestProgress;
-
-    // ── tiers_for ───────────────────────────────────────────
-
-    #[test]
-    fn tiers_for_wikipedia_includes_essential_and_full() {
-        let tiers = tiers_for("wikipedia");
-        assert!(tiers.contains(&"essential".to_string()));
-        assert!(tiers.contains(&"research".to_string()));
-        assert!(tiers.contains(&"technical".to_string()));
-        assert!(tiers.contains(&"full".to_string()));
-    }
-
-    #[test]
-    fn tiers_for_sep_is_research_only() {
-        let tiers = tiers_for("sep");
-        assert!(tiers.contains(&"research".to_string()));
-        assert!(tiers.contains(&"full".to_string()));
-        // SEP is research-grade and not part of the essential
-        // tier — installing it pulls multiple GB.
-        assert!(!tiers.contains(&"essential".to_string()));
-    }
-
-    #[test]
-    fn tiers_for_stackexchange_is_technical() {
-        let tiers = tiers_for("stackexchange");
-        assert!(tiers.contains(&"technical".to_string()));
-        assert!(tiers.contains(&"full".to_string()));
-        assert!(!tiers.contains(&"essential".to_string()));
-    }
-
-    #[test]
-    fn tiers_for_unknown_corpus_falls_back_to_full() {
-        let tiers = tiers_for("some_user_corpus");
-        assert_eq!(tiers, vec!["full".to_string()]);
-    }
-
-    // ── ingest_progress_to_payload ──────────────────────────
-
-    #[test]
-    fn payload_for_downloading_carries_percent_and_size_message() {
-        let payload = ingest_progress_to_payload(
-            "wikipedia",
-            &IngestProgress::Downloading {
-                percent: 42.5,
-                bytes_downloaded: 5_242_880, // 5 MB
-                bytes_total: Some(10_485_760),
-            },
-        );
-        assert_eq!(payload.corpus_id, "wikipedia");
-        assert_eq!(payload.phase, "downloading");
-        assert!((payload.percent - 42.5).abs() < 1e-3);
-        // The message should describe the download size in MB so the
-        // UI can show "5.0 MB" while progress is below 100%.
-        let message = payload
-            .message
-            .expect("downloading payload should have a message");
-        assert!(
-            message.contains("MB"),
-            "expected MB in message, got '{message}'"
-        );
-    }
-
-    #[test]
-    fn payload_for_embedding_computes_percent_from_total() {
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::Embedding {
-                chunks_embedded: 250,
-                total: 1000,
-                docs_processed: 10,
-                chunks_per_sec: 50.0,
-                expected_docs: None,
-            },
-        );
-        assert_eq!(payload.phase, "embedding");
-        assert!((payload.percent - 25.0).abs() < 1e-3);
-        assert_eq!(payload.chunks_processed, 250);
-    }
-
-    #[test]
-    fn payload_for_embedding_handles_zero_total() {
-        // The pipeline reports `total: 0` early, before it knows the
-        // chunk count. The mapping must not divide-by-zero.
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::Embedding {
-                chunks_embedded: 0,
-                total: 0,
-                docs_processed: 0,
-                chunks_per_sec: 0.0,
-                expected_docs: None,
-            },
-        );
-        assert_eq!(payload.percent, 0.0);
-    }
-
-    #[test]
-    fn payload_for_embedding_does_not_overshoot_on_per_section_emit() {
-        // Wikipedia JSONL emits one ExtractedDoc per section; for a
-        // typical curated set that's ~10× the accepted-article count.
-        // Confirm the live-event percent does NOT compute
-        // `docs_processed / expected_docs` — that was an earlier
-        // (wrong) attempt at filter-aware progress that hit 100%
-        // within minutes of an embed run with hours left. Polling-side
-        // shard-scan progress is the honest signal; the live-event
-        // path falls back to the chunk-total ratio (0 until known).
-        let payload = ingest_progress_to_payload(
-            "wikipedia",
-            &IngestProgress::Embedding {
-                chunks_embedded: 339_200,
-                total: 0,                // unknown (streaming) → 0% live-event percent
-                docs_processed: 592_253, // 11× over the title cap
-                chunks_per_sec: 34.0,
-                expected_docs: Some(51_222),
-            },
-        );
-        assert_eq!(payload.phase, "embedding");
-        assert_eq!(
-            payload.percent, 0.0,
-            "live-event path must defer to polling shard-scan progress, not lie about completion"
-        );
-        // The "/ Y articles" context still appears in the message.
-        let msg = payload.message.as_deref().unwrap_or_default();
-        assert!(msg.contains("articles"), "{msg}");
-    }
-
-    #[test]
-    fn embed_message_omits_articles_when_no_expected_docs() {
-        let m = format_embed_message(339_200, 128_000, 32.0, None);
-        assert!(m.contains("128.0k docs"), "{m}");
-        assert!(!m.contains("articles"), "{m}");
-    }
-
-    #[test]
-    fn embed_message_includes_filter_scope_when_known() {
-        // Wikipedia Core mid-run: filter expects 51,286 titles, the
-        // pipeline has emitted 25,643 sections so far. The display
-        // unit ("articles") is approximate but communicates the
-        // operator-relevant scale.
-        let m = format_embed_message(339_200, 25_643, 32.0, Some(51_286));
-        assert!(m.contains("/ 51.3k articles"), "{m}");
-        assert!(m.contains("339.2k chunks"), "{m}");
-        assert!(
-            !m.contains("docs"),
-            "should swap in 'articles' wording: {m}"
-        );
-    }
-
-    #[test]
-    fn embed_message_clamps_overshoot_to_expected() {
-        // docs_processed > expected (sections-per-article > 1 for
-        // wikipedia_jsonl). Clamp the displayed numerator so the
-        // ratio reads sensibly instead of "128.0k / 51.3k".
-        let m = format_embed_message(339_200, 128_000, 32.0, Some(51_286));
-        assert!(m.contains("51.3k / 51.3k articles"), "{m}");
-    }
-
-    #[test]
-    fn payload_for_complete_marks_full_progress() {
-        let payload = ingest_progress_to_payload(
-            "sep",
-            &IngestProgress::Complete {
-                total_chunks: 5000,
-                duration_secs: 1234,
-            },
-        );
-        assert_eq!(payload.phase, "complete");
-        assert_eq!(payload.percent, 100.0);
-        assert_eq!(payload.chunks_processed, 5000);
-        let message = payload.message.expect("should include duration");
-        assert!(message.contains("1234"));
-    }
-
-    /// Cover every variant of `IngestProgress` to catch the case where
-    /// a future variant is added to corpus-engine but the desktop's
-    /// mapping table is not updated. Without this, a new variant
-    /// would silently fall through to whatever default behavior the
-    /// match arm produces.
-    #[test]
-    fn payload_phase_is_set_for_every_progress_variant() {
-        let cases = [
-            IngestProgress::Downloading {
-                percent: 0.0,
-                bytes_downloaded: 0,
-                bytes_total: None,
-            },
-            IngestProgress::Extracting {
-                documents_processed: 1,
-            },
-            IngestProgress::Chunking { chunks_created: 1 },
-            IngestProgress::Embedding {
-                chunks_embedded: 1,
-                total: 1,
-                docs_processed: 1,
-                chunks_per_sec: 1.0,
-                expected_docs: None,
-            },
-            IngestProgress::Indexing {
-                chunks_indexed: 1,
-                total: 1,
-            },
-            IngestProgress::Complete {
-                total_chunks: 1,
-                duration_secs: 1,
-            },
-        ];
-        for case in cases {
-            let payload = ingest_progress_to_payload("test", &case);
-            assert!(
-                !payload.phase.is_empty(),
-                "every IngestProgress variant must map to a non-empty phase string"
-            );
-            assert_eq!(payload.corpus_id, "test");
-        }
-    }
-}

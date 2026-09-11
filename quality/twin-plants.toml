@@ -481,3 +481,47 @@ replace     = '''        // TWIN-CENSUS PLANT (scripts/twin-census.py) — the r
         // checks stay, which is exactly the half-defended state the parity
         // suite exists to catch.
         .layer(Extension(daemon))'''
+
+# ── sovereign-desktop, sv-surface D9b ──────────────────────────────────────
+#
+# The CONSUMER census, not the construction floor. `attach_construction_
+# census.rs` counts what the boot spine BUILDS; this family counts what the
+# command surface still READS out of those builds. 65b92cd15 measured the
+# gap and it is the one that matters: a needle deleted while a read of it
+# survives does not purify the boot, it deletes an answer.
+#
+# The plant is a source-text one because the crate is bin-only — a
+# `tests/*.rs` cannot name `AppState`, `new_with_mode` needs a real
+# `AppHandle`, and the spine needs a real GGUF at `slots.fast`. Recorded
+# there rather than hidden: the census reads the command files as text, and
+# the plant re-adds the local primitive to the file it was retired from.
+#
+# Watched red 2026-09-10 on this tree with three simultaneous plants — the
+# built-in catalogue read back in `corpus.rs`, `diagnose_corpus` deleted
+# instead of repointed, and the in-process `CorpusEngine::ingest` back in
+# `recipe_testing.rs`. All three tests failed, each naming its own file and
+# primitive; restored, re-green 3/3.
+
+[[family]]
+id          = "sv-desktop-d9b-consumer"
+crate       = "sovereign-desktop"
+census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d9b_consumer_census.rs"
+mustFail    = ["the_retired_local_primitives_do_not_return"]
+breaks      = "a repointed command re-deriving an answer the daemon serves — in attach, against a different store, index or registry than the turn is answered from, silently"
+target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs"
+expect_red  = "`.diagnose_indexes()` is back in corpus_install.rs — that question is answered by GET /internal/corpus/diagnose"
+find        = '''    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .corpus_diagnose()
+        .await
+        .map_err(|e| e.to_string())'''
+replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local index
+    // diagnosis, restored. In attach this describes the indexes THIS
+    // process has a second handle on, not the ones the turns are
+    // answered from.
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => std::sync::Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    drop(engine_guard);
+    Ok(engine.diagnose_indexes().await)'''

@@ -19,13 +19,14 @@ use crate::state::{self, AppState, DesktopConfig};
 
 #[tauri::command]
 pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
-    Ok(engine.diagnose_indexes().await)
+    // sv-surface D9b — `GET /internal/corpus/diagnose`. A diagnosis of
+    // indexes this process merely has a second handle on is a diagnosis of
+    // the wrong thing; the report the operator wants describes the indexes
+    // the turns are answered from.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .corpus_diagnose()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Kick off a corpus install via the daemon's unified install
@@ -44,6 +45,24 @@ pub async fn install_corpus(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
+) -> Result<(), String> {
+    request_daemon_install(&app_handle, &state, &corpus_id).await
+}
+
+/// THE install request — `POST /internal/corpus/install` plus the
+/// optimistic `corpus-progress` stub that flips the button before the
+/// status poller's next tick.
+///
+/// One implementation (ARCH §10.6). The setup wizard's tier installs
+/// (`recipe_testing::start_tier_installs`) used to carry their own copy of
+/// this — and the copy did not call the daemon at all: it ran
+/// `CorpusEngine::ingest` in THIS process, so the wizard's "install
+/// essential" ingested through a second pipeline the daemon knew nothing
+/// about, competing with it for the same index directory (sv-surface D9b).
+pub(crate) async fn request_daemon_install(
+    app_handle: &tauri::AppHandle,
+    state: &AppState,
+    corpus_id: &str,
 ) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -71,7 +90,7 @@ pub async fn install_corpus(
     // in the background) will overwrite this stub payload with real
     // progress on its very next pass.
     let initial = CorpusProgressPayload {
-        corpus_id: corpus_id.clone(),
+        corpus_id: corpus_id.to_string(),
         phase: "downloading".into(),
         percent: 0.0,
         chunks_processed: 0,
@@ -79,7 +98,7 @@ pub async fn install_corpus(
         ..Default::default()
     };
     if let Ok(mut map) = state.install_progress.try_write() {
-        map.insert(corpus_id.clone(), initial.clone());
+        map.insert(corpus_id.to_string(), initial.clone());
     }
     let _ = app_handle.emit("corpus-progress", initial);
 

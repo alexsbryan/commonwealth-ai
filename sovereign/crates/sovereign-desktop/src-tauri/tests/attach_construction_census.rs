@@ -74,6 +74,43 @@
 //! guaranteed false positive is how people learn to reach for
 //! `--no-verify`.
 //!
+//! # D9b consumed 22 of the reads and the floor did not move (2026-09-10)
+//!
+//! Re-counted first, same method, on the tree D9b started from: **55 reads
+//! across 13 files**, not 49. Eleven of the thirteen per-file numbers above
+//! reproduce exactly; `chat.rs` is 8 (recorded 3) and `recipe_testing.rs` is
+//! 3 (recorded 2). Re-running the counter AT 65b92cd15 gives 8 and 3 there
+//! too, so those two figures were an undercount when written, not drift
+//! since — the instrument is sound, the two numbers it reported were not
+//! (§18.4: validate the instrument before the result).
+//!
+//! D9b repointed 22 onto 2a9a9e91e's routes — the six document commands, the
+//! corpus catalogue, the shelf, health, retry-enrichment, diagnose, the tier
+//! installs, conversation create/delete/end/export, the skill toggle and
+//! `is_backend_ready`. **55 -> 33 across 10 files.** The consumer census is
+//! `d9b_consumer_census.rs`; it pins each retired primitive to the route
+//! that answers it now.
+//!
+//! The FLOOR is unchanged at 12, and that is a measurement, not an omission.
+//! Every one of the eleven spine needles is consumed by
+//! `sovereign_runtime_recipe::common_parts` -> `commission` — `store`,
+//! `sqlite_store`, `corpus_engine`, `notes`, `features` (via the tool
+//! bundles), `skills`, the GLiNER extractor, the tiered provider and the
+//! knowledge view all feed the Runtime this process commissions in attach
+//! mode too. `notes` and `features` have NO command-surface reader at all
+//! and are still not free for that reason. So the commission is the
+//! blocker, and the commission has six live attach-time readers of its own:
+//! `chat.rs` 110 and 954 (readiness gates), 1063 (the cancel fallback), 1161
+//! (the session->conversation soft read), `document_asset.rs` 387
+//! (`ask_document`'s turn half) and `models.rs` 34 (`search_web`'s tool
+//! registry). Three of those six are named CANNOT-CROSS in 2a9a9e91e and one
+//! more is a turn-path change owing a pre-registered bench (§18.6).
+//!
+//! `attach_bootstrap()` is therefore still not written, on the same rule the
+//! D9 correction set: the floor reaches zero when the last consumer does,
+//! and a hoist before then deletes answers. The remaining consumers and the
+//! route each one needs are enumerated on the campaign's D9b row.
+//!
 //! Watched to fail: add or remove a construction site in `state.rs`'s
 //! bootstrap spine (or edit an expected count here) and this goes red
 //! naming the needle. Sabotage-verified at landing: one count edited,

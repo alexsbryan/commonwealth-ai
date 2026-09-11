@@ -352,48 +352,20 @@ pub async fn get_corpus_health(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<Option<CorpusHealthDetail>, String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Ok(None),
-    };
-    drop(engine_guard);
-
-    let index = match engine.open_index_for_corpus(&corpus_id).await {
-        Ok(idx) => idx,
-        Err(_) => return Ok(None),
-    };
-
-    // Count skeleton parse failures from the NDJSON log file.
-    let failures_path = index.path().join("_skeleton_failures.ndjson");
-    let parse_failure_count = if failures_path.exists() {
-        std::fs::read_to_string(&failures_path)
-            .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count() as u64)
-            .unwrap_or(0)
-    } else {
-        0
-    };
-
-    // Check if a field skeleton exists (indicates enrichment ran).
-    let has_skeleton = index.load_field_skeleton().ok().flatten().is_some();
-    let skeleton_questions = if has_skeleton {
-        index
-            .load_field_skeleton()
-            .ok()
-            .flatten()
-            .map(|s| s.canonical_questions.len() as u64)
-            .unwrap_or(0)
-    } else {
-        0
-    };
-
-    Ok(Some(CorpusHealthDetail {
-        corpus_id: corpus_id.clone(),
-        claims_count: skeleton_questions,
-        relationships_count: 0,
-        has_article_profiles: has_skeleton,
-        parse_failure_count,
-    }))
+    // sv-surface D9b — `GET /internal/corpus/{corpus}/health`. The index
+    // this reads (`_skeleton_failures.ndjson`, the field skeleton) is the
+    // one the daemon ingests INTO; opening it a second time from this
+    // process is a second lance handle on the same directory, and in
+    // attach a stale one.
+    //
+    // `Ok(None)` keeps its meaning — the route's 404 is "no such installed
+    // corpus", exactly what `open_index_for_corpus`'s `Err(_) => Ok(None)`
+    // said here. Every other failure is an `Err` now rather than a
+    // silently-empty health panel.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .corpus_health::<CorpusHealthDetail>(&corpus_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Re-parse stored skeleton extraction failures using the improved repair
@@ -406,19 +378,19 @@ pub async fn retry_enrichment_failures(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<u64, String> {
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
-
-    let index = engine
-        .open_index_for_corpus(&corpus_id)
+    // sv-surface D9b — `POST /internal/corpus/{corpus}/retry-enrichment`.
+    // The repair parser rewrites `field_skeleton.json` IN the index, so it
+    // must run in the process that owns the index; an attached desktop
+    // salvaging into its own copy wrote questions the serving runtime
+    // would never read.
+    //
+    // The route answers `(salvaged, still_failed)` — the command had been
+    // dropping the second half on the floor. The frontend contract stays
+    // `u64` (this rung is the repoint, not a DTO change, ARCH §10.2), so
+    // the number that was lost is at least traced.
+    let (salvaged, still_failed) = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .corpus_retry_enrichment(&corpus_id)
         .await
-        .map_err(|e| format!("Failed to open index for '{corpus_id}': {e}"))?;
-
-    let (salvaged, still_failed) = corpus_engine::reprocess_skeleton_failures(&index)
         .map_err(|e| format!("Reprocessing failed: {e}"))?;
 
     tracing::info!(
@@ -428,5 +400,5 @@ pub async fn retry_enrichment_failures(
         "Skeleton failure reprocessing complete"
     );
 
-    Ok(salvaged as u64)
+    Ok(salvaged)
 }

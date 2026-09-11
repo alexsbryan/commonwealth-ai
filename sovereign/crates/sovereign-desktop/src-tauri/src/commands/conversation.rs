@@ -22,44 +22,33 @@ pub async fn create_conversation(
     state: State<'_, Arc<AppState>>,
     surface_skill_id: Option<String>,
 ) -> Result<CreateConversationResponse, String> {
-    let id = uuid::Uuid::new_v4().to_string();
-    let created_at = now_epoch();
-
-    // Persist the conversation row with its surface tag NOW so the
-    // first chat dispatch already knows which surface created this
-    // conversation. Pre-2026-05-24 this was a lazy create — the row
-    // appeared only when the first message was saved, and the
-    // runtime auto-tagged with whatever was in
-    // `SkillRegistry::primary_skill_id_for_conversation()` at dispatch
-    // time. That coupled routing to global mutable registry state +
-    // required every workspace surface to toggle skills via
-    // `rebuild_runtime` on mount/destroy (15s × N rebuilds). With
-    // the surface declaring its skill at create-time, routing
-    // becomes a stateless per-turn lookup and the lifecycle glue
-    // disappears.
+    // sv-surface D9b — `POST /v1/conversations`. The row is SEEDED, not
+    // created lazily, and that is exactly why it has to be seeded on the
+    // store the turn will be answered against: the surface tag decides
+    // routing at dispatch, and since R5 the dispatch is the daemon's. The
+    // local arm seeded this process's `sqlite_store`, which in attach is a
+    // different file from the one serving the turn — the tag was written
+    // where nobody would read it.
     //
-    // `surface_skill_id == None` is the default-chat case: no
-    // workspace tag, routing follows intent-derived policy.
-    if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .insert_empty_conversation(&id, created_at, surface_skill_id.as_deref())
-            .await
-            .map_err(|e| format!("create_conversation insert: {e}"))?;
-    } else {
-        // Sqlite store unavailable (early boot, IO error). Fall
-        // through: the conversation row still gets created lazily
-        // on first message save and runtime's older auto-tag path
-        // handles attribution best-effort.
-        tracing::warn!("create_conversation: sqlite store unavailable, deferring insert");
-    }
+    // The old `else` branch is gone with it, and that is a §18.3 repair,
+    // not a loss: "sqlite store unavailable" used to `warn!` and return a
+    // conversation id anyway, leaving the frontend holding an id for a row
+    // that did not exist and would be lazily minted UNTAGGED by the first
+    // turn. The route either seeds the row or says why.
+    //
+    // `enabled_corpora: None` — the desktop's own create seeds no
+    // allow-list; the client verifies the daemon echoed what was sent, so
+    // a host that ignores the field is an error rather than a silent
+    // "everything is searchable".
+    let created = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .create_conversation(surface_skill_id.as_deref(), None)
+        .await
+        .map_err(|e| format!("create_conversation: {e}"))?;
 
     Ok(CreateConversationResponse {
-        id,
-        created_at,
-        // The desktop's own create seeds no allow-list; the field exists on
-        // the wire type so a scoped create can echo one (the daemon's route
-        // does), and `None` is omitted from the serialized bytes.
-        enabled_corpora: None,
+        id: created.id,
+        created_at: created.created_at,
+        enabled_corpora: created.enabled_corpora,
     })
 }
 
@@ -70,6 +59,15 @@ pub async fn list_conversations(
     offset: Option<usize>,
     surface_skill_id: Option<String>,
 ) -> Result<Vec<ConversationEntry>, String> {
+    // sv-surface D9b — NOT repointed, and the reason is a missing route,
+    // not an oversight. `GET /v1/conversations` takes `limit`/`offset` and
+    // nothing else; this listing is SURFACE-SCOPED
+    // (`list_conversations_for_surface`), and cross-surface visibility is a
+    // structural restriction, so serving it through the unscoped route
+    // would widen it silently — the §18.3 substitution, in the one place
+    // the redesign made load-bearing. Owed: `GET /v1/conversations?
+    // skill_id=` with `list_conversations_for_surface` as the decider.
+    //
     // Readiness gates on the DATABASE, not the chat Runtime: listing
     // conversations is not a chat operation (Phase 0).
     let _ = require_store!(state);
@@ -108,6 +106,9 @@ pub async fn list_conversations(
 /// — the notebook's Ask-tab history. Default-chat surface only;
 /// "everything"-scoped conversations are excluded (see
 /// `SqliteStateStore::list_conversations_for_corpus`).
+/// sv-surface D9b — NOT repointed: no corpus-scoped listing route exists.
+/// Owed: `GET /v1/conversations?corpus_id=` over
+/// `SqliteStateStore::list_conversations_for_corpus`.
 #[tauri::command]
 pub async fn notebook_conversations(
     state: State<'_, Arc<AppState>>,
@@ -141,6 +142,16 @@ pub async fn get_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<ConversationDetail, String> {
+    // sv-surface D9b — NOT repointed, and this one is a wire GAP, not a
+    // missing route. `GET /v1/conversations/{id}` exists and `export_answer`
+    // below rides it. But it answers the TYPED projection
+    // (provenance/citations/epistemic_state) and drops two fields this DTO
+    // carries: `metadata`, the verbatim blob the frontend types as `unknown`
+    // and reads with pointers, and `enabled_corpora`, which
+    // `CorpusFilterStrip` renders. Repointing today would quietly empty
+    // both. Two ways out, both outside this rung: widen the route's
+    // `ConversationResponse`, or convert the renderer onto the projections
+    // (`conversation_wire_census.rs` already names that as rung 6's job).
     let store = require_store!(state);
 
     let convo = store
@@ -183,9 +194,11 @@ pub async fn delete_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let store = require_store!(state);
-
-    store
+    // sv-surface D9b — `DELETE /v1/conversations/{id}`, in BOTH modes. The
+    // daemon's store is the one the sidebar was listed from; deleting the
+    // desktop's own row left the served row in place, so the entry came
+    // back on the next list.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
         .delete_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())
@@ -209,6 +222,10 @@ pub async fn rename_conversation(
         trimmed.to_string()
     };
 
+    // sv-surface D9b — NOT repointed: the daemon serves no conversation
+    // update. Owed: `PATCH /v1/conversations/{id}` with `{title}` over
+    // `update_conversation_title`. Until then the rename lands on this
+    // process's row and the served sidebar keeps the old title.
     let store = require_store!(state);
 
     store
@@ -235,6 +252,12 @@ pub async fn set_conversation_enabled_corpora(
     conversation_id: String,
     enabled_corpora: Option<Vec<String>>,
 ) -> Result<(), String> {
+    // sv-surface D9b — NOT repointed: no route writes the allow-list after
+    // create. `POST /v1/conversations` accepts `enabled_corpora` at SEED
+    // time only. Owed: `PUT /v1/conversations/{id}/enabled-corpora`. This is
+    // the sharpest of the five holdouts — retrieval reads the allow-list on
+    // the DAEMON's row, so in attach every chip the user toggles is written
+    // where the retrieval that honours it will never look.
     let store = require_store!(state);
 
     store
@@ -634,6 +657,13 @@ pub async fn submit_information_search(
     // search still feeds through to refinement so the bench's
     // `submit_information_response` path is unaffected.
     if let Some(ref cid) = conversation_id {
+        // sv-surface D9b — NOT repointed: `searched_sources` has no wire
+        // accessor (neither `get_conversation`'s response nor any write
+        // route carries it). This arm is already dead whenever a wire turn
+        // is parked, which since R5 is every real turn; it survives for
+        // legacy callers and for bench paths with no conversation wired.
+        // Owed with the enabled-corpora write above, or delete the arm once
+        // the daemon's fold is proven to be the only one.
         if !state.turn_wire.has(cid).await {
             let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
                 let guard = state.store.read().await;
@@ -756,9 +786,20 @@ pub async fn finalize_inner_work_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    if let Err(e) = runtime.end_conversation(&conversation_id).await {
+    // sv-surface D9b — `POST /v1/conversations/{id}/end`. The extraction
+    // pass has to run on the Runtime that OWNS the conversation's memories,
+    // which since R5 is the serving one. This process's `Runtime` in attach
+    // has never seen the conversation, so the local call extracted from an
+    // empty history and stamped nothing.
+    //
+    // The soft-fail contract is UNCHANGED on purpose: a failed extraction
+    // warns and still answers `Ok(())`, because the user closing an
+    // inner-work session must not see an error for a background pass. What
+    // changed is only WHICH runtime does the work.
+    if let Err(e) = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .end_conversation(&conversation_id)
+        .await
+    {
         tracing::warn!(
             error = %e,
             conversation_id = %conversation_id,
@@ -867,26 +908,26 @@ pub async fn toggle_skill(
 }
 
 /// Shared body for the `toggle_skill` Tauri command. Single
-/// implementation guarantees uniform idempotency + rebuild
-/// behavior. (Pre-2026-05-24 also served per-workspace wrappers
-/// like `recipe_author_set_workspace_active`; those were removed
-/// when routing moved to conversation-tag-driven primary skill
-/// selection.)
+/// implementation guarantees uniform idempotency. (Pre-2026-05-24
+/// also served per-workspace wrappers like
+/// `recipe_author_set_workspace_active`; those were removed when
+/// routing moved to conversation-tag-driven primary skill selection.)
 ///
 /// Idempotent: if the requested state already matches the stored
-/// `config.active_skills`, returns early without `config.save()`
-/// or `rebuild_runtime`. Diagnosed 2026-05-23: the InnerWork
-/// surface and a parallel App.svelte view-effect both called the
-/// older non-idempotent `toggle_skill` on view-enter, kicking off
-/// two ~15s `rebuild_runtime` passes that locked the UI for ~30s.
-/// Even after removing the redundant caller, no-op short-circuit
-/// is the right shape for a toggle — callers shouldn't have to
-/// track local state to avoid thrashing the registry.
+/// `config.active_skills`, returns early without `config.save()` and
+/// without touching the serving registry. Diagnosed 2026-05-23: the
+/// InnerWork surface and a parallel App.svelte view-effect both called
+/// the older non-idempotent `toggle_skill` on view-enter, kicking off
+/// two ~15s runtime rebuilds that locked the UI for ~30s. Removing
+/// that rebuild is what sv-surface D9b did (see the body); the no-op
+/// short-circuit stays because it is the right shape for a toggle —
+/// callers shouldn't have to track local state to avoid a round trip.
 pub async fn toggle_skill_impl(
     state: &Arc<AppState>,
     skill_id: String,
     active: bool,
 ) -> Result<(), String> {
+    let skill_id_for_wire = skill_id.clone();
     {
         let mut config = state.config.write().await;
         let already = config.active_skills.contains(&skill_id);
@@ -904,7 +945,40 @@ pub async fn toggle_skill_impl(
         config.save()?;
     }
 
-    state::rebuild_runtime(state).await
+    // sv-surface D9b — `PUT /v1/skills/{id}/active`. The registry that
+    // decides which skills a turn may use is the SERVING runtime's, and
+    // since R5 that is the daemon's in both modes (in Local the daemon is
+    // handed `Arc::clone(&runtime_arc)`, so this PUT reaches the very
+    // object this process holds — one registry, one answer).
+    //
+    // `rebuild_runtime` is GONE from this path, and it is the deletion
+    // that matters: a ~15s drop-and-recommission of the whole Runtime, to
+    // change one bool in a set. It could not have been doing the job in
+    // attach anyway — rebuilding THIS process's registry while the turn is
+    // answered against the daemon's is the C2 divergence in miniature.
+    // The config write above stays: it is the persisted PREFERENCE the
+    // next boot activates from, a different fact from the live set.
+    //
+    // A 404 means the daemon has no such skill registered. That is a
+    // named refusal, not an `Ok(())` — the pane must not paint a toggle
+    // the serving runtime never accepted (ARCH §18.3).
+    let echoed = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .set_skill_active::<SkillEntry>(&skill_id_for_wire, active)
+        .await
+        .map_err(|e| format!("toggle_skill: {e}"))?;
+    match echoed {
+        Some(entry) => {
+            tracing::info!(
+                skill_id = %entry.id,
+                active = entry.active,
+                "toggle_skill: the serving registry echoed back"
+            );
+            Ok(())
+        }
+        None => Err(format!(
+            "toggle_skill: the serving runtime has no skill `{skill_id_for_wire}` registered"
+        )),
+    }
 }
 
 /// The answer document — its extraction, its block flattening and its
@@ -921,7 +995,6 @@ pub async fn toggle_skill_impl(
 use sovereign_contracts::types::answer_doc::{
     doc_blocks, render_answer_markdown, AnswerDoc, Block,
 };
-use sovereign_contracts::types::projection::project_message_metadata;
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -1208,8 +1281,13 @@ pub async fn export_answer(
     message_id: String,
     dest_path: String,
 ) -> Result<(), String> {
-    let store = require_store!(state);
-    let convo = store
+    // sv-surface D9b — `GET /v1/conversations/{id}`. The wire row already
+    // carries the TYPED projection this export needs, run by
+    // `project_message_metadata` on the daemon: one reader of the metadata
+    // shape, not one per host (ARCH §10.6). So the local
+    // `project_message_metadata` call below is gone, not moved — an
+    // exported document now cannot depend on which process rendered it.
+    let convo = sovereign_turn_client::TurnClient::new(state.client_base_url())
         .get_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -1224,13 +1302,9 @@ pub async fn export_answer(
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
-    // The document is built from the TYPED projection, not from the
-    // persisted blob — the same `(provenance, citations)` a client gets
-    // over the wire, so an attached desktop exports what a local one
-    // does. `project_message_metadata` is the single reader of the
-    // metadata shape.
-    let (provenance, citations) = project_message_metadata(&msg.metadata);
-    let doc = AnswerDoc::from_projection(&msg.content, provenance.as_ref(), &citations);
+    // The document is built from the TYPED projection the host already
+    // ran, not from a second local read of the persisted blob.
+    let doc = AnswerDoc::from_projection(&msg.content, msg.provenance.as_ref(), &msg.citations);
     let bytes: Vec<u8> = match ext.as_str() {
         "pdf" => render_answer_pdf(&doc)?,
         "docx" => render_answer_docx(&doc)?,
