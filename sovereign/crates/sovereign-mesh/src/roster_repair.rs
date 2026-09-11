@@ -40,20 +40,12 @@ pub struct ForgottenMember {
     pub already_retired: bool,
 }
 
-/// Resolve an operator's `<node>` argument against a member row: exact
-/// name, or a node_id prefix of at least 4 hex characters.
-///
-/// A prefix shorter than 4 is refused rather than matched loosely — a
-/// one-character prefix against a 16-character id is very nearly "retire an
-/// arbitrary member", and this command writes a tombstone.
-fn member_matches(node_id: commonwealth_core::ids::NodeId, name: &str, query: &str) -> bool {
-    if name == query {
-        return true;
-    }
-    let id = node_id.to_string();
-    let q = query.trim_start_matches("node-");
-    q.len() >= 4 && id.trim_start_matches("node-").starts_with(q)
-}
+/// Resolve an operator's `<node>` argument against a member row — exact
+/// name, or a ≥4-char node_id prefix. The rule itself lives in
+/// `commonwealth_core::mesh` (moved 2026-09-11) so the package crates that
+/// resolve the same `<peer>` argument — `commonwealth-media`, and the rails
+/// daemon behind it — share one implementation with this one (ARCH §10.6).
+pub(crate) use commonwealth_core::mesh::member_matches;
 
 impl EmbeddedDaemon {
     /// Retire one member row: tombstone it locally and let the ordinary
@@ -207,36 +199,5 @@ pub async fn mesh_forget_member(
             Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The resolver's safety rule, watched failing. `forget-member` WRITES a
-    /// tombstone, so a loose match is not a usability nicety — a
-    /// one-character prefix against a 16-character id is very nearly "retire
-    /// an arbitrary member". Four is the floor.
-    #[test]
-    fn a_short_node_id_prefix_never_resolves_a_member() {
-        let id = commonwealth_core::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
-        let m = |q: &str| member_matches(id, "BeefyMac", q);
-        assert!(!m("b"), "1 char must not match");
-        assert!(!m("b88"), "3 chars must not match");
-        assert!(m("b882"), "4 chars is the floor");
-        assert!(m("node-b882"), "the node- prefix is optional");
-        assert!(m("BeefyMac"), "exact name matches");
-        assert!(!m("Beefy"), "a partial NAME must not match");
-        assert!(!m("b883"), "a wrong prefix must not match");
-    }
-
-    /// An empty query must never match. It reaches here as `--force` with no
-    /// member, and matching everything would retire whichever row the
-    /// iteration happened to reach first.
-    #[test]
-    fn an_empty_query_matches_nothing() {
-        let id = commonwealth_core::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
-        assert!(!member_matches(id, "BeefyMac", ""));
     }
 }

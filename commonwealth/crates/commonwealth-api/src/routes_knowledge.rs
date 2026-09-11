@@ -288,7 +288,7 @@ pub async fn knowledge_search(
             Err(e) => {
                 tracing::warn!(error = %e, "knowledge: HTTP client build failed");
                 // Return what we have locally; don't fail the whole
-                // request over a transport construction error.
+                // request because the peer path is unavailable.
                 return build_response(
                     all_results,
                     corpora_searched,
@@ -298,79 +298,88 @@ pub async fn knowledge_search(
                 );
             }
         };
-
         let transport = state.peer_transport();
-        let mut futures = Vec::new();
-        for (node_id, (node_name, contact, corpora)) in fanout_jobs.into_iter() {
-            let http = http.clone();
-            let transport = transport.clone();
-            let query_embedding = request.query_embedding.clone();
-            let query_text = request.query_text.clone();
-            let limit_u32 = request.effective_limit();
-            let requester_id = self_id;
-            let fanout_inner = state.inner.clone();
-            futures.push(tokio::spawn(async move {
-                // Hold the live fan-out gauge up for the lifetime of this peer
-                // request; the RAII guard decrements even if the task is
-                // cancelled or panics, so `BoundedFanOut` never sees a leak.
-                let _fanout_guard = FanoutGuard::new(fanout_inner);
-                fanout_one_peer(
-                    http,
-                    transport,
-                    requester_id,
-                    node_id,
-                    node_name,
-                    contact,
+        let query_embedding = request.query_embedding.clone();
+        let query_text = request.query_text.clone();
+        let limit_u32 = request.effective_limit();
+        let requester_id = self_id;
+        // The corpora each peer was asked for, kept beside the rows so a
+        // peer that failed marks exactly its corpora unavailable. Keyed by
+        // the row's wire id (`NodeId::to_string`), the one form both sides
+        // share.
+        let asked: HashMap<String, Vec<String>> = fanout_jobs
+            .iter()
+            .map(|(id, (_, _, corpora))| (id.to_string(), corpora.clone()))
+            .collect();
+        let targets: Vec<(crate::fanout::FanoutTarget, Vec<String>)> = fanout_jobs
+            .into_iter()
+            .map(|(node_id, (name, contact, corpora))| {
+                (
+                    crate::fanout::FanoutTarget {
+                        node_id,
+                        name,
+                        contact,
+                    },
                     corpora,
-                    query_embedding,
-                    query_text,
-                    limit_u32,
                 )
-                .await
-            }));
-        }
-
-        let mut peers_succeeded = 0usize;
-        let mut peers_failed = 0usize;
-        for f in futures {
-            match f.await {
-                Ok(PeerOutcome::Served {
-                    results,
-                    corpora_served,
-                    corpora_unavailable: peer_unavailable,
-                }) => {
-                    peers_succeeded += 1;
-                    for c in corpora_served {
+            })
+            .collect();
+        // The per-request timeout on the client is the per-endpoint guard;
+        // the fan-out core's cap is left off so a peer with several
+        // addresses keeps the time to try them, as before the extraction.
+        let rows = crate::fanout::fan_out(
+            state.inner.fanout_inflight.clone(),
+            targets,
+            None,
+            move |t, corpora| {
+                let http = http.clone();
+                let transport = transport.clone();
+                let query_embedding = query_embedding.clone();
+                let query_text = query_text.clone();
+                async move {
+                    fanout_one_peer(
+                        http,
+                        transport,
+                        requester_id,
+                        t,
+                        corpora,
+                        query_embedding,
+                        query_text,
+                        limit_u32,
+                    )
+                    .await
+                }
+            },
+        )
+        .await;
+        for row in rows {
+            match row.verdict {
+                crate::fanout::PeerVerdict::Served(served) => {
+                    for c in served.corpora_served {
                         corpora_searched.insert(c);
                     }
-                    for c in peer_unavailable {
+                    for c in served.corpora_unavailable {
                         corpora_unavailable.insert(c);
                     }
-                    all_results.extend(results);
+                    all_results.extend(served.results);
                 }
-                Ok(PeerOutcome::Failed {
-                    corpora_unavailable: failed_corpora,
-                }) => {
-                    peers_failed += 1;
-                    for c in failed_corpora {
-                        corpora_unavailable.insert(c);
+                crate::fanout::PeerVerdict::Failed { .. }
+                | crate::fanout::PeerVerdict::NeverAsked { .. } => {
+                    if let Some(corpora) = asked.get(&row.node_id) {
+                        for c in corpora {
+                            corpora_unavailable.insert(c.clone());
+                        }
                     }
-                }
-                Err(e) => {
-                    peers_failed += 1;
-                    tracing::warn!(error = %e, "knowledge: fan-out join failed");
                 }
             }
         }
-        // Single-line summary the operator can grep for: if
-        // peers_succeeded == 0 AND peers_failed > 0, every peer we
-        // tried was unreachable — that's the AP-isolation /
-        // stale-address failure mode. If peers_succeeded > 0 but
-        // corpora_unavailable is non-empty, specific corpora were
-        // missing on each peer tried.
+        // Single-line summary the operator can grep for (the per-peer
+        // counts are logged by the fan-out core under target `fanout`): if
+        // nothing was served and something failed, every peer we tried was
+        // unreachable — the AP-isolation / stale-address failure mode. If
+        // peers served but corpora_unavailable is non-empty, specific
+        // corpora were missing on each peer tried.
         tracing::info!(
-            peers_succeeded,
-            peers_failed,
             corpora_unavailable = ?corpora_unavailable,
             "knowledge: fan-out complete"
         );
@@ -385,29 +394,6 @@ pub async fn knowledge_search(
     )
 }
 
-/// RAII gauge guard for `AppStateInner::fanout_inflight`: increments on
-/// construction and decrements on drop, so the live count of outbound peer
-/// fan-out requests is correct even if a spawned fan-out task panics or is
-/// cancelled. One is held inside each fan-out task; the companion read is
-/// [`AppState::fanout_inflight_count`], surfaced over HTTP via `glassbox_signals`
-/// and asserted by the `BoundedFanOut` soak invariant.
-struct FanoutGuard(std::sync::Arc<crate::state::AppStateInner>);
-impl FanoutGuard {
-    fn new(inner: std::sync::Arc<crate::state::AppStateInner>) -> Self {
-        inner
-            .fanout_inflight
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Self(inner)
-    }
-}
-impl Drop for FanoutGuard {
-    fn drop(&mut self) {
-        self.0
-            .fanout_inflight
-            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
 /// A peer's advertised knowledge offering, cloned out of the mesh
 /// read-lock so fan-out can run without holding the lock.
 struct PeerOffering {
@@ -417,20 +403,17 @@ struct PeerOffering {
     corpora: Vec<String>,
 }
 
-enum PeerOutcome {
-    Served {
-        results: Vec<KnowledgeResult>,
-        corpora_served: Vec<String>,
-        corpora_unavailable: Vec<String>,
-    },
-    Failed {
-        corpora_unavailable: Vec<String>,
-    },
+/// What one peer answered with, its results already stamped with who served them.
+struct PeerServed {
+    results: Vec<KnowledgeResult>,
+    corpora_served: Vec<String>,
+    corpora_unavailable: Vec<String>,
 }
 
 /// Query a single peer. Try each of their advertised addresses in
 /// order until one works (same "first reachable wins" policy as
-/// gossip and the join handshake). Any successful response is
+/// gossip and the join handshake) — `fanout::first_endpoint_that_answers`
+/// owns that loop and the `note_success` pin. Any successful response is
 /// annotated with the peer's id/name so the caller's merge step
 /// can surface attribution to the UI.
 ///
@@ -445,18 +428,17 @@ enum PeerOutcome {
 /// `knowledge_served_e2e` exercises the post-stamp emission path;
 /// the two-daemon `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger`
 /// test pins this header-stamping contract end-to-end.
+#[allow(clippy::too_many_arguments)]
 async fn fanout_one_peer(
     http: reqwest::Client,
     transport: std::sync::Arc<dyn commonwealth_transport::PeerTransport>,
     requester_id: NodeId,
-    node_id: NodeId,
-    node_name: String,
-    contact: commonwealth_transport::PeerContact,
+    target: crate::fanout::FanoutTarget,
     corpora: Vec<String>,
     query_embedding: Vec<f32>,
     query_text: String,
     limit: u32,
-) -> PeerOutcome {
+) -> Result<PeerServed, crate::fanout::PeerFailure> {
     let body = KnowledgeSearchRequest {
         query_embedding,
         query_text,
@@ -472,109 +454,71 @@ async fn fanout_one_peer(
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
+    let node_id = target.node_id;
+    let node_name = target.name.clone();
     // The transport resolves and orders the candidates (ranked
     // addresses, last-working promoted to the front). This retired
     // the fan-out-local copy of gossip's `last_working_address_cache`
     // — the transport is shared state in `AppState`, so knowledge
     // fan-out and gossip now feed the same reachability hint instead
     // of converging two duplicate caches.
-    let endpoints = transport
-        .endpoints(
-            &contact,
-            commonwealth_transport::TrafficClass::KnowledgeSearch,
-        )
-        .await;
-    for ep in &endpoints {
-        let url = format!("{}/internal/knowledge/search", ep.base_url);
-        match http
-            .post(&url)
-            .header("X-Node-Id", &requester_hex)
-            .json(&body)
-            .send()
-            .await
-        {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<KnowledgeSearchResponse>().await {
-                    Ok(parsed) => {
-                        // Pin this endpoint as the preferred starting
-                        // point for the next fan-out round.
-                        transport.note_success(
-                            node_id,
-                            commonwealth_transport::TrafficClass::KnowledgeSearch,
-                            ep,
-                        );
-                        tracing::info!(
-                            peer = %node_id,
-                            peer_name = %node_name,
-                            addr = %ep.label,
-                            corpora = ?corpora,
-                            hits = parsed.results.len(),
-                            "knowledge: fan-out served"
-                        );
-                        let peer_tag_id = node_id.to_string();
-                        let peer_tag_name = node_name.clone();
-                        let results: Vec<KnowledgeResult> = parsed
-                            .results
-                            .into_iter()
-                            .map(|mut r| {
-                                r.metadata
-                                    .insert("peer_node_id".into(), peer_tag_id.clone());
-                                r.metadata.insert("peer_name".into(), peer_tag_name.clone());
-                                r
-                            })
-                            .collect();
-                        return PeerOutcome::Served {
-                            results,
-                            corpora_served: parsed.corpora_searched,
-                            corpora_unavailable: parsed.corpora_unavailable,
-                        };
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            peer = %node_id,
-                            addr = %ep.label,
-                            error = %e,
-                            "knowledge: fan-out deserialise failed"
-                        );
-                    }
+    crate::fanout::first_endpoint_that_answers(
+        &transport,
+        node_id,
+        &target.contact,
+        commonwealth_transport::TrafficClass::KnowledgeSearch,
+        |ep| {
+            let http = http.clone();
+            let body = &body;
+            let requester_hex = &requester_hex;
+            let corpora = &corpora;
+            let node_name = node_name.clone();
+            async move {
+                let url = format!("{}/internal/knowledge/search", ep.base_url);
+                let resp = http
+                    .post(&url)
+                    .header("X-Node-Id", requester_hex)
+                    .json(body)
+                    .send()
+                    .await
+                    .map_err(|e| format!("transport error: {e}"))?;
+                if !resp.status().is_success() {
+                    return Err(format!("non-success status {}", resp.status()));
                 }
-            }
-            Ok(resp) => {
-                tracing::warn!(
-                    peer = %node_id,
-                    addr = %ep.label,
-                    status = %resp.status(),
-                    "knowledge: fan-out non-success status"
-                );
-            }
-            Err(e) => {
-                // Info-level (was debug) — this is the log the user
-                // needs to see when "I can tell my Founder has SEP,
-                // so why aren't we fetching it?" The common cause is
-                // the advertised peer address being unreachable from
-                // here (AP isolation, stale cached address, VPN down).
+                let parsed: KnowledgeSearchResponse = resp
+                    .json()
+                    .await
+                    .map_err(|e| format!("deserialise failed: {e}"))?;
                 tracing::info!(
                     peer = %node_id,
+                    peer_name = %node_name,
                     addr = %ep.label,
-                    error = %e,
-                    "knowledge: fan-out transport error, trying next address"
+                    corpora = ?corpora,
+                    hits = parsed.results.len(),
+                    "knowledge: fan-out served"
                 );
+                let peer_tag_id = node_id.to_string();
+                let results: Vec<KnowledgeResult> = parsed
+                    .results
+                    .into_iter()
+                    .map(|mut r| {
+                        r.metadata
+                            .insert("peer_node_id".into(), peer_tag_id.clone());
+                        r.metadata.insert("peer_name".into(), node_name.clone());
+                        r
+                    })
+                    .collect();
+                Ok(PeerServed {
+                    results,
+                    corpora_served: parsed.corpora_searched,
+                    corpora_unavailable: parsed.corpora_unavailable,
+                })
             }
-        }
-    }
-    PeerOutcome::Failed {
-        corpora_unavailable: corpora,
-    }
+        },
+    )
+    .await
 }
 
-/// Merge, dedupe, rerank, and wrap in the response envelope.
-/// Dedupe key is `(corpus_id, content)` so a peer-hosted replica
-/// doesn't double-count when the same chunk text shows up from two
-/// sources. Score ties use the first-seen record.
-///
-/// `requested` is the corpus set the CALLER named (`None` when the request was
-/// unconstrained). Every named corpus that nobody searched is reported as
-/// unavailable — see the note on the loop below.
 fn build_response(
     mut all_results: Vec<KnowledgeResult>,
     corpora_searched: HashSet<String>,

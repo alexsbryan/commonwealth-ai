@@ -847,9 +847,11 @@ pub struct AppStateInner {
     /// glassbox companion to the inbound `peer_sched` admission gauge: it makes
     /// `BoundedFanOut` a live runtime signal, not just a source-unit-tested
     /// property of `select_fanout_corpora`. 0 when no fan-out is in progress.
-    /// Maintained by `FanoutGuard` (routes_knowledge.rs), read via
+    /// Maintained by `commonwealth_transport::fanout`'s guard, which holds
+    /// this same `Arc` — the counter is shared, not owned, so the fan-out
+    /// serves a process with no `AppState` at all. Read via
     /// [`AppState::fanout_inflight_count`].
-    pub fanout_inflight: std::sync::atomic::AtomicUsize,
+    pub fanout_inflight: commonwealth_transport::fanout::InflightGauge,
     /// Corpus IDs currently being actively ingested on this node.
     /// Prevents the auto-collaborate loop from firing a second
     /// `collaborate` call while a live ingest task is writing chunks.
@@ -1781,7 +1783,7 @@ impl AppState {
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
-                fanout_inflight: std::sync::atomic::AtomicUsize::new(0),
+                fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 active_ingests: RwLock::new(HashSet::new()),
                 corpus_progress: RwLock::new(HashMap::new()),
                 newsworthy_force_tick: RwLock::new(None),

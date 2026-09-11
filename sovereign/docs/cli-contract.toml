@@ -241,6 +241,38 @@ classification = "daemon"
 args = ["mesh", "status"]
 expect_exit = 0
 [[command]]
+# Federated media, the viewer half: prints the loopback URL that reaches a
+# member's `[iroh] media_origin` by mesh key, then does one GET / through it.
+# Smoked on `--help` only, and that is deliberate: the verb exists for a SECOND
+# node that declares a media origin, and its refusals go to stderr, which the
+# journey `expect` block cannot read — so a one-node journey could assert
+# nothing but an exit code, which the census refuses as evidence. Proven by
+# `iroh_dialer_admission_e2e` (member reads a title by key; stranger's dial
+# dies) and `media_reach::tests` (every refusal named).
+path = "mesh media"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--json" }, { name = "--no-probe" }]
+[command.smoke]
+args = ["mesh", "media", "--help"]
+expect_exit = 0
+[[command]]
+# The catalogue half of federated media: `POST /v1/mesh/media/fanout` — the
+# same request to every offering member, one attributed row each, on
+# `commonwealth_api::fanout`. Smoked on `--help` for the reason `mesh media`
+# is: it needs members that declare a media origin. Proven by
+# `media_fanout::tests` (selection: every named member a row; the body cap)
+# and `fanout::tests` (the core: slow peer isolated, never-asked is a row).
+path = "mesh media fanout"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" }, { name = "--json" }]
+[command.smoke]
+args = ["mesh", "media", "fanout", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh balance"
 binary = "llm"
 visibility = "public"

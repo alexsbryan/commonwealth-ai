@@ -47,6 +47,7 @@ impl MeshState {
                     // workflow (operators need self.address as the
                     // founder addr; member addresses for debugging).
                     addresses: m.addresses.iter().map(|a| a.to_string()).collect(),
+                    origins: m.capabilities.origins.clone(),
                     // Derived from the hardware this member ALREADY gossips —
                     // no new gossip field, no schema change, no extra round.
                     // A member advertising no GPU gets `None` rather than a

@@ -37,6 +37,16 @@
 //! # 3. measure through whatever local port step 2 printed
 //! …-- pull --addr 127.0.0.1:NNNNN --path /media.bin --verify
 //! …-- pull --addr 127.0.0.1:NNNNN --path /media.bin --viewers 4
+//!
+//! # 4. THE BAR, through the PRODUCT path rather than this binary's own bridge:
+//! #    the URL `svrn mesh media <holder>` prints is a bridge the viewer's
+//! #    daemon holds over cwth/media/0 to the holder's [iroh] media_origin.
+//! #    --url takes it verbatim; --duration-secs re-pulls the same path back to
+//! #    back until the clock runs out and judges the pre-registered bar
+//! #    (BAR_MBIT / BAR_STALL_MS / BAR_SECS below). Record `svrn mesh media
+//! #    --json`'s `path` + `relayed_reading` beside the line: only a relayed
+//! #    reading is the bar's kind, and on one LAN the path reads `mixed`.
+//! …-- pull --url http://127.0.0.1:NNNNN --path /media.bin --duration-secs 600 --label relayed-run1
 //! ```
 //!
 //! Byte-exactness is ALSO checkable without trusting this binary at all:
@@ -119,8 +129,8 @@ mod real_main {
                      gateway --origin HOST:PORT\n  \
                      serve --origin HOST:PORT [--relay-only] [--no-n0]\n  \
                      bridge --iroh <dial-string> [--relay-only]\n  \
-                     pull --addr HOST:PORT --path /P [--range a-b] [--viewers K] [--verify] \
-                     [--label L]"
+                     pull (--url http://H:P | --addr H:P) --path /P [--range a-b] [--viewers K] \
+                     [--verify] [--duration-secs N] [--label L]"
                 );
                 std::process::exit(2);
             }
@@ -678,12 +688,70 @@ mod real_main {
         s[i.min(s.len() - 1)]
     }
 
+    /// The pre-registered bar (WORK_PLANE.md, federated media): one stream
+    /// sustains this rate for this long with no stall over this gap, on the
+    /// RELAYED path, over ≥3 runs. Held here so the verdict line and the doc
+    /// cannot drift apart; the path KIND is not this binary's to know — it
+    /// comes from `svrn mesh media --json` (`relayed_reading`).
+    const BAR_MBIT: f64 = 25.0;
+    const BAR_STALL_MS: f64 = 2000.0;
+    const BAR_SECS: f64 = 600.0;
+
+    /// Pull `path` from `addr` back to back until `deadline`, folding every
+    /// fetch into one reading. Gaps are measured WITHIN fetches only — the
+    /// reconnect between two is this harness's artefact, not the stream's —
+    /// and the reconnect count is reported beside it so it is never hidden.
+    async fn fetch_until(
+        addr: SocketAddr,
+        path: &str,
+        range: Option<(u64, u64)>,
+        verify: bool,
+        deadline: Option<Instant>,
+    ) -> std::io::Result<(Reading, usize)> {
+        let t0 = Instant::now();
+        let mut acc = fetch(addr, path, range, verify).await?;
+        let mut reconnects = 0usize;
+        while let Some(d) = deadline {
+            if Instant::now() >= d {
+                break;
+            }
+            let r = fetch(addr, path, range, verify).await?;
+            reconnects += 1;
+            acc.body_bytes += r.body_bytes;
+            acc.gaps_ms.extend(r.gaps_ms);
+            // Each fetch's LAST bucket is a partial second by construction; the
+            // report drops only the final one, so folding them in as whole
+            // seconds read as stalls that never happened (watched: worst_1s
+            // 2.4 Mbit/s on a 951 Mbit/s pull, 29 fetches in). Drop the
+            // completed fetch's trailing bucket before appending the next.
+            acc.per_sec.pop();
+            acc.per_sec.extend(r.per_sec);
+            acc.verify_fail_at = acc.verify_fail_at.or(r.verify_fail_at);
+            acc.status = r.status;
+        }
+        if deadline.is_some() {
+            acc.secs = t0.elapsed().as_secs_f64();
+        }
+        Ok((acc, reconnects))
+    }
+
     async fn pull(args: &[String]) {
-        let addr: SocketAddr = flag(args, "--addr")
-            .expect("pull needs --addr")
-            .parse()
-            .expect("bad --addr");
+        // `--url` is the form the product prints (`svrn mesh media`), taken
+        // verbatim so the number and the demo share one path; `--addr` is the
+        // bench's own bridge line.
+        let addr: SocketAddr = match (flag(args, "--url"), flag(args, "--addr")) {
+            (Some(u), _) => u
+                .trim_end_matches('/')
+                .strip_prefix("http://")
+                .expect("--url must be http://host:port, as `svrn mesh media` prints it")
+                .parse()
+                .expect("bad --url authority"),
+            (None, Some(a)) => a.parse().expect("bad --addr"),
+            (None, None) => panic!("pull needs --url (from `svrn mesh media`) or --addr"),
+        };
         let path = flag(args, "--path").unwrap_or_else(|| "/".to_string());
+        let duration_secs: Option<f64> = flag_num(args, "--duration-secs");
+        let deadline = duration_secs.map(|d| Instant::now() + Duration::from_secs_f64(d));
         let range = flag(args, "--range").map(|r| {
             let (a, b) = r.split_once('-').expect("--range a-b");
             (
@@ -700,21 +768,21 @@ mod real_main {
         for v in 0..viewers {
             let path = path.clone();
             tasks.push(tokio::spawn(async move {
-                (v, fetch(addr, &path, range, verify).await)
+                (v, fetch_until(addr, &path, range, verify, deadline).await)
             }));
         }
         let mut oks = Vec::new();
         for t in tasks {
             let (v, r) = t.await.expect("join");
             match r {
-                Ok(r) => oks.push((v, r)),
+                Ok((r, reconnects)) => oks.push((v, r, reconnects)),
                 Err(e) => println!("viewer {v}: ERROR {e}"),
             }
         }
         let wall = t0.elapsed().as_secs_f64();
-        oks.sort_by_key(|(v, _)| *v);
+        oks.sort_by_key(|(v, _, _)| *v);
         let mut agg_bytes = 0u64;
-        for (v, r) in &oks {
+        for (v, r, reconnects) in &oks {
             let mbit = if r.secs > 0.0 {
                 r.body_bytes as f64 * 8.0 / r.secs / 1_000_000.0
             } else {
@@ -738,7 +806,7 @@ mod real_main {
             println!(
                 "{label} viewer={v} status={} clen={:?} crange={:?} bytes={} secs={:.2} \
                  rate={:.1} Mbit/s ttfb={:.1}ms gaps: n={} p50={:.1} p99={:.1} max={:.1}ms \
-                 stalls>500ms={} >1s={} >2s={} worst_1s={:.1} Mbit/s verify={}",
+                 stalls>500ms={} >1s={} >2s={} worst_1s={:.1} Mbit/s verify={} reconnects={}",
                 r.status,
                 r.content_length,
                 r.content_range,
@@ -758,8 +826,33 @@ mod real_main {
                     None if verify => "OK".to_string(),
                     None => "off".to_string(),
                     Some(off) => format!("MISMATCH@{off}"),
-                }
+                },
+                reconnects
             );
+            if let Some(d) = duration_secs {
+                // The bar, judged from the numbers above and nothing else. The
+                // path KIND is deliberately absent: this binary cannot see the
+                // daemon's endpoint, and a verdict that assumed one would be
+                // the LAN-as-relay substitution the bar exists to refuse.
+                let ran_the_bar = d >= BAR_SECS && r.secs >= BAR_SECS;
+                let rate_ok = mbit >= BAR_MBIT;
+                let over = r.gaps_ms.iter().filter(|g| **g > BAR_STALL_MS).count();
+                let verdict = if !ran_the_bar {
+                    format!(
+                        "could-not-judge (ran {:.0}s of the bar's {BAR_SECS:.0}s)",
+                        r.secs
+                    )
+                } else if rate_ok && over == 0 {
+                    "met".to_string()
+                } else {
+                    "NOT met".to_string()
+                };
+                println!(
+                    "{label} viewer={v} BAR rate>={BAR_MBIT} Mbit/s: {} ({mbit:.1}) · stalls>{BAR_STALL_MS:.0}ms: {over} · {:.0}s of {BAR_SECS:.0}s · verdict={verdict} · path kind: `svrn mesh media --json` .path.relayed_reading must be true for this to be the bar's reading",
+                    if rate_ok { "yes" } else { "NO" },
+                    r.secs,
+                );
+            }
         }
         if viewers > 1 {
             println!(

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::mesh_identity::{aliased_endpoint_keys, AliasedEndpointKey, EndpointClaim};
 
+pub mod wire;
+
 use crate::capabilities::NodeCapabilities;
 use crate::ids::{MeshId, NodeId, NodePubkey};
 
@@ -341,6 +343,11 @@ impl MemberRecord {
 pub struct IrohDialInfo {
     pub relay_url: Option<String>,
     pub direct_addrs: Vec<SocketAddr>,
+    /// What the live acceptor routes to a local origin — see
+    /// [`crate::capabilities::NodeCapabilities::origins`]. Read off the
+    /// acceptor, not the config, so a declared origin whose endpoint never
+    /// bound is not advertised.
+    pub origins: Vec<crate::capabilities::OriginKind>,
 }
 
 /// Current status of a node as observed by the mesh.
@@ -364,6 +371,27 @@ pub struct MeshPeering {
     pub trust_level: PeerTrustLevel,
     pub established_at: u64,
     pub contact_nodes: Vec<SocketAddr>,
+}
+
+/// Resolve an operator's `<node>` argument against a member row: exact
+/// name, or a node_id prefix of at least 4 hex characters (the `node-`
+/// prefix is optional on either side).
+///
+/// A prefix shorter than 4 is refused rather than matched loosely — a
+/// one-character prefix against a 16-character id is very nearly "any
+/// member", and the callers act on the answer (`forget-member` writes a
+/// tombstone; `mesh media <peer>` mints a bridge; `media_allow` admits a
+/// dial). One implementation so every `<peer>` argument on every surface
+/// resolves the same way (ARCH §10.6) — it lives here rather than in
+/// `sovereign-mesh` because the package crates resolve the same argument
+/// with no sovereign runtime under them.
+pub fn member_matches(node_id: NodeId, name: &str, query: &str) -> bool {
+    if name == query {
+        return true;
+    }
+    let id = node_id.to_string();
+    let q = query.trim_start_matches("node-");
+    q.len() >= 4 && id.trim_start_matches("node-").starts_with(q)
 }
 
 /// Level of trust between peered meshes.

@@ -20,6 +20,10 @@ pub mod admission;
 pub mod auto_recover;
 pub mod client_auth;
 pub mod client_surface;
+// The fan-out core is `commonwealth_transport::fanout` since the rails carve
+// (a package-only member fans out too, with none of this crate). Re-exported
+// so `commonwealth_api::fanout::…` paths keep resolving.
+pub use commonwealth_transport::fanout;
 pub mod frontdoor;
 pub mod headers;
 pub mod middleware;

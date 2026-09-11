@@ -27,9 +27,9 @@ use commonwealth_api::server::{client_router, client_router_for, ClientSurface};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, CLIENT_ALPN,
-    RPC_ALPN,
+    MEDIA_ALPN, RPC_ALPN,
 };
-use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck};
+use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck, MemberIdentity};
 
 use crate::common;
 use crate::common::{client_app_state, spawn_router};
@@ -47,9 +47,17 @@ fn member_pubkey() -> NodePubkey {
     NodePubkey(*key(MEMBER_SEED).public().as_bytes())
 }
 
+/// How the lender's roster names the member — what its media origin is told.
+fn member_identity() -> MemberIdentity {
+    MemberIdentity {
+        name: "LittleMac".into(),
+        node_id: NodeId::from_u128(0xB0B),
+    }
+}
+
 fn only_the_member() -> MemberCheck {
     let member = member_pubkey();
-    Arc::new(move |k| Box::pin(std::future::ready(k == member)))
+    Arc::new(move |k| Box::pin(std::future::ready((k == member).then(member_identity))))
 }
 
 /// iroh binds the wildcard, which is not dialable as-is — rewrite to loopback.
@@ -113,11 +121,14 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         rpc: Some("127.0.0.1:2".parse().unwrap()),
         peer,
         guest,
+        media: None,
+        media_allow: Arc::new(Vec::new()),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
-    let acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
         let check = check.clone();
+        let routes = routes.clone();
         async move { routes.forward_for(&alpn, dialer, &check).await }
     });
     (endpoint, acceptor)
@@ -320,11 +331,14 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         // client router, `/internal/*` and all.
         peer: Some(spawn_router(client_router(state.clone())).await),
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: None,
+        media_allow: Arc::new(Vec::new()),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
-    let _acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
+    let _acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
         let check = check.clone();
+        let routes = routes.clone();
         async move { routes.forward_for(&alpn, dialer, &check).await }
     });
 
@@ -341,5 +355,198 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         resp.status(),
         reqwest::StatusCode::OK,
         "this is what the fix removes: a peer minting guest credentials on your node"
+    );
+}
+
+// ── federated media: the viewer half ─────────────────────────────────
+//
+// The holder half (`AcceptorRoutes::media`) was landed with a unit test on
+// the routing decision. This is the byte plane end to end through the SAME
+// tunnel the daemon's transport mints for `TrafficClass::Media`: a member's
+// `HttpBridge` over `MEDIA_ALPN`, a lender whose acceptor forwards to a
+// loopback origin that authenticates nothing, and a player-shaped `GET`.
+
+/// A lender that declares a media origin — an HTTP server on loopback that
+/// serves one "title" and honours `Range`, the two things a player needs.
+async fn lender_with_media(title: &'static [u8]) -> (Endpoint, IrohAcceptor) {
+    lender_with_media_allowing(title, Vec::new()).await
+}
+
+/// [`lender_with_media`] with an `[iroh] media_allow` list. The origin also
+/// answers `/whoami` with the identity headers it was handed — the witness
+/// that the acceptor, not the client, said who is asking.
+async fn lender_with_media_allowing(
+    title: &'static [u8],
+    media_allow: Vec<String>,
+) -> (Endpoint, IrohAcceptor) {
+    use axum::http::{header, HeaderMap, StatusCode as S};
+    use axum::routing::get;
+    let whoami = |headers: HeaderMap| async move {
+        let h = |n: &str| {
+            headers
+                .get(n)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<absent>")
+                .to_string()
+        };
+        format!("{} {}", h("x-mesh-member"), h("x-mesh-node"))
+    };
+    let origin = spawn_router(axum::Router::new().route("/whoami", get(whoami)).route(
+        "/library/title.bin",
+        get(move |headers: HeaderMap| async move {
+            // `bytes=A-B` → 206 with exactly that slice; no header → 200 whole.
+            let range = headers
+                .get(header::RANGE)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("bytes="))
+                .and_then(|v| v.split_once('-'))
+                .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)));
+            match range {
+                Some((a, b)) if a <= b && b < title.len() => {
+                    (S::PARTIAL_CONTENT, title[a..=b].to_vec())
+                }
+                _ => (S::OK, title.to_vec()),
+            }
+        }),
+    ))
+    .await;
+
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        internal: "127.0.0.1:1".parse().unwrap(),
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: Some(origin),
+        media_allow: Arc::new(media_allow),
+    };
+    let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), MEDIA_ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// The origin learns WHO is asking from the acceptor, which verified the key
+/// in the handshake — never from the client, which can type anything. The
+/// failing input is a forged `X-Mesh-Member` surviving the forward, or the
+/// verified one being absent.
+#[tokio::test]
+async fn the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed() {
+    let (lender, _acceptor) = lender_with_media(b"x").await;
+    let dialer = dialer_endpoint(MEMBER_SEED).await;
+    let bridge = HttpBridge::spawn(dialer, dialable(&lender), MEDIA_ALPN)
+        .await
+        .expect("bridge binds");
+    let resp = reqwest::Client::new()
+        .get(format!("http://{}/whoami", bridge.local_addr()))
+        .header("X-Mesh-Member", "forged")
+        .header("X-Mesh-Node", "node-forged")
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("the member's request is forwarded");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    let expected = format!("LittleMac {}", member_identity().node_id);
+    assert_eq!(body, expected);
+    drop(bridge);
+}
+
+/// `[iroh] media_allow` end to end: a member the list does not name gets no
+/// bytes (the dial dies, as a stranger's does), and the same member named
+/// is served — so this is a refusal, not a dead origin.
+#[tokio::test]
+async fn a_member_outside_media_allow_is_closed_and_one_inside_is_served() {
+    const TITLE: &[u8] = b"allow-listed";
+    let (lender, _acceptor) = lender_with_media_allowing(TITLE, vec!["SomeoneElse".into()]).await;
+    let outcome = get_as(&lender, MEMBER_SEED, MEDIA_ALPN, "/library/title.bin", None).await;
+    assert!(
+        outcome.is_err(),
+        "a member outside media_allow must be closed, got {:?}",
+        outcome.map(|r| r.status())
+    );
+
+    let (lender, _acceptor) = lender_with_media_allowing(TITLE, vec!["LittleMac".into()]).await;
+    let resp = get_as(&lender, MEMBER_SEED, MEDIA_ALPN, "/library/title.bin", None)
+        .await
+        .expect("the named member is served");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert_eq!(resp.bytes().await.unwrap().as_ref(), TITLE);
+}
+
+/// THE demo's byte plane. A member's player reads a title from the peer's
+/// origin through the bridge — whole, and by `Range`, because seeking is a
+/// `Range` request and the splice must not touch it.
+#[tokio::test]
+async fn a_member_reads_a_title_from_the_peers_media_origin_by_key() {
+    const TITLE: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let (lender, _acceptor) = lender_with_media(TITLE).await;
+
+    let resp = get_as(&lender, MEMBER_SEED, MEDIA_ALPN, "/library/title.bin", None)
+        .await
+        .expect("a member's dial is forwarded to the origin");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert_eq!(resp.bytes().await.unwrap().as_ref(), TITLE);
+
+    // A seek: one Range request, byte-exact through the splice.
+    let dialer = dialer_endpoint(MEMBER_SEED).await;
+    let bridge = HttpBridge::spawn(dialer, dialable(&lender), MEDIA_ALPN)
+        .await
+        .expect("bridge binds");
+    let resp = reqwest::Client::new()
+        .get(format!("http://{}/library/title.bin", bridge.local_addr()))
+        .header("Range", "bytes=10-19")
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("the seek is served");
+    assert_eq!(resp.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+    assert_eq!(resp.bytes().await.unwrap().as_ref(), &TITLE[10..=19]);
+    drop(bridge);
+}
+
+/// The arm that matters, end to end: the dial string is public (it rides in
+/// every invite), so a stranger holding it must get NO bytes — the dial dies
+/// rather than being downgraded to some listener that would answer. The
+/// failing input is `forward_for` returning `media` for a non-member.
+#[tokio::test]
+async fn a_stranger_holding_the_dial_string_cannot_read_the_library() {
+    let (lender, _acceptor) = lender_with_media(b"not for you").await;
+    let outcome = get_as(
+        &lender,
+        STRANGER_SEED,
+        MEDIA_ALPN,
+        "/library/title.bin",
+        None,
+    )
+    .await;
+    assert!(
+        outcome.is_err(),
+        "a stranger's media dial must die, got {:?}",
+        outcome.map(|r| r.status())
+    );
+    // …and the same lender still serves the member, so this is not a dead
+    // origin passing as a refusal.
+    let resp = get_as(&lender, MEMBER_SEED, MEDIA_ALPN, "/library/title.bin", None)
+        .await
+        .expect("the member is still served");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+}
+
+/// A node that declares no origin closes even a member's dial — no route to
+/// nowhere, and no accidental forward to the peer listener.
+#[tokio::test]
+async fn a_member_dialing_a_node_with_no_media_origin_is_closed_not_misrouted() {
+    // `lender(true)` declares `media: None` and advertises no MEDIA_ALPN.
+    let (lender, _acceptor) = lender(true).await;
+    let outcome = get_as(&lender, MEMBER_SEED, MEDIA_ALPN, "/library/title.bin", None).await;
+    assert!(
+        outcome.is_err(),
+        "no origin means no route, got {:?}",
+        outcome.map(|r| r.status())
     );
 }

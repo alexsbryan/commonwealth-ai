@@ -43,8 +43,14 @@ kernel-types = { workspace = true }
 # path that never runs in production is exactly the drift mesh-of-one exists
 # to prevent, moved from runtime to compile time. iroh should leave WITH the
 # mesh when the mesh becomes optional, not on its own before that.
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
+# `fanout` because `media_fanout.rs` calls the fan-out core where it lives
+# (ARCH §8.3: the owner, not `commonwealth-api`'s re-export of it).
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+# The media decisions — admission, reach, catalogue fan-out — so this daemon
+# and the package-only rails daemon compose ONE implementation (ARCH §10.6).
+# A direct path dep on the owner like its neighbours above (ARCH §8.3).
+commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory

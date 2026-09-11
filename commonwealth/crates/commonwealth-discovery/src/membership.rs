@@ -149,6 +149,7 @@ pub fn init_mesh_with_identity(
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,
@@ -323,6 +324,7 @@ pub fn accept_join_with_identity(
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,

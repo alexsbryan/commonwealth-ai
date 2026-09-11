@@ -122,6 +122,7 @@ impl SimulatedNodeBuilder {
             inference_availability: 1.0,
             inference_capable: true,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,
@@ -236,6 +237,7 @@ impl SimulatedNode {
             inference_availability: 1.0,
             inference_capable: true,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,

@@ -28,39 +28,24 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use commonwealth_transport::iroh::{
-    build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, RelayConfig,
-    ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN,
+    build_relayed_endpoint, format_dial_string, Endpoint, Forward, IrohAcceptor, IrohTransport,
+    RelayConfig, ALPN, CLIENT_ALPN, GUEST_ALPN, MEDIA_ALPN, RPC_ALPN,
 };
 use commonwealth_transport::TrafficClass;
+
+/// The media decisions this acceptor makes are the package crate's (moved
+/// 2026-09-11, cw-lift D1): the membership consult, the identity an origin is
+/// handed, the `media_allow` verdict, and the live-path reading. Re-exported
+/// under their old paths so `daemon.rs`, `media_reach`, the CLI and the tests
+/// keep naming them here, while a package-only rails daemon composes exactly
+/// the same code (ARCH §10.6).
+pub use commonwealth_media::{admits_no_one, MemberCheck, MemberIdentity, PeerTransportPath};
 
 /// Map `[iroh.transport]` config to the traffic classes routed over
 /// iroh. Since the iroh-first flip (2026-07): iroh enabled means EVERY
 /// class routes iroh-first (with automatic per-dial IP fallback via
 /// `RoutedTransport`'s empty required set), and the config is an
 /// opt-OUT — `<class> = "ip"` pins that class to the IP path. A legacy
-/// Answers "is this dialer a live member of the mesh we are serving?"
-///
-/// A closure rather than a snapshot because membership changes between dials
-/// and a cached set would admit a departed node (or refuse a fresh one) for as
-/// long as it was stale. The daemon supplies one reading `AppState`'s live
-/// `Mesh`; `MemberRecord.removed_at` tombstones are excluded, so leaving the
-/// mesh takes reachability with it.
-pub type MemberCheck = std::sync::Arc<
-    dyn Fn(
-            commonwealth_core::ids::NodePubkey,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
-        + Send
-        + Sync,
->;
-
-/// A check that admits nobody. For hosts with no mesh to consult — every
-/// `CLIENT_ALPN` dial is treated as a stranger and meets the bearer gate.
-/// Fail-CLOSED by construction: forgetting to wire the real check cannot
-/// widen access, only narrow it.
-pub fn admits_no_one() -> MemberCheck {
-    std::sync::Arc::new(|_| Box::pin(std::future::ready(false)))
-}
-
 /// `"iroh"` entry is a no-op (it names the default) and is logged as
 /// such; unknown values get the default (routed) with a warning. The
 /// string→`TrafficClass` interpretation lives here (Track W3) because
@@ -95,6 +80,12 @@ pub fn iroh_routed_classes(
             }
         }
     }
+    // `Media` has no `[iroh.transport]` entry, on purpose: the other seven
+    // choose between two transports, and this one has only one. The holder's
+    // origin is loopback-bound and admitted by mesh key, so `= "ip"` would
+    // pin the class to a transport that returns no candidates for it — a
+    // config line that silently turns the feature off. Always routed.
+    out.push(TrafficClass::Media);
     out
 }
 
@@ -215,22 +206,6 @@ fn env_kill_switch() -> bool {
     )
 }
 
-/// The live iroh connection path to one peer (H2 observability). A
-/// point-in-time snapshot from the endpoint's `remote_info`; the
-/// operator's answer to "is this peer on a direct path or the relay?"
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct PeerTransportPath {
-    /// `direct` (active IP path, hole-punched), `relayed` (active only
-    /// via a relay), `mixed` (both active), `idle` (known peer, no
-    /// active path this moment), or `unknown` (endpoint has no record).
-    pub path: String,
-    /// The relay URL in active use, if the path rides one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub relay: Option<String>,
-    /// Count of active direct (IP) addresses to this peer.
-    pub active_direct_addrs: usize,
-}
-
 /// Every member the iroh endpoint could hold a path to, paired with what
 /// membership believes and what the endpoint actually holds — the watchdog's
 /// peer-path health term (note `a3f3fbff`).
@@ -302,6 +277,9 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`RPC_ALPN`] to a local ggml
     /// rpc-server — the truth behind `/status`'s `rpc_worker.iroh` flag.
     rpc_route_active: bool,
+    /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
+    /// the fact the gossip self-stamp advertises as `origins: [media]`.
+    media_route_active: bool,
 }
 
 /// The four local listeners an accepted iroh connection can be forwarded to.
@@ -309,7 +287,7 @@ pub struct MeshIrohAccess {
 /// A value rather than four loose arguments because the decision below reads
 /// them together, and because a test wiring a real acceptor must be able to
 /// build the SAME routing the daemon does — not a second copy of it (§10.6).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct AcceptorRoutes {
     /// The mesh-internal router (`:9742`), loopback-bound.
     pub internal: SocketAddr,
@@ -328,6 +306,13 @@ pub struct AcceptorRoutes {
     pub guest: Option<SocketAddr>,
     /// A local ggml rpc-server, when this node serves one.
     pub rpc: Option<SocketAddr>,
+    /// A local HTTP media origin, when this node's operator declared one
+    /// (`[iroh] media_origin`). `None` means the protocol is not advertised at
+    /// all, so a dial is closed rather than left hanging on a route to nowhere.
+    pub media: Option<SocketAddr>,
+    /// `[iroh] media_allow`: which members may reach `media`, by name or id
+    /// prefix. Empty admits every member. A non-member is refused either way.
+    pub media_allow: std::sync::Arc<Vec<String>>,
 }
 
 impl AcceptorRoutes {
@@ -373,15 +358,15 @@ impl AcceptorRoutes {
         alpn: &[u8],
         dialer: commonwealth_core::ids::NodePubkey,
         is_member: &MemberCheck,
-    ) -> Option<SocketAddr> {
+    ) -> Option<Forward> {
         if alpn == ALPN {
-            return Some(self.internal);
+            return Some(Forward::Splice(self.internal));
         }
         if alpn == GUEST_ALPN {
-            return self.guest;
+            return self.guest.map(Forward::Splice);
         }
         if alpn == CLIENT_ALPN {
-            if is_member(dialer).await {
+            if is_member(dialer).await.is_some() {
                 if self.peer.is_none() {
                     // Fail closed, loudly. The operator listener is not a
                     // fallback: it serves `/internal/*` to anything that
@@ -393,7 +378,7 @@ impl AcceptorRoutes {
                          listener did not bind, and the operator listener is not a fallback"
                     );
                 }
-                return self.peer;
+                return self.peer.map(Forward::Splice);
             }
             // Glassbox: this is the branch that used to be an unconditional
             // forward, so it must be visible when it fires (§9.1).
@@ -403,11 +388,25 @@ impl AcceptorRoutes {
                 downgraded = self.guest.is_some(),
                 "iroh(mesh): CLIENT_ALPN dial from a non-member — routing to the                  bearer-checking listener (closing if it did not bind)"
             );
-            return self.guest;
+            return self.guest.map(Forward::Splice);
+        }
+        if alpn == MEDIA_ALPN {
+            // One decider for the media dial: the origin declared here, the
+            // roster's word on the dialer, and the allow-list. The three
+            // refusals (no origin, non-member, outside the list) and their
+            // tracing live in `commonwealth_media::admit_media`, so a rails
+            // daemon with none of this acceptor under it refuses the same
+            // dials for the same reasons (ARCH §10.6).
+            return commonwealth_media::admit_media(
+                is_member(dialer).await.as_ref(),
+                dialer,
+                self.media,
+                &self.media_allow,
+            );
         }
         if alpn == RPC_ALPN {
-            if is_member(dialer).await {
-                return self.rpc;
+            if is_member(dialer).await.is_some() {
+                return self.rpc.map(Forward::Splice);
             }
             tracing::warn!(
                 target: "transport",
@@ -438,6 +437,8 @@ impl MeshIrohAccess {
         internal_port: u16,
         peer_addr: Option<SocketAddr>,
         guest_addr: Option<SocketAddr>,
+        media_origin: Option<SocketAddr>,
+        media_allow: Vec<String>,
         member_check: MemberCheck,
         enabled: bool,
         relay_cfg: &RelayConfig,
@@ -468,6 +469,18 @@ impl MeshIrohAccess {
         let mut alpns = vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()];
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
+        }
+        // Advertised only when there is something behind it, for the same
+        // reason RPC is: a node that negotiates a protocol it cannot forward
+        // turns a closed dial into a hang.
+        if let Some(origin) = media_origin {
+            alpns.push(MEDIA_ALPN.to_vec());
+            tracing::info!(
+                target: "transport",
+                media_origin = %origin,
+                "iroh(mesh): serving MEDIA_ALPN to members — a peer's player reaches this \
+                 origin by mesh key, with no port forwarded and no VPN"
+            );
         }
         // A guest is a different principal from a peer, so it gets a different
         // protocol — forwarded to the daemon's SECOND bind of the client
@@ -524,11 +537,15 @@ impl MeshIrohAccess {
             peer: peer_addr,
             guest: guest_addr,
             rpc: rpc_forward,
+            media: media_origin,
+            media_allow: std::sync::Arc::new(media_allow),
         };
-        let acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
-            let is_member = member_check.clone();
-            async move { routes.forward_for(&alpn, dialer, &is_member).await }
-        });
+        let acceptor =
+            IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+                let is_member = member_check.clone();
+                let routes = routes.clone();
+                async move { routes.forward_for(&alpn, dialer, &is_member).await }
+            });
 
         tracing::info!(
             endpoint_id = %endpoint.id(),
@@ -542,6 +559,7 @@ impl MeshIrohAccess {
             endpoint,
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
+            media_route_active: media_origin.is_some(),
         })
     }
 
@@ -573,6 +591,11 @@ impl MeshIrohAccess {
         &self,
     ) -> std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync> {
         let endpoint = self.endpoint.clone();
+        let origins = if self.media_route_active {
+            vec![commonwealth_core::capabilities::OriginKind::Media]
+        } else {
+            Vec::new()
+        };
         std::sync::Arc::new(move || {
             let addr = endpoint.addr();
             // Bind to locals (statements) so the transient `relay_urls`
@@ -583,6 +606,7 @@ impl MeshIrohAccess {
             commonwealth_core::mesh::IrohDialInfo {
                 relay_url,
                 direct_addrs,
+                origins: origins.clone(),
             }
         })
     }
@@ -628,30 +652,17 @@ impl MeshIrohAccess {
         self.endpoint.id().to_string()
     }
 
-    /// The live connection path to `peer_pubkey` over iroh, from the
-    /// endpoint's `remote_info` snapshot (H2 observability — the
-    /// "is anyone actually on the relay?" question). Returns the
-    /// `path` classification, the active relay if any, and the count
-    /// of active direct addresses. `None` when the endpoint has no
-    /// record of this peer (never dialed, or not iroh-reachable).
-    /// Takes an [`Endpoint`] handle (see [`Self::endpoint_handle`]) so
-    /// the caller needn't hold the daemon-state lock across the await.
+    /// The live connection path to `peer_pubkey` over iroh — the "is anyone
+    /// actually on the relay?" question. Takes an [`Endpoint`] handle (see
+    /// [`Self::endpoint_handle`]) so the caller needn't hold the daemon-state
+    /// lock across the await. The reading itself is
+    /// `commonwealth_media::path_to`, which is the one conversion from the
+    /// transport's snapshot the operator surface and the health term share.
     pub async fn peer_path_on(
         endpoint: &Endpoint,
         peer_pubkey: &[u8; 32],
     ) -> Option<PeerTransportPath> {
-        let id = commonwealth_transport::iroh::PublicKey::from_bytes(peer_pubkey).ok()?;
-        // The classification itself lives in `commonwealth_transport::iroh`
-        // (ARCH §10.6 — one implementation): the watchdog's peer-path health
-        // term reads the same snapshot, and a second copy here is how the
-        // operator surface and the health term would come to disagree about
-        // what "reachable" means.
-        let snap = commonwealth_transport::iroh::peer_path_snapshot(endpoint, id).await?;
-        Some(PeerTransportPath {
-            path: snap.path.as_str().to_string(),
-            relay: snap.relay,
-            active_direct_addrs: snap.active_direct_addrs,
-        })
+        commonwealth_media::path_to(endpoint, peer_pubkey).await
     }
 
     /// Bounded wait for a RELAY-bearing dial string, polling every
@@ -714,8 +725,11 @@ mod tests {
         assert_eq!(out.len(), TrafficClass::ALL.len() - 1);
     }
 
+    /// Every configurable class opted out leaves exactly the one that has no
+    /// entry: `Media` has one transport, so there is nothing to opt it out
+    /// TO. (Until 2026-09-11 this asserted `is_empty()` over seven classes.)
     #[test]
-    fn all_classes_opted_out_yields_empty() {
+    fn opting_every_class_out_still_routes_media() {
         let out = iroh_routed_classes(&section(|t| {
             t.gossip = Some("ip".into());
             t.control_plane = Some("ip".into());
@@ -725,7 +739,7 @@ mod tests {
             t.status_probe = Some("ip".into());
             t.rpc_tensor = Some("ip".into());
         }));
-        assert!(out.is_empty());
+        assert_eq!(out, vec![TrafficClass::Media]);
     }
 
     #[test]
@@ -820,8 +834,25 @@ mod tests {
     const MEMBER: NodePubkey = NodePubkey([7u8; 32]);
     const STRANGER: NodePubkey = NodePubkey([9u8; 32]);
 
+    fn member_identity() -> MemberIdentity {
+        MemberIdentity {
+            name: "LittleMac".into(),
+            node_id: commonwealth_core::ids::NodeId::from_u128(0xB0B),
+        }
+    }
+
     fn only_the_member() -> MemberCheck {
-        std::sync::Arc::new(|k| Box::pin(std::future::ready(k == MEMBER)))
+        std::sync::Arc::new(|k| Box::pin(std::future::ready((k == MEMBER).then(member_identity))))
+    }
+
+    /// `forward_for` as a bare address, for the arms whose kind is a splice.
+    async fn target_of(
+        r: &AcceptorRoutes,
+        alpn: &[u8],
+        who: NodePubkey,
+        check: &MemberCheck,
+    ) -> Option<SocketAddr> {
+        r.forward_for(alpn, who, check).await.map(Forward::target)
     }
 
     fn addr(port: u16) -> SocketAddr {
@@ -834,6 +865,8 @@ mod tests {
             peer: Some(addr(41001)),
             guest: Some(addr(41000)),
             rpc: Some(addr(50052)),
+            media: Some(addr(8096)),
+            media_allow: std::sync::Arc::new(Vec::new()),
         }
     }
 
@@ -844,8 +877,7 @@ mod tests {
     async fn a_stranger_on_the_client_alpn_is_routed_to_the_bearer_gate() {
         let r = routes();
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
-                .await,
+            target_of(&r, CLIENT_ALPN, STRANGER, &only_the_member()).await,
             r.guest,
         );
     }
@@ -860,7 +892,7 @@ mod tests {
     async fn a_member_on_the_client_alpn_reaches_the_peer_listener_not_the_operators() {
         let r = routes();
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            target_of(&r, CLIENT_ALPN, MEMBER, &only_the_member()).await,
             r.peer,
         );
     }
@@ -876,13 +908,12 @@ mod tests {
             ..routes()
         };
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            target_of(&r, CLIENT_ALPN, MEMBER, &only_the_member()).await,
             None,
         );
         // The stranger arm is unaffected — it was never routed to `peer`.
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
-                .await,
+            target_of(&r, CLIENT_ALPN, STRANGER, &only_the_member()).await,
             r.guest,
         );
     }
@@ -896,13 +927,12 @@ mod tests {
             ..routes()
         };
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
-                .await,
+            target_of(&r, CLIENT_ALPN, STRANGER, &only_the_member()).await,
             None,
         );
         // The member arm is unaffected — this is not "refuse everything".
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            target_of(&r, CLIENT_ALPN, MEMBER, &only_the_member()).await,
             r.peer,
         );
     }
@@ -913,23 +943,109 @@ mod tests {
     async fn the_rpc_alpn_admits_members_only_and_has_no_downgrade() {
         let r = routes();
         assert_eq!(
-            r.forward_for(RPC_ALPN, MEMBER, &only_the_member()).await,
+            target_of(&r, RPC_ALPN, MEMBER, &only_the_member()).await,
             r.rpc,
         );
         assert_eq!(
-            r.forward_for(RPC_ALPN, STRANGER, &only_the_member()).await,
+            target_of(&r, RPC_ALPN, STRANGER, &only_the_member()).await,
+            None,
+        );
+    }
+
+    /// **A MEDIA LIBRARY IS NOT A PUBLIC SURFACE.** The origin is somebody's
+    /// Jellyfin on loopback and it authenticates nothing, so — exactly like the
+    /// rpc-server — a member is forwarded and a stranger is refused rather than
+    /// downgraded to some other listener. The failing input is this arm
+    /// returning `self.media` unconditionally, which is how a dial string that
+    /// rides in every invite would become a key to the operator's films.
+    #[tokio::test]
+    async fn the_media_alpn_admits_members_only_and_has_no_downgrade() {
+        let r = routes();
+        // A member's media dial is the identity-carrying kind: the origin is
+        // told who is asking, and told by the acceptor rather than the client.
+        let forward = r
+            .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+            .await
+            .expect("a member reaches the origin");
+        match &forward {
+            Forward::Http { origin, headers } => {
+                assert_eq!(Some(*origin), r.media);
+                assert!(
+                    headers.contains(&("X-Mesh-Member".to_string(), "LittleMac".to_string())),
+                    "{headers:?}"
+                );
+                assert!(
+                    headers.iter().any(|(n, _)| n == "X-Mesh-Node"),
+                    "{headers:?}"
+                );
+            }
+            other => panic!("a media dial must be an identity forward, got {other:?}"),
+        }
+        assert!(
+            r.media.is_some(),
+            "the fixture must actually serve media, or the assertion above passes on a shared None"
+        );
+        assert_eq!(
+            target_of(&r, MEDIA_ALPN, STRANGER, &only_the_member()).await,
+            None,
+        );
+
+        // A node that declares no origin advertises nothing and closes even a
+        // member's dial — no route to nowhere.
+        let unserved = AcceptorRoutes {
+            media: None,
+            ..routes()
+        };
+        assert_eq!(
+            target_of(&unserved, MEDIA_ALPN, MEMBER, &only_the_member()).await,
             None,
         );
     }
 
     /// A guest is by definition not a member; the listener behind this ALPN
     /// reads its bearer, so the dialer's key decides nothing here.
+    /// `[iroh] media_allow` narrows WHICH members reach the origin, by the
+    /// name or id prefix the roster shows. The failing input is a member
+    /// outside the list being forwarded; the control is the same member
+    /// inside it, and an empty list admitting every member as before.
+    #[tokio::test]
+    async fn the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest() {
+        let allow = |entries: &[&str]| AcceptorRoutes {
+            media_allow: std::sync::Arc::new(entries.iter().map(|s| s.to_string()).collect()),
+            ..routes()
+        };
+        assert!(
+            allow(&["SomeoneElse"])
+                .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_none(),
+            "a member the list does not name is closed"
+        );
+        assert!(allow(&["LittleMac"])
+            .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+            .await
+            .is_some());
+        let id_prefix = member_identity().node_id.to_string();
+        assert!(allow(&[&id_prefix[..12]])
+            .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+            .await
+            .is_some());
+        assert!(allow(&[])
+            .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+            .await
+            .is_some());
+        // The list never widens: a stranger stays closed however it is named.
+        assert!(allow(&["LittleMac"])
+            .forward_for(MEDIA_ALPN, STRANGER, &only_the_member())
+            .await
+            .is_none());
+    }
+
     #[tokio::test]
     async fn the_guest_alpn_admits_any_dialer_because_its_listener_checks() {
         let r = routes();
         assert_eq!(
-            r.forward_for(GUEST_ALPN, STRANGER, &only_the_member())
-                .await,
+            target_of(&r, GUEST_ALPN, STRANGER, &only_the_member()).await,
             r.guest,
         );
     }
@@ -942,7 +1058,7 @@ mod tests {
     async fn the_internal_alpn_stays_open_so_a_joiner_can_become_a_member() {
         let r = routes();
         assert_eq!(
-            r.forward_for(ALPN, STRANGER, &only_the_member()).await,
+            target_of(&r, ALPN, STRANGER, &only_the_member()).await,
             Some(r.internal),
         );
     }
@@ -952,8 +1068,7 @@ mod tests {
     async fn an_unknown_alpn_is_closed() {
         let r = routes();
         assert_eq!(
-            r.forward_for(b"cwth/not-a-protocol/0", MEMBER, &only_the_member())
-                .await,
+            target_of(&r, b"cwth/not-a-protocol/0", MEMBER, &only_the_member()).await,
             None,
         );
     }
@@ -964,11 +1079,11 @@ mod tests {
     async fn the_default_check_admits_no_one() {
         let r = routes();
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, MEMBER, &admits_no_one()).await,
+            target_of(&r, CLIENT_ALPN, MEMBER, &admits_no_one()).await,
             r.guest,
         );
         assert_eq!(
-            r.forward_for(RPC_ALPN, MEMBER, &admits_no_one()).await,
+            target_of(&r, RPC_ALPN, MEMBER, &admits_no_one()).await,
             None,
         );
     }

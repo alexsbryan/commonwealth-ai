@@ -692,6 +692,7 @@ impl MeshStateResponse {
                     contribution_level: 0,
                     contribution_label: String::new(),
                     addresses: m.addresses,
+                    origins: m.origins,
                     node_pubkey: m.node_pubkey,
                     active: m.active,
                     hw_fingerprint: m.hw_fingerprint,

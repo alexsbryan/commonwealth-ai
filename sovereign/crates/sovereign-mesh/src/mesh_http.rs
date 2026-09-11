@@ -43,6 +43,16 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             post(crate::roster_repair::mesh_forget_member),
         )
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
+        // Federated media, viewer half: the loopback URL that reaches a
+        // member's `[iroh] media_origin`. The holder half is the acceptor's
+        // MEDIA_ALPN slot in `iroh_access`.
+        .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
+        // The catalogue half: one request to every offering member, one
+        // attributed row each (`commonwealth_api::fanout` underneath).
+        .route(
+            "/v1/mesh/media/fanout",
+            post(crate::media_fanout::mesh_media_fanout),
+        )
         .route(
             "/v1/mesh/measurements",
             post(publish_measurement).get(peer_measurements),
@@ -360,6 +370,11 @@ pub struct MemberDto {
     /// pod-deployment workflows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// The local origins this member serves over the mesh — `["media"]` when
+    /// its `[iroh] media_origin` is live. What `svrn mesh media` (no peer)
+    /// lists; empty for a daemon that predates the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origins: Vec<commonwealth_core::capabilities::OriginKind>,
     /// The endpoint key this member is dialed on, lowercase hex. See
     /// [`crate::types::MeshMember::node_pubkey`] — two ACTIVE members sharing
     /// one is the roster's identity collision, and this is the read surface
@@ -499,6 +514,7 @@ async fn mesh_status(
             vram_gb: m.vram_gb,
             can_anchor: m.can_anchor,
             addresses: m.addresses.clone(),
+            origins: m.origins.clone(),
             node_pubkey: m.node_pubkey.clone(),
             active: m.active,
             hw_fingerprint: m.hw_fingerprint,

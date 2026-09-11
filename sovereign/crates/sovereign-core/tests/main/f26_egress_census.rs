@@ -392,6 +392,18 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // and nothing on this path may construct a RemotePayload/QueryEgress
     // client (that stays in the boundary).
     ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
+    // NEW 2026-09-11: `svrn mesh media <peer>`, the viewer half of federated
+    // media. One client, two loopback destinations: our own daemon's
+    // `/v1/mesh/media` to mint the bridge, then one `GET /` through that
+    // bridge — which is a 127.0.0.1 port the daemon holds and which tunnels
+    // to a MEMBER's media origin over iroh by its key. The bytes that leave
+    // the machine ride the estate's own transport to a Commonwealth node, so
+    // Mesh is the honest class; the request carries no estate content, only
+    // the probe that proves the splice answers.
+    // 1 -> 2 (2026-09-11): `mesh media fanout <path>` builds its own client to
+    // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
+    // the reaching. Same class, same reason.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
@@ -700,6 +712,26 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/commonwealth-app/src/proxy.rs", Class::LocalDaemon, 1),
+    // Federated media's catalogue half. The row was
+    // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
+    // moved to the package crate later the same day (0eccf5664) — same two
+    // sites, same class, one fewer daemon that can answer the question
+    // differently. One client per fan-out, driven through each member's
+    // loopback bridge to that member's media origin over the estate's own
+    // transport; the second site is the unit test's local origin.
+    ("commonwealth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 2),
+
+    // ---- commonwealth-rails: the package-only rails daemon (2026-09-11) ----
+    // Every destination is a peer of the operator's own mesh, reached through
+    // a loopback bridge this process minted, over a QUIC connection dialed by
+    // the peer's Ed25519 key. Nothing here has a third-party endpoint to
+    // point at: the URL is always `127.0.0.1:<ephemeral>` and the far end is
+    // a member.
+    ("commonwealth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 1),
+    ("commonwealth/crates/commonwealth-rails/src/join.rs", Class::Mesh, 1),
+    // `cw-rails media` is a client of THIS daemon's own loopback API — the
+    // same bytes a `curl` would send, and they never leave the machine.
+    ("commonwealth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
 ];
 
 // ---------------------------------------------------------------------------

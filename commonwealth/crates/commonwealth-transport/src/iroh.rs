@@ -39,6 +39,8 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+
+pub use crate::iroh_identity_forward::Forward;
 use std::sync::Arc;
 
 use commonwealth_core::ids::{NodeId, NodePubkey};
@@ -97,6 +99,21 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// (`commonwealth_api::client_auth::ClientAuthPolicy`). A guest connection
 /// cannot reach the trusted listener, and a peer's inference is untouched.
 pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+
+/// A MEMBER reaching this node's media origin — whatever HTTP media server its
+/// operator already runs (Jellyfin's `:8096`, a plain file server, anything that
+/// speaks `Range`).
+///
+/// Its own protocol rather than a path on the client API, because the product is
+/// that clients speak the media server's OWN api: the bridge is
+/// [`tokio::io::copy`] in both directions and never parses HTTP, so `Range`
+/// passes through untouched and a player seeks as if the library were local. A
+/// path on `CLIENT_ALPN` would have meant re-implementing the media server.
+///
+/// Members only, and refused rather than downgraded for a stranger — the origin
+/// authenticates nothing, so there is no safe listener to fall back to. Same
+/// rule as [`RPC_ALPN`], for the same reason.
+pub const MEDIA_ALPN: &[u8] = b"cwth/media/0";
 
 // Re-exported so feature consumers (sovereign-server, the mobile
 // core, the sovereign-mesh spike test) build endpoints without
@@ -430,7 +447,38 @@ impl HttpBridge {
         target: EndpointAddr,
         alpn: &'static [u8],
     ) -> std::io::Result<Self> {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        Self::spawn_preferring(endpoint, target, alpn, None).await
+    }
+
+    /// [`spawn`](Self::spawn), asking for `preferred` first. A bridge the
+    /// transport mints for a peer prefers [`preferred_bridge_port`], so the
+    /// same peer answers at the same loopback URL across daemon restarts and a
+    /// player or a shim can hold it with no mesh state of its own. When that
+    /// port is taken the bind falls back to an ephemeral one and SAYS so —
+    /// a substitution named at warn, never a silent different URL (§18.3).
+    pub async fn spawn_preferring(
+        endpoint: Endpoint,
+        target: EndpointAddr,
+        alpn: &'static [u8],
+        preferred: Option<u16>,
+    ) -> std::io::Result<Self> {
+        let listener = match preferred {
+            None => tokio::net::TcpListener::bind("127.0.0.1:0").await?,
+            Some(port) => match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "transport",
+                        preferred = port,
+                        peer = %target.id,
+                        error = %e,
+                        "iroh bridge: the port derived from this peer's key is taken — \
+                         substituting an ephemeral one, so this peer's URL differs from its usual"
+                    );
+                    tokio::net::TcpListener::bind("127.0.0.1:0").await?
+                }
+            },
+        };
         let local_addr = listener.local_addr()?;
         let peer_label = target.id.to_string();
         let target = Arc::new(std::sync::Mutex::new(target));
@@ -686,6 +734,7 @@ impl IrohTransport {
         match class {
             TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
             TrafficClass::RpcTensor => RPC_ALPN,
+            TrafficClass::Media => MEDIA_ALPN,
             _ => ALPN,
         }
     }
@@ -789,9 +838,14 @@ impl IrohTransport {
             );
             return Some(local_addr);
         }
-        let bridge = HttpBridge::spawn(self.endpoint.clone(), target, alpn)
-            .await
-            .ok()?;
+        let bridge = HttpBridge::spawn_preferring(
+            self.endpoint.clone(),
+            target,
+            alpn,
+            Some(preferred_bridge_port(pubkey, alpn)),
+        )
+        .await
+        .ok()?;
         let local_addr = bridge.local_addr();
         bridges.insert(
             key,
@@ -806,6 +860,23 @@ impl IrohTransport {
 
 /// Copy bytes both ways between a TCP socket and an iroh bi-stream
 /// until both directions close.
+/// The loopback port a peer's bridge prefers, from its key and the ALPN —
+/// identity from essence (ARCH §7.5), never a counter or whatever the kernel
+/// handed out last time. 20000..=32767 sits below Linux's default ephemeral
+/// range (32768–60999), so a derived port is never one an unrelated socket
+/// was just given; a collision between two peers is a 1-in-12768 event per
+/// pair and is handled by the named fallback in
+/// [`HttpBridge::spawn_preferring`].
+pub fn preferred_bridge_port(pubkey: &NodePubkey, alpn: &[u8]) -> u16 {
+    // FNV-1a: spread, not secrecy. The inputs are public.
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in pubkey.0.iter().chain(alpn.iter()) {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    20_000 + (h % 12_768) as u16
+}
+
 async fn pump(
     tcp: tokio::net::TcpStream,
     mut send: iroh::endpoint::SendStream,
@@ -899,10 +970,9 @@ impl IrohAcceptor {
     /// NOT correct where it trusts loopback — see
     /// [`spawn_admitting`](Self::spawn_admitting).
     pub fn spawn(endpoint: iroh::Endpoint, forward_to: SocketAddr) -> Self {
-        Self::run(
-            endpoint,
-            move |_alpn, _dialer| async move { Some(forward_to) },
-        )
+        Self::run(endpoint, move |_alpn, _dialer| async move {
+            Some(Forward::Splice(forward_to))
+        })
     }
 
     /// Spawn the accept loop routing each connection to a local
@@ -913,7 +983,7 @@ impl IrohAcceptor {
     /// not in `routes` is closed with a loud log, never misrouted.
     pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {
         Self::run(endpoint, move |alpn, _dialer| {
-            let target = routes.get(&alpn).copied();
+            let target = routes.get(&alpn).copied().map(Forward::Splice);
             async move { target }
         })
     }
@@ -946,6 +1016,23 @@ impl IrohAcceptor {
         F: Fn(Vec<u8>, NodePubkey) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Option<SocketAddr>> + Send + 'static,
     {
+        let resolve = Arc::new(resolve);
+        Self::run(endpoint, move |alpn, dialer| {
+            let resolve = resolve.clone();
+            async move { resolve(alpn, dialer).await.map(Forward::Splice) }
+        })
+    }
+
+    /// [`spawn_admitting`](Self::spawn_admitting), where the resolver also
+    /// picks the KIND of forward: a byte splice, or an HTTP origin that is
+    /// handed the dialer's verified identity on every request
+    /// ([`Forward::Http`]). One accept loop serves both; the kind is decided
+    /// once per connection beside the listener, by the same evidence.
+    pub fn spawn_admitting_forward<F, Fut>(endpoint: iroh::Endpoint, resolve: F) -> Self
+    where
+        F: Fn(Vec<u8>, NodePubkey) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Option<Forward>> + Send + 'static,
+    {
         Self::run(endpoint, resolve)
     }
 
@@ -956,7 +1043,7 @@ impl IrohAcceptor {
     fn run<F, Fut>(endpoint: iroh::Endpoint, resolve: F) -> Self
     where
         F: Fn(Vec<u8>, NodePubkey) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Option<SocketAddr>> + Send + 'static,
+        Fut: std::future::Future<Output = Option<Forward>> + Send + 'static,
     {
         let resolve = Arc::new(resolve);
         let task = tokio::spawn(async move {
@@ -979,7 +1066,7 @@ impl IrohAcceptor {
                     // certificate). Route this connection's streams by both.
                     let alpn = conn.alpn().to_vec();
                     let dialer = NodePubkey(*conn.remote_id().as_bytes());
-                    let Some(forward_to) = resolve(alpn.clone(), dialer).await else {
+                    let Some(forward) = resolve(alpn.clone(), dialer).await else {
                         tracing::warn!(
                             target: "transport",
                             alpn = %String::from_utf8_lossy(&alpn),
@@ -988,16 +1075,29 @@ impl IrohAcceptor {
                         );
                         return;
                     };
+                    let (forward_to, identity) = match forward {
+                        Forward::Splice(addr) => (addr, None),
+                        Forward::Http { origin, headers } => (origin, Some(Arc::new(headers))),
+                    };
                     loop {
                         match conn.accept_bi().await {
                             Ok((send, recv)) => {
+                                let identity = identity.clone();
                                 tokio::spawn(async move {
                                     match tokio::net::TcpStream::connect(forward_to).await {
                                         Ok(tcp) => {
                                             // Same Nagle × delayed-ACK stall as the
                                             // bridge side — see HttpBridge::spawn.
                                             tcp.set_nodelay(true).ok();
-                                            pump(tcp, send, recv).await
+                                            match identity {
+                                                None => pump(tcp, send, recv).await,
+                                                Some(headers) => {
+                                                    crate::iroh_identity_forward::pump_with_identity(
+                                                        tcp, send, recv, headers,
+                                                    )
+                                                    .await
+                                                }
+                                            }
                                         }
                                         Err(e) => tracing::warn!(
                                             target: "transport",
@@ -1085,6 +1185,42 @@ mod tests {
                 a
             })
             .collect()
+    }
+
+    /// The same peer and protocol always prefer the same port, a different
+    /// protocol on the same peer prefers a different one, and every derived
+    /// port sits below the kernel's ephemeral range. The failing inputs are
+    /// a port outside 20000..=32767 or two calls disagreeing.
+    #[test]
+    fn a_peers_bridge_port_is_derived_from_its_key_and_alpn() {
+        let a = NodePubkey([7u8; 32]);
+        let b = NodePubkey([8u8; 32]);
+        let p = preferred_bridge_port(&a, MEDIA_ALPN);
+        assert_eq!(p, preferred_bridge_port(&a, MEDIA_ALPN));
+        assert_ne!(p, preferred_bridge_port(&a, CLIENT_ALPN));
+        assert_ne!(p, preferred_bridge_port(&b, MEDIA_ALPN));
+        for port in [p, preferred_bridge_port(&b, MEDIA_ALPN)] {
+            assert!((20_000..=32_767).contains(&port), "{port}");
+        }
+    }
+
+    /// When the derived port is already bound, the bridge still comes up —
+    /// on another port, named at warn — rather than failing the dial.
+    #[tokio::test]
+    async fn a_taken_derived_port_falls_back_to_an_ephemeral_one_and_still_serves() {
+        let server_ep = hermetic_endpoint(61, vec![CLIENT_ALPN.to_vec()]).await;
+        let client_ep = hermetic_endpoint(62, vec![]).await;
+        let taken = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = taken.local_addr().unwrap().port();
+        let mut target = EndpointAddr::new(server_ep.id());
+        for sock in loopback_sockets(&server_ep) {
+            target = target.with_ip_addr(sock);
+        }
+        let bridge = HttpBridge::spawn_preferring(client_ep, target, CLIENT_ALPN, Some(port))
+            .await
+            .expect("a taken preferred port is not a failed bridge");
+        assert_ne!(bridge.local_addr().port(), port);
+        assert!(bridge.local_addr().ip().is_loopback());
     }
 
     /// A trivial TCP "service": every accepted connection is answered
@@ -1241,14 +1377,38 @@ mod tests {
         );
     }
 
-    /// Three protocols, three distinct byte strings. A collision would route
+    /// Five protocols, five distinct byte strings. A collision would route
     /// one class to another's listener with no error anywhere.
     #[test]
     fn the_alpns_are_distinct() {
-        let all = [ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN];
+        let all = [ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN, MEDIA_ALPN];
         for (i, a) in all.iter().enumerate() {
             for b in all.iter().skip(i + 1) {
                 assert_ne!(a, b, "ALPNs must be distinct");
+            }
+        }
+    }
+
+    /// The viewer half of federated media dials the ALPN the holder's
+    /// acceptor admits members on — and ONLY that one. The failing input is
+    /// `Media` falling into the `_ => ALPN` arm: the dial would reach the
+    /// peer's internal router, which serves no bytes a player wants, and the
+    /// symptom would be a bridge that "works" (loopback accepts) and a
+    /// player that never starts.
+    #[test]
+    fn the_media_class_rides_the_media_alpn_and_no_other() {
+        assert_eq!(
+            IrohTransport::alpn_for_class(TrafficClass::Media),
+            MEDIA_ALPN
+        );
+        for class in TrafficClass::ALL {
+            if class != TrafficClass::Media {
+                assert_ne!(
+                    IrohTransport::alpn_for_class(class),
+                    MEDIA_ALPN,
+                    "{} must not reach the media origin",
+                    class.as_str()
+                );
             }
         }
     }

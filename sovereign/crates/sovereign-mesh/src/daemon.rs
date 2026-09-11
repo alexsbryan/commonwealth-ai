@@ -2859,7 +2859,12 @@ impl EmbeddedDaemon {
                     "work donor: boundary ready"
                 ),
             }
-            let provides = sandbox.provides();
+            // BOTH read off the sandbox, before it moves into the registry.
+            // `platform` is the IMAGE's under a boundary and this host's
+            // without one — a donor advertises where a unit RUNS, and this
+            // said `std::env::consts` until 2026-09-10, which refused a
+            // macOS host's perfectly runnable Linux work on `Os`.
+            let (provides, (os, arch)) = (sandbox.provides(), sandbox.platform());
             work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
                 corpus_engine.clone(),
                 sandbox,
@@ -2867,8 +2872,8 @@ impl EmbeddedDaemon {
             crate::work_donor::resolve_offer(
                 &c.compute.work_offer,
                 &work_registry,
-                std::env::consts::OS,
-                std::env::consts::ARCH,
+                &os,
+                &arch,
                 provides,
             )
             .map_err(|e| MeshError::Config(e.to_string()))?
@@ -4066,15 +4071,43 @@ impl EmbeddedDaemon {
                     let mesh = app_state.inner.mesh.read().await;
                     mesh.members
                         .values()
-                        .any(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
+                        .find(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
+                        .map(|m| crate::iroh_access::MemberIdentity {
+                            name: m.name.clone(),
+                            node_id: m.node_id,
+                        })
                 })
             })
         };
+        // A MEDIA ORIGIN A MEMBER MAY REACH, when the operator declared one.
+        // Parsed here and REFUSED by name if it does not parse: a media library
+        // silently not served is the shape of a demo that fails at the worst
+        // moment, and a dropped config value is the §18.3 substitution.
+        let media_origin: Option<std::net::SocketAddr> = {
+            let raw = self.setup_config.read().await.iroh.media_origin.clone();
+            match raw {
+                None => None,
+                Some(raw) => match raw.parse() {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        return Err(MeshError::Config(format!(
+                            "[iroh] media_origin = \"{raw}\" is not a host:port ({e}) — a node \
+                             that cannot parse what it would serve must not boot pretending to \
+                             serve it"
+                        )))
+                    }
+                },
+            }
+        };
+        // Who may reach it, by the names the roster shows. Empty = every member.
+        let media_allow: Vec<String> = self.setup_config.read().await.iroh.media_allow.clone();
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             peer_addr,
             guest_addr,
+            media_origin,
+            media_allow.clone(),
             member_check.clone(),
             iroh_enabled,
             &iroh_relay_cfg,
@@ -4154,6 +4187,7 @@ impl EmbeddedDaemon {
             let routed = iroh_routed_classes.clone();
             let required = iroh_required_classes.clone();
             let member_check = member_check.clone();
+            let media_allow = media_allow.clone();
             let rebuild: crate::iroh_watchdog::RebuildFn = Arc::new(move || {
                 let state = state.clone();
                 let data_dir = data_dir.clone();
@@ -4162,12 +4196,15 @@ impl EmbeddedDaemon {
                 let routed = routed.clone();
                 let required = required.clone();
                 let member_check = member_check.clone();
+                let media_allow = media_allow.clone();
                 Box::pin(async move {
                     let new = crate::iroh_access::MeshIrohAccess::start(
                         &data_dir,
                         internal_port,
                         peer_addr,
                         guest_addr,
+                        media_origin,
+                        media_allow.clone(),
                         member_check.clone(),
                         iroh_enabled,
                         &relay_cfg,

@@ -190,6 +190,13 @@ if "sovereign-mesh" in seen:
     # their tests exited 4 ("no tests matched") with 880 others skipped —
     # observed 2026-09-01. Same value both gates, so no fingerprint flip.
     want.append("sovereign-mesh/treesitter")
+if "commonwealth-transport" in seen:
+    # `fanout` is the generic peer fan-out (moved out of commonwealth-api in
+    # the rails carve, 2026-09-11). Every workspace consumer turns it on, so
+    # a workspace run gets it by unification; a solo `--package
+    # commonwealth-transport` run would compile the module — and its three
+    # gauge/row tests — to nothing. Same value in sovereign-lint.sh.
+    want.append("commonwealth-transport/fanout")
 if "sovereign-turn-client" in seen:
     # `bundled-backend` is the named reachability capability (src/reach.rs):
     # off by default, so without this flag its bring-up tests are compiled by

@@ -98,3 +98,4 @@
 1	studio/crates/sovereign-recipe-author/src/capability_request.rs
 1	studio/crates/sovereign-recipe-author/src/checkpoint.rs
 1	studio/crates/sovereign-recipe-author/src/project.rs
+1	studio/crates/sovereign-workflow-host/src/workflow_http.rs

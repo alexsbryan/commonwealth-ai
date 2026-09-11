@@ -1,0 +1,153 @@
+# syntax=docker/dockerfile:1.7
+# sovereign work-donor image — the boundary a `process:v1` unit runs inside.
+#
+# ── build (from the workspace root):
+#     podman build -t localhost/sovereign-work:latest \
+#                  -f sovereign/container/Containerfile.work-donor .
+#
+# ── declare it, on the node that will donate:
+#     [compute.work_offer] image = "localhost/sovereign-work:latest"
+#
+# ── warm the donor's workdir ONCE, with network (then every unit runs without):
+#     podman run --rm --userns=keep-id --entrypoint= \
+#                -v <donor-root>/work-donor/worktrees/<repo>:/work:Z -w /work \
+#                localhost/sovereign-work:latest cargo fetch --locked
+#     mkdir -p <that worktree>/.cargo-container/xdg-cache \
+#       && cp -a ~/.cache/ort.pyke.io/dfbin <that worktree>/.cargo-container/xdg-cache/
+#
+# A unit runs with `--network=none` and ONE mount, so a unit that compiles
+# needs its inputs inside that mount. The base image's layout already says
+# where: `.cargo-container` in the workdir (reached as `CARGO_HOME=/cargo`
+# below), which persists across units (the donor's clean omits `-x`). What
+# nobody had done was put anything there. On 2026-09-11 two `dst-scenarios`
+# attempts reported could-not-judge after 360 s and 2107 s, read as compile
+# time; `podman logs` on the third said what they were doing the whole time —
+# `Updating crates.io index … Could not resolve host: index.crates.io`, cargo
+# retrying a network that is not there. The image's own /usr/local/cargo
+# registry is not the answer either: it holds 624 crates against the
+# lockfile's 1,328. So the registry is fetched into the workdir once, with
+# network, by the operator — the same standing as building this image — and
+# `CARGO_NET_OFFLINE` below makes a unit that lacks an input fail in
+# milliseconds by name instead of spending its budget on retries.
+#
+# The registry is not the only build-time download. `ort-sys` (the ONNX
+# runtime behind gliner) fetches a prebuilt `libonnxruntime.a` from
+# parcel.pyke.io in its build script, cached under `$XDG_CACHE_HOME/
+# ort.pyke.io/dfbin/<triple>/<hash>/` — and `bench-compile` came back
+# `exited 101 after 18 s: Dns Failed: parcel.pyke.io` for exactly that.
+# `XDG_CACHE_HOME` below puts that cache INSIDE `.cargo-container`, which is
+# gitignored and so survives the donor's `clean -fdq` between units (a
+# `/work/.cache` would not); the second warm line copies the host's cache
+# there. Every host that has built this workspace has one. Note the layout:
+# with XDG_CACHE_HOME set, ort-sys uses that directory AS its root (dfbin/
+# directly under it), while the HOME fallback adds `.cache/ort.pyke.io/` —
+# so the copy is of `dfbin`, not of `ort.pyke.io`. Watched: the first warm
+# copied `ort.pyke.io` whole and the build script fetched anyway.
+#
+# The image is the DONOR OPERATOR's declaration, never the submitter's and never
+# the package's: `commonwealth_work::sandbox` ships none and refuses to guess
+# one. This file is the monorepo's own answer for its own donors, and
+# `Sandbox::probe` still has to find it locally before this node may claim
+# `Isolation::RootlessContainer`.
+#
+# ── why it derives rather than installs
+#
+# The desktop Linux build image already carries the toolchain a CI shard needs
+# (cargo, rustc, python3, clang, protoc) and this monorepo's container cargo
+# cache layout (CARGO_HOME=/work/.cargo-container, CARGO_TARGET_DIR=
+# /work/target-container-linux — both inside the unit's workdir, which is the
+# ONE directory the boundary mounts). Re-installing that here would be a second
+# copy of a 3 GB answer.
+#
+# ── the one thing it has to change, and it was MEASURED
+#
+# A unit runs under `--userns=keep-id`: as the donor's own uid, not root. The
+# base image installs rust through rustup at /usr/local/rustup owned by
+# root:root 0755, and the rustup PROXY writes a temp file into $RUSTUP_HOME on
+# every invocation. So on 2026-09-11 the first real donated CI units came back
+# `exited 1 after 899ms — error: could not create temp file
+# /usr/local/rustup/tmp/9s7k36ngcaqhl762_file: Permission denied`, before
+# compiling a line. Two of the four units in that run died on it; the one that
+# needed no toolchain passed.
+#
+# The fix is NOT a chmod over a 3 GB tree — that rewrites the whole layer. Put
+# the toolchain's own bin directory first on PATH, so `cargo` and `rustc` are
+# the real binaries and the proxy is never invoked. One ENV layer, no bytes
+# copied. Verified as uid 1000 inside the boundary: cargo 1.97.1, rustc 1.97.1,
+# git 2.34.1.
+FROM localhost/sovereign-desktop-linux-build:latest
+
+# The workspace pins its compiler (rust-toolchain.toml → 1.95.0) and the
+# reference runs on it; the base image installs `stable`, which had drifted to
+# 1.97.1. Watched 2026-09-11: the two trybuild suites failed in the boundary
+# on diagnostic WORDING alone (`no associated function or constant named`
+# against the snapshot's `no function or associated item named`) — the image
+# is the CI environment, so it carries the pinned toolchain, and that
+# toolchain's own bin dir goes first on PATH (see the rustup-proxy note
+# below). The pin AND the component list are COPIED in rather than typed here
+# so there is one place they live; bump the file, rebuild the image. The list
+# matters as much as the pin: the same suites mismatched again on 2026-09-11
+# under the pinned compiler, on the three source lines rustc prints for a
+# diagnostic into `core` — rendered only when `rust-src` is in the sysroot,
+# which the reference host had and an image typing `clippy,rustfmt` did not.
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+# CARGO_HOME is pinned to /usr/local/cargo for this step only: the base image
+# points it at the workdir for units, and rustup keeps its own settings under
+# CARGO_HOME, so without this `rustup default` says it is not installed.
+RUN set -eu; export CARGO_HOME=/usr/local/cargo; \
+    pin="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' /tmp/rust-toolchain.toml)"; \
+    test -n "$pin"; \
+    comps="$(sed -n 's/^components *= *\[\(.*\)\]/\1/p' /tmp/rust-toolchain.toml | tr -d ' "')"; \
+    test -n "$comps"; \
+    rustup toolchain install "$pin" --profile minimal --component "$comps"; \
+    rustup default "$pin"; \
+    ln -sfn "/usr/local/rustup/toolchains/${pin}-x86_64-unknown-linux-gnu" /usr/local/rustup/toolchains/pinned; \
+    rm /tmp/rust-toolchain.toml
+
+ENV PATH=/usr/local/rustup/toolchains/pinned/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# There is no network inside the boundary, and cargo should not act as if
+# there might be: with this set, a missing crate is `error: no matching
+# package named …` at once, attributable to the workdir's inputs, rather than
+# minutes of `spurious network error` retries that expire the unit's budget and
+# read as "still compiling" from outside.
+ENV CARGO_NET_OFFLINE=true
+
+# The registry stays where the base image put it — `.cargo-container` inside
+# the one mount — but a unit reaches it as `/cargo`, not as a path under
+# `/work`. trybuild rewrites a registry path in a diagnostic to `$CARGO/…`
+# only if the line did not already match the workspace root: its normalizer
+# tries `$WORKSPACE` first and stops there. With CARGO_HOME under `/work`, the
+# `serde_json-$VERSION/src/de.rs` line every snapshot expects came out as
+# `$WORKSPACE/.cargo-container/registry/src/index.crates.io-…/serde_json-1.0.150/
+# src/de.rs`, and `kernel-types::answer_reds` failed on that line alone
+# (2026-09-11, first full run under the pinned compiler). A symlink costs the
+# image nothing and the operator's warm line does not change: the host path is
+# the same directory.
+RUN ln -s /work/.cargo-container /cargo
+ENV CARGO_HOME=/cargo
+
+# Build-script caches (ort-sys's prebuilt runtime, anything else that reads
+# the XDG cache) live inside the one mount, in the ignored dir the registry
+# already uses, so they persist across units and are warmed the same way.
+ENV XDG_CACHE_HOME=/cargo/xdg-cache
+
+# The reference runs `sovereign-test.sh` under nextest (one process per test);
+# without it the script's `auto` engine falls back to plain cargo, which runs
+# every test of a binary in ONE process and adds doctests — a different
+# instrument. Watched 2026-09-11 in the boundary: 12,730 / 13 under cargo
+# against 12,731 / 0 under nextest at the same rev, two of the 13 being one
+# in-process e2e pair sharing a listener address across tokio runtimes. D2's
+# done-when is counts that EQUAL the local run, which needs the same engine.
+# Prebuilt tarball rather than `cargo install`: seconds, not minutes, and the
+# toolchain's own bin dir is already first on PATH.
+RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/cargo/bin \
+ && chmod a+rx /usr/local/cargo/bin/cargo-nextest \
+ && cargo nextest --version
+
+# The unit's argv is the unit. `Sandbox::command_line` passes `--entrypoint=`
+# for exactly this reason — an image ENTRYPOINT would take the submitter's argv
+# as ARGUMENTS and the donor would report a verdict about a program nobody
+# sealed — and this makes the image itself honest rather than relying on the
+# flag.
+ENTRYPOINT []

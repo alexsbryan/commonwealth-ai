@@ -383,6 +383,12 @@ else
             # crate's treesitter-gated integration files to nothing.
             features+=",sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-mesh/treesitter"
         fi
+        if [[ "$c" == "commonwealth-transport" ]]; then
+            # `fanout` — kept in step with scripts/lib/cargo-scope.sh: a solo
+            # transport run would otherwise compile the fan-out module and
+            # its tests to nothing.
+            features+=",commonwealth-transport/fanout"
+        fi
     done
 fi
 if [[ ! -x "$ADAPTER" ]]; then

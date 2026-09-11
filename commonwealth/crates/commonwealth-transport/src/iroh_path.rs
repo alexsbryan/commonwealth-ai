@@ -50,6 +50,23 @@ impl PeerPath {
     pub fn is_active(self) -> bool {
         matches!(self, Self::Direct | Self::Relayed | Self::Mixed)
     }
+
+    /// Whether a measurement taken over this path RIGHT NOW is a RELAYED
+    /// reading — the one the federated-media bar is stated on
+    /// (WORK_PLANE.md: ≥25 Mbit/s for 10 min, no stall over 2 s, on the
+    /// relayed path).
+    ///
+    /// Only `Relayed` qualifies. `Mixed` means a direct leg and a relay are
+    /// both live, and iroh sends on the direct leg whenever it can — so a
+    /// play over `mixed` is a direct number wearing a relay's name. That is
+    /// the failing input this method exists to refuse: on one LAN every
+    /// path reads `mixed`, and a bar cleared there would be a claim about a
+    /// relay nothing went through. The way to take a relayed reading on
+    /// purpose is `SOVEREIGN_IROH_RELAY_ONLY=1` on BOTH ends, after which
+    /// this reads `relayed`.
+    pub fn is_relayed_reading(self) -> bool {
+        matches!(self, Self::Relayed)
+    }
 }
 
 /// One peer's live path, plus the detail the operator surface prints.
@@ -121,6 +138,27 @@ mod tests {
         assert_eq!(classify_peer_path(false, true, true), PeerPath::Relayed);
         assert_eq!(classify_peer_path(false, false, true), PeerPath::Idle);
         assert_eq!(classify_peer_path(false, false, false), PeerPath::Unknown);
+    }
+
+    /// The bar's reading, watched on the input that matters: `mixed` is a
+    /// direct number under a relay's name, and must not count. `relayed`
+    /// alone does.
+    #[test]
+    fn only_a_relayed_path_is_a_relayed_reading() {
+        use super::PeerPath;
+        assert!(PeerPath::Relayed.is_relayed_reading());
+        for p in [
+            PeerPath::Mixed,
+            PeerPath::Direct,
+            PeerPath::Idle,
+            PeerPath::Unknown,
+        ] {
+            assert!(
+                !p.is_relayed_reading(),
+                "{} must not pass as a relayed reading",
+                p.as_str()
+            );
+        }
     }
 
     /// `is_active` is what a reachability judgement reads. A path that

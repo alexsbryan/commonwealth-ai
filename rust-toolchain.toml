@@ -6,4 +6,12 @@
 # compiling with the same rustc.
 [toolchain]
 channel = "1.95.0"
-components = ["clippy", "rustfmt"]
+# `rust-src` is load-bearing for the trybuild suites (`kernel-types::answer_reds`,
+# `corpus-engine::evidence_reds`): their `.stderr` snapshots carry the source
+# snippet rustc prints for a diagnostic that points into `core` (`fn ne(&self,
+# other: &Rhs) -> bool` under `$RUST/core/src/cmp.rs`), and rustc renders that
+# snippet only when the sysroot has the sources. Watched 2026-09-11: a toolchain
+# without it printed the `-->` line and nothing under it, and the snapshot
+# mismatched on those three lines alone. Every place that installs this
+# toolchain reads this list, so the component is declared here, not remembered.
+components = ["clippy", "rustfmt", "rust-src"]

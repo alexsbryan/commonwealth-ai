@@ -135,6 +135,7 @@ fn caps_with_hosted(corpora: &[&str]) -> NodeCapabilities {
         inference_availability: 0.0,
         inference_capable: false,
         loaded_models: vec![],
+        origins: Vec::new(),
         embed_model: None,
         benchmark: None,
         current_in_flight: None,

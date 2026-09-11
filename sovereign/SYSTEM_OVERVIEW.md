@@ -4287,9 +4287,13 @@ launchd-held FDs.
 
 ### Deep-link handler
 
-`sovereign-mesh/deep_link.rs` parses `sovereign://create?name=<name>`
-and `sovereign://join?key=<key>` (with relay hints for NAT
-traversal). The desktop app registers as the system handler.
+`commonwealth-discovery/src/deep_link.rs` parses
+`sovereign://create?name=<name>` and `sovereign://join?key=<key>` (with
+relay hints for NAT traversal); it moved down from `sovereign-mesh` on
+2026-09-11 so a lifted process can read an invite, and
+`sovereign-mesh/src/deep_link.rs` re-exports it plus
+`join_confirmation_from_link`. The desktop app registers as the system
+handler.
 
 ### Subsystems with their own docs
 
@@ -5666,11 +5670,161 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 |---|---|---|
 | `cwth/client/0` | the PEER listener (no bearer — peer federated inference carries none, and its key is the credential), which serves the client router **minus `/internal/*`**. Closed outright if that listener did not bind | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
+| `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
 
 Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_this_closes`
 wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
+
+**Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
+`commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
+glue in `sovereign-mesh/src/media_reach.rs`, 2026-09-11). The holder declares
+`[iroh] media_origin = "127.0.0.1:8096"`; a value that does not parse refuses
+the boot. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
+`svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
+transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
+in place when the peer's dial info moves, so a player can hold the URL. The
+viewer-side bridge is `tokio::io::copy` both ways and never parses HTTP; the
+holder-side media arm rewrites request heads to carry the caller's identity
+(next entry) and copies everything else, which is why `Range` (a seek) passes
+through byte-exact. `Media` is the one class with no
+`[iroh.transport]` entry: it has exactly one transport (the IP overlay returns
+no candidates for it — there is no port to guess and a guess would be the
+library over plaintext), so there is nothing to opt it out to. What the read
+refuses it names — unknown, ambiguous, offline, no identity, no origin, no
+iroh path, non-loopback endpoint — rather than handing out a port that accepts
+and never answers; the CLI then does one real `GET /` through the bridge so the person
+sees an HTTP status, not a port. The response also says which KIND of number a
+play would be: `path.relayed_reading` is true only for `relayed`, decided once
+by `PeerPath::is_relayed_reading` — `mixed` (a direct leg and a relay both
+live, bytes on the direct leg, which is every path on one LAN) is a direct
+number under a relay's name and must not clear the bar. The bar itself is
+measured through the SAME URL: `media_bridge_bench pull --url <it>
+--duration-secs 600` judges the pre-registered rate / stall / duration and
+leaves the path kind to that field. Watched failing:
+`iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
+and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
+These decisions live in the package crate so the inference daemon and the
+package-only rails daemon compose ONE implementation of them (ARCH §10.6).
+
+**What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
+`OriginKind`, 2026-09-11). The acceptor knows whether it routes `cwth/media/0`
+to a local origin (`MeshIrohAccess::media_route_active`); the dial-info provider
+carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
+into this node's own capabilities each round, after the hardware/corpora
+snapshot replaces them — so the advertisement is a fact about the LIVE acceptor,
+not about config, and a declared origin whose endpoint never bound is not
+offered. A closed enum, serde-defaulted and skipped when empty: a peer on an
+older build reads as advertising none (absence, never an offer), and new→old
+wire bytes are unchanged. Two reads consume it. `GET /v1/mesh/media` with no
+`peer` — `svrn mesh media` bare — lists every active member other than self
+whose origins carry `media`, with status and live path, dialing nothing
+(`EmbeddedDaemon::media_offers`, `offering_members`); offline members are rows
+with their status, because a person wants to know the library exists. And
+`pick_member` refuses a named member that advertises none
+(`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
+close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
+failing: `commonwealth-media reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
+
+**The origin is told WHO is asking, by the acceptor and never by the client**
+(`commonwealth-transport/src/iroh_identity_forward.rs`, `[iroh] media_allow`,
+2026-09-11). The acceptor's resolver now returns a `Forward` kind: `Splice`
+(the byte copy above, unchanged for every other ALPN) or `Http { origin,
+headers }`, which `AcceptorRoutes::forward_for` picks for `cwth/media/0` from
+a member — `MemberCheck` returns `Option<MemberIdentity>` (name + node id,
+both `commonwealth-media/src/identity.rs` since 2026-09-11, with
+`admit_media` the one place the three refusals are decided)
+rather than a bool, so the identity the QUIC handshake verified is in hand
+where the route is decided. `pump_with_identity` parses request HEADS only,
+on the client→origin direction: every client-supplied `x-mesh-*` header is
+dropped, then `X-Mesh-Member`, `X-Mesh-Node`, `X-Mesh-Pubkey` are appended,
+the body is copied by its `Content-Length`, and the next head is read — so a
+kept-alive connection carries the identity on every request. Responses are
+still a byte copy, which is why `Range` stays byte-exact; a chunked request
+body (which media clients do not send) passes the rest of that connection
+through unrewritten and says so at info. `[iroh] media_allow` — member names
+or ≥4-char id prefixes, resolved by `member_matches` like every other
+`<peer>` argument — narrows which members reach the origin; empty admits every
+member, and a non-member is closed regardless. Watched failing:
+`iroh_identity_forward::tests::a_forged_identity_header_is_replaced_by_the_verified_one`
+(strip disabled), `iroh_access::tests::the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest`
+(check disabled), and end to end
+`the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed` /
+`a_member_outside_media_allow_is_closed_and_one_inside_is_served`.
+
+**One fan-out for every federated question** (`commonwealth-transport/src/fanout.rs`,
+2026-09-11 — WORK_PLANE.md design gap 1, done by extraction). The peer half
+of the knowledge route's fan-out moved out unchanged in behaviour and generic
+in type: `FanoutTarget` (identity + contact, cloned out of the mesh lock),
+`fan_out(inner, targets, per_peer, ask)` — one spawned task per target under
+the `fanout_inflight` gauge the `BoundedFanOut` soak invariant reads, an
+optional per-peer cap so one stalled relay cannot hold the rest, a
+`PeerRow<T>` per target in the order given with `Served(T)` / `Failed` /
+`NeverAsked` and elapsed, a panic in one task a failed row rather than a lost
+one — and `first_endpoint_that_answers`, the transport's candidate loop with
+the `note_success` pin. Every target is a row (`rows.len() == targets.len()`):
+the cloud-peer flight's lesson (note 60d4d79b) that an unasked corpus must
+not read as an empty answer, applied to peers. Merge stays with each caller,
+because item semantics are the origin's: the knowledge route keeps its
+corpus accounting and `X-Node-Id` stamp and calls the core; the media fan-out
+is the second caller. Watched failing: `fanout::tests::
+a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
+`a_target_refused_before_dialing_is_a_never_asked_row_not_an_absence`
+(verdict collapsed to failed); the extraction's guard is the unchanged
+`knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
+
+**Federated media, the catalogue half**
+(`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
+`sovereign-mesh/src/media_fanout.rs`, `POST /v1/mesh/media/fanout`,
+`svrn mesh media fanout <path>`, 2026-09-11).
+The same origin-relative request to every member that offers a media origin,
+each through its own bridge (the URL `svrn mesh media <peer>` prints, so the
+holder's identity headers ride along), concurrently under a per-member cap,
+returned as one document: `asked` and one `PeerRow<MediaAnswer>` per target —
+status, content type, body (lossy text, cut at 4 MiB with `truncated` set),
+bytes, elapsed — or `failed` / `never_asked` with the reason. `peers` names
+members exactly as the verb resolves them, and a name the roster refuses is
+a `never_asked` row carrying that refusal, never a dropped name
+(`select_targets`); without `peers`, the targets are what the bare verb
+lists. `roster_of` is now the one projection all three media reads
+share. Deliberately absent: merge, dedup, item schema (the origin's), and
+streams (the per-member URL's). Like the viewer half above, the selection, the
+request validation and the per-origin ask live in the package crate so the
+inference daemon and the rails daemon fan out with one implementation
+(ARCH §10.6). Watched failing:
+`commonwealth-media fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
+(refused names filtered out) and
+`an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
+
+**The minimal rails daemon** (`commonwealth/crates/commonwealth-rails`, the
+`cw-rails` binary, `scripts/cw-rails-lift.sh --sandbox`, 2026-09-11).
+The process that IS your address on the mesh, with media registered on it and
+nothing else — what a Jellyswarrm-shaped shim author installs beside their
+media server. `cw-rails join <invite>`, then `cw-rails run`, and the shim sees
+three loopback routes (`GET /v1/mesh/status`, `GET /v1/mesh/media[?peer=]`,
+`POST /v1/mesh/media/fanout`) plus `X-Mesh-Member` / `-Node` / `-Pubkey` on
+every request its origin receives: no key, no relay, no port-forward, no VPN.
+A separate binary for a closure reason — `commonwealth-api` resolves 743
+crates (corpus-engine, arrow, the sovereign runtime) and this resolves 319
+(`cargo tree --edges normal`, 2026-09-11),
+and three `[[forbid]]` rows in `quality/ARCH_LAYERS.toml` keep it that way
+between lifts. All of it is composition: identity, the endpoint, the acceptor,
+`Forward::Http`, the bridge, dial-by-key, `Mesh` with its merge and proofs,
+the `mesh::wire` structs and all three media questions are owned elsewhere;
+new here are the config, the round loop, the routes and the CLI.
+**What it does NOT do**, each deliberate: admit joiners (no `/internal/join`
+and no invite minting — a mesh is founded by a full daemon, and that absence
+is most of why this lifts); join over LAN/mDNS (an invite with no iroh dial is
+refused by name; the legacy paths mean plaintext HTTP to an address); anything
+Jellyfin (GPL-2 against this repo's AGPL keeps the shim a separate
+distribution). Watched failing, all in `commonwealth-rails`:
+`an_invite_with_no_iroh_dial_is_refused_by_name` (join),
+`a_round_from_another_mesh_is_401_and_merges_nothing` (internal),
+`a_non_loopback_listen_address_is_refused_before_it_binds` (api).
+The instrument is a physical lift, not a crate-name count: it builds
+and tests the closure outside the repository, then joins a real mesh and reads
+its own three routes — four verdicts, and no invite abstains rather than fails.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
@@ -8558,6 +8712,33 @@ findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
 `grounding/tests.rs`, `chaos_monkey/score.rs`, `sovereign/crates/sovereign-mesh/src/daemon.rs`,
 `session_state.rs`, the `AGENTS.md` instruction surface and the approach band —
 are upstream's; `git diff main...HEAD` touches none of them.
+
+### 10.1q Fan-in ACCEPTED — `commonwealth-core` 14 → 16 (cw-lift D1 follow-on, 2026-09-11)
+
+Two crates were added to the workspace on 2026-09-11 and both name
+`commonwealth-core`, which is the whole of layer-gate's fan-in complaint:
+
+| Dependent | Landed | Why it names `commonwealth-core` |
+|---|---|---|
+| `commonwealth-media` | `0eccf5664` | `Mesh`, `MemberRecord`, `NodeStatus`, `OriginKind`, `member_matches` — the roster vocabulary all three media questions are asked in |
+| `commonwealth-rails` | this commit | the same, plus `mesh::wire`'s join and gossip bodies and `MeshWire` |
+
+The ratchet's own advice — "depend on a narrower crate instead" — has no
+answer here, and that is the honest reading rather than a dodge: the types
+these two need ARE the mesh vocabulary, and the crate that owns it is the one
+every member already links. A narrower crate would be a second home for
+`Mesh`, which is the §10.6 failure the `mesh::wire` move (`c2a1e8eca`) was
+made to end — four declarations of one wire shape, converged to one.
+
+`quality/baselines/fan_in.tsv` was edited BY HAND, one line, rather than
+regenerated: `--update-baseline` rewrites every row and would have banked any
+other crate's drift in the same stroke, unread. The eight-row file is
+otherwise unchanged and the diff is one number.
+
+Not a licence for the next one. `commonwealth-core` is named a god-crate by
+this gate for a reason, and the two admitted here are package crates whose
+entire purpose is to be liftable — if a third arrives without that property,
+the answer is the split, not another row.
 
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 

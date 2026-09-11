@@ -250,7 +250,74 @@ pub(super) fn head_rev(repo: &Path) -> Result<String, String> {
     if rev.is_empty() {
         return Err("`git rev-parse HEAD` printed nothing".to_string());
     }
+    // A DIRTY TREE HAS NO REVISION THAT NAMES ITS BYTES, and until 2026-09-10
+    // this function handed one out anyway. That was a FALSE ACCEPT in the field
+    // built to prevent exactly it: the submitter pins HEAD, the donor checks
+    // that same rev out into a clean worktree, both attributions carry the
+    // identical sha, `ComputeAttribution::comparable_to` sees four fields agree
+    // — and a verdict about DIFFERENT BYTES is adopted as evidence about this
+    // checkout. Well-formed green about a tree nobody tested, which is the one
+    // failure this whole comparability apparatus exists to stop
+    // (WORK_PLANE.md's 5e bar iii, ARCH §18.1's "assert on something the
+    // subject cannot author").
+    //
+    // Refused rather than marked. A `<sha>-dirty` rev would also fail to
+    // match, but it would fail LATER and per-unit, as a donor refusing a rev it
+    // cannot resolve — burning a whole run to say what is knowable before the
+    // first act is signed. And it is refused HERE rather than in
+    // `run_distributed` because both callers of this function are the
+    // distributed path (the other is `--dry-run`, which prints the reason the
+    // real run will refuse), so a future third caller inherits the rule instead
+    // of having to remember it (§7).
+    let dirt = uncommitted(repo)?;
+    if !dirt.is_empty() {
+        let shown: Vec<&str> = dirt.iter().take(3).map(String::as_str).collect();
+        return Err(format!(
+            "this checkout has {} uncommitted change(s) ({}{}) — a donor fetches COMMITTED bytes, \
+             so every unit would be pinned to {} while the tree under test is something else, and \
+             the donor's verdict would compare equal to a local run it is not about. Commit or \
+             stash first; a local (non-distributed) run has no such requirement because it tests \
+             the tree in front of it",
+            dirt.len(),
+            shown.join(", "),
+            if dirt.len() > shown.len() {
+                ", …"
+            } else {
+                ""
+            },
+            &rev[..rev.len().min(12)]
+        ));
+    }
     Ok(rev)
+}
+
+/// The paths `git` reports as not matching `HEAD` — modified, staged, renamed,
+/// deleted or untracked-and-not-ignored.
+///
+/// Untracked files COUNT, and that is the whole reason this reads `status`
+/// rather than `diff --quiet`: a new untracked `#[test]` changes the test count
+/// a distributed run is about to compare, which is the exact number D2's bar
+/// reads. Ignored files do not count, and `--porcelain` already excludes them.
+fn uncommitted(repo: &Path) -> Result<Vec<String>, String> {
+    let out = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo)
+        .output()
+        .map_err(|e| format!("cannot run git in {}: {e}", repo.display()))?;
+    if !out.status.success() {
+        // An unreadable status is not a clean tree. Absence is reported, never
+        // defaulted into the permissive answer (§18.3).
+        return Err(format!(
+            "`git status --porcelain` failed in {} — a distributed run cannot confirm the tree it \
+             would pin is the tree it is about",
+            repo.display()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| l.get(3..).map(str::to_string))
+        .filter(|p| !p.trim().is_empty())
+        .collect())
 }
 
 /// The submitter-side toolchain absence.
@@ -275,8 +342,28 @@ pub(super) use commonwealth_work::attribution::ABSENT_TOOLCHAIN;
 ///
 /// The reference every donor's `provenance` is checked against, so that "a
 /// verdict that is not yours" is a typed question rather than a footnote.
+///
+/// **THE IMAGE IS THE CI ENVIRONMENT, so the reference is read from the same
+/// boundary a donor uses** (operator, 2026-09-10, on what a distributed verdict
+/// is comparable to — the ordinary answer anyone who has run CI would give).
+/// This read `of_this_host` until then, and the consequence was not subtle: a
+/// containerized donor reports the image's compiler (`rustc 1.97.1` here) while
+/// the reference reported the laptop's (`1.95.0`), the toolchain field differed,
+/// and `comparable_to` refused EVERY donor's verdict — including this node's own.
+/// The distributed path could not have adopted a single row.
+///
+/// It is still an INDEPENDENT reading, which is what §18.1 requires: this runs
+/// `Sandbox::probe` on this host's declared image and reads the compiler itself,
+/// exactly as a donor does on its own machine. Shared method, separate values.
+/// With no image declared the probe reports `Direct`, `of_sandbox` falls through
+/// to this host, and a native reference is the honest one — because on such a
+/// host a unit would have run natively too.
 pub(super) fn local_attribution(repo_rev: &str) -> ComputeAttribution {
-    commonwealth_work::attribution::of_this_host(repo_rev)
+    let image = sovereign_core::setup_config::SetupConfig::load()
+        .ok()
+        .and_then(|c| c.compute.work_offer.image.clone());
+    let (sandbox, _why) = commonwealth_work::sandbox::Sandbox::probe(image.as_deref());
+    commonwealth_work::attribution::of_sandbox(repo_rev, &sandbox)
 }
 
 /// Which fields of a donor's attribution do not match this checkout's.
@@ -803,6 +890,74 @@ pub(super) async fn run_distributed(
 
 #[cfg(test)]
 mod tests {
+
+    /// **THE FALSE ACCEPT, and why the refusal cannot live in `comparable_to`.**
+    ///
+    /// A submitter with uncommitted changes pins `HEAD`; a donor checks that
+    /// same rev out into a clean worktree; both attributions carry the identical
+    /// sha. The last assertion here is the important one — those two
+    /// attributions DO compare equal, because by the time `comparable_to` looks
+    /// there is nothing left to see. The apparatus cannot catch this, so the
+    /// only place it can be caught is where the rev is minted.
+    ///
+    /// Failing input: the `uncommitted` check removed from `head_rev`, which is
+    /// how this stood until 2026-09-10. Watched — with it removed, `head_rev`
+    /// hands back the sha and the `expect_err` below fails.
+    ///
+    /// The control comes FIRST on purpose: a check that refused every tree would
+    /// satisfy the dirty half while making the tool useless.
+    #[test]
+    fn a_dirty_checkout_has_no_revision_to_pin_and_the_comparison_cannot_tell() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repo = dir.path();
+        let git = |args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo)
+                .output()
+                .expect("git runs");
+            assert!(
+                ok.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&ok.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.email", "t@example.invalid"]);
+        git(&["config", "user.name", "t"]);
+        git(&["commit", "--quiet", "--allow-empty", "-m", "one"]);
+
+        // CONTROL: a clean checkout pins, and what it pins is a real sha.
+        let clean = head_rev(repo).expect("a clean checkout pins its HEAD");
+        assert_eq!(clean.len(), 40, "a resolved sha, got {clean:?}");
+
+        // An UNTRACKED file is enough, and that is deliberate: a new
+        // `#[test]` nobody committed changes the very count a distributed run
+        // compares.
+        std::fs::write(repo.join("new_test.rs"), b"#[test] fn t() {}").expect("write");
+        let err = head_rev(repo).expect_err("a dirty checkout must refuse to pin");
+        assert!(
+            err.contains("uncommitted") && err.contains("new_test.rs"),
+            "the refusal must name what is dirty, got {err:?}"
+        );
+
+        // A tracked modification is the same fact by another route.
+        git(&["add", "new_test.rs"]);
+        git(&["commit", "--quiet", "-m", "two"]);
+        head_rev(repo).expect("committing it makes the tree pinnable again");
+        std::fs::write(repo.join("new_test.rs"), b"#[test] fn t() { panic!() }").expect("write");
+        head_rev(repo).expect_err("a modified tracked file must refuse too");
+
+        // AND THE REASON IT HAD TO BE CAUGHT UPSTREAM: two readings of the same
+        // sha compare EQUAL. If the refusal above were ever removed, this is
+        // what would adopt a donor's verdict about different bytes.
+        let submitter = local_attribution(&clean);
+        let donor = local_attribution(&clean);
+        assert!(
+            submitter.comparable_to(&donor),
+            "identical revs compare equal — which is exactly why a dirty tree must never mint one"
+        );
+    }
     use super::*;
     use kernel_types::quality::Registry;
 

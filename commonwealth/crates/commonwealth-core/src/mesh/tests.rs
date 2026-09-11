@@ -86,6 +86,7 @@ pub(crate) fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             inference_availability: 1.0,
             inference_capable: false,
             loaded_models: vec![],
+            origins: Vec::new(),
 
             embed_model: None,
             benchmark: None,
@@ -833,4 +834,30 @@ fn a_pre_split_peers_payload_still_parses() {
     assert_eq!(back.invite_version, 0);
     assert_eq!(back.invite_expires_at, None);
     assert!(!back.require_encryption);
+}
+
+/// The resolver's safety rule, watched failing. Callers ACT on the answer —
+/// `forget-member` writes a tombstone — so a loose match is not a usability
+/// nicety: a one-character prefix against a 16-character id is very nearly
+/// "retire an arbitrary member". Four is the floor.
+#[test]
+fn a_short_node_id_prefix_never_resolves_a_member() {
+    let id = crate::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
+    let m = |q: &str| member_matches(id, "BeefyMac", q);
+    assert!(!m("b"), "1 char must not match");
+    assert!(!m("b88"), "3 chars must not match");
+    assert!(m("b882"), "4 chars is the floor");
+    assert!(m("node-b882"), "the node- prefix is optional");
+    assert!(m("BeefyMac"), "exact name matches");
+    assert!(!m("Beefy"), "a partial NAME must not match");
+    assert!(!m("b883"), "a wrong prefix must not match");
+}
+
+/// An empty query must never match. It reaches here as `--force` with no
+/// member, and matching everything would retire whichever row the iteration
+/// happened to reach first.
+#[test]
+fn an_empty_query_matches_nothing() {
+    let id = crate::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
+    assert!(!member_matches(id, "BeefyMac", ""));
 }

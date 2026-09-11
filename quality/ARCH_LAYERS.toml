@@ -178,6 +178,22 @@ crates = [
     # acts it is given. See its [[forbid]] block below; the layer entry alone
     # would be a green gate enforcing nothing (§5.1).
     "commonwealth-work",
+    # Federated media (cw-lift D1 follow-on, 2026-09-11). Mesh vocabulary for
+    # the same reason the rail and the work plane are: who offers a library,
+    # who may reach it, and the catalogue fan-out are roster questions, and its
+    # whole in-repo surface is `commonwealth-core` + `commonwealth-transport`.
+    # See its [[forbid]] blocks below; the layer entry alone would be a green
+    # gate enforcing nothing (§5.1).
+    "commonwealth-media",
+    # The minimal rails daemon (same rung). Mesh vocabulary for the same
+    # reason: it is a member of a mesh with media registered on it, not a
+    # neutral kernel. Its in-repo surface is `commonwealth-core`,
+    # `-transport`, `-media` and `-discovery`. See its [[forbid]] blocks
+    # below — the layer entry alone is a green gate enforcing nothing, and the
+    # whole reason this binary exists is a closure property: `commonwealth-api`
+    # resolves 743 crates and this resolves 319 (`cargo tree --edges normal`,
+    # measured 2026-09-11).
+    "commonwealth-rails",
 ]
 
 # The agent substrate: runtime core, inference, persistence, and the studio
@@ -395,8 +411,24 @@ to = "commonwealth-*"
 reason = "same rule pointing the other way — corpus-engine's three tenants write this journal too, so a mesh dependency would make the knowledge layer link the mesh to append a line"
 
 # The ring rail, split out of commonwealth-knowledge on 2026-09-04 (cw-lift
-# 1b). `commonwealth-rail*` covers BOTH new crates, so the fold and the journal
-# cannot drift apart on what they may name. These three are the whole point of
+# 1b). Each rule is TWO ROWS, `commonwealth-rail` and `commonwealth-rail-core`
+# named explicitly, so the fold and the journal cannot drift apart on what they
+# may name.
+#
+# THEY WERE ONE ROW EACH, `from = "commonwealth-rail*"`, until 2026-09-11. The
+# glob was written to cover two crates and it covers any crate whose name
+# STARTS with `commonwealth-rail` — which `commonwealth-rails`, the minimal
+# rails daemon, does. It is named after the RAILS (reachability, roster, the
+# media plane), not after the rail (the ring journal), and the two are
+# different subsystems. The daemon inherited four rules it was never written
+# for and went red on edges its own rows permit: `commonwealth-core` is
+# forbidden to the rail by the fourth rule and is the whole substrate of the
+# daemon. `forbidden_by` (arch-layers/src/lib.rs:238) returns the FIRST
+# matching row, so the accidental match won and the daemon's own rows below
+# were never reached. The `from` side takes one glob and has no `except`, so
+# naming the two crates is the fix; the reason text of each rule is unchanged,
+# and the fourth rule keeps its identical `except` on both rows so the split is
+# provably semantics-preserving for the pair it was written about. These three are the whole point of
 # the extraction — the rail is meant to be liftable by a third party building a
 # ring app, and the two edges it just shed are exactly the two a convenience
 # restores first. The `corpus-engine*` rule is load-bearing today rather than
@@ -404,12 +436,22 @@ reason = "same rule pointing the other way — corpus-engine's three tenants wri
 # to Op/OpId/SkippedLine, order 1a moved those into `oplog`, and this commit is
 # where the dep line actually goes away. Nothing enforced it until now.
 [[forbid]]
-from = "commonwealth-rail*"
+from = "commonwealth-rail"
 to = "corpus-engine*"
 reason = "the rail's entire reason for being a crate is that a 2,600-line signed log does not need a 578-crate knowledge closure; the oplog extraction (1a) paid for this and a dep back spends it"
 
 [[forbid]]
-from = "commonwealth-rail*"
+from = "commonwealth-rail-core"
+to = "corpus-engine*"
+reason = "the rail's entire reason for being a crate is that a 2,600-line signed log does not need a 578-crate knowledge closure; the oplog extraction (1a) paid for this and a dep back spends it"
+
+[[forbid]]
+from = "commonwealth-rail"
+to = "sovereign-*"
+reason = "a ring app is composed by a peer that has no sovereign build at all — the rail is the substrate the second application (canon x rail) has to compose on, and naming the runtime makes that untestable"
+
+[[forbid]]
+from = "commonwealth-rail-core"
 to = "sovereign-*"
 reason = "a ring app is composed by a peer that has no sovereign build at all — the rail is the substrate the second application (canon x rail) has to compose on, and naming the runtime makes that untestable"
 
@@ -418,7 +460,12 @@ reason = "a ring app is composed by a peer that has no sovereign build at all �
 # reaches back for a Corpus or a WorkQueue, the layer check passes because both
 # sit in mesh-foundation, and the extraction is undone with nothing red.
 [[forbid]]
-from = "commonwealth-rail*"
+from = "commonwealth-rail"
+to = "commonwealth-knowledge"
+reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
+
+[[forbid]]
+from = "commonwealth-rail-core"
 to = "commonwealth-knowledge"
 reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
@@ -448,22 +495,80 @@ reason = "these two crates are what came out of commonwealth-knowledge; a dep ba
 # and `rusqlite` is already inside the package closure via `commonwealth-state`.
 # NOTHING IN THE REPO WENT RED ON (a2). The block below is what makes it red.
 [[forbid]]
-from = "commonwealth-rail*"
+from = "commonwealth-rail"
 to = "commonwealth-*"
 except = ["commonwealth-rail-core"]
 reason = "the rail's manifests declare commonwealth-core ABSENT in prose and nothing enforced it; membership cannot, because core and state are package members. Absorbing MeshStore into the rail crate (Phase 2's (a2) reading) takes rail -> core via StoreEntry.origin: NodeId and puts the closure at 78 against cw-rail-closure's floor of 50. The exception is the journal naming the fold, which is the split itself"
 
-# The work plane, cw-lift 5c. It needs its OWN row: the `commonwealth-rail*`
-# blocks above are the nearest thing to a catch-all in this file and the
-# matcher is a literal glob (`arch-layers/src/lib.rs:231`), so
-# `commonwealth-rail*` does not match `commonwealth-work` -- checked, not
-# assumed. Without this block the crate would sit in `mesh-foundation` with
+[[forbid]]
+from = "commonwealth-rail-core"
+to = "commonwealth-*"
+except = ["commonwealth-rail-core"]
+reason = "the rail's manifests declare commonwealth-core ABSENT in prose and nothing enforced it; membership cannot, because core and state are package members. Absorbing MeshStore into the rail crate (Phase 2's (a2) reading) takes rail -> core via StoreEntry.origin: NodeId and puts the closure at 78 against cw-rail-closure's floor of 50. The exception is the journal naming the fold, which is the split itself"
+
+# The work plane, cw-lift 5c. It needs its OWN row: the rail blocks above are
+# the nearest thing to a catch-all in this file and the matcher is a literal
+# glob (`arch-layers/src/lib.rs:231`), so nothing above reaches
+# `commonwealth-work` -- checked, not assumed. (Those blocks were written
+# `commonwealth-rail*` at the time; the check held for `-work` and did not for
+# `commonwealth-rails`, which is why they name their two crates now.) Without this block the crate would sit in `mesh-foundation` with
 # nothing at all stopping a `sovereign-*` edge, which is the exact failure
 # `commonwealth/BOUNDARY.md` was written about.
 [[forbid]]
 from = "commonwealth-work"
 to = "sovereign-*"
 reason = "cw-lift 5f builds this crate in a sandbox outside the monorepo; a sovereign-* edge is the one thing that makes that impossible and it would be acquired in a commit nothing else here goes red on"
+
+# Federated media, cw-lift D1. Its own rows for the same reason the work
+# plane needed its own: the matcher is a literal glob
+# (`arch-layers/src/lib.rs:231`), so nothing above reaches
+# `commonwealth-media` and without these it would sit in `mesh-foundation`
+# with nothing stopping either edge.
+[[forbid]]
+from = "commonwealth-media"
+to = "sovereign-*"
+reason = "a package-only rails daemon composes this crate with no sovereign runtime under it; a sovereign-* edge ends that, and it would be acquired in a commit nothing else here goes red on"
+
+# The second half, and the one a well-meant commit would breach first: media
+# rides the mesh RAILS, not the applications. `commonwealth-api` has the
+# fan-out helper, `commonwealth-knowledge` has a corpus, and reaching for
+# either would pull a ~600-crate closure into the lift. Written as the
+# closure itself — `commonwealth-*` minus the two crates this one is allowed
+# to name — rather than as three rows naming today's applications, so a crate
+# added to that layer tomorrow is refused without anyone remembering to.
+[[forbid]]
+from = "commonwealth-media"
+to = "commonwealth-*"
+except = ["commonwealth-core", "commonwealth-transport"]
+reason = "the media decisions are the rails' own; commonwealth-{api,knowledge,inference} are applications on this substrate and each carries a corpus-engine closure the rails lift cannot take"
+
+# The rails daemon, cw-lift D1 follow-on. Same two rows as `commonwealth-media`
+# directly above, and written the same way — as the closure minus what this
+# crate may name — so a crate added to `mesh-foundation` tomorrow is refused
+# without anyone remembering to. `scripts/cw-rails-lift.sh --sandbox` is the
+# instrument that reads what a crate-name count cannot (a `build.rs`, a
+# hand-spelled relative path, an `include_str!` escaping the crate root); these
+# rows are what stop the edge being acquired in the first place.
+[[forbid]]
+from = "commonwealth-rails"
+to = "sovereign-*"
+reason = "this binary is BUILT AND RUN outside the monorepo by scripts/cw-rails-lift.sh; a sovereign-* edge is the one thing that makes that impossible, and it would be acquired in a commit nothing else here goes red on"
+
+[[forbid]]
+from = "commonwealth-rails"
+to = "commonwealth-*"
+except = [
+    "commonwealth-core",
+    "commonwealth-transport",
+    "commonwealth-media",
+    "commonwealth-discovery",
+]
+reason = "the four it may name are the rails; commonwealth-{api,knowledge,inference} are applications on them. The api crate is the one a well-meant commit would breach first — it has the gossip handler and the fan-out route this daemon mirrors — and its closure is 743 crates against this daemon's 319 (`cargo tree --edges normal`, 2026-09-11). The wire structs are commonwealth-core's `mesh::wire`: one definition, two speakers."
+
+[[forbid]]
+from = "commonwealth-rails"
+to = "corpus-engine*"
+reason = "the knowledge engine is the single largest thing the lift exists to leave behind, and it arrives transitively through any of the three application crates above"
 
 [[forbid]]
 from = "commonwealth-core"
@@ -827,6 +932,29 @@ crates = [
     # against it, and every gate in the repo would be green on a
     # `sovereign-*` dep acquired the day before that lift.
     "commonwealth-work",
+    # Federated media, admitted 2026-09-11 at cw-lift D1. Seven crates -> eight
+    # and the zero-exception property still holds: its entire internal surface
+    # is `commonwealth-core` + `commonwealth-transport`, both already members,
+    # so the widening admits no new leaf at all.
+    #
+    # Here the day it is registered, and for the same reason the work plane
+    # was: `commonwealth-rails` is being written against it, and the two
+    # [[forbid]] rows above are what keep the closure liftable between now and
+    # then.
+    "commonwealth-media",
+    # The rails daemon, admitted the same day and against the same property:
+    # eight crates -> nine, and its entire internal surface is
+    # `commonwealth-{core,transport,media,discovery}`, every one already a
+    # member. The widening admits no new leaf.
+    #
+    # It is the first BINARY in this package, which is the point. A gate that
+    # counted crate names would stay green through a `build.rs`, a
+    # hand-spelled `path = "../.."`, or an `include_str!` escaping the crate
+    # root — none of which `cargo tree` can see. `scripts/cw-rails-lift.sh
+    # --sandbox` reads those by copying this closure out of the repository,
+    # building it against a synthesised workspace and RUNNING it against a
+    # live mesh; this row is what stops the edge being acquired between lifts.
+    "commonwealth-rails",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
