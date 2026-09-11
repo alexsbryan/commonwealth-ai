@@ -900,6 +900,66 @@ impl TurnClient {
         .await
     }
 
+    /// [`Self::corpus_atoms_all`] for a caller to whom "this corpus has
+    /// no atlas" is an ANSWER, not a failure.
+    ///
+    /// The host answers 404 for a corpus that is not installed OR whose
+    /// `atlas/` dir is absent, and says so in those words
+    /// (`reading_http.rs:427`). For the starter-questions surface those
+    /// are one fact — there are no atom-derived starters, fall back to
+    /// excerpts — and it is the same fact the in-process caller read off
+    /// `atlas_dir.exists()` before this route existed.
+    ///
+    /// `Ok(None)` is ONLY that 404, and only on the FIRST page. A 404
+    /// part-way through the paging loop means the atlas vanished under
+    /// the read and stays an `Err`: it is a different event, and
+    /// collapsing the two would hand the caller a short list that looks
+    /// complete (ARCH principle 6). Every other status is still the
+    /// host's own words.
+    pub async fn corpus_atoms_all_if_present<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<Vec<T>>> {
+        let first: AtomsPage<T> = match self
+            .internal_get_opt(
+                format!("/internal/corpus/{corpus_id}/atoms"),
+                &[
+                    ("offset", "0".to_string()),
+                    ("limit", ATOMS_PAGE_REQUEST.to_string()),
+                ],
+            )
+            .await?
+        {
+            Some(page) => page,
+            None => return Ok(None),
+        };
+
+        let mut out: Vec<T> = first.atoms;
+        let mut offset = 0usize;
+        let mut next = first.next_offset;
+        loop {
+            let Some(n) = next else { return Ok(Some(out)) };
+            if n <= offset {
+                return Err(Error::Inference(format!(
+                    "GET /internal/corpus/{corpus_id}/atoms: host advertised \
+                     next_offset={n} at offset {offset} — the page would not advance"
+                )));
+            }
+            offset = n;
+            let page = self
+                .corpus_atoms::<T>(corpus_id, offset, ATOMS_PAGE_REQUEST)
+                .await?;
+            if page.atoms.is_empty() && page.next_offset.is_some() {
+                return Err(Error::Inference(format!(
+                    "GET /internal/corpus/{corpus_id}/atoms: host returned 0 rows at \
+                     offset {offset} while still advertising a next offset"
+                )));
+            }
+            out.extend(page.atoms);
+            next = page.next_offset;
+        }
+    }
+
     /// Every atom in a corpus's atlas, paged until the host says the
     /// read is finished — the drop-in replacement for the desktop's
     /// in-process `load_atoms`, which returns the whole vec because it

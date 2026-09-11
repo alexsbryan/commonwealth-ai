@@ -53,7 +53,6 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
-use sovereign_tools::mcp::secret_store;
 use tauri::State;
 
 use crate::state::AppState;
@@ -167,8 +166,28 @@ pub async fn mcp_add_server(
 }
 
 /// Remove a server from the canonical config.
+///
+/// The orphaned secret is dropped through the SAME call
+/// [`mcp_clear_token`] makes — `TurnClient::mcp_clear_token`, whose
+/// handler runs `secret_store::delete_token` on the host
+/// (`sovereign-mesh/src/mcp_config_http.rs:270`). It used to call that
+/// function here, in this process, which is the secret store of
+/// whichever machine the WINDOW is on: on an attached boot the server
+/// left the shared config and its token stayed on the daemon's disk,
+/// live, for a server the user believed they had deleted. Two callers
+/// of one decider, and the in-process one was reaching the wrong host
+/// (ARCH principles 8 and 12).
+///
+/// Still best-effort, as it was: a token that will not delete must not
+/// strand the config edit that already succeeded. It is logged now
+/// rather than dropped into `let _`, because a secret that outlives its
+/// server is exactly the thing an operator would want to find in a log
+/// (ARCH principle 1).
 #[tauri::command]
-pub async fn mcp_remove_server(name: String) -> Result<(), String> {
+pub async fn mcp_remove_server(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+) -> Result<(), String> {
     let mut cfg = SetupConfig::load().map_err(|e| format!("load config: {e}"))?;
     let before = cfg.mcp_servers.len();
     cfg.mcp_servers.retain(|s| s.name != name);
@@ -176,8 +195,14 @@ pub async fn mcp_remove_server(name: String) -> Result<(), String> {
         return Err(format!("No MCP server named '{name}'."));
     }
     cfg.save().map_err(|e| format!("save config: {e}"))?;
-    // Don't leave an orphaned secret behind.
-    let _ = secret_store::delete_token(&name);
+    if let Err(e) = mcp_client(&state).mcp_clear_token(name.trim()).await {
+        tracing::warn!(
+            server = %name,
+            error = %e,
+            "mcp_remove_server: the server left the config but its stored token \
+             could not be cleared on the host"
+        );
+    }
     Ok(())
 }
 
