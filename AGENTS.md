@@ -79,6 +79,8 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | Two implementations of one threshold, formula, or key | §10.6 |
 | A key derived from a row count, sequence number, or network address | §7.5 |
 | New capability added without citing the existing surface that was checked | §19 |
+| One component supervising, restarting, or deciding when another should stop | §20 |
+| A gate that would still pass with the ability it guards fully intact | §20 |
 
 <!-- portable:end -->
 ### Which door to open
@@ -109,6 +111,8 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | Am I asking a model to guarantee a behaviour? | §7.6 |
 | Health checks, probes, "is the peer alive?" | §9.5 |
 | Am I about to build something new — a store, pass, corpus, harness, script? | §19 |
+| Am I deciding who owns a process, a lifetime, or a recovery? | §20 |
+| I removed every use — is the ability actually gone? | §20 |
 
 ### System geography — three tiers, cheapest first
 

@@ -1327,3 +1327,92 @@ reason)" is the earned version.
 The tell, from the 2026-06-15 incident: when a design starts feeling
 complicated, treat it as a signal you missed the reuse — not that the problem
 is hard.
+
+---
+
+## 20. Draw the line by what each side owns about itself
+
+Before deciding who calls whom, write down what each component owns about
+*itself* — its data, its lifetime, its recovery. Everything else only asks.
+(Minted 2026-09-11 by operator directive, after a session took five passes to
+reach an answer this question produces in one.)
+
+### The incident
+
+sv-surface set out to make the desktop a thin client over the daemon. The
+session spent a day asking **"who should own the daemon process?"** and cycled
+through answers: the desktop supervises a child (what ships today); the boot
+cost is only ~300 ms so leave it; no — supervised-child is the *default*, so
+the desktop is already a client; no — hand the daemon to launchd and systemd;
+and finally, from the operator, the question that dissolved it:
+
+> "The daemon is the daemon and the desktop client is the client."
+> "Think of it like an api layer that ships a client package to handle
+> networking. The app still does nothing daemon related. It invokes something
+> and moves on. The daemon manages its logic and its lifecycle when embedded."
+
+Write down what each side owns and the answers stop needing negotiation. A
+daemon owns its data root, its weights, when it idles, when it restarts. A
+client owns what it shows and what it asks for. Then: who restarts the daemon
+after a crash — it does, or the OS if the *user* asked for that, never the
+app. When does a model unload — the daemon decides, because it owns its
+lifetime. What does the app do — asks. An OS service stops being an
+architectural requirement and becomes what it actually is, a preference for
+users who want the daemon to outlive their session.
+
+### Three rules that follow
+
+**Is anyone doing something *for* another component?** Supervising it,
+restarting it, deciding when it should stop. That is the tell that the line
+is in the wrong place. `sovereign-desktop` held a restart policy, a 5-second
+shutdown budget and an exit handler for a process that should manage all
+three itself — 1,990 production lines of lifecycle, of which ~271 survive the
+question above.
+
+**A gap in one thing is not a job for another.** This is the sharpest form and
+the one the session got wrong worst. A service-managed daemon holds ~28 GB
+after the window closes, and that was written up as an architectural
+trade-off about lifetimes — should the app kill the daemon to free memory?
+It was a missing idle policy in the daemon: `[daemon] primary_idle_secs` is
+300, `extras_idle_secs` is 0, and the fast and embed slots have no monitor at
+all (`daemon_cmd/build/inference.rs:293,347`). Fix the component that cannot
+look after itself. The moment you hand its gap to a neighbour, that neighbour
+knows its internals forever.
+
+**Calling something is not owning it.** Once the line is drawn this is what
+keeps it stable. One call that grants no new ability is a fine seam — a client
+starting a backend by path links nothing and learns nothing. Holding a handle,
+a retry, or a dependency is ownership. Argue about what each side *can
+become*, never about what it happened to call.
+
+### How you will know you drew it wrong: the uses go to zero and the ability stays
+
+> Deleting every *use* of an ability is not deleting the ability. The count
+> reaches zero, the code still compiles it in, and the work reads as finished.
+
+Look for the ability where it is granted — the dependency in `Cargo.toml`, the
+import, the feature flag — not by counting the places that use it. If your
+check would still pass with the ability completely intact, it is measuring a
+symptom, and it will turn green at the exact moment you most want it honest.
+
+The same campaign built three instruments in a row and none could reach its
+own claim: `is_attach_mode` forks 15 → 0, attach-time reads of local state
+55 → 33, the construction count pinned at 12. All three could have hit zero
+with the whole backend still inside the app, because `main.rs:136-138`
+re-enters the desktop binary as the daemon and `src-tauri/Cargo.toml` links
+the 21 crates that let it — which is how you get a 661 MB "client" beside a
+614 MB daemon. The check that works is `cargo tree`.
+
+This is §18's shape (a green result nobody earned) pointed at a boundary, and
+it is the symptom; the ownership question above is the cure.
+
+### And do not gate on who is running it
+
+"Phones cannot run a backend" is a fact about this year. "This build ships no
+backend it can start" is the same guard without deciding the future for you —
+and the day a model fits on a phone, one is a flag and the other is a rewrite.
+A phone running on-device inference is not an exception to client/daemon
+separation; it is a client whose daemon is colocated, which is the same
+sentence the campaign already used for in-process hosting. (Caught by the
+operator before it shipped: a draft made "mobile cannot spawn" structural by
+omitting the capability from mobile's build.)
