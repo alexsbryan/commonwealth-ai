@@ -89,6 +89,8 @@ commits_since_review() {
 # One session: the agent's output streams to this process's stdout (the log);
 # a watchdog kills it past the wall-clock timeout; permission auto-rejections
 # are counted from the log.
+SESSION_PGID=""
+trap 'if [ -n "${SESSION_PGID:-}" ]; then kill -TERM -- -"$SESSION_PGID" 2>/dev/null; sleep 2; kill -KILL -- -"$SESSION_PGID" 2>/dev/null; fi' EXIT
 run_session() { # prompt_file
   local prompt="$1" before after child waited input
   input="${TMPDIR:-/tmp}/ralph-input-$$.md"
@@ -101,18 +103,31 @@ run_session() { # prompt_file
     cat "$prompt"
   } > "$input"
   before=$(grep -c 'auto-rejecting' ralph/log.txt 2>/dev/null || true); before=${before:-0}
+  # Launch the session in its own process group, so a timeout kills the whole
+  # tree — cargo, rustc, the embedded Postgres postmasters — and leaves no
+  # orphans for the next session to fight.
+  set -m
   opencode run "$(cat "$input")" &
-  child=$!; waited=0
+  child=$!
+  set +m
+  SESSION_PGID="$child"
+  waited=0
   while kill -0 "$child" 2>/dev/null && [ "$waited" -lt "$SESSION_TIMEOUT" ]; do
     sleep 30; waited=$((waited + 30))
     [ $((waited % 60)) -eq 0 ] && echo "[ralph]   ... session running ${waited}s (pid $child)"
+    if [ -f "$STOP_FILE" ]; then
+      echo "[ralph] STOP requested — killing the session process group"
+      kill -TERM -- -"$SESSION_PGID" 2>/dev/null; sleep 5; kill -KILL -- -"$SESSION_PGID" 2>/dev/null
+      break
+    fi
   done
   if kill -0 "$child" 2>/dev/null; then
-    echo "[ralph] session exceeded ${SESSION_TIMEOUT}s — killing (the tree resumes it)"
+    echo "[ralph] session exceeded ${SESSION_TIMEOUT}s — killing the process group (the tree resumes it)"
     notify "iteration timeout" "killed at ${SESSION_TIMEOUT}s"
-    kill "$child" 2>/dev/null; sleep 5; kill -9 "$child" 2>/dev/null
+    kill -TERM -- -"$SESSION_PGID" 2>/dev/null; sleep 5; kill -KILL -- -"$SESSION_PGID" 2>/dev/null
   fi
   wait "$child" 2>/dev/null || true
+  SESSION_PGID=""
   rm -f "$input"
   after=$(grep -c 'auto-rejecting' ralph/log.txt 2>/dev/null || true); after=${after:-0}
   if [ "$after" -gt "$before" ]; then
