@@ -6093,6 +6093,20 @@ absent and the guards fail closed for *every* caller.
   penalized peer's scorer sees lower affinities and naturally
   routes elsewhere. Filtering enforced in two places
   (`peer_preferences.rs` + `store.rs`).
+  Read and written over the wire since sv-surface svt-3:
+  `GET /internal/peer-preference/list`,
+  `POST /internal/peer-preference/{set,clear}`
+  (`commonwealth-api/src/routes_internal/peer_preference.rs`, mounted
+  `server.rs:526-536`), reached by `TurnClient::{peer_preferences,
+  set_peer_preference, clear_peer_preference}`. The clamp and the
+  32-hex-char node-id precondition stay in the daemon — a client
+  states neither. The desktop's three Mesh Health commands go through
+  that client in BOTH bootstrap modes, which is what took
+  `commonwealth-core` and `commonwealth-state` out of
+  `sovereign-desktop/src-tauri/Cargo.toml`; before svt-3 the Attach arm
+  refused with "set via `commonwealth peer-preference set` instead" and
+  the list arm answered an empty list it could not distinguish from
+  "none set".
 - See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
   for peer-admission, contribution ceiling, and foreground-yield.
 
@@ -6368,7 +6382,7 @@ commonwealth corpus status              Ingestion/shard status (GET /internal/co
 commonwealth corpus collaborate <id>    Recruit peers for a mid-flight ingestion
 commonwealth daemon start               Run the daemon
 commonwealth recipe test/validate       Community-recipe harness
-commonwealth peer-preference …          Per-peer affinity (local-only)
+commonwealth peer-preference …          Per-peer affinity (local-only store; /internal/peer-preference/* serves it)
 ```
 
 Every command does real work (2026-07-01): the aspirational

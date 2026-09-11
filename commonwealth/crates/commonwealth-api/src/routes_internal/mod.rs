@@ -40,6 +40,7 @@ mod knowledge;
 mod mesh_admin;
 mod model_files;
 mod newsworthy_status;
+mod peer_preference;
 mod pipeline_pause;
 mod ring_sync;
 mod rpc_warm;
@@ -89,6 +90,10 @@ pub use mesh_admin::{
 pub use model_files::{list_model_files, serve_model_file, ModelFileInfo, ModelFileListing};
 pub use newsworthy_status::{
     newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
+};
+pub use peer_preference::{
+    peer_preference_clear, peer_preference_list, peer_preference_set, ClearPeerPreferenceRequest,
+    PeerPreferenceView, SetPeerPreferenceRequest,
 };
 pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
