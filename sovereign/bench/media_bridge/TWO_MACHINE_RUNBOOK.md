@@ -221,3 +221,21 @@ VM on a symmetric >=100 Mbit link serving to the Mac on the hotspot, relay
 FORCED on the Mac (`pfctl` anchor blocking outbound UDP to the VM's address —
 a public VM punches too), recorded as forced; the Mac's hotspot downlink is
 169 Mbit/s, not a cap. Check the VM's IPv6 before writing a v4-only block.
+
+---
+
+# LIVE RUN, 2026-09-11 (later) — the cloud sender, unforced
+
+`cloud-sender-unforced-2026-09-11.stdout`. The operator declined any block
+("real world conditions… just test"), so these are mixed-path readings, not the
+relayed bar (still kept 0 / discarded 1). Michigan VM (uplink 550-680 Mbit/s
+measured) → Mac on home broadband (downlink 186): one stream 87.0 Mbit/s over
+25 s and 55.2 over 623 s with 3 reconnects and four >1 s gaps; four streams
+99.3 aggregate vs 87.0 for one. No ~25 ceiling; the path tops near 100 and
+degrades with duration. Neither endpoint is the cap, so the gap is the iroh
+path. Next instrument: print `Connection::rtt` beside the bench's `path=` line
+so the per-stream-window arithmetic (noq default 1,250,000 B; nothing set in
+`relayed_endpoint_builder`) can be closed, and a plain-TCP pull on the same
+pair as the control. Practical notes: a Vast container has no NET_ADMIN
+(iptables refused), CPU-only Vast offers refuse `create instance`, and the
+repo's `.cargo/config.toml` (clang + mold) must be set aside on a plain image.

@@ -1,0 +1,64 @@
+# Cloud sender, UNFORCED, 2026-09-11 ~21:00-21:50 UTC. Operator decision (verbatim,
+# relayed): "These are real world conditions, I'm not modifying the test to be less
+# like real conditions. Just test." So NO pf, NO block; path class reported beside
+# every number. These are real-world MIXED-path readings between genuinely different
+# networks and are NOT samples of the pre-registered RELAYED bar (kept 0, discarded 1
+# from reversed-leg-2026-09-11.stdout — unchanged).
+#
+# SENDER: Vast instance 50640732, Michigan US datacenter, public 216.234.102.170
+# (static, no global IPv6), bench built from origin/main at cb4741d6e (serve/origin/gen
+# identical to the merged tree; the puller's binary is the merged tree, same file).
+# Neutral uplink from the VM (100 MiB POST to speed.cloudflare.com/__up): 683.2 and
+# 552.2 Mbit/s. So the sender is not the cap.
+# RECEIVER: MacBook, home broadband behind RuggedFox's NAT (public 69.181.167.209 —
+# it left the hotspot before this leg; Tailscale stopped; v4-only link); downlink to
+# two CDNs 183.3 / 189.3 Mbit/s. So the receiver is not the cap. (The household's
+# UPLINK is 21-26 Mbit/s and would bind the moment anyone serves FROM the Mac.)
+# Different networks: 69.181.167.209 (CA residential) vs 216.234.102.170 (MI DC).
+#
+# Path throughout (the bench's own remote_info line, unchanged before/between/after):
+path=mixed direct=[216.234.102.170:32082] relay=[https://use1-1.relay.n0.iroh.link./]
+#   (the VM advertised :54618; its NAT remapped the port — block by ADDRESS if ever forcing)
+#
+# 1. Probe (label kept for continuity; nothing was forced):
+forced-probe viewer=0 status=206 clen=Some(33554432) crange=Some("bytes 0-33554431/1073741824") bytes=33554432 secs=10.97 rate=24.5 Mbit/s ttfb=617.0ms gaps: n=5382 p50=0.2 p99=18.2 max=109.8ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=14.4 Mbit/s verify=off reconnects=0
+#
+# 2. soak1 — 600 s, --verify, the one sustained run (soak2 was cut at 57 s, before any
+#    verdict, to run the discriminators first; soak3 not run):
+soak1 viewer=0 status=200 clen=Some(1073741824) crange=None bytes=4294967296 secs=622.62 rate=55.2 Mbit/s ttfb=160.6ms gaps: n=414635 p50=0.1 p99=14.9 max=1244.0ms stalls>500ms=4 >1s=4 >2s=0 worst_1s=0.0 Mbit/s verify=OK reconnects=3
+soak1 viewer=0 BAR rate>=25 Mbit/s: yes (55.2) · stalls>2000ms: 0 · 623s of 600s · verdict=met · path kind: `svrn mesh media --json` .path.relayed_reading must be true for this to be the bar's reading
+#    verify=OK across 4.29 GB: byte-exactness through the splice held for four full
+#    passes. BUT reconnects=3 and four gaps over 1 s (max 1244 ms, a worst second of
+#    0.0 Mbit/s): a player would see four rebuffers. "verdict=met" is not "watchable".
+#
+# 3. RTT upper bounds (1 KiB range on the warm bridge; ttfb = RTT + splice + seek):
+rtt-proxy-1 viewer=0 status=206 clen=Some(1024) crange=Some("bytes 0-1023/1073741824") bytes=1024 secs=0.00 rate=286.6 Mbit/s ttfb=238.8ms gaps: n=0 p50=NaN p99=NaN max=NaNms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off reconnects=0
+rtt-proxy-2 viewer=0 status=206 clen=Some(1024) crange=Some("bytes 0-1023/1073741824") bytes=1024 secs=0.00 rate=673.4 Mbit/s ttfb=159.8ms gaps: n=0 p50=NaN p99=NaN max=NaNms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off reconnects=0
+rtt-proxy-3 viewer=0 status=206 clen=Some(1024) crange=Some("bytes 0-1023/1073741824") bytes=1024 secs=0.00 rate=264.3 Mbit/s ttfb=280.4ms gaps: n=0 p50=NaN p99=NaN max=NaNms stalls>500ms=0 >1s=0 >2s=0 worst_1s=0.0 Mbit/s verify=off reconnects=0
+#
+# 4. The discriminator for the "~25 Mbit/s per-stream window" hypothesis:
+viewers4 viewer=0 status=206 clen=Some(268435456) crange=Some("bytes 0-268435455/1073741824") bytes=268435456 secs=57.51 rate=37.3 Mbit/s ttfb=161.4ms gaps: n=49240 p50=0.1 p99=9.2 max=170.9ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=17.5 Mbit/s verify=off reconnects=0
+viewers4 viewer=1 status=206 clen=Some(268435456) crange=Some("bytes 0-268435455/1073741824") bytes=268435456 secs=59.78 rate=35.9 Mbit/s ttfb=161.5ms gaps: n=48504 p50=0.1 p99=10.5 max=225.0ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=12.5 Mbit/s verify=off reconnects=0
+viewers4 viewer=2 status=206 clen=Some(268435456) crange=Some("bytes 0-268435455/1073741824") bytes=268435456 secs=86.33 rate=24.9 Mbit/s ttfb=163.1ms gaps: n=43903 p50=0.1 p99=20.7 max=212.8ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=1.6 Mbit/s verify=off reconnects=0
+viewers4 viewer=3 status=206 clen=Some(268435456) crange=Some("bytes 0-268435455/1073741824") bytes=268435456 secs=71.66 rate=30.0 Mbit/s ttfb=161.4ms gaps: n=50849 p50=0.1 p99=14.0 max=187.0ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=2.7 Mbit/s verify=off reconnects=0
+viewers4 AGGREGATE viewers=4 bytes=1073741824 wall=86.50s rate=99.3 Mbit/s
+viewers1 viewer=0 status=206 clen=Some(268435456) crange=Some("bytes 0-268435455/1073741824") bytes=268435456 secs=24.69 rate=87.0 Mbit/s ttfb=182.5ms gaps: n=22518 p50=0.1 p99=13.1 max=174.4ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=40.8 Mbit/s verify=off reconnects=0
+#
+# READING.
+# - There is NO ~25 Mbit/s ceiling. Short probes understate by ramp (24.5 → 87.0 for
+#   one stream). The earlier "RuggedFox uplink is the cap" finding stands on its own.
+# - The path tops out near 100 Mbit/s: 99.3 aggregate with four streams vs 87.0 with
+#   one (+14% for 4×). Per-stream flow control (noq-proto default stream_receive_window
+#   1,250,000 B; nothing set in commonwealth-transport/src/iroh.rs:236-272) is NOT
+#   falsified — with RTT only bounded above (≤160-280 ms) it permits ≥ 62 Mbit/s and
+#   would predict 87 at ~115 ms — but it is not what bounds four streams. Between the
+#   link (550-680 up, 186 down) and the path (~100) the gap is OURS: iroh/noq path
+#   (Cubic default, 1200 B MTU, GSO falling back on EINVAL) or the relay-assisted
+#   direct path. NEXT INSTRUMENT: print Connection::rtt beside the path line
+#   (iroh-1.0.2/src/endpoint/connection.rs:1016) so the window arithmetic closes, and
+#   compare a plain TCP pull on the same pair.
+# - THE FINDING: the path DEGRADES WITH DURATION — 87.0 over 25 s, 55.2 over 623 s
+#   with 3 reconnects and four >1 s gaps. A player experiences 87 for a while and
+#   then seconds of nothing. That is a stability question no mean-rate bar surfaces,
+#   and it is the one a shim author will hit first.
+# VM cost: $0.215/h × 34 min (20:51-21:25 UTC) ≈ $0.12; destroyed after these readings, none listed after.
