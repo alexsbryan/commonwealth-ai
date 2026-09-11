@@ -115,6 +115,21 @@ const RETIRED: &[Retired] = &[
         hay: "project_message_metadata(&msg.metadata)",
         route: "GET /v1/conversations/{id} (the daemon runs the projection)",
     },
+    // sv-surface correctness wave — the two wrong-store WRITES. A read that
+    // came back from the wrong store rendered a stale sidebar; these two
+    // silently discarded the user's action, which is worse: the rename
+    // reverted on the next list, and every corpus chip was written where
+    // retrieval never looks.
+    Retired {
+        file: "src/commands/conversation.rs",
+        hay: ".update_conversation_title(",
+        route: "PATCH /v1/conversations/{id} (trim, empty-refusal and the 200-char clamp moved with it)",
+    },
+    Retired {
+        file: "src/commands/conversation.rs",
+        hay: ".set_conversation_enabled_corpora(",
+        route: "PUT /v1/conversations/{id}/enabled-corpora (which also VALIDATES — the local write never did)",
+    },
     // ── document_asset.rs ────────────────────────────────────
     Retired {
         file: "src/commands/document_asset.rs",
@@ -247,6 +262,8 @@ fn every_repointed_command_reaches_the_family_client() {
                 ".end_conversation(",
                 ".get_conversation(",
                 ".set_skill_active::<SkillEntry>(",
+                ".rename_conversation(",
+                ".set_enabled_corpora(",
             ],
         ),
         (

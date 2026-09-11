@@ -1146,6 +1146,92 @@ async fn conversation_delete_route_is_204_and_removes_the_row() {
     assert_eq!(served, expected);
 }
 
+/// Rename crosses the wire, and the three rules that shape a title travel
+/// WITH the write rather than with each surface that offers a rename box
+/// (§10.6). The desktop carried its own trim + empty-refusal + 200-char
+/// clamp until sv-surface, and in attach mode applied all three to a row
+/// the served sidebar never reads — so the old name came back on the next
+/// list.
+#[tokio::test]
+async fn conversation_patch_route_renames_the_row_and_owns_the_title_rules() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+    let http = reqwest::Client::new();
+
+    // Padding is trimmed and a 300-character title clamps to 200 — by the
+    // HANDLER, so a caller that sends neither rule gets both.
+    let padded = format!("  {}  ", "x".repeat(300));
+    let resp = http
+        .patch(format!("{base}/v1/conversations/alpha"))
+        .json(&serde_json::json!({ "title": padded }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    assert!(
+        resp.text().await.unwrap().is_empty(),
+        "204 carries no body — the shape delete already answers"
+    );
+    let row = store.get_conversation("alpha").await.unwrap();
+    assert_eq!(
+        row.title.as_deref(),
+        Some("x".repeat(200).as_str()),
+        "the handler trims and clamps; the row is the proof"
+    );
+
+    // And the read route serves what the write landed — one writer, and the
+    // list a sidebar renders agrees with it.
+    let served: serde_json::Value = http
+        .get(format!("{base}/v1/conversations/alpha"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(served["title"], serde_json::json!("x".repeat(200)));
+
+    // An empty title is refused in the host's words rather than written.
+    let resp = http
+        .patch(format!("{base}/v1/conversations/alpha"))
+        .json(&serde_json::json!({ "title": "   " }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+
+    // A body naming no updatable field is a 400, not a 204 that changed
+    // nothing — absence is reported, never defaulted (§18.3).
+    let resp = http
+        .patch(format!("{base}/v1/conversations/alpha"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+
+    // The row survived both refusals intact.
+    assert_eq!(
+        store
+            .get_conversation("alpha")
+            .await
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("x".repeat(200).as_str()),
+    );
+
+    // A conversation this daemon does not hold is the get route's 404.
+    let resp = http
+        .patch(format!("{base}/v1/conversations/ghost"))
+        .json(&serde_json::json!({ "title": "anything" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+}
+
 /// The one-shot messages route drives the SAME driver the WebSocket stream
 /// runs (`collect_turn` → `serve_turn`), and the turn it wrote is what the
 /// get route then serves — one writer, REST and WS and read all agreeing.

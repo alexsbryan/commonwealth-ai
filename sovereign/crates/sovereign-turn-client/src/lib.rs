@@ -470,6 +470,43 @@ impl TurnClient {
             .await
     }
 
+    /// `PATCH /v1/conversations/{id}` — rename a conversation.
+    ///
+    /// The host trims and clamps the title (200 characters) and refuses an
+    /// empty one in its own words, so a surface offering a rename box
+    /// carries no copy of that rule. 404 when the row is gone.
+    pub async fn rename_conversation(&self, conversation_id: &str, title: &str) -> Result<()> {
+        self.internal_write_no_answer(
+            reqwest::Method::PATCH,
+            format!("/v1/conversations/{conversation_id}"),
+            Some(&serde_json::json!({ "title": title })),
+        )
+        .await
+    }
+
+    /// `PUT /v1/conversations/{id}/enabled-corpora` — replace the
+    /// per-conversation retrieval allow-list.
+    ///
+    /// `None` clears it, which the column reads as "search every installed
+    /// corpus". A `Some` is validated against what this host can actually
+    /// search: an unknown id comes back as the host's refusal naming the
+    /// installed list, and an empty list is refused rather than stored as
+    /// "search nothing". That validation is the reason this is a route and
+    /// not a store write — the desktop wrote the column locally until
+    /// sv-surface, and in attach mode that is not the row the turn reads.
+    pub async fn set_enabled_corpora(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<&[String]>,
+    ) -> Result<()> {
+        self.internal_write_no_answer(
+            reqwest::Method::PUT,
+            format!("/v1/conversations/{conversation_id}/enabled-corpora"),
+            Some(&serde_json::json!({ "enabled_corpora": enabled_corpora })),
+        )
+        .await
+    }
+
     /// `POST /v1/conversations/{id}/messages` — the one-shot REST turn.
     ///
     /// The same driver the stream runs, collected: the reply arrives whole

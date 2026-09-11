@@ -77,7 +77,7 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Extension, Path, Query, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -124,6 +124,11 @@ pub fn turn_router_with(daemon: Arc<EmbeddedDaemon>, timers: SocketTimers) -> Ro
         .route("/v1/conversations/search", get(search_conversations))
         .route("/v1/conversations/{id}", get(get_conversation))
         .route("/v1/conversations/{id}", delete(delete_conversation))
+        .route("/v1/conversations/{id}", patch(patch_conversation))
+        .route(
+            "/v1/conversations/{id}/enabled-corpora",
+            put(put_enabled_corpora),
+        )
         .route("/v1/conversations/{id}/messages", post(send_message))
         .route("/v1/conversations/{id}/stream", get(ws_handler))
         .route("/v1/conversations/{id}/end", post(end_conversation))
@@ -396,6 +401,97 @@ async fn delete_conversation(
     match store.delete_conversation(&conversation_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `PATCH /v1/conversations/{id}` — update the mutable fields of a row.
+///
+/// Today that is the title and only the title, so the request carries one
+/// optional field and a body naming none of them is a 400 rather than a
+/// silent no-op success (§18.3: absence is reported, never defaulted).
+/// PATCH rather than PUT because the row is not being replaced — the
+/// history, the allow-list and the skill tag are untouched.
+#[derive(Debug, Default, Deserialize)]
+pub struct PatchConversationRequest {
+    /// The new title. Trimmed and clamped by the handler, not by the
+    /// caller — see `patch_conversation`.
+    pub title: Option<String>,
+}
+
+async fn patch_conversation(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+    Json(req): Json<PatchConversationRequest>,
+) -> Response {
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    let Some(raw) = req.title else {
+        return bad_request(
+            "patch conversation: the body names no updatable field — send {\"title\": \"…\"}",
+        );
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return bad_request("Title cannot be empty");
+    }
+    // Trim and the 200-character clamp live HERE, with the write, rather
+    // than in each surface that offers a rename box. The desktop carried
+    // its own copy until sv-surface and a CLI rename would have had to
+    // grow a third — one rule, one place (§10.6). Chars, not bytes, so a
+    // title of 200 emoji clamps to 200 of them and not to a split
+    // grapheme.
+    let title: String = trimmed.chars().take(200).collect();
+    match store
+        .update_conversation_title(&conversation_id, &title)
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(sovereign_core::error::Error::NotFound(_)) => not_found("Conversation not found"),
+        Err(e) => internal_error(&e.to_string()),
+    }
+}
+
+/// `PUT /v1/conversations/{id}/enabled-corpora` — replace the
+/// per-conversation retrieval allow-list.
+///
+/// PUT, not PATCH: the list is replaced wholesale, which is what the
+/// desktop's chip strip does on every toggle. `enabled_corpora: null`
+/// (or an absent field, which serde reads as the same) CLEARS it, and
+/// clearing means "search every installed corpus" — the column's own
+/// contract, not this route's invention. An EMPTY list is refused,
+/// because "search nothing" is a state no user asked for and the
+/// validator says so in its own words.
+#[derive(Debug, Default, Deserialize)]
+pub struct EnabledCorporaRequest {
+    pub enabled_corpora: Option<Vec<String>>,
+}
+
+async fn put_enabled_corpora(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+    Json(req): Json<EnabledCorporaRequest>,
+) -> Response {
+    // The RUNTIME, not the store: the allow-list is validated against the
+    // corpora this daemon can actually search, and `allow_list_universe`
+    // reads the same engine retrieval fans out over. A store-only write
+    // would accept an id nothing will ever match.
+    let Some(runtime) = daemon.runtime() else {
+        return service_unavailable("this daemon serves no turns (mesh-admin)");
+    };
+    match runtime
+        .set_conversation_allow_list(&conversation_id, req.enabled_corpora.as_deref())
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        // Same split `create_conversation` draws: a bad allow-list is the
+        // caller's mistake and carries its remedy (the installed ids); a
+        // missing row and a store failure are different facts again.
+        Err(sovereign_core::error::Error::InvalidInput(msg)) => bad_request(&msg),
+        Err(sovereign_core::error::Error::NotFound(_)) => not_found("Conversation not found"),
+        Err(e) => internal_error(&format!("set enabled corpora: {e}")),
     }
 }
 

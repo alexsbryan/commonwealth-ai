@@ -100,8 +100,10 @@ pub async fn send_message_stream(
     attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<StreamStartedResponse, String> {
     // Readiness gate only — the wire drive below needs no Runtime handle;
-    // in Local mode the daemon answering the socket IS this process's.
-    let _guard = require_runtime!(state);
+    // in Local mode the daemon answering the socket IS this process's. So
+    // the gate asks the PORT, not `state.runtime`: the local handle was
+    // answering a different question and, in attach, the wrong one.
+    crate::commands::require_backend_ready(&state).await?;
 
     state.approval.set_task_id(&conversation_id).await;
 
@@ -944,8 +946,9 @@ pub async fn send_message(
     context_chunks: Option<Vec<FocusedChunkRef>>,
     attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<MessageResponse, String> {
-    // Readiness gate only — the one-shot answer crosses the wire.
-    let _guard = require_runtime!(state);
+    // Readiness gate only — the one-shot answer crosses the wire, so the
+    // gate asks the port (see `send_message_stream`).
+    crate::commands::require_backend_ready(&state).await?;
 
     state.approval.set_task_id(&conversation_id).await;
 

@@ -205,25 +205,17 @@ pub async fn rename_conversation(
     conversation_id: String,
     title: String,
 ) -> Result<(), String> {
-    let trimmed = title.trim();
-    if trimmed.is_empty() {
-        return Err("Title cannot be empty".to_string());
-    }
-    // Guard against unreasonably long titles.
-    let title = if trimmed.chars().count() > 200 {
-        trimmed.chars().take(200).collect::<String>()
-    } else {
-        trimmed.to_string()
-    };
-
-    // sv-surface D9b — NOT repointed: the daemon serves no conversation
-    // update. Owed: `PATCH /v1/conversations/{id}` with `{title}` over
-    // `update_conversation_title`. Until then the rename lands on this
-    // process's row and the served sidebar keeps the old title.
-    let store = require_store!(state);
-
-    store
-        .update_conversation_title(&conversation_id, &title)
+    // `PATCH /v1/conversations/{id}`, in BOTH modes — the write half of the
+    // row `create` and `delete` already cross for. Measured the same way as
+    // the allow-list below: against a live daemon the row lives in the
+    // daemon's store, so the local rename found nothing to update.
+    //
+    // The trim, the empty refusal and the 200-character clamp went WITH the
+    // write (§10.6). They were never a UI rule: a CLI rename would have
+    // needed the same three, and the daemon is the one place they hold for
+    // every surface. A refusal arrives as the host's own words.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .rename_conversation(&conversation_id, &title)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -246,16 +238,32 @@ pub async fn set_conversation_enabled_corpora(
     conversation_id: String,
     enabled_corpora: Option<Vec<String>>,
 ) -> Result<(), String> {
-    // sv-surface D9b — NOT repointed: no route writes the allow-list after
-    // create. `POST /v1/conversations` accepts `enabled_corpora` at SEED
-    // time only. Owed: `PUT /v1/conversations/{id}/enabled-corpora`. This is
-    // the sharpest of the five holdouts — retrieval reads the allow-list on
-    // the DAEMON's row, so in attach every chip the user toggles is written
-    // where the retrieval that honours it will never look.
-    let store = require_store!(state);
-
-    store
-        .set_conversation_enabled_corpora(&conversation_id, enabled_corpora)
+    // `PUT /v1/conversations/{id}/enabled-corpora`, in BOTH modes.
+    //
+    // MEASURED, because the comment this replaces was wrong and worth
+    // correcting rather than inheriting. It said the toggle "is written
+    // where the retrieval that honours it will never look". Driven against
+    // a real attached desktop (command bridge, scratch profile, live daemon
+    // on :9741) the conversation is minted by `POST /v1/conversations` on
+    // the DAEMON's store and is absent from this process's — so the local
+    // write hit zero rows and returned `NotFound`. In the shipped shape,
+    // where setup mirrors `data_dir` into the CLI's config, it is one
+    // sqlite FILE and the write did land. Neither is "silently ignored".
+    //
+    // Two things are wrong with it anyway, and they are why this crosses:
+    //
+    //   * NO VALIDATION. The local write stored any string. The route runs
+    //     `corpus_allow_list_verdict` against the corpora the daemon can
+    //     actually search — proved on the real daemon: `definitely-not-
+    //     installed` now comes back 400 naming all installed ids, where the
+    //     local write accepted it and left retrieval to intersect it away
+    //     into an answer reading "the corpus does not cover this" (§18.3).
+    //   * A SECOND WRITER. When the roots DO match, this process was
+    //     writing a data root whose `RunLock` the daemon holds — the
+    //     invariant state.rs states at the commission site, and the class
+    //     D0's CompactionWorker fix belonged to.
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .set_enabled_corpora(&conversation_id, enabled_corpora.as_deref())
         .await
         .map_err(|e| e.to_string())?;
 

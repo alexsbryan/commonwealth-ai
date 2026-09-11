@@ -290,16 +290,50 @@ pub struct CorpusProgressPayload {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
+use std::sync::Arc;
+
 use sovereign_core::time::unix_now as now_epoch;
 
-macro_rules! require_runtime {
-    ($state:expr) => {{
-        let guard = $state.runtime.read().await;
-        if guard.is_none() {
-            return Err("Backend is still loading. Please wait.".to_string());
+use crate::state::AppState;
+
+/// The readiness gate for a turn command — the wire form of what
+/// `require_runtime!` used to answer, and the reason that macro is gone.
+///
+/// The two chat commands never wanted a `Runtime` HANDLE: both drive the
+/// turn over the socket and their own comments said "readiness gate only".
+/// What they wanted was the boolean "is something serving on the client
+/// port yet", and `state.runtime.is_some()` answered a different question —
+/// in attach mode this process commissions a Runtime over a remote provider
+/// and reports `Some` whether or not anything is serving, so the gate said
+/// ready while the port was dark. Asking the port is the same repoint
+/// `is_backend_ready` made (sv-surface D9b), for the same reason, and it is
+/// what frees the eleven-needle boot spine from having to exist in attach
+/// at all.
+///
+/// The substitution is named, not silent (ARCH §18.3): `Ok(false)` (the
+/// daemon answered and serves no turns) and a transport failure (nothing
+/// answered) are DIFFERENT facts and are traced apart, but both return the
+/// one sentence the frontend has always rendered while boot is in flight.
+/// Changing that string is a frontend change, not a repoint.
+pub(crate) async fn require_backend_ready(state: &Arc<AppState>) -> Result<(), String> {
+    const NOT_READY: &str = "Backend is still loading. Please wait.";
+    match sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .backend_ready()
+        .await
+    {
+        Ok(true) => Ok(()),
+        Ok(false) => {
+            tracing::info!("require_backend_ready: the port answered and serves no turns yet");
+            Err(NOT_READY.to_string())
         }
-        guard
-    }};
+        Err(e) => {
+            tracing::info!(
+                error = %e,
+                "require_backend_ready: nothing answered on the client port yet"
+            );
+            Err(NOT_READY.to_string())
+        }
+    }
 }
 
 /// The `require_runtime!` shape for commands that need the DATABASE, not
