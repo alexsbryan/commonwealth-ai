@@ -21,6 +21,18 @@
 # alive on the host. Solo sessions may run bare; the wrapper is then a
 # no-cost pass-through (one mkdir + one rmdir).
 #
+# REENTRANT, because the rule above makes nesting inevitable: a wrapped
+# script may itself wrap its own cargo step (scripts/stage-daemon-sidecar.sh
+# does), and before 2026-09-11 that inner call waited on a lock its own
+# parent held — a deadlock that reads in the log as an ordinary queue
+# ("waiting for pid N") and never ends. The holder exports
+# SVRN_CARGO_LOCK_HELD with its pid; a nested call sees it and passes
+# through. The variable reaches descendants ONLY, so it cannot make one
+# session skip another session's lock. The one gap it leaves is a holder
+# whose lock was age-reclaimed out from under it (RECLAIM_AFTER_SECS): its
+# children still pass through, which is the same exposure the reclaim itself
+# already decided to accept.
+#
 # The lock is a DIRECTORY (mkdir is atomic everywhere, including macOS
 # which ships no flock(1)) holding the holder's PID and command line.
 # A holder that died without releasing is reclaimed automatically: a PID
@@ -84,6 +96,14 @@ release() {
     fi
 }
 
+# Already inside a lock this process tree acquired: run, do not queue.
+if [ -n "${SVRN_CARGO_LOCK_HELD:-}" ]; then
+    echo "with-cargo-lock: nested under pid ${SVRN_CARGO_LOCK_HELD} — passing through" >&2
+    exec "$@"
+fi
+
 acquire "$@"
 trap release EXIT INT TERM
+SVRN_CARGO_LOCK_HELD="$$"
+export SVRN_CARGO_LOCK_HELD
 "$@"
