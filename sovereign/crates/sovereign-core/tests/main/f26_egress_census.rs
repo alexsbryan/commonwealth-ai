@@ -364,6 +364,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // and nothing on this path may construct a RemotePayload/QueryEgress
     // client (that stays in the boundary).
     ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
+    // NEW 2026-09-11: `svrn mesh media <peer>`, the viewer half of federated
+    // media. One client, two loopback destinations: our own daemon's
+    // `/v1/mesh/media` to mint the bridge, then one `GET /` through that
+    // bridge — which is a 127.0.0.1 port the daemon holds and which tunnels
+    // to a MEMBER's media origin over iroh by its key. The bytes that leave
+    // the machine ride the estate's own transport to a Commonwealth node, so
+    // Mesh is the honest class; the request carries no estate content, only
+    // the probe that proves the splice answers.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
