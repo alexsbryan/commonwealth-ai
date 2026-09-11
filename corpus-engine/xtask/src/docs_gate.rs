@@ -41,6 +41,106 @@ const DOCS_GATE_EXTS: &[&str] = &[
     ".rs", ".md", ".toml", ".sh", ".py", ".mjs", ".ts", ".yml", ".txt",
 ];
 
+/// ARCH_PRINCIPLES is meant to be read WHOLE, so its size is a contract.
+///
+/// It reached 80 sections and ~19k tokens because nothing ever forced a trade,
+/// and at that size agents sampled it instead of reading it — a compass that is
+/// sampled has stopped steering. Distilled to twelve principles on 2026-09-11.
+///
+/// FIXED, not baselined. Every other ratchet here takes `--update-baseline`,
+/// which is right for a quantity that legitimately grows. This one does not
+/// grow: a thirteenth principle displaces a twelfth, and having that argument
+/// is the mechanism. There is deliberately no escape flag.
+const ARCH_DOC: &str = "sovereign/ARCH_PRINCIPLES.md";
+const ARCH_MAX_TOKENS: usize = 8_000;
+const ARCH_MAX_SECTION_TOKENS: usize = 600;
+const ARCH_MAX_PRINCIPLES: usize = 12;
+/// -> one finding per breach; empty means the budget holds.
+/// Tokens estimated at 3.7 chars each — the ratio this repo's context audits
+/// use. Integer maths, so `len * 10 / 37`.
+fn arch_budget(text: &str) -> Vec<String> {
+    let toks = |s: &str| s.len() * 10 / 37;
+    let mut out = Vec::new();
+    let total = toks(text);
+    if total > ARCH_MAX_TOKENS {
+        out.push(format!(
+            "{ARCH_DOC}: ~{total} tokens exceeds the fixed {ARCH_MAX_TOKENS} budget by \
+             {}. Cut a section; the budget does not rise (see its 'How to add').",
+            total - ARCH_MAX_TOKENS
+        ));
+    }
+    let mut name = String::from("(preamble)");
+    let mut buf = String::new();
+    let mut principles = 0usize;
+    let mut flush = |name: &str, buf: &str, out: &mut Vec<String>| {
+        let t = buf.len() * 10 / 37;
+        if t > ARCH_MAX_SECTION_TOKENS {
+            out.push(format!(
+                "{ARCH_DOC} \"{name}\": ~{t} tokens over the {ARCH_MAX_SECTION_TOKENS} \
+                 per-section cap. One principle may not eat the document."
+            ));
+        }
+    };
+    for line in text.lines() {
+        if let Some(h) = line
+            .strip_prefix("## ")
+            .or_else(|| line.strip_prefix("### "))
+        {
+            flush(&name, &buf, &mut out);
+            if h.split('.')
+                .next()
+                .is_some_and(|n| n.parse::<u32>().is_ok())
+            {
+                principles += 1;
+            }
+            name = h.to_string();
+            buf.clear();
+        } else {
+            buf.push_str(line);
+            buf.push('\n');
+        }
+    }
+    flush(&name, &buf, &mut out);
+    if principles > ARCH_MAX_PRINCIPLES {
+        out.push(format!(
+            "{ARCH_DOC}: {principles} numbered principles exceeds {ARCH_MAX_PRINCIPLES}. \
+             A new one DISPLACES an old one — delete the one it obsoletes (rule 4)."
+        ));
+    }
+    out
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    /// The planted breach and its clean control — a gate nobody has watched
+    /// fail is not a gate (ARCH principle 5).
+    #[test]
+    fn arch_budget_catches_a_fat_section_and_passes_a_lean_one() {
+        let fat = format!("## 1. x\n{}\n", "word ".repeat(3_000));
+        assert!(!arch_budget(&fat).is_empty(), "a 3k-word section passed");
+        let lean = "## 1. x\nshort.\n\n## 2. y\nalso short.\n";
+        assert!(arch_budget(lean).is_empty(), "a lean doc was rejected");
+    }
+
+    #[test]
+    fn arch_budget_counts_principles_and_the_real_doc_fits() {
+        let many: String = (1..=13).map(|i| format!("## {i}. p\nx\n")).collect();
+        assert!(
+            arch_budget(&many).iter().any(|f| f.contains("DISPLACES")),
+            "13 principles passed"
+        );
+        let real = std::fs::read_to_string(crate::common::repo_root().join(ARCH_DOC))
+            .expect("ARCH_PRINCIPLES.md");
+        assert_eq!(
+            arch_budget(&real),
+            Vec::<String>::new(),
+            "the live doc is over budget"
+        );
+    }
+}
+
 pub fn run() -> i32 {
     let root = common::repo_root();
     let scope = match common::SourceTree::discover(&root) {
@@ -65,6 +165,12 @@ pub fn run() -> i32 {
 
     let mut fails: BTreeSet<String> = BTreeSet::new();
     let mut checked = 0usize;
+
+    // The size contract, before the citation sweep: a doc nobody reads
+    // whole cannot be kept true by checking its links.
+    if let Ok(t) = std::fs::read_to_string(root.join(ARCH_DOC)) {
+        fails.extend(arch_budget(&t));
+    }
 
     for doc in DOCS_GATE_DOCS {
         let path = root.join(doc);
