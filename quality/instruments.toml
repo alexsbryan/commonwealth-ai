@@ -580,9 +580,33 @@ cost_secs = 0.3
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "none" }
-negative_control = "settings-wiring --self-test (plants the historical duplicate+relative blob and watches it fail)"
+negative_control = "settings-wiring-self-test"
 runs_in = ["prepush"]
 doc = ".claude/hooks/tests/settings-wiring.sh"
+
+# The negative control for the gate above. It EXISTED before it was
+# registered — `settings-wiring.sh --self-test` has always planted the
+# historical blob and watched the check reject it — but the gate's
+# `negative_control` carried a DESCRIPTION of it rather than its id, which
+# is the one thing that field may not be (line 142: a sabotage mutant id, or
+# the id of a control instrument). So the registry's own test read it as
+# naming nothing, and `xtask::instrument_registry` went red on a control
+# that was real. Measured 0.09s: it plants a relative + duplicated
+# UserPromptSubmit command, asserts BOTH findings, then asserts a correctly
+# wired blob still passes — so it pins the detector in both directions
+# rather than only the failing one.
+[[instrument]]
+id = "settings-wiring-self-test"
+kind = "control"
+claim = "invariant"
+command = "bash .claude/hooks/tests/settings-wiring.sh --self-test"
+cost_secs = 0.1
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["ci:suites", "by-hand"]
+doc = ".claude/hooks/tests/settings-wiring.sh (--self-test)"
 
 [[instrument]]
 id = "hook-selftests"
