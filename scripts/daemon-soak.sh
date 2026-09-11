@@ -517,12 +517,16 @@ note "HOME=$SOAK_HOME ports=$CLIENT_PORT/$INTERNAL_PORT cycles=$CYCLES case=$CAS
 if [[ "$CASE" == "attach" || "$CASE" == "all" ]]; then
   run_cycles "attach" "$DAEMON_BIN" daemon run
 fi
-if [[ "$CASE" == "child" || "$CASE" == "all" ]]; then
-  if [[ -x "$CHILD_BIN" ]]; then
-    run_cycles "child(--daemon-child)" "$CHILD_BIN" --daemon-child
-  else
-    note "case child: SKIPPED — $CHILD_BIN not built (cargo build -p sovereign-desktop)"
-  fi
+# THE `child` CASE IS RETIRED, not skipped (svt-2, 2026-09-11). It drove
+# `sovereign-desktop --daemon-child`, and that argv form no longer boots a
+# daemon: `main.rs` refuses it with NOT_A_DAEMON and ExitCode::FAILURE,
+# because the desktop is not something that can BE a daemon any more. Running
+# it would soak a process that exits 1 on the first cycle and report the
+# refusal as instability. The `attach` case above drives the same daemon
+# bootstrap through the real binary, which is what the coverage was ever for.
+if [[ "$CASE" == "child" ]]; then
+  note "case child: RETIRED at svt-2 — the desktop refuses --daemon-child by design; use --case attach"
+  exit 2
 fi
 if [[ "$CASE" == "guards" || "$CASE" == "all" ]]; then
   run_guards

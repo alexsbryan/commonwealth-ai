@@ -32,10 +32,10 @@
 #   5  safety soak    reserves-4  eval inner-chaos --minutes <remaining, minus Phase-4 reserve>
 #   4  real-binary e2e     ~50m  MANAGED real-mode: frees :9741, runs test:e2e:real + test:e2e:faults
 #                                against SOVEREIGN_REAL_CHAT_MODEL, then restores the resident daemon
-#   6  production boot     ~15m  scripts/wizard-verify.sh — fresh wizard -> complete_setup -> supervised
-#                                relaunch -> `current_exe() --daemon-child` -> Attach. The ONLY lane that
-#                                reaches that branch; everything else that supervises pins
-#                                SOVEREIGN_CLI_PATH. Linux isolates via netns; macOS/other frees :9741
+#   6  production boot     ~15m  scripts/wizard-verify.sh — fresh wizard -> complete_setup -> relaunch
+#                                -> DETACHED sidecar daemon -> Attach. The ONLY lane with no CLI
+#                                pinned, so the only one that resolves the daemon the way a shipped
+#                                install does. Linux isolates via netns; macOS/other frees :9741
 #                                around the drive (same handoff as phase 4) and restores it after.
 #
 # Usage:
@@ -514,14 +514,17 @@ phase4() {
 }
 
 # ── Phase 6: the production boot chain ───────────────────────────────────────
-# Every OTHER supervised lane in the repo pins SOVEREIGN_CLI_PATH
-# (faults/spawn.ts:151, tests/e2e/scripts/lib/harness.mjs:257), which sends
-# supervisor_setup::resolve_daemon_child() down branch 1 — "point at a CLI
-# build". A packaged install has no such env var and takes branch 2,
-# `current_exe() --daemon-child` (supervisor_setup.rs:74-78). wizard-verify.sh
-# unsets the var, so it is the ONLY thing that exercises the branch every
-# shipped user runs. It was orphaned until 2026-07-28: referenced by
-# DAEMON_RESILIENCE.md and by nothing executable, despite catching a real
+# WHAT THIS UNIQUELY COVERS, restated at svt-2 (2026-09-11). It used to be
+# the only lane taking `resolve_daemon_child()`'s branch 2 — `current_exe()
+# --daemon-child` — because every other supervised lane pinned
+# SOVEREIGN_CLI_PATH. Supervision is gone and so is that function. What is
+# left is the same shape one rung out: a packaged install has no `svrn` on
+# PATH, so the daemon it reaches is the SIDECAR beside its own executable,
+# resolved by `daemon_binary::stable_daemon_binary` and brought up detached by
+# `serving_host::ensure_reachable`. wizard-verify.sh drives a fresh profile
+# with no CLI pinned, so it is still the only thing exercising the path every
+# shipped user takes. It was orphaned until 2026-07-28 — referenced by
+# DAEMON_RESILIENCE.md and by nothing executable — despite catching a real
 # ship-blocking bug on its first run (fresh desktop-only installs never wrote
 # config.toml, so supervision would never have engaged for them).
 #
@@ -530,7 +533,7 @@ phase4() {
 # phase 4 has restored the resident daemon.
 phase6() {
   phase_enabled 6 || { record "6 prod-boot" "SKIP" 0 "disabled"; return 0; }
-  log "PHASE 6 — production boot chain (fresh wizard → complete_setup → --daemon-child → Attach)"
+  log "PHASE 6 — production boot chain (fresh wizard → complete_setup → detached sidecar daemon → Attach)"
   [ -n "$DRY_RUN" ] && { record "6 prod-boot" "DRY" 0 "scripts/wizard-verify.sh in a private netns"; return 0; }
   [ -x "$DESKTOP_BIN" ] || { record "6 prod-boot" "SKIP" 0 "desktop binary missing (run --build)"; return 0; }
   # Linux runs wizard-verify inside a private netns, so :9741/:9745 are
@@ -549,7 +552,7 @@ phase6() {
   run_capped "$SMOKE_P6_SECS" scripts/wizard-verify.sh > "$ART/p6-wizard-verify.log" 2>&1
   rc=$?
   if [ -z "$netns" ]; then
-    # The drive's EXIT trap kills its own supervised child; give the port a
+    # The drive's EXIT trap kills the sidecar daemon it started; give the port a
     # moment to actually release before we start the resident daemon onto it.
     local w=0
     while [ "$w" -lt 15 ] && curl -s --max-time 2 "$DAEMON_URL/v1/models" >/dev/null 2>&1; do
@@ -560,7 +563,7 @@ phase6() {
   secs=$(( $(date +%s) - t0 ))
   case "$rc" in
     0) log "  production boot chain: PASS"
-       record "6 prod-boot" "PASS" "$secs" "supervised relaunch verified (branch-2 --daemon-child)" ;;
+       record "6 prod-boot" "PASS" "$secs" "post-setup relaunch + detached sidecar daemon verified" ;;
     # wizard-verify exits 2 for a missing binary/GGUF — a prerequisite gap, not
     # a regression. Same treatment phase 4 gives a missing desktop binary.
     2) warn "  wizard-verify prerequisites missing (see p6-wizard-verify.log)"

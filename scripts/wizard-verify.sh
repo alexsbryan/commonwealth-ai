@@ -5,14 +5,16 @@
 # Drives the REAL desktop binary through the fresh-install wizard flow:
 # boots it with a fresh HOME (wizard state), invokes `complete_setup`
 # through the command bridge's production IPC path (the same code path
-# the wizard's JS uses), then asserts the supervised-relaunch chain:
+# the wizard's JS uses), then asserts the post-setup relaunch chain. svt-2
+# (2026-09-11) deleted supervision, so step 3 changed shape: the daemon is a
+# detached SIDECAR, not a child of the app.
 #
 #   1. complete_setup triggers the relaunch (log line),
 #   2. the old instance exits,
-#   3. a NEW desktop instance appears, resolves Local{CliSetup},
-#      and spawns `--daemon-child`,
-#   4. the child daemon owns :9741 + the pidfile + the flock,
-#   5. the new instance logs the supervised Attach switch.
+#   3. a NEW desktop instance appears, resolves Local{CliSetup}, and a
+#      `sovereign-cli-daemon daemon run` sidecar comes up DETACHED,
+#   4. that daemon owns :9741 + the pidfile + the flock,
+#   5. the new instance logs the Attach switch.
 #
 # Isolation, per platform:
 #   Linux  — self-wraps in `unshare -r -n` (private netns) so :9741/:9745
@@ -122,6 +124,9 @@ new_desktop_pids() {
 }
 proc_cmd()  { ps -o command= -p "$1" 2>/dev/null; }
 proc_ppid() { ps -o ppid= -p "$1" 2>/dev/null | tr -d '[:space:]'; }
+# svt-2: the daemon is no longer the app's CHILD, it is a detached sibling.
+# Its own process group is what proves the detachment, so read pgid too.
+proc_pgid() { ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; }
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ✓ $*"; }
@@ -175,20 +180,32 @@ if kill -0 "$APP1" 2>/dev/null; then
 else
   ok "app1 exited after complete_setup"
 fi
-if grep -aq "relaunching into the supervised topology" "$LOG"; then
-  ok "app1 logged the supervised relaunch"
+# svt-2 (2026-09-11): the desktop no longer supervises anything, so the
+# relaunch is about the CONFIG being read at startup, not about entering a
+# supervised topology. `setup_flow::relaunch_after_setup` replaced
+# `supervisor_setup::maybe_restart_into_supervised`; the log line moved with it.
+if grep -aq "relaunching so the new config is read at startup" "$LOG"; then
+  ok "app1 logged the post-setup relaunch"
 else
-  bad "no 'relaunching into the supervised topology' in app1 log"
+  bad "no 'relaunching so the new config is read at startup' in app1 log"
 fi
 
-# ── 3: new instance + --daemon-child appear ────────────────────────
+# ── 3: new instance + the SIDECAR daemon appear ────────────────────
+# svt-2 deleted `--daemon-child`: `main.rs` now refuses every daemon argv
+# form with NOT_A_DAEMON, and the daemon this app talks to is the Tauri
+# SIDECAR — a separate `sovereign-cli-daemon` binary running `daemon run`,
+# brought up by `serving_host::ensure_reachable`. So the desktop-pid scan no
+# longer finds it: look for the sidecar by its own name.
 # Identity by pre-snapshot difference + cmdline (portable), never by
 # /proc/<pid>/environ — see PRE_PIDS above.
 APP2=""; CHILD=""
 for i in $(seq 1 90); do
   for p in $(new_desktop_pids); do
     [[ "$p" == "$APP1" ]] && continue
-    if proc_cmd "$p" | grep -q -- "--daemon-child"; then CHILD="$p"; else APP2="$p"; fi
+    APP2="$p"
+  done
+  for p in $(pgrep -f "sovereign-cli-daemon" 2>/dev/null); do
+    proc_cmd "$p" | grep -q -- "daemon run" && CHILD="$p"
   done
   [[ -n "$APP2" && -n "$CHILD" ]] && break
   sleep 1
@@ -196,15 +213,20 @@ done
 [[ -n "$APP2" ]] && KILL_PIDS+=("$APP2")
 [[ -n "$CHILD" ]] && KILL_PIDS+=("$CHILD")
 if [[ -n "$APP2" ]]; then ok "relaunched desktop instance running (pid $APP2)"; else bad "no relaunched desktop instance found"; fi
-if [[ -n "$CHILD" ]]; then ok "supervised --daemon-child running (pid $CHILD)"; else bad "no --daemon-child process found"; fi
-# Stronger than co-existence: the daemon child must have been spawned BY
-# the relaunched instance, which is what "supervised" actually means.
+if [[ -n "$CHILD" ]]; then ok "sidecar daemon running (pid $CHILD)"; else bad "no sovereign-cli-daemon 'daemon run' process found"; fi
+# THE ASSERTION INVERTED AT svt-2, and the inversion is the point. It used to
+# demand the daemon be PARENTED by the app, which is what "supervised" meant.
+# Now the requirement is the opposite: the daemon must be DETACHED, in its own
+# process group (`process_group(0)` in sovereign-turn-client/src/reach.rs), so
+# that closing the window leaves the node serving the mesh. A daemon sharing
+# the app's process group would die with it — the regression this checks for.
 if [[ -n "$APP2" && -n "$CHILD" ]]; then
-  CHILD_PPID="$(proc_ppid "$CHILD")"
-  if [[ "$CHILD_PPID" == "$APP2" ]]; then
-    ok "daemon child is parented by the relaunched instance"
+  CHILD_PGID="$(proc_pgid "$CHILD")"
+  APP2_PGID="$(proc_pgid "$APP2")"
+  if [[ -n "$CHILD_PGID" && "$CHILD_PGID" != "$APP2_PGID" ]]; then
+    ok "sidecar daemon is detached (pgid $CHILD_PGID != app pgid $APP2_PGID)"
   else
-    bad "child $CHILD ppid=$CHILD_PPID != relaunched instance $APP2"
+    bad "daemon pgid=$CHILD_PGID shares the app's group $APP2_PGID — it would die with the window"
   fi
 fi
 
@@ -214,7 +236,7 @@ for i in $(seq 1 120); do
   curl -sf -m 2 http://127.0.0.1:9741/v1/models >/dev/null 2>&1 && { READY=1; break; }
   sleep 1
 done
-if [[ -n "$READY" ]]; then ok ":9741 serving (supervised child)"; else bad ":9741 never answered"; fi
+if [[ -n "$READY" ]]; then ok ":9741 serving (sidecar daemon)"; else bad ":9741 never answered"; fi
 # write_pidfile is the LAST bootstrap step (daemon_cmd/mod.rs) — poll.
 PIDFILE=""
 for i in $(seq 1 40); do
