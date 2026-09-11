@@ -105,6 +105,7 @@ run_session() { # prompt_file
   child=$!; waited=0
   while kill -0 "$child" 2>/dev/null && [ "$waited" -lt "$SESSION_TIMEOUT" ]; do
     sleep 30; waited=$((waited + 30))
+    [ $((waited % 60)) -eq 0 ] && echo "[ralph]   ... session running ${waited}s (pid $child)"
   done
   if kill -0 "$child" 2>/dev/null; then
     echo "[ralph] session exceeded ${SESSION_TIMEOUT}s — killing (the tree resumes it)"
