@@ -15,11 +15,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use sovereign_mesh::gossip;
 
 fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {

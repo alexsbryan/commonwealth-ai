@@ -50,14 +50,14 @@
 //! `Display` is the first EIGHT of sixteen bytes and partition directories are
 //! named from it, so the ids differ in their HIGH bytes.
 
-use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use sovereign_api::server::internal_router;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{Submission, WorkAct};
 use corpus_engine::index::CorpusIndex;
 use oicp_types::JobKind;
+use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
+use sovereign_api::server::internal_router;
 use sovereign_mesh::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
 use tempfile::TempDir;
 

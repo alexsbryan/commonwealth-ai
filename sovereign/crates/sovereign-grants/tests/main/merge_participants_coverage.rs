@@ -29,11 +29,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use commonwealth_core::ids::{HandoffId, NodeId};
-use sovereign_grants::shard_manager::MergePlan;
-use sovereign_grants::ShardManager;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{InsertChunk, InsertCodeMeta};
 use corpus_engine::{Corpus, CorpusEngine, CorpusIndex, EmbedFn};
+use sovereign_grants::shard_manager::MergePlan;
+use sovereign_grants::ShardManager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(crate) const EMBED_DIM: usize = 8;

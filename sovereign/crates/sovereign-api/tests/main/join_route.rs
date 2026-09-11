@@ -10,12 +10,12 @@ use std::net::SocketAddr;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_discovery::membership;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use tower::ServiceExt;
 
 /// Build a mesh with a known founder and a known join_key. Returns

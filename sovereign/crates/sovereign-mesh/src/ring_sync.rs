@@ -75,12 +75,12 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use commonwealth_core::mesh::NodeStatus;
+use commonwealth_transport::{peer_contact, TrafficClass};
 use sovereign_api::routes_internal::{
     RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
 };
 use sovereign_api::state::AppState;
-use commonwealth_core::mesh::NodeStatus;
-use commonwealth_transport::{peer_contact, TrafficClass};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
@@ -601,13 +601,13 @@ mod tests {
 
     use super::*;
     use axum::response::IntoResponse;
-    use sovereign_api::server::internal_router;
     use commonwealth_core::ids::{MeshId, NodeId};
     use commonwealth_core::mesh::Mesh;
     use commonwealth_rail::{
         actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct,
         RingJournal, RingRail, Roster, SignedOp, SigningKey,
     };
+    use sovereign_api::server::internal_router;
     use std::collections::HashMap;
     use std::sync::Arc;
 

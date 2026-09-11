@@ -808,10 +808,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            json["oicp_version"],
-            sovereign_serving::oicp::OICP_VERSION
-        );
+        assert_eq!(json["oicp_version"], sovereign_serving::oicp::OICP_VERSION);
         assert_eq!(json["provider"]["type"], "mesh");
     }
 

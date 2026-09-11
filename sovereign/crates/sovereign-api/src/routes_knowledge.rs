@@ -27,9 +27,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
-use sovereign_serving::oicp::{
-    KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
-};
+use sovereign_serving::oicp::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;
 

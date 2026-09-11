@@ -96,10 +96,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::AppRegistry;
 use commonwealth_core::ids::{HandoffId, MeshId};
 use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
 use commonwealth_core::mesh::Mesh;
@@ -116,7 +112,11 @@ use kernel_types::judgement::Reason;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
 use serde_json::json;
+use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use sovereign_mesh::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
+use sovereign_meshapp_registry::AppRegistry;
 use tempfile::TempDir;
 
 use crate::common;

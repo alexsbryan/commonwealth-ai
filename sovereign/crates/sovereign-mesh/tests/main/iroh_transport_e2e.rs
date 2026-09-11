@@ -20,14 +20,14 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{
     Endpoint, EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN,
 };
 use commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 
 async fn bind_iroh_endpoint(seed: u8) -> Endpoint {
     // Builder::empty(): no relays, no address-lookup services —

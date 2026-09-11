@@ -10,11 +10,11 @@ use std::net::SocketAddr;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use tower::ServiceExt;
 
 fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {

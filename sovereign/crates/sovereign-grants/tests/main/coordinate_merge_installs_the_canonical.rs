@@ -70,8 +70,8 @@ use std::sync::Arc;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
-use sovereign_grants::{ShardManager, WorkQueueManager};
 use corpus_engine::{Corpus, CorpusIndex};
+use sovereign_grants::{ShardManager, WorkQueueManager};
 
 use super::merge_participants_coverage::{embedding, fixture, Fixture, CORPUS};
 

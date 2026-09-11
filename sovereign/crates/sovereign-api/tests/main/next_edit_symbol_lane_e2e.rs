@@ -17,8 +17,8 @@
 //! that is a `use` import rather than a call. There is a test for each,
 //! and each fails if the corresponding guard is removed.
 
-use sovereign_api::next_edit_symbols::{navigate, Decline};
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
+use sovereign_api::next_edit_symbols::{navigate, Decline};
 
 const CORPUS: &str = "e2e-symbol-lane";
 

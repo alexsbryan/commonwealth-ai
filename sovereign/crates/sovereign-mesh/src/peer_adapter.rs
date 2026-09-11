@@ -24,9 +24,9 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use sovereign_api::state::ConvergenceRecord;
 use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
+use sovereign_api::state::ConvergenceRecord;
 use sovereign_contracts::peer::{Convergence, PeerEntry, PeerStore, PeerStoreError};
 
 /// [`PeerStore`] backed by the ring-projected [`MeshStore`].

@@ -54,8 +54,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use sovereign_grants::shard_manager::{MergePlan, ShardManager};
 use corpus_engine::Corpus;
+use sovereign_grants::shard_manager::{MergePlan, ShardManager};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 

@@ -64,8 +64,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use sovereign_api::openai_types::{ChatCompletionRequest, ToolDefinition};
 use serde::Deserialize;
+use sovereign_api::openai_types::{ChatCompletionRequest, ToolDefinition};
 
 /// One named profile. Either allows all tools (wildcard) or a
 /// specific list. Stored in TOML as either:

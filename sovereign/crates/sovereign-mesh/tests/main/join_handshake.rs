@@ -24,11 +24,11 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 
 async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

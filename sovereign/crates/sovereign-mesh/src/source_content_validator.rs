@@ -286,8 +286,8 @@ fn lookup_value<'a>(root: &'a serde_json::Value, path: &str) -> Option<&'a serde
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_api::openai_types::{ToolDefinition, ToolFunction};
     use serde_json::json;
+    use sovereign_api::openai_types::{ToolDefinition, ToolFunction};
 
     fn tool(name: &str, params: serde_json::Value) -> ToolDefinition {
         ToolDefinition {

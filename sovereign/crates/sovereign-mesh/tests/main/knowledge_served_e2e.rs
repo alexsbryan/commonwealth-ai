@@ -34,14 +34,14 @@
 //! - Emitted before truncation (over-counted under pressure).
 use std::sync::Arc;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{id_to_hex, solo_mesh, spawn_router};

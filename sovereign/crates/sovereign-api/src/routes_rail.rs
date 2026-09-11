@@ -24,9 +24,9 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use sovereign_grants::GuestGrant;
 use commonwealth_rail::{Compaction, RailAct, RailError, RingJournal, RingRail, RosterOrigin};
 use serde::Deserialize;
+use sovereign_grants::GuestGrant;
 
 use crate::client_auth::Guest;
 use crate::state::AppState;
@@ -319,8 +319,8 @@ mod tests {
     use std::future::Future;
     use std::pin::Pin;
 
-    use sovereign_grants::Scope;
     use commonwealth_rail::{Roster, RosterSource};
+    use sovereign_grants::Scope;
 
     use super::*;
 

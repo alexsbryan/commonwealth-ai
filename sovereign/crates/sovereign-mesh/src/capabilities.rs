@@ -36,7 +36,6 @@
 //! installing, disk fills up, etc.).
 use std::sync::Arc;
 
-use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{
     AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
 };
@@ -44,6 +43,7 @@ use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo
 use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::hardware;
 use corpus_engine::engine::CorpusEngine;
+use sovereign_api::state::AppState;
 
 /// Build a fresh `NodeCapabilities` describing this node right now.
 ///

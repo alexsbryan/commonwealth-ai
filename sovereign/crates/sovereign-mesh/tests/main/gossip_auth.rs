@@ -28,10 +28,10 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 
 use crate::common;
 use crate::common::{member_with_last_seen as member, spawn_router};

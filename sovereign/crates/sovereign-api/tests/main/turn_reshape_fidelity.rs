@@ -507,11 +507,11 @@ mod falsifiers {
 // cannot tell the model emitted a broken one; a refactor that drops
 // the repair looks identical from outside.
 
+use futures::Stream;
+use http_body_util::BodyExt;
 use sovereign_api::openai_types::StreamFrame;
 use sovereign_api::openai_types::{ChatCompletionResponse, ChatMessage, ToolCall};
 use sovereign_api::state::{LocalInferenceError, LocalInferenceService};
-use futures::Stream;
-use http_body_util::BodyExt;
 use std::pin::Pin;
 
 /// A response-side pass the gate governs, paired with the name the

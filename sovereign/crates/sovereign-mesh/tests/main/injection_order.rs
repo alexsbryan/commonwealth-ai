@@ -23,13 +23,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use sovereign_api::state::{AppState, LocalInferenceService};
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use tracing_subscriber::fmt::MakeWriter;
 
 use crate::common;

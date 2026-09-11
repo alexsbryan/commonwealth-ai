@@ -27,9 +27,6 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::knowledge::CorpusShardInfo;
@@ -41,6 +38,9 @@ use commonwealth_transport::{
 };
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::spawn_router;

@@ -46,9 +46,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{MeshId, NodeId};
@@ -57,6 +54,9 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::spawn_router;

@@ -20,18 +20,18 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::{Stream, StreamExt};
 use sovereign_api::openai_types::{
     self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     FunctionCall, Role, ToolCall, Usage,
 };
 use sovereign_api::state::{LocalInferenceError, LocalInferenceService};
-use sovereign_serving::oicp::ProviderManifest;
-use futures::{Stream, StreamExt};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
     CompletionRequest, FinishReason as CoreFinishReason, StreamFrame as CoreStreamFrame,
     StreamUsage as CoreStreamUsage,
 };
+use sovereign_serving::oicp::ProviderManifest;
 
 /// Translate `sovereign_core` stream framing into the wire shape
 /// `LocalInferenceService::chat_completion_stream` exposes. The two

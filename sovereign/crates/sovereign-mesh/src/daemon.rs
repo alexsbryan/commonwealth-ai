@@ -11,12 +11,12 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use sovereign_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 
@@ -3114,11 +3114,9 @@ impl EmbeddedDaemon {
                 sovereign_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
-            engine.set_foreground_signal(
-                sovereign_api::yield_hook::AppStateForegroundSignal::new(
-                    app_state.inner.clone(),
-                ),
-            );
+            engine.set_foreground_signal(sovereign_api::yield_hook::AppStateForegroundSignal::new(
+                app_state.inner.clone(),
+            ));
             info!("foreground-yield: turn lease installed on corpus engine");
         }
 
@@ -3529,8 +3527,7 @@ impl EmbeddedDaemon {
         self.client_listener.send_replace(ClientListener::Pending);
         let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
-            let mut client_router =
-                sovereign_api::server::client_router(app_state_clone.clone());
+            let mut client_router = sovereign_api::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
                 // Phase 5: daemon path leaves the spec-presence gate
                 // off (`FeatureRoot::new(None)`) so `tools/list`
@@ -3555,8 +3552,7 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router =
-                sovereign_api::server::internal_router(app_state_clone.clone());
+            let internal_router = sovereign_api::server::internal_router(app_state_clone.clone());
             let peer_router = sovereign_api::server::client_router_for(
                 app_state_clone.clone(),
                 sovereign_api::server::ClientSurface::Peer,
@@ -5302,8 +5298,8 @@ mod tests {
     /// Commonwealth's handler had nothing to list.
     #[test]
     fn register_local_model_slots_writes_info_for_all_three_slots() {
-        use sovereign_api::state::AppState;
         use commonwealth_core::mesh::Mesh;
+        use sovereign_api::state::AppState;
 
         let mesh = Mesh {
             mesh_secret: [0u8; 32],

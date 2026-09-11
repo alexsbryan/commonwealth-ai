@@ -22,11 +22,11 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use sovereign_api::server::client_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use sovereign_api::server::client_router;
+use sovereign_api::state::AppState;
 use tower::ServiceExt;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
@@ -554,14 +554,11 @@ async fn get_via_guest_listener(
         req.extensions_mut()
             .insert(ConnectInfo(p.parse::<SocketAddr>().unwrap()));
     }
-    sovereign_api::server::client_router_for(
-        state,
-        sovereign_api::server::ClientSurface::Guest,
-    )
-    .oneshot(req)
-    .await
-    .unwrap()
-    .status()
+    sovereign_api::server::client_router_for(state, sovereign_api::server::ClientSurface::Guest)
+        .oneshot(req)
+        .await
+        .unwrap()
+        .status()
 }
 
 /// THE finding. A tunnelled caller presenting nothing looks exactly like the

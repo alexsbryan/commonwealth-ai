@@ -73,10 +73,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
-use sovereign_api::state::{AppState, AppStateInner};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{Person, RailError, RingRail, Roster, RosterSource};
+use sovereign_api::state::{AppState, AppStateInner};
 
 /// A ring roster derived from mesh membership, plus the reverse lookup a
 /// caller needs to name a signer's node.

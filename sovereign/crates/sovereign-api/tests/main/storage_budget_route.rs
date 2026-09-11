@@ -15,10 +15,10 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use std::collections::HashMap;
 use tower::ServiceExt;
 
@@ -168,8 +168,8 @@ async fn budget_unset_returns_no_remaining() {
 
 use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
-use sovereign_serving::scheduler::knowledge_assignment::plan_collaborative_ingestion;
 use corpus_engine::{SourceFileRecord, SourceFileStatus};
+use sovereign_serving::scheduler::knowledge_assignment::plan_collaborative_ingestion;
 
 fn embed() -> EmbedModelInfo {
     use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};

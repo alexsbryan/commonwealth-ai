@@ -20,9 +20,6 @@ use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use sovereign_api::server::{client_router, internal_router};
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::knowledge::CorpusShardInfo;
@@ -30,6 +27,9 @@ use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use tower::ServiceExt;
 
 /// 8-dim zero vector — matches what mock-embed-backed indexes ship

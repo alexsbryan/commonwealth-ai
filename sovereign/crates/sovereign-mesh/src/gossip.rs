@@ -38,11 +38,11 @@
 //! steps.
 use std::time::{Duration, Instant};
 
-use sovereign_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use serde::{Deserialize, Serialize};
+use sovereign_api::state::AppState;
 use tracing::{debug, info, warn};
 
 use crate::capabilities::build_local_capabilities;

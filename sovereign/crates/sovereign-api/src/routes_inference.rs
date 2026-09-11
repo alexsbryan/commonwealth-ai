@@ -1895,8 +1895,8 @@ mod list_models_tests {
 
     use super::*;
     use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
-    use sovereign_serving::oicp::{ModelStatus, ProviderManifest, ProviderModel};
     use futures::Stream;
+    use sovereign_serving::oicp::{ModelStatus, ProviderManifest, ProviderModel};
     use std::pin::Pin;
     use std::sync::Arc;
 

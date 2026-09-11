@@ -8,21 +8,19 @@ use tokio::sync::RwLock;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use sovereign_meshapp_registry::proxy::AppPortMap;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use sovereign_serving::model_aliases::ModelAliasTable;
-use sovereign_serving::oicp::ProviderManifest;
-use sovereign_serving::store_adapter::InferenceStateStore;
-use sovereign_grants::{
-    EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager,
-};
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
+use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager};
+use sovereign_meshapp_registry::proxy::AppPortMap;
+use sovereign_meshapp_registry::registry::AppRegistry;
+use sovereign_serving::model_aliases::ModelAliasTable;
+use sovereign_serving::oicp::ProviderManifest;
+use sovereign_serving::store_adapter::InferenceStateStore;
 
 use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 

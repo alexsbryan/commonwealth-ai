@@ -22,15 +22,15 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use sovereign_api::server::internal_router;
-use sovereign_api::state::AppState;
-use sovereign_meshapp_registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{Corpus, CorpusEngine, EmbedFn};
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
+use sovereign_meshapp_registry::AppRegistry;
 use tempfile::tempdir;
 
 /// Build a tiny canonical with three chunks carrying explicit

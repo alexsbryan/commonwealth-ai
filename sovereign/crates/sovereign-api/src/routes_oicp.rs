@@ -426,10 +426,10 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use commonwealth_state::{PeerPreference, PeerPreferenceStore};
     use sovereign_serving::oicp::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
-    use commonwealth_state::{PeerPreference, PeerPreferenceStore};
 
     fn nid(byte: u8) -> NodeId {
         NodeId::from_u128(byte as u128)
