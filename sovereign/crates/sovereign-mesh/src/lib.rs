@@ -64,6 +64,7 @@ pub mod loopback_guard;
 pub mod lsp_tier;
 pub mod mcp_router;
 pub mod measurements_rail;
+pub mod media_reach;
 pub mod mesh_discovery;
 pub mod mesh_http;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
@@ -98,7 +99,6 @@ pub mod reading_http;
 pub mod reindexer;
 pub mod ring_roster;
 pub mod ring_sync;
-pub mod media_reach;
 pub mod roster_repair;
 pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production

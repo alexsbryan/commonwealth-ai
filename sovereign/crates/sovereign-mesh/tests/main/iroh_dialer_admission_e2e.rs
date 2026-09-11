@@ -434,7 +434,14 @@ async fn a_member_reads_a_title_from_the_peers_media_origin_by_key() {
 #[tokio::test]
 async fn a_stranger_holding_the_dial_string_cannot_read_the_library() {
     let (lender, _acceptor) = lender_with_media(b"not for you").await;
-    let outcome = get_as(&lender, STRANGER_SEED, MEDIA_ALPN, "/library/title.bin", None).await;
+    let outcome = get_as(
+        &lender,
+        STRANGER_SEED,
+        MEDIA_ALPN,
+        "/library/title.bin",
+        None,
+    )
+    .await;
     assert!(
         outcome.is_err(),
         "a stranger's media dial must die, got {:?}",
