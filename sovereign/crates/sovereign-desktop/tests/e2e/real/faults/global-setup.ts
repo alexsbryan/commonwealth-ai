@@ -31,15 +31,25 @@ export default async function globalSetup(): Promise<void> {
   // :9741 must be free for the BOOT-FAULT instances (their bootstrap
   // probes it; an occupant flips them to Attach and skips the paths
   // under test). The shared supervised child runs on :9751 instead.
-  for (const [port, why] of [
+  const PORTS = [
     [9741, "stop the dev daemon (`sovereign daemon stop`)"],
     [9745, "another harness desktop is running — stop it"],
     [9751, "a previous faults child daemon survived — kill it"],
-  ] as const) {
+  ] as const;
+  for (const [port, why] of PORTS) {
     if (await portInUse(port)) {
       throw new Error(`faults setup: :${port} is occupied — ${why}.`);
     }
   }
+  // The CLAIM global-teardown reaps against. Written only now, after every
+  // port has been proved free, so the file means "this run took these and
+  // whatever holds one afterwards is ours" — never "these ports look like
+  // ours". A teardown that finds no claim kills nothing by port, which is
+  // what keeps a crashed setup from reaping the operator's own daemon.
+  fs.writeFileSync(
+    path.join(ARTIFACTS, "faults-owned-ports.json"),
+    JSON.stringify(PORTS.map(([p]) => p)),
+  );
 
   if (!fs.existsSync(path.join(CRATE_ROOT, "dist/index.html"))) {
     execSync("npm run build", { cwd: CRATE_ROOT, stdio: "inherit" });
