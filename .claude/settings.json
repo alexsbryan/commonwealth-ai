@@ -31,14 +31,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .claude/hooks/inject-notes.py"
-          }
-        ]
       }
     ],
     "PreToolUse": [

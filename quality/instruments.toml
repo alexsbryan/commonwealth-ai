@@ -564,6 +564,26 @@ negative_control = "none"
 runs_in = ["ci:suites"]
 doc = "scripts/tests/"
 
+# The one hook assertion that is HARD and runs at prepush, deliberately apart
+# from `hook-selftests` below. That suite is advisory, runs only in ci:suites,
+# and sits behind 16 known failures — it could not have caught this and did
+# not, eight times. The finding it gates is a settings.json entry deleted from
+# main seven times since 2026-05-10 and returned eight, always by merge union,
+# never by a deliberate edit. The failure it produces is a dead UserPromptSubmit
+# turn the moment a session's cwd is not the repo root.
+[[instrument]]
+id = "hook-wiring"
+kind = "gate"
+claim = "invariant"
+command = "bash .claude/hooks/tests/settings-wiring.sh"
+cost_secs = 0.3
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "settings-wiring --self-test (plants the historical duplicate+relative blob and watches it fail)"
+runs_in = ["prepush"]
+doc = ".claude/hooks/tests/settings-wiring.sh"
+
 [[instrument]]
 id = "hook-selftests"
 kind = "suite"
