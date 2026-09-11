@@ -1,0 +1,58 @@
+# Reversed leg, 2026-09-11 ~20:30 UTC — RuggedFox (home broadband, 69.181.167.209)
+# SERVING, MacBook pulling over an iPhone hotspot (172.20.10.x, CGNAT; Tailscale
+# verified stopped on the Mac: `tailscale status` -> stopped, 0 routes in 100/10,
+# ping 100.115.12.21 100% loss, default route 172.20.10.1 en0).
+#
+# VERDICT ON THE BAR: COULD-NOT-JUDGE, BY CONSTRUCTION. Kept 0, discarded 1.
+#
+# 1. The probe punched through. The bench's OWN path line (the gate) read
+#    `mixed` with a non-empty direct list — RuggedFox's PUBLIC UDP endpoint,
+#    not the tailnet or LAN address the runbook warned about:
+
+path=mixed direct=[69.181.167.209:43327] relay=[https://usw1-1.relay.n0.iroh.link./]
+reversed-probe viewer=0 status=206 clen=Some(33554432) crange=Some("bytes 0-33554431/1073741824") bytes=33554432 secs=11.89 rate=22.6 Mbit/s ttfb=197.7ms gaps: n=5476 p50=0.7 p99=13.2 max=123.0ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=17.1 Mbit/s verify=off reconnects=0
+
+#    DISCARD (direct non-empty). Finding: cellular CGNAT does NOT defeat
+#    hole-punching on its own — the dialer behind CGNAT reaches a home NAT that
+#    admits the punch (permissive mapping, or iroh's port mapper). The runbook's
+#    premise sentence was wrong and is rewritten.
+#
+# 2. The sender is capped at the bar. RuggedFox's upload capacity to a neutral
+#    endpoint (100 MiB POST to https://speed.cloudflare.com/__up), twice:
+
+run1: 2636057 B/s http=200 time=39.778s = 21.1 Mbit/s
+run2: 3213088 B/s http=200 time=32.635s = 25.7 Mbit/s
+
+#    The Mac's hotspot DOWNlink, same method (26 MiB GET from Cloudflare):
+#    21179400 B/s = 169.4 Mbit/s — not the bottleneck.
+#
+#    So 22.6 Mbit/s over the punched path IS the home ISP's uplink, and a
+#    600 s soak on any path — forced relay included — would file an ISP cap as
+#    a transport verdict. Not run. Both directions on this pair are
+#    sender-capped: the Mac's cellular UPLINK one way (the 8.7 Mbit/s of
+#    relay-leg-TWO-MACHINE-probe.stdout), RuggedFox's home UPLINK the other.
+#
+# WHAT WOULD MEASURE THE FLOOR: a sender with real uplink — a cloud VM with a
+# symmetric >=100 Mbit link — serving to the Mac on the hotspot, with the
+# relay FORCED on the Mac (pf block of outbound UDP to the VM's address; a
+# public VM punches too), recorded as forced. Different networks stays met.
+# RuggedFox has no global IPv6 (only the Tailscale ULA, v6 egress unreachable),
+# so a v4-only block is complete against it; check the VM's v6 before ruling.
+#
+# Harness note (found reading media_bridge_bench.rs:714-715): `fetch_until`
+# checks the deadline at the top of each WHOLE-FILE pull, so on a 1 GiB origin
+# at ~22 Mbit/s a `--duration-secs 600` run lasts ~760 s (two full pulls).
+# `secs` will not read 600; the BAR line still judges >= 600.
+#
+# 3. Capacity on the DISCARDED (mixed, hole-punched) path — a full 1 GiB pull
+#    through the same bridge, labelled by the Mac side for what it is. Not a
+#    sample. Best case for the transport, and it sits flat AT the bar:
+
+capacity-probe-NOT-A-BAR-READING viewer=0 status=206 clen=Some(1073741824) crange=None bytes=1073741824 secs=344.07 rate=25.0 Mbit/s ttfb=115.6ms gaps: n=146632 p50=0.4 p99=15.3 max=267.4ms stalls>500ms=0 >1s=0 >2s=0 worst_1s=7.5 Mbit/s verify=off reconnects=0
+capacity-probe-NOT-A-BAR-READING viewer=0 BAR rate>=25 Mbit/s: NO (25.0) · stalls>2000ms: 0 · 344s of 600s · verdict=could-not-judge (ran 344s of the bar's 600s) · path kind: `svrn mesh media --json` .path.relayed_reading must be true for this to be the bar's reading
+
+#    25.0 sustained over 344 s with p50 gap 0.4 ms and no stalls is the shape
+#    of an ISP shaper, and it sits between RuggedFox's two neutral uplink
+#    readings (21.1, 25.7). Three independent measurements agree: on this leg
+#    every byte measured was RuggedFox's uplink; the transport was never the
+#    constraint. FINAL: kept 0, discarded 1, could-not-judge by construction.

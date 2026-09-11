@@ -2191,5 +2191,9 @@ key = "scripts/fetch-desktop-binaries.sh"
 why = "downloads prebuilt sidecar binaries into the bundle"
 
 [[not_instrument]]
+key = "scripts/stage-daemon-sidecar.sh"
+why = "the same act as `fetch-desktop-binaries.sh` for the one sidecar this repo BUILDS rather than downloads \u2014 it links `sovereign-cli-daemon` and copies it to `binaries/<name>-<triple>` so Tauri's `externalBin` finds it (svt-1). It stages an artifact; it takes no verdict and has nothing to fail on. What verifies the installer actually carries a working daemon is the desktop e2e lane, not this copy"
+
+[[not_instrument]]
 key = "scripts/bump-desktop-version.sh"
 why = "edits version fields; `check-desktop-version` is the gate over its result"

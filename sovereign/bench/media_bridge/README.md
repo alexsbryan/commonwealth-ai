@@ -18,3 +18,14 @@ n0 severed (`presets::Minimal`) except where noted.
 - `relay-leg-CONTAMINATED.stdout` — DISCARD the rates. `--relay-only` did not
   hold: `path=mixed`, and 2 of 3 runs measured the direct path. Kept because
   the failure is the finding — gate any relayed reading on the `path=` line.
+- `reversed-leg-2026-09-11.stdout` — the reversed leg (RuggedFox serving, the
+  Mac pulling over cellular). COULD-NOT-JUDGE by construction: the probe
+  punched to RuggedFox's public endpoint (discarded, `mixed`), and RuggedFox's
+  own uplink measures 21-26 Mbit/s — at the bar. Both directions on this pair
+  are sender-capped; the floor needs a cloud sender.
+- `cloud-sender-unforced-2026-09-11.stdout` — a Michigan datacenter VM (uplink
+  550-680 Mbit/s measured) serving to the Mac on home broadband, UNFORCED by the
+  operator's decision, path `mixed`. NOT relayed-bar samples. One stream: 87.0
+  Mbit/s over 25 s, 55.2 over 623 s with 3 reconnects and four >1 s gaps;
+  four streams 99.3 aggregate. No ~25 ceiling; the path tops near 100 and
+  degrades with duration — the stability finding.
