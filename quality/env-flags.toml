@@ -814,6 +814,13 @@ shadows = "daemon.client_port"
 purpose = "Daemon base URL for CLI clients — the highest-precedence leg of the ONE decider, sovereign_contracts::setup_config::client_daemon_base (env, then [daemon] client_port, then the compiled default). SVRNMESH_DAEMON_URL is the same knob's post-rename spelling and loses to this one when both are set; a blank value counts as UNSET and falls through to the config rather than dispatching at a bare path; a trailing slash is trimmed because every caller appends /v1/…. Why it is a decider and not just a variable: until 2026-08-25 the env and the config were TWO resolvers with opposite blind spots — the env leg lived in sovereign-cli-shared::urls and could not see a moved client_port, while client_daemon_base saw the config and not the env — so this knob reached ONE daemon-talking call site (mcp_client) out of ~30, and `svrn enrich` / `svrn backlog score` kept driving the operator's local daemon whatever it said, answering successfully while doing it. WHAT IT DELIBERATELY DOES NOT REACH: daemon lifecycle (`daemon stop/restart/reload` and its readiness probe) and `corpus watch register`, which resolve through the env-blind client_daemon_base_for. A URL cannot be SIGTERM'd and a remote daemon cannot watch this host's filesystem, so honouring the knob there would kill the local daemon and then report READY off the remote (ARCH §18.3)."
 
 [[flag]]
+name = "SOVEREIGN_DAEMON_BINARY"
+cluster = "infra-paths"
+default = "unset — the app searches beside its own executable, then ~/.local/bin, then /usr/local/bin"
+status = "shipped"
+purpose = "Absolute path to the daemon binary the desktop hands to the OS service manager at the end of setup (sovereign-desktop/src-tauri/src/service_adoption.rs). Setup registers the daemon as a launchd agent / systemd user unit / Scheduled Task so the node stays available to the mesh while the app is closed — availability is a property of the NODE, not a convenience for the app (sv-surface `sv-no-daemon-management`, amended 2026-09-11). The search order below the override is the order a real install produces: beside this executable (where a Tauri sidecar would land — `externalBin` is unset today, see sovereign-desktop/RELEASING.md), then the directories `landing/install.sh` writes `svrn` into. Set this when the CLI lives somewhere else, or to point a test at a stand-in. A path that is not a file is IGNORED with a warning rather than handed to the service manager as an ExecStart that can never run."
+
+[[flag]]
 name = "SOVEREIGN_CONCEPT_CORPUS"
 cluster = "infra-paths"
 default = "the repo directory name"

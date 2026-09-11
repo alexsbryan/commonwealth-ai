@@ -293,7 +293,7 @@ const FAST_SHORT_COALESCE_WINDOW_MS: u64 = 5;
 // wall-clock for the 900-tok/128-tok shape — a 2.1× speedup which
 // projects to ~15min savings per wiki-tier2-500 Phase 1b pass.
 
-struct CoalescerJob {
+pub(crate) struct CoalescerJob {
     pub(crate) request: CompletionRequest,
     pub(crate) response: tokio::sync::oneshot::Sender<Result<CompletionResponse>>,
 }
@@ -324,7 +324,7 @@ fn fast_short_queue_cap() -> usize {
         .unwrap_or(FAST_SHORT_QUEUE_CAP_DEFAULT)
 }
 
-struct FastShortCoalescer {
+pub(crate) struct FastShortCoalescer {
     pub(crate) enqueue: tokio::sync::mpsc::Sender<CoalescerJob>,
     /// The bound `enqueue` was built with. Held because
     /// `Sender::capacity()` reports REMAINING permits; depth is
@@ -1241,7 +1241,6 @@ impl EmbeddedLlamaCpp {
         let (fast_loaded, fast_size_bytes) = build_fast_family(&backend, &fast_recipe)?;
         let fast_meta = FastMeta {
             model_id: fast_loaded.slot.model_id.clone(),
-            size_bytes: fast_size_bytes,
             n_ctx_train: fast_loaded.slot.model.n_ctx_train(),
             fim_style: crate::fim::detect_fim_style(&fast_loaded.slot.model),
             fast_short_expected: fast_loaded.fast_short.is_some(),
@@ -2750,10 +2749,6 @@ pub(crate) struct FastRecipe {
 #[derive(Clone)]
 pub(crate) struct FastMeta {
     model_id: String,
-    /// Footprint of one resident copy, from the boot load. This is what
-    /// the slot COSTS when loaded, which is a different question from
-    /// what it costs right now — `/status` reads residency separately.
-    size_bytes: u64,
     n_ctx_train: u32,
     fim_style: Option<FimStyle>,
     /// Did the FastShort gate clear at boot? Routing asks this, and

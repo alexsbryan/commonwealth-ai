@@ -27,6 +27,7 @@ mod mobile_host_setup;
 mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
+mod service_adoption;
 mod setup_flow;
 mod smoketest;
 mod state;

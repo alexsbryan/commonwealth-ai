@@ -328,6 +328,26 @@ pub async fn maybe_restart_into_supervised(app_handle: &AppHandle) -> bool {
     if !is_enabled() {
         return false;
     }
+
+    // Hand the daemon to the OS first, so what the relaunched instance FINDS
+    // is a service-owned daemon rather than nothing (sv-surface, amended
+    // 2026-09-11: availability belongs to the node, so the desktop installs
+    // the service by default). This adds no branch below — `bootstrap::decide`
+    // probes the client port first and returns Attach for any daemon that
+    // answers, whoever started it. When there is no binary to register, or
+    // registration fails, the relaunch spawns the supervised child exactly as
+    // it did before, and `adopt_service` has said in the log which of those
+    // happened.
+    //
+    // Deliberately after the `is_enabled` gate: `SOVEREIGN_FORCE_LOCAL=1`
+    // harnesses ask for in-process, and registering a service under them
+    // would put a second daemon on the port they are testing.
+    let client_port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    let adoption = crate::service_adoption::adopt_service(client_port).await;
+    info!(?adoption, "setup: service adoption decided");
+
     let exe = match std::env::current_exe() {
         Ok(e) => e,
         Err(e) => {

@@ -12484,6 +12484,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-runtime-recipe",
+ "sovereign-service",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-turn-client",

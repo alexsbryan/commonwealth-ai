@@ -7879,6 +7879,35 @@ need admin, while the daemon serves one person's data root). So "contributes
 while you are logged in" is the honest claim on those two, and it is written
 down here rather than assumed.
 
+AND THE DESKTOP NOW REGISTERS IT, which is what makes the decision true.
+Until 2026-09-11 nothing in `sovereign-desktop` ever called
+`install_service` — only `svrn setup`'s finish step and the explicit `svrn
+install-service` verb did — so a user who never touched the CLI had a daemon
+that died with the window every time.
+`sovereign-desktop/src-tauri/src/service_adoption.rs` closes that: at the end
+of the wizard it resolves a daemon binary, registers it, and waits for it to
+answer. IT ADDS NO BOOT PATH. `bootstrap::decide` already probes the client
+port FIRST and returns `Attach` for any daemon that answers, whoever started
+it, so the post-wizard relaunch that already existed
+(`maybe_restart_into_supervised`) needs no new branch — what changes is what
+the relaunched instance FINDS. The binary search order is the order a real
+install produces: the `SVRNMESH_DAEMON_BINARY` override, then beside this
+executable (where a Tauri sidecar would land — `externalBin` is unset, see
+the config split in `sovereign-desktop/RELEASING.md`, so that work flips this
+on with no code change), then `~/.local/bin` and `/usr/local/bin`, which is
+where `landing/install.sh` puts `svrn`. No binary means no registration and
+the supervised child the app has always had, said in the log rather than
+inferred. THE ONE THING THAT MUST NOT RACE is the relaunch: if the app
+restarts before the service's daemon has bound the port, the fresh instance
+probes, sees nothing, goes Local and binds `:9741` itself — the exact failure
+`bootstrap.rs` was written to end. So registration is followed by a readiness
+wait sized against the daemon's OWN 120s budget, and a registered-but-silent
+daemon has its service STOPPED rather than left to fight the supervised child
+for the port; it starts again at next login. Note that this path does NOT use
+the client's `bundled-backend` bring-up capability and must not: the OS
+starts the daemon here, and a client that started one as well would be
+managing a lifecycle it does not own.
+
 ### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
 
 The campaign landed 44 commits in one day (R1 through the dedup pass,
