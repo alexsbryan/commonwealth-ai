@@ -1331,6 +1331,115 @@ status    = "active"
 # never what embedded is entitled to.
 
 [[bar]]
+id           = "sv-no-daemon-management"
+one_line     = "CLAIM: the desktop does not manage a daemon - it cannot spawn one, cannot become one, and does not link the crates that would let it"
+derives_from = "operator, 2026-09-11: 'DoD of this initiative is most fundamentally that we do away with the desktop app managing a daemon (the thinness purity moment)'"
+status       = "open"
+# THIS BAR OUTRANKS sv-attach-pure-client AND SUBSUMES IT. That bar counts
+# needles inside a mode ("attach constructs zero local deciders"), which
+# presupposes both modes exist and measures a lagging count. This one asks
+# the coarser, honest question: is the daemon something this app owns? If
+# the crate is not linked, the spine cannot be constructed, the census stops
+# being needed rather than being driven to zero, and the parity claim
+# (desktop = cli = mobile) becomes structural rather than argued.
+#
+# WHY SUPERVISED-CHILD IS NOT THE DESTINATION. It looks like the answer and
+# is not. `main.rs:136-138` is `Launch::Daemon =>
+# std::process::exit(sovereign_cli_daemon::daemon_child_main())`: the "child
+# daemon" is THIS BINARY re-entering itself (`current_exe() --daemon-child`,
+# supervisor_setup.rs:134-149). So the desktop must LINK the whole backend to
+# be able to become one - 21 workspace crates in src-tauri/Cargo.toml
+# including sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe,
+# corpus-engine+treesitter, gliner, inference, commonwealth-core/state.
+# Debug binaries: sovereign-desktop 661 MB, sovereign-cli-daemon 614 MB - the
+# app is LARGER than the daemon it supervises, because it is the daemon plus
+# a UI. `svrn chat` links sovereign-turn-client and speaks HTTP; mobile
+# consumes the one client family; the desktop contains the backend. That is
+# the parity gap, and no attach-needle count reaches it.
+# Supervised-child (W1 flip, 2026-07-18) bought CRASH ISOLATION and is worth
+# keeping as a product property - it just delivered it by making the app able
+# to BE a daemon instead of by having one it does not own.
+#
+# MEASURED 2026-09-11 (three read-only surveys, file:line in each finding):
+#   * 1,990 production Rust lines in sovereign-desktop exist for daemon
+#     lifecycle; ~271 survive an OS-managed daemon. Buckets: child supervision
+#     645, in-process EmbeddedDaemon + RunLock 365 (state.rs), bootstrap
+#     Attach/Local decision 280 (collapses to a ~40-line readiness wait),
+#     smoketest crash-isolation subprocess 302 (belongs in the daemon, which
+#     is what loads models), mobile-host supervision 90, crash-log
+#     consumption 37. Plus sovereign-compute/src/supervisor.rs 1,082 - but
+#     see below, that module STAYS.
+#   * THE REPLACEMENT IS ALREADY WRITTEN. `kickstart_daemon`
+#     (config_setup.rs:256-298) shells `launchctl kickstart -k
+#     gui/<uid>/com.svrnmesh.daemon` and `systemctl --user restart svrnmesh`
+#     today, exposed as `attach_restart_daemon`. `install-service` writes a
+#     launchd LaunchAgent (KeepAlive.SuccessfulExit=false) and a systemd user
+#     unit (Restart=on-failure, StartLimitBurst=5). `attach_watch.rs` (101
+#     lines) already polls an EXTERNALLY owned daemon and drives the
+#     ReconnectBanner's attach-down state. The OS-managed topology is the
+#     path the desktop already takes when it finds a daemon running.
+#   * THE SHARED SUPERVISOR IS NOT DELETED, only its desktop caller.
+#     `sovereign_compute::supervisor` is consumed by sovereign-cli-daemon
+#     (daemon_cmd/bootstrap.rs:592, discovery_policy.rs:24) for its own
+#     compute children. A daemon supervising its compute children is right;
+#     a desktop supervising a daemon is not.
+#   * FIRST LAUNCH ALREADY NEEDS NONE OF IT, on the default path. The wizard
+#     runs with every AppState slot None; `maybe_start` refuses to engage
+#     without a CliSetup config (supervisor_setup.rs:174-179) and config.toml
+#     does not exist until step 5, so steps 1-5 have no daemon BY
+#     CONSTRUCTION - and none of them needs one: hardware detect, bundled
+#     catalog resolution, mkdir, the three GGUF downloads, validation, the
+#     config writes. All weight-free. Everything that genuinely requires this
+#     process to hold weights/store/Runtime hangs off
+#     state::bootstrap_with_progress (setup_flow.rs:447), and on the DEFAULT
+#     path step 5d returns before ever reaching it: it writes the first-run
+#     marker, spawns a fresh current_exe() and exits
+#     (maybe_restart_into_supervised, supervisor_setup.rs:327-356). Under an
+#     OS service that whole relaunch DELETES - write config, install+start
+#     the service, attach. Strictly simpler than what ships.
+#   * THE FORCE_LOCAL JOURNEY IS NOT EVIDENCE AGAINST THIS.
+#     first-launch-setup.journey.spec.ts:84-86 sets SOVEREIGN_FORCE_LOCAL=1
+#     to suppress the relaunch, and GUEST_QA_DESIGN.md:31-40 already says what
+#     that costs: "The highest-stakes journey exercises the one branch real
+#     users never take." The default path is covered by
+#     scripts/wizard-verify.sh, which unsets the flag (:107).
+#
+# THE ONE HARD BLOCKER IS WINDOWS, and it is real. No service backend exists
+# at all - no unit template, no contrib/windows/, no prebuilt Windows CLI,
+# and `install_service` hard-errors on the platform (service_install.rs:46-54).
+# The desktop DOES ship Windows (scripts/build-desktop-windows.sh, NSIS), and
+# sovereign-compute's supervisor is platform-neutral (one cfg(unix) in 1,082
+# lines), so supervised-child is currently the ONLY way a Windows user gets a
+# daemon. Deleting it without a Windows story breaks the platform outright.
+# The bar therefore lands per-platform: move the daemon-hosting crates to
+# [target.'cfg(windows)'.dependencies], green on macOS+Linux, and Windows is
+# a DECLARED exception with a DEFAULTS_LEDGER row and a review-by - never a
+# silent one (K1's rule).
+#
+# THE PRODUCT TRADE, named rather than discovered later: today quitting the
+# app kills the child and frees the weights. Under a service they stay
+# resident - a 35B Q6 is ~28 GB pinned across app restarts (state/config.rs
+# :155-157), and the idle monitor only reclaims the PRIMARY slot after
+# primary_idle_secs (default 300s); fast+embed stay loaded indefinitely
+# (builders/inference.rs:275-280). The mitigation belongs to the daemon, not
+# the app: extend the idle policy to every slot, or a release HINT the daemon
+# may honour. A desktop that stops the service on quit is managing a daemon
+# again and fails this bar.
+#
+# TWO DEFECTS THE SURVEY TURNED UP, unrelated to the bar but not to be lost:
+# the mobile-host `sovereign-server` child is NOT stopped on quit
+# (stop_daemon_child takes only state.supervisor, main.rs:979) and is
+# orphaned by _exit - the exact hazard Launch::Server's own doc records
+# (launch.rs:99-112); and `setup-restarting` is emitted with a 600ms paint
+# sleep to NO listener (supervisor_setup.rs:339-344).
+floor        = 21.0
+floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2df562caa, 2026-09-11; the daemon-hosting subset is sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe, corpus-engine, sovereign-gliner, sovereign-inference, sovereign-tools, commonwealth-core, commonwealth-state. Lifecycle code: 1,990 production lines, ~271 of which survive"
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "cargo tree -p sovereign-desktop --edges normal --depth 1, gated by cargo xtask layer over quality/ARCH_LAYERS.toml - a dependency bar, not a needle count, so it goes red when the edge comes back rather than when someone re-derives a construction"
+kill         = "K3 - if a capability genuinely cannot be served by a daemon the app does not own, it goes to the operator as a DECLARED per-platform exception with a DEFAULTS_LEDGER row and a review-by date. Windows is the first and currently the only such row."
+
+[[bar]]
 id           = "sv-attach-pure-client"
 one_line     = "CLAIM: attach mode constructs zero local deciders - the desktop is a client, like svrn chat"
 derives_from = "TOPOLOGY 3.5 'one process assembles; everything else is a surface', refined by Phase 6 wave 2 to one-DRIVER; attach is the boot where client-only is provable"
