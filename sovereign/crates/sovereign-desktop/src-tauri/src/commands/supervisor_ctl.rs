@@ -37,10 +37,17 @@ pub async fn supervisor_active(state: State<'_, Arc<AppState>>) -> Result<bool, 
 
 /// Attach-mode recovery: best-effort restart of the EXTERNALLY-owned
 /// daemon via the OS service manager (`launchctl kickstart` /
-/// `systemctl --user restart`). Errors when no service is registered —
-/// the banner then tells the user to run `svrn daemon restart`
-/// themselves. Backs the attach-down banner raised by
+/// `systemctl --user restart`). Backs the attach-down banner raised by
 /// `crate::attach_watch` (DAEMON_RESILIENCE.md P0.2).
+///
+/// The `Err` is the banner's text, so it is written to be read by a
+/// person: when no service manager owns the daemon — or this platform
+/// has no backend the app can call — the message names that fact and the
+/// command that fixes it (`kickstart_daemon`'s refusals, ARCH principle
+/// 6). It is never a raw `launchctl`/`systemctl` line, and it never
+/// becomes a spawn: the app does not manage a daemon's lifecycle
+/// (sv-surface `sv-no-daemon-management`), so "there is nothing here to
+/// restart" is an answer, not a gap to fill.
 #[tauri::command]
 pub async fn attach_restart_daemon() -> Result<(), String> {
     tokio::task::spawn_blocking(super::config_setup::kickstart_daemon)

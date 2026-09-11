@@ -46,4 +46,15 @@ StandardError=journal
 SyslogIdentifier=svrnmesh
 
 [Install]
+# `default.target` is the USER manager's login target, so on its own this
+# reads "start at login", not "start at boot": systemd stops `user@<uid>.
+# service` when the last session ends, taking the daemon with it. The
+# installer therefore also runs `loginctl enable-linger <user>`
+# (sovereign-service `ensure_linger`), which keeps the user manager running
+# across logout and starts it at boot with no login at all — the property a
+# mesh node needs and a login-scoped unit does not have. If the install
+# warned that lingering could not be enabled, run it by hand:
+#
+#     loginctl enable-linger $USER
+#
 WantedBy=default.target

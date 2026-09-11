@@ -250,9 +250,113 @@ async fn request_daemon_reload(base_url: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Best-effort restart of the `sovereign-daemon` service. Used only
-/// when the admin/reload handler reported `restart_required` (port
-/// or data_dir change) — hot reload can't rebind listeners.
+/// The two commands that can put a daemon back when the app cannot.
+///
+/// Spelled once so every refusal below says the same thing (ARCH
+/// principle 8). The app never starts a daemon itself — sv-surface's
+/// `sv-no-daemon-management` bar — so "what do I do now" has exactly
+/// these two answers and the user is owed both: one for right now, one
+/// so the machine handles it next time.
+const START_IT_YOURSELF: &str = "Start it with `svrn daemon start`, or run `svrn install-service` \
+     to register it with your service manager — then it restarts itself after a crash and \
+     comes back at login.";
+
+/// Does this service-manager stderr mean "nothing here owns the daemon"?
+///
+/// Both managers refuse in prose and neither in a distinguishable exit
+/// code: `launchctl kickstart` on an unregistered label prints `Could not
+/// find service "com.svrnmesh.daemon" in domain…`, and `systemctl --user
+/// restart` on a unit that was never installed prints `Unit
+/// svrnmesh.service not found.`. That is a refusal to act, not a failed
+/// restart, and it is the one case the user can fix — so it gets its own
+/// sentence instead of being forwarded raw.
+///
+/// Gated with the two arms that CALL a service manager: a Windows build
+/// takes `no_backend_here_refusal` instead and would otherwise carry this
+/// dead. `test` keeps it compiled everywhere the suite runs.
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub(crate) fn stderr_means_no_service_registered(stderr: &str) -> bool {
+    let lowered = stderr.to_lowercase();
+    lowered.contains("could not find service")
+        || lowered.contains("not found")
+        || lowered.contains("no such file or directory")
+}
+
+/// What the banner's Restart button says when no service manager owns the
+/// daemon.
+///
+/// ARCH principle 6: the absence is reported in words the user can act
+/// on, never as the manager's raw stderr — which names a launchd label
+/// they have never seen and no command at all.
+///
+/// Deliberately hedged with "under the name the app knows": this file
+/// probes ONE unit/label, while `svrn daemon restart` walks
+/// `sovereign_service::CANDIDATE_SERVICES` (current name, then the
+/// pre-rebrand `sovereign.service` / `com.sovereign.daemon`). A host
+/// still registered under the legacy name IS service-managed, and a flat
+/// "nothing owns this daemon" would be false there. Re-deriving that
+/// candidate list here would be a second copy of one decider in the one
+/// crate forbidden to link its owner, so the refusal points at the CLI
+/// that already knows instead.
+///
+/// Gated with the two arms that CALL a service manager: a Windows build
+/// takes `no_backend_here_refusal` instead and would otherwise carry this
+/// dead. `test` keeps it compiled everywhere the suite runs.
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub(crate) fn no_service_manager_refusal(detail: &str) -> String {
+    let detail = detail.trim();
+    let because = if detail.is_empty() {
+        String::new()
+    } else {
+        format!(" ({detail})")
+    };
+    format!(
+        "No service manager owns this daemon under the name the app knows{because}, \
+         so there is nothing here to restart. {START_IT_YOURSELF}"
+    )
+}
+
+/// What the Restart button says where the app has no service-manager call
+/// to make at all.
+///
+/// `sovereign-service` DOES have a Windows backend (a logon-triggered
+/// Scheduled Task), so `svrn install-service` works there — but writing
+/// its `schtasks` argv out again HERE would be a second implementation of
+/// one decider (ARCH principle 8) inside the crate that must not link the
+/// first (sv-surface `sv-no-daemon-management`). So this arm names the
+/// CLI rather than growing a third copy of the restart logic.
+///
+/// The mirror image of the gate on the three above: compiled where the
+/// arm that USES it is, plus `test` so the suite reads it everywhere.
+#[cfg(any(not(any(target_os = "macos", target_os = "linux")), test))]
+pub(crate) fn no_backend_here_refusal() -> String {
+    format!(
+        "The app has no way to ask a service manager to restart the daemon on this \
+         platform (os={}) — it never owns a daemon's lifecycle. {START_IT_YOURSELF}",
+        std::env::consts::OS
+    )
+}
+
+/// The manager was asked, was there, and still refused. Its own words are
+/// the diagnosis and are kept verbatim; the tail is what the user does
+/// next, because a stderr line alone is not an answer.
+///
+/// Gated with the two arms that CALL a service manager: a Windows build
+/// takes `no_backend_here_refusal` instead and would otherwise carry this
+/// dead. `test` keeps it compiled everywhere the suite runs.
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub(crate) fn manager_refused(command: &str, stderr: &str) -> String {
+    format!("`{command}` failed: {}. {START_IT_YOURSELF}", stderr.trim())
+}
+
+/// Best-effort restart of the svrnmesh daemon THROUGH ITS SERVICE
+/// MANAGER. Two call sites: the admin/reload handler reporting
+/// `restart_required` (a port or data_dir change hot reload cannot
+/// rebind), and the attach-down banner's Restart button
+/// (`attach_restart_daemon`).
+///
+/// It asks a manager and never spawns anything: every failure path below
+/// ends in a sentence, not a process.
 pub(crate) fn kickstart_daemon() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -269,10 +373,12 @@ pub(crate) fn kickstart_daemon() -> Result<(), String> {
             .output()
             .map_err(|e| format!("spawn launchctl: {e}"))?;
         if !out.status.success() {
-            return Err(format!(
-                "launchctl kickstart {label} failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            ));
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            return Err(if stderr_means_no_service_registered(&stderr) {
+                no_service_manager_refusal(&stderr)
+            } else {
+                manager_refused(&format!("launchctl kickstart -k {label}"), &stderr)
+            });
         }
         Ok(())
     }
@@ -280,20 +386,115 @@ pub(crate) fn kickstart_daemon() -> Result<(), String> {
     {
         use std::process::Command;
         let out = Command::new("systemctl")
-            .args(["--user", "restart", "svrnmesh"])
+            .args(["--user", "restart", "svrnmesh.service"])
             .output()
             .map_err(|e| format!("spawn systemctl: {e}"))?;
         if !out.status.success() {
-            return Err(format!(
-                "systemctl --user restart svrnmesh failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            ));
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            return Err(if stderr_means_no_service_registered(&stderr) {
+                no_service_manager_refusal(&stderr)
+            } else {
+                manager_refused("systemctl --user restart svrnmesh.service", &stderr)
+            });
         }
         Ok(())
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
-        Err("service restart is only supported on macOS and Linux".into())
+        Err(no_backend_here_refusal())
+    }
+}
+
+/// The refusal wording, checked on every platform — the arms that build
+/// it are `cfg`-gated but the sentences are not, and a refusal nobody can
+/// act on is the failure this pins.
+#[cfg(test)]
+mod restart_refusal_tests {
+    use super::*;
+
+    /// The shapes both managers actually print when the daemon is not
+    /// theirs. Pasted, not paraphrased.
+    #[test]
+    fn both_managers_are_recognised_saying_no_such_service() {
+        for stderr in [
+            "Could not find service \"com.svrnmesh.daemon\" in domain for login context",
+            "Failed to restart svrnmesh.service: Unit svrnmesh.service not found.",
+            "Unit svrnmesh.service not found.",
+        ] {
+            assert!(
+                stderr_means_no_service_registered(stderr),
+                "not recognised as an unregistered service: {stderr:?}"
+            );
+        }
+    }
+
+    /// A manager that IS there and failed for its own reason must keep its
+    /// own diagnosis — collapsing it into "no service registered" would be
+    /// the silent substitution (ARCH principle 6) one rung down.
+    #[test]
+    fn a_real_failure_is_not_read_as_an_absent_service() {
+        for stderr in [
+            "Permission denied",
+            "Job for svrnmesh.service failed because the control process exited with error code.",
+            "Failed to connect to bus: No medium found",
+        ] {
+            assert!(
+                !stderr_means_no_service_registered(stderr),
+                "a live manager's failure was read as an absent service: {stderr:?}"
+            );
+        }
+    }
+
+    /// Every refusal the Restart button can return names BOTH commands.
+    /// The button's whole job when it cannot act is to say what can.
+    #[test]
+    fn every_refusal_names_a_command_the_user_can_run() {
+        for msg in [
+            no_service_manager_refusal("Could not find service"),
+            no_backend_here_refusal(),
+            manager_refused(
+                "systemctl --user restart svrnmesh.service",
+                "Permission denied",
+            ),
+        ] {
+            assert!(
+                msg.contains("svrn daemon start"),
+                "no way to start it now: {msg}"
+            );
+            assert!(
+                msg.contains("svrn install-service"),
+                "no way to stop it happening again: {msg}"
+            );
+        }
+    }
+
+    /// The manager's own words survive — the refusal adds a sentence, it
+    /// does not replace the diagnosis.
+    #[test]
+    fn the_managers_own_words_are_kept() {
+        let msg = manager_refused(
+            "launchctl kickstart -k gui/501/com.svrnmesh.daemon",
+            "Bootstrap failed: 5: Input/output error",
+        );
+        assert!(
+            msg.contains("Bootstrap failed: 5: Input/output error"),
+            "{msg}"
+        );
+        assert!(
+            msg.contains("launchctl kickstart -k gui/501/com.svrnmesh.daemon"),
+            "{msg}"
+        );
+    }
+
+    /// No dangling `()` when there is nothing to quote.
+    #[test]
+    fn the_refusal_reads_cleanly_with_no_detail() {
+        let msg = no_service_manager_refusal("  ");
+        assert!(!msg.contains("()"), "{msg}");
+        assert!(
+            msg.starts_with("No service manager owns this daemon"),
+            "{msg}"
+        );
     }
 }
 

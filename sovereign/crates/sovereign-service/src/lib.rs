@@ -27,7 +27,11 @@
 //! - **macOS** — a launchd LaunchAgent in `~/Library/LaunchAgents/`, loaded
 //!   with `launchctl`.
 //! - **Linux** — a systemd user unit in `~/.config/systemd/user/`, enabled
-//!   with `systemctl --user`.
+//!   with `systemctl --user`, plus `loginctl enable-linger` so the user
+//!   manager survives logout and starts at boot (see `ensure_linger` —
+//!   without it a user unit means "at login", not "at boot", and a
+//!   headless node is absent for exactly the window it was installed to
+//!   cover).
 //! - **Windows** — a Scheduled Task registered with `schtasks /Create /XML`.
 //!   Not a Windows Service: the SCM requires administrator rights and
 //!   registers machine-wide, which is the wrong grain twice over. A logon-
@@ -439,7 +443,158 @@ fn install_systemd(bin_path: &Path) -> Result<(), String> {
         return Err(format!("systemctl enable --now failed: {}", stderr.trim()));
     }
 
+    // Enabled is not the same as SURVIVING LOGOUT — see `ensure_linger`.
+    // Deliberately not part of the `?` chain above: a host whose polkit
+    // refuses lingering still has a correctly installed service, and
+    // failing the install would be the wrong verdict. It warns instead,
+    // naming the consequence (ARCH principle 6).
+    ensure_linger();
+
     Ok(())
+}
+
+// ─── Lingering: the difference between a service and a NODE ───────
+//
+// A systemd USER unit lives inside `user@<uid>.service`, and systemd stops
+// that manager when the user's last session ends. So `WantedBy=default.target`
+// means "at login", not "at boot": without lingering the daemon dies at logout
+// and does not come back until someone logs in again — precisely the window a
+// headless box in the corner is supposed to be contributing to the mesh.
+// `loginctl enable-linger <user>` is what makes the user manager start at boot
+// and outlive every session; it is also the only part of this install that a
+// distro's polkit may refuse, so it is a warning and never a fatal error.
+//
+// `uninstall_service` deliberately does NOT turn it back off: lingering is a
+// property of the USER, not of this unit, and another of their units may be
+// living on it. Enabling it is our business; revoking it is not.
+//
+// The argv deciders and the output parse are pure, and compiled under `test`
+// on every platform for the same reason `lifecycle_argv` is: the interesting
+// part is a string, and a string is checkable from whatever host the suite
+// runs on.
+
+/// Argv that asks logind "does this user's manager survive logout?".
+///
+/// `show-user --property=Linger` answers for a user with no active session
+/// too, which is the state an install run from a remote shell is in.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn linger_probe_argv(user: &str) -> Vec<String> {
+    vec!["show-user".into(), user.into(), "--property=Linger".into()]
+}
+
+/// Argv that turns lingering on for one user. No `--now`, no elevation:
+/// enabling it for ONESELF is what default polkit rules permit.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn linger_enable_argv(user: &str) -> Vec<String> {
+    vec!["enable-linger".into(), user.into()]
+}
+
+/// Is lingering already on, per `loginctl show-user` output?
+///
+/// Whole-line equality rather than `contains`: the block this parses also
+/// carries the word in its negative form, so a laxer `contains("Linger")`
+/// reads `Linger=no` as a yes and the install then skips the only step
+/// that was the point.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn linger_is_enabled(show_user_output: &str) -> bool {
+    show_user_output
+        .lines()
+        .any(|line| line.trim() == "Linger=yes")
+}
+
+/// What the operator is told when lingering could not be turned on.
+///
+/// Reports the absence in the words of its consequence, not in logind's
+/// (ARCH principle 6): the manager's own stderr is kept, but the sentence
+/// that matters is what the user loses and the one command that fixes it.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn linger_refusal_warning(user: &str, detail: &str) -> String {
+    let detail = detail.trim();
+    let because = if detail.is_empty() {
+        String::new()
+    } else {
+        format!(" ({detail})")
+    };
+    format!(
+        "svrnmesh: WARNING — could not enable lingering for {user}{because}.\n\
+         svrnmesh:   The daemon will STOP AT LOGOUT: systemd tears down your user\n\
+         svrnmesh:   manager when your last session ends, and it does not come back\n\
+         svrnmesh:   until you log in again. Peers see this node as ABSENT from the\n\
+         svrnmesh:   mesh for that whole window, not as busy.\n\
+         svrnmesh:   Fix it with:  loginctl enable-linger {user}\n\
+         svrnmesh:   (some distros' polkit rules require an administrator to run it)."
+    )
+}
+
+/// Whose manager we are asking logind to keep alive.
+///
+/// Shelled out rather than adding a `whoami`/`users` dependency — one string
+/// does not buy a crate here (module doc: every dependency is a decision).
+/// `$USER` is set by every interactive shell; `id -un` covers the install
+/// run from something that is not one.
+#[cfg(target_os = "linux")]
+fn current_username() -> Option<String> {
+    for key in ["USER", "LOGNAME"] {
+        if let Ok(name) = std::env::var(key) {
+            let name = name.trim().to_string();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    let out = std::process::Command::new("id").arg("-un").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Make this user's systemd manager outlive their sessions, so the daemon
+/// stays on the mesh across logout and comes back at boot.
+///
+/// Idempotent, like everything else in this module's install path: the
+/// probe runs first and an already-lingering user is left alone rather
+/// than re-asked (a repeat `enable-linger` is harmless but a repeat
+/// polkit prompt on a desktop host is not).
+#[cfg(target_os = "linux")]
+fn ensure_linger() {
+    let Some(user) = current_username() else {
+        eprintln!(
+            "{}",
+            linger_refusal_warning("$USER", "cannot resolve the current username")
+        );
+        return;
+    };
+
+    if let Ok(out) = std::process::Command::new("loginctl")
+        .args(linger_probe_argv(&user))
+        .output()
+    {
+        if out.status.success() && linger_is_enabled(&String::from_utf8_lossy(&out.stdout)) {
+            return;
+        }
+    }
+
+    match std::process::Command::new("loginctl")
+        .args(linger_enable_argv(&user))
+        .output()
+    {
+        Ok(out) if out.status.success() => {
+            eprintln!(
+                "svrnmesh: enabled lingering for {user} — the daemon now survives \
+                 logout and starts at boot without a login"
+            );
+        }
+        Ok(out) => eprintln!(
+            "{}",
+            linger_refusal_warning(&user, &String::from_utf8_lossy(&out.stderr))
+        ),
+        Err(e) => eprintln!(
+            "{}",
+            linger_refusal_warning(&user, &format!("spawn loginctl: {e}"))
+        ),
+    }
 }
 
 /// Where the task XML is staged before `schtasks /Create /XML` reads it.
@@ -1508,5 +1663,78 @@ mod reregister_decision_tests {
         assert_eq!(systemd.len(), 2);
         assert!(systemd[0].contains(&"daemon-reload".to_string()));
         assert!(systemd[1].contains(&"reset-failed".to_string()));
+    }
+}
+
+/// The linger decision, checked from whatever platform the suite runs on.
+///
+/// Pure by construction (see the block comment above `linger_probe_argv`),
+/// so the Linux-only half of `install_service` is not the only thing that
+/// ever exercises it — nobody here installs a systemd unit on demand, and
+/// an unchecked spelling of `loginctl` would ship as a guess.
+#[cfg(test)]
+mod linger_tests {
+    use super::*;
+
+    #[test]
+    fn the_probe_asks_logind_for_the_linger_property() {
+        assert_eq!(
+            linger_probe_argv("alex"),
+            ["show-user", "alex", "--property=Linger"],
+            "show-user answers for a user with no active session; `list-users` \
+             does not list one, which is the state a remote install runs in"
+        );
+    }
+
+    #[test]
+    fn enabling_is_per_user_and_asks_for_no_elevation() {
+        assert_eq!(linger_enable_argv("alex"), ["enable-linger", "alex"]);
+    }
+
+    #[test]
+    fn linger_is_read_from_the_whole_line_not_a_substring() {
+        assert!(linger_is_enabled("Linger=yes"));
+        assert!(linger_is_enabled("IdleHint=no\nLinger=yes\nState=active\n"));
+        assert!(!linger_is_enabled("Linger=no"));
+        assert!(!linger_is_enabled(""));
+        // The trap this guards: a `contains("Linger=yes")`-shaped check is
+        // fine, but a `contains("Linger")` one reads "no" as "yes" and the
+        // install then silently skips the only step that matters.
+        assert!(!linger_is_enabled("Linger=no\nLingerHint=yes-ish"));
+    }
+
+    /// A refusal must arrive as its consequence plus its repair, never as
+    /// logind's stderr alone (ARCH principle 6).
+    #[test]
+    fn the_warning_names_the_consequence_and_the_exact_fix() {
+        let w = linger_refusal_warning("alex", "Access denied\n");
+        assert!(
+            w.contains("loginctl enable-linger alex"),
+            "the fix must be a command the user can paste: {w}"
+        );
+        assert!(
+            w.contains("STOP AT LOGOUT"),
+            "the consequence must be in plain words: {w}"
+        );
+        assert!(
+            w.contains("ABSENT"),
+            "and in mesh terms — the node leaves, it does not idle: {w}"
+        );
+        assert!(
+            w.contains("Access denied"),
+            "logind's own words survive, they are just not the whole message: {w}"
+        );
+        assert!(
+            w.contains("WARNING"),
+            "never reported as a failed install: {w}"
+        );
+    }
+
+    /// An empty detail must not leave a dangling `()` in the sentence.
+    #[test]
+    fn the_warning_reads_cleanly_with_no_detail() {
+        let w = linger_refusal_warning("alex", "   ");
+        assert!(w.contains("for alex."), "{w}");
+        assert!(!w.contains("()"), "{w}");
     }
 }

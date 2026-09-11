@@ -7849,6 +7849,36 @@ dependency on `sovereign-contracts`; it KEPT the one it had. One crate became
 two and both name the seam, so fan-in counts an edge where there was already
 a use.
 
+WHAT THE THREE BACKENDS ACTUALLY PROMISE, measured 2026-09-11 after the
+operator settled that availability to the mesh is a property of the node
+rather than a convenience for the app (`quality/campaigns/sv-surface.toml`,
+"AMENDED 2026-09-11"). All three are SESSION-scoped, and only one of them
+could be fixed:
+
+- **Linux — now at boot, surviving logout.** The unit is a `systemd --user`
+  unit (`WantedBy=default.target`, `contrib/systemd/svrnmesh.service`), so
+  the user manager is torn down at logout and the node left the mesh until
+  someone logged in. `install_systemd` now calls `ensure_linger`, which
+  probes `loginctl show-user <u> --property=Linger` before asking, so a
+  repeat install does not re-prompt polkit. A refusal is a WARNING naming
+  the consequence and the exact fix, never fatal and never silent (ARCH
+  principle 6) — on a host whose polkit declines, the promise degrades back
+  to login-only and the installer says so. `uninstall_service` deliberately
+  does NOT disable lingering: it is a property of the user, not of this unit.
+- **macOS — at login, not at boot.** A LaunchAgent in
+  `~/Library/LaunchAgents` loaded into the per-user GUI domain `gui/<uid>`
+  with `RunAtLoad`. Verified against the live registration on the dev host.
+- **Windows — at login, not at boot.** The task's only trigger is
+  `<LogonTrigger>` running as `<LogonType>InteractiveToken`
+  (`contrib/windows/SvrnmeshDaemon.xml:30-36`); `StartWhenAvailable` covers
+  a missed SCHEDULED start, not a boot with nobody logged in.
+
+The two that stayed login-scoped would need a system-level daemon, which K1
+rejected on grain (the SCM and a root LaunchDaemon register machine-wide and
+need admin, while the daemon serves one person's data root). So "contributes
+while you are logged in" is the honest claim on those two, and it is written
+down here rather than assumed.
+
 ### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
 
 The campaign landed 44 commits in one day (R1 through the dedup pass,

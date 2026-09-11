@@ -36,10 +36,32 @@ use sovereign_turn_client::ServingHost;
 use tauri::{AppHandle, Emitter};
 
 const PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
-/// Consecutive failures before the banner raises. 3×5s rides out a
-/// hot-reload blip; a restarting daemon (30–60s model load) correctly
-/// shows as down until it answers again.
-const FAILURES_TO_RAISE: u32 = 3;
+/// Consecutive misses before the banner raises — 36 × 5s = 180s.
+///
+/// It was 3 (15s), and at 15s the banner fired during every ORDINARY
+/// restart and said "down" about a daemon that was starting normally. The
+/// threshold has to clear both clocks that a restart runs through before
+/// the daemon can answer at all:
+///
+/// * the service manager's own relaunch delay — launchd `ThrottleInterval`
+///   10s (`contrib/launchd/com.svrnmesh.daemon.plist`, the KeepAlive note),
+///   systemd `RestartSec=10` (`contrib/systemd/svrnmesh.service`), and
+///   Task Scheduler `RestartOnFailure/Interval` `PT1M`
+///   (`contrib/windows/SvrnmeshDaemon.xml`, whose minimum IS one minute).
+///   Worst case across the three: 60s.
+/// * the daemon's own readiness budget — 120s by default
+///   (`sovereign-cli-daemon` `daemon_cmd/lifecycle.rs::parse_ready_timeout`,
+///   `DEFAULT_SECS = 120`), which is how long a starting daemon is
+///   legitimately not answering `/v1/models` while it loads a model.
+///
+/// 60 + 120 = 180s is the longest an ordinary restart takes on the slowest
+/// platform; anything below it makes the banner a guess. The cost is that a
+/// daemon which is genuinely gone goes unannounced for three minutes — paid
+/// deliberately, because a banner that cries wolf on every restart is one
+/// users learn to ignore, and the recovery this banner offers
+/// (`attach_restart_daemon`) is useless against a daemon that was already
+/// coming back on its own.
+const FAILURES_TO_RAISE: u32 = 36;
 
 /// Mirrors over the `attach-daemon-state` event; `kind` is the
 /// discriminant, matching the `supervisor-state` convention.
@@ -78,6 +100,17 @@ pub fn spawn(app_handle: AppHandle, client_port: u16) {
                 raised = false;
             } else {
                 consecutive += 1;
+                // The banner deliberately waits out the OS's recovery window,
+                // which leaves three minutes where the only global signal is a
+                // per-turn error. One line at the first miss so the log tells
+                // the story at default levels, not only at debug.
+                if consecutive == 1 {
+                    tracing::info!(
+                        client_port,
+                        raise_after_secs = (FAILURES_TO_RAISE as u64) * PROBE_INTERVAL.as_secs(),
+                        "attach-watch: daemon stopped answering — watching"
+                    );
+                }
                 if consecutive >= FAILURES_TO_RAISE {
                     if !raised {
                         tracing::warn!(
