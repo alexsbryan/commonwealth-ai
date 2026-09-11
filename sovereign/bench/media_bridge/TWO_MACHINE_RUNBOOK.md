@@ -18,9 +18,13 @@ page — CI-on-your-metal across two nodes, and remote media playback.
 "different networks" is unmet and the result is a relay floor, not a verdict.
 
 **Put the MacBook on a phone hotspot instead.** Cellular gives genuine network
-diversity and CGNAT, which defeats hole-punching on its own — so it produces a
-real relayed path AND the bar's actual condition. That is the difference
-between a reading and a verdict, for about five minutes of setup.
+diversity (different public IPs, CGNAT on the phone side). It does NOT, on its
+own, defeat hole-punching: measured 2026-09-11, a Mac on an iPhone hotspot
+punched straight to RuggedFox's public UDP endpoint on the first try
+(`reversed-leg-2026-09-11.stdout`). CGNAT stops INBOUND punches to the
+phone side, so the relayed path arises naturally only when the phone side is
+the one being dialled; when it dials a home NAT that admits punches, the path
+reads `mixed`. Plan on FORCING the relay (below) and recording it as forced.
 
 ## Two preconditions are already cleared — do NOT redo them
 
@@ -189,4 +193,31 @@ reading count.
 Then take the actual bar: three or more runs, 600 s each, full file rather than
 a 32 MiB range, reported as a distribution.
 
-    ./target/release/examples/media_bridge_bench pull --addr 127.0.0.1:NNNNN --path /media.bin --verify --label soak1
+    ./target/release/examples/media_bridge_bench pull --addr 127.0.0.1:NNNNN --path /media.bin --verify --duration-secs 600 --label soak1
+
+`--duration-secs` is not optional: the BAR verdict line prints only inside
+that branch (`media_bridge_bench.rs`, the `if let Some(d) = duration_secs`).
+And `fetch_until` checks the deadline at the top of each WHOLE-FILE pull, so
+on a 1 GiB origin at ~22 Mbit/s a "600 s" run lasts ~760 s and `secs` reads
+that; the verdict still judges `>= 600`. Budget ~13 min per soak.
+
+---
+
+# LIVE RUN, 2026-09-11 — the reversed leg, taken
+
+`reversed-leg-2026-09-11.stdout`. **Could-not-judge, by construction. Kept 0,
+discarded 1.** Two findings, both about the pair rather than the transport:
+
+1. The probe read `path=mixed direct=[69.181.167.209:43327]` — the Mac on the
+   hotspot punched to RuggedFox's PUBLIC endpoint, with Tailscale verifiably
+   stopped. The premise sentence above was rewritten on this evidence.
+2. RuggedFox's uplink to a neutral endpoint is 21.1 / 25.7 Mbit/s — AT the
+   bar. The 22.6 Mbit/s probe was the home ISP, not the path; a soak on any
+   path, forced relay included, would have filed an ISP cap as a verdict.
+
+Both directions on this pair are sender-capped (phone uplink one way, home
+uplink the other). **The next leg needs a sender with real uplink:** a cloud
+VM on a symmetric >=100 Mbit link serving to the Mac on the hotspot, relay
+FORCED on the Mac (`pfctl` anchor blocking outbound UDP to the VM's address —
+a public VM punches too), recorded as forced; the Mac's hotspot downlink is
+169 Mbit/s, not a cap. Check the VM's IPv6 before writing a v4-only block.
