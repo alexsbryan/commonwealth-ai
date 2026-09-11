@@ -7824,6 +7824,38 @@ declared-type walks as peers, whose condition was met on 2026-09-03 (see
 locally.
 
 
+### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
+
+The campaign landed 44 commits in one day (R1 through the dedup pass,
+`quality/campaigns/sv-surface.toml` THE LEDGER). The ratchets were re-pinned in
+a worktree at `origin/main` (4888f733e) — not on the working tree — so what is
+already public is separated from what this branch adds, and then the branch's
+own growth was accepted at a clean HEAD (d9e2577d5 plus the campaign file).
+Net production Rust for the branch: +10,471 (+21,047 / −10,576); the desktop
+is −2,004 net and the daemon carries the routes that serve it. Directive 3 of
+the campaign ("must reduce code") is NOT met, and the campaign file says so
+with the numbers rather than a plan.
+
+What the lines bought, by ratchet finding:
+
+| Finding | Bought |
+|---|---|
+| `sovereign-turn-client/src/lib.rs` 1,614 → 3,655 (+2,041; crate +988 production) | the one client family: every route family's methods (reading, atlas incl. conv-tiered, meshapp, insights, notes, features, local corpus incl. register/ingest-progress, governance, MCP config, recipe projects, skills/provenance/ready, documents, catalogue), now on ONE `exchange` decider (4d91462d1); the re-exports mobile consumes. Split owed: one module per family (ARCH §3.2) |
+| `sovereign-mesh/src/turn_http.rs` 1,421 → 1,875 (+454) | TurnSettled with the producer JOIN, the idle close, cancel reaching a parked prompt, refusals as ResolveAck, per-turn prompt ids (188a9e4e4). Split owed |
+| `sovereign-mesh/src/daemon.rs` 5,330 → 5,517 (+187) | the ClientListener bind outcome (3c7ad5933) and fourteen router mounts. Split long owed (§3.1, 4× the line) |
+| `sovereign-desktop/src-tauri/src/state.rs` 1,894 → 2,195 (+301) | B4 attach-to-the-holder with the pid identity probe and the bind gate (65b92cd15, 3c7ad5933) — the split of `bootstrap_with_progress` is D9b's blocked work |
+| `sovereign-desktop/src-tauri/src/commands/chat.rs` NEW oversized 1,396 | one socket reader, per-conversation wire slots, ResolveAck rendering (759ea5133). Split owed |
+| `sovereign-desktop/src-tauri/src/local_corpus_commands.rs` 1,367 → 1,627 (+260) | the ingest job's follow loop (poll + the same Tauri frames) and the wire register (502304f63, fdaa06937); the census says which pairs stay app-local |
+| `sovereign-cli-llm/src/reading_diag_cmd.rs` 1,213 → 1,327 (+114) | the deref half on the daemon plus the golden module over captured bytes (503aeee43) |
+| `sovereign-contracts/src/skills.rs` 1,469 → 1,525 (+56) | the RwLock active set so a daemon can toggle a skill (2a9a9e91e) |
+| tests: `loopback_parity.rs` 1,829 (new oversized), `turn_surface.rs` 1,479 (new), `store_tests.rs` +283, mesh tests +4,531, core +477, desktop +603, contracts +218 | the PUT-gate loopback census that closed f6a633519's NOT-A-GATE, one e2e per route family watched red, the conv-browse trait tests, the parity journey, the twin censuses. `loopback_parity.rs` still carries 1,114 lines of rung 1/3/6 parity suites under the wrong docstring — a relocation owed |
+
+Twenty-four `size-gate` keys grew; `--tighten` found nothing to bank on either
+gate after acceptance. The dedup pass that preceded this acceptance
+(55a7ff294, 4d91462d1, d9e2577d5) removed 2,487 production lines; the
+scaffolding it removed was 17% of the branch's net, and the rest is daemon
+surface the surfaces now consume.
+
 ### 10.1j Size — a 1,384-line file lost 259 lines and the band counted it as growth (enrichment-as-plugin Step 2, 2026-09-03)
 
 `corpus-engine-vocab` took the taxonomy block out of

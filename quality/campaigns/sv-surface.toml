@@ -984,6 +984,19 @@ status    = "active"
 # 1/3/6 parity suites under a docstring that says "cross-router loopback
 # parity" — a relocation owed, not a deletion.
 #
+# AFTER THE DEDUPLICATION PASS (55a7ff294, 4d91462d1, d9e2577d5), the
+# same numstat over all 44 sv-surface commits R1..HEAD:
+#   production Rust   +21,047 / -10,576  = NET +10,471   (was +12,958)
+#   test Rust         +11,637 /  -1,096  = NET +10,541
+#   by crate, production net: sovereign-mesh +7,782; turn-client +2,462;
+#   contracts +875; core +616; mobile +362; cli-llm +140; meshapp +76;
+#   store +50; cli-daemon +34; server +30; tools +27; commonwealth-api
+#   +21; sovereign-desktop -2,004.
+# The dedup removed 2,487 production lines, 11% above the plan's 2,245,
+# and the result is the shape the reviewer predicted: the surfaces are
+# thinner (desktop -2,004 net), the daemon is larger by the routes that
+# serve them, and directive 3 stays NOT MET at +10,471.
+#
 # THE HONEST SHAPE OF THE RESULT: two of the three constructions are
 # proven (surface parity on the real harness; twin censuses red on
 # planted twins across 19 families), the third is measured and not met
