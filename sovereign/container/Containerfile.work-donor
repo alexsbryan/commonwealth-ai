@@ -17,8 +17,8 @@
 #
 # A unit runs with `--network=none` and ONE mount, so a unit that compiles
 # needs its inputs inside that mount. The base image's layout already says
-# where: `CARGO_HOME=/work/.cargo-container`, i.e. the registry lives in the
-# workdir, which persists across units (the donor's clean omits `-x`). What
+# where: `.cargo-container` in the workdir (reached as `CARGO_HOME=/cargo`
+# below), which persists across units (the donor's clean omits `-x`). What
 # nobody had done was put anything there. On 2026-09-11 two `dst-scenarios`
 # attempts reported could-not-judge after 360 s and 2107 s, read as compile
 # time; `podman logs` on the third said what they were doing the whole time —
@@ -84,8 +84,12 @@ FROM localhost/sovereign-desktop-linux-build:latest
 # against the snapshot's `no function or associated item named`) — the image
 # is the CI environment, so it carries the pinned toolchain, and that
 # toolchain's own bin dir goes first on PATH (see the rustup-proxy note
-# below). The pin is COPIED in rather than typed here so there is one place
-# it lives; bump the file, rebuild the image.
+# below). The pin AND the component list are COPIED in rather than typed here
+# so there is one place they live; bump the file, rebuild the image. The list
+# matters as much as the pin: the same suites mismatched again on 2026-09-11
+# under the pinned compiler, on the three source lines rustc prints for a
+# diagnostic into `core` — rendered only when `rust-src` is in the sysroot,
+# which the reference host had and an image typing `clippy,rustfmt` did not.
 COPY rust-toolchain.toml /tmp/rust-toolchain.toml
 # CARGO_HOME is pinned to /usr/local/cargo for this step only: the base image
 # points it at the workdir for units, and rustup keeps its own settings under
@@ -93,7 +97,9 @@ COPY rust-toolchain.toml /tmp/rust-toolchain.toml
 RUN set -eu; export CARGO_HOME=/usr/local/cargo; \
     pin="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' /tmp/rust-toolchain.toml)"; \
     test -n "$pin"; \
-    rustup toolchain install "$pin" --profile minimal --component clippy,rustfmt; \
+    comps="$(sed -n 's/^components *= *\[\(.*\)\]/\1/p' /tmp/rust-toolchain.toml | tr -d ' "')"; \
+    test -n "$comps"; \
+    rustup toolchain install "$pin" --profile minimal --component "$comps"; \
     rustup default "$pin"; \
     ln -sfn "/usr/local/rustup/toolchains/${pin}-x86_64-unknown-linux-gnu" /usr/local/rustup/toolchains/pinned; \
     rm /tmp/rust-toolchain.toml
@@ -107,10 +113,24 @@ ENV PATH=/usr/local/rustup/toolchains/pinned/bin:/usr/local/cargo/bin:/usr/local
 # read as "still compiling" from outside.
 ENV CARGO_NET_OFFLINE=true
 
+# The registry stays where the base image put it — `.cargo-container` inside
+# the one mount — but a unit reaches it as `/cargo`, not as a path under
+# `/work`. trybuild rewrites a registry path in a diagnostic to `$CARGO/…`
+# only if the line did not already match the workspace root: its normalizer
+# tries `$WORKSPACE` first and stops there. With CARGO_HOME under `/work`, the
+# `serde_json-$VERSION/src/de.rs` line every snapshot expects came out as
+# `$WORKSPACE/.cargo-container/registry/src/index.crates.io-…/serde_json-1.0.150/
+# src/de.rs`, and `kernel-types::answer_reds` failed on that line alone
+# (2026-09-11, first full run under the pinned compiler). A symlink costs the
+# image nothing and the operator's warm line does not change: the host path is
+# the same directory.
+RUN ln -s /work/.cargo-container /cargo
+ENV CARGO_HOME=/cargo
+
 # Build-script caches (ort-sys's prebuilt runtime, anything else that reads
 # the XDG cache) live inside the one mount, in the ignored dir the registry
 # already uses, so they persist across units and are warmed the same way.
-ENV XDG_CACHE_HOME=/work/.cargo-container/xdg-cache
+ENV XDG_CACHE_HOME=/cargo/xdg-cache
 
 # The reference runs `sovereign-test.sh` under nextest (one process per test);
 # without it the script's `auto` engine falls back to plain cargo, which runs
