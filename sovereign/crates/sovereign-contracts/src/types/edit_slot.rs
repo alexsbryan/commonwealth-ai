@@ -152,7 +152,7 @@ pub struct FimLane {
 ///
 /// Deliberately thin. Sampling for this lane (`max_tokens`, `stop`,
 /// `temperature`, thinking suppression) is **per-consult policy** and
-/// lives on `commonwealth_api::next_edit_model::ConsultPlan`, which
+/// lives on `sovereign_api::next_edit_model::ConsultPlan`, which
 /// both the daemon and the offline scorer read — duplicating it here
 /// would let the two drift and silently measure different models
 /// (ARCH §10.6).

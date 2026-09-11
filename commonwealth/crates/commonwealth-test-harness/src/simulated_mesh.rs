@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use bytes::Bytes;
-use commonwealth_app::manifest::MeshAppManifest;
+use sovereign_meshapp_registry::manifest::MeshAppManifest;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_inference::plan::MeshPlan;
+use sovereign_serving::plan::MeshPlan;
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 

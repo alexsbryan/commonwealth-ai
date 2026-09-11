@@ -58,7 +58,8 @@ sovereign-cli-shared = { workspace = true, features = ["scip"] }
 # rather than keeping it. Now a capability, one layer down, and the interface
 # is two names: `build_with_progress_with_embedder` and `ParsedBuild`.
 sovereign-enrichment-build = { workspace = true }
-# `commonwealth-state`, `commonwealth-core` and `commonwealth-api` WERE HERE,
+# `commonwealth-state`, `commonwealth-core` and `commonwealth-api` (now
+# `sovereign-api`) WERE HERE,
 # and cw-lift rung 3b deleted all three. The whole coupling was eleven lines in
 # two files: `NodeId` reached through `commonwealth_core::ids`'s re-export of
 # the kernel type (ARCH §8.3), one call to the pure `partition::should_host`,

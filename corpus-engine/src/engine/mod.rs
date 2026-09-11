@@ -1269,7 +1269,7 @@ impl CorpusEngine {
     /// in-memory `MeshStore` losing the handoff blob across a
     /// daemon restart while the dispatcher's recovery path can no
     /// longer find a peer that holds it. See
-    /// `commonwealth_api::auto_recover` for the recovery primitive
+    /// `sovereign_api::auto_recover` for the recovery primitive
     /// that consumes this.
     ///
     /// Excludes:

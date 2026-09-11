@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end gossip convergence test.
 //!
-//! Binds two real `commonwealth_api::internal_router` instances on
+//! Binds two real `sovereign_api::internal_router` instances on
 //! ephemeral localhost ports (skipping `EmbeddedDaemon`'s hardcoded
 //! 9742), seeds each with a distinct `AppState` on the same mesh,
 //! and drives `sovereign_mesh::gossip::run_one_round` between them.
@@ -15,8 +15,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_api::server::internal_router;
-use commonwealth_api::state::AppState;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};

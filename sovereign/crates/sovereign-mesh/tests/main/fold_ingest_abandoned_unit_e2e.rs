@@ -50,8 +50,8 @@
 //! `Display` is the first EIGHT of sixteen bytes and partition directories are
 //! named from it, so the ids differ in their HIGH bytes.
 
-use commonwealth_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use commonwealth_api::server::internal_router;
+use sovereign_api::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
+use sovereign_api::server::internal_router;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
@@ -519,7 +519,7 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
 
 /// Merge one corpus from a coverage, asserting the merge itself succeeded —
 /// a precondition for the gossip reading, not the reading's own bar.
-async fn merge_one(state: &commonwealth_api::state::AppState, corpus: &str, cov: &FoldCoverage) {
+async fn merge_one(state: &sovereign_api::state::AppState, corpus: &str, cov: &FoldCoverage) {
     let outcome =
         merge_from_fold_coverage(state, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
     assert!(

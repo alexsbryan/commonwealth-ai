@@ -8,7 +8,7 @@ license.workspace = true
 serving-policy = { workspace = true }
 # The launch-shape vocabulary. `RpcServe` is the ONE reading of
 # `SOVEREIGN_RPC_SERVE`, shared with the two mesh surfaces and
-# commonwealth-api's `/status`, so nothing can advertise a worker this
+# sovereign-api's `/status`, so nothing can advertise a worker this
 # crate would not bind (sovereign-contracts is a serde/DTO leaf — no
 # runtime, no layer inversion).
 sovereign-contracts = { workspace = true }

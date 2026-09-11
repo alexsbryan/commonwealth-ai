@@ -27,9 +27,9 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
-use commonwealth_api::server::{client_router, internal_router};
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::knowledge::CorpusShardInfo;

@@ -3,16 +3,15 @@
 #   cargo run -p xtask -- layout-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- layout-gate --tighten
-4	commonwealth/crates/commonwealth-api/src/auto_recover.rs
-2	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_queue.rs
-4	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_sync.rs
-8	commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs
 6	corpus-engine/src/engine/mod.rs
 2	corpus-engine/src/enrichment/atlas/strategies/code_walk.rs
 1	corpus-engine/src/enrichment/code_intel/pass.rs
 3	corpus-engine/src/sharding.rs
 1	corpus-engine/src/snapshot.rs
 6	corpus-engine/xtask/src/layout_gate.rs
+4	sovereign/crates/sovereign-api/src/auto_recover.rs
+2	sovereign/crates/sovereign-api/src/routes_internal/corpus_queue.rs
+4	sovereign/crates/sovereign-api/src/routes_internal/corpus_sync.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
 1	sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs
@@ -33,6 +32,7 @@
 3	sovereign/crates/sovereign-cli/src/rough_edges_cmd.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
+8	sovereign/crates/sovereign-grants/src/shard_manager.rs
 1	sovereign/crates/sovereign-mesh/src/auto_resume.rs
 3	sovereign/crates/sovereign-mesh/src/reading_http.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped.rs

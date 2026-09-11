@@ -39,7 +39,7 @@
 //! # …and it repeats, because one body is not the unit of convergence
 //!
 //! Both `ops` arrays are stopped at
-//! [`RING_SYNC_OPS_BUDGET_BYTES`](commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES),
+//! [`RING_SYNC_OPS_BUDGET_BYTES`](sovereign_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES),
 //! and [`exchange`] repeats the pair until neither side moves. Nothing on the
 //! wire changed shape for that: the exchange was always idempotent, so a
 //! partial one is safe and the second half is just the next call.
@@ -75,10 +75,10 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use commonwealth_api::routes_internal::{
+use sovereign_api::routes_internal::{
     RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
 };
-use commonwealth_api::state::AppState;
+use sovereign_api::state::AppState;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_transport::{peer_contact, TrafficClass};
 use tokio::sync::Notify;
@@ -594,14 +594,14 @@ mod tests {
     //! The loop itself, against a live listener.
     //!
     //! `exchange` needs a `reqwest` client and a real socket, so these bind
-    //! `commonwealth_api::server::internal_router` on an ephemeral port — the
+    //! `sovereign_api::server::internal_router` on an ephemeral port — the
     //! same shape `tests/main/gossip_integration.rs` uses for the gossip loop,
     //! and the only way to drive the production loop rather than a second
     //! spelling of it (ARCH §10.6).
 
     use super::*;
     use axum::response::IntoResponse;
-    use commonwealth_api::server::internal_router;
+    use sovereign_api::server::internal_router;
     use commonwealth_core::ids::{MeshId, NodeId};
     use commonwealth_core::mesh::Mesh;
     use commonwealth_rail::{
@@ -929,7 +929,7 @@ mod tests {
         );
         assert!(
             serde_json::to_vec(&chunk).unwrap().len()
-                <= commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
+                <= sovereign_api::server::MAX_REQUEST_BODY_BYTES,
             "a chunk must fit the limit it was budgeted against"
         );
     }
@@ -1087,7 +1087,7 @@ mod tests {
     /// one of `DAEMON_OWN_NAMESPACES` — a namespace not on that list has no
     /// derived roster and would be refused at the door for that reason alone,
     /// which is a different test.
-    const KV: &str = commonwealth_inference::INFERENCE_APP_ID;
+    const KV: &str = sovereign_serving::INFERENCE_APP_ID;
 
     /// One mesh both nodes see. Each member carries the pubkey of the key its
     /// node signs with, because that equality is the whole bridge between a

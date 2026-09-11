@@ -44,24 +44,25 @@ kernel-types = { workspace = true }
 # to prevent, moved from runtime to compile time. iroh should leave WITH the
 # mesh when the mesh becomes optional, not on its own before that.
 # `fanout` because `media_fanout.rs` calls the fan-out core where it lives
-# (ARCH §8.3: the owner, not `commonwealth-api`'s re-export of it).
+# (ARCH §8.3: the owner, not `sovereign-api`'s re-export of it).
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 # The media decisions — admission, reach, catalogue fan-out — so this daemon
 # and the package-only rails daemon compose ONE implementation (ARCH §10.6).
 # A direct path dep on the owner like its neighbours above (ARCH §8.3).
 commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
-commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
+sovereign-api = { path = "../../../sovereign/crates/sovereign-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory
 # variants of each when `EmbeddedDaemon` builds its state.
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 # The ring rail's storage type, installed onto `AppState` at startup. A
 # DIRECT dep on the crate that OWNS `RingRail`, not on a re-export shim, so
-# this crate and commonwealth-api cannot end up on two versions of one
+# this crate and sovereign-api cannot end up on two versions of one
 # logical type (ARCH §8.3). Until cw-lift 1c that comment was aspirational:
-# the dep was on `commonwealth-knowledge` and `RingRail` arrived through its
-# `rail` re-export. `commonwealth-knowledge` is GONE from this crate — the two
+# the dep was on `commonwealth-knowledge` (now `sovereign-grants`) and
+# `RingRail` arrived through its `rail` re-export. That dep is GONE from this
+# crate — the two
 # rail sites were its only references — so the mesh no longer links the
 # knowledge layer to install a journal.
 commonwealth-rail = { workspace = true }
@@ -80,16 +81,16 @@ commonwealth-rail = { workspace = true }
 # whose registry is empty and which therefore refuses every `[compute
 # .work_offer]` a person writes.
 commonwealth-work = { workspace = true, features = ["process"] }
-commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
+sovereign-meshapp-registry = { path = "../../../sovereign/crates/sovereign-meshapp-registry" }
 # DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
 # deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.
 # Optional: only the `dst` feature (the CI fault-injection gate) pulls it in,
 # so default builds don't drag the test harness into the dependency graph.
 commonwealth-test-harness = { path = "../../../commonwealth/crates/commonwealth-test-harness", optional = true }
 # KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
-# re-exported via commonwealth-inference::oicp — we POST/parse those
+# re-exported via sovereign-serving::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
-commonwealth-inference = { path = "../../../commonwealth/crates/commonwealth-inference" }
+sovereign-serving = { path = "../../../sovereign/crates/sovereign-serving" }
 # `treesitter` feature dropped from the unconditional dep 2026-05-22:
 # only `reindexer` + `project_http` (the SCIP-graph modules) need it,
 # and those are now feature-gated by this crate's `treesitter` feature
@@ -241,9 +242,9 @@ dst = ["dep:commonwealth-test-harness"]
 # so a production build never links a measurement harness. Run:
 #   cargo test -p sovereign-mesh --features mesh-sim,treesitter --test main mesh_sim_scoreboard -- --nocapture
 mesh-sim = []
-# Forward the ATOS served-middleware pipeline through to commonwealth-api.
+# Forward the ATOS served-middleware pipeline through to sovereign-api.
 # OFF by default; an atos daemon build turns it on via the feature chain.
-atos = ["commonwealth-api/atos"]
+atos = ["sovereign-api/atos"]
 # Enables `reindexer` + `project_http` — the SCIP-graph-hosting
 # modules. Off by default so binaries that only use the mesh
 # primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't

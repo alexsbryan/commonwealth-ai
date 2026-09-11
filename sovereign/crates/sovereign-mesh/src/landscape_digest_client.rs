@@ -17,7 +17,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use commonwealth_inference::oicp::{LandscapeDigestRequest, LandscapeDigestResponse};
+use sovereign_serving::oicp::{LandscapeDigestRequest, LandscapeDigestResponse};
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
 
@@ -151,7 +151,7 @@ impl LandscapeDigestProvider for MeshLandscapeDigestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_inference::oicp::{LandscapeDigestEntry, LandscapeDigestResponse};
+    use sovereign_serving::oicp::{LandscapeDigestEntry, LandscapeDigestResponse};
     use sovereign_core::types::{Conversation, ConversationId, Message, MessageId, Role};
 
     /// Spin up a hand-rolled axum server that returns a fixed

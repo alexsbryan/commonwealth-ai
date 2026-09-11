@@ -2569,7 +2569,7 @@ impl TurnClient {
     /// The wire form of `commonwealth_state::current_contributions`,
     /// which this crate cannot name (see the note above
     /// [`Self::corpus_atoms`]), so the caller supplies `T`. It is
-    /// `Vec<commonwealth_api::routes_internal::NodeContributionsView>`
+    /// `Vec<sovereign_api::routes_internal::NodeContributionsView>`
     /// for the daemon's own shape, and the desktop's
     /// `Vec<NodeContributionsDto>` — the same field names — for the
     /// Mesh Health Members panel.
@@ -2592,7 +2592,7 @@ impl TurnClient {
     /// `GET /internal/peer-preference/list` — every affinity
     /// preference the host holds, in the store's own scan order.
     ///
-    /// `T` is `Vec<commonwealth_api::routes_internal::PeerPreferenceView>`
+    /// `T` is `Vec<sovereign_api::routes_internal::PeerPreferenceView>`
     /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
     /// — identical field names — for the Mesh Health panel. This crate
     /// cannot name either (see the note above [`Self::corpus_atoms`]).

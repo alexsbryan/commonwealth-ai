@@ -70,7 +70,7 @@
 
 use std::collections::HashMap;
 
-use commonwealth_api::openai_types::ToolDefinition;
+use sovereign_api::openai_types::ToolDefinition;
 use sovereign_inference::embedded::ParsedToolCall;
 
 /// One validation finding. Field names are flat to simplify log
@@ -286,7 +286,7 @@ fn lookup_value<'a>(root: &'a serde_json::Value, path: &str) -> Option<&'a serde
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_api::openai_types::{ToolDefinition, ToolFunction};
+    use sovereign_api::openai_types::{ToolDefinition, ToolFunction};
     use serde_json::json;
 
     fn tool(name: &str, params: serde_json::Value) -> ToolDefinition {

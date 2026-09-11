@@ -12,7 +12,7 @@
 //! `AcceptorRoutes::forward_for` fixes that by consulting the ONE thing a QUIC
 //! handshake actually proves: the dialer's Ed25519 key, the same key the mesh
 //! gossips. These tests drive it through a real `IrohAcceptor`, real
-//! `commonwealth_api` client routers, and real `HttpBridge` dials — and the
+//! `sovereign_api` client routers, and real `HttpBridge` dials — and the
 //! `..._is_the_hole_this_closes` twin reproduces the old behaviour so the fix
 //! is watched succeeding against a failure that is watched failing.
 //!
@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_api::server::{client_router, client_router_for, ClientSurface};
+use sovereign_api::server::{client_router, client_router_for, ClientSurface};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, CLIENT_ALPN,

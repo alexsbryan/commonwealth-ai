@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Adapter: `sovereign_core::traits::InferenceProvider` →
-//! `commonwealth_api::state::LocalInferenceService`.
+//! `sovereign_api::state::LocalInferenceService`.
 //!
 //! Why this exists: Commonwealth's HTTP handlers speak OpenAI-style
 //! `ChatCompletionRequest`/`Response`; Sovereign's runtime speaks
@@ -20,12 +20,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use commonwealth_api::openai_types::{
+use sovereign_api::openai_types::{
     self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     FunctionCall, Role, ToolCall, Usage,
 };
-use commonwealth_api::state::{LocalInferenceError, LocalInferenceService};
-use commonwealth_inference::oicp::ProviderManifest;
+use sovereign_api::state::{LocalInferenceError, LocalInferenceService};
+use sovereign_serving::oicp::ProviderManifest;
 use futures::{Stream, StreamExt};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
@@ -1305,7 +1305,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         &self,
         mut request: ChatCompletionRequest,
     ) -> Result<
-        Pin<Box<dyn Stream<Item = commonwealth_api::openai_types::StreamFrame> + Send>>,
+        Pin<Box<dyn Stream<Item = sovereign_api::openai_types::StreamFrame> + Send>>,
         LocalInferenceError,
     > {
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
@@ -1368,7 +1368,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .map_err(map_provider_error)?;
         tracing::info!("sovereign inference adapter: typed streaming started");
         // Translate sovereign_core::types::StreamFrame →
-        // commonwealth_api::openai_types::StreamFrame. The two
+        // sovereign_api::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);
         // translation is a per-variant copy.
         let mapped = inner.map(translate_stream_frame);
@@ -1424,12 +1424,12 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 
     async fn fim_completion_stream(
         &self,
-        request: commonwealth_api::state::FimCompletionRequest,
-    ) -> Result<commonwealth_api::state::FimStreamStart, String> {
+        request: sovereign_api::state::FimCompletionRequest,
+    ) -> Result<sovereign_api::state::FimStreamStart, String> {
         crate::fim_adapter::fim_completion_stream(&self.provider, request).await
     }
 
-    fn edit_status(&self) -> Option<commonwealth_api::state::EditSlotStatus> {
+    fn edit_status(&self) -> Option<sovereign_api::state::EditSlotStatus> {
         crate::fim_adapter::edit_status(&self.provider)
     }
 
@@ -1462,7 +1462,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         self.provider.extras_inventory()
     }
 
-    fn resident_slots(&self) -> Vec<commonwealth_api::state::ResidentSlot> {
+    fn resident_slots(&self) -> Vec<sovereign_api::state::ResidentSlot> {
         // Map the sovereign engine's residency report across the
         // api-crate seam (commonwealth-api can't depend on
         // sovereign-contracts, so the two ResidentSlot types are
@@ -1470,20 +1470,20 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         self.provider
             .resident_slots()
             .into_iter()
-            .map(|s| commonwealth_api::state::ResidentSlot {
+            .map(|s| sovereign_api::state::ResidentSlot {
                 role: s.role,
                 model_id: s.model_id,
                 resident: s.resident,
                 size_bytes: s.size_bytes,
                 transitioning: s.transitioning,
-                placement: s.placement.map(|p| commonwealth_api::state::SlotPlacement {
+                placement: s.placement.map(|p| sovereign_api::state::SlotPlacement {
                     mode: p.mode,
                     total_blocks: p.total_blocks,
                     local_blocks: p.local_blocks,
                     workers: p
                         .workers
                         .into_iter()
-                        .map(|w| commonwealth_api::state::WorkerPlacement {
+                        .map(|w| sovereign_api::state::WorkerPlacement {
                             endpoint: w.endpoint,
                             blocks: w.blocks,
                             holds_output: w.holds_output,
@@ -1494,13 +1494,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .collect()
     }
 
-    fn compute_children(&self) -> Vec<commonwealth_api::state::ComputeChildStatus> {
+    fn compute_children(&self) -> Vec<sovereign_api::state::ComputeChildStatus> {
         // Map the compute-child statuses across the api-crate seam (same
         // copied-type convention as `resident_slots` above).
         self.provider
             .compute_children()
             .into_iter()
-            .map(|c| commonwealth_api::state::ComputeChildStatus {
+            .map(|c| sovereign_api::state::ComputeChildStatus {
                 name: c.name,
                 role: c.role,
                 model_id: c.model_id,
@@ -1554,7 +1554,7 @@ mod guard_tests {
 #[cfg(test)]
 mod adapter_translation_tests {
     use super::{strip_tool_call_blocks, SovereignInferenceAdapter};
-    use commonwealth_api::openai_types::{
+    use sovereign_api::openai_types::{
         ChatCompletionRequest, ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction,
     };
 

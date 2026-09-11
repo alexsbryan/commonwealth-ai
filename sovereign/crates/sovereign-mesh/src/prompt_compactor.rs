@@ -45,7 +45,7 @@
 //!     guessing at opencode's prompt markers; opencode-specific trims
 //!     will land once `PromptSizeReport` data from real loops is in.
 
-use commonwealth_api::openai_types::{ChatCompletionRequest, Role};
+use sovereign_api::openai_types::{ChatCompletionRequest, Role};
 
 /// Per-message-class character accounting for one chat-completion
 /// request. Computed at the entry point of `chat_completion` and
@@ -270,7 +270,7 @@ fn ceil_char_boundary(s: &str, idx: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_api::openai_types::{ChatMessage, ToolDefinition, ToolFunction};
+    use sovereign_api::openai_types::{ChatMessage, ToolDefinition, ToolFunction};
 
     fn msg(role: &str, content: &str) -> ChatMessage {
         ChatMessage {

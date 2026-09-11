@@ -156,9 +156,9 @@ crates = [
     "commonwealth-state",
     "commonwealth-transport",
     "commonwealth-discovery",
-    "commonwealth-inference",
-    "commonwealth-knowledge",
-    "commonwealth-app",
+    "sovereign-serving",
+    "sovereign-grants",
+    "sovereign-meshapp-registry",
     # The ring rail, split out of `commonwealth-knowledge` on 2026-09-04
     # (cw-lift 1b). `-rail-core` is the fold — vocabulary, signing, admission,
     # the sync digest, and ZERO I/O — and `-rail` is the JSONL journal that
@@ -278,7 +278,7 @@ crates = [
 [[layer]]
 name = "mesh-api"
 crates = [
-    "commonwealth-api",
+    "sovereign-api",
     "commonwealth-test-harness",
     "sovereign-mesh",
 ]
@@ -461,12 +461,12 @@ reason = "a ring app is composed by a peer that has no sovereign build at all �
 # sit in mesh-foundation, and the extraction is undone with nothing red.
 [[forbid]]
 from = "commonwealth-rail"
-to = "commonwealth-knowledge"
+to = "sovereign-grants"
 reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
 [[forbid]]
 from = "commonwealth-rail-core"
-to = "commonwealth-knowledge"
+to = "sovereign-grants"
 reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
 # THE THREE BLOCKS ABOVE WERE NOT THE ENFORCEMENT THEY READ AS, and the hole
@@ -591,19 +591,19 @@ to = "sovereign-*"
 reason = "mesh foundation must stay consumable without the agent runtime"
 
 [[forbid]]
-from = "commonwealth-inference"
+from = "sovereign-serving"
 to = "sovereign-*"
-reason = "mesh foundation must stay consumable without the agent runtime"
+reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
 [[forbid]]
-from = "commonwealth-knowledge"
+from = "sovereign-grants"
 to = "sovereign-*"
-reason = "mesh foundation must stay consumable without the agent runtime"
+reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
 [[forbid]]
-from = "commonwealth-app"
+from = "sovereign-meshapp-registry"
 to = "sovereign-*"
-reason = "mesh foundation must stay consumable without the agent runtime"
+reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
 # WHAT actually crosses, so R6 has a size rather than a feeling. Census
 # 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /
@@ -639,15 +639,22 @@ reason = "mesh foundation must stay consumable without the agent runtime"
 # the OICP-only seam is the goal state (remediation R6). Forbidden so every
 # such edge must be individually grandfathered below and burns down visibly.
 [[forbid]]
-from = "commonwealth-api"
+from = "sovereign-api"
 to = "sovereign-*"
-except = ["sovereign-contracts"]
+except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
+# `except` gained sovereign-{serving,grants,meshapp-registry} at the domains-1
+# move (2026-09-11): they were `commonwealth-{inference,knowledge,app}` and left
+# `commonwealth/crates/` in the same commit as this crate. They were ALWAYS in
+# its closure and were never part of R6 — the census counts 11 types / 38 refs
+# into sovereign-{contracts,tools,atos} only. Excepting them preserves R6's
+# measurement exactly; without it the rule fires on three edges it never meant.
+
 reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
 
 [[forbid]]
 from = "commonwealth-test-harness"
 to = "sovereign-*"
-except = ["sovereign-contracts"]
+except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
 reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
@@ -1083,6 +1090,12 @@ reason = "`relaunch_after_setup` spawns `current_exe()` and exits — THIS app, 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
 [[exception]]
+from = "commonwealth-test-harness"
+to = "sovereign-api"
+reason = "R6 debt the domains-1 move EXPOSED rather than created. The harness has always depended on the API it simulates against; while both were `commonwealth-*` the edge was intra-family and no rule looked at it. `commonwealth-api` became `sovereign-api` on 2026-09-11 and the same edge is now cross-family, which is what R6 has always said it is. Nothing about the code changed — only whether a gate could see it."
+tracking = "domains-2: the harness leaves commonwealth/crates/ with oicp-conformance, at which point `from` no longer matches and this row must be DELETED (a stale exception fails the gate, which is the reminder)"
+
+[[exception]]
 package = "corpus-mcp"
 from = "sovereign-enrichment-catalog"
 to = "corpus-engine"
@@ -1119,19 +1132,19 @@ reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/me
 tracking = "nc-3-backstage"
 
 [[exception]]
-from = "commonwealth-api"
+from = "sovereign-api"
 to = "sovereign-core"
 reason = "the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam"
 tracking = "R6"
 
 [[exception]]
-from = "commonwealth-api"
+from = "sovereign-api"
 to = "sovereign-tools"
 reason = "tool registry assembly for the embedded runtime; goal state is the OICP seam"
 tracking = "R6"
 
 [[exception]]
-from = "commonwealth-api"
+from = "sovereign-api"
 to = "sovereign-atos"
 reason = "feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds"
 tracking = "R6"

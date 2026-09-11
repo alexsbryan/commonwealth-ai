@@ -194,7 +194,7 @@ fn client_token_path(data_dir: &Path) -> std::path::PathBuf {
 /// Load the persisted client-API bearer token, or generate + persist a
 /// fresh one (256-bit, hex-encoded) on first call. Used to authenticate
 /// non-loopback callers of `:9741` when the daemon binds a routable
-/// address — see `commonwealth_api::client_auth`.
+/// address — see `sovereign_api::client_auth`.
 ///
 /// Mirrors [`load_or_generate_node_key`]'s persistence shape: atomic
 /// write via a `.tmp` rename, `0600` on unix. Unlike the node key, the
@@ -224,7 +224,7 @@ pub fn load_or_create_client_token(data_dir: &Path) -> std::io::Result<String> {
 ///
 /// THE definition of what a bearer this daemon accepts looks like, shared by
 /// the persisted client token below and by ephemeral guest grants
-/// (`commonwealth_knowledge::guest_grant`). Both land in the same
+/// (`sovereign_grants::guest_grant`). Both land in the same
 /// `Authorization: Bearer` header and are compared by the same
 /// `client_auth_layer`, so two generators would be two answers to one
 /// question (ARCH §10.6) — and the weaker one would set the real strength.

@@ -38,9 +38,9 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use commonwealth_api::server::client_router;
-use commonwealth_api::state::{AppState, LocalInferenceService};
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::server::client_router;
+use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;

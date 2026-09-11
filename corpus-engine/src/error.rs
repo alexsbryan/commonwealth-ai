@@ -71,7 +71,7 @@ pub enum Error {
     /// wild instance.
     ///
     /// Sibling concept, deliberately NOT the same type:
-    /// `commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage`
+    /// `sovereign_api::auto_recover::RecoveryOutcome::IncompleteCoverage`
     /// names the identical decision on the stranded-partition recovery
     /// path. It stays a separate type only because `commonwealth-api`
     /// depends on `commonwealth-knowledge` (and on this crate) and not
@@ -110,7 +110,7 @@ pub enum Error {
     ///
     /// Sibling concept, deliberately not the same type — same reasoning as
     /// [`Error::IncompleteCoverage`]:
-    /// `commonwealth_api::auto_recover::RecoveryOutcome::MergedButNotInstalled`
+    /// `sovereign_api::auto_recover::RecoveryOutcome::MergedButNotInstalled`
     /// carries these three fields across the crate boundary unchanged.
     #[error(
         "corpus {corpus}: {chunks} chunks merged into {canonical_path} but the canonical was \

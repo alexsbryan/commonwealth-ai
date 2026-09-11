@@ -23,8 +23,8 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use commonwealth_api::server::internal_router;
-use commonwealth_api::state::AppState;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use commonwealth_core::ids::NodeId;
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, SecretKey, ALPN};

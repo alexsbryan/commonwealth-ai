@@ -3,7 +3,7 @@
 //!
 //! Minted 2026-09-04 for cw-lift rung 3b. Before it, `sovereign-cli-daemon`
 //! named `commonwealth_state::MeshStore` and
-//! `commonwealth_api::state::ConvergenceRecord` directly, and those two types
+//! `sovereign_api::state::ConvergenceRecord` directly, and those two types
 //! were the whole reason the local daemon could not link without the mesh
 //! substrate. The couplings were eleven lines in two files; what they cost was
 //! the entire `commonwealth-*` closure on a binary that has no mesh to speak

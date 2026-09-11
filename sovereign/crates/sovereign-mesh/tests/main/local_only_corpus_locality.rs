@@ -39,8 +39,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;

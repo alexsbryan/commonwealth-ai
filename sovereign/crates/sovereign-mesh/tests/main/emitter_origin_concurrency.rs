@@ -33,9 +33,9 @@
 //! ledger in production. Caught here.
 use std::sync::Arc;
 
-use commonwealth_api::server::internal_router;
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
 use commonwealth_state::MeshStore;

@@ -7,8 +7,8 @@
 //! `hosted_corpora: vec![]`, defeating the whole knowledge fan-out.
 use std::sync::Arc;
 
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};

@@ -4,11 +4,11 @@ use std::net::SocketAddr;
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::*;
-use commonwealth_inference::inference_plan::InferencePlan;
-use commonwealth_inference::model::ModelInfo;
+use sovereign_serving::inference_plan::InferencePlan;
+use sovereign_serving::model::ModelInfo;
 
-use commonwealth_api::server::{client_router, internal_router};
-use commonwealth_api::state::AppState;
+use sovereign_api::server::{client_router, internal_router};
+use sovereign_api::state::AppState;
 
 /// A simulated node for integration testing.
 /// Runs an in-process API server and holds mesh/model state.

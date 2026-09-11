@@ -28,7 +28,7 @@ use std::net::SocketAddr;
 
 use axum::routing::post;
 use axum::{Json, Router};
-use commonwealth_inference::oicp::{KnowledgeResult, KnowledgeSearchResponse};
+use sovereign_serving::oicp::{KnowledgeResult, KnowledgeSearchResponse};
 use sovereign_core::traits::{MeshKnowledgeSource, UnavailabilityReason};
 use sovereign_mesh::knowledge_client::MeshKnowledgeClient;
 

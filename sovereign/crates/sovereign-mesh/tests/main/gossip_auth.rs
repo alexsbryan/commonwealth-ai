@@ -28,8 +28,8 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_api::server::internal_router;
-use commonwealth_api::state::AppState;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
 
@@ -69,7 +69,7 @@ fn build_founder(
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: commonwealth_api::state::MeshMutationHook =
+    let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });

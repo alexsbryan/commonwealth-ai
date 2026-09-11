@@ -2,7 +2,7 @@
 //! Mesh state translation — converts Commonwealth's internal state
 //! into UI-friendly representations for Sovereign's frontend.
 
-use commonwealth_api::state::AppState;
+use sovereign_api::state::AppState;
 use commonwealth_core::mesh::NodeStatus;
 
 use crate::types::*;

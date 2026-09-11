@@ -1,0 +1,25 @@
+[package]
+name = "sovereign-grants"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+corpus-engine = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }
+reqwest = { workspace = true }
+hex = "0.4"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

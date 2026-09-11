@@ -930,7 +930,7 @@ mod contribution_view_tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Exactly what `commonwealth_api::routes_internal::mesh_admin::
+    /// Exactly what `sovereign_api::routes_internal::mesh_admin::
     /// contribution_view` serialises: `Vec<NodeContributionsView>`,
     /// plain field names, no serde renames, already sorted by node id
     /// (the handler's own `out.sort_by` is the last thing it does).
@@ -1174,7 +1174,7 @@ mod contribution_view_tests {
 
     /// The peer-preference half of the same contract (svt-3).
     ///
-    /// Exactly what `commonwealth_api::routes_internal::peer_preference::
+    /// Exactly what `sovereign_api::routes_internal::peer_preference::
     /// peer_preference_list` serialises: `Vec<PeerPreferenceView>`, plain
     /// field names, no serde renames. Before svt-3 the Local arm built these
     /// DTOs in-process from `commonwealth_state::PeerPreferenceStore::list`

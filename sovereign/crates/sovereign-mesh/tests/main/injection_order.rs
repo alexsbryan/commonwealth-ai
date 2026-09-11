@@ -23,8 +23,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use commonwealth_api::state::{AppState, LocalInferenceService};
-use commonwealth_app::registry::AppRegistry;
+use sovereign_api::state::{AppState, LocalInferenceService};
+use sovereign_meshapp_registry::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
@@ -142,7 +142,7 @@ fn with_mesh_mutation_hook_emits_error_when_arc_already_cloned() {
     let app_state = fresh_app_state();
     let _kept = app_state.inner.clone();
 
-    let hook: commonwealth_api::state::MeshMutationHook =
+    let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(|_mesh: &Mesh, _self_id: NodeId| {
             // Body intentionally empty — the test isn't about firing
             // the hook, only about catching the install-time no-op.
@@ -176,7 +176,7 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
         Arc::new(SovereignInferenceAdapter::new(provider));
     let app_state = app_state.with_local_inference(adapter);
 
-    let hook: commonwealth_api::state::MeshMutationHook =
+    let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(|_mesh: &Mesh, _self_id: NodeId| {});
     let app_state = app_state.with_mesh_mutation_hook(hook);
 

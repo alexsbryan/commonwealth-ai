@@ -36,7 +36,7 @@
 //! installing, disk fills up, etc.).
 use std::sync::Arc;
 
-use commonwealth_api::state::AppState;
+use sovereign_api::state::AppState;
 use commonwealth_core::capabilities::{
     AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
 };
