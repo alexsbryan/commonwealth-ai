@@ -103,7 +103,31 @@ if [ -n "${SVRN_CARGO_LOCK_HELD:-}" ]; then
 fi
 
 acquire "$@"
-trap release EXIT INT TERM
 SVRN_CARGO_LOCK_HELD="$$"
 export SVRN_CARGO_LOCK_HELD
-"$@"
+
+# RELEASING THE LOCK IS NOT ENOUGH — TAKE THE WHOLE GROUP DOWN WITH US.
+# Killing this wrapper used to leave its `cargo` running, orphaned to init,
+# still holding `target/<profile>/.cargo-lock`. Every other agent then sat on
+# "Blocking waiting for file lock on artifact directory" — cargo's OWN lock,
+# which this script does not manage and cannot release — while our directory
+# lock read as free. Measured 2026-09-11: one orphaned `cargo build --bins`
+# stalled two agent sessions and two rust-analyzer flychecks for ten minutes,
+# and the stall named no owner anywhere. `set -m` puts the child in its own
+# process group so the negative-pid kill reaches its rustc children too; the
+# repo learned the same lesson in fde5b7f71 for the ralph loop.
+set -m
+"$@" &
+CHILD=$!
+# Fires on EVERY exit, not only on a signal: the straggler that matters is a
+# `cargo` still holding the artifact lock after the thing that started it has
+# gone, whether that was a kill or an ordinary return. A child the command
+# DETACHED on purpose — `svrn daemon start` — is exempt by construction,
+# because detaching means calling `process_group(0)` and leaving this group.
+reap() {
+    kill -TERM "-$CHILD" 2>/dev/null
+    release
+}
+trap reap EXIT INT TERM
+wait "$CHILD"
+exit $?
