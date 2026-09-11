@@ -354,6 +354,23 @@ fn an_unpinned_unit_reports_the_rev_the_donor_actually_ran_at() {
         "a workdir that is not a checkout must NAME the absence, got {nowhere:?}"
     );
 
+    // **THE CASE PRODUCTION ACTUALLY PRODUCES, and the one this test was
+    // missing.** The assertion above passes for an accidental reason — a
+    // `tempdir` lands in `/tmp`, outside any checkout — while an unpinned unit
+    // runs in `donor_root/scratch`, which is under a checkout exactly when the
+    // daemon's data dir is. `git rev-parse` WALKS UP, so before the tracked
+    // content check this returned the repo's HEAD for a directory holding
+    // nothing of it: a fabricated rev that compares EQUAL to a submitter at
+    // that rev. Empty on purpose — git does not track empty directories, so
+    // this leaves `git status` clean, which the distributed path now requires.
+    let nested = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).expect("tempdir in the repo");
+    let fabricated = repo_rev_of(&unit, nested.path());
+    assert!(
+        kernel_types::is_absent_marker(&fabricated),
+        "a scratch dir that merely SITS under a checkout holds none of it — got {fabricated:?}, \
+         which is this repo's HEAD attributed to work that never touched it"
+    );
+
     let mut pinned = unit.clone();
     pinned.requirements.repo_rev = Some("deadbeef".to_string());
     assert_eq!(
