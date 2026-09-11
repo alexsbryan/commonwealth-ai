@@ -95,3 +95,9 @@ commonwealth-inference/orchestrator/
 # the gate had been RED at HEAD since the split landed, verified with the
 # work stashed.
 commonwealth-knowledge/src/rail/
+
+# §10.1r cites `sovereign-cli-daemon/src/service_install.rs` HISTORICALLY — the
+# row's whole point is that its 1,039 lines BECAME `sovereign-service` as one
+# registrar for three platforms (fe5a85cc3, 2026-09-11), so the old path is
+# supposed to be absent. Same shape as discovery/tls.rs above.
+sovereign-cli-daemon/src/service_install.rs

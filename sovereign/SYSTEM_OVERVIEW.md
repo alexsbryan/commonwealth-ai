@@ -8740,6 +8740,65 @@ this gate for a reason, and the two admitted here are package crates whose
 entire purpose is to be liftable — if a third arrives without that property,
 the answer is the split, not another row.
 
+### 10.1r Size ACCEPTED at the cw-lift landing — 2026-09-11 (re-pinned at `origin/main` 4ea0201e2)
+
+Sixty-four non-merge commits since the last pin (`2a3a78766`, §10.1i): the
+cw-lift arc (D1 federated media and its follow-on items 1/2/4/5, the
+`commonwealth-rails` carve, D2's distributed CI on the image boundary) plus the
+tail of sv-surface (the service registrar, the turn/desktop wire corrections).
+`size-gate` 582,408 -> 586,870 code lines: **+4,462 net code across 38 keys
+that moved**, +3,845 test. `arch-gate` froze 13 size rows.
+
+**The re-pin used the working tree rather than a worktree at `origin/main`, and
+that is safe HERE for a reason worth writing down rather than assuming.** The
+recipe's worktree dance exists to stop a `--update-baseline` absorbing this
+branch's growth along with what is already public. At this HEAD the two
+unpushed commits (`bf88e79c1`, `2693914f6`) are bench stdout and runbook prose
+-- `git diff --name-only origin/main..HEAD | grep -c '\.rs$'` is **0** -- so
+the tree's code IS `origin/main`'s code and the separation is there by
+construction. Every row below is already public. Where that is not true, use
+the worktree.
+
+What the lines bought, by key:
+
+| Key | Delta | Bought |
+|---|---|---|
+| `commonwealth-rails` (+tests) | NEW 1,577 (+761) | the daemon a shim author installs -- `cw-rails join` / `cw-rails run`, one iroh endpoint carrying the join handshake, the gossip round, the acceptor and every media bridge, plus three loopback routes (`b25c04b3e`). 319 crates against `commonwealth-api`'s 743, and the lift measured 1 |
+| `sovereign-service` (+tests) | NEW 959 (+111) | NOT new code: `sovereign-cli-daemon/src/service_install.rs` (**-1,039**) became one registrar for three platforms, and Windows got a daemon it never had (`fe5a85cc3`, `00b4b26ea`). Net **-80** production lines for a platform more |
+| `sovereign-desktop/src-tauri::tests` | +902 | the sv-surface wire corrections' tests (`c4019115e`, `2df562caa`) and the contribution-ledger consolidation (`4b29cd3fe`) |
+| `scripts` | +783 | `cw-rails-lift.sh` (450, the lift instrument with its own watched-red escape probe), `cw-media-demo.sh` (109), `stage-daemon-sidecar.sh` (127), `with-cargo-lock.sh` (20), plus the `co-*` campaign tooling |
+| `commonwealth-media` (+tests) | NEW 575 (+304) | the three media questions -- catalogue, reach, fan-out -- in the crate both the inference daemon and the rails daemon call (`0eccf5664`) |
+| `commonwealth-transport` (+tests) | +442 (+310) | `iroh.rs` 1,483 -> 1,643: the forwarded-caller headers with the client-supplied `x-mesh-*` strip, `[iroh] media_allow`, and the FNV-1a bridge port derived from the peer key (`93a779fad`, `451dc2933`, `0bde967d9`) |
+| `sovereign-inference::tests` | +396 | the idle-eviction tests for fast and embed (`f619a4b8e`) |
+| `sovereign-cli-llm` | +337 | the quality-check and campaign verbs the arc drove |
+| `commonwealth-discovery` (+tests) | +263 (+328) | `deep_link.rs`'s new home, with the rails daemon's join over `iroh=` dial |
+| `corpus-engine/xtask::tests` | +290 | `docs_gate.rs` +106 and the ratchets' own coverage |
+| `commonwealth-work` (+tests) | +283 (+110) | `sandbox.rs`'s `Sandbox::probe` reaching the image, and `refusal.rs` 1,232 -> 1,304 -- a unit's preconditions asked of the environment it RUNS in rather than the donor's host (`e82736ad6`) |
+| `sovereign-mesh` (+tests) | +163 (+168) | `media_reach.rs`, the `MEDIA_ALPN` membership check, `turn_http.rs` 1,875 -> 2,022 |
+| `sovereign-cli` | **-193** | `project_init/scaffold.rs` **-258**, against `quality_check_cmd/distribute.rs` 1,347 -> 1,502 (the image IS the CI environment: `519082c37`, `a9494c36c`) |
+| `sovereign-cli-daemon` | **-550** | the registrar move above |
+| `corpus-engine/xtask` | **-206** | net, after `docs_gate.rs` +106 |
+
+The `--update-baseline` banked those three cuts as ceilings in the same stroke,
+so `--tighten` finds nothing left to bank.
+
+Splits still owed, unchanged by this acceptance and now carrying more:
+`sovereign-inference/src/embedded/engine.rs` (4,488), `sovereign-turn-client/src/lib.rs`
+(3,781, one module per route family -- §10.1i), `sovereign-contracts/src/setup_config.rs`
+(3,534), `sovereign-mesh/src/turn_http.rs` (2,022),
+`sovereign-mesh/tests/main/loopback_parity.rs` (2,018),
+`commonwealth-transport/src/iroh.rs` (1,643),
+`sovereign-service/src/lib.rs` (1,740, NEW oversized -- the three platform
+registrars are three modules), `sovereign-desktop/src-tauri/src/mesh_commands.rs`
+(1,221, NEW oversized).
+
+One instrument-gate red was PAID rather than re-pinned in the same commit:
+`scripts/stage-daemon-sidecar.sh` is reachable from `desktop-release.yml:444`
+and was on no map. It stages an artifact and takes no verdict, so it is a
+`[[not_instrument]]` beside its companion `fetch-desktop-binaries.sh` -- what
+verifies the installer carries a working daemon is the desktop e2e lane, not
+the copy.
+
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 
 `scripts/pre-push.sh` blocked on two gates. Neither failure was this branch's,
