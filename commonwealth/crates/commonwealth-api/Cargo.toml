@@ -9,7 +9,7 @@ license.workspace = true
 serving-policy = { workspace = true }
 kernel-types = { workspace = true }
 commonwealth-core = { workspace = true }
-commonwealth-transport = { workspace = true }
+commonwealth-transport = { workspace = true, features = ["fanout"] }
 commonwealth-discovery = { workspace = true }
 commonwealth-inference = { workspace = true }
 commonwealth-knowledge = { workspace = true }

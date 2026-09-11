@@ -79,6 +79,10 @@
 //! Closing it needs a tunnel-proxy sidecar, which nobody has built.
 
 pub mod identity;
+// Ask N peers the same question concurrently, one attributed row each —
+// tokio-shaped, so behind its own feature like the iroh path.
+#[cfg(feature = "fanout")]
+pub mod fanout;
 mod ip;
 #[cfg(feature = "iroh")]
 pub mod iroh;

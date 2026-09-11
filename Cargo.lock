@@ -2100,6 +2100,7 @@ dependencies = [
  "hex",
  "iroh",
  "rustls",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

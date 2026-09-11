@@ -327,25 +327,30 @@ pub async fn knowledge_search(
         // The per-request timeout on the client is the per-endpoint guard;
         // the fan-out core's cap is left off so a peer with several
         // addresses keeps the time to try them, as before the extraction.
-        let rows = crate::fanout::fan_out(state.inner.clone(), targets, None, move |t, corpora| {
-            let http = http.clone();
-            let transport = transport.clone();
-            let query_embedding = query_embedding.clone();
-            let query_text = query_text.clone();
-            async move {
-                fanout_one_peer(
-                    http,
-                    transport,
-                    requester_id,
-                    t,
-                    corpora,
-                    query_embedding,
-                    query_text,
-                    limit_u32,
-                )
-                .await
-            }
-        })
+        let rows = crate::fanout::fan_out(
+            state.inner.fanout_inflight.clone(),
+            targets,
+            None,
+            move |t, corpora| {
+                let http = http.clone();
+                let transport = transport.clone();
+                let query_embedding = query_embedding.clone();
+                let query_text = query_text.clone();
+                async move {
+                    fanout_one_peer(
+                        http,
+                        transport,
+                        requester_id,
+                        t,
+                        corpora,
+                        query_embedding,
+                        query_text,
+                        limit_u32,
+                    )
+                    .await
+                }
+            },
+        )
         .await;
         for row in rows {
             match row.verdict {

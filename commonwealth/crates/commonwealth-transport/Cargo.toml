@@ -18,10 +18,15 @@ hex = "0.4"
 # confined to src/iroh.rs, so version churn is a one-file change.
 iroh = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+# `fanout` only: the per-peer rows are what a route serialises.
+serde = { workspace = true, optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
 
 [features]
 iroh = ["dep:iroh", "dep:tokio", "dep:rustls"]
+# The generic peer fan-out (`fanout` module). Its own feature so a build that
+# only wants the `PeerTransport` seam links neither tokio nor serde.
+fanout = ["dep:tokio", "dep:serde"]
 # Bench/measurement-only: a PathSelector that pins traffic to the relay even
 # when hole-punching would succeed — the deterministic "relay floor" for the
 # distributed-inference path characterization (tunnel_bench --relay-only).

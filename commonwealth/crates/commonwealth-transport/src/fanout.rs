@@ -30,10 +30,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_transport::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 use serde::Serialize;
 
-use crate::state::AppStateInner;
+use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A peer to ask: its identity as the roster names it, and how to reach it,
 /// cloned out of the mesh lock so the fan-out runs without holding it.
@@ -104,28 +105,30 @@ pub fn counts<T>(rows: &[PeerRow<T>]) -> FanoutCounts {
     c
 }
 
-/// RAII gauge guard for `AppStateInner::fanout_inflight`: increments on
-/// construction and decrements on drop, so the live count of outbound peer
-/// fan-out requests is correct even if a spawned fan-out task panics or is
-/// cancelled. One is held inside each fan-out task; the companion read is
-/// `AppState::fanout_inflight_count`, surfaced over HTTP via `glassbox_signals`
-/// and asserted by the `BoundedFanOut` soak invariant.
-struct FanoutGuard(Arc<AppStateInner>);
+/// The live count of outbound peer asks, shared with whoever reports it.
+///
+/// A bare counter rather than the daemon's state struct, so the same
+/// fan-out serves a process that has no such struct — the package-only rails
+/// daemon — and the daemon keeps its `AppState::fanout_inflight_count` read
+/// (surfaced over HTTP via `glassbox_signals`, asserted by the `BoundedFanOut`
+/// soak invariant) by holding the same `Arc`.
+pub type InflightGauge = Arc<AtomicUsize>;
+
+/// RAII gauge guard: increments on construction and decrements on drop, so
+/// the count is correct even if a spawned fan-out task panics or is
+/// cancelled. One is held inside each fan-out task.
+struct FanoutGuard(InflightGauge);
 
 impl FanoutGuard {
-    fn new(inner: Arc<AppStateInner>) -> Self {
-        inner
-            .fanout_inflight
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Self(inner)
+    fn new(gauge: InflightGauge) -> Self {
+        gauge.fetch_add(1, Ordering::Relaxed);
+        Self(gauge)
     }
 }
 
 impl Drop for FanoutGuard {
     fn drop(&mut self) {
-        self.0
-            .fanout_inflight
-            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        self.0.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
@@ -137,7 +140,7 @@ impl Drop for FanoutGuard {
 /// caps each ask; `None` leaves each to its own timeouts. A task that panics
 /// is a [`PeerVerdict::Failed`] row, and the gauge is released either way.
 pub async fn fan_out<T, P, F, Fut>(
-    inner: Arc<AppStateInner>,
+    gauge: InflightGauge,
     targets: Vec<(FanoutTarget, P)>,
     per_peer: Option<Duration>,
     ask: F,
@@ -152,7 +155,7 @@ where
     let mut handles = Vec::with_capacity(targets.len());
     for (target, payload) in targets {
         let ask = ask.clone();
-        let guard = FanoutGuard::new(inner.clone());
+        let guard = FanoutGuard::new(gauge.clone());
         let identity = (target.node_id.to_string(), target.name.clone());
         let handle = tokio::spawn(async move {
             let _guard = guard;
@@ -253,7 +256,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::test_app_state;
 
     fn target(n: u128, name: &str) -> FanoutTarget {
         FanoutTarget {
@@ -275,10 +277,10 @@ mod tests {
     /// one is a failed row naming the cap, and nothing waited on it.
     #[tokio::test]
     async fn a_slow_peer_does_not_delay_the_others_and_is_a_failed_row() {
-        let state = test_app_state();
+        let gauge: InflightGauge = Arc::new(AtomicUsize::new(0));
         let started = Instant::now();
         let rows = fan_out(
-            state.inner.clone(),
+            gauge.clone(),
             vec![(target(1, "Slow"), 5_000u64), (target(2, "Quick"), 0u64)],
             Some(Duration::from_millis(200)),
             |_t, sleep_ms| async move {
@@ -305,9 +307,9 @@ mod tests {
     /// from reading as a quiet one. Failing input: a row dropped.
     #[tokio::test]
     async fn a_target_refused_before_dialing_is_a_never_asked_row_not_an_absence() {
-        let state = test_app_state();
+        let gauge: InflightGauge = Arc::new(AtomicUsize::new(0));
         let rows = fan_out(
-            state.inner.clone(),
+            gauge.clone(),
             vec![(target(1, "Offline"), ()), (target(2, "Up"), ())],
             None,
             |t, ()| async move {
@@ -341,9 +343,9 @@ mod tests {
     /// task panics, and the panic is a failed row rather than a lost one.
     #[tokio::test]
     async fn the_gauge_returns_to_zero_after_a_peer_task_panics() {
-        let state = test_app_state();
+        let gauge: InflightGauge = Arc::new(AtomicUsize::new(0));
         let rows = fan_out(
-            state.inner.clone(),
+            gauge.clone(),
             vec![(target(1, "Boom"), ()), (target(2, "Fine"), ())],
             None,
             |t, ()| async move {
@@ -354,7 +356,7 @@ mod tests {
             },
         )
         .await;
-        assert_eq!(state.fanout_inflight_count(), 0);
+        assert_eq!(gauge.load(Ordering::Relaxed), 0);
         assert!(
             matches!(rows[0].verdict, PeerVerdict::Failed { .. }),
             "{:?}",

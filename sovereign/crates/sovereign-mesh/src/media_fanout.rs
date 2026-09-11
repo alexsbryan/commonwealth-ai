@@ -30,8 +30,10 @@ use std::time::Duration;
 use axum::extract::{ConnectInfo, Extension, Json};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use commonwealth_api::fanout::{fan_out, first_endpoint_that_answers, FanoutTarget, PeerFailure};
 use commonwealth_core::ids::NodeId;
+use commonwealth_transport::fanout::{
+    fan_out, first_endpoint_that_answers, FanoutTarget, PeerFailure,
+};
 use commonwealth_transport::{PeerContact, TrafficClass};
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +92,7 @@ pub struct MediaFanoutResponse {
     pub path: String,
     /// Targets, each of which is a row — asked or not.
     pub asked: usize,
-    pub rows: Vec<commonwealth_api::fanout::PeerRow<MediaAnswer>>,
+    pub rows: Vec<commonwealth_transport::fanout::PeerRow<MediaAnswer>>,
 }
 
 /// One target of a fan-out, decided from the roster before anything is sent.
@@ -311,7 +313,7 @@ impl EmbeddedDaemon {
             "media fan-out: asking every selected member through its own bridge"
         );
         let rows = fan_out(
-            app_state.inner.clone(),
+            app_state.inner.fanout_inflight.clone(),
             targets,
             Some(timeout),
             move |t, refusal| {

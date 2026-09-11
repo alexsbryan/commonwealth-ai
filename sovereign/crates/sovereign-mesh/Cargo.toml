@@ -43,7 +43,9 @@ kernel-types = { workspace = true }
 # path that never runs in production is exactly the drift mesh-of-one exists
 # to prevent, moved from runtime to compile time. iroh should leave WITH the
 # mesh when the mesh becomes optional, not on its own before that.
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
+# `fanout` because `media_fanout.rs` calls the fan-out core where it lives
+# (ARCH §8.3: the owner, not `commonwealth-api`'s re-export of it).
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
