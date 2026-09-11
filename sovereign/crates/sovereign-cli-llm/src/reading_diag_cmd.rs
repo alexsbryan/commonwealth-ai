@@ -26,14 +26,9 @@
 //! nothing" or "atom spans are empty for a chunk that obviously
 //! mentions Alyosha."
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan};
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId, Edge,
-};
-use corpus_engine::{CorpusEngine, ScoredChunk};
+use corpus_engine::ScoredChunk;
+use serde::Deserialize;
+use sovereign_turn_client::TurnClient;
 
 /// Local error/result alias — keeps the harness independent of any
 /// particular workspace error type. Errors here are diagnostic
@@ -77,13 +72,16 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Calls into the corpus engine + atlas readers DIRECTLY (no Tauri, no \
-             daemon HTTP) — same code the desktop's `read_get_chunk_neighbors` / \
-             `read_get_atom_card` Tauri commands wrap. If `chat inspect` is \
-             green and `reading-diag` is red, the bug is in the reading-surface \
-             chain (chunk_id plumbing, neighbor projection, AtomSpan detector, \
-             section→chunk resolver). If both are red, the bug is upstream in \
-             retrieval.",
+            "Walks the deref chain over the DAEMON's reading routes \
+             (`/internal/corpus/{corpus}/chunks/{id}/neighbors`, `/atoms/{id}`, \
+             `/atoms/{id}/elsewhere`) — the same handlers the desktop's \
+             `read_get_chunk_neighbors` / `read_get_atom_card` reach, so a bug \
+             found here is a bug the desktop has. Needs a running daemon, as it \
+             always has: the query embedding comes from the daemon's embed model \
+             too. If `chat inspect` is green and `reading-diag` is red, the bug is \
+             in the reading-surface chain (chunk_id plumbing, neighbor projection, \
+             AtomSpan detector, section→chunk resolver). If both are red, the bug \
+             is upstream in retrieval.",
         ),
     ],
 };
@@ -375,6 +373,12 @@ struct Summary {
 // ─── Run ─────────────────────────────────────────────────────
 
 async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagReport> {
+    // The deref half reads through the daemon's reading routes. The
+    // base is the session's own — the SAME daemon whose embed model
+    // produced the query vector below, so the chain being validated is
+    // one host's answer end to end rather than two.
+    let client = TurnClient::new(&session.daemon_base);
+
     let embedding = session
         .inference
         .embed_query(&args.question)
@@ -506,7 +510,7 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
 
     let mut citations: Vec<CitationDeref> = Vec::new();
     for (rank, (corpus_id, chunk)) in all_hits.into_iter().enumerate() {
-        let deref = walk_citation(rank + 1, &corpus_id, &chunk, &session.corpus_engine, args).await;
+        let deref = walk_citation(rank + 1, &corpus_id, &chunk, &client, args).await;
         citations.push(deref);
     }
 
@@ -521,11 +525,103 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
     })
 }
 
+// ─── The wire shapes (reading_http's responses) ───────────────
+//
+// `reading_http`'s response types are `Serialize`-only, and three of
+// their fields (`atom_type`, `edge_type`, `role`) are `&'static str`,
+// which no `Deserialize` impl can fill. So the reader is declared here
+// with `String` in those positions rather than widening the mesh crate
+// — a mesh type that gained `Deserialize` would have to give up the
+// `&'static str`s to do it, and every handler builds them from a
+// `label()` that returns exactly those statics.
+//
+// Only the fields this report prints are named; serde ignores the
+// rest, so a host that grows a field does not break this reader.
+
+#[derive(Debug, Deserialize)]
+struct WireChunk {
+    content: String,
+    #[serde(default)]
+    section_id: Option<String>,
+    #[serde(default)]
+    atom_spans: Vec<WireSpan>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireSpan {
+    atom_id: String,
+    atom_type: String,
+    span_start: usize,
+    span_end: usize,
+    surface_form: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireNeighbors {
+    center: WireChunk,
+    #[serde(default)]
+    prev: Vec<WireChunk>,
+    #[serde(default)]
+    next: Vec<WireChunk>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireAtomCard {
+    atom_id: String,
+    atom_type: String,
+    canonical_name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    related: Vec<WireRelated>,
+    #[serde(default)]
+    cross_corpus: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireRelated {
+    atom_id: String,
+    atom_type: String,
+    canonical_name: String,
+    edge_type: String,
+    role: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireElsewhere {
+    #[serde(default)]
+    same_corpus: Vec<WireSectionRef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireSectionRef {
+    section_id: String,
+    #[serde(default)]
+    chunk_id: Option<u64>,
+}
+
+// ─── Deref walk (over the daemon's reading routes) ───────────
+//
+// Every read below is `reading_http`'s answer, not a re-derivation of
+// it. What this function used to do — open the index, run
+// `detect_atom_spans` against a locally-read `atoms.json`, fold the
+// edge list, resolve sections to chunks — is what the five handlers
+// do, and the four helpers that did it here carried the banner
+// "(mirror reading_http)". They are gone; the handlers are the one
+// decider (ARCH §10.6).
+//
+// This costs nothing in reachability: `reading-diag` already required
+// a live daemon before this change, because `build_session` resolves
+// the daemon's model ids and builds an HTTP `InferenceProvider` over
+// them (`chat_cmd::bootstrap::build_inference`). A command that cannot
+// embed its query without the daemon cannot walk a deref chain without
+// it either.
+
 async fn walk_citation(
     rank: usize,
     corpus_id: &str,
     chunk: &ScoredChunk,
-    engine: &Arc<CorpusEngine>,
+    client: &TurnClient,
     args: &CmdArgs,
 ) -> CitationDeref {
     let chunk_id = chunk.chunk_id;
@@ -538,46 +634,69 @@ async fn walk_citation(
         .collect::<String>()
         .replace('\n', " ");
 
-    // Neighbors — only attempt when chunk_id present.
-    let neighbors = match chunk_id {
-        None => NeighborStatus {
+    // ONE round trip for the window AND the atom mentions: the center
+    // chunk arrives with `atom_spans` already detected against its own
+    // text, so there is no second read and no detector here.
+    let window: Option<WireNeighbors> = match chunk_id {
+        None => None,
+        Some(id) => match client
+            .reading_neighbors::<WireNeighbors>(corpus_id, id, 1)
+            .await
+        {
+            Ok(w) => w,
+            Err(e) => {
+                return CitationDeref {
+                    rank,
+                    corpus_id: corpus_id.to_string(),
+                    chunk_id,
+                    title: chunk.title.clone(),
+                    score: chunk.score,
+                    vector_distance: chunk.vector_distance,
+                    chunk_id_ok,
+                    snippet,
+                    neighbors: NeighborStatus {
+                        attempted: true,
+                        found: false,
+                        prev_count: 0,
+                        next_count: 0,
+                        failure: Some(format!("neighbors: {e}")),
+                    },
+                    atom_spans: AtomSpansStatus {
+                        attempted: true,
+                        section_id: None,
+                        span_count: 0,
+                        sample_spans: Vec::new(),
+                        invalid_offsets: 0,
+                        failure: Some(format!("neighbors: {e}")),
+                    },
+                    first_atom_card: None,
+                    elsewhere: None,
+                };
+            }
+        },
+    };
+
+    let neighbors = match (&chunk_id, &window) {
+        (None, _) => NeighborStatus {
             attempted: false,
             found: false,
             prev_count: 0,
             next_count: 0,
             failure: Some("chunk_id missing on search result".into()),
         },
-        Some(id) => match engine.open_index_for_corpus(corpus_id).await {
-            Err(e) => NeighborStatus {
-                attempted: true,
-                found: false,
-                prev_count: 0,
-                next_count: 0,
-                failure: Some(format!("open_index: {e}")),
-            },
-            Ok(idx) => match idx.neighbors(id, 1).await {
-                Err(e) => NeighborStatus {
-                    attempted: true,
-                    found: false,
-                    prev_count: 0,
-                    next_count: 0,
-                    failure: Some(format!("neighbors: {e}")),
-                },
-                Ok(None) => NeighborStatus {
-                    attempted: true,
-                    found: false,
-                    prev_count: 0,
-                    next_count: 0,
-                    failure: Some("neighbors returned None — center chunk not found by id".into()),
-                },
-                Ok(Some(window)) => NeighborStatus {
-                    attempted: true,
-                    found: true,
-                    prev_count: window.prev.len(),
-                    next_count: window.next.len(),
-                    failure: None,
-                },
-            },
+        (Some(_), None) => NeighborStatus {
+            attempted: true,
+            found: false,
+            prev_count: 0,
+            next_count: 0,
+            failure: Some("neighbors returned None — center chunk not found by id".into()),
+        },
+        (Some(_), Some(w)) => NeighborStatus {
+            attempted: true,
+            found: true,
+            prev_count: w.prev.len(),
+            next_count: w.next.len(),
+            failure: None,
         },
     };
 
@@ -591,15 +710,15 @@ async fn walk_citation(
             failure: None,
         }
     } else {
-        compute_atom_spans(corpus_id, chunk, engine, args).await
+        spans_from_center(window.as_ref().map(|w| &w.center), args)
     };
 
     let (first_atom_card, elsewhere) = if args.skip_atoms || atom_spans.span_count == 0 {
         (None, None)
     } else {
         let first_atom_id = atom_spans.sample_spans[0].atom_id.clone();
-        let card = compute_atom_card(corpus_id, &first_atom_id, engine, args).await;
-        let els = compute_elsewhere(corpus_id, &first_atom_id, engine).await;
+        let card = fetch_atom_card(client, corpus_id, &first_atom_id, args).await;
+        let els = fetch_elsewhere(client, corpus_id, &first_atom_id).await;
         (card, els)
     };
 
@@ -619,73 +738,49 @@ async fn walk_citation(
     }
 }
 
-async fn compute_atom_spans(
-    corpus_id: &str,
-    chunk: &ScoredChunk,
-    engine: &Arc<CorpusEngine>,
-    args: &CmdArgs,
-) -> AtomSpansStatus {
-    let installed = match engine.installed_indexes().await {
-        Ok(i) => i,
-        Err(e) => {
-            return AtomSpansStatus {
-                attempted: true,
-                section_id: None,
-                span_count: 0,
-                sample_spans: Vec::new(),
-                invalid_offsets: 0,
-                failure: Some(format!("installed_indexes: {e}")),
-            };
-        }
-    };
-    let entry = match installed.iter().find(|i| i.corpus_id == corpus_id) {
-        Some(e) => e,
-        None => {
-            return AtomSpansStatus {
-                attempted: true,
-                section_id: None,
-                span_count: 0,
-                sample_spans: Vec::new(),
-                invalid_offsets: 0,
-                failure: Some(format!("corpus `{corpus_id}` not in installed_indexes")),
-            };
-        }
-    };
-    let atlas_dir = entry.path.join("atlas");
-    if !atlas_dir.exists() {
+/// Fold the center chunk's served spans into the report row.
+///
+/// The byte-offset check stays CLIENT-side deliberately: it is the one
+/// assertion this command exists to make that the host cannot make for
+/// itself — `&content[start..end] == surface_form` is a claim about the
+/// bytes as they arrived, and a host that got it wrong would report
+/// itself green. It is checked over the SAMPLE, exactly as before.
+fn spans_from_center(center: Option<&WireChunk>, args: &CmdArgs) -> AtomSpansStatus {
+    let Some(center) = center else {
         return AtomSpansStatus {
             attempted: true,
-            section_id: chunk.metadata.get("section_id").cloned(),
+            section_id: None,
             span_count: 0,
             sample_spans: Vec::new(),
             invalid_offsets: 0,
-            failure: Some("no atlas/ dir for this corpus — atom layer disabled".into()),
+            failure: Some("no center chunk — cannot detect atom spans".into()),
         };
-    }
-    let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(f) => f.atoms,
-        Err(e) => {
-            return AtomSpansStatus {
-                attempted: true,
-                section_id: chunk.metadata.get("section_id").cloned(),
-                span_count: 0,
-                sample_spans: Vec::new(),
-                invalid_offsets: 0,
-                failure: Some(format!("read atoms: {e}")),
-            };
-        }
     };
 
-    // section_id sourcing: ScoredChunk.metadata is HashMap<String,
-    // String> populated from the chunk's metadata JSON. Sectioned
-    // chunker writes section_id there. If absent → atom layer no-ops.
-    let section_id = chunk.metadata.get("section_id").cloned();
-    let spans = detect_atom_spans(&chunk.content, section_id.as_deref(), &atoms);
     let mut invalid_offsets = 0;
-    let sample_spans: Vec<SampleSpan> = spans
+    let sample_spans: Vec<SampleSpan> = center
+        .atom_spans
         .iter()
         .take(args.max_spans)
-        .map(|s| sample_from_span(&chunk.content, s))
+        .map(|s| {
+            let actual_slice = if s.span_start <= s.span_end && s.span_end <= center.content.len() {
+                center
+                    .content
+                    .get(s.span_start..s.span_end)
+                    .unwrap_or("<bad utf8 boundary>")
+                    .to_string()
+            } else {
+                "<out of bounds>".to_string()
+            };
+            SampleSpan {
+                atom_id: s.atom_id.clone(),
+                atom_type: s.atom_type.clone(),
+                surface_form: s.surface_form.clone(),
+                span_start: s.span_start,
+                span_end: s.span_end,
+                actual_slice,
+            }
+        })
         .inspect(|s| {
             if s.actual_slice != s.surface_form {
                 invalid_offsets += 1;
@@ -695,216 +790,91 @@ async fn compute_atom_spans(
 
     AtomSpansStatus {
         attempted: true,
-        section_id,
-        span_count: spans.len(),
+        section_id: center.section_id.clone(),
+        span_count: center.atom_spans.len(),
         sample_spans,
         invalid_offsets,
         failure: None,
     }
 }
 
-fn sample_from_span(text: &str, s: &AtomSpan) -> SampleSpan {
-    let actual_slice = if s.span_start <= s.span_end && s.span_end <= text.len() {
-        text.get(s.span_start..s.span_end)
-            .unwrap_or("<bad utf8 boundary>")
-            .to_string()
-    } else {
-        "<out of bounds>".to_string()
-    };
-    SampleSpan {
-        atom_id: s.atom_id.clone(),
-        atom_type: s.atom_type.to_string(),
-        surface_form: s.surface_form.clone(),
-        span_start: s.span_start,
-        span_end: s.span_end,
-        actual_slice,
-    }
-}
-
-async fn compute_atom_card(
+async fn fetch_atom_card(
+    client: &TurnClient,
     corpus_id: &str,
     atom_id: &str,
-    engine: &Arc<CorpusEngine>,
     args: &CmdArgs,
 ) -> Option<AtomCardStatus> {
-    let atlas_dir = atlas_dir_for_corpus(engine, corpus_id).await?;
-    let atoms = read_atlas_atoms(&atlas_dir).ok()?.atoms;
-    let target = AtomId::from_raw(atom_id.to_string());
-    let atom = atoms.iter().find(|a| *a.id() == target)?;
-    let edges = read_atlas_edges(&atlas_dir)
-        .map(|f| f.edges)
-        .unwrap_or_default();
-    let cross = read_atlas_cross_corpus_edges(&atlas_dir)
-        .map(|f| f.edges)
-        .unwrap_or_default();
-
-    let (atom_type, canonical_name, description) = atom_brief(atom);
-    let related: Vec<&Edge> = edges
-        .iter()
-        .filter(|e| e.source == target || e.target == target)
-        .collect();
-    let cross_count = cross
-        .iter()
-        .filter(|e| e.edge.source == target || e.edge.target == target)
-        .count();
-
-    let mut sample_related: Vec<RelatedSummary> = Vec::new();
-    let by_id: HashMap<&AtomId, &AtomEnvelope> = atoms.iter().map(|a| (a.id(), a)).collect();
-    for e in related.iter().take(args.max_related) {
-        let (other_id, role) = if e.source == target {
-            (&e.target, "source")
-        } else {
-            (&e.source, "target")
-        };
-        let Some(other) = by_id.get(other_id) else {
-            continue;
-        };
-        let (other_type, other_name, _) = atom_brief(other);
-        sample_related.push(RelatedSummary {
-            atom_id: other_id.as_str().to_string(),
-            atom_type: other_type.into(),
-            canonical_name: other_name,
-            edge_type: format!("{:?}", e.edge_type).to_lowercase(),
-            role: role.to_string(),
-        });
-    }
-
-    Some(AtomCardStatus {
-        atom_id: target.as_str().to_string(),
-        atom_type: atom_type.into(),
-        canonical_name,
-        description_chars: description.chars().count(),
-        related_count: related.len(),
-        cross_corpus_count: cross_count,
-        sample_related,
-    })
+    let card = client
+        .reading_atom_card::<WireAtomCard>(corpus_id, atom_id)
+        .await
+        .ok()??;
+    Some(card_status(card, args.max_related))
 }
 
-async fn compute_elsewhere(
+/// The card fold, apart from the fetch so a test can drive it with a
+/// body the daemon actually served (`reading_diag_wire_fold` below).
+fn card_status(card: WireAtomCard, max_related: usize) -> AtomCardStatus {
+    AtomCardStatus {
+        atom_id: card.atom_id,
+        atom_type: card.atom_type,
+        canonical_name: card.canonical_name,
+        description_chars: card.description.chars().count(),
+        related_count: card.related.len(),
+        cross_corpus_count: card.cross_corpus.len(),
+        sample_related: card
+            .related
+            .into_iter()
+            .take(max_related)
+            .map(|r| RelatedSummary {
+                atom_id: r.atom_id,
+                atom_type: r.atom_type,
+                canonical_name: r.canonical_name,
+                edge_type: r.edge_type,
+                role: r.role,
+            })
+            .collect(),
+    }
+}
+
+async fn fetch_elsewhere(
+    client: &TurnClient,
     corpus_id: &str,
     atom_id: &str,
-    engine: &Arc<CorpusEngine>,
 ) -> Option<ElsewhereStatus> {
-    let atlas_dir = atlas_dir_for_corpus(engine, corpus_id).await?;
-    let atoms = read_atlas_atoms(&atlas_dir).ok()?.atoms;
-    let target = AtomId::from_raw(atom_id.to_string());
-    let atom = atoms.iter().find(|a| *a.id() == target)?;
-    let evidence = atom_evidence_section_ids(atom);
-    let mut unique: Vec<String> = Vec::new();
-    {
-        let mut seen = std::collections::HashSet::new();
-        for s in &evidence {
-            if seen.insert(s.clone()) {
-                unique.push(s.clone());
-            }
-        }
-    }
-    let index = engine.open_index_for_corpus(corpus_id).await.ok()?;
-    let resolved = index
-        .resolve_sections_to_chunks(&unique)
+    let els = client
+        .reading_atom_elsewhere::<WireElsewhere>(corpus_id, atom_id)
         .await
-        .unwrap_or_default();
-    let chunks_resolved = resolved.len();
-    let section_count = unique.len();
+        .ok()??;
+    Some(elsewhere_status(els))
+}
+
+/// The elsewhere fold, apart from the fetch for the same reason.
+fn elsewhere_status(els: WireElsewhere) -> ElsewhereStatus {
+    let section_count = els.same_corpus.len();
+    let chunks_resolved = els
+        .same_corpus
+        .iter()
+        .filter(|s| s.chunk_id.is_some())
+        .count();
     let resolution_rate = if section_count == 0 {
         0.0
     } else {
         chunks_resolved as f64 / section_count as f64
     };
-    let sample_unresolved: Vec<String> = unique
+    let sample_unresolved: Vec<String> = els
+        .same_corpus
         .iter()
-        .filter(|s| !resolved.contains_key(s.as_str()))
+        .filter(|s| s.chunk_id.is_none())
+        .map(|s| s.section_id.clone())
         .take(5)
-        .cloned()
         .collect();
 
-    Some(ElsewhereStatus {
+    ElsewhereStatus {
         section_count,
         chunks_resolved,
         resolution_rate,
         sample_unresolved,
-    })
-}
-
-// ─── Atom helpers (mirror reading_http) ──────────────────────
-
-async fn atlas_dir_for_corpus(
-    engine: &Arc<CorpusEngine>,
-    corpus_id: &str,
-) -> Option<std::path::PathBuf> {
-    let installed = engine.installed_indexes().await.ok()?;
-    let entry = installed.iter().find(|i| i.corpus_id == corpus_id)?;
-    let atlas_dir = entry.path.join("atlas");
-    if atlas_dir.exists() {
-        Some(atlas_dir)
-    } else {
-        None
     }
-}
-
-fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
-    match atom {
-        AtomEnvelope::Entity(e) => ("entity", e.canonical_name.clone(), e.description.clone()),
-        AtomEnvelope::Event(e) => ("event", e.description.clone(), e.description.clone()),
-        AtomEnvelope::State(s) => (
-            "state",
-            s.label.clone(),
-            format!("State of {}: {}", s.entity_id.as_str(), s.label),
-        ),
-        AtomEnvelope::Relation(r) => ("relation", r.label.clone(), r.label.clone()),
-        AtomEnvelope::Claim(c) => ("claim", c.content.clone(), c.content.clone()),
-        AtomEnvelope::Question(q) => ("question", q.content.clone(), q.content.clone()),
-        AtomEnvelope::Configuration(c) => ("configuration", c.label.clone(), c.description.clone()),
-        AtomEnvelope::ArgumentReconstruction(a) => (
-            "argument",
-            a.name.clone(),
-            format!(
-                "{} (P1..P{}, conclusion present: {})",
-                a.name,
-                a.premises.len(),
-                !a.conclusion.is_empty()
-            ),
-        ),
-        AtomEnvelope::Position(p) => ("position", p.canonical_name.clone(), p.content.clone()),
-        AtomEnvelope::Opposition(o) => (
-            "opposition",
-            o.canonical_label.clone(),
-            if o.framing.is_empty() {
-                format!("{} vs {}", o.left_label, o.right_label)
-            } else {
-                o.framing.clone()
-            },
-        ),
-        AtomEnvelope::Asset(a) => (
-            "asset",
-            if a.original_filename.is_empty() {
-                format!("{} asset", a.asset_kind)
-            } else {
-                a.original_filename.clone()
-            },
-            format!(
-                "{} bytes, sha256:{}",
-                a.size,
-                &a.sha256[..16.min(a.sha256.len())]
-            ),
-        ),
-        AtomEnvelope::Summary(sm) => (
-            "summary",
-            format!("Summary (level {})", sm.level),
-            sm.text.clone(),
-        ),
-    }
-}
-
-fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
-    // Was a twelfth hand-written fan-out, and the THIRD copy carrying
-    // `unreachable!("typed atoms wired in Gap B Stage 4")` for Position and
-    // Opposition — two kinds `atlas::writer` has been writing to atoms.json
-    // since Gap B landed. `evidence_anchors()` is the one owner.
-    atom.evidence_anchors()
-        .into_iter()
-        .map(|(id, _)| id)
-        .collect()
 }
 
 // ─── Summary + output ────────────────────────────────────────
@@ -1210,4 +1180,181 @@ fn print_json(report: &DiagReport) {
         "{}",
         serde_json::to_string_pretty(&payload).unwrap_or_default()
     );
+}
+// ─── Tests ───────────────────────────────────────────────────
+
+#[cfg(test)]
+mod reading_diag_wire_fold {
+    //! The report rows are folded from bodies the DAEMON served, so
+    //! these fixtures are bodies the daemon actually served — captured
+    //! verbatim from `GET /internal/corpus/brothers-karamazov-book-1/
+    //! atoms/entity-0002` and its `/elsewhere` on 2026-09-10.
+    //!
+    //! Why real bytes rather than hand-written ones: the reader in this
+    //! file is a `Deserialize` MIRROR of `reading_http`'s
+    //! `Serialize`-only types, and the failure it can have is drift — a
+    //! field renamed or dropped on the host, which a hand-written
+    //! fixture would happily keep matching. A body from the wire cannot
+    //! drift without these going red.
+
+    use super::*;
+
+    const CARD_BODY: &str = r##"{"atom_id":"entity-0002","atom_type":"entity","corpus_id":"brothers-karamazov-book-1","canonical_name":"Alexey Fyodorovitch Karamazov","description":"The third son of Fyodor Pavlovitch, the narrator's subject.","salience":0.5,"enrichment_depth":"Extracted","related":[{"atom_id":"event-0007","atom_type":"event","canonical_name":"The general's widow slaps Fyodor Pavlovitch, takes the orphaned boys in rugs, an…","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"event-0011","atom_type":"event","canonical_name":"The family members gather in Zossima’s cell under the pretext of conciliation, t…","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"event-0012","atom_type":"event","canonical_name":"Alyosha sends a letter warning Dmitri not to be provoked by vileness during the …","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"state-0009","atom_type":"state","canonical_name":"Realist whose faith springs from desire rather than miracle; deeply moved by Zossima's spiritual power","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"relation-0005","atom_type":"relation","canonical_name":"Guardian and ward — Yefim takes Alexey into his family and educates him personally","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"relation-0009","atom_type":"relation","canonical_name":"Novice and elder — Alyosha lives in Zossima's cell, serves him voluntarily without binding obligation but with deep devotion","edge_type":"involves","role":"target","confidence":1.0},{"atom_id":"claim-0013","atom_type":"claim","canonical_name":"The Russian peasant soul needs a holy figure to worship as proof that truth stil…","edge_type":"involves","role":"target","confidence":1.0}]}"##;
+    const ELSEWHERE_BODY: &str = r##"{"atom_id":"entity-0002","corpus_id":"brothers-karamazov-book-1","same_corpus":[{"section_id":"sec_0001","preview":"was the third son"}],"cross_corpus":[]}"##;
+
+    #[test]
+    fn the_card_body_folds_to_the_row_the_report_prints() {
+        let card: WireAtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
+        let row = card_status(card, 6);
+
+        assert_eq!(row.atom_id, "entity-0002");
+        assert_eq!(row.atom_type, "entity");
+        assert_eq!(row.canonical_name, "Alexey Fyodorovitch Karamazov");
+        assert_eq!(row.description_chars, 59);
+        // The host resolves and does NOT cap `related`, so the count is
+        // rows a reader can name — seven here — while the sample obeys
+        // the caller's --max-related.
+        assert_eq!(row.related_count, 7);
+        assert_eq!(row.cross_corpus_count, 0);
+        assert_eq!(row.sample_related.len(), 6);
+
+        let first = &row.sample_related[0];
+        assert_eq!(first.atom_id, "event-0007");
+        assert_eq!(first.atom_type, "event");
+        assert_eq!(first.role, "target");
+        assert_eq!(first.edge_type, "involves");
+    }
+
+    #[test]
+    fn max_related_clips_the_sample_without_touching_the_count() {
+        let card: WireAtomCard = serde_json::from_str(CARD_BODY).expect("card decodes");
+        let row = card_status(card, 2);
+        assert_eq!(row.sample_related.len(), 2);
+        assert_eq!(
+            row.related_count, 7,
+            "the count is the atlas's, not the sample's"
+        );
+    }
+
+    #[test]
+    fn a_section_the_index_cannot_resolve_reads_as_unresolved() {
+        // The real body: one evidenced section, and no chunk in the
+        // index carries it — `chunk_id` is ABSENT, not null. That is
+        // the case the resolution-rate smell exists to surface, and
+        // `#[serde(default)]` is what keeps an absent key readable.
+        let els: WireElsewhere = serde_json::from_str(ELSEWHERE_BODY).expect("elsewhere decodes");
+        let row = elsewhere_status(els);
+        assert_eq!(row.section_count, 1);
+        assert_eq!(row.chunks_resolved, 0);
+        assert_eq!(row.resolution_rate, 0.0);
+        assert_eq!(row.sample_unresolved, vec!["sec_0001".to_string()]);
+    }
+
+    #[test]
+    fn a_resolved_section_raises_the_rate() {
+        let els: WireElsewhere = serde_json::from_str(
+            r#"{"same_corpus":[{"section_id":"a","chunk_id":7},{"section_id":"b"}]}"#,
+        )
+        .expect("decodes");
+        let row = elsewhere_status(els);
+        assert_eq!(row.chunks_resolved, 1);
+        assert_eq!(row.section_count, 2);
+        assert_eq!(row.resolution_rate, 0.5);
+        assert_eq!(row.sample_unresolved, vec!["b".to_string()]);
+    }
+
+    /// The byte-offset check is the one claim the host cannot make for
+    /// itself — it is a claim about the bytes AS THEY ARRIVED, and a
+    /// host that got it wrong would report itself green. This is its
+    /// failing input: a span whose offsets do not slice its own surface
+    /// form out of the served content.
+    #[test]
+    fn a_span_that_does_not_slice_its_own_surface_form_is_counted_invalid() {
+        let args = fixture_args();
+
+        let good: WireChunk = serde_json::from_str(
+            r#"{"content":"Alyosha went home","atom_spans":[
+                 {"atom_id":"e1","atom_type":"entity","span_start":0,"span_end":7,
+                  "surface_form":"Alyosha"}]}"#,
+        )
+        .expect("decodes");
+        let ok = spans_from_center(Some(&good), &args);
+        assert_eq!(ok.span_count, 1);
+        assert_eq!(ok.invalid_offsets, 0, "offsets slice the surface form");
+        assert_eq!(ok.sample_spans[0].actual_slice, "Alyosha");
+
+        let bad: WireChunk = serde_json::from_str(
+            r#"{"content":"Alyosha went home","atom_spans":[
+                 {"atom_id":"e1","atom_type":"entity","span_start":8,"span_end":12,
+                  "surface_form":"Alyosha"}]}"#,
+        )
+        .expect("decodes");
+        let broken = spans_from_center(Some(&bad), &args);
+        assert_eq!(broken.invalid_offsets, 1, "8..12 is `went`, not `Alyosha`");
+        assert_eq!(broken.sample_spans[0].actual_slice, "went");
+    }
+
+    #[test]
+    fn an_out_of_bounds_span_is_named_rather_than_panicking() {
+        let oob: WireChunk = serde_json::from_str(
+            r#"{"content":"short","atom_spans":[
+                 {"atom_id":"e1","atom_type":"entity","span_start":90,"span_end":99,
+                  "surface_form":"whatever"}]}"#,
+        )
+        .expect("decodes");
+        let row = spans_from_center(Some(&oob), &fixture_args());
+        assert_eq!(row.sample_spans[0].actual_slice, "<out of bounds>");
+        assert_eq!(row.invalid_offsets, 1);
+    }
+
+    /// `span_count` is the host's total; `sample_spans` obeys
+    /// --max-spans, and `invalid_offsets` is counted over the SAMPLE —
+    /// which is what the pre-wire code did, and what the summary line
+    /// "invalid byte offsets" has always meant.
+    #[test]
+    fn max_spans_clips_the_sample_and_the_offset_audit_with_it() {
+        let many: WireChunk = serde_json::from_str(
+            r#"{"content":"aaaa bbbb cccc","atom_spans":[
+                 {"atom_id":"1","atom_type":"entity","span_start":0,"span_end":4,"surface_form":"aaaa"},
+                 {"atom_id":"2","atom_type":"entity","span_start":5,"span_end":9,"surface_form":"bbbb"},
+                 {"atom_id":"3","atom_type":"entity","span_start":0,"span_end":4,"surface_form":"cccc"}]}"#,
+        )
+        .expect("decodes");
+        let mut args = fixture_args();
+        args.max_spans = 2;
+        let row = spans_from_center(Some(&many), &args);
+        assert_eq!(row.span_count, 3, "the count is every span the host found");
+        assert_eq!(row.sample_spans.len(), 2);
+        assert_eq!(
+            row.invalid_offsets, 0,
+            "the third span is bad but unsampled"
+        );
+    }
+
+    #[test]
+    fn a_missing_center_is_a_named_failure_not_an_empty_span_list() {
+        let row = spans_from_center(None, &fixture_args());
+        assert!(row.attempted);
+        assert_eq!(row.span_count, 0);
+        assert!(
+            row.failure
+                .as_deref()
+                .unwrap_or_default()
+                .contains("no center chunk"),
+            "absence is reported, never defaulted (ARCH §18.3): {:?}",
+            row.failure
+        );
+    }
+
+    fn fixture_args() -> CmdArgs {
+        CmdArgs {
+            question: String::new(),
+            corpus_filter: None,
+            limit: 3,
+            max_spans: 6,
+            max_related: 6,
+            skip_atoms: false,
+            format: OutputFormat::Text,
+        }
+    }
 }
