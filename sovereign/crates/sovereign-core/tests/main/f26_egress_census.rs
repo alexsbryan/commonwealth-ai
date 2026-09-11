@@ -223,6 +223,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-mesh/src/peer_inference.rs", Class::Mesh, 2),
+    // Federated media's catalogue half (2026-09-11): one client per fan-out,
+    // built in the daemon and driven through each member's loopback bridge to
+    // that member's media origin over the estate's own transport; the second
+    // site is the unit test's local origin. Mesh — no estate content leaves.
+    ("sovereign/crates/sovereign-mesh/src/media_fanout.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
     // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,
     // and the traffic class is unchanged — every destination is either this
@@ -372,7 +377,10 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the machine ride the estate's own transport to a Commonwealth node, so
     // Mesh is the honest class; the request carries no estate content, only
     // the probe that proves the splice answers.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 1),
+    // 1 -> 2 (2026-09-11): `mesh media fanout <path>` builds its own client to
+    // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
+    // the reaching. Same class, same reason.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
