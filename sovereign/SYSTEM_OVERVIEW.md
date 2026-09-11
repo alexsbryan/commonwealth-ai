@@ -5644,11 +5644,31 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 |---|---|---|
 | `cwth/client/0` | the PEER listener (no bearer — peer federated inference carries none, and its key is the credential), which serves the client router **minus `/internal/*`**. Closed outright if that listener did not bind | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
+| `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
 
 Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_this_closes`
 wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
+
+**Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
+`sovereign-mesh/src/media_reach.rs`, 2026-09-11). The holder declares
+`[iroh] media_origin = "127.0.0.1:8096"`; a value that does not parse refuses
+the boot. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
+`svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
+transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
+in place when the peer's dial info moves, so a player can hold the URL. The
+bridge is `tokio::io::copy` both ways and never parses HTTP, which is why
+`Range` (a seek) passes through byte-exact. `Media` is the one class with no
+`[iroh.transport]` entry: it has exactly one transport (the IP overlay returns
+no candidates for it — there is no port to guess and a guess would be the
+library over plaintext), so there is nothing to opt it out to. What the read
+refuses it names — unknown, ambiguous, offline, no identity, no iroh path,
+non-loopback endpoint — rather than handing out a port that accepts and never
+answers; the CLI then does one real `GET /` through the bridge so the person
+sees an HTTP status, not a port. Watched failing:
+`iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
+and `media_reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing

@@ -95,6 +95,12 @@ pub fn iroh_routed_classes(
             }
         }
     }
+    // `Media` has no `[iroh.transport]` entry, on purpose: the other seven
+    // choose between two transports, and this one has only one. The holder's
+    // origin is loopback-bound and admitted by mesh key, so `= "ip"` would
+    // pin the class to a transport that returns no candidates for it — a
+    // config line that silently turns the feature off. Always routed.
+    out.push(TrafficClass::Media);
     out
 }
 
@@ -748,8 +754,11 @@ mod tests {
         assert_eq!(out.len(), TrafficClass::ALL.len() - 1);
     }
 
+    /// Every configurable class opted out leaves exactly the one that has no
+    /// entry: `Media` has one transport, so there is nothing to opt it out
+    /// TO. (Until 2026-09-11 this asserted `is_empty()` over seven classes.)
     #[test]
-    fn all_classes_opted_out_yields_empty() {
+    fn opting_every_class_out_still_routes_media() {
         let out = iroh_routed_classes(&section(|t| {
             t.gossip = Some("ip".into());
             t.control_plane = Some("ip".into());
@@ -759,7 +768,7 @@ mod tests {
             t.status_probe = Some("ip".into());
             t.rpc_tensor = Some("ip".into());
         }));
-        assert!(out.is_empty());
+        assert_eq!(out, vec![TrafficClass::Media]);
     }
 
     #[test]
@@ -970,9 +979,13 @@ mod tests {
             r.forward_for(MEDIA_ALPN, MEMBER, &only_the_member()).await,
             r.media,
         );
-        assert!(r.media.is_some(), "the fixture must actually serve media, or the assertion above passes on a shared None");
+        assert!(
+            r.media.is_some(),
+            "the fixture must actually serve media, or the assertion above passes on a shared None"
+        );
         assert_eq!(
-            r.forward_for(MEDIA_ALPN, STRANGER, &only_the_member()).await,
+            r.forward_for(MEDIA_ALPN, STRANGER, &only_the_member())
+                .await,
             None,
         );
 

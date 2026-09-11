@@ -47,7 +47,11 @@ pub struct ForgottenMember {
 /// A prefix shorter than 4 is refused rather than matched loosely — a
 /// one-character prefix against a 16-character id is very nearly "retire an
 /// arbitrary member", and this command writes a tombstone.
-fn member_matches(node_id: commonwealth_core::ids::NodeId, name: &str, query: &str) -> bool {
+pub(crate) fn member_matches(
+    node_id: commonwealth_core::ids::NodeId,
+    name: &str,
+    query: &str,
+) -> bool {
     if name == query {
         return true;
     }

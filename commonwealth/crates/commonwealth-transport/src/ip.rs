@@ -72,7 +72,8 @@ impl IpTransport {
             | TrafficClass::ControlPlane
             | TrafficClass::KnowledgeSearch
             | TrafficClass::ModelTransfer
-            | TrafficClass::RpcTensor => None,
+            | TrafficClass::RpcTensor
+            | TrafficClass::Media => None,
         }
     }
 }
@@ -90,6 +91,17 @@ impl PeerTransport for IpTransport {
         // address that can never answer — no candidates is the honest
         // response; discovery's own probing owns the raw-TCP path.
         if class == TrafficClass::RpcTensor {
+            return Vec::new();
+        }
+        // Media has no IP path AT ALL, by design rather than by omission:
+        // the holder's origin is bound to loopback and admitted by mesh
+        // key at its iroh acceptor. A candidate here would be a guess at
+        // a port on the peer's LAN address that nothing serves — and if
+        // something did, it would be the operator's library over
+        // plaintext to anyone on the overlay. No candidates is the only
+        // honest answer, and the routed composition then reports "no
+        // path" instead of degrading.
+        if class == TrafficClass::Media {
             return Vec::new();
         }
         let mut addrs = commonwealth_core::peer_addr::sorted_addresses(&peer.addresses);

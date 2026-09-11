@@ -82,6 +82,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "switch" => cmd_switch(&args[1..]).await,
         "forget" => cmd_forget(&args[1..]).await,
         "forget-member" => crate::mesh_member_cmd::cmd_forget_member(&args[1..]).await,
+        "media" => crate::mesh_media::cmd_media(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
         "use" => crate::mesh_guest::cmd_use(&args[1..]).await,
@@ -469,6 +470,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             (
                 "transport",
                 "Show each peer's live iroh path (direct / relayed / mixed)",
+            ),
+            (
+                "media <peer>",
+                "Print a localhost URL that reaches a member's media server (Jellyfin) by mesh key — no VPN, no port forwarded",
             ),
             ("balance", "Show your contribution to the mesh"),
             ("list", "Show every mesh this node has joined; the active one is marked"),

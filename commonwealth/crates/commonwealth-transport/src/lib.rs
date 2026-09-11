@@ -125,13 +125,22 @@ pub enum TrafficClass {
     /// per-worker (advertised via `/status`), not the uniform mesh
     /// ports, so the raw-TCP path stays with discovery's own probing.
     RpcTensor,
+    /// A member's player reaching the peer's declared media origin
+    /// (`[iroh] media_origin`, Jellyfin's `:8096` or any HTTP server
+    /// honouring `Range`) — HTTP spliced whole through the bridge, never
+    /// parsed. Candidates are bridge-local `127.0.0.1:<port>` URLs a
+    /// player is pointed at verbatim. iroh-ONLY: the origin is bound to
+    /// loopback on the holder and is reachable by mesh key alone, so the
+    /// IP transport returns NO candidates — there is no port to guess,
+    /// and a plaintext guess would be a hole rather than a fallback.
+    Media,
 }
 
 impl TrafficClass {
     /// Every traffic class, in flip order. Callers that must apply a
     /// policy to all peer traffic — e.g. routing every class over iroh
     /// when the mesh-wide encryption policy is on — enumerate this.
-    pub const ALL: [TrafficClass; 7] = [
+    pub const ALL: [TrafficClass; 8] = [
         TrafficClass::Gossip,
         TrafficClass::ControlPlane,
         TrafficClass::KnowledgeSearch,
@@ -139,6 +148,7 @@ impl TrafficClass {
         TrafficClass::Inference,
         TrafficClass::StatusProbe,
         TrafficClass::RpcTensor,
+        TrafficClass::Media,
     ];
 
     /// Stable lowercase name for tracing fields.
@@ -151,6 +161,7 @@ impl TrafficClass {
             TrafficClass::Inference => "inference",
             TrafficClass::StatusProbe => "status_probe",
             TrafficClass::RpcTensor => "rpc_tensor",
+            TrafficClass::Media => "media",
         }
     }
 }

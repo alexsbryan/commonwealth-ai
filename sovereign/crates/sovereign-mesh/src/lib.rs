@@ -98,6 +98,7 @@ pub mod reading_http;
 pub mod reindexer;
 pub mod ring_roster;
 pub mod ring_sync;
+pub mod media_reach;
 pub mod roster_repair;
 pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production

@@ -44,6 +44,10 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             post(crate::roster_repair::mesh_forget_member),
         )
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
+        // Federated media, viewer half: the loopback URL that reaches a
+        // member's `[iroh] media_origin`. The holder half is the acceptor's
+        // MEDIA_ALPN slot in `iroh_access`.
+        .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
         .route(
             "/v1/mesh/measurements",
             post(publish_measurement).get(peer_measurements),

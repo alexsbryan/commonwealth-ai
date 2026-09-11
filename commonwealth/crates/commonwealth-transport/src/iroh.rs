@@ -701,6 +701,7 @@ impl IrohTransport {
         match class {
             TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
             TrafficClass::RpcTensor => RPC_ALPN,
+            TrafficClass::Media => MEDIA_ALPN,
             _ => ALPN,
         }
     }
@@ -1256,14 +1257,38 @@ mod tests {
         );
     }
 
-    /// Three protocols, three distinct byte strings. A collision would route
+    /// Five protocols, five distinct byte strings. A collision would route
     /// one class to another's listener with no error anywhere.
     #[test]
     fn the_alpns_are_distinct() {
-        let all = [ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN];
+        let all = [ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN, MEDIA_ALPN];
         for (i, a) in all.iter().enumerate() {
             for b in all.iter().skip(i + 1) {
                 assert_ne!(a, b, "ALPNs must be distinct");
+            }
+        }
+    }
+
+    /// The viewer half of federated media dials the ALPN the holder's
+    /// acceptor admits members on — and ONLY that one. The failing input is
+    /// `Media` falling into the `_ => ALPN` arm: the dial would reach the
+    /// peer's internal router, which serves no bytes a player wants, and the
+    /// symptom would be a bridge that "works" (loopback accepts) and a
+    /// player that never starts.
+    #[test]
+    fn the_media_class_rides_the_media_alpn_and_no_other() {
+        assert_eq!(
+            IrohTransport::alpn_for_class(TrafficClass::Media),
+            MEDIA_ALPN
+        );
+        for class in TrafficClass::ALL {
+            if class != TrafficClass::Media {
+                assert_ne!(
+                    IrohTransport::alpn_for_class(class),
+                    MEDIA_ALPN,
+                    "{} must not reach the media origin",
+                    class.as_str()
+                );
             }
         }
     }
