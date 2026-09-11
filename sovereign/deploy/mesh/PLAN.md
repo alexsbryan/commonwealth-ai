@@ -253,7 +253,7 @@ any argv a third party brings. OCI is named as H2; a trusted-native kind on a so
 what the ring already is, and this repository ships no sandbox mechanism to pretend otherwise.
 **The inference plane is not the first customer** — no unit in v0 touches a model and
 `JobRequirements` carries no model field; inference payloads ride the same kind later.
-This lands as cw-lift Phase 5, rungs 5a–5h (`quality/campaigns/cw-lift.toml`). Rungs 4, 6, 7 follow
+This lands as cw-lift Phase 5, rungs 5a–5h (`quality/campaigns/closed/cw-lift.toml`). Rungs 4, 6, 7 follow
 the same seam; the foreground-yield policy (rung 7) is stated as a `WorkOffer` field and tested
 here. *Demo: this repository's own test suite green, run as mesh jobs on an idle peer — Actions
 minutes at $0.*

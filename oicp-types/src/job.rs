@@ -479,7 +479,7 @@ mod precondition_labels {
 /// governing decision for this rung is that no unit in v0 reaches inference —
 /// no model in [`JobRequirements`], none in `JobContext`, no bench lane, no
 /// judge — and `cw-work-no-inference` is pre-registered in
-/// `quality/campaigns/cw-lift.toml` at 0 → 0 to stop that eroding one payload
+/// `quality/campaigns/closed/cw-lift.toml` at 0 → 0 to stop that eroding one payload
 /// at a time. An `Option<InferenceRequirements>` on the central job noun is
 /// exactly that erosion: it would read to the next author as sanction for
 /// inference payloads on `process:v1`.

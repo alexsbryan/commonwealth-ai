@@ -18,7 +18,7 @@
 //! The single rule this module exists to hold. A split run that silently drops
 //! a shard reports a smaller, greener table than a local run, and a
 //! share-only bar would score that as a win
-//! (`quality/campaigns/cw-lift.toml`, `cw-work-ci-offload`). So every selected
+//! (`quality/campaigns/closed/cw-lift.toml`, `cw-work-ci-offload`). So every selected
 //! instrument gets a row: one that nobody could take is `never-ran` carrying
 //! the cohort's typed refusals, and one still queued or leased when the budget
 //! expired is `could-not-judge` saying so.

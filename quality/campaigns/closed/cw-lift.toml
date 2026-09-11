@@ -20,7 +20,93 @@ objective = "Commonwealth becomes a liftable substrate package in-repo, so a sov
 spec      = "the approved plan, 2026-09-03; commonwealth/BOUNDARY.md is its committed half"
 register  = "quality/ARCH_LAYERS.toml"
 declared  = "2026-09-04"
-status    = "active"
+status    = "closed"
+# ── CLOSED 2026-09-11, ON THE PRODUCT ───────────────────────────────────────
+#
+# The bars below are HYPOTHESES about the objective and they are kept as
+# measured, unrepaired. What closes this campaign is the product, because the
+# product is what ladders to the objective. Three demos, three verdicts:
+#
+# D2 · CI ON YOUR METAL — MET, and the done-when is the done-when. At
+# `746104439`, `svrn quality check --trigger ci:test --distribute` handed all
+# four units from the submitter (`46d0c1fb…`) to a donor daemon (`421d9c78…`)
+# under a rootless container boundary; every row passed, 1009 s of a 3600 s
+# budget. The distributed `sovereign-test` row is 12,734 run / 12,734 passed /
+# 0 failed; the local `sovereign-test.sh --human` at the same rev is 12,734
+# passed / 0 failed. EQUAL, which is the gate the bar names. Five image
+# defects were found by RUNNING and none by reading. The cross-MACHINE reading
+# is not taken and is not claimed: both daemons were on this host, and the
+# instrument cannot tell that from two machines.
+#
+# D3 · THE LIFTED PEER — MET. Four runs of `cw-work-lift.sh --sandbox` with an
+# image: 7.7-8.4 s build outside this monorepo, three heterogeneous
+# `process:v1` units complete, 0 lost leases, 0 double delivers, peer unchanged
+# at its 400-line cap. The escape probe is step 6 of the instrument and is
+# watched failing bare, then refused as a donated unit.
+#
+# D1 · FEDERATED MEDIA — THE PRODUCT WORKS AND THE GATE AS WRITTEN IS NOT MET.
+# Both halves are true and collapsing them either way would be the lie.
+#
+#   Proven, watched: the demo is three lines per role and runs end to end.
+#   `svrn mesh media RuggedFox` hands back a `127.0.0.1` URL; through it,
+#   Jellyfin login, the title listed, a 10 MB `Range` pull at 74 MB/s byte-
+#   exact, ffmpeg decoding 15 s at 4.7x realtime. No VPN and no port forwarded.
+#   The rails daemon a shim author installs lifted out of this repo (518
+#   packages, 22.1 s on a stock toolchain, 37 tests green), joined a real mesh
+#   by invite, and pulled HTTP 302 from another member's Jellyfin origin in
+#   18 ms. Items 1, 2, 4 and 5 landed with their refusals watched red.
+#
+#   Proven, measured, ACROSS THE OPEN INTERNET — and this is why the claim is
+#   NOT "LAN-only": a Michigan datacenter VM (uplink 683/552 Mbit/s) served a
+#   1 GiB file to a Mac on home broadband, two different networks, no VPN and
+#   no port forward. 87.0 Mbit/s over 25 s and 55.2 over 623 s, verified byte-
+#   exact across 4.29 GB; four concurrent streams aggregate 99.3. That is 2-3x
+#   the bar's 25 Mbit/s, and the earlier "~25 ceiling" was probe ramp.
+#
+#   NOT proven, and the gate says both: the path is RELAYED, and no stall over
+#   2 s for 10 minutes across >=3 runs. Every kept reading resolved `mixed` —
+#   a direct/holepunched path — so the relayed leg is kept 0 / discarded 2 and
+#   the relay is the fallback nobody has measured. And the 623 s run took 3
+#   reconnects and four gaps over 1 s with a worst second of 0 Mbit/s, so the
+#   stall clause is the one at risk, not the rate clause.
+#
+#   THE CLAIM THAT IS JUSTIFIED, in the product's own words: federated media
+#   between members on different networks, over the open internet, with no VPN
+#   and no port forward, at 55-87 Mbit/s on a holepunched path. The relay
+#   fallback is unmeasured and long-run stability is unmeasured. Not "LAN-only"
+#   — that is narrower than the evidence. Not the pre-registered gate either —
+#   that is wider. Reopening needs the Mac on another network, and the ranked
+#   next reading is RECONNECT CAUSE from the bridge log, not the transport
+#   window (see the D1 item-3 block in the order file, and note a62bb34d).
+#
+# RE-VERIFIED AT CLOSE, 2026-09-11, rather than asserted from the record:
+#   cw-local-only-daemon  met 0.0 (ref=head). It had read could-not-judge for
+#     days for an environment reason and not a product one — the instrument
+#     builds, and on THIS host a build outside the vulkan toolbox dies on
+#     `linker clang not found`. Run inside it, the sabotage-watched test
+#     `a_local_only_daemon_spawns_no_network_service` passes and the bar is MET.
+#   cw-work-package-lift  verdict 1 at this HEAD, with an image declared:
+#     built in 7.7 s outside the monorepo, ran three heterogeneous units on a
+#     nine-act rail, 0 lost leases, 0 double delivers, and REFUSED BOTH ESCAPES
+#     (the control probe reached the internet bare, as it must). Its
+#     could-not-judge rows are the instrument doing its job: it ships no image
+#     because the image is the donor operator's declaration, and with none
+#     declared the peer publishes no offer and the run abstains.
+#   cw-work-ci-offload  abstains now, and that is the honest reading on a tree
+#     whose distributed run's artifact directory (target/) has been reaped. The
+#     met 1.0 stands on `746104439` with the counts above. Its instrument was
+#     ALSO fixed today and that fix is the one repair this close makes: it took
+#     the newest quality-check document by mtime, so an unrelated local
+#     `pre-push` run became the subject and the bar reported 0.0 — a true
+#     sentence about the wrong run, demoting a met bar two hours after it was
+#     stamped. It now skips documents with no `submitted_by` and abstains when
+#     none survives (§18.2: absence is not a measurement of zero).
+#
+# NOT re-verified and not claimed: D1's relayed bar, and the cross-MACHINE half
+# of D2. Both need hardware the operator holds.
+#
+# The objective sentence was already met 2026-09-08 as a PROFILE, not a
+# package — the block above says so and that reading is unchanged.
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
 #
@@ -949,14 +1035,21 @@ floor        = -4690.0
 floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
 direction    = "lower_is_better"
-instrument   = "git show --numstat --format= $(sed -n '/── LADDER ─/,/^# G IS DONE/p' quality/campaigns/cw-lift.toml | grep DONE | grep -oE '[0-9a-f]{9}') -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
+instrument   = "git show --numstat --format= $(sed -n '/── LADDER ─/,/^# G IS DONE/p' quality/campaigns/closed/cw-lift.toml | grep DONE | grep -oE '[0-9a-f]{9}') -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
 kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. The extraction is costing more than the boundary is worth."
 
 [[bar]]
 id           = "cw-sovereign-commonwealth-edge"
 one_line     = "CLAIM: the ungoverned sovereign -> commonwealth edge narrows as vocabulary is rehomed"
 derives_from = "P1, re-derived 2026-09-04 at 4b from a per-crate census of the edge"
-status       = "open"
+status       = "deferred"
+# DEFERRED at close, 2026-09-11. The `instrument` below is a command with a
+# prose parenthetical glued to it, so the measure harness execs it and bash
+# dies on the `(` — every reading since declaration has been could-not-judge
+# for that reason and not for anything about the edge. Stripping the prose is
+# not enough either: nc-boundary.py ends on a type list, not a number, so it
+# violates the instrument contract. This bar has never judged. It is deferred
+# rather than descoped because the claim is still the right one to ask.
 # ── P1 IS FALSIFIED AND PHASE 4 IS OVER. The claim above is kept verbatim so
 # the miss stays legible; what follows is the correction, not a replacement.
 #
@@ -1315,7 +1408,13 @@ kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines,
 id           = "cw-twin-visibility"
 one_line     = "CLAIM: we can SEE a dead twin, not just a coupling"
 derives_from = "OFF-PLAN. Added 2026-09-04 after auditing what the campaign's instruments can actually detect."
-status       = "open"
+status       = "descoped"
+# DESCOPED at close, 2026-09-11 — the kill bar below FIRED as written and the
+# status_note has said so since 2026-09-04. The `instrument` field is prose,
+# not a command, so this bar has never run; its could-not-judge rows are
+# never-ran wearing an abstention, which is the one thing the four-verdict
+# vocabulary exists to prevent. dry-report shipped as a similarity report,
+# which is the honest disposition of the finding.
 # (was "answered — first pass NEGATIVE and WRONG; corrected same day"; the
 # bar stays open until its instrument measures it)
 # THE CAMPAIGN'S HEADLINE IS TWIN REMOVAL AND NOTHING MEASURES A TWIN.
@@ -1458,7 +1557,12 @@ kill         = "the instrument cannot distinguish 'same shape, both live and bot
 id           = "cw-wire-contract-halves"
 one_line     = "CLAIM: a peer-to-peer message is ONE type both ends import, not two halves of a serde contract"
 derives_from = "three read-only investigations, 2026-09-04, over the six cross-family shape forks"
-status       = "open"
+status       = "deferred"
+# DEFERRED at close, 2026-09-11. `svrn code converge shape` RUNS and its
+# output is useful — it is what found Mesh == MeshWire == PersistedMesh — but
+# it ends on prose, so the instrument contract (last line a bare number) is
+# violated and the verdict is unparseable-output every time. The convergence
+# work itself landed (`mesh::wire`, c2a1e8eca); what is missing is a counter.
 # THE PATTERN. commonwealth-api is the schema owner for three peer-to-peer
 # protocols whose other end is in sovereign-mesh, and it declares every message
 # with only the SERVER's half of serde. sovereign-mesh needed the mirror half

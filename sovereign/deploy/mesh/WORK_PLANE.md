@@ -3,7 +3,7 @@
 **Status:** DRAFT design, nothing landed. Written 2026-09-04 from an operator-directed
 exploration ("commonwealth as the rails for a general distributed compute mesh — for
 scientific researchers losing HPC access, and for arbitrary workloads"); **re-cut onto the
-ring rail 2026-09-09** and landed as cw-lift Phase 5 (`quality/campaigns/cw-lift.toml`,
+ring rail 2026-09-09** and landed as cw-lift Phase 5 (`quality/campaigns/closed/cw-lift.toml`,
 rungs 5a–5h). This is the design deliverable [`PLAN.md`](PLAN.md) Phase 3 was gated on
 ("design-gated after Phase 2 starts"), and it answers PLAN.md open question 7.
 
@@ -692,5 +692,5 @@ rather than depending on it.
 *Companion to [`PLAN.md`](PLAN.md) (which this extends at Phase 3),
 [`GROUND_TRUTH.md`](GROUND_TRUTH.md), and
 [`docs/CMNWLTH_DESIGN.md`](../../../docs/CMNWLTH_DESIGN.md) (the same ontology, superseded as
-a design). The ladder and the bars are `quality/campaigns/cw-lift.toml`, Phase 5. Update this
+a design). The ladder and the bars are `quality/campaigns/closed/cw-lift.toml`, Phase 5. Update this
 file in the same commit as the code it describes (§1.1).*
