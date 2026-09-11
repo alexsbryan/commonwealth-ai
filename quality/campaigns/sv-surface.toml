@@ -997,6 +997,22 @@ status    = "active"
 # thinner (desktop -2,004 net), the daemon is larger by the routes that
 # serve them, and directive 3 stays NOT MET at +10,471.
 #
+# CONSTRUCTION 3, TWIN CENSUSES — FINAL RUN on the clean tree at 2a3a78766
+# (scripts/twin-census.py; runs 20260911T015127Z + 20260911T025452Z):
+# 20 families, 20 proved-red, 0 NOT-A-GATE, 0 could-not-judge. The first
+# pass abstained on five families whose plants had gone stale under the
+# dedup and D9b (a find string that no longer occurred, a plant that no
+# longer compiled, an expect_red the census no longer prints); each was
+# re-planted against today's code, compile-verified, restored byte-for-
+# byte, and reddened its census by name. Families: turn-driver,
+# reading-wire, atlas-browse, meshapp-atoms, meshapp-explorer,
+# attach-floor, conversation-wire, conv-browse, governance-oplog,
+# insight-gather, insight-sink-wire, lessons-notes-wire,
+# local-corpus-ingest, local-corpus-registry, mcp-config-wire,
+# recipe-project-composition, sv-desktop-d9b-consumer, turn-capability
+# (core), mobile-wire-mirror (mobile), mesh-loopback-layer (mesh — the
+# PUT gate that closed f6a633519's finding).
+#
 # THE HONEST SHAPE OF THE RESULT: two of the three constructions are
 # proven (surface parity on the real harness; twin censuses red on
 # planted twins across 19 families), the third is measured and not met

@@ -213,13 +213,22 @@ mustFail    = ["the_sink_status_reads_the_daemons_registry"]
 breaks      = "the desktop's own insight sink registry — empty on an attached boot, and reported as the answer"
 target      = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
 expect_red  = "reads this process's insight sink registry again"
+# Re-planted 2026-09-10: the old `replace` did not COMPILE — it called
+# `get_insight_service`, which D8 deleted (its own census assertion is what
+# pins the deletion). The handle comes off `AppState` directly now, which is
+# the same second registry by the same read. `sinks: Vec::new()` rather than
+# `vec![]` on purpose: the sibling assertion in this test bans the literal
+# `sinks: vec![]`, and a plant that trips two assertions cannot say which one
+# detected it (§18.1).
 find        = '''    let status = insight_client(&state)'''
 replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local registry, back.
-    if let Ok(service) = get_insight_service(&state).await {
+    // On an attached boot it is empty however many vaults the daemon has
+    // connected, and this reports that emptiness as the answer.
+    if let Some(service) = state.insight_service.read().await.clone() {
         if service.sinks.any_connected().await {
             return Ok(SinkStatusDto {
                 any_connected: true,
-                sinks: vec![],
+                sinks: Vec::new(),
             });
         }
     }
@@ -247,10 +256,16 @@ mustFail    = ["the_desktop_holds_no_conversation_route_urls"]
 breaks      = "a hand-rolled daemon route URL in the desktop — a private client minting itself beside sovereign-turn-client"
 target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/conversation.rs"
 expect_red  = "hand-rolled daemon route URLs"
-find        = '''use crate::state::{self, AppState, DesktopConfig};'''
-replace     = '''use crate::state::{self, AppState, DesktopConfig};
+# Re-planted 2026-09-10: the old `find` (`use crate::state::{self, AppState,
+# DesktopConfig};`) occurred 0x — D9b took the local seeding path out and the
+# import with it, so the file now imports `AppState` alone. The needle is
+# unchanged (a route URL on a production line), only its anchor moved.
+find        = '''use crate::state::AppState;'''
+replace     = '''use crate::state::AppState;
 
-// TWIN-CENSUS PLANT (scripts/twin-census.py) — the private client, back.
+// TWIN-CENSUS PLANT (scripts/twin-census.py) — the private client, back:
+// a hand-rolled daemon route const beside the family client that already
+// speaks this route.
 #[allow(dead_code)]
 const PLANTED_CONVERSATIONS_ROUTE: &str = "/v1/conversations";'''
 
@@ -341,7 +356,12 @@ census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/local_corpus_w
 mustFail    = ["the_registry_reads_read_the_wire"]
 breaks      = "a second ingest running on this process's manager — the bespoke arm, writing an index the daemon is not the one writing"
 target      = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
-expect_red  = "calls `.ingest(&corpus_id` on a local"
+# Re-spelled 2026-09-10: the assertion took the call into a `{}` placeholder
+# (one message for all eleven CROSSED_MANAGER_CALLS), so no substring can span
+# both the needle and the prose. The rule text is what is checkable in the
+# census source AND in the formatted failure; the call itself still prints
+# beside it.
+expect_red  = "on a local LocalCorpusManager again"
 find        = '''    let ack = lc_client(&state)
         .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)'''
 replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the bespoke arm, back:
@@ -472,15 +492,27 @@ guard_paths = [
     "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",
 ]
 expect_red  = "only the router's `loopback_only` layer can refuse it"
-find        = '''        .layer(axum::middleware::from_fn(
-            crate::loopback_guard::loopback_only,
-        ))
-        .layer(Extension(daemon))'''
+# Re-planted 2026-09-10: the old `find` occurred 0x. d9e2577d5 folded the two
+# repeated `.layer(...)` calls into `LoopbackRouter::localhost_only_with`, and
+# the per-handler guard into the `LocalOnly` extractor — so the guard is now
+# ONE call, and stripping that call is the same twin with a shorter diff. The
+# dead `planted_sealed_nothing` keeps the `LoopbackRouter` import in use, so
+# the plant removes the GUARD and nothing else.
+find        = '''        .localhost_only_with(daemon)
+}'''
 replace     = '''        // TWIN-CENSUS PLANT (scripts/twin-census.py) — the router-level
-        // loopback guard, removed. The per-handler `enforce_localhost`
-        // checks stay, which is exactly the half-defended state the parity
-        // suite exists to catch.
-        .layer(Extension(daemon))'''
+        // loopback guard, removed. The per-handler `LocalOnly` extractors
+        // stay, which is exactly the half-defended state the parity suite
+        // exists to catch.
+        .layer(Extension(daemon))
+}
+
+/// TWIN-CENSUS PLANT (scripts/twin-census.py) — holds the `LoopbackRouter`
+/// import in use so the plant above changes the guard and nothing else.
+#[allow(dead_code)]
+fn planted_sealed_nothing() -> Router {
+    Router::new().localhost_only()
+}'''
 
 # ── sovereign-desktop, sv-surface D9b ──────────────────────────────────────
 #
@@ -509,19 +541,30 @@ census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d9b_consumer_c
 mustFail    = ["the_retired_local_primitives_do_not_return"]
 breaks      = "a repointed command re-deriving an answer the daemon serves — in attach, against a different store, index or registry than the turn is answered from, silently"
 target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs"
-expect_red  = "`.diagnose_indexes()` is back in corpus_install.rs — that question is answered by GET /internal/corpus/diagnose"
-find        = '''    sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .corpus_diagnose()
+# Re-spelled and re-planted 2026-09-10. The old `expect_red` quoted a message
+# that no longer exists: the offender line is built from a `{file}`/`{hay}`/
+# `{route}` format, so the checkable text is the prose between the
+# placeholders. And the plant is ADDITIVE now — the old one REPLACED the
+# `.corpus_diagnose()` call, which would also redden this census's positive
+# half (`every_repointed_command_reaches_the_family_client`). The twin this
+# family is named for is a second decider standing BESIDE the wire call, not
+# instead of it.
+expect_red  = "is back — that question is answered by"
+find        = '''#[tauri::command]
+pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {'''
+replace     = '''/// TWIN-CENSUS PLANT (scripts/twin-census.py) — the local index diagnosis,
+/// restored beside the wire call. In attach it describes the indexes THIS
+/// process has a second handle on, not the ones the turns are answered from.
+#[allow(dead_code)]
+async fn planted_local_diagnose(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .corpus_engine
+        .read()
         .await
-        .map_err(|e| e.to_string())'''
-replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local index
-    // diagnosis, restored. In attach this describes the indexes THIS
-    // process has a second handle on, not the ones the turns are
-    // answered from.
-    let engine_guard = state.corpus_engine.read().await;
-    let engine = match engine_guard.as_ref() {
-        Some(e) => std::sync::Arc::clone(e),
-        None => return Err("Corpus engine not initialized".into()),
-    };
-    drop(engine_guard);
-    Ok(engine.diagnose_indexes().await)'''
+        .clone()
+        .ok_or_else(|| "Corpus engine not initialized".to_string())?;
+    Ok(engine.diagnose_indexes().await)
+}
+
+#[tauri::command]
+pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {'''
