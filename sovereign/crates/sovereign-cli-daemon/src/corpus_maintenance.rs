@@ -40,6 +40,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
 use corpus_engine::{CorpusEngine, Retention};
 
 /// Minutes between sweeps. `0` disables the sweep entirely.
@@ -83,16 +84,16 @@ fn prune_days() -> i64 {
         .unwrap_or(1)
 }
 
-/// Manifest versions a corpus may retain before the sweep reclaims, regardless
-/// of age.
+/// How far past `prune_days` the cutoff may reach when versions pile up.
 ///
-/// The bound that `prune_days` alone could not provide. Deliberately generous:
-/// this is a ceiling that catches unbounded accumulation, not a target to
-/// hold corpora at. Reclamation still never deletes anything younger than
-/// `prune_days` (see `corpus_engine::index::maintain::Retention`), so the
-/// directory settles at whatever the corpus writes in that window — for
-/// wikipedia, ~850 versions rather than ~6,000. `0` disables the count bound
-/// and leaves age as the only limit, which is the behaviour that leaked.
+/// The bound that `prune_days` alone could not provide, for a corpus writing
+/// faster than any age window can bound. It is an input to the cutoff (see
+/// `Retention::cutoff_days`), NOT the trigger for reclamation — it was also
+/// the trigger until 2026-09-11, and a quiet corpus sitting under the ceiling
+/// was then never reclaimed at all (see `Retention::reclaimable`). Deliberately
+/// generous: reclamation still never deletes anything younger than
+/// `prune_days`, so the directory settles at whatever the corpus writes in that
+/// window. `0` disables the count bound and leaves age as the only reach.
 fn keep_versions() -> Option<usize> {
     match std::env::var("SOVEREIGN_CORPUS_MAINTENANCE_KEEP_VERSIONS")
         .ok()
@@ -227,15 +228,25 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64, keep: 
         // asks its own question. That question is one metadata listing — the
         // same budget as the row estimate above (ARCH §10.6: two decisions,
         // two deciders, rather than one threshold standing in for both).
-        let versions = if retention.is_some() {
-            idx.version_count().await
+        let version_ts = if retention.is_some() {
+            idx.version_timestamps().await
         } else {
-            0
+            Vec::new()
         };
+        let versions = version_ts.len();
         max_versions = max_versions.max(versions);
-        let reclaim = retention
-            .and_then(|r| r.keep_versions)
-            .is_some_and(|k| versions > k);
+        // A COUNT CANNOT ANSWER THIS. Until 2026-09-11 the condition was
+        // `versions > keep_versions` against a shipped ceiling of 1,000, and a
+        // quiet corpus below that ceiling was never reclaimed at all. Measured
+        // on `wikipedia` that day: 926 versions — under the ceiling, so this
+        // gate never opened — holding 107.4GB of superseded fragments and
+        // 31.3GB of dead index directories against 12.4GB of live data, in a
+        // dataset last written the day before. Gate 1 was shut for the same
+        // reason (nothing appended), so the sweep logged "below both gates"
+        // every cycle forever. `keep_versions` remains a real bound, but it is
+        // a bound INSIDE the cutoff (see `Retention::cutoff_days`), never the
+        // question of whether to look.
+        let reclaim = retention.is_some_and(|r| r.reclaimable(&version_ts, Utc::now()));
 
         if !fold && !reclaim {
             tracing::debug!(

@@ -69,8 +69,8 @@ pub struct DesktopConfig {
     pub enable_recipe_authoring: bool,
     /// Opt-in for **Mobile access** — serving the phone-facing
     /// `sovereign-server` API so the svrnmesh mobile app can pair with this
-    /// node over the tailnet. When `true`, the desktop supervises a
-    /// `sovereign-server` child (via [`crate::supervisor::Supervisor`]) that
+    /// node over the tailnet. When `true`, the desktop starts a
+    /// `sovereign-server` child (see [`crate::mobile_host_setup::start`]) that
     /// delegates all inference to the local daemon — it loads no models of
     /// its own. Off by default; flipped from Settings → Mobile access.
     #[serde(default)]

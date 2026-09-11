@@ -36,13 +36,13 @@ use std::time::Duration;
 
 use serde::Serialize;
 use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::types::Custody;
 use sovereign_core::deep_research::containment::missing_claim_figures;
 use sovereign_core::deep_research::icd::{
     BudgetLedger, Charter, EvidenceWindow, GapList, Manifest, Verdict, VerdictSet,
 };
 use sovereign_core::deep_research::launch::{self, LaunchOptions};
 use sovereign_core::deep_research::{resume, run, SearchSource};
-use sovereign_core::types::Custody;
 use tauri::{AppHandle, Emitter};
 
 // ── Carved-out sections ────────────────────────────────────────────────────

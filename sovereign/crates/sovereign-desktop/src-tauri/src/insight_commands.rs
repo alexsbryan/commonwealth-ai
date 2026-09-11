@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
-use sovereign_core::types::{InsightPosition, InsightSinkState, InsightSource};
+use sovereign_contracts::types::{InsightPosition, InsightSinkState, InsightSource};
 
 use crate::state::AppState;
 
@@ -221,10 +221,10 @@ pub async fn explore_insights(
     let conv_id = uuid::Uuid::new_v4().to_string();
 
     // Save a system message with the insight context.
-    let system_msg = sovereign_core::types::Message {
+    let system_msg = sovereign_contracts::types::Message {
         id: uuid::Uuid::new_v4().to_string(),
         conversation_id: conv_id.clone(),
-        role: sovereign_core::types::Role::System,
+        role: sovereign_contracts::types::Role::System,
         content: format!(
             "The user has gathered the following insights from previous research. \
              Use them as context for the conversation.\n\n{context_preamble}"
@@ -236,10 +236,10 @@ pub async fn explore_insights(
 
     // Save conversation first, then the system message.
     store
-        .save_message(&sovereign_core::types::Message {
+        .save_message(&sovereign_contracts::types::Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conv_id.clone(),
-            role: sovereign_core::types::Role::User,
+            role: sovereign_contracts::types::Role::User,
             content: String::new(), // dummy to create conversation
             created_at: now(),
             metadata: None,

@@ -19,8 +19,9 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
+use corpus_engine::enrichment::atlas::AtomEnvelope;
 use serde::Serialize;
 // The enrichment store, shared with the CLI and the daemon's watched-folder
 // driver (rung nc-16-shared-capability). This file used to carry its own
@@ -28,6 +29,9 @@ use serde::Serialize;
 // derivation; all three are gone.
 use sovereign_enrichment_catalog::{catalog, paths, EnrichedCorpusSummary};
 use tauri::AppHandle;
+use tauri::State;
+
+use crate::state::AppState;
 
 // ─── Command: enrich_list_corpora ────────────────────────────────────
 
@@ -210,23 +214,48 @@ pub struct StarterQuestion {
 /// Returns an empty vec (NOT an error) when atoms.json is absent — the
 /// UI branches on vec length to decide whether to fall back to
 /// excerpt-based starters.
+/// The atoms come from the SERVING host, not this process's disk
+/// (sv-surface svt-3). `paths::index_root(&corpus_id).join("atlas")`
+/// named a directory only a co-located daemon shares: on an attached
+/// boot it is this laptop's index root while the corpus, the atlas and
+/// the answer all live on the daemon's, so the chips silently
+/// disappeared for every corpus the user actually had.
+/// `commands::meshapp` already reads atoms this way.
+///
+/// "No atlas" stays an EMPTY LIST and not an error, because that is the
+/// signal the UI branches on — but it is now the host's 404 saying so
+/// (`reading_http.rs:427`), carried through
+/// [`TurnClient::corpus_atoms_all_if_present`], rather than this
+/// process's guess from a `Path::exists` on the wrong machine. A host
+/// that is unreachable, or that cannot read an atlas it HAS, is an
+/// `Err` — the two were indistinguishable before (ARCH principle 6).
 #[tauri::command]
 pub async fn enrich_get_starter_questions(
+    state: State<'_, Arc<AppState>>,
     corpus_id: String,
     limit: usize,
 ) -> Result<Vec<StarterQuestion>, String> {
-    let atlas_dir = paths::index_root(&corpus_id).join("atlas");
-    if !atlas_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let atoms_file = read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("reading atoms.json under {}: {e}", atlas_dir.display()))?;
+    let atoms = match sovereign_turn_client::TurnClient::new(state.internal_base_url())
+        .corpus_atoms_all_if_present::<AtomEnvelope>(&corpus_id)
+        .await
+        .map_err(|e| format!("enrich_get_starter_questions: {e}"))?
+    {
+        Some(atoms) => atoms,
+        None => {
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                "enrich_get_starter_questions: host has no atlas for this corpus \
+                 — excerpt starters, not a failed read"
+            );
+            return Ok(Vec::new());
+        }
+    };
 
-    let starters = rank_starter_questions(&atoms_file.atoms, limit);
+    let starters = rank_starter_questions(&atoms, limit);
     tracing::debug!(
         corpus_id = %corpus_id,
-        total_atoms = atoms_file.atoms.len(),
-        question_atoms = atoms_file.atoms.iter().filter(|a| matches!(a, AtomEnvelope::Question(_))).count(),
+        total_atoms = atoms.len(),
+        question_atoms = atoms.iter().filter(|a| matches!(a, AtomEnvelope::Question(_))).count(),
         returned = starters.len(),
         "enrich_get_starter_questions"
     );

@@ -413,7 +413,7 @@ pub struct CrashReportInfo {
 
 #[tauri::command]
 pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
-    let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let cfg = sovereign_contracts::setup_config::SetupConfig::load().ok();
     let app_version = env!("CARGO_PKG_VERSION");
     let data_dir = cfg
         .as_ref()

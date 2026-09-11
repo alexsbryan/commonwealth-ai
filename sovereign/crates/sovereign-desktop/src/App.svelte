@@ -695,11 +695,10 @@
 
 <ToastHost />
 
-<!-- Global supervisor banner. Listens for `supervisor-state` events
-     from the Rust supervisor and renders only when the daemon is
-     restarting / unhealthy / failed (silent for healthy + starting).
-     Visible across every view, including setup/welcome — a daemon
-     crash mid-setup deserves the same recovery surface. -->
+<!-- Global backend banner. Listens for `attach-daemon-state` from
+     `attach_watch` and renders only when the daemon this app talks to has
+     stopped answering. Visible across every view, including setup/welcome —
+     a backend that dies mid-setup deserves the same recovery surface. -->
 <ReconnectBanner onOpenDiagnostics={openDiagnosticsView} />
 
 <!-- Boot-time notice when the configured chat model can't run on this

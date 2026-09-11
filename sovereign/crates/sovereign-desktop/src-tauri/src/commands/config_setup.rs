@@ -1069,12 +1069,14 @@ pub async fn complete_setup(
         tracing::warn!("complete_setup: admin/reload failed: {e}");
     }
 
-    // First-session supervision (DAEMON_RESILIENCE.md P0.1): relaunch
-    // so the fresh instance boots straight into the supervised child —
-    // this session never bound :9741, so there is nothing to hand
-    // over. On `false` (harnesses / kill-switch / spawn failure) keep
-    // the legacy in-process completion below.
-    if crate::supervisor_setup::maybe_restart_into_supervised(&app_handle).await {
+    // Relaunch so the fresh instance reads the config this wizard just wrote
+    // at startup, where `serving_host::ensure_reachable` runs — this session
+    // never bound :9741, so there is nothing to hand over. On `false`
+    // (harnesses / kill-switch / spawn failure) keep the in-process completion
+    // below. See `setup_flow::relaunch_after_setup`.
+    if crate::setup_flow::daemon_runs_elsewhere()
+        && crate::setup_flow::relaunch_after_setup(&app_handle).await
+    {
         return Ok(());
     }
 

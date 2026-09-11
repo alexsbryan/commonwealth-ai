@@ -64,13 +64,25 @@ Recovery is still NOT one of the covered cases — nothing here restarts a
 crashed daemon, and the bring-up runs once, at startup, never on a timer or a
 health signal.
 
-**What is NOT settled by this graduation.** The `Reached::BroughtUp` path has
-been exercised on unix only. Detached survival on unix is proven by a
-process-group assertion (`sovereign-turn-client/src/reach.rs`,
-`the_brought_up_process_is_in_its_own_process_group`); the Windows
-`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` spawn compiles and has still
-never been RUN. A packaged release build carrying the sidecar has not been
-produced on this host either — see svt-1's report.
+**Exercised on a packaged app, 2026-09-11.** `cargo tauri build --debug` with
+`SOVEREIGN_DESKTOP_SIDECAR_PROFILE=debug` put both binaries in
+`svrnmesh.app/Contents/MacOS/` — `sovereign-desktop` beside
+`sovereign-cli-daemon`, which is where `daemon_binary`'s first search leg
+looks. Launched under `env -i` with a scratch HOME and `svrn`, `sovereign` and
+`sovereign-cli` all absent from PATH, the app logged `reach: this build ships a
+backend it can bring up` naming `<root>/.sovereign/bin/sovereign-cli-daemon`
+(so `stable_daemon_binary`'s install ran, not the in-bundle path), then
+`BroughtUp { pid, ready_after: 27.0s }`; `/v1/models` answered with the model
+loaded and a `/v1/chat/completions` turn returned. The app was then killed and
+the daemon KEPT SERVING, pgid equal to its own pid — the detached-survival
+property, observed on a real bundle rather than only asserted in a unit test.
+
+**What is STILL not settled.** Only the DEBUG profile has been packaged; release
+codegen has never carried the sidecar on this host, and the tauri DMG step fails
+here for unrelated Finder/TCC reasons (`scripts/build-desktop-macos.sh`
+documents it), so the installer leg is unproven. The Windows
+`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` spawn compiles (`cargo xwin
+check`) and has still never been RUN.
 
 **Superseded by, not withering into.** This row closes because a surface
 reached for the capability, which is what the row asked for. If the desktop

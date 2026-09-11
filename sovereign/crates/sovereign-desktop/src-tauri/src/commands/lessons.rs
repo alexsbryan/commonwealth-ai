@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use corpus_engine_notes::{NoteScope, NoteSource};
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::types::LessonProposedPayload;
 use sovereign_core::lessons::{LessonPayload, TaughtFrom, LESSON_KIND};
-use sovereign_core::types::LessonProposedPayload;
 use sovereign_mesh::notes_http::NoteEntry;
 use tauri::State;
 

@@ -62,6 +62,20 @@ pub enum Violation {
         from: String,
         to: String,
     },
+    /// A declared thin surface that can REACH a crate it may not become.
+    ///
+    /// The only variant keyed on a closure rather than an edge, because the
+    /// ability it names is transitive: Cargo links what a crate reaches, not
+    /// what it names. `path` is the shortest route, so the reader deletes the
+    /// hop that actually carries it rather than hunting the manifest for a
+    /// direct edge that is not there.
+    SurfaceReach {
+        surface: String,
+        reached: String,
+        /// Shortest path, `surface` first and `reached` last.
+        path: Vec<String>,
+        doc: String,
+    },
     /// A product crate depending on a back-of-house crate in its default
     /// build. The one-way rule runs the other way: back-of-house observes the
     /// product, never the reverse.
@@ -172,6 +186,29 @@ impl Violation {
                  longer matches any edge — the package got cleaner; delete \
                  the entry from quality/ARCH_LAYERS.toml"
             ),
+            Violation::SurfaceReach {
+                surface,
+                reached,
+                path,
+                doc,
+            } => {
+                let route = path.join(" → ");
+                // Name the FIRST hop explicitly. A direct reach and a
+                // three-crate chain read identically in a path line, and the
+                // edge a reader can actually delete is the one in `surface`'s
+                // own manifest.
+                let hop = path.get(1).map(String::as_str).unwrap_or(reached);
+                format!(
+                    "{surface} can reach `{reached}`, via {route} — a thin \
+                     surface may not LINK a crate that assembles or hosts a \
+                     backend, however indirectly ({doc}). Delete `{surface} → \
+                     {hop}` from its Cargo.toml. If this build genuinely must \
+                     ship a backend it can bring up, that is a DECLARED \
+                     capability with an owner and a review-by, never a \
+                     dependency nobody noticed — grandfather it with an \
+                     [[exception]] naming the rung that removes it."
+                )
+            }
             Violation::BackstageEdge { from, to, kind } => format!(
                 "{from} → {to}: {} dependency on a `backstage` crate that the \
                  DEFAULT build carries — the quality controls observe the \

@@ -20,7 +20,6 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
-use crate::supervisor_setup::SupervisedDaemon;
 
 // Built-in skills live in a submodule (§3.3 state.rs decomposition).
 mod builtin_skills;
@@ -182,28 +181,16 @@ pub struct AppState {
     /// or when those DBs failed to open.
     pub notes: RwLock<Option<Arc<NoteStore>>>,
     pub features: RwLock<Option<Arc<RecipeProjectStore>>>,
-    /// Child-process daemon supervisor. Populated when
-    /// `supervisor_setup::maybe_start` spawned a daemon child — the
-    /// DEFAULT Local-mode boot since the W1 flip (DAEMON_RESILIENCE.md
-    /// P0.1; opt-outs: `SOVEREIGN_USE_SUPERVISOR=0`,
-    /// `SOVEREIGN_FORCE_LOCAL=1`). `None` for the in-process fallback
-    /// and for Attach mode (an externally-owned daemon). The
-    /// `supervisor_reconnect` / `supervisor_active` commands
-    /// (`commands/supervisor_ctl.rs`) surface it to the frontend.
+    /// Handle on the opt-in **Mobile access** `sovereign-server` child (the
+    /// phone-facing host). `Some` while the host runs; aborting the handle
+    /// drops the future holding the `Child`, whose `kill_on_drop(true)`
+    /// SIGKILLs `sovereign-server` — that is the toggle-off path. `None` when
+    /// Mobile access is off. See [`crate::mobile_host_setup`].
     ///
-    /// Holds the supervisor AND its run-loop handle together
-    /// ([`SupervisedDaemon`]) because stopping the child needs both: the
-    /// app's `RunEvent::Exit` takes the pair out of here and hands it to
-    /// `supervisor_setup::shutdown`, which signals the loop and then
-    /// waits for the child to be reaped. `_exit(0)` runs no destructors,
-    /// so this deliberate stop is the ONLY thing that keeps quit from
-    /// orphaning the daemon child.
-    pub supervisor: RwLock<Option<SupervisedDaemon>>,
-    /// Supervise-task handle for the opt-in **Mobile access**
-    /// `sovereign-server` child (the phone-facing host). `Some` while the host
-    /// runs; aborting the handle drops the run future and the in-flight child's
-    /// `kill_on_drop(true)` SIGKILLs `sovereign-server` — that's the toggle-off
-    /// path. `None` when Mobile access is off. See [`crate::mobile_host_setup`].
+    /// It is a plain child, not a supervised one, since 2026-09-11: the
+    /// restart policy, backoff, heartbeat and crash-loop breaker this used to
+    /// carry went with the daemon supervisor (sv-surface svt-2). The desktop
+    /// owns the TOGGLE and nothing else about the host's life.
     pub mobile_host_supervisor: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// Manager for external MCP servers loaded at bootstrap (the
     /// `[[mcp_servers]]` array of the canonical config). Held only for its
@@ -342,7 +329,6 @@ impl AppState {
     pub fn new_with_mode(
         approval: Arc<TauriApprovalChannel>,
         mode: crate::bootstrap::BootstrapMode,
-        supervisor: Option<SupervisedDaemon>,
     ) -> Self {
         let config = DesktopConfig::load();
         // The daemon is NOT constructed here. In Local mode `bootstrap`
@@ -385,7 +371,6 @@ impl AppState {
             watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),
             features: RwLock::new(None),
-            supervisor: RwLock::new(supervisor),
             mobile_host_supervisor: RwLock::new(None),
             mcp_servers: RwLock::new(None),
             entity_extractor: RwLock::new(None),
@@ -581,8 +566,8 @@ pub async fn bootstrap_with_progress(
     // Glassbox: the mode this boot resolved, at the top of the spine
     // that behaves differently because of it. `bootstrap::detect` logs
     // the PROBE's conclusion; this logs what the state object actually
-    // carries after the supervisor seam may have changed it, which is
-    // the value every later branch reads (sv-surface D9).
+    // carries, including the B4 run-lock attach below, which is the
+    // value every later branch reads (sv-surface D9).
     tracing::info!(
         target: "bootstrap",
         attach = state.is_attach_mode(),
@@ -1048,13 +1033,12 @@ pub async fn bootstrap_with_progress(
     // ── Single-instance guard for the IN-PROCESS daemon ────────────
     //
     // Local mode means THIS process becomes the writer of `cfg.data.dir` —
-    // the same root a standalone `svrn daemon run` claims. Supervised Local
-    // never reaches here: `supervisor_setup::maybe_start` has already flipped
-    // the mode to Attach against its own child, and the child takes the lock
-    // itself. So this covers exactly the in-process fallback
-    // (`SOVEREIGN_USE_SUPERVISOR=0`, `SOVEREIGN_FORCE_LOCAL=1`, or a
-    // supervisor that failed to start) — the one shape where the desktop
-    // process itself owns a data root.
+    // the same root a standalone `svrn daemon run` claims. It is reached only
+    // when no daemon answered the client port at `bootstrap::detect` AND
+    // `serving_host::ensure_reachable` could not bring one up (no binary, or
+    // `SOVEREIGN_FORCE_LOCAL=1` asking this process to run the weights). That
+    // is the one remaining shape where the desktop process itself owns a data
+    // root — and it is the in-process hosting svt-3 removes.
     //
     // A refusal means a daemon owns that root but was not answering `:9741`
     // when `bootstrap::detect()` probed it: starting up, unloading an 18GB

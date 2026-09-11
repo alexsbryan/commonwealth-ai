@@ -42,21 +42,22 @@ sovereign-runtime-recipe = { workspace = true }
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }
-# The daemon entry as a library (DAEMON_RESILIENCE.md P0.1): the
-# `--daemon-child` argv arm runs the REAL daemon (`daemon_child_main`)
-# so the supervisor can spawn `current_exe() --daemon-child` — one
-# daemon bootstrap, two entry points, no sidecar binary in the bundle.
-sovereign-cli-daemon = { path = "../../sovereign-cli-daemon" }
+# `sovereign-cli-daemon` and `sovereign-compute` LEFT HERE at svt-2
+# (2026-09-11). The desktop used to link the daemon entry as a library so
+# `--daemon-child` could run the real daemon in this process, and the
+# child-process supervisor so it could parent one. Both roles are gone:
+# `main.rs` refuses every daemon argv form with `NOT_A_DAEMON`, and the
+# daemon this app talks to is the Tauri SIDECAR, built as a separate binary
+# by `scripts/stage-daemon-sidecar.sh`. Do not re-add either to reach a type
+# — that is the dependency edge `cargo xtask layer-gate` exists to hold.
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
-# Child-process supervisor (extracted here 2026-07-20 so the daemon's
-# compute-child manager shares it). `src/supervisor.rs` re-exports this.
-sovereign-compute = { workspace = true }
-# Mesh Health surfaces (peer preferences, dimensional contributions) —
-# Tauri commands access the in-process AppState's accessors. The
-# `sovereign-mesh` crate already path-depends on these so version
-# skew is impossible.
-commonwealth-core = { path = "../../../../commonwealth/crates/commonwealth-core" }
-commonwealth-state = { path = "../../../../commonwealth/crates/commonwealth-state" }
+# `commonwealth-core` and `commonwealth-state` LEFT HERE at svt-3 chunk 3
+# (2026-09-11). The Mesh Health surfaces — peer preferences and dimensional
+# contributions — used to reach the in-process AppState's accessors directly,
+# which meant the desktop held commonwealth's own types to spell a NodeId.
+# Both now ask the daemon: `/internal/contribution/view` and
+# `/internal/peer-preference/{set,clear,list}`, through `TurnClient`. The
+# peer-preference route was the LAST thing holding these two.
 corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-authoring-harness.workspace = true
 corpus-engine-notes = { workspace = true }

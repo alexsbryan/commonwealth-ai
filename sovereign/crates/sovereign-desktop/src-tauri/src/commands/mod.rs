@@ -57,7 +57,7 @@ pub struct ConversationDetail {
     pub updated_at: i64,
     /// User-controlled corpus allow-list. `None` = "all installed
     /// corpora" (default); `Some(vec)` = explicit subset. See
-    /// `sovereign_core::types::Conversation::enabled_corpora`.
+    /// `sovereign_contracts::types::Conversation::enabled_corpora`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled_corpora: Option<Vec<String>>,
 }

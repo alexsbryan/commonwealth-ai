@@ -27,9 +27,24 @@ status    = "active"
 # below are what sovereign-desktop declares. The transitive closure (53 crates,
 # six of which bind a listener) collapses when these go, so the direct form is
 # the honest cheap check, not a weaker one wearing the same sentence.
+# SUPERSEDED IN PLACE, 2026-09-11 (svt-4). The statement is unchanged except
+# for one word — REACHES, not names — and the check is now the gate rather
+# than a grep, for two reasons measured on this tree the same day:
+#
+#   1. DIRECT EDGES HAD A LIVE HOLE. The paragraph above chose direct edges
+#      deliberately and called it "the honest cheap check". It is not: the
+#      desktop named `sovereign-runtime-recipe`, which names `sovereign-tools`,
+#      which binds an MCP listener. Delete the five names below and this grep
+#      exits 0 with sovereign-tools still compiled into the app — the exact
+#      shape of green-gate-enforcing-nothing the predicate exists to refuse.
+#      The rule is now reachability over Cargo's own graph and the violation
+#      carries its path (quality/arch-layers/src/surfaces.rs).
+#   2. ONE DECIDER. A grep here and a gate in quality/ARCH_LAYERS.toml would
+#      be two implementations of one question, free to disagree (ARCH
+#      principle 8). The check calls the gate.
 [predicate]
-statement = "sovereign-desktop depends on no crate that can assemble or host a daemon — it names none of sovereign-mesh, sovereign-cli-daemon, sovereign-compute, sovereign-workflow-host, sovereign-tools in [dependencies]"
-check = "! grep -qE '^(sovereign-mesh|sovereign-cli-daemon|sovereign-compute|sovereign-workflow-host|sovereign-tools) *=' sovereign/crates/sovereign-desktop/src-tauri/Cargo.toml"
+statement = "sovereign-desktop REACHES no crate that can assemble or host a daemon — none of sovereign-mesh, sovereign-cli-daemon, sovereign-compute, sovereign-workflow-host, sovereign-tools is in its Cargo dependency closure — AND no thin surface retains a process handle or tracks a lifecycle"
+check = "(cd corpus-engine && cargo xtask layer-gate && cargo xtask lifecycle-gate)"
 
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
@@ -1647,11 +1662,76 @@ status       = "open"
 # orphaned by _exit - the exact hazard Launch::Server's own doc records
 # (launch.rs:99-112); and `setup-restarting` is emitted with a 600ms paint
 # sleep to NO listener (supervisor_setup.rs:339-344).
+# ── THE INSTRUMENT LANDED — svt-4, 2026-09-11 ─────────────────────────────
+#
+# HALF ONE: `[thin_surfaces]` in quality/ARCH_LAYERS.toml (schema v4),
+# evaluated by quality/arch-layers/src/surfaces.rs, run by `cargo xtask
+# layer-gate`. REACHABILITY, not edges — see the predicate note above for the
+# hole that decided it. Two surfaces are enrolled: sovereign-desktop and
+# sovereign-mobile. Mobile is ALREADY CLEAN (2 direct deps:
+# sovereign-turn-client, commonwealth-transport), which is what gives this
+# rule a passing subject and a failing one on the same run; a green over one
+# input is an absence of input, not a claim (ARCH principle 5).
+#
+# corpus-engine is NOT on the may_not_reach list although this bar's
+# floor_basis names it: sovereign-core reaches it, so forbidding it makes the
+# rule unsatisfiable for any surface that keeps core — and it binds no
+# listener and hosts nothing. It is on the floor as SIZE, which size-gate is
+# the instrument for.
+#
+# HALF TWO: `cargo xtask lifecycle-gate`. Four rules — starts / detaches /
+# retains / reaps — over `src/**/*.rs` of the SAME surface list, plus the
+# declared bring-up decider (sovereign-turn-client/src/reach.rs), which may
+# trip the first two and not the last two. That pair IS this bar's settled
+# sentence: a client may bring a backend up at a moment a user action asks for
+# one, and never on a timer or a health signal.
+#
+# WATCHED RED, both, and the third run is the one that matters:
+#   * half 1 — the five burn-down [[exception]] rows removed: 5 violations,
+#     one per crate the desktop reached, each naming its path.
+#   * half 2 — a retained `std::process::Child` + `try_wait` + respawn planted
+#     in sovereign-mobile/src-tauri/src/state.rs (a surface that was CLEAN):
+#     3 violations, one per rule. Same plant in the desktop's attach_watch.rs
+#     (the file the bar names as where a Down-triggered respawn would be
+#     written): 2 violations. Both restored byte-identical, git status clean.
+#   * THE PAIR — with the mobile plant in the tree, `layer-gate` printed
+#     "no thin surface reaches a backend it could become" and exited 0. A full
+#     re-supervision, and half one did not move one inch. That run is the
+#     whole argument for two halves, and it is now a measurement rather than a
+#     prediction.
+#
+# THE CLOSURE LOOP FIRED THE SAME DAY. svt-2 (99a0b1520, fc2086637) removed
+# sovereign-cli-daemon and sovereign-compute from src-tauri/Cargo.toml, and
+# layer-gate went RED on the two now-stale [[exception]] rows until they were
+# deleted. Not a synthetic proof — the rule forcing a live win to be banked
+# within hours of being written.
+#
+# BASELINE AT LANDING (the list svt-3 drives to zero):
+#   half 1 — 3 of 5 reaches remain: sovereign-mesh, sovereign-tools,
+#            sovereign-workflow-host. sovereign-tools arrives BOTH directly
+#            and via sovereign-runtime-recipe, so removing the direct edge
+#            alone will not clear it — which is the case reachability was
+#            built for.
+#   half 2 — 10 burning-down sites + 3 sanctioned:
+#            smoketest.rs starts 2 / reaps 3        (the crash-isolation fork)
+#            mobile_host_setup.rs starts 2 / reaps 2 (the sovereign-server child)
+#            setup_flow.rs starts 1                  (relaunch of THIS app)
+#            config_setup.rs starts 3  — SANCTIONED, the attach_restart_daemon
+#            button asking the OS service manager to restart. Not debt.
+#
+# ONE HOLE, NAMED. Half two's unit is the FILE and its evidence is text. It
+# cannot see supervision written through a crate that wraps `std::process`
+# behind a name the needles do not carry — which is precisely what half one
+# forbids, so the pair is closed against the case either alone would miss.
+# What neither half sees is supervision inside a crate the surface legitimately
+# depends on: if `sovereign-meshapp` grew a restart policy, the desktop would
+# inherit it and both gates stay green. Enrolling a crate as a surface is the
+# fix, and it is a one-line edit to [thin_surfaces].
 floor        = 21.0
 floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2df562caa, 2026-09-11; the daemon-hosting subset is sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe, corpus-engine, sovereign-gliner, sovereign-inference, sovereign-tools, commonwealth-core, commonwealth-state. Lifecycle code: 1,990 production lines, ~271 of which survive"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "TWO HALVES, and either alone is a green gate enforcing nothing. (1) cargo tree -p sovereign-desktop --edges normal --depth 1 carries no daemon-assembling crate, gated by cargo xtask layer-gate over quality/ARCH_LAYERS.toml. (2) a census that no surface retains a process handle or tracks a lifecycle - no Child, no supervisor, no stop-on-exit - because a dependency gate passes clean through supervision re-added one small commit at a time"
+instrument   = "TWO HALVES, and either alone is a green gate enforcing nothing. Both landed svt-4 (2026-09-11) and both watched red. (1) `cd corpus-engine && cargo xtask layer-gate` — the [thin_surfaces] pass in quality/ARCH_LAYERS.toml: no declared surface REACHES a daemon-assembling crate, transitively, over Cargo's own graph. (2) `cd corpus-engine && cargo xtask lifecycle-gate` — the census: no surface names the process-control API (starts / detaches / retains / reaps), with one sanctioned bring-up decider that may start and detach and may not retain or reap. Both run in `cargo xtask quality` and the CI gates job."
 goodhart     = "a surface can stop MANAGING a daemon while still LINKING one — the management calls go and the crate edge stays, which is exactly the state the predicate caught on 2026-09-11"
 kill         = "K3 - in-process hosting is a DECLARED capability, not a fallback: a build that brings up a backend says so by name, with an owner and a reason. iOS is the standing case (no fork/exec, so a sidecar is impossible), and it is why the embedded sink is not retired. Anything else that cannot be served by a daemon the app does not own goes to the operator as a declared exception with a DEFAULTS_LEDGER row and a review-by date - never a silent in-process path."
 

@@ -137,6 +137,55 @@ impl Retention {
             None => self.min_age_days,
         }
     }
+
+    /// Is any superseded version actually eligible for deletion?
+    ///
+    /// THE RECLAMATION GATE, and it asks [`Self::cutoff_days`] rather than a
+    /// question of its own. ONE DECIDER (ARCH §8): "how old is old enough" is
+    /// answered in exactly one place, and the gate that decides whether to
+    /// prune now resolves it the same way the prune itself will. Two sites
+    /// answering that differently is the defect this replaces.
+    ///
+    /// # Why the gate was a version COUNT, and why that leaked
+    ///
+    /// Until 2026-09-11 the daemon opened this gate on `versions >
+    /// keep_versions` — a count, against a shipped ceiling of 1,000.
+    /// A count is not a cost. Before compaction worked, a version pinned one
+    /// small append and 1,000 of them were cheap; after it worked, a version
+    /// pins a whole compacted fragment and the same count means two orders of
+    /// magnitude more disk. Measured on `wikipedia` this day: 926 versions —
+    /// comfortably UNDER the ceiling, so the gate never opened — holding
+    /// 107.4GB of superseded fragments and 31.3GB of dead index directories
+    /// against 12.4GB of live data, in a 152GB dataset that had not been
+    /// written since the day before.
+    ///
+    /// The corpus was quiet, so gate 1 (`unindexed >= floor`) was shut too.
+    /// Both gates shut means `sweep: below both gates — skipping`, every cycle,
+    /// forever: a corpus that stops being appended stops being reclaimed and
+    /// freezes with its entire garbage backlog on disk. That is the shape any
+    /// user with a shipped `wikipedia` reaches, not a property of this machine.
+    ///
+    /// # Why this converges instead of running every cycle
+    ///
+    /// `timestamps[0]` is the CURRENT version, which lance never deletes, so
+    /// it is excluded: a static corpus whose single version is a year old has
+    /// nothing to reclaim and must not re-open this gate hourly for a prune
+    /// that can remove nothing. After a successful prune every surviving
+    /// superseded version is younger than the cutoff, the gate closes, and it
+    /// re-opens only when new writes age past it — at most one prune per
+    /// corpus per `min_age_days`.
+    ///
+    /// `timestamps` are NEWEST FIRST, the same contract as
+    /// [`Self::cutoff_days`]. Empty or single-version input yields `false`,
+    /// which routes to "nothing to reclaim" — the conservative answer for a
+    /// gate, and the same best-effort contract as
+    /// [`CorpusIndex::version_timestamps`].
+    pub fn reclaimable(&self, timestamps: &[DateTime<Utc>], now: DateTime<Utc>) -> bool {
+        let cutoff = self.cutoff_days(timestamps, now);
+        timestamps
+            .get(1..)
+            .is_some_and(|superseded| superseded.iter().any(|t| (now - *t).num_days() >= cutoff))
+    }
 }
 
 impl CorpusIndex {
@@ -165,21 +214,28 @@ impl CorpusIndex {
         total
     }
 
-    /// How many manifest versions this corpus retains.
+    /// This corpus's manifest version timestamps, NEWEST FIRST.
     ///
-    /// The health signal for RECLAMATION, and deliberately a different number
+    /// The health signal for RECLAMATION, and deliberately a different reading
     /// from [`Self::unindexed_rows_estimate`], which is the health signal for
-    /// SEARCH SPEED. Conflating them is what leaked 154GB: see
-    /// [`Self::prune`].
+    /// SEARCH SPEED. Conflating them is what leaked 154GB: see [`Self::prune`].
+    ///
+    /// Timestamps rather than a count, because a count cannot answer the gate's
+    /// question — see [`Retention::reclaimable`] for the 138.7GB that ruling on
+    /// the count alone retained. `.len()` still gives the count, for telemetry.
     ///
     /// Cheap — a metadata listing, no data scan — the same contract that lets
     /// the daemon sweep ask `unindexed_rows_estimate` of every corpus every
-    /// cycle. Best-effort by design: a listing that fails yields 0, which
-    /// routes to "nothing to reclaim". Never used to claim a corpus IS
+    /// cycle. Best-effort by design: a listing that fails yields an empty vec,
+    /// which routes to "nothing to reclaim". Never used to claim a corpus IS
     /// healthy, only to decline unnecessary work.
-    pub async fn version_count(&self) -> usize {
+    pub async fn version_timestamps(&self) -> Vec<DateTime<Utc>> {
         match self.table.list_versions().await {
-            Ok(v) => v.len(),
+            Ok(v) => {
+                let mut ts: Vec<DateTime<Utc>> = v.iter().map(|x| x.timestamp).collect();
+                ts.sort_unstable_by(|a, b| b.cmp(a));
+                ts
+            }
             Err(e) => {
                 // The 0 is the documented best-effort contract above, but it
                 // must not be SILENT. 0 routes to "nothing to reclaim", so a
@@ -190,10 +246,10 @@ impl CorpusIndex {
                 // emit (§9.1, §18.3).
                 tracing::warn!(
                     error = %e,
-                    "version_count: listing versions failed — reporting 0, so this \
-                     corpus will not be reclaimed this cycle"
+                    "version_timestamps: listing versions failed — reporting none, so \
+                     this corpus will not be reclaimed this cycle"
                 );
-                0
+                Vec::new()
             }
         }
     }
@@ -434,5 +490,106 @@ mod tests {
             keep_versions: Some(1),
         };
         assert_eq!(r.cutoff_days(&[], now), 2);
+    }
+
+    /// The shipped daemon policy, so these cases are about the real gate and
+    /// not a shape chosen to pass. `prune_days()` = 1, `keep_versions()` = 1000.
+    fn shipped() -> Retention {
+        Retention {
+            min_age_days: 1,
+            keep_versions: Some(1_000),
+        }
+    }
+
+    /// THE REGRESSION. `wikipedia` on 2026-09-11: 926 manifest versions
+    /// spanning Sep 8 13:40 - Sep 10 23:14 (57.6h), against the shipped
+    /// ceiling of 1,000. The count gate asked `versions > keep_versions`, got
+    /// `926 > 1000` = false, and never opened — while the dataset held 107.4GB
+    /// of superseded fragments and 31.3GB of dead index directories against
+    /// 12.4GB of live data. Gate 1 was shut too (nothing appended since the
+    /// day before), so the sweep skipped the corpus every cycle, forever.
+    #[test]
+    fn a_quiet_corpus_under_the_count_ceiling_is_still_reclaimable() {
+        let now = Utc::now();
+        // The measured shape: 926 versions over 57.6 hours.
+        let versions: Vec<_> = (0..926)
+            .map(|i| now - ChronoDuration::minutes(i * 3736 / 926))
+            .collect();
+        let r = shipped();
+        assert!(
+            !(versions.len() > r.keep_versions.unwrap()),
+            "the count gate that shipped: 926 versions is UNDER the 1,000 ceiling"
+        );
+        assert!(
+            r.reclaimable(&versions, now),
+            "and yet two days of superseded versions are past the 1-day cutoff"
+        );
+    }
+
+    /// The reason the gate cannot simply be "always prune": `timestamps[0]` is
+    /// the current version and lance never deletes it, so a static corpus whose
+    /// one version is ancient would re-open the gate every cycle for a prune
+    /// that can remove nothing.
+    #[test]
+    fn a_static_corpus_with_one_ancient_version_never_reopens_the_gate() {
+        let now = Utc::now();
+        let versions = vec![now - ChronoDuration::days(365)];
+        assert!(!shipped().reclaimable(&versions, now));
+        assert!(
+            !shipped().reclaimable(&[], now),
+            "nor does an empty listing"
+        );
+    }
+
+    /// Reader safety, restated as the gate sees it: superseded versions exist,
+    /// but all of them are inside the `min_age_days` window, so there is
+    /// nothing this policy may delete and the gate stays shut.
+    #[test]
+    fn superseded_versions_inside_the_safety_window_do_not_open_the_gate() {
+        let now = Utc::now();
+        let versions = hourly(now, 12); // twelve versions, all < 1 day old
+        assert!(!shipped().reclaimable(&versions, now));
+    }
+
+    /// CONVERGENCE. After a prune, everything left is younger than the cutoff,
+    /// so the gate closes and stays closed until new writes age past it — at
+    /// most one prune per corpus per `min_age_days`, not one per sweep cycle.
+    #[test]
+    fn the_gate_closes_after_a_prune_and_reopens_only_on_age() {
+        let now = Utc::now();
+        let after_prune = hourly(now, 20); // all within the last day
+        assert!(!shipped().reclaimable(&after_prune, now));
+        // A day later, the same history has aged past the floor.
+        let later = now + ChronoDuration::days(1) + ChronoDuration::hours(1);
+        assert!(shipped().reclaimable(&after_prune, later));
+    }
+
+    /// The gate and the prune answer to ONE decider (ARCH §8): whenever
+    /// `reclaimable` opens, some superseded version is at or past the very
+    /// cutoff `prune` will pass to lance — the gate can never open on a
+    /// question the prune would answer differently.
+    #[test]
+    fn the_gate_agrees_with_the_cutoff_the_prune_will_use() {
+        let now = Utc::now();
+        for count in [2usize, 50, 926, 2000] {
+            for min_age_days in [1i64, 7] {
+                let versions: Vec<_> = (0..count)
+                    .map(|i| now - ChronoDuration::minutes(i as i64 * 4))
+                    .collect();
+                let r = Retention {
+                    min_age_days,
+                    keep_versions: Some(1_000),
+                };
+                let cutoff = r.cutoff_days(&versions, now);
+                let eligible = versions[1..]
+                    .iter()
+                    .any(|t| (now - *t).num_days() >= cutoff);
+                assert_eq!(
+                    r.reclaimable(&versions, now),
+                    eligible,
+                    "count={count} min_age_days={min_age_days} cutoff={cutoff}"
+                );
+            }
+        }
     }
 }

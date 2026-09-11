@@ -516,6 +516,24 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/contribution/view",
             get(routes_internal::contribution_view),
         )
+        // Operator-private per-peer affinity multiplier (Mesh Health
+        // panel, beside the ledger view above). The daemon owns the
+        // store AND the only reader of it — `routes_oicp.rs:383
+        // apply_peer_preference` — so these three are where a client
+        // asks rather than reaching into an in-process AppState it
+        // had to link two crates to hold (sv-surface svt-3).
+        .route(
+            "/internal/peer-preference/list",
+            get(routes_internal::peer_preference_list),
+        )
+        .route(
+            "/internal/peer-preference/set",
+            post(routes_internal::peer_preference_set),
+        )
+        .route(
+            "/internal/peer-preference/clear",
+            post(routes_internal::peer_preference_clear),
+        )
         // Local Activity ledger — the glassbox "what is my daemon
         // doing?" surface. Local-only namespace; loopback-only like
         // the rest of /internal/*. `summary` is the totals card;

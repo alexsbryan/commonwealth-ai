@@ -32,12 +32,12 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 
 | flag | default | status | purpose |
 |---|---|---|---|
-| `SOVEREIGN_BIN` | unset | shipped | Drift orchestrator's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_CLI_PATH). |
-| `SOVEREIGN_CLI` | unset | shipped | Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_CLI_PATH). |
+| `SOVEREIGN_BIN` | unset | shipped | Drift orchestrator's path to the sovereign CLI. ANCHOR of the sibling-binary synonym cluster — two names for 'where is the CLI' (with SOVEREIGN_CLI). It was three until SOVEREIGN_CLI_PATH was deprecated on 2026-09-11; the anchor moved here so the cluster is described by a row that still has readers. |
+| `SOVEREIGN_CLI` | unset | shipped | Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_BIN). |
 | `SOVEREIGN_CLI_DAEMON_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-daemon sibling. |
 | `SOVEREIGN_CLI_DEV_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-dev sibling. |
 | `SOVEREIGN_CLI_LLM_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-llm sibling the dispatcher execs. |
-| `SOVEREIGN_CLI_PATH` | unset | shipped | Desktop supervisor's path to the sovereign CLI. One of THREE names for 'where is the CLI' (with SOVEREIGN_BIN, SOVEREIGN_CLI) — the sibling-binary synonym cluster. |
+| `SOVEREIGN_CLI_PATH` | unset | deprecated | ORPHANED 2026-09-11 by svt-2 (99a0b1520): its only reader was `supervisor_setup::resolve_daemon_child`, and that module is deleted — zero Rust readers remain. DEPRECATED rather than deleted, for two reasons. (1) A user or CI job with it still exported now gets NOTHING, silently, and the successor is a DIFFERENT name — `SVRNMESH_DAEMON_BINARY` / `SOVEREIGN_DAEMON_BINARY`, read through `rebrand::svrnmesh_env` in `daemon_binary::daemon_binary` (daemon_binary.rs:69). A row that says so is the difference between a rename a reader can follow and a flag that quietly stopped working (ARCH principle 6). (2) `sovereign/crates/sovereign-desktop/tests/e2e/real/faults/spawn.ts:151` and `tests/e2e/scripts/lib/harness.mjs:257` still SET it; until those are cleaned up the name is live in the tree and env-gate should keep knowing it. Delete this row when both setters are gone. |
 | `SOVEREIGN_SERVER_PATH` | unset | shipped | Mobile host's path to the sovereign server binary. |
 
 ## corpus

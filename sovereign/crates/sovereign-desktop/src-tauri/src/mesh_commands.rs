@@ -828,6 +828,19 @@ pub async fn mesh_get_contributions(
         .map_err(|e| format!("mesh_get_contributions: {e}"))
 }
 
+/// Set or replace one peer's affinity multiplier.
+///
+/// ONE path in both modes: `POST /internal/peer-preference/set`. Until
+/// svt-3 Attach mode REFUSED here, naming the CLI, because no route
+/// existed — an honest refusal (ARCH principle 6) that cost two crates,
+/// `commonwealth-core` and `commonwealth-state`, a place in this
+/// client's manifest so the Local arm could hold a `NodeId` and a
+/// `PeerPreference`. Both are the daemon's to hold: it owns the
+/// `MeshStore` the preference lands in and is the only reader of it
+/// (`commonwealth-api/src/routes_oicp.rs:383`).
+///
+/// The `(0.0, 1.0]` clamp and the 32-hex-char id precondition are BOTH
+/// the host's now, not restated here (ARCH principle 8).
 #[tauri::command]
 pub async fn mesh_set_peer_preference(
     state: State<'_, Arc<AppState>>,
@@ -835,125 +848,81 @@ pub async fn mesh_set_peer_preference(
     multiplier: f64,
     reason: Option<String>,
 ) -> Result<(), String> {
-    if attached_port(&state).is_some() {
-        return Err("peer preferences are not yet exposed over the daemon HTTP \
-             API in Attach mode — set via `commonwealth peer-preference \
-             set` instead"
-            .into());
-    }
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    let Some(app_state) = mesh.app_state().await else {
-        return Err("mesh daemon not running".into());
-    };
-    let target = parse_node_id_hex(&node_id)?;
-    let pref =
-        commonwealth_state::PeerPreference::new(multiplier, reason).map_err(|e| format!("{e}"))?;
-    app_state
-        .inner
-        .peer_preferences
-        .set(&target, pref)
-        .map_err(|e| format!("{e}"))?;
-    Ok(())
+    tracing::debug!(
+        target: "mesh_state",
+        base = %state.internal_base_url(),
+        multiplier,
+        "mesh_set_peer_preference: asking the daemon to record the preference"
+    );
+    sovereign_turn_client::TurnClient::new(state.internal_base_url())
+        .set_peer_preference(&node_id, multiplier, reason.as_deref())
+        .await
+        .map_err(|e| format!("mesh_set_peer_preference: {e}"))
 }
 
+/// Drop one peer's affinity preference, answering whether one was set.
+///
+/// Same one path in both modes as [`mesh_set_peer_preference`]. The bool
+/// is the host's own idempotency answer, carried through rather than
+/// inferred from a status code.
 #[tauri::command]
 pub async fn mesh_clear_peer_preference(
     state: State<'_, Arc<AppState>>,
     node_id: String,
 ) -> Result<bool, String> {
-    if attached_port(&state).is_some() {
-        return Err("peer preferences are not yet exposed over the daemon HTTP \
-             API in Attach mode — clear via `commonwealth peer-preference \
-             clear` instead"
-            .into());
-    }
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    let Some(app_state) = mesh.app_state().await else {
-        return Err("mesh daemon not running".into());
-    };
-    let target = parse_node_id_hex(&node_id)?;
-    app_state
-        .inner
-        .peer_preferences
-        .clear(&target)
-        .map_err(|e| format!("{e}"))
+    tracing::debug!(
+        target: "mesh_state",
+        base = %state.internal_base_url(),
+        "mesh_clear_peer_preference: asking the daemon to drop the preference"
+    );
+    sovereign_turn_client::TurnClient::new(state.internal_base_url())
+        .clear_peer_preference(&node_id)
+        .await
+        .map_err(|e| format!("mesh_clear_peer_preference: {e}"))
 }
 
+/// Every affinity preference the operator has set, for the Mesh Health
+/// panel.
+///
+/// ONE path in both modes: `GET /internal/peer-preference/list`. Until
+/// svt-3 the Attach arm returned an EMPTY LIST — not an error — for a
+/// question it had no way to ask, which is the shape ARCH principle 6
+/// exists to forbid: "the operator has set no preferences" and "this
+/// client cannot see them" rendered identically in the panel.
+///
+/// Local mode keeps the one substitution that IS honest, and it is the
+/// same one `mesh_get_contributions` makes: with no mesh daemon running
+/// there is no `/internal` listener to ask, and "no mesh yet" is a fact
+/// the panel renders. A host that IS listening and refuses stays an
+/// `Err`.
 #[tauri::command]
 pub async fn mesh_list_peer_preferences(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<PeerPreferenceDto>, String> {
-    if attached_port(&state).is_some() {
-        return Ok(Vec::new());
+    let attached = attached_port(&state).is_some();
+    if !attached {
+        match state.mesh().await {
+            Some(mesh) if mesh.app_state().await.is_some() => {}
+            _ => {
+                tracing::debug!(
+                    target: "mesh_state",
+                    "mesh_list_peer_preferences: local mode with no running mesh \
+                     daemon — no preferences, not a failed read"
+                );
+                return Ok(Vec::new());
+            }
+        }
     }
-    let Some(mesh) = state.mesh().await else {
-        return Ok(Vec::new());
-    };
-    let Some(app_state) = mesh.app_state().await else {
-        return Ok(Vec::new());
-    };
-    let entries = app_state
-        .inner
-        .peer_preferences
-        .list()
-        .map_err(|e| format!("{e}"))?;
-    Ok(entries
-        .into_iter()
-        .map(|(id, p)| PeerPreferenceDto {
-            node_id: hex_node_id(id.as_bytes()),
-            multiplier: p.multiplier(),
-            reason: p.reason().map(|s| s.to_string()),
-            set_at: p.set_at(),
-        })
-        .collect())
-}
-
-/// The 32-char lowercase hex of a node id — the form the frontend
-/// keys peers by, and the inverse of [`parse_node_id_hex`].
-///
-/// Takes BYTES, not the id type. All it ever needed was the 16 bytes,
-/// and naming `commonwealth_core::ids::NodeId` in this signature was
-/// one of the sites holding that crate in the desktop's manifest
-/// (svt-3). `kernel_types::NodeId::to_hex()` produces these same 32
-/// chars and is where this belongs once the peer-preference commands
-/// stop needing the type at all — see [`parse_node_id_hex`].
-fn hex_node_id(bytes: &[u8; 16]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Parse the 32-char hex form back into a node id.
-///
-/// This one CANNOT take or return bytes: its two callers
-/// (`mesh_set_peer_preference`, `mesh_clear_peer_preference`) hand
-/// the result straight to `PeerPreferences::set`/`clear`, which take
-/// a `NodeId`. So `commonwealth_core::ids::NodeId` — itself a
-/// re-export of `kernel_types::NodeId` — stays named here, and
-/// `commonwealth-core` stays in `Cargo.toml`, until those two
-/// commands reach the daemon over a route. svt-3 scopes that as its
-/// own follow-up; this is the last thing holding the crate.
-///
-/// Deliberately NOT `NodeId::from_hex`, which trims surrounding
-/// whitespace and so accepts inputs this refuses. Narrowing to the
-/// canonical parser is a behaviour change, not a rename (ARCH
-/// principle 8 — the convergence is owed, but it is not free).
-fn parse_node_id_hex(s: &str) -> Result<commonwealth_core::ids::NodeId, String> {
-    if s.len() != 32 {
-        return Err(format!("expected 32-hex-char node id, got '{s}'"));
-    }
-    let mut bytes = [0u8; 16];
-    for (i, b) in bytes.iter_mut().enumerate() {
-        let pair = s
-            .get(i * 2..i * 2 + 2)
-            .ok_or_else(|| format!("invalid hex id '{s}'"))?;
-        *b = u8::from_str_radix(pair, 16).map_err(|_| format!("invalid hex id '{s}'"))?;
-    }
-    Ok(commonwealth_core::ids::NodeId::from_u128(
-        u128::from_be_bytes(bytes),
-    ))
+    tracing::debug!(
+        target: "mesh_state",
+        attached,
+        base = %state.internal_base_url(),
+        "mesh_list_peer_preferences: asking the daemon for the preference list"
+    );
+    sovereign_turn_client::TurnClient::new(state.internal_base_url())
+        .peer_preferences::<PeerPreferenceDto>()
+        .await
+        .map_err(|e| format!("mesh_list_peer_preferences: {e}"))
 }
 
 #[cfg(test)]
@@ -1203,19 +1172,51 @@ mod contribution_view_tests {
         );
     }
 
-    /// `hex_node_id` takes bytes now. It must still produce the same
-    /// 32 lowercase chars the peer-preference list has always keyed on
-    /// — and the same string `parse_node_id_hex` reads back.
+    /// The peer-preference half of the same contract (svt-3).
+    ///
+    /// Exactly what `commonwealth_api::routes_internal::peer_preference::
+    /// peer_preference_list` serialises: `Vec<PeerPreferenceView>`, plain
+    /// field names, no serde renames. Before svt-3 the Local arm built these
+    /// DTOs in-process from `commonwealth_state::PeerPreferenceStore::list`
+    /// and the Attach arm returned an empty list; both arms now parse this
+    /// route, so what used to be a mapping bug becomes a PARSE bug — and
+    /// this is where it lands.
+    ///
+    /// Distinct non-zero values per field, and a second row whose `reason`
+    /// is absent, because `Option<String>` is the one field a wrong serde
+    /// attribute can blank without failing.
     #[test]
-    fn the_hex_round_trip_is_unchanged_by_taking_bytes() {
-        let bytes: [u8; 16] = [
-            0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-            0x18, 0xaa,
-        ];
-        let hex = hex_node_id(&bytes);
-        assert_eq!(hex, "0a0b0c0d0e0f101112131415161718aa");
-        let parsed = parse_node_id_hex(&hex).expect("the hex form parses back");
-        assert_eq!(hex_node_id(parsed.as_bytes()), hex, "round trip");
-        assert!(parse_node_id_hex("abc").is_err(), "a short id is refused");
+    fn the_daemon_preference_view_parses_into_the_dto_field_for_field() {
+        const DAEMON_PREFS_JSON: &str = r#"[
+          {
+            "node_id": "0a0b0c0d0e0f101112131415161718aa",
+            "multiplier": 0.25,
+            "reason": "throttled while it backfills",
+            "set_at": 1757000000
+          },
+          {
+            "node_id": "ff0b0c0d0e0f101112131415161718bb",
+            "multiplier": 1.0,
+            "reason": null,
+            "set_at": 1757000001
+          }
+        ]"#;
+
+        let got: Vec<PeerPreferenceDto> =
+            serde_json::from_str(DAEMON_PREFS_JSON).expect("the daemon's own shape parses");
+        assert_eq!(got.len(), 2);
+
+        assert_eq!(got[0].node_id, "0a0b0c0d0e0f101112131415161718aa");
+        assert_eq!(got[0].multiplier, 0.25, "an f64, not rounded");
+        assert_eq!(
+            got[0].reason.as_deref(),
+            Some("throttled while it backfills")
+        );
+        assert_eq!(got[0].set_at, 1_757_000_000);
+
+        assert_eq!(got[1].node_id, "ff0b0c0d0e0f101112131415161718bb");
+        assert_eq!(got[1].multiplier, 1.0, "the top of the clamp survives");
+        assert_eq!(got[1].reason, None, "an absent note stays absent");
+        assert_eq!(got[1].set_at, 1_757_000_001);
     }
 }

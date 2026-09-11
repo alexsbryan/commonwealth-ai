@@ -34,6 +34,7 @@
 | `instrument-gate` | `cargo xtask instrument-gate` | hard | F0 | 0.04s | yes |
 | `layer-gate` | `cargo xtask layer-gate` | hard | F0 | 0.10s | yes |
 | `layout-gate` | `cargo xtask layout-gate` | hard | F0 | 3s | yes |
+| `lifecycle-gate` | `cargo xtask lifecycle-gate` | hard | F0 | 0.10s | yes |
 | `lint-gate` | `cargo run -p xtask -- lint-gate --from /tmp/clippy.json` | advisory | F0 | unmeasured | **no** |
 | `lock-gate` | `cargo xtask lock-gate` | hard | F0 | 0.10s | yes |
 | `rustfmt` | `cargo fmt --all --check` | hard | F0 | 6s | yes |
@@ -145,7 +146,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -182,7 +183,6 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `desktop-check` | — | `--fail-on-warnings` | without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI |
 | `desktop-demo` | `port-listening:9741`<br>`slot-decodes:primary` | `(a failed beat exports no clip)` | the product reel is an acceptance suite: `demo:export` is what turns green beats into artifacts, so a broken beat cannot ship as a video |
 | `desktop-e2e-faults` | `port-listening:9751`<br>`binary:sovereign-desktop` | `-c playwright.faults.config.ts` | a separate config because the fault specs kill processes and own ports — they cannot share a run with anything |
-|  |  | `SOVEREIGN_CLI_PATH` | the supervisor prefers it when set, so this suite exercises a DIFFERENT branch of resolve_daemon_child() than a packaged install takes |
 | `desktop-e2e-real` | `port-listening:9745`<br>`binary:sovereign-desktop` | `-c playwright.real.config.ts` | bare `playwright test` silently runs the SYNTHETIC suite instead |
 |  |  | `SOVEREIGN_REAL_CHAT_MODEL / SOVEREIGN_REAL_EMBED_MODEL` | setup FAILS if these do not resolve — the GGUFs are not in the repo, which is the whole reason no CI job runs this |
 |  |  | `SOVEREIGN_REAL_ALLOW_ATTACH=1` | attaches to an existing daemon on :9741 instead of starting a hermetic one. NON-HERMETIC: knowledge and inference state become whatever the box has |
@@ -233,7 +233,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `throughput` | `port-listening:9741`<br>`slot-decodes:primary`<br>`slot-decodes:fast`<br>`binary:python3` | — | — |
 | `throughput-probe` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
 | `windows-crosscheck` | `binary:cargo-xwin` | — | — |
-| `wizard-verify` | `binary:sovereign-desktop`<br>`port-listening:9741` | `SOVEREIGN_CLI_PATH UNSET` | every other supervised lane in the repo SETS it, so resolve_daemon_child() takes the env branch. This is the only coverage of the `current_exe() --daemon-child` branch a packaged install actually takes |
+| `wizard-verify` | `binary:sovereign-desktop`<br>`port-listening:9741` | `SOVEREIGN_FORCE_LOCAL UNSET` | the coverage claim SURVIVED svt-2 and its mechanism did not. It used to read `SOVEREIGN_CLI_PATH UNSET`, because every other supervised lane pinned that and this one did not, so only this lane took resolve_daemon_child()'s `current_exe() --daemon-child` branch. Supervision and that function are gone (99a0b1520). What is left is the same shape one rung out: this script unsets SOVEREIGN_FORCE_LOCAL (wizard-verify.sh:109) and drives a fresh profile, so it is still the only thing exercising the DEFAULT wizard path — the sidecar beside the executable, resolved by daemon_binary::stable_daemon_binary and brought up detached by serving_host::ensure_reachable. journeys/first-launch-setup.journey.spec.ts:86 SETS the flag, which is why the journey covers the branch real users never take (GUEST_QA_DESIGN.md:31-40) |
 |  |  | `a private netns (Linux) / checked-free ports (macOS)` | there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges |
 | `xtask-quality` | — | `check-mode only` | baseline mutations stay explicit per-gate, so a habit-run can never silently move a ratchet |
 |  |  | `four verdicts, not two` | a gate that could not reach its evidence did not pass, and one that never ran did not pass either — the summary keeps PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN apart |
@@ -248,11 +248,11 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
 | `ci:desktop-release` | `check-desktop-version` |
 | `ci:fmt` | `rustfmt` |
-| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `size-gate` |
+| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `size-gate` |
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -269,7 +269,11 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
+<<<<<<< HEAD
 ### What CI does not run (73 of 99)
+=======
+### What CI does not run (71 of 98)
+>>>>>>> origin
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -353,5 +357,9 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
+<<<<<<< HEAD
 **99 instruments, 12 with a negative control, 48 unmeasured cost, 33 by-hand only.** (0 run nowhere at all.)
+=======
+**98 instruments, 12 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
+>>>>>>> origin
 

@@ -132,13 +132,16 @@ pub fn run(args: &[String]) -> i32 {
     let default_absent = edges.iter().filter(|e| e.optional).count();
     eprintln!(
         "layer-gate: {} members, {} internal edges ({} dev, exempt; {} absent from the \
-         default build) vs {} layers; {} back-of-house patterns; fan-in ratchet over {} crates",
+         default build) vs {} layers; {} back-of-house patterns; {} thin surface(s) × {} \
+         crates they may not reach; fan-in ratchet over {} crates",
         names.len(),
         edges.len(),
         dev_edges_up,
         default_absent,
         map.layers.len(),
         map.backstage.len(),
+        map.thin_surfaces.crates.len(),
+        map.thin_surfaces.may_not_reach.len(),
         baseline.len()
     );
     // An unconfigured rule and a satisfied rule must not print the same way.
@@ -153,6 +156,17 @@ pub fn run(args: &[String]) -> i32 {
             map.schema_version
         );
     }
+    // Same discipline for the thin-surface rule: `parse` refuses an empty one
+    // at schema_version >= 4, so this can only be a deliberate older map — an
+    // unconfigured rule and a satisfied rule must not print the same way.
+    if map.thin_surfaces.crates.is_empty() {
+        eprintln!(
+            "  · thin-surface rule NOT CONFIGURED (schema_version {} declares no \
+             [thin_surfaces]) — this run says nothing about whether a client links a \
+             backend it could become",
+            map.schema_version
+        );
+    }
     for v in &violations {
         eprintln!("  ✗ {}", v.describe());
     }
@@ -161,7 +175,8 @@ pub fn run(args: &[String]) -> i32 {
     }
     if violations.is_empty() && fan_in_fails.is_empty() {
         eprintln!(
-            "  ✓ every crate assigned, every edge points down or sideways, fan-in within caps"
+            "  ✓ every crate assigned, every edge points down or sideways, no thin surface \
+             reaches a backend it could become, fan-in within caps"
         );
         0
     } else {
@@ -176,6 +191,17 @@ pub fn run(args: &[String]) -> i32 {
             "Layer/forbid violations: fix the edge or add a [[exception]] with a reason \
              (a reviewable policy diff). Stale exceptions: delete the entry."
         );
+        if violations
+            .iter()
+            .any(|v| matches!(v, arch_layers::Violation::SurfaceReach { .. }))
+        {
+            eprintln!(
+                "Thin surfaces: this is HALF ONE of sv-surface's `sv-no-daemon-management` \
+                 instrument, and half one alone is a green gate enforcing nothing — a \
+                 dependency rule passes clean through supervision re-added one retry at a \
+                 time. Run `cargo xtask lifecycle-gate` for the other half."
+            );
+        }
         if violations
             .iter()
             .any(|v| matches!(v, arch_layers::Violation::BackstageEdge { .. }))

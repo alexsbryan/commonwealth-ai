@@ -54,6 +54,8 @@
 //! window. The one-shot drains (`run_turn`, `connect`) are byte-for-byte
 //! the pre-R2 behaviour — an unclaimed plain stream.
 
+use std::time::Duration;
+
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::net::TcpStream;
@@ -144,11 +146,74 @@ pub struct TurnObserver<'a> {
     pub on_notice: Option<&'a mut (dyn FnMut(&TurnNotice) + Send)>,
 }
 
+/// What bounds ONE non-streaming exchange with a serving host.
+///
+/// Until 2026-09-11 there was nothing here: `TurnClient` built a bare
+/// `reqwest::Client`, which has NO timeout of any kind, and roughly thirty
+/// desktop commands inherited that — a daemon that accepted the connection
+/// and then went silent hung the calling Tauri command forever, with no
+/// knob anywhere to bound it. Meanwhile every hand-rolled `reqwest` call in
+/// `sovereign-desktop` picked its own number (2 s, 3 s, 5 s, 10 s, 30 s,
+/// 300 s, 600 s, 3600 s across eleven modules), so the migration onto this
+/// client was moving callers from many private deciders onto none at all.
+///
+/// Three bounds rather than one, because they answer different questions
+/// and only the first two have a defensible universal value:
+///
+/// - `connect` — is anything LISTENING. A daemon that is not up fails here,
+///   and it fails fast because nothing about the route changes the answer.
+/// - `read` — has the host gone silent. It bounds the wait for the next
+///   bytes and RESETS on progress, so a route that legitimately takes
+///   minutes (a governance seed, an enrichment retry) survives it while a
+///   host that died mid-answer does not.
+/// - `total` — a hard ceiling on the whole exchange, `None` by default.
+///   There is no honest universal value: this client's sixty-odd routes run
+///   from a cached catalog read to a model-backed pass, so a number that
+///   suits one truncates another. A CALLER that knows its own route names
+///   one; the crate does not invent it (ARCH principle 6 — a truncated
+///   answer reported as an error is fine, a guessed ceiling is not).
+///
+/// NOT the turn stream. `connect`/`connect_with` open a WebSocket through
+/// `tokio_tungstenite`, which never touches this client, and a turn is
+/// meant to stay open for as long as the host is generating.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RequestBudget {
+    /// Bound on establishing the TCP/TLS connection.
+    pub connect: Duration,
+    /// Bound on the wait for the next bytes of an answer. Resets on
+    /// progress, so it bounds SILENCE, not duration.
+    pub read: Duration,
+    /// Hard ceiling on the whole exchange. `None` leaves it bounded by
+    /// `read` alone.
+    pub total: Option<Duration>,
+}
+
+/// A host that is not listening answers this question immediately; the
+/// budget only has to cover a loopback or LAN handshake.
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Sixty seconds of NO bytes at all. Chosen against the slowest thing a
+/// host does between writes on these routes — a model-backed pass that
+/// emits nothing until it is done — not against total call duration, which
+/// this bound deliberately does not constrain.
+const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
+
+impl Default for RequestBudget {
+    fn default() -> Self {
+        Self {
+            connect: DEFAULT_CONNECT_TIMEOUT,
+            read: DEFAULT_READ_TIMEOUT,
+            total: None,
+        }
+    }
+}
+
 /// A connection to a serving host's turn surface.
 #[derive(Debug, Clone)]
 pub struct TurnClient {
     base: String,
     http: reqwest::Client,
+    budget: RequestBudget,
 }
 
 /// How to open one conversation's turn stream (sv-surface R2 / G12).
@@ -332,15 +397,36 @@ pub struct ConversationHistory {
 
 impl TurnClient {
     /// `base` is the host root, e.g. `http://127.0.0.1:9741` — no `/v1`.
+    ///
+    /// Carries [`RequestBudget::default`]; [`Self::with_budget`] is the
+    /// spelling for a caller that knows its own route.
     pub fn new(base: impl Into<String>) -> Self {
+        Self::with_budget(base, RequestBudget::default())
+    }
+
+    /// [`Self::new`] with the exchange bounds named.
+    ///
+    /// Panics only where `reqwest::Client::new` itself does — a TLS backend
+    /// that will not initialise. That is reqwest's own documented contract
+    /// for an infallible constructor, and it is a panic rather than a
+    /// substitution: a client built without the budget it was asked for
+    /// would be the success-shaped wrong answer (ARCH principle 6).
+    pub fn with_budget(base: impl Into<String>, budget: RequestBudget) -> Self {
         let mut base = base.into();
         while base.ends_with('/') {
             base.pop();
         }
-        Self {
-            base,
-            http: reqwest::Client::new(),
-        }
+        let http = reqwest::Client::builder()
+            .connect_timeout(budget.connect)
+            .read_timeout(budget.read)
+            .build()
+            .expect("reqwest client with a request budget (TLS backend init)");
+        Self { base, http, budget }
+    }
+
+    /// The bounds this client applies to every non-streaming exchange.
+    pub fn budget(&self) -> RequestBudget {
+        self.budget
     }
 
     /// `POST /v1/conversations` — seed the row before the first message.
@@ -364,14 +450,15 @@ impl TurnClient {
         // no turns (mesh-admin)") and that is the sentence the operator
         // needs. `host_words` is where that unwrapping lives now — this
         // method's private copy of it was the original (§10.6).
-        let body = Self::required(
-            self.http
-                .post(&url)
-                .json(&create_conversation_body(skill_id, enabled_corpora)),
-            &url,
-            &ctx,
-        )
-        .await?;
+        let body = self
+            .required(
+                self.http
+                    .post(&url)
+                    .json(&create_conversation_body(skill_id, enabled_corpora)),
+                &url,
+                &ctx,
+            )
+            .await?;
         let v: serde_json::Value = parse(&body, &ctx)?;
         let id = v
             .get("id")
@@ -813,6 +900,66 @@ impl TurnClient {
         .await
     }
 
+    /// [`Self::corpus_atoms_all`] for a caller to whom "this corpus has
+    /// no atlas" is an ANSWER, not a failure.
+    ///
+    /// The host answers 404 for a corpus that is not installed OR whose
+    /// `atlas/` dir is absent, and says so in those words
+    /// (`reading_http.rs:427`). For the starter-questions surface those
+    /// are one fact — there are no atom-derived starters, fall back to
+    /// excerpts — and it is the same fact the in-process caller read off
+    /// `atlas_dir.exists()` before this route existed.
+    ///
+    /// `Ok(None)` is ONLY that 404, and only on the FIRST page. A 404
+    /// part-way through the paging loop means the atlas vanished under
+    /// the read and stays an `Err`: it is a different event, and
+    /// collapsing the two would hand the caller a short list that looks
+    /// complete (ARCH principle 6). Every other status is still the
+    /// host's own words.
+    pub async fn corpus_atoms_all_if_present<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<Vec<T>>> {
+        let first: AtomsPage<T> = match self
+            .internal_get_opt(
+                format!("/internal/corpus/{corpus_id}/atoms"),
+                &[
+                    ("offset", "0".to_string()),
+                    ("limit", ATOMS_PAGE_REQUEST.to_string()),
+                ],
+            )
+            .await?
+        {
+            Some(page) => page,
+            None => return Ok(None),
+        };
+
+        let mut out: Vec<T> = first.atoms;
+        let mut offset = 0usize;
+        let mut next = first.next_offset;
+        loop {
+            let Some(n) = next else { return Ok(Some(out)) };
+            if n <= offset {
+                return Err(Error::Inference(format!(
+                    "GET /internal/corpus/{corpus_id}/atoms: host advertised \
+                     next_offset={n} at offset {offset} — the page would not advance"
+                )));
+            }
+            offset = n;
+            let page = self
+                .corpus_atoms::<T>(corpus_id, offset, ATOMS_PAGE_REQUEST)
+                .await?;
+            if page.atoms.is_empty() && page.next_offset.is_some() {
+                return Err(Error::Inference(format!(
+                    "GET /internal/corpus/{corpus_id}/atoms: host returned 0 rows at \
+                     offset {offset} while still advertising a next offset"
+                )));
+            }
+            out.extend(page.atoms);
+            next = page.next_offset;
+        }
+    }
+
     /// Every atom in a corpus's atlas, paged until the host says the
     /// read is finished — the drop-in replacement for the desktop's
     /// in-process `load_atoms`, which returns the whole vec because it
@@ -1232,7 +1379,9 @@ impl TurnClient {
         body: &serde_json::Value,
     ) -> Result<bool> {
         let (url, ctx) = self.target(method.as_str(), &path);
-        let answer = Self::required(self.http.request(method, &url).json(body), &url, &ctx).await?;
+        let answer = self
+            .required(self.http.request(method, &url).json(body), &url, &ctx)
+            .await?;
         let wire: AffectedWire = parse(&answer, &ctx)?;
         Ok(wire.existed)
     }
@@ -2397,13 +2546,14 @@ impl TurnClient {
         // a different fact, and the reason this does not collapse both
         // into a bool (ARCH §18.3).
         let (url, ctx) = self.target("GET", "/v1/ready");
-        let answer = Self::exchange(
-            self.http.get(&url),
-            &url,
-            &ctx,
-            Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
-        )
-        .await?;
+        let answer = self
+            .exchange(
+                self.http.get(&url),
+                &url,
+                &ctx,
+                Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
+            )
+            .await?;
         match answer {
             Some(body) => Ok(parse::<Wire>(&body, &ctx)?.ready),
             None => Ok(false),
@@ -2437,6 +2587,65 @@ impl TurnClient {
             .await
     }
 
+    // ─── Per-peer affinity preferences (sv-surface svt-3) ────────
+
+    /// `GET /internal/peer-preference/list` — every affinity
+    /// preference the host holds, in the store's own scan order.
+    ///
+    /// `T` is `Vec<commonwealth_api::routes_internal::PeerPreferenceView>`
+    /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
+    /// — identical field names — for the Mesh Health panel. This crate
+    /// cannot name either (see the note above [`Self::corpus_atoms`]).
+    ///
+    /// An empty list means the operator has set no preferences, which
+    /// is the default state of every node. It is NOT "the host could
+    /// not be asked" — that arrives as an `Err` (ARCH principle 6).
+    pub async fn peer_preferences<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/peer-preference/list".to_string(), &[])
+            .await
+    }
+
+    /// `POST /internal/peer-preference/set` — set or replace one
+    /// peer's multiplier.
+    ///
+    /// `multiplier` is NOT validated here. The `(0.0, 1.0]` clamp is
+    /// `commonwealth_state::PeerPreference::new`'s and a second copy in
+    /// this client would be a second decider free to drift from it
+    /// (ARCH principle 8); an out-of-range value comes back as the
+    /// host's own 400 text.
+    pub async fn set_peer_preference(
+        &self,
+        node_id: &str,
+        multiplier: f64,
+        reason: Option<&str>,
+    ) -> Result<()> {
+        let body = serde_json::json!({
+            "node_id": node_id,
+            "multiplier": multiplier,
+            "reason": reason,
+        });
+        self.internal_write_no_answer(
+            reqwest::Method::POST,
+            "/internal/peer-preference/set".to_string(),
+            Some(&body),
+        )
+        .await
+    }
+
+    /// `POST /internal/peer-preference/clear` — drop one peer's
+    /// preference, answering whether one was there.
+    ///
+    /// The bool is the host's, not an inference from a status code:
+    /// "cleared it" and "there was nothing set" are different facts and
+    /// the caller renders them differently.
+    pub async fn clear_peer_preference(&self, node_id: &str) -> Result<bool> {
+        self.internal_post_json(
+            "/internal/peer-preference/clear".to_string(),
+            &serde_json::json!({ "node_id": node_id }),
+        )
+        .await
+    }
+
     // ─── The internal exchange: one sentence, six named shapes ────
     //
     // Every method above that talks to the host says one of six
@@ -2463,11 +2672,20 @@ impl TurnClient {
     /// `Ok(None)` is `absent`; `Ok(Some(body))` is a success body the
     /// caller may parse or discard.
     async fn exchange(
+        &self,
         req: reqwest::RequestBuilder,
         url: &str,
         ctx: &str,
         absent: Option<reqwest::StatusCode>,
     ) -> Result<Option<String>> {
+        // The ONE place the whole-exchange ceiling is applied, so the
+        // thirteen shapes below cannot each answer it differently
+        // (ARCH principle 8). `connect` and `read` are already on the
+        // client itself and reach this request without being spelled.
+        let req = match self.budget.total {
+            Some(total) => req.timeout(total),
+            None => req,
+        };
         let resp = req
             .send()
             .await
@@ -2486,8 +2704,8 @@ impl TurnClient {
     /// body is owed. The `None` arm is structurally unreachable; it is
     /// reported rather than defaulted, because a success-shaped value
     /// invented here is the §18.3 failure itself.
-    async fn required(req: reqwest::RequestBuilder, url: &str, ctx: &str) -> Result<String> {
-        match Self::exchange(req, url, ctx, None).await? {
+    async fn required(&self, req: reqwest::RequestBuilder, url: &str, ctx: &str) -> Result<String> {
+        match self.exchange(req, url, ctx, None).await? {
             Some(body) => Ok(body),
             None => Err(Error::Inference(format!("{ctx}: no answer"))),
         }
@@ -2512,7 +2730,7 @@ impl TurnClient {
         if !query.is_empty() {
             req = req.query(query);
         }
-        parse(&Self::required(req, &url, &ctx).await?, &ctx)
+        parse(&self.required(req, &url, &ctx).await?, &ctx)
     }
 
     /// `GET` where a 404 is an ANSWER — the host has no such row —
@@ -2534,7 +2752,7 @@ impl TurnClient {
         if !query.is_empty() {
             req = req.query(query);
         }
-        Self::exchange(req, &url, &ctx, Some(reqwest::StatusCode::NOT_FOUND))
+        self.exchange(req, &url, &ctx, Some(reqwest::StatusCode::NOT_FOUND))
             .await?
             .map(|b| parse(&b, &ctx))
             .transpose()
@@ -2548,7 +2766,9 @@ impl TurnClient {
         body: &B,
     ) -> Result<T> {
         let (url, ctx) = self.target("POST", &path);
-        let answer = Self::required(self.http.post(&url).json(body), &url, &ctx).await?;
+        let answer = self
+            .required(self.http.post(&url).json(body), &url, &ctx)
+            .await?;
         parse(&answer, &ctx)
     }
 
@@ -2565,7 +2785,7 @@ impl TurnClient {
     /// must keep receiving none.
     async fn internal_post_bare<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
         let (url, ctx) = self.target("POST", &path);
-        let answer = Self::required(self.http.post(&url), &url, &ctx).await?;
+        let answer = self.required(self.http.post(&url), &url, &ctx).await?;
         parse(&answer, &ctx)
     }
 
@@ -2576,7 +2796,9 @@ impl TurnClient {
         body: &B,
     ) -> Result<T> {
         let (url, ctx) = self.target("PUT", &path);
-        let answer = Self::required(self.http.put(&url).json(body), &url, &ctx).await?;
+        let answer = self
+            .required(self.http.put(&url).json(body), &url, &ctx)
+            .await?;
         parse(&answer, &ctx)
     }
 
@@ -2588,13 +2810,14 @@ impl TurnClient {
         body: &B,
     ) -> Result<Option<T>> {
         let (url, ctx) = self.target("PUT", &path);
-        let answer = Self::exchange(
-            self.http.put(&url).json(body),
-            &url,
-            &ctx,
-            Some(reqwest::StatusCode::NOT_FOUND),
-        )
-        .await?;
+        let answer = self
+            .exchange(
+                self.http.put(&url).json(body),
+                &url,
+                &ctx,
+                Some(reqwest::StatusCode::NOT_FOUND),
+            )
+            .await?;
         answer.map(|a| parse(&a, &ctx)).transpose()
     }
 
@@ -2603,7 +2826,8 @@ impl TurnClient {
     /// otherwise) and discarded, because these routes send none.
     async fn internal_delete(&self, path: String) -> Result<()> {
         let (url, ctx) = self.target("DELETE", &path);
-        Self::exchange(self.http.delete(&url), &url, &ctx, None).await?;
+        self.exchange(self.http.delete(&url), &url, &ctx, None)
+            .await?;
         Ok(())
     }
 
@@ -2615,7 +2839,7 @@ impl TurnClient {
         path: String,
     ) -> Result<T> {
         let (url, ctx) = self.target("DELETE", &path);
-        let answer = Self::required(self.http.delete(&url), &url, &ctx).await?;
+        let answer = self.required(self.http.delete(&url), &url, &ctx).await?;
         parse(&answer, &ctx)
     }
 
@@ -2634,7 +2858,7 @@ impl TurnClient {
         if let Some(body) = body {
             req = req.json(body);
         }
-        Self::exchange(req, &url, &ctx, None).await?;
+        self.exchange(req, &url, &ctx, None).await?;
         Ok(())
     }
 
@@ -3776,6 +4000,171 @@ mod stream_split_tests {
             err.to_string()
                 .contains("unexpected frame after the turn completed"),
             "the error names the violation; got {err}"
+        );
+    }
+}
+
+/// The exchange budget, proven on a real socket against a host that
+/// misbehaves in the two ways that actually happen: it accepts and then
+/// says nothing, or it answers slowly but never stops making progress.
+///
+/// Before 2026-09-11 the first case had no bound at all — `reqwest::Client`
+/// carries no default timeout — and every one of this client's callers
+/// inherited the hang.
+#[cfg(test)]
+mod request_budget_tests {
+    use std::time::{Duration, Instant};
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    use super::{RequestBudget, TurnClient};
+
+    /// The route under test is any plain GET; `contribution_view` is the
+    /// shortest one to spell. What is being proven is the exchange
+    /// helper's bounds, not this route.
+    async fn ask(client: &TurnClient) -> super::Result<Vec<serde_json::Value>> {
+        client.contribution_view::<Vec<serde_json::Value>>().await
+    }
+
+    /// Read the request line and headers so the client's write completes,
+    /// then hand the caller the socket to answer on — or not.
+    async fn accept_one(listener: TcpListener) -> tokio::net::TcpStream {
+        let (mut sock, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 1024];
+        let _ = sock.read(&mut buf).await.unwrap();
+        sock
+    }
+
+    #[tokio::test]
+    async fn a_host_that_accepts_and_then_says_nothing_is_an_error_not_a_hang() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let sock = accept_one(listener).await;
+            // Hold the connection open and answer NOTHING. This is the
+            // shape a wedged daemon has: the port is bound, the accept
+            // succeeds, no bytes ever come back.
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            drop(sock);
+        });
+
+        let client = TurnClient::with_budget(
+            base,
+            RequestBudget {
+                connect: Duration::from_secs(2),
+                read: Duration::from_millis(300),
+                total: None,
+            },
+        );
+        let started = Instant::now();
+        let outcome = tokio::time::timeout(Duration::from_secs(5), ask(&client))
+            .await
+            .expect("the read bound must end the exchange; a hang here is the defect itself");
+        assert!(
+            outcome.is_err(),
+            "a silent host is an error, never an empty answer"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "the read bound should have fired in ~300ms, took {:?}",
+            started.elapsed()
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_slow_but_progressing_host_outlives_the_read_bound() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let mut sock = accept_one(listener).await;
+            sock.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n",
+            )
+            .await
+            .unwrap();
+            // Three gaps, each under the read bound, summing to more than
+            // it: this is the route that takes minutes and is healthy.
+            for chunk in [&b"1\r\n[\r\n"[..], &b"1\r\n]\r\n"[..], &b"0\r\n\r\n"[..]] {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                sock.write_all(chunk).await.unwrap();
+                sock.flush().await.unwrap();
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        });
+
+        let client = TurnClient::with_budget(
+            base,
+            RequestBudget {
+                connect: Duration::from_secs(2),
+                read: Duration::from_millis(600),
+                total: None,
+            },
+        );
+        let started = Instant::now();
+        let rows = tokio::time::timeout(Duration::from_secs(5), ask(&client))
+            .await
+            .expect("no hang")
+            .expect("a host making progress is not a timeout");
+        assert!(rows.is_empty());
+        assert!(
+            started.elapsed() > Duration::from_millis(600),
+            "the exchange must have outlasted the read bound to prove anything; took {:?}",
+            started.elapsed()
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_total_ceiling_cuts_what_the_read_bound_would_have_allowed() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let mut sock = accept_one(listener).await;
+            sock.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n",
+            )
+            .await
+            .unwrap();
+            for chunk in [&b"1\r\n[\r\n"[..], &b"1\r\n]\r\n"[..], &b"0\r\n\r\n"[..]] {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                sock.write_all(chunk).await.unwrap();
+                sock.flush().await.unwrap();
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        });
+
+        // Same host, same read bound as the test above — only `total`
+        // differs, so a failure here can be nothing else.
+        let client = TurnClient::with_budget(
+            base,
+            RequestBudget {
+                connect: Duration::from_secs(2),
+                read: Duration::from_millis(600),
+                total: Some(Duration::from_millis(300)),
+            },
+        );
+        let outcome = tokio::time::timeout(Duration::from_secs(5), ask(&client))
+            .await
+            .expect("no hang");
+        assert!(
+            outcome.is_err(),
+            "the caller's own ceiling must cut an exchange the read bound allows"
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn the_default_budget_bounds_silence_and_ceilings_nothing() {
+        let budget = TurnClient::new("http://127.0.0.1:9741").budget();
+        assert_eq!(budget, RequestBudget::default());
+        assert_eq!(budget.connect, Duration::from_secs(5));
+        assert_eq!(budget.read, Duration::from_secs(60));
+        assert!(
+            budget.total.is_none(),
+            "a universal ceiling over sixty routes would truncate the slow ones; \
+             a caller that knows its route names its own"
         );
     }
 }

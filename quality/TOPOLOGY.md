@@ -286,6 +286,11 @@ reported loudly (§18.3) rather than defaulted: a legacy data root that still
 holds live data, two processes writing one corpus index, and a cancel that must
 cross a process boundary.
 
+The SURFACE half — which of the 242 registered paths are the daemon's at all,
+sorted into turn / job / node / resource by a placement test, and how each
+family migrates — is `quality/DAEMON_CORE.md` (2026-09-11), with
+`scripts/daemon-route-census.py` as its measurement.
+
 ---
 
 ## 4. The property to hold — not a number to hit
