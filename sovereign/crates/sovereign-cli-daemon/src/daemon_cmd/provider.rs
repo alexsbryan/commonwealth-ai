@@ -76,6 +76,12 @@ impl ProviderFactory for LlamaCppFactory {
         // `Arc<dyn InferenceProvider>` so the wrapper can hold it.
         let raw_concrete = Arc::new(provider);
         raw_concrete.start_idle_monitor(cfg.daemon.primary_idle_secs);
+        // The hot-reload path builds a WHOLE new provider, so it has to
+        // arm every monitor the cold-start path arms. Miss one here and a
+        // reloaded daemon silently re-acquires the pinned-forever
+        // behaviour the cold-start path just gave up.
+        raw_concrete.start_fast_idle_monitor(cfg.daemon.fast_idle_secs);
+        raw_concrete.start_embed_idle_monitor(cfg.daemon.embed_idle_secs);
         let raw: Arc<dyn InferenceProvider> = raw_concrete;
 
         // Wrap so a hot-reloaded daemon keeps its mesh-aware model

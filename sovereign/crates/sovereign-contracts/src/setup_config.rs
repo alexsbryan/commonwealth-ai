@@ -1313,6 +1313,57 @@ pub struct DaemonSection {
     #[serde(default = "default_extras_idle_secs")]
     pub extras_idle_secs: u64,
 
+    /// Idle seconds before the **fast** slot is unloaded to reclaim
+    /// memory. Default 900s (15 min).
+    ///
+    /// Until this existed the fast slot was pinned from boot to process
+    /// exit. The daemon is a mesh node and has to stay up and reachable
+    /// for peers even when nobody is using the desktop app — but "stays
+    /// up" and "holds several GB" are not the same requirement, and
+    /// conflating them is the reason people ask to turn the daemon off.
+    ///
+    /// Why 900 and not 300: the fast slot is on the path of nearly every
+    /// interactive turn (routing, short enrichment calls, token
+    /// counting, the edit lanes), so it should outlive a pause the
+    /// primary's 300s window would drop through — but it should not
+    /// outlive a walk away from the machine. The floor that matters is
+    /// the OTHER direction: an idle window SHORTER than the slot's own
+    /// load time makes every pause re-pay the load, which is exactly the
+    /// trap `primary_idle_secs = 60` produced in the field (note
+    /// 419e273c: seven reloads in one day, one of them unloading and
+    /// reloading a second later). 900s is comfortably above any observed
+    /// fast-slot load.
+    ///
+    /// `0` pins the slot for the daemon's lifetime — the pre-2026-09-11
+    /// behaviour, for hosts that would rather spend memory than ever pay
+    /// a reload.
+    ///
+    /// Slots serving a request are skipped. The check runs every 10s, so
+    /// the effective window is `max(fast_idle_secs, 10)`.
+    ///
+    /// NOTE in the alias configuration (`[models].fast` unset, so the
+    /// fast and primary slots share one GGUF and one weights
+    /// allocation): the memory comes back only once BOTH this monitor
+    /// and `primary_idle_secs` have dropped their slots.
+    #[serde(default = "default_fast_idle_secs")]
+    pub fast_idle_secs: u64,
+
+    /// Idle seconds before the **embed** slot is unloaded to reclaim
+    /// memory. Default 900s (15 min).
+    ///
+    /// Same reasoning and same default as `fast_idle_secs` — an
+    /// always-on node should not hold an embedder for a corpus nobody is
+    /// ingesting. The embedder is the smaller of the two (a few hundred
+    /// MB for a 0.6B) and also the cheaper to reload, so if you are
+    /// tuning one of these downward, this is the one.
+    ///
+    /// Batch ingestion keeps the slot hot on its own: every embed call
+    /// re-stamps the idle clock, so a running pipeline never trips this
+    /// however long it runs. `0` pins the slot for the daemon's
+    /// lifetime.
+    #[serde(default = "default_embed_idle_secs")]
+    pub embed_idle_secs: u64,
+
     /// Cooperative yield window for background corpus ingestion. When
     /// the daemon serves a foreground inference request on
     /// `/v1/chat/completions`, it stamps a "last-active" timestamp;
@@ -1474,6 +1525,8 @@ impl Default for DaemonSection {
             autostart: default_autostart(),
             primary_idle_secs: default_primary_idle_secs(),
             extras_idle_secs: default_extras_idle_secs(),
+            fast_idle_secs: default_fast_idle_secs(),
+            embed_idle_secs: default_embed_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
             max_peer_inflight: default_max_peer_inflight(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
@@ -1753,6 +1806,19 @@ fn default_primary_idle_secs() -> u64 {
 /// setting a positive value.
 fn default_extras_idle_secs() -> u64 {
     0
+}
+/// Fifteen minutes: longer than any pause inside a working session,
+/// shorter than a walk away from the machine, and far longer than the
+/// slot's own load time — the ratio that matters, per the
+/// `primary_idle_secs = 60` thrash note (419e273c).
+fn default_fast_idle_secs() -> u64 {
+    900
+}
+/// Fifteen minutes, matching `fast_idle_secs`. An idle node holds no
+/// embedder for a corpus nobody is ingesting; an ingest in progress
+/// re-stamps the clock on every batch and never trips it.
+fn default_embed_idle_secs() -> u64 {
+    900
 }
 /// Default `60` enables foreground-yield with a one-minute window:
 /// background ingest pauses for a minute after each chat request, then
@@ -3122,6 +3188,70 @@ yield_to_foreground_secs = 0
         // Neither file exists.
         migrate_config_between(&legacy, &new_path);
         assert!(!new_path.exists());
+    }
+
+    #[test]
+    fn eager_slots_unload_when_idle_by_default() {
+        // The always-on posture, asserted rather than described: a node
+        // that nobody has asked anything in fifteen minutes should not be
+        // holding the fast model or the embedder. Before these knobs
+        // existed both slots were pinned from boot to process exit, which
+        // is why an idle daemon read as "tens of GB for nothing".
+        let cfg = DaemonSection::default();
+        assert_eq!(cfg.fast_idle_secs, 900);
+        assert_eq!(cfg.embed_idle_secs, 900);
+    }
+
+    #[test]
+    fn eager_slot_idle_windows_outlast_a_slot_load() {
+        // The failure mode these defaults are chosen against is NOT
+        // "unloads too late" — it is an idle window SHORTER than the
+        // slot's own load time, which makes every pause re-pay the load.
+        // Field case: `primary_idle_secs = 60` produced seven reloads in
+        // a day, one of them unloading and reloading a second apart
+        // (note 419e273c). A cold load has been measured at 15-95s, so
+        // any window at or under 95s is in that trap.
+        let cfg = DaemonSection::default();
+        let worst_observed_cold_load_secs = 95;
+        assert!(
+            cfg.fast_idle_secs > worst_observed_cold_load_secs,
+            "fast_idle_secs {} is inside the thrash band",
+            cfg.fast_idle_secs
+        );
+        assert!(
+            cfg.embed_idle_secs > worst_observed_cold_load_secs,
+            "embed_idle_secs {} is inside the thrash band",
+            cfg.embed_idle_secs
+        );
+    }
+
+    #[test]
+    fn eager_slot_idle_windows_parse_from_toml() {
+        let toml_str = r#"
+[daemon]
+fast_idle_secs = 120
+embed_idle_secs = 0
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.fast_idle_secs, 120);
+        // `0` is the documented opt-out — pin the slot for the daemon's
+        // lifetime — and must survive the round trip as 0 rather than
+        // being back-filled by the default.
+        assert_eq!(cfg.daemon.embed_idle_secs, 0);
+    }
+
+    #[test]
+    fn an_existing_config_without_the_knobs_still_loads() {
+        // Operators upgrading the binary keep their config.toml. Absence
+        // takes the default rather than failing the parse.
+        let toml_str = r#"
+[daemon]
+primary_idle_secs = 300
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.primary_idle_secs, 300);
+        assert_eq!(cfg.daemon.fast_idle_secs, 900);
+        assert_eq!(cfg.daemon.embed_idle_secs, 900);
     }
 
     #[test]

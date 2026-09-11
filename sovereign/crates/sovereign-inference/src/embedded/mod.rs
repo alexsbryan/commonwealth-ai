@@ -12,6 +12,9 @@ mod engine;
 pub mod ffi_trace;
 pub mod gates;
 mod grammar;
+/// Idle residency for the eager slots (`fast`, `embed`) — the cell and
+/// the one idleness decider both new monitors share.
+pub(crate) mod idle_slot;
 /// What one slot's KV cache costs, from the gguf's own metadata.
 pub(crate) mod kv_budget;
 pub mod kv_ops;

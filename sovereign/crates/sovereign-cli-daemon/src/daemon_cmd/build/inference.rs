@@ -348,6 +348,16 @@ pub(crate) fn load_provider(
         // desktop; batch workloads (atlas enrich) want 1800+ to skip the
         // 3–4 s reload tax between back-to-back short LLM calls.
         arc.start_idle_monitor(config.daemon.primary_idle_secs);
+        // The two slots that used to be pinned from boot to process exit.
+        // The daemon is a mesh node: it stays up and reachable for peers
+        // whether or not anyone is using the desktop app, and an always-on
+        // process must hold close to nothing while nobody is asking. Both
+        // monitors release WEIGHTS only — nothing here stops the process,
+        // and the next request on either slot reloads transparently.
+        // Sourced from `[daemon].fast_idle_secs` / `[daemon].embed_idle_secs`
+        // (both default 900s); `0` restores the old pinned behaviour.
+        arc.start_fast_idle_monitor(config.daemon.fast_idle_secs);
+        arc.start_embed_idle_monitor(config.daemon.embed_idle_secs);
         // Optional cross-encoder reranker from `SOVEREIGN_RERANK_MODEL_PATH`.
         // Soft-fail: a missing/broken reranker file must not block startup —
         // retrieval simply runs the baseline path.
@@ -533,5 +543,115 @@ mod distributed_primary_routing_tests {
         let ids = distributed_primary_model_ids("primary");
         let count = ids.iter().filter(|m| *m == "primary").count();
         assert_eq!(count, 1, "got: {ids:?}");
+    }
+}
+
+/// Every path that builds an inference provider must arm every idle
+/// monitor the slot lineup has.
+///
+/// **The bug this is a gate for.** There are two provider-build paths in
+/// this crate: cold start (`build/inference.rs`) and hot reload
+/// (`daemon_cmd/provider.rs`). When `start_fast_idle_monitor` and
+/// `start_embed_idle_monitor` were added, only the first was obvious —
+/// the second was found by grepping, not by anything failing. A reloaded
+/// daemon that armed three of four monitors would quietly re-acquire the
+/// pinned-forever footprint the cold-start path had just given up, with
+/// nothing red anywhere and no symptom except memory.
+///
+/// A type-level fix would be better and is not available: the monitors
+/// are independent inherent methods on a provider the reload path
+/// legitimately holds as `Arc<dyn InferenceProvider>` moments later. So
+/// the invariant is enforced where it can be — over the source — in the
+/// same shape `embedded::ffi_trace` already uses for the KV-clear rule.
+#[cfg(test)]
+mod idle_monitor_coverage {
+    /// The two provider-build paths, by source.
+    const COLD_START_SRC: &str = include_str!("inference.rs");
+    const HOT_RELOAD_SRC: &str = include_str!("../provider.rs");
+
+    /// Every idle monitor the embedded engine exposes. Adding a slot with
+    /// an idle monitor means adding it here, which is the point: the list
+    /// is the checklist.
+    const MONITORS: [&str; 4] = [
+        "start_idle_monitor(",
+        "start_extras_idle_monitor(",
+        "start_fast_idle_monitor(",
+        "start_embed_idle_monitor(",
+    ];
+
+    /// A call, not a mention: comments explaining a monitor must not
+    /// satisfy the gate. A gate that would pass with the ability it
+    /// guards fully removed is not a gate.
+    fn calls(src: &str, monitor: &str) -> bool {
+        src.lines()
+            .filter(|l| {
+                let t = l.trim_start();
+                !t.starts_with("//") && !t.starts_with("///") && !t.starts_with('*')
+            })
+            .any(|l| l.contains(monitor))
+    }
+
+    #[test]
+    fn the_cold_start_path_arms_every_idle_monitor() {
+        let missing: Vec<&str> = MONITORS
+            .iter()
+            .copied()
+            .filter(|m| !calls(COLD_START_SRC, m))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "cold-start provider build never calls: {missing:?} — those slots stay \
+             resident for the life of the daemon"
+        );
+    }
+
+    #[test]
+    fn the_hot_reload_path_arms_every_slot_monitor() {
+        // `start_extras_idle_monitor` is deliberately absent from this
+        // list: the hot-reload path does not install `[models.extra]`
+        // slots, so there are none to sweep. The three that correspond to
+        // slots it DOES build must all be armed.
+        let required = [
+            "start_idle_monitor(",
+            "start_fast_idle_monitor(",
+            "start_embed_idle_monitor(",
+        ];
+        let missing: Vec<&str> = required
+            .iter()
+            .copied()
+            .filter(|m| !calls(HOT_RELOAD_SRC, m))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "hot-reload provider build never calls: {missing:?} — a reloaded daemon \
+             would re-acquire the pinned-forever footprint"
+        );
+    }
+
+    #[test]
+    fn each_monitor_reads_its_own_configured_window() {
+        // One knob per monitor, read from config — not a literal, and not
+        // another slot's knob. A monitor wired to the wrong field looks
+        // armed and sweeps on someone else's schedule.
+        for (monitor, knob) in [
+            ("start_idle_monitor(", "primary_idle_secs"),
+            ("start_extras_idle_monitor(", "extras_idle_secs"),
+            ("start_fast_idle_monitor(", "fast_idle_secs"),
+            ("start_embed_idle_monitor(", "embed_idle_secs"),
+        ] {
+            let wired = COLD_START_SRC
+                .lines()
+                .chain(HOT_RELOAD_SRC.lines())
+                .filter(|l| {
+                    let t = l.trim_start();
+                    !t.starts_with("//") && !t.starts_with("///")
+                })
+                .any(|l| l.contains(monitor) && l.contains(knob));
+            assert!(
+                wired,
+                "`{monitor}` is never called with `{knob}` — it is either hardcoded or \
+                 reading another slot's window"
+            );
+        }
     }
 }

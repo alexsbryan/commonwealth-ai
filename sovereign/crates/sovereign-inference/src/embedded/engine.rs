@@ -34,6 +34,7 @@ use sovereign_core::traits::{frames_to_text_stream, InferenceProvider, ResidentS
 use sovereign_core::types::*;
 use sovereign_core::Result;
 
+use super::idle_slot::IdleSlot;
 use crate::hardware::HardwareProfile;
 
 /// Reserved extras-slot name for the dedicated code-editing model
@@ -631,7 +632,21 @@ impl FastShortCoalescer {
 pub struct EmbeddedLlamaCpp {
     #[allow(dead_code)]
     backend: Arc<LlamaBackend>,
-    fast: Arc<ModelSlot>,
+    /// The fast family, behind an idle cell.
+    ///
+    /// Was `Arc<ModelSlot>` — pinned from boot to process exit, which is
+    /// the several GB an idle mesh node used to hold for nobody. The cell
+    /// lets `start_fast_idle_monitor` drop the weights between requests;
+    /// `fast_family()` loads them back on the next one. See
+    /// `embedded::idle_slot`.
+    fast: Arc<IdleSlot<FastFamily>>,
+    /// What the fast slot answers about itself while cold — id, size,
+    /// trained window, FIM markers, FastShort eligibility. Read by every
+    /// sync accessor that used to reach through `fast` into the live
+    /// `LlamaModel`.
+    fast_meta: FastMeta,
+    /// How to load the family back.
+    fast_recipe: FastRecipe,
     /// Continuous-batched companion to `fast`, sharing the same loaded
     /// `LlamaModel` via `Arc` but standing up its own `LlamaContext`
     /// with `n_seq_max=8`. Short-call enrichment phases (Phase 1b
@@ -649,14 +664,12 @@ pub struct EmbeddedLlamaCpp {
     /// The coalescer routes solo-vs-batched dispatch (see
     /// `fast_short_coalescer`). Held as `Arc` so the inflight
     /// semaphore + KV cache stay shared across in-flight requests.
-    fast_short: Option<Arc<ModelSlot>>,
     /// Continuous-batching dispatcher in front of `fast_short`. Receives
     /// `complete` requests, drains them in batches of up to
     /// `n_seq_max` jobs inside a 5ms coalesce window, and delivers each
     /// caller its own `CompletionResponse`. `None` whenever
     /// `fast_short` is `None` — the two fields are constructed and
     /// discarded as a unit.
-    fast_short_coalescer: Option<Arc<FastShortCoalescer>>,
     /// The lazy chat slot. When `code_path` is set, this slot
     /// hot-swaps between the Main responder and the Code specialist
     /// based on the incoming request's `capability_hint`. Keeping
@@ -688,7 +701,14 @@ pub struct EmbeddedLlamaCpp {
     /// have different chat templates / thinking control than
     /// general models (e.g., DeepSeek Coder vs Qwen3.5).
     code_quirks: ModelQuirks,
-    embed_slot: Option<Arc<EmbedSlot>>,
+    /// The embedding slot, behind an idle cell. `None` when no embedding
+    /// model is CONFIGURED — which is a different thing from "configured
+    /// but currently unloaded", and the two must not be conflated: the
+    /// first is an error for the caller, the second is a reload.
+    embed_slot: Option<Arc<IdleSlot<EmbedSlot>>>,
+    /// How to load the embed slot back. `Some` exactly when `embed_slot`
+    /// is `Some`.
+    embed_recipe: Option<EmbedRecipe>,
     /// Advertised id of the loaded embed model — the gguf file stem,
     /// the same convention `/v1/models` advertises and
     /// `SplitInferenceProvider` reports, so persisted embeddings
@@ -1207,148 +1227,34 @@ impl EmbeddedLlamaCpp {
             }
         }
 
-        tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
-        let fast = Arc::new(ModelSlot::load(
-            "fast",
-            &backend,
-            fast_model_path,
-            // The fast slot's OWN window. Identical to the primary's unless
-            // `[models].fast_context_size` says otherwise — see `SlotWindows`.
-            fast_context_size,
-            n_gpu_layers,
-            // The fast slot stays local — never distributed across the mesh —
-            // EXCEPT in a compute child loaded via `load_single_distributed`,
-            // where this one slot IS the mesh's distributed primary.
-            only_slot_distributable,
-        )?);
-        tracing::info!(slot = "fast", family = ?fast_family, "slot loaded");
-
-        // FastShort companion: a second LlamaContext on the same Fast
-        // model with n_seq_max=8 for continuous-batched short calls.
-        // Sharing weights via Arc<LlamaModel> means the only marginal
-        // cost is ~750MB KV cache (Strix Halo unified memory makes
-        // this a non-issue; tighter hosts can opt out). Failure is
-        // logged but non-fatal — the daemon still serves all callers
-        // through `fast` as before.
-        //
-        // **Recurrent-arch gate (2026-05-24).** Models whose gguf
-        // architecture is recurrent (qwen*moe / mamba / deltanet /
-        // rwkv / ssm) need `with_n_rs_seq(>= n_seq_max)` on every
-        // context that issues a batched decode — the recurrent
-        // layers carry per-sequence state and a low `n_rs_seq`
-        // makes `ctx.decode(batch)` fail with `Decode Error -3:
-        // unknown` the first time a continuous-batched call lands.
-        // FastShort's `from_existing_model` constructor does not
-        // wire `n_rs_seq` (only the lazy primary slot's
-        // `ModelSlot::load` does), so we'd build a ctx that
-        // crashes on its first real request. Symptom observed on
-        // Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-
-        // Compact (`qwen3moe` arch) in inner-work first turn,
-        // 2026-05-24. Refuse to construct FastShort for recurrent
-        // models — all callers route through `fast` (n_seq_max=1)
-        // and the speedup is forfeited rather than the daemon
-        // crashing the first time the model is touched.
-        //
-        // The right long-term fix is propagating `n_rs_seq` into
-        // `from_existing_model` so FastShort can serve recurrent
-        // models too; deferred until there's a bench fixture that
-        // covers this combo. Track at [[invariant_fast_short_recurrent_arch]].
-        let fast_arch = read_gguf_arch(&fast.model);
-        // FastShort construction gate — decision matrix + history in
-        // `gates::fast_short_gate` (tested weight-free). NARROWED
-        // 2026-06-11 (qwen-MoE + MTP-by-name vetoes removed); qwen-MoE
-        // RE-VETOED 2026-06-16 after the predicted `Decode Error -3`
-        // bite-back on a ~10k-prefill + sustained-FastShort workload
-        // (see the gate's doc). MTP-by-name stays cleared; recurrent
-        // families (mamba/rwkv/deltanet/ssm) + qwen*moe are vetoed.
-        // SOVEREIGN_FAST_SHORT_DISABLE=1 is the catch-all mitigation.
-        // [[invariant_fast_short_recurrent_arch]]
-        let gate = fast_short_gate(&fast_arch, only_slot_distributable, |k| {
-            std::env::var(k).ok()
-        });
-        let (fast_short, fast_short_coalescer) = if gate == FastShortGate::DistributedChild {
-            tracing::info!(
-                slot = "fast_short",
-                "skipped — distributed compute child: this slot IS the sharded \
-                 primary and serves a single stream, so the contention FastShort \
-                 exists for cannot occur; building it anyway cost 14.5 GB of GTT \
-                 (measured 2026-08-02)"
-            );
-            (None, None)
-        } else if gate == FastShortGate::Disabled {
-            tracing::info!(
-                slot = "fast_short",
-                "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
-            );
-            (None, None)
-        } else if gate == FastShortGate::UnsafeRecurrent {
-            tracing::warn!(
-                slot = "fast_short",
-                arch = %fast_arch,
-                model_id = %fast.model_id,
-                "skipped — fast slot arch is an uncleared recurrent family \
-                 (mamba/rwkv/deltanet/ssm); the FastShort burst repro has \
-                 never run against it. All callers route to `fast`. To \
-                 clear it: ./scripts/gate-repros.sh --fastshort <gguf> \
-                 (see gates::fast_short_gate doc)."
-            );
-            (None, None)
-        } else if gate == FastShortGate::UnsafeQwenMoeBiteback {
-            tracing::warn!(
-                slot = "fast_short",
-                arch = %fast_arch,
-                model_id = %fast.model_id,
-                "skipped — qwen*moe FastShort `Decode Error -3` bite-back \
-                 (re-vetoed 2026-06-16: a ~10k-token prefill + a background \
-                 FastShort heartbeat corrupted shared decode state on APEX \
-                 qwen35moe). All callers route to `fast` (n_seq_max=1) — \
-                 forfeits the batched speedup, never crashes. Diagnostic \
-                 override: SOVEREIGN_FAST_SHORT_FORCE=1 (see gates doc)."
-            );
-            (None, None)
-        } else {
-            if gate == FastShortGate::ForcedSafe {
-                tracing::warn!(
-                    slot = "fast_short",
-                    arch = %fast_arch,
-                    model_id = %fast.model_id,
-                    "SOVEREIGN_FAST_SHORT_FORCE overrode an unsafe verdict — \
-                     DIAGNOSTIC ONLY; expect Decode Error -3 on the first \
-                     continuous-batched call unless upstream fixed n_rs_seq \
-                     propagation"
-                );
-            }
-            match ModelSlot::from_existing_model(
-                "fast_short",
-                &backend,
-                Arc::clone(&fast.model),
-                fast.model_id.clone(),
-                fast.size_bytes,
-                FAST_SHORT_N_CTX,
-                FAST_SHORT_N_SEQ_MAX,
-                FAST_SHORT_N_UBATCH,
-                n_gpu_layers,
-            ) {
-                Ok(slot) => {
-                    let slot = Arc::new(slot);
-                    let coalescer = Arc::new(FastShortCoalescer::spawn(
-                        Arc::clone(&slot),
-                        fast_quirks.clone(),
-                        FAST_SHORT_N_SEQ_MAX as usize,
-                    ));
-                    (Some(slot), Some(coalescer))
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        slot = "fast_short",
-                        error = %e,
-                        "failed to build continuous-batched companion; \
-                         all callers will route to `fast` as before"
-                    );
-                    (None, None)
-                }
-            }
+        let fast_recipe = FastRecipe {
+            path: fast_model_path.to_path_buf(),
+            ctx_size: fast_context_size,
+            gpu_layers: n_gpu_layers,
+            distributable: only_slot_distributable,
+            quirks: fast_quirks.clone(),
+            family: fast_family.clone(),
         };
+        // Eager boot load, exactly as before. What changed is where the
+        // weights land: in a cell the idle monitor can empty, instead of
+        // an `Arc` pinned for the life of the process.
+        let (fast_loaded, fast_size_bytes) = build_fast_family(&backend, &fast_recipe)?;
+        let fast_meta = FastMeta {
+            model_id: fast_loaded.slot.model_id.clone(),
+            size_bytes: fast_size_bytes,
+            n_ctx_train: fast_loaded.slot.model.n_ctx_train(),
+            fim_style: crate::fim::detect_fim_style(&fast_loaded.slot.model),
+            fast_short_expected: fast_loaded.fast_short.is_some(),
+        };
+        // Borrowed ONLY for the primary-alias block below, and dropped
+        // when this constructor returns. Storing it in `Self` would pin
+        // the very weights the idle monitor exists to release.
+        let fast_slot_for_alias = Arc::clone(&fast_loaded.slot);
+        let fast = Arc::new(IdleSlot::resident(
+            "fast",
+            Arc::new(fast_loaded),
+            fast_size_bytes,
+        ));
 
         // Embedding models are usually small (~100-500 MB) and we want
         // them resident any time corpus ingestion or search runs, so we
@@ -1373,10 +1279,19 @@ impl EmbeddedLlamaCpp {
                 // Silicon Metal (33 vs 2.8 seq/sec, 12×). The Metal
                 // GGML_ASSERT(buf_src) crash referenced in the old
                 // comment was fixed in llama-cpp-2 0.1.141.
-                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks) {
+                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks.clone()) {
                     Ok(slot) => {
-                        tracing::info!(slot = "embed", "slot loaded");
-                        Some(Arc::new(slot))
+                        // Priced from the gguf on disk: `EmbedSlot` has no
+                        // `size()` accounting of its own, and an honest
+                        // file-size figure beats no figure at all when the
+                        // idle log has to say what an unload bought.
+                        let size_bytes = super::model_slot::total_model_bytes(path);
+                        tracing::info!(slot = "embed", size_bytes, "slot loaded");
+                        Some(Arc::new(IdleSlot::resident(
+                            "embed",
+                            Arc::new(slot),
+                            size_bytes,
+                        )))
                     }
                     Err(e) => {
                         tracing::warn!(slot = "embed", error = %e, "slot load failed — embedding unavailable");
@@ -1386,6 +1301,11 @@ impl EmbeddedLlamaCpp {
             }
             None => None,
         };
+        let embed_recipe = embed_model_path.map(|p| EmbedRecipe {
+            path: p.to_path_buf(),
+            gpu_layers: n_gpu_layers,
+            quirks: embed_quirks.clone(),
+        });
 
         if let Some(p) = code_model_path {
             tracing::info!(
@@ -1507,9 +1427,9 @@ impl EmbeddedLlamaCpp {
                 match ModelSlot::from_existing_model(
                     "primary_alias",
                     &backend,
-                    Arc::clone(&fast.model),
-                    fast.model_id.clone(),
-                    fast.size_bytes,
+                    Arc::clone(&fast_slot_for_alias.model),
+                    fast_slot_for_alias.model_id.clone(),
+                    fast_slot_for_alias.size_bytes,
                     context_size,
                     /* n_seq_max */ 1,
                     /* n_ubatch */ 512,
@@ -1536,8 +1456,8 @@ impl EmbeddedLlamaCpp {
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
-            fast_short,
-            fast_short_coalescer,
+            fast_meta,
+            fast_recipe,
             primary: Arc::new(Mutex::new(primary_preloaded)),
             primary_path: primary_model_path.map(|p| p.to_path_buf()),
             primary_ctx_size: context_size,
@@ -1548,6 +1468,7 @@ impl EmbeddedLlamaCpp {
             code_path: code_model_path.map(|p| p.to_path_buf()),
             code_quirks,
             embed_slot,
+            embed_recipe,
             embed_model_id: embed_model_path
                 .and_then(|p| p.file_stem())
                 .map(|s| s.to_string_lossy().into_owned()),
@@ -1701,11 +1622,14 @@ impl EmbeddedLlamaCpp {
         warn_if_specialist_served_default_dialect(section, format);
 
         if aliases_fast {
-            let style = crate::fim::detect_fim_style(&self.fast.model);
+            // From the cached meta, not the live model: the markers are a
+            // property of the gguf, and this may run when the fast slot is
+            // idle-unloaded.
+            let style = self.fast_meta.fim_style;
             let (next_edit, fim) = edit_lanes(style, format, Some(section));
             let info = EditSlotInfo {
                 slot: "fast".to_string(),
-                model_id: self.fast.model_id.clone(),
+                model_id: self.fast_meta.model_id.clone(),
                 aliased_to_fast: true,
                 // Operator-chosen: they pointed `[models.edit].path`
                 // here. Provenance, not capability — see `degraded`.
@@ -1792,13 +1716,13 @@ impl EmbeddedLlamaCpp {
         if self.edit_slot_info().is_some() {
             return Ok(());
         }
-        let style = crate::fim::detect_fim_style(&self.fast.model);
+        let style = self.fast_meta.fim_style;
         // No `[models.edit]` exists to read, so the shared defaults
         // stand in — see `setup_config::fim_defaults`.
         let (next_edit, fim) = edit_lanes(style, format, None);
         let info = EditSlotInfo {
             slot: "fast".to_string(),
-            model_id: self.fast.model_id.clone(),
+            model_id: self.fast_meta.model_id.clone(),
             aliased_to_fast: true,
             // Nobody chose this model for editing. This flag is the
             // whole basis of the nudge on /status.inference.edit.
@@ -2241,12 +2165,16 @@ impl EmbeddedLlamaCpp {
         }
         let mut out: Vec<ResidentSlot> = Vec::new();
 
-        // ── fast (eager, always resident) ──
+        // ── fast (loaded at boot, released when idle) ──
+        // `resident` is read, never assumed. It said `true` unconditionally
+        // while the slot genuinely could not be unloaded; now that it can,
+        // a hardcoded `true` would be the same reporting lie that
+        // `loaded_models: []` was.
         out.push(ResidentSlot {
             role: "fast".to_string(),
-            model_id: self.fast.model_id.clone(),
-            resident: true,
-            size_bytes: Some(self.fast.size_bytes),
+            model_id: self.fast_meta.model_id.clone(),
+            resident: self.fast.is_resident(),
+            size_bytes: self.fast.resident_bytes(),
             transitioning: false,
             placement: None,
         });
@@ -2290,13 +2218,14 @@ impl EmbeddedLlamaCpp {
             }
         }
 
-        // ── embed (eager when configured) ──
-        if let (Some(_), Some(id)) = (&self.embed_slot, &self.embed_model_id) {
+        // ── embed (loaded at boot when configured, released when idle) ──
+        if let (Some(cell), Some(id)) = (&self.embed_slot, &self.embed_model_id) {
             out.push(ResidentSlot {
                 role: "embed".to_string(),
                 model_id: id.clone(),
-                resident: true,
-                size_bytes: None, // EmbedSlot doesn't surface a byte count today
+                resident: cell.is_resident(),
+                // Now priced: the idle cell captures the gguf size at load.
+                size_bytes: cell.resident_bytes(),
                 transitioning: false,
                 placement: None,
             });
@@ -2366,7 +2295,16 @@ impl EmbeddedLlamaCpp {
     /// request is a solo, latency-bound singleton. Drives
     /// [`should_batch_fast_short`] — the FastShort-as-overflow-lane rule.
     fn fast_slot_busy(&self) -> bool {
-        self.fast.queue.available_permits() == 0
+        match self.fast.try_resident() {
+            Some(family) => family.slot.queue.available_permits() == 0,
+            // Cold, or a load in progress. Either way no decode is running
+            // on these weights, so there is no concurrent Fast demand for
+            // FastShort to coalesce — which is exactly what this predicate
+            // is asked. Reporting `true` here would route a lone request
+            // into the batched lane on the strength of a load it is itself
+            // waiting for.
+            None => false,
+        }
     }
 
     /// Acquire the lazy slot's single permit, reporting the wait.
@@ -2423,7 +2361,7 @@ impl EmbeddedLlamaCpp {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
             {
-                if mid == self.fast.model_id {
+                if mid == self.fast_meta.model_id {
                     // A short/Fast request addressed to the fast model by name rides
                     // the FastShort continuous-batched companion ONLY under contention
                     // (`fast` slot busy) — that's when a bulk fan-out (code-intel
@@ -2432,13 +2370,13 @@ impl EmbeddedLlamaCpp {
                     // decode instead: ~29% faster and no head-of-line stall (measured
                     // 2026-07-14). See `should_batch_fast_short`.
                     if should_batch_fast_short(
-                        self.fast_short.is_some(),
+                        self.fast_meta.fast_short_expected,
                         self.fast_slot_busy(),
                         request,
                     ) {
                         return SlotTarget::FastShort;
                     }
-                    if self.fast_short.is_some() && fits_fast_short(request) {
+                    if self.fast_meta.fast_short_expected && fits_fast_short(request) {
                         tracing::debug!(
                             "FastShort-eligible but `fast` slot idle — routing to Fast \
                              (MTP) for lower solo latency; FastShort is the batched \
@@ -2478,7 +2416,7 @@ impl EmbeddedLlamaCpp {
             // picker when the `fast` slot is already busy (concurrent Fast
             // demand). Idle → the request is a latency-bound singleton and
             // pick_slot routes it to `fast` (MTP). See `should_batch_fast_short`.
-            self.fast_short.is_some() && self.fast_slot_busy(),
+            self.fast_meta.fast_short_expected && self.fast_slot_busy(),
             extras_match,
         )
     }
@@ -2599,6 +2537,76 @@ impl EmbeddedLlamaCpp {
         });
     }
 
+    /// The fast family, loading it first when the idle monitor released
+    /// it.
+    ///
+    /// THE ONE PLACE dispatch obtains the fast weights (ARCH principle 8).
+    /// Every caller that used to clone `self.fast` goes through here, so
+    /// there is no path on which a request can meet a cold slot and fail.
+    async fn fast_family(&self, why: &'static str) -> Result<Arc<FastFamily>> {
+        let backend = Arc::clone(&self.backend);
+        let recipe = self.fast_recipe.clone();
+        self.fast
+            .acquire(why, move || build_fast_family(&backend, &recipe))
+            .await
+    }
+
+    /// The embed slot, loading it first when the idle monitor released it.
+    ///
+    /// Distinguishes NOT CONFIGURED (an error the operator has to fix, and
+    /// the message says how) from CONFIGURED BUT COLD (a reload nobody
+    /// needs to know about). Collapsing the two is how an unload would
+    /// start reading as a broken install.
+    async fn embed_handle(&self, why: &'static str) -> Result<Arc<EmbedSlot>> {
+        let (Some(cell), Some(recipe)) = (&self.embed_slot, &self.embed_recipe) else {
+            return Err(Error::Inference(
+                "No embedding model is configured. Open Settings → Embedding model and \
+                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
+                 then retry."
+                    .to_string(),
+            ));
+        };
+        let backend = Arc::clone(&self.backend);
+        let recipe = recipe.clone();
+        cell.acquire(why, move || {
+            let slot = EmbedSlot::load(&backend, &recipe.path, recipe.gpu_layers, recipe.quirks)?;
+            let size_bytes = super::model_slot::total_model_bytes(&recipe.path);
+            Ok((slot, size_bytes))
+        })
+        .await
+    }
+
+    /// Start the `fast` family's idle monitor.
+    ///
+    /// The fast slot used to be pinned from boot to process exit. On an
+    /// always-on mesh node that is several GB held for nobody, which is
+    /// the number people are looking at when they ask to turn the daemon
+    /// off. `fast_idle_secs == 0` keeps the old behaviour.
+    ///
+    /// NOTE for the alias configuration (`[models].fast` unset, so
+    /// `fast_path == primary_path`): the primary slot is built from the
+    /// fast slot's own `Arc<LlamaModel>`, so this unload frees the
+    /// weights only once the PRIMARY monitor has also dropped its slot.
+    /// Two monitors, one allocation — both have to fire.
+    pub fn start_fast_idle_monitor(&self, idle_secs: u64) {
+        super::idle_slot::spawn_idle_monitor(Arc::clone(&self.fast), idle_secs);
+    }
+
+    /// Start the `embed` slot's idle monitor.
+    ///
+    /// Smaller than `fast` (a few hundred MB for a 0.6B embedder) but held
+    /// under exactly the same rule, and on a node that only occasionally
+    /// ingests it is resident for nothing the rest of the time.
+    pub fn start_embed_idle_monitor(&self, idle_secs: u64) {
+        match self.embed_slot.as_ref() {
+            Some(cell) => super::idle_slot::spawn_idle_monitor(Arc::clone(cell), idle_secs),
+            None => tracing::debug!(
+                slot = "embed",
+                "no embedding model configured — no idle monitor to start"
+            ),
+        }
+    }
+
     /// Start a background task that unloads the primary model after idle timeout.
     pub fn start_idle_monitor(self: &Arc<Self>, timeout_secs: u64) {
         let this = Arc::clone(self);
@@ -2693,6 +2701,239 @@ impl EmbeddedLlamaCpp {
         .await
         .map_err(|e| Error::Inference(format!("reload join failed: {e}")))?
     }
+}
+
+/// Everything loaded from the `fast` gguf, as ONE droppable unit.
+///
+/// `fast`, its FastShort companion and the coalescer in front of the
+/// companion all share a single `Arc<LlamaModel>` — that is the entire
+/// point of `from_existing_model`, and it is why the idle monitor cannot
+/// take them one at a time. Dropping `fast` alone frees a KV cache and
+/// leaves the weights exactly where they were. So the unit of residency
+/// is the family, not the slot.
+///
+/// Dropping a `FastFamily` also closes the coalescer's `enqueue` channel,
+/// which ends its drain task, which releases the last `Arc<ModelSlot>`
+/// for the companion. The weights therefore free a beat after the drop
+/// rather than exactly at it — RAII, not a forced teardown.
+pub(crate) struct FastFamily {
+    pub(crate) slot: Arc<ModelSlot>,
+    pub(crate) fast_short: Option<Arc<ModelSlot>>,
+    pub(crate) coalescer: Option<Arc<FastShortCoalescer>>,
+}
+
+/// How to load the fast family again after an idle unload.
+///
+/// Plain data, cloned into the reload closure. Holding the recipe rather
+/// than a handle is what lets the slot answer "what am I?" while holding
+/// no weights at all.
+#[derive(Clone)]
+pub(crate) struct FastRecipe {
+    path: PathBuf,
+    ctx_size: u32,
+    gpu_layers: u32,
+    distributable: bool,
+    quirks: ModelQuirks,
+    family: ModelFamily,
+}
+
+/// What the `fast` slot can answer about itself while its weights are
+/// gone.
+///
+/// Every field here is a property of the GGUF FILE, not of a particular
+/// load: the same bytes produce the same model id, the same trained
+/// context window and the same FIM marker set every time. Caching them at
+/// boot is what keeps the sync accessors — `count_tokens`,
+/// `n_ctx_train_for_primary`, `/status`, the edit-lane install — working
+/// unchanged across an unload, instead of each having to become async or
+/// each having to force a multi-GB load to read one number.
+#[derive(Clone)]
+pub(crate) struct FastMeta {
+    model_id: String,
+    /// Footprint of one resident copy, from the boot load. This is what
+    /// the slot COSTS when loaded, which is a different question from
+    /// what it costs right now — `/status` reads residency separately.
+    size_bytes: u64,
+    n_ctx_train: u32,
+    fim_style: Option<FimStyle>,
+    /// Did the FastShort gate clear at boot? Routing asks this, and
+    /// routing is about capability, not about whether the weights happen
+    /// to be resident this instant.
+    fast_short_expected: bool,
+}
+
+/// How to load the embed slot again after an idle unload.
+#[derive(Clone)]
+pub(crate) struct EmbedRecipe {
+    path: PathBuf,
+    gpu_layers: u32,
+    quirks: Option<EmbedQuirks>,
+}
+
+/// Load the fast gguf and everything that shares its weights.
+///
+/// Called from exactly two places — the eager boot load, and
+/// [`IdleSlot::acquire`] when a request finds the slot cold. One function
+/// for both so a reloaded family can never differ from the booted one:
+/// the FastShort gate, its vetoes and its env overrides are evaluated on
+/// the same code path either way. Two builders would be two answers to
+/// one question (ARCH principle 8).
+///
+/// Returns the family and its resident footprint in bytes.
+fn build_fast_family(
+    backend: &Arc<LlamaBackend>,
+    recipe: &FastRecipe,
+) -> Result<(FastFamily, u64)> {
+    tracing::info!(slot = "fast", family = ?recipe.family, "loading slot");
+    let fast = Arc::new(ModelSlot::load(
+        "fast",
+        backend,
+        &recipe.path,
+        // The fast slot's OWN window. Identical to the primary's unless
+        // `[models].fast_context_size` says otherwise — see `SlotWindows`.
+        recipe.ctx_size,
+        recipe.gpu_layers,
+        // The fast slot stays local — never distributed across the mesh —
+        // EXCEPT in a compute child loaded via `load_single_distributed`,
+        // where this one slot IS the mesh's distributed primary.
+        recipe.distributable,
+    )?);
+    tracing::info!(slot = "fast", family = ?recipe.family, "slot loaded");
+
+    // FastShort companion: a second LlamaContext on the same Fast
+    // model with n_seq_max=8 for continuous-batched short calls.
+    // Sharing weights via Arc<LlamaModel> means the only marginal
+    // cost is ~750MB KV cache (Strix Halo unified memory makes
+    // this a non-issue; tighter hosts can opt out). Failure is
+    // logged but non-fatal — the daemon still serves all callers
+    // through `fast` as before.
+    //
+    // **Recurrent-arch gate (2026-05-24).** Models whose gguf
+    // architecture is recurrent (qwen*moe / mamba / deltanet /
+    // rwkv / ssm) need `with_n_rs_seq(>= n_seq_max)` on every
+    // context that issues a batched decode — the recurrent
+    // layers carry per-sequence state and a low `n_rs_seq`
+    // makes `ctx.decode(batch)` fail with `Decode Error -3:
+    // unknown` the first time a continuous-batched call lands.
+    // FastShort's `from_existing_model` constructor does not
+    // wire `n_rs_seq` (only the lazy primary slot's
+    // `ModelSlot::load` does), so we'd build a ctx that
+    // crashes on its first real request. Symptom observed on
+    // Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-
+    // Compact (`qwen3moe` arch) in inner-work first turn,
+    // 2026-05-24. Refuse to construct FastShort for recurrent
+    // models — all callers route through `fast` (n_seq_max=1)
+    // and the speedup is forfeited rather than the daemon
+    // crashing the first time the model is touched.
+    //
+    // The right long-term fix is propagating `n_rs_seq` into
+    // `from_existing_model` so FastShort can serve recurrent
+    // models too; deferred until there's a bench fixture that
+    // covers this combo. Track at [[invariant_fast_short_recurrent_arch]].
+    let fast_arch = read_gguf_arch(&fast.model);
+    // FastShort construction gate — decision matrix + history in
+    // `gates::fast_short_gate` (tested weight-free). NARROWED
+    // 2026-06-11 (qwen-MoE + MTP-by-name vetoes removed); qwen-MoE
+    // RE-VETOED 2026-06-16 after the predicted `Decode Error -3`
+    // bite-back on a ~10k-prefill + sustained-FastShort workload
+    // (see the gate's doc). MTP-by-name stays cleared; recurrent
+    // families (mamba/rwkv/deltanet/ssm) + qwen*moe are vetoed.
+    // SOVEREIGN_FAST_SHORT_DISABLE=1 is the catch-all mitigation.
+    // [[invariant_fast_short_recurrent_arch]]
+    let gate = fast_short_gate(&fast_arch, recipe.distributable, |k| std::env::var(k).ok());
+    let (fast_short, fast_short_coalescer) = if gate == FastShortGate::DistributedChild {
+        tracing::info!(
+            slot = "fast_short",
+            "skipped — distributed compute child: this slot IS the sharded \
+             primary and serves a single stream, so the contention FastShort \
+             exists for cannot occur; building it anyway cost 14.5 GB of GTT \
+             (measured 2026-08-02)"
+        );
+        (None, None)
+    } else if gate == FastShortGate::Disabled {
+        tracing::info!(
+            slot = "fast_short",
+            "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
+        );
+        (None, None)
+    } else if gate == FastShortGate::UnsafeRecurrent {
+        tracing::warn!(
+            slot = "fast_short",
+            arch = %fast_arch,
+            model_id = %fast.model_id,
+            "skipped — fast slot arch is an uncleared recurrent family \
+             (mamba/rwkv/deltanet/ssm); the FastShort burst repro has \
+             never run against it. All callers route to `fast`. To \
+             clear it: ./scripts/gate-repros.sh --fastshort <gguf> \
+             (see gates::fast_short_gate doc)."
+        );
+        (None, None)
+    } else if gate == FastShortGate::UnsafeQwenMoeBiteback {
+        tracing::warn!(
+            slot = "fast_short",
+            arch = %fast_arch,
+            model_id = %fast.model_id,
+            "skipped — qwen*moe FastShort `Decode Error -3` bite-back \
+             (re-vetoed 2026-06-16: a ~10k-token prefill + a background \
+             FastShort heartbeat corrupted shared decode state on APEX \
+             qwen35moe). All callers route to `fast` (n_seq_max=1) — \
+             forfeits the batched speedup, never crashes. Diagnostic \
+             override: SOVEREIGN_FAST_SHORT_FORCE=1 (see gates doc)."
+        );
+        (None, None)
+    } else {
+        if gate == FastShortGate::ForcedSafe {
+            tracing::warn!(
+                slot = "fast_short",
+                arch = %fast_arch,
+                model_id = %fast.model_id,
+                "SOVEREIGN_FAST_SHORT_FORCE overrode an unsafe verdict — \
+                 DIAGNOSTIC ONLY; expect Decode Error -3 on the first \
+                 continuous-batched call unless upstream fixed n_rs_seq \
+                 propagation"
+            );
+        }
+        match ModelSlot::from_existing_model(
+            "fast_short",
+            backend,
+            Arc::clone(&fast.model),
+            fast.model_id.clone(),
+            fast.size_bytes,
+            FAST_SHORT_N_CTX,
+            FAST_SHORT_N_SEQ_MAX,
+            FAST_SHORT_N_UBATCH,
+            recipe.gpu_layers,
+        ) {
+            Ok(slot) => {
+                let slot = Arc::new(slot);
+                let coalescer = Arc::new(FastShortCoalescer::spawn(
+                    Arc::clone(&slot),
+                    recipe.quirks.clone(),
+                    FAST_SHORT_N_SEQ_MAX as usize,
+                ));
+                (Some(slot), Some(coalescer))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    slot = "fast_short",
+                    error = %e,
+                    "failed to build continuous-batched companion; \
+                     all callers will route to `fast` as before"
+                );
+                (None, None)
+            }
+        }
+    };
+
+    let size_bytes = fast.size_bytes;
+    Ok((
+        FastFamily {
+            slot: fast,
+            fast_short,
+            coalescer: fast_short_coalescer,
+        },
+        size_bytes,
+    ))
 }
 
 /// P0.2 boot-guard policy, pure for testability: an aliased fast+primary
@@ -2987,11 +3228,23 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // present, so the unwraps below match construction in
         // `load_full_with_families`.
         if matches!(target, SlotTarget::FastShort) {
-            let coalescer = self
-                .fast_short_coalescer
-                .as_ref()
-                .expect("FastShort selected without coalescer present")
-                .clone();
+            let family = self.fast_family("complete/fast_short").await?;
+            let Some(coalescer) = family.coalescer.clone() else {
+                // Routing picked FastShort from the boot-time gate verdict,
+                // but this load produced no coalescer — only reachable if a
+                // gate input (SOVEREIGN_FAST_SHORT_DISABLE / _FORCE, or the
+                // RPC distribution posture) changed under the running
+                // daemon. REFUSE and name it rather than quietly serving
+                // from a different slot than the router chose: a silent
+                // substitution here would show up later as an unexplained
+                // latency profile (ARCH principle 6).
+                return Err(Error::Inference(
+                    "FastShort was selected for this request but the reloaded fast family \
+                     has no continuous-batched companion — the FastShort gate's inputs \
+                     changed since boot. Restart the daemon to re-evaluate the lineup."
+                        .to_string(),
+                ));
+            };
             let result = coalescer.complete(request.clone()).await;
             if let Ok(ref resp) = result {
                 tracing::info!(
@@ -3270,8 +3523,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 Err(e) => Err(e),
             }
         } else {
-            // Use fast slot.
-            let slot = Arc::clone(&self.fast);
+            // Use fast slot. `fast_family` loads the weights first when
+            // the idle monitor released them — the reload is not the
+            // caller's business, which is what makes "a request after an
+            // unload is served" structural rather than remembered.
+            let family = self.fast_family("complete/fast").await?;
+            let slot = Arc::clone(&family.slot);
             // Throttle fast-slot dispatch to 1 inflight at the async
             // layer. Same rationale as the extras path. KV enrichment
             // Phase 2 fans out 4+ parallel calls on this slot — without
@@ -3670,7 +3927,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 }
             });
         } else {
-            let slot = Arc::clone(&self.fast);
+            let family = self.fast_family("complete_stream_with_finish/fast").await?;
+            let slot = Arc::clone(&family.slot);
             let _permit = ModelSlot::acquire_inflight(
                 &slot,
                 "complete_stream_with_finish/fast",
@@ -3726,15 +3984,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let slot = self.embed_slot.as_ref().ok_or_else(|| {
-            Error::Inference(
-                "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry."
-                    .to_string(),
-            )
-        })?;
-        let slot = Arc::clone(slot);
+        let slot = self.embed_handle("embed").await?;
         let text_len = text.len();
         let text = text.to_string();
 
@@ -3781,15 +4031,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     }
 
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        let slot = self.embed_slot.as_ref().ok_or_else(|| {
-            Error::Inference(
-                "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry."
-                    .to_string(),
-            )
-        })?;
-        let slot = Arc::clone(slot);
+        let slot = self.embed_handle("embed_query").await?;
         let query = query.to_string();
 
         tokio::task::spawn_blocking(move || {
@@ -3819,15 +4061,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     }
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        let slot = self.embed_slot.as_ref().ok_or_else(|| {
-            Error::Inference(
-                "No embedding model is configured. Open Settings → Embedding model and \
-                 select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry."
-                    .to_string(),
-            )
-        })?;
-        let slot = Arc::clone(slot);
+        let slot = self.embed_handle("embed_batch").await?;
         let texts = texts.to_vec();
 
         tokio::task::spawn_blocking(move || {
@@ -3895,10 +4129,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 .as_ref()
                 .and_then(|p| p.file_stem())
                 .and_then(|s| s.to_str())
-                .unwrap_or(&self.fast.model_id)
+                .unwrap_or(&self.fast_meta.model_id)
                 .to_string()
         } else {
-            self.fast.model_id.clone()
+            self.fast_meta.model_id.clone()
         }
     }
 
@@ -3929,7 +4163,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     /// Settings UI ceiling hint; the upper bound is shape-similar
     /// across the same model family.
     fn n_ctx_train_for_primary(&self) -> Option<u32> {
-        Some(self.fast.model.n_ctx_train())
+        Some(self.fast_meta.n_ctx_train)
     }
 
     /// Override the trait default heuristic with the fast slot's
@@ -3946,7 +4180,23 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     /// dense text, which is the safe direction for budgeting (we'd
     /// rather over-compact than blow the slot).
     fn count_tokens(&self, text: &str) -> u32 {
-        match self.fast.model.str_to_token(text, AddBos::Never) {
+        let Some(family) = self.fast.try_resident() else {
+            // The tokenizer lives inside the weights, and the idle monitor
+            // released them. This IS a substitution, and it is named, not
+            // silent (ARCH principle 6): the caller gets the project-wide
+            // ~4 chars/token heuristic, which over-estimates on dense text
+            // — the safe direction for a budget. The alternative, forcing a
+            // multi-GB synchronous load to count tokens, would undo the
+            // unload the caller never asked for.
+            tracing::debug!(
+                slot = "fast",
+                chars = text.chars().count(),
+                "count_tokens: fast slot is idle-unloaded; using the chars/4 heuristic \
+                 instead of the model tokenizer"
+            );
+            return (text.chars().count() / 4) as u32;
+        };
+        match family.slot.model.str_to_token(text, AddBos::Never) {
             Ok(tokens) => tokens.len() as u32,
             Err(_) => (text.chars().count() / 4) as u32,
         }
