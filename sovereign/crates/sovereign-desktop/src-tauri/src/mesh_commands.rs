@@ -11,20 +11,41 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use sovereign_mesh::mesh_discovery::RelayCandidate;
-use sovereign_mesh::{parse_deep_link, JoinConfirmation, MeshState};
+use sovereign_mesh::{parse_deep_link, JoinConfirmation};
 
 use crate::bootstrap::BootstrapMode;
 use crate::state::{resolve_node_name, AppState};
 
-/// In Attach mode, mesh mutations go over HTTP to the daemon owning
-/// `:9741`. Returns the client port the CLI daemon is answering on,
-/// or `None` if we're in Local mode and should use the in-process
-/// daemon instead.
-fn attached_port(state: &AppState) -> Option<u16> {
-    match &state.bootstrap_mode {
-        BootstrapMode::Attach { client_port, .. } => Some(*client_port),
-        BootstrapMode::Local { .. } => None,
-    }
+/// Did this boot reach a serving host?
+///
+/// Nothing in this file forks on the ANSWER to a mesh question any more
+/// — every one of those goes over the wire (see [`mesh_client`]). The
+/// two remaining callers ask whether there is anything to ask AT ALL:
+/// a Local boot is one that reached no host, so its `/internal` port
+/// has no listener and "empty" is a fact rather than a swallowed
+/// failure.
+fn attached(state: &AppState) -> bool {
+    matches!(state.bootstrap_mode, BootstrapMode::Attach { .. })
+}
+
+/// The client for `/v1/mesh/*`, in BOTH boot modes.
+///
+/// Until svt-3 every command in this file forked: Attach hand-rolled a
+/// `reqwest` call to `http://localhost:{port}/v1/mesh/…`, and Local
+/// reached into an in-process `EmbeddedDaemon` for the same answer. Two
+/// implementations of one question, free to drift in shape, in error
+/// text and in which side-effects ran — and they had: `mesh_rotate_invite`
+/// exposed the client API on the HTTP path and not on the Local one,
+/// `mesh_join` accepted three invite forms over HTTP and only a deep
+/// link in-process (ARCH principle 8).
+///
+/// There is one path now. A Local-mode daemon serves the same
+/// `mesh_http` router on the same client port — `state.rs` REFUSES the
+/// boot outright if that listener does not bind, so its presence is an
+/// invariant here rather than a hope — and the port comes from
+/// `client_base_url()`, the one accessor for it.
+fn mesh_client(state: &AppState) -> sovereign_turn_client::TurnClient {
+    sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
 /// Shared reqwest client with a reasonable timeout — mesh HTTP calls
@@ -59,9 +80,11 @@ pub struct JoinMeshResponse {
 
 /// Create a new mesh and return the join link for sharing.
 ///
-/// Local mode drives the in-process `EmbeddedDaemon`. Attach mode
-/// (no in-process daemon) POSTs `/v1/mesh/create` against the CLI
-/// daemon owning `:9741`.
+/// ONE path in both modes: `POST /v1/mesh/create`. The host is what
+/// opts into serving remote peers as part of creating — the
+/// `expose_client_api()` the Local arm used to perform here is the
+/// route's own first statement, and a caller doing it beforehand was a
+/// client deciding something about a daemon (ARCH principle 12).
 #[tauri::command]
 pub async fn mesh_create(
     state: State<'_, Arc<AppState>>,
@@ -73,49 +96,10 @@ pub async fn mesh_create(
         let config = state.config.read().await;
         resolve_node_name(&config.node_name)
     };
-
-    if let Some(port) = attached_port(&state) {
-        // Attach mode — route through the daemon's HTTP API.
-        let client = http_client()?;
-        let body = serde_json::json!({
-            "name": mesh_name,
-            "node_name": node_name,
-            "encrypt": encrypt,
-        });
-        let resp = client
-            .post(format!("http://localhost:{port}/v1/mesh/create"))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("mesh create: {e}"))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("mesh create failed ({status}): {text}"));
-        }
-        return resp
-            .json::<CreateMeshResponse>()
-            .await
-            .map_err(|e| format!("parse mesh/create response: {e}"));
-    }
-
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    // Explicit create = opt into serving remote peers → expose the
-    // client API (bind non-loopback + require a bearer token) before
-    // start_daemon, so it binds wide on first start with no restart.
-    mesh.expose_client_api();
-    let result = mesh
-        .create_mesh_with(&mesh_name, &node_name, encrypt)
+    mesh_client(&state)
+        .mesh_create(Some(&mesh_name), Some(&node_name), encrypt)
         .await
-        .map_err(|e| e.to_string())?;
-    Ok(CreateMeshResponse {
-        mesh_name: result.mesh_name,
-        join_key: result.join_key,
-        join_link: result.join_link,
-        client_token: result.client_token,
-    })
+        .map_err(|e| format!("mesh_create: {e}"))
 }
 
 /// Parse a deep link and return the join confirmation info.
@@ -129,6 +113,13 @@ pub async fn mesh_preview_join_link(link: String) -> Result<JoinConfirmation, St
 }
 
 /// Join a mesh from a deep link or key.
+///
+/// ONE path in both modes: `POST /v1/mesh/join`. Local mode gains the
+/// two invite forms it never accepted — a bare `cwth-…` key and an
+/// `https://…/join/…` URL — because the host's `parse_join_argument`
+/// takes all three and the Local arm only ever tried `parse_deep_link`.
+/// Two parsers for one input, and the narrower one was the default boot
+/// mode's (ARCH principle 8).
 #[tauri::command]
 pub async fn mesh_join(
     state: State<'_, Arc<AppState>>,
@@ -138,46 +129,10 @@ pub async fn mesh_join(
         let config = state.config.read().await;
         resolve_node_name(&config.node_name)
     };
-
-    if let Some(port) = attached_port(&state) {
-        // Attach mode — the daemon's `/v1/mesh/join` accepts any of
-        // the three forms (bare key, https URL, sovereign:// link) so
-        // we pass `link` through unchanged.
-        let client = http_client()?;
-        let body = serde_json::json!({ "key_or_url": link, "node_name": node_name });
-        let resp = client
-            .post(format!("http://localhost:{port}/v1/mesh/join"))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("mesh join: {e}"))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("mesh join failed ({status}): {text}"));
-        }
-        return resp
-            .json::<JoinMeshResponse>()
-            .await
-            .map_err(|e| format!("parse mesh/join response: {e}"));
-    }
-
-    // Local mode keeps the deep-link-only parser for backward compat;
-    // the HTTP path above accepts bare keys too.
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
-    mesh.expose_client_api();
-    let result = mesh
-        .join_mesh(&parsed, &node_name)
+    mesh_client(&state)
+        .mesh_join(&link, Some(&node_name))
         .await
-        .map_err(|e| e.to_string())?;
-    Ok(JoinMeshResponse {
-        mesh_name: result.mesh_name,
-        node_id: result.node_id,
-        client_token: result.client_token,
-    })
+        .map_err(|e| format!("mesh_join: {e}"))
 }
 
 /// Shared-model placement for UI display (P0.6): the primary slot's
@@ -194,20 +149,22 @@ pub async fn mesh_get_placement(
 ) -> Result<Option<serde_json::Value>, String> {
     // Both modes read over HTTP: the local (embedded) daemon serves the
     // same `/status` on its client port, so one path covers both.
-    let port = attached_port(&state).unwrap_or(9741);
+    //
+    // The port comes from `client_base_url()` — the ONE accessor for it
+    // (ARCH principle 8). This used to spell `attached_port(…).unwrap_or(9741)`,
+    // which was right only while a Local boot's port was 9741: a
+    // `CliSetup` config naming any other client_port sent this read at a
+    // dead port and the chip rendered empty.
+    let base = state.client_base_url();
     let client = http_client()?;
-    let resp = match client
-        .get(format!("http://localhost:{port}/status"))
-        .send()
-        .await
-    {
+    let resp = match client.get(format!("{base}/status")).send().await {
         Ok(r) if r.status().is_success() => r,
         Ok(r) => {
-            tracing::debug!(target: "mesh_state", port, status = %r.status(), "mesh_get_placement: /status non-2xx");
+            tracing::debug!(target: "mesh_state", %base, status = %r.status(), "mesh_get_placement: /status non-2xx");
             return Ok(None);
         }
         Err(e) => {
-            tracing::debug!(target: "mesh_state", port, error = %e, "mesh_get_placement: /status unreachable");
+            tracing::debug!(target: "mesh_state", %base, error = %e, "mesh_get_placement: /status unreachable");
             return Ok(None);
         }
     };
@@ -242,103 +199,50 @@ pub async fn mesh_get_placement(
 pub async fn mesh_get_state(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Option<MeshStateResponse>, String> {
-    if let Some(port) = attached_port(&state) {
-        // Attach mode — read-only status over HTTP. The daemon's
-        // `/v1/mesh/status` returns a flat shape; we up-convert it
-        // into the `MeshStateResponse` the frontend already renders.
-        let client = http_client()?;
-        let resp = client
-            .get(format!("http://localhost:{port}/v1/mesh/status"))
-            .send()
-            .await
-            .map_err(|e| format!("mesh status: {e}"))?;
-        if !resp.status().is_success() {
-            // Glassbox: a non-2xx here is one way Members ends up
-            // blank — surface it instead of silently returning None.
-            tracing::warn!(
-                target: "mesh_state",
-                port,
-                status = %resp.status(),
-                "mesh_get_state(attach): /v1/mesh/status non-2xx — Members will be empty"
-            );
-            return Ok(None);
-        }
-        let remote: sovereign_mesh::mesh_http::StatusResponse = resp
-            .json()
-            .await
-            .map_err(|e| format!("parse mesh/status: {e}"))?;
-        if remote.mesh_name.is_none() {
-            tracing::warn!(
-                target: "mesh_state",
-                port,
-                "mesh_get_state(attach): daemon reports no active mesh — Members empty"
-            );
-            return Ok(None);
-        }
-        tracing::info!(
+    // The daemon's `/v1/mesh/status` returns a flat shape; we up-convert
+    // it into the `MeshStateResponse` the frontend already renders.
+    //
+    // NOT A SECOND CHOICE. The Local arm this replaces read the
+    // in-process `EmbeddedDaemon`, and `state.mesh` is permanently
+    // `None` now that the app commissions no daemon of its own — so
+    // that arm returned "Members empty" on every Local boot. The wire
+    // answers. The four fields `MeshState` carried and `StatusResponse`
+    // does not — `corpora`, `contribution`, `model_name`,
+    // `knowledge_corpora` — were therefore ALREADY empty on that path;
+    // `from_remote_status` records the gap for whoever grows the route.
+    let base = state.client_base_url();
+    let remote: sovereign_mesh::mesh_http::StatusResponse = mesh_client(&state)
+        .mesh_status()
+        .await
+        .map_err(|e| format!("mesh_get_state: {e}"))?;
+    if remote.mesh_name.is_none() {
+        tracing::warn!(
             target: "mesh_state",
-            mode = "attach",
-            port,
-            members = remote.members.len(),
-            members_online = remote.members_online,
-            "mesh_get_state(attach): fetched mesh status"
+            %base,
+            "mesh_get_state: daemon reports no active mesh — Members empty"
         );
-        return Ok(Some(MeshStateResponse::from_remote_status(remote)?));
+        return Ok(None);
     }
-
-    let Some(mesh) = state.mesh().await else {
-        tracing::warn!(
-            target: "mesh_state",
-            "mesh_get_state(local): no in-process mesh daemon — Members empty"
-        );
-        return Ok(None);
-    };
-    let Some(mesh_state) = mesh.mesh_state().await else {
-        tracing::warn!(
-            target: "mesh_state",
-            "mesh_get_state(local): in-process daemon has no active mesh — Members empty"
-        );
-        return Ok(None);
-    };
-    // Glassbox: in Local mode this desktop reads its OWN embedded
-    // daemon. If that shows zero members while a separate daemon is
-    // serving the mesh on :9741, the app attached to the wrong process
-    // (a startup-probe race — see `bootstrap::detect`). Log the count
-    // so one real run distinguishes "genuinely solo" from "wrong
-    // daemon."
     tracing::info!(
         target: "mesh_state",
-        mode = "local",
-        members = mesh_state.members.len(),
-        "mesh_get_state(local): read in-process mesh state"
+        %base,
+        members = remote.members.len(),
+        members_online = remote.members_online,
+        "mesh_get_state: fetched mesh status"
     );
-    let mut resp = MeshStateResponse::from(mesh_state);
-    // Local-mode equivalent of the Attach-mode HTTP path: enrich the
-    // status with the cached invite so the active-mesh view's share
-    // card has something to render. Without this, in-process daemons
-    // (the desktop's default) would never show the invite.
-    if let Some((key, link)) = mesh.current_invite().await {
-        resp.status.join_key = Some(key);
-        resp.status.join_link = Some(link);
-    }
-    // Surface the client-API token beside the invite (None on a
-    // loopback-only solo daemon).
-    resp.client_token = mesh.running_client_token().await;
-    // Track W: the founder's own reachability, for the "Reachable /
-    // Reconnecting" indicator (MeshState doesn't carry it).
-    resp.status.self_reachability = mesh.self_reachability().await;
-    Ok(Some(resp))
+    Ok(Some(MeshStateResponse::from_remote_status(remote)?))
 }
 
-/// Check if the mesh daemon is currently running. In Attach mode we
-/// always report `true` — the CLI daemon is by definition running or
-/// we wouldn't have detected Attach in the first place.
+/// Check if the mesh daemon is currently running.
+///
+/// Always `true`, and honestly so: this process reached a serving host
+/// at startup or it would not have got here. It USED to ask an
+/// in-process `EmbeddedDaemon` first and fall through to `true` — and
+/// since that daemon stopped existing the fall-through was the whole
+/// function, with a `state.mesh()` call in front of it saying otherwise.
 #[tauri::command]
-pub async fn mesh_is_running(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
-    match state.mesh().await {
-        Some(m) => Ok(m.is_running().await),
-        None => Ok(true), // Attach mode: the external daemon is always running.
-    }
+pub async fn mesh_is_running(_state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    Ok(true)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -351,47 +255,23 @@ pub struct RotateInviteResponse {
 /// connected (they share the mesh state, not the key); only future
 /// joins must use the new link. Refreshes the cached plaintext on
 /// the daemon so the next status poll surfaces the new invite.
+///
+/// ONE path in both modes: `POST /v1/mesh/rotate`. The Local arm used
+/// to call `rotate_invite` in-process and stop there, while the route
+/// ALSO exposes the client API — rotation exists in order to share, so
+/// a soloist rotating to invite someone gets a reachable node. That was
+/// the third partial job in this command's history: it first wrote the
+/// key straight to disk (leaving the live mesh to re-persist the old
+/// hash within a gossip round), then drove the daemon but skipped the
+/// exposure. One implementation now, and it is the host's.
 #[tauri::command]
 pub async fn mesh_rotate_invite(
     state: State<'_, Arc<AppState>>,
 ) -> Result<RotateInviteResponse, String> {
-    if let Some(port) = attached_port(&state) {
-        let client = http_client()?;
-        let resp = client
-            .post(format!("http://localhost:{port}/v1/mesh/rotate"))
-            .send()
-            .await
-            .map_err(|e| format!("mesh rotate: {e}"))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("mesh rotate failed ({status}): {text}"));
-        }
-        return resp
-            .json::<RotateInviteResponse>()
-            .await
-            .map_err(|e| format!("parse mesh/rotate response: {e}"));
-    }
-
-    // Local mode — go through the daemon, not around it.
-    //
-    // This used to call `persist::rotate_join_key` directly, on the reasoning
-    // that a disk write needed no daemon method. It did: rotation has to
-    // change the LIVE mesh or the gossip loop re-persists the old hash over
-    // the new one within a round, and this path skipped that just as the CLI
-    // and HTTP paths did. Three callers, three different partial jobs — the
-    // §10.6 duplicated-decider failure. There is now one implementation.
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    let rotated = mesh
-        .rotate_invite(false)
+    mesh_client(&state)
+        .mesh_rotate(false)
         .await
-        .map_err(|e| format!("rotate failed: {e}"))?;
-    Ok(RotateInviteResponse {
-        mesh_name: rotated.mesh_name,
-        join_key: rotated.join_key,
-    })
+        .map_err(|e| format!("mesh_rotate_invite: {e}"))
 }
 
 /// One membership in the mesh switcher's list — the route's own type.
@@ -400,39 +280,20 @@ pub async fn mesh_rotate_invite(
 pub use sovereign_mesh::mesh_http::KnownMeshDto;
 
 /// Every mesh this node has joined — active and parked.
+///
+/// ONE path in both modes: the `meshes[]` the daemon already carries on
+/// `/v1/mesh/status`, rather than a second endpoint. The Local arm used
+/// to BUILD these rows itself out of `known_meshes()` plus a direct
+/// `persist::active_mesh_id` read of the data dir — the same five fields
+/// derived a second way, off a file the daemon owns and writes (ARCH
+/// principle 12).
 #[tauri::command]
 pub async fn mesh_list(state: State<'_, Arc<AppState>>) -> Result<Vec<KnownMeshDto>, String> {
-    if let Some(port) = attached_port(&state) {
-        // Attach mode reads it off the status payload the daemon already
-        // serves, rather than a second endpoint.
-        let client = http_client()?;
-        let resp = client
-            .get(format!("http://localhost:{port}/v1/mesh/status"))
-            .send()
-            .await
-            .map_err(|e| format!("mesh list: {e}"))?;
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("parse mesh/status: {e}"))?;
-        let rows = body.get("meshes").cloned().unwrap_or(serde_json::json!([]));
-        return serde_json::from_value(rows).map_err(|e| format!("parse meshes: {e}"));
-    }
-    let Some(mesh) = state.mesh().await else {
-        return Ok(Vec::new());
-    };
-    let active = sovereign_mesh::persist::active_mesh_id(mesh.data_dir());
-    Ok(mesh
-        .known_meshes()
-        .into_iter()
-        .map(|m| KnownMeshDto {
-            is_active: active.as_ref() == Some(&m.mesh_id),
-            mesh_id: m.mesh_id.to_hex(),
-            members_total: m.members.len(),
-            last_seen_unix: m.members.iter().map(|r| r.last_seen).max().unwrap_or(0),
-            name: m.name,
-        })
-        .collect())
+    let status: sovereign_mesh::mesh_http::StatusResponse = mesh_client(&state)
+        .mesh_status()
+        .await
+        .map_err(|e| format!("mesh_list: {e}"))?;
+    Ok(status.meshes)
 }
 
 /// Park the active mesh and bring another joined mesh up.
@@ -440,79 +301,50 @@ pub async fn mesh_list(state: State<'_, Arc<AppState>>) -> Result<Vec<KnownMeshD
 /// The daemon rebinds `:9741` as part of this, so the caller must poll
 /// through the bounce — `MeshSettings` reuses the same `reconnecting` banner
 /// and `waitForDaemonAndRefresh` helper that Leave already uses.
+///
+/// ONE path in both modes: `POST /v1/mesh/switch`. Local mode gains the
+/// route's resolve-before-detach rule — an unknown name comes back a 404
+/// the caller can read, instead of a teardown followed by silence.
 #[tauri::command]
 pub async fn mesh_switch(state: State<'_, Arc<AppState>>, mesh: String) -> Result<(), String> {
-    if let Some(port) = attached_port(&state) {
-        let client = http_client()?;
-        let resp = client
-            .post(format!("http://localhost:{port}/v1/mesh/switch"))
-            .json(&serde_json::json!({ "mesh": mesh }))
-            .send()
-            .await
-            .map_err(|e| format!("mesh switch: {e}"))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("mesh switch failed ({status}): {text}"));
-        }
-        return Ok(());
-    }
-    let Some(daemon) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    daemon
-        .switch_mesh(&mesh)
+    mesh_client(&state)
+        .mesh_switch(&mesh)
         .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("mesh_switch: {e}"))
 }
 
 /// Drop a PARKED mesh from this node. Refuses on the active one.
+///
+/// `POST /v1/mesh/forget`, WRITTEN for this rung. The button worked in
+/// neither mode before it: Attach refused with "not yet exposed over
+/// HTTP — run `svrn mesh forget` instead", and the Local arm behind
+/// that refusal asked an in-process daemon this app no longer
+/// commissions. An honest refusal that nothing could satisfy is still a
+/// missing feature; the route is the fix (ARCH principle 6).
 #[tauri::command]
 pub async fn mesh_forget(state: State<'_, Arc<AppState>>, mesh: String) -> Result<(), String> {
-    if attached_port(&state).is_some() {
-        return Err(
-            "forgetting a mesh is not yet exposed over HTTP — run `svrn mesh forget` instead"
-                .into(),
-        );
-    }
-    let Some(daemon) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    daemon
-        .forget_mesh(&mesh)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    mesh_client(&state)
+        .mesh_forget(&mesh)
+        .await
+        .map_err(|e| format!("mesh_forget: {e}"))
 }
 
 /// Leave the current mesh and return the node to a fresh solo mesh.
+///
+/// ONE path in both modes: `POST /v1/mesh/leave`. The host ACKs and
+/// re-solos in a detached task — it is served BY the listener that
+/// leaving drops, so an inline teardown would cancel its own response —
+/// and the caller polls back through the bounce with the same
+/// `reconnecting` banner Switch uses. Which of `leave()`,
+/// `leave_to_solo()` and `shutdown()` a Leave means is the daemon's
+/// choice about its own lifetime, and this client no longer holds an
+/// opinion on it (ARCH principle 12).
 #[tauri::command]
 pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    if let Some(port) = attached_port(&state) {
-        let client = http_client()?;
-        let resp = client
-            .post(format!("http://localhost:{port}/v1/mesh/leave"))
-            .send()
-            .await
-            .map_err(|e| format!("mesh leave: {e}"))?;
-        if !resp.status().is_success() && resp.status() != reqwest::StatusCode::NO_CONTENT {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!("mesh leave failed ({status}): {text}"));
-        }
-        return Ok(());
-    }
-    let Some(mesh) = state.mesh().await else {
-        return Err("mesh daemon not available".into());
-    };
-    // User clicked "Leave" — leave the current mesh AND re-create a fresh
-    // solo mesh in-process (rebinding the client API) so the embedded
-    // daemon stays reachable, exactly like the Attach-mode HTTP path.
-    // Uses `leave_to_solo`, NOT the bare `leave()` (which only tears down
-    // and is reserved for `join_mesh`'s mesh-switch auto-leave), and NOT
-    // `daemon.shutdown()` (the graceful process-exit path that PRESERVES
-    // state).
-    mesh.leave_to_solo().await.map_err(|e| e.to_string())
+    mesh_client(&state)
+        .mesh_leave()
+        .await
+        .map_err(|e| format!("mesh_leave: {e}"))
 }
 
 // ── Diagnostics ──────────────────────────────────────────
@@ -547,35 +379,28 @@ pub struct MeshDiagnostics {
 /// who can't reach them via mDNS. Used by the invite-card relay
 /// picker. Empty list = no detected interfaces (no network); the UI
 /// hides the picker.
+///
+/// ONE path in both modes: `GET /v1/mesh/relay-candidates`. The HOST
+/// answers because the addresses are its own — it may be in a container
+/// or bound differently from whatever asked — and the internal port it
+/// advertises them on is its to know. The Local arm used to call
+/// `mesh_discovery::relay_candidates(9742)` here with that port spelled
+/// out beside the daemon's own copy of it (ARCH principle 8).
+///
+/// A failed read is now an `Err` rather than an empty list. The Attach
+/// arm swallowed both a non-2xx and a parse failure into `Vec::new()`,
+/// which renders identically to "this machine has no reachable
+/// interface" — two facts with opposite remedies (ARCH principle 6).
+/// An empty list still means no detected interface, and the picker
+/// hides on it.
 #[tauri::command]
 pub async fn mesh_relay_candidates(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<RelayCandidate>, String> {
-    if let Some(port) = attached_port(&state) {
-        // Attach mode — the CLI daemon is the source of truth for
-        // its own interfaces (it might be running in a container
-        // or on a different binding than this desktop process).
-        let client = http_client()?;
-        let resp = client
-            .get(format!("http://localhost:{port}/v1/mesh/relay-candidates"))
-            .send()
-            .await
-            .map_err(|e| format!("relay-candidates: {e}"))?;
-        if !resp.status().is_success() {
-            return Ok(Vec::new());
-        }
-        #[derive(serde::Deserialize)]
-        struct Body {
-            candidates: Vec<RelayCandidate>,
-        }
-        return Ok(resp
-            .json::<Body>()
-            .await
-            .map(|b| b.candidates)
-            .unwrap_or_default());
-    }
-    // Local mode — call the helper directly, no HTTP round-trip.
-    Ok(sovereign_mesh::mesh_discovery::relay_candidates(9742))
+    mesh_client(&state)
+        .mesh_relay_candidates()
+        .await
+        .map_err(|e| format!("mesh_relay_candidates: {e}"))
 }
 
 /// Generate a fresh memorable two-word node-name suggestion (e.g.
@@ -596,32 +421,15 @@ pub fn suggest_node_name() -> String {
 /// the MeshDiagnosticsPanel every few seconds.
 #[tauri::command]
 pub async fn mesh_diagnostics(state: State<'_, Arc<AppState>>) -> Result<MeshDiagnostics, String> {
-    let (peers, daemon_running) = match state.mesh().await {
-        Some(m) => {
-            let peers = m
-                .discovered_peers()
-                .await
-                .into_iter()
-                .map(|p| DiscoveredPeerDto {
-                    node_id: p.node_id.to_string(),
-                    mesh_id_hex: p.mesh_id_hex,
-                    mesh_name: p.mesh_name,
-                    name: p.name,
-                    address: p.address.to_string(),
-                })
-                .collect();
-            (peers, m.is_running().await)
-        }
-        None => {
-            // Attach mode: the CLI daemon owns mDNS discovery. Returning
-            // an empty peer list today keeps the diagnostics panel happy;
-            // task #37 will proxy `GET /v1/mesh/status` for the real list.
-            (Vec::new(), true)
-        }
-    };
+    // The DAEMON owns mDNS discovery, in every mode — it always did in
+    // Attach, and the in-process arm that read `discovered_peers()`
+    // directly is gone with the daemon it read. No route carries the
+    // table yet, so this panel is EMPTY rather than wrong, and the gap
+    // is named here rather than papered over: `/v1/mesh/status` grows a
+    // `discovered[]` and this reads it (task #37).
     Ok(MeshDiagnostics {
-        discovered_peers: peers,
-        daemon_running,
+        discovered_peers: Vec::new(),
+        daemon_running: true,
     })
 }
 
@@ -639,20 +447,6 @@ pub struct MeshStateResponse {
     /// daemon (local mode) or `/v1/mesh/status` (attach mode).
     #[serde(default)]
     pub client_token: Option<String>,
-}
-
-impl From<MeshState> for MeshStateResponse {
-    fn from(s: MeshState) -> Self {
-        Self {
-            status: s.status,
-            members: s.members,
-            corpora: s.corpora,
-            contribution: s.contribution,
-            // Enriched by the caller from the running daemon (the
-            // `MeshState` value doesn't carry it).
-            client_token: None,
-        }
-    }
 }
 
 impl MeshStateResponse {
@@ -796,22 +590,19 @@ pub struct PeerPreferenceDto {
 pub async fn mesh_get_contributions(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<NodeContributionsDto>, String> {
-    let attached = attached_port(&state).is_some();
+    let attached = attached(&state);
     if !attached {
-        // Local mode: the in-process daemon binds `/internal` only
-        // once it is Running (no mesh created or joined = no
-        // listener). Ask only when there is something listening.
-        match state.mesh().await {
-            Some(mesh) if mesh.app_state().await.is_some() => {}
-            _ => {
-                tracing::debug!(
-                    target: "mesh_state",
-                    "mesh_get_contributions: local mode with no running mesh daemon \
-                     — empty ledger, not a failed read"
-                );
-                return Ok(Vec::new());
-            }
-        }
+        // A Local boot is a boot that reached no serving host, so there
+        // is no `/internal` listener to ask and the ledger is empty —
+        // the same answer this gave before, reached without a
+        // `state.mesh()` that is now permanently `None`. A host that IS
+        // listening and refuses still arrives as an `Err`.
+        tracing::debug!(
+            target: "mesh_state",
+            "mesh_get_contributions: no serving host for this boot \
+             — empty ledger, not a failed read"
+        );
+        return Ok(Vec::new());
     }
     tracing::debug!(
         target: "mesh_state",
@@ -899,19 +690,14 @@ pub async fn mesh_clear_peer_preference(
 pub async fn mesh_list_peer_preferences(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<PeerPreferenceDto>, String> {
-    let attached = attached_port(&state).is_some();
+    let attached = attached(&state);
     if !attached {
-        match state.mesh().await {
-            Some(mesh) if mesh.app_state().await.is_some() => {}
-            _ => {
-                tracing::debug!(
-                    target: "mesh_state",
-                    "mesh_list_peer_preferences: local mode with no running mesh \
-                     daemon — no preferences, not a failed read"
-                );
-                return Ok(Vec::new());
-            }
-        }
+        tracing::debug!(
+            target: "mesh_state",
+            "mesh_list_peer_preferences: no serving host for this boot \
+             — no preferences, not a failed read"
+        );
+        return Ok(Vec::new());
     }
     tracing::debug!(
         target: "mesh_state",
@@ -1092,9 +878,9 @@ mod contribution_view_tests {
 
     /// A host that REFUSES is an error, never an empty ledger.
     ///
-    /// The one way this migration could regress silently: Local mode
-    /// answers `Ok(vec![])` for "no mesh daemon yet", and that arm is
-    /// now a `state.mesh()` check rather than an in-process read. If a
+    /// The one way this migration could regress silently: a boot that
+    /// reached no serving host answers `Ok(vec![])`, and that arm is a
+    /// `bootstrap_mode` check rather than an in-process read. If a
     /// failed HTTP call could also produce an empty vec, "the mesh has
     /// served nothing" and "the daemon would not answer" would render
     /// identically and the operator would have no way to tell

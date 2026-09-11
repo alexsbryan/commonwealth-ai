@@ -37,6 +37,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/join", post(mesh_join))
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/switch", post(mesh_switch))
+        .route("/v1/mesh/forget", post(mesh_forget))
         .route("/v1/mesh/leave", post(mesh_leave))
         .route(
             "/v1/mesh/forget-member",
@@ -967,11 +968,43 @@ pub struct KnownMeshDto {
     pub last_seen_unix: u64,
 }
 
-/// Body for [`mesh_switch`].
+/// Body for [`mesh_switch`] and [`mesh_forget`].
+///
+/// ONE type for the two, because the two take ONE thing and resolve it
+/// through the same `persist::resolve_known` — a second struct with the
+/// same field would be a second place for the reference syntax to drift
+/// (ARCH principle 8), which is the exact bug `forget_mesh` shipped when
+/// it refused the id prefix `switch_mesh` accepted.
 #[derive(Debug, Deserialize)]
 pub struct SwitchRequest {
     /// Mesh name, full hex id, or an unambiguous id prefix (≥8 chars).
     pub mesh: String,
+}
+
+/// `POST /v1/mesh/forget` — drop a PARKED mesh from this node.
+///
+/// Delegates wholly to [`EmbeddedDaemon::forget_mesh`], which refuses the
+/// active one. Written at sv-surface svt-3 because until then the desktop
+/// could forget a mesh ONLY through an in-process daemon: attach mode
+/// answered "not yet exposed over HTTP — run `svrn mesh forget` instead",
+/// and once the app stopped commissioning a daemon of its own that arm
+/// became unreachable, so the button worked in neither mode.
+async fn mesh_forget(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<SwitchRequest>,
+) -> impl IntoResponse {
+    match daemon.forget_mesh(&req.mesh) {
+        Ok(name) => (StatusCode::OK, Json(serde_json::json!({ "forgot": name }))).into_response(),
+        // The daemon distinguishes "no such mesh" from "that one is
+        // active"; both arrive as its own words rather than a status the
+        // caller has to interpret (ARCH principle 6).
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 /// `POST /v1/mesh/switch` — set the active mesh down and bring another up.

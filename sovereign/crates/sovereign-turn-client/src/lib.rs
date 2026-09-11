@@ -68,6 +68,10 @@ use sovereign_contracts::error::{Error, Result};
 // "Ensure a backend is reachable" belongs to the client, not to the
 // application — sv-surface's `sv-no-daemon-management` bar. See `reach.rs`.
 pub mod reach;
+// The mesh half of the client: `/v1/mesh/*` on the client port and the two
+// `/internal/*` mesh-admin reads. An `impl TurnClient` block, so the surface
+// is unchanged — see `mesh.rs` for why it is not in this file.
+mod mesh;
 
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
@@ -2560,92 +2564,6 @@ impl TurnClient {
         }
     }
 
-    // ─── The mesh contribution ledger (sv-surface svt-3) ─────
-
-    /// `GET /internal/contribution/view` — every peer's dimensional
-    /// contributions over the daemon's default window, one entry per
-    /// node its `MeshStore` holds ledger events about.
-    ///
-    /// The wire form of `commonwealth_state::current_contributions`,
-    /// which this crate cannot name (see the note above
-    /// [`Self::corpus_atoms`]), so the caller supplies `T`. It is
-    /// `Vec<commonwealth_api::routes_internal::NodeContributionsView>`
-    /// for the daemon's own shape, and the desktop's
-    /// `Vec<NodeContributionsDto>` — the same field names — for the
-    /// Mesh Health Members panel.
-    ///
-    /// The host owns the ORDER: it sorts by node id before it answers.
-    /// A caller that re-sorts is a second decider for a question
-    /// already settled (ARCH principle 8).
-    ///
-    /// This is the LEDGER, not a liveness probe. An empty list means
-    /// the store holds no events — the right answer for a mesh of one
-    /// that has served nothing yet, and NOT a signal that the host is
-    /// unreachable, which arrives as an `Err`.
-    pub async fn contribution_view<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        self.internal_get("/internal/contribution/view".to_string(), &[])
-            .await
-    }
-
-    // ─── Per-peer affinity preferences (sv-surface svt-3) ────────
-
-    /// `GET /internal/peer-preference/list` — every affinity
-    /// preference the host holds, in the store's own scan order.
-    ///
-    /// `T` is `Vec<commonwealth_api::routes_internal::PeerPreferenceView>`
-    /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
-    /// — identical field names — for the Mesh Health panel. This crate
-    /// cannot name either (see the note above [`Self::corpus_atoms`]).
-    ///
-    /// An empty list means the operator has set no preferences, which
-    /// is the default state of every node. It is NOT "the host could
-    /// not be asked" — that arrives as an `Err` (ARCH principle 6).
-    pub async fn peer_preferences<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
-        self.internal_get("/internal/peer-preference/list".to_string(), &[])
-            .await
-    }
-
-    /// `POST /internal/peer-preference/set` — set or replace one
-    /// peer's multiplier.
-    ///
-    /// `multiplier` is NOT validated here. The `(0.0, 1.0]` clamp is
-    /// `commonwealth_state::PeerPreference::new`'s and a second copy in
-    /// this client would be a second decider free to drift from it
-    /// (ARCH principle 8); an out-of-range value comes back as the
-    /// host's own 400 text.
-    pub async fn set_peer_preference(
-        &self,
-        node_id: &str,
-        multiplier: f64,
-        reason: Option<&str>,
-    ) -> Result<()> {
-        let body = serde_json::json!({
-            "node_id": node_id,
-            "multiplier": multiplier,
-            "reason": reason,
-        });
-        self.internal_write_no_answer(
-            reqwest::Method::POST,
-            "/internal/peer-preference/set".to_string(),
-            Some(&body),
-        )
-        .await
-    }
-
-    /// `POST /internal/peer-preference/clear` — drop one peer's
-    /// preference, answering whether one was there.
-    ///
-    /// The bool is the host's, not an inference from a status code:
-    /// "cleared it" and "there was nothing set" are different facts and
-    /// the caller renders them differently.
-    pub async fn clear_peer_preference(&self, node_id: &str) -> Result<bool> {
-        self.internal_post_json(
-            "/internal/peer-preference/clear".to_string(),
-            &serde_json::json!({ "node_id": node_id }),
-        )
-        .await
-    }
-
     // ─── The internal exchange: one sentence, six named shapes ────
     //
     // Every method above that talks to the host says one of six
@@ -2720,7 +2638,7 @@ impl TurnClient {
     }
 
     /// `GET`, parsed answer. Any non-success is the host's words.
-    async fn internal_get<T: serde::de::DeserializeOwned>(
+    pub(crate) async fn internal_get<T: serde::de::DeserializeOwned>(
         &self,
         path: String,
         query: &[(&str, String)],
@@ -2760,7 +2678,10 @@ impl TurnClient {
 
     /// `POST` with a JSON body, parsed answer. The POST twin of
     /// [`Self::internal_get`].
-    async fn internal_post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+    pub(crate) async fn internal_post_json<
+        B: serde::Serialize + ?Sized,
+        T: serde::de::DeserializeOwned,
+    >(
         &self,
         path: String,
         body: &B,
@@ -2783,7 +2704,10 @@ impl TurnClient {
     /// from [`Self::internal_post_empty`]: the two put different bytes
     /// on the wire, and a route whose handler takes no body extractor
     /// must keep receiving none.
-    async fn internal_post_bare<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
+    pub(crate) async fn internal_post_bare<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+    ) -> Result<T> {
         let (url, ctx) = self.target("POST", &path);
         let answer = self.required(self.http.post(&url), &url, &ctx).await?;
         parse(&answer, &ctx)
@@ -2847,7 +2771,7 @@ impl TurnClient {
     /// `POST …/end` and `POST …/tool-outcome` shape. `body` is
     /// `None` for the routes that take no body at all, and their
     /// request stays byte-for-byte the bodiless one they always sent.
-    async fn internal_write_no_answer<B: serde::Serialize + ?Sized>(
+    pub(crate) async fn internal_write_no_answer<B: serde::Serialize + ?Sized>(
         &self,
         method: reqwest::Method,
         path: String,
