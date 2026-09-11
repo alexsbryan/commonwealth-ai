@@ -5731,7 +5731,7 @@ member, and a non-member is closed regardless. Watched failing:
 `the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed` /
 `a_member_outside_media_allow_is_closed_and_one_inside_is_served`.
 
-**One fan-out for every federated question** (`commonwealth-api/src/fanout.rs`,
+**One fan-out for every federated question** (`commonwealth-transport/src/fanout.rs`,
 2026-09-11 — WORK_PLANE.md design gap 1, done by extraction). The peer half
 of the knowledge route's fan-out moved out unchanged in behaviour and generic
 in type: `FanoutTarget` (identity + contact, cloned out of the mesh lock),
@@ -5774,6 +5774,35 @@ inference daemon and the rails daemon fan out with one implementation
 `commonwealth-media fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
 (refused names filtered out) and
 `an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
+
+**The minimal rails daemon** (`commonwealth/crates/commonwealth-rails`, the
+`cw-rails` binary, `scripts/cw-rails-lift.sh --sandbox`, 2026-09-11).
+The process that IS your address on the mesh, with media registered on it and
+nothing else — what a Jellyswarrm-shaped shim author installs beside their
+media server. `cw-rails join <invite>`, then `cw-rails run`, and the shim sees
+three loopback routes (`GET /v1/mesh/status`, `GET /v1/mesh/media[?peer=]`,
+`POST /v1/mesh/media/fanout`) plus `X-Mesh-Member` / `-Node` / `-Pubkey` on
+every request its origin receives: no key, no relay, no port-forward, no VPN.
+A separate binary for a closure reason — `commonwealth-api` resolves 743
+crates (corpus-engine, arrow, the sovereign runtime) and this resolves 319
+(`cargo tree --edges normal`, 2026-09-11),
+and three `[[forbid]]` rows in `quality/ARCH_LAYERS.toml` keep it that way
+between lifts. All of it is composition: identity, the endpoint, the acceptor,
+`Forward::Http`, the bridge, dial-by-key, `Mesh` with its merge and proofs,
+the `mesh::wire` structs and all three media questions are owned elsewhere;
+new here are the config, the round loop, the routes and the CLI.
+**What it does NOT do**, each deliberate: admit joiners (no `/internal/join`
+and no invite minting — a mesh is founded by a full daemon, and that absence
+is most of why this lifts); join over LAN/mDNS (an invite with no iroh dial is
+refused by name; the legacy paths mean plaintext HTTP to an address); anything
+Jellyfin (GPL-2 against this repo's AGPL keeps the shim a separate
+distribution). Watched failing, all in `commonwealth-rails`:
+`an_invite_with_no_iroh_dial_is_refused_by_name` (join),
+`a_round_from_another_mesh_is_401_and_merges_nothing` (internal),
+`a_non_loopback_listen_address_is_refused_before_it_binds` (api).
+The instrument is a physical lift, not a crate-name count: it builds
+and tests the closure outside the repository, then joins a real mesh and reads
+its own three routes — four verdicts, and no invite abstains rather than fails.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
@@ -8377,6 +8406,33 @@ findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
 `grounding/tests.rs`, `chaos_monkey/score.rs`, `sovereign/crates/sovereign-mesh/src/daemon.rs`,
 `session_state.rs`, the `AGENTS.md` instruction surface and the approach band —
 are upstream's; `git diff main...HEAD` touches none of them.
+
+### 10.1q Fan-in ACCEPTED — `commonwealth-core` 14 → 16 (cw-lift D1 follow-on, 2026-09-11)
+
+Two crates were added to the workspace on 2026-09-11 and both name
+`commonwealth-core`, which is the whole of layer-gate's fan-in complaint:
+
+| Dependent | Landed | Why it names `commonwealth-core` |
+|---|---|---|
+| `commonwealth-media` | `0eccf5664` | `Mesh`, `MemberRecord`, `NodeStatus`, `OriginKind`, `member_matches` — the roster vocabulary all three media questions are asked in |
+| `commonwealth-rails` | this commit | the same, plus `mesh::wire`'s join and gossip bodies and `MeshWire` |
+
+The ratchet's own advice — "depend on a narrower crate instead" — has no
+answer here, and that is the honest reading rather than a dodge: the types
+these two need ARE the mesh vocabulary, and the crate that owns it is the one
+every member already links. A narrower crate would be a second home for
+`Mesh`, which is the §10.6 failure the `mesh::wire` move (`c2a1e8eca`) was
+made to end — four declarations of one wire shape, converged to one.
+
+`quality/baselines/fan_in.tsv` was edited BY HAND, one line, rather than
+regenerated: `--update-baseline` rewrites every row and would have banked any
+other crate's drift in the same stroke, unread. The eight-row file is
+otherwise unchanged and the diff is one number.
+
+Not a licence for the next one. `commonwealth-core` is named a god-crate by
+this gate for a reason, and the two admitted here are package crates whose
+entire purpose is to be liftable — if a third arrives without that property,
+the answer is the split, not another row.
 
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 

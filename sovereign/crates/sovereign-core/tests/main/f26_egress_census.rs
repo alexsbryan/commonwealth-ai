@@ -223,11 +223,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-mesh/src/peer_inference.rs", Class::Mesh, 2),
-    // Federated media's catalogue half (2026-09-11): one client per fan-out,
-    // built in the daemon and driven through each member's loopback bridge to
-    // that member's media origin over the estate's own transport; the second
-    // site is the unit test's local origin. Mesh — no estate content leaves.
-    ("sovereign/crates/sovereign-mesh/src/media_fanout.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
     // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,
     // and the traffic class is unchanged — every destination is either this
@@ -687,6 +682,26 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/commonwealth-app/src/proxy.rs", Class::LocalDaemon, 1),
+    // Federated media's catalogue half. The row was
+    // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
+    // moved to the package crate later the same day (0eccf5664) — same two
+    // sites, same class, one fewer daemon that can answer the question
+    // differently. One client per fan-out, driven through each member's
+    // loopback bridge to that member's media origin over the estate's own
+    // transport; the second site is the unit test's local origin.
+    ("commonwealth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 2),
+
+    // ---- commonwealth-rails: the package-only rails daemon (2026-09-11) ----
+    // Every destination is a peer of the operator's own mesh, reached through
+    // a loopback bridge this process minted, over a QUIC connection dialed by
+    // the peer's Ed25519 key. Nothing here has a third-party endpoint to
+    // point at: the URL is always `127.0.0.1:<ephemeral>` and the far end is
+    // a member.
+    ("commonwealth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 1),
+    ("commonwealth/crates/commonwealth-rails/src/join.rs", Class::Mesh, 1),
+    // `cw-rails media` is a client of THIS daemon's own loopback API — the
+    // same bytes a `curl` would send, and they never leave the machine.
+    ("commonwealth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
 ];
 
 // ---------------------------------------------------------------------------

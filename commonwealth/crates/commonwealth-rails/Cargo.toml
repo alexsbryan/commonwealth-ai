@@ -1,0 +1,40 @@
+[package]
+name = "commonwealth-rails"
+description = "The minimal rails daemon — the process that IS your address on the mesh, with media registered on it and nothing else. Package-closure clean: no sovereign runtime, no corpus engine, no api crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cw-rails"
+path = "src/main.rs"
+
+[dependencies]
+commonwealth-core = { workspace = true }
+# `iroh` for the endpoint, the acceptor and the dial-by-key transport;
+# `fanout` because the media catalogue half runs on it.
+commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
+commonwealth-media = { workspace = true }
+# `deep_link::parse_join_argument` for the invite, and
+# `membership::validate_join_key_format` for the bare-key form.
+commonwealth-discovery = { workspace = true }
+# The node key's type. Already in commonwealth-transport's closure, so
+# naming it here adds nothing a lift has to carry.
+ed25519-dalek = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+hostname = { workspace = true }
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

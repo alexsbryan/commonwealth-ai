@@ -163,6 +163,14 @@ members = [
     # and HTTP, so a package-only rails daemon composes the SAME media
     # decisions the inference daemon makes (ARCH §10.6).
     "commonwealth/crates/commonwealth-media",
+    # The minimal rails daemon (cw-lift D1 follow-on, 2026-09-11) — the
+    # process that IS your address on the mesh, with media registered on it
+    # and nothing else. A PACKAGE binary: `commonwealth-{core,transport,media,
+    # discovery}` plus axum/reqwest/tokio, because `scripts/cw-rails-lift.sh`
+    # builds and RUNS it outside this monorepo. `commonwealth-api`'s closure
+    # is 743 crates and this one is 319; the whole point is the difference
+    # (`cargo tree --edges normal`, measured 2026-09-11).
+    "commonwealth/crates/commonwealth-rails",
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
@@ -297,6 +305,7 @@ commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-media = { path = "commonwealth/crates/commonwealth-media" }
+commonwealth-rails = { path = "commonwealth/crates/commonwealth-rails" }
 commonwealth-app = { path = "commonwealth/crates/commonwealth-app" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 
