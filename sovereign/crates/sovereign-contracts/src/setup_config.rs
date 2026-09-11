@@ -242,6 +242,24 @@ pub struct IrohSection {
     /// ```
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_origin: Option<String>,
+    /// `[iroh] media_allow` — which MEMBERS may reach `media_origin`, each by
+    /// member name or a node-id prefix of at least four characters, as `svrn
+    /// mesh status` shows them. Empty (the default) admits every member, as
+    /// before; a non-member is refused regardless of this list. Checked in the
+    /// acceptor where the dialer's key was verified, so it is a list of
+    /// identities the mesh has gossiped — never of addresses, and never a
+    /// header a client could have typed. The origin itself is handed the
+    /// admitted member's name and node id on every request (`X-Mesh-Member`,
+    /// `X-Mesh-Node`), so a server that authenticates nothing can still map a
+    /// member to one of its own users.
+    ///
+    /// ```toml
+    /// [iroh]
+    /// media_origin = "127.0.0.1:8096"
+    /// media_allow = ["LittleMac", "node-44ae7614"]
+    /// ```
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media_allow: Vec<String>,
     /// Which discovery/relay infrastructure to use (H1 sovereignty
     /// knob). `"n0"` or absent (the default) = n0's public relays AND
     /// n0's DNS/pkarr address-lookup. `"none"` / `"self"` / `"local"`

@@ -83,6 +83,8 @@ mod ip;
 #[cfg(feature = "iroh")]
 pub mod iroh;
 #[cfg(feature = "iroh")]
+pub mod iroh_identity_forward;
+#[cfg(feature = "iroh")]
 mod iroh_path;
 mod routed;
 

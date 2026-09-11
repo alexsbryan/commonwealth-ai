@@ -5658,8 +5658,10 @@ the boot. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-i
 `svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
 transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
 in place when the peer's dial info moves, so a player can hold the URL. The
-bridge is `tokio::io::copy` both ways and never parses HTTP, which is why
-`Range` (a seek) passes through byte-exact. `Media` is the one class with no
+viewer-side bridge is `tokio::io::copy` both ways and never parses HTTP; the
+holder-side media arm rewrites request heads to carry the caller's identity
+(next entry) and copies everything else, which is why `Range` (a seek) passes
+through byte-exact. `Media` is the one class with no
 `[iroh.transport]` entry: it has exactly one transport (the IP overlay returns
 no candidates for it — there is no port to guess and a guess would be the
 library over plaintext), so there is nothing to opt it out to. What the read
@@ -5695,6 +5697,30 @@ with their status, because a person wants to know the library exists. And
 (`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
 close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
 failing: `media_reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
+
+**The origin is told WHO is asking, by the acceptor and never by the client**
+(`commonwealth-transport/src/iroh_identity_forward.rs`, `[iroh] media_allow`,
+2026-09-11). The acceptor's resolver now returns a `Forward` kind: `Splice`
+(the byte copy above, unchanged for every other ALPN) or `Http { origin,
+headers }`, which `AcceptorRoutes::forward_for` picks for `cwth/media/0` from
+a member — `MemberCheck` returns `Option<MemberIdentity>` (name + node id)
+rather than a bool, so the identity the QUIC handshake verified is in hand
+where the route is decided. `pump_with_identity` parses request HEADS only,
+on the client→origin direction: every client-supplied `x-mesh-*` header is
+dropped, then `X-Mesh-Member`, `X-Mesh-Node`, `X-Mesh-Pubkey` are appended,
+the body is copied by its `Content-Length`, and the next head is read — so a
+kept-alive connection carries the identity on every request. Responses are
+still a byte copy, which is why `Range` stays byte-exact; a chunked request
+body (which media clients do not send) passes the rest of that connection
+through unrewritten and says so at info. `[iroh] media_allow` — member names
+or ≥4-char id prefixes, resolved by `member_matches` like every other
+`<peer>` argument — narrows which members reach the origin; empty admits every
+member, and a non-member is closed regardless. Watched failing:
+`iroh_identity_forward::tests::a_forged_identity_header_is_replaced_by_the_verified_one`
+(strip disabled), `iroh_access::tests::the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest`
+(check disabled), and end to end
+`the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed` /
+`a_member_outside_media_allow_is_closed_and_one_inside_is_served`.
 
 **Which listener serves a route is the guard; "is the caller loopback" is not**
 (`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
