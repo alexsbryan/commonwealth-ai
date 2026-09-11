@@ -890,6 +890,72 @@ status    = "active"
 #   ORDER: D1, D2, D0 first (no new wire, all forks gone, ~ -770 for ~0
 #   risk); then D3/D4 wire can be built beside them.
 #
+# ── THE LEDGER — measured 2026-09-10 at the end of the landing session ──────
+#
+# Method: `git show --numstat -M` over every sv-surface commit (R1 through
+# D9a, 35 commits, plus D9b uncommitted at the time of writing), Rust only,
+# production = any .rs not under a tests/ directory and not *_tests.rs.
+#
+#   production Rust   +18,397 / -5,439  = NET +12,958  (with D9b: +12,224)
+#   test Rust         + 9,878 /   -376  = NET + 9,502
+#   all Rust                              NET +22,460
+#
+# DIRECTIVE 3 ("this whole initiative MUST reduce code by the end") IS NOT
+# MET, and this row says so rather than reporting a plan. Where the lines
+# went, from the same table: the wire batches d250e0893 (+877),
+# 710a0326e (+2,199), 4c45a1fc9 (+1,606), 21f572734 (+3,513), 2a9a9e91e
+# (+1,868), 188a9e4e4 (+985) — a route family costs 400 to 1,100
+# production lines (handlers + absence mapping + a generic client method
+# per route + the loopback leg), an order of magnitude above the survey's
+# "+~1,750 wire" estimate, which priced doors at 60-150 lines each. The
+# desktop deleted what the survey said it would, and more (c7e7d6a73
+# -776, 1f7ea8745 -175, 19946f99a -225, 069660fd9 -299, 502304f63
+# -2,090, D9b -1,156; state.rs 1,847 -> 3,354 lines because B4 and the
+# identity probe LANDED there while the split did not).
+#
+# WHAT THE CLI COULD SHED — PRICED BY INVENTORY, THEN MEASURED BY DOING IT.
+# A read-only survey (2026-09-10) priced the CLI's in-process twins of the
+# new routes at ~2,600 production lines: reading_diag_cmd ~788, notes_cmd
+# ~650, atlas inspect/status/stats ~430, corpus_catalog_cmd ~290, mcp_cmd
+# ~200, meshapp dev's op_handler ~150, corpus_watch_cmd ~120. The rung that
+# tried to land them found the survey wrong by an order of magnitude:
+# NET -13 production lines across sovereign-cli-llm + sovereign-cli. One
+# family crossed — reading-diag, which already REQUIRED the daemon
+# (build_session fails at "daemon unreachable" before any changed line;
+# stdout byte-identical on a golden; -70 in the file, +57 for three
+# additive client methods reading_neighbors / reading_atom_card /
+# reading_atom_elsewhere; reading_http's DTOs are Serialize-only with
+# &'static str fields, so a minimal typed reader stays CLI-side). The
+# other six are the DAEMON-DOWN FALLBACK the CLI keeps by design, or
+# print things the daemon deliberately does not serve: notes_cmd is
+# already daemon-first through the MCP door with NoteStore as the named
+# required fallback (the agent-notes journey documents it); atlas status
+# has no route and its charter is "works without a running daemon";
+# atlas stats has no route and 3 of 8 columns have no daemon source;
+# atlas inspect already shares ONE FileAtlasReader with atlas_http (not a
+# twin); corpus_catalog_cmd is a name collision with corpus_catalog_http,
+# not a counterpart; mcp_cmd works daemon-down and prints connected /
+# tool_count / error, which 21f572734's route refuses to fabricate
+# (mcp-interop is a live journey on that stdout); meshapp dev's point is
+# offline bundle dev, and its real §10.6 twin is the duplicated clamps.
+# THE RULE that decided it: a CLI command that answers with the daemon
+# down keeps doing so; a repoint subtracts only where the command already
+# required the daemon. The number that would close the gap is not in the
+# surfaces; it is the 3,354-line desktop spine, which the D9 correction
+# shows cannot come out until `commission`'s six attach-time readers have
+# their seven routes — and those routes cost what the others cost.
+#
+# THE HONEST SHAPE OF THE RESULT: two of the three constructions are
+# proven (surface parity on the real harness; twin censuses red on
+# planted twins across 19 families), the third is measured and not met
+# (attach floor 12 of 14, 33 attach-time reads remaining, one object —
+# the Runtime commission — behind all of them), every peripheral fork is
+# gone, mobile is on the one client family, the turn protocol's lifecycle
+# holes are closed, and the code is larger. The operator's three
+# directives pulled against each other exactly as the REALIGNMENT section
+# said they might, and directive 2 (no feature loss) won: every capability
+# crossed at the price of its wire.
+#
 # ── WHERE TO PICK THIS UP ───────────────────────────────────────────────────
 #
 # Read, in this order: this file's REALIGNMENT + GAP LEDGER (above), then

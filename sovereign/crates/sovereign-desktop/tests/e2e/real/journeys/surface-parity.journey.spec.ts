@@ -88,6 +88,21 @@ interface Row {
   detail: Record<string, unknown>;
 }
 
+/** The grounding gate's action vocabulary folded to what a reader
+ *  experiences: `released` (released / citation_grounded / annotated_marked
+ *  / retried — the answer reached the reader with grounding), `withheld`
+ *  (every abstained_* and refused_*), or `none` when no gate ran. The
+ *  vocabulary is the daemon's (sovereign-core grounding); an action outside
+ *  it is its own class, so a new verb cannot silently pass as released. */
+function gateClass(action: string | null | undefined): string {
+  if (!action) return "none";
+  if (["released", "citation_grounded", "annotated_marked", "retried"].includes(action)) {
+    return "released";
+  }
+  if (action.startsWith("abstained") || action.startsWith("refused")) return "withheld";
+  return `unclassified:${action}`;
+}
+
 journeyTest(J_SURFACE_PARITY, async ({ page, bridge, run }) => {
   // Three real turns (one in-app, two through the CLI) do not fit the
   // config's 180s per-test budget. Each turn is capped at 240s on its
@@ -217,19 +232,37 @@ journeyTest(J_SURFACE_PARITY, async ({ page, bridge, run }) => {
       },
     },
     {
-      family: "grounding_gate_action",
+      // The gate's RELEASE CLASS is the parity family, not its raw action.
+      // Measured 2026-09-10 on two consecutive runs of this journey: run 1
+      // both surfaces "released"; run 2 desktop "released" (per-claim
+      // audit) and CLI "citation_grounded" (quote-first) — same intent,
+      // same sources, both naming the facts. The raw action is a property
+      // of the model's draft under MoE nondeterminism at temperature 0
+      // (RUNBOOK §6), not of the surface; a HARD row on it fails on
+      // weather. What the surfaces MUST agree on is whether the answer was
+      // released to the reader or withheld — the class. The raw action is
+      // recorded beside it, TRACKED.
+      family: "grounding_gate_class",
       kind: "HARD",
-      verdict: desktop.gateAction === cli.gateAction && desktop.gateRan === cli.gateRan
-        ? "passed"
-        : "failed",
+      verdict:
+        gateClass(desktop.gateAction) === gateClass(cli.gateAction) &&
+        desktop.gateRan === cli.gateRan
+          ? "passed"
+          : "failed",
       detail: {
-        desktop: { action: desktop.gateAction, ran: desktop.gateRan },
-        cli: { action: cli.gateAction, ran: cli.gateRan },
+        desktop: { class: gateClass(desktop.gateAction), action: desktop.gateAction, ran: desktop.gateRan },
+        cli: { class: gateClass(cli.gateAction), action: cli.gateAction, ran: cli.gateRan },
         // A row that passes because BOTH sides are absent is parity, but
         // it is parity on a gate that never ran — say so rather than let
         // the tick read as "verified" (§18.2).
         passed_on_absence: !desktop.gateRan && !cli.gateRan,
       },
+    },
+    {
+      family: "grounding_gate_action",
+      kind: "TRACKED",
+      verdict: desktop.gateAction === cli.gateAction ? "passed" : "failed",
+      detail: { desktop: desktop.gateAction, cli: cli.gateAction },
     },
     {
       family: "full_text",
