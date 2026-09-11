@@ -1353,9 +1353,81 @@ check = "! grep -qE '^(sovereign-mesh|sovereign-cli-daemon|sovereign-compute|sov
 
 [[bar]]
 id           = "sv-no-daemon-management"
-one_line     = "CLAIM: the desktop does not manage a daemon - it cannot spawn one, cannot become one, and does not link the crates that would let it"
+one_line     = "CLAIM: the desktop cannot BECOME a daemon - it does not link the crates that assemble one, and reachability belongs to the client package, not the app"
 derives_from = "operator, 2026-09-11: 'DoD of this initiative is most fundamentally that we do away with the desktop app managing a daemon (the thinness purity moment)'"
 status       = "open"
+# ── REVISED 2026-09-11, SAME DAY, BY THE OPERATOR — read this first ────────
+#
+# The bar first read "cannot spawn one, cannot become one, and does not link
+# the crates that would let it". The middle clause was wrong, and the
+# correction is the architecture rather than a wording fix.
+#
+#   "The daemon is the daemon and the desktop client is the client. If
+#    there's a small moment where the client has to spawn something that's
+#    the kind of integration surface we actually can tolerate."
+#
+# WHAT IS ACTUALLY BEING SEPARATED is ownership of identity, not who calls
+# spawn. The daemon owns the data root, the RunLock, the weights and the
+# serving. A binary that LINKS `sovereign-cli-daemon` and re-enters itself
+# (main.rs:136-138) is a daemon wearing a UI whatever the process tree looks
+# like at runtime — and an attach-needle count reaches zero with the whole
+# backend still compiled in. So the operative test is the DEPENDENCY EDGE.
+# `Command::new(path).spawn()` links nothing and is not the failure.
+#
+# AND THE APP SHOULD NOT HOLD EVEN THAT. The better decomposition is the one
+# an API client package already shows: an application calls the client and
+# moves on; establishing reachability is the CLIENT's concern the way
+# connection setup is `libpq`'s and not the caller's. So "ensure a backend is
+# reachable" belongs to the client family (`sovereign-turn-client`), where
+# retry, readiness and backoff live once and every surface — desktop, CLI,
+# phone — inherits the same behaviour. The desktop then holds ZERO daemon
+# code, not a little, and the parity claim pays out instead of being argued.
+# The honest precedent is a language server or an embedded database driver,
+# NOT an API client (libpq does not start Postgres) — so the capability is
+# NAMED on the client, never smuggled in as a networking detail.
+#
+# THE CAPABILITY IS CAPABILITY-SHAPED, NOT PLATFORM-SHAPED. A first draft of
+# this revision proposed making "mobile cannot spawn" structural by omitting
+# the feature from mobile's build. That encodes TODAY'S DEPLOYMENT as an
+# invariant and boxes out on-device inference on a phone — a bonsai or 1-bit
+# model — which the operator caught. The flag asks "does this build ship a
+# backend it can bring up", and a phone flips it the day a model fits, with
+# no architecture change: this file's own sentence already covers it, because
+# "Local" is just the boot where the daemon happens to be in-process. A phone
+# running on-device is a client whose daemon is COLOCATED, not an exception.
+#
+# WHICH IS WHY IN-PROCESS HOSTING SURVIVES. iOS forbids fork/exec for App
+# Store apps, so on a phone an embedded backend cannot be a sidecar process —
+# it must be in-process, exactly the thing being removed from the desktop.
+# The embedded sink was already sanctioned at the top of this file ("nothing
+# requires a host to speak HTTP"); THIS is the case it was sanctioned for.
+# What dies is the DESKTOP assembling a daemon as a side effect of being a
+# UI. What lives is in-process hosting as a DECLARED mode with a named owner.
+#
+# THE INSTRUMENT NEEDS TWO HALVES, and the first one alone is how this rots.
+# A dependency-edge gate passes clean through someone adding a retry, then a
+# backoff, then a health check, then a restart policy — nobody re-supervises
+# in one commit. So the bar is the dependency edge PLUS a census that no
+# surface retains a process handle or tracks a lifecycle. Same lesson the
+# attach floor already taught: a count that cannot move under real regression
+# does not measure it (§18.4).
+#
+# A CORRECTION TO THIS FILE'S OWN PRODUCT TRADE. An earlier revision said a
+# service-managed daemon "keeps ~28 GB resident after the window closes" and
+# treated quitting as a way to free it. A user never wants the daemon DOWN;
+# they want not to pay for idle, and that is the daemon's own policy, which
+# already exists: `[daemon] primary_idle_secs` defaults to 300 and
+# `extras_idle_secs` to 0, applied in daemon_cmd/build/inference.rs:293,347.
+# The real gap is that the fast and embed slots have NO idle monitor at all.
+# That is a daemon-side fix in the place that should be deciding, not an
+# argument about lifecycle.
+#
+# WHERE fe5a85cc3 LANDS AFTER THIS. `sovereign-service` and the Windows
+# Scheduled Task are NOT the desktop's path — they are the CLI / headless /
+# server path, for operators who want a daemon that outlives a session. That
+# is a user-choice feature, which is why per-platform backends are the right
+# price there and would have been the wrong tax on the desktop.
+#
 # THIS BAR OUTRANKS sv-attach-pure-client AND SUBSUMES IT. That bar counts
 # needles inside a mode ("attach constructs zero local deciders"), which
 # presupposes both modes exist and measures a lagging count. This one asks
@@ -1457,9 +1529,9 @@ floor        = 21.0
 floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2df562caa, 2026-09-11; the daemon-hosting subset is sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe, corpus-engine, sovereign-gliner, sovereign-inference, sovereign-tools, commonwealth-core, commonwealth-state. Lifecycle code: 1,990 production lines, ~271 of which survive"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "cargo tree -p sovereign-desktop --edges normal --depth 1, gated by cargo xtask layer over quality/ARCH_LAYERS.toml - a dependency bar, not a needle count, so it goes red when the edge comes back rather than when someone re-derives a construction"
+instrument   = "TWO HALVES, and either alone is a green gate enforcing nothing. (1) cargo tree -p sovereign-desktop --edges normal --depth 1 carries no daemon-assembling crate, gated by cargo xtask layer-gate over quality/ARCH_LAYERS.toml. (2) a census that no surface retains a process handle or tracks a lifecycle - no Child, no supervisor, no stop-on-exit - because a dependency gate passes clean through supervision re-added one small commit at a time"
 goodhart     = "a surface can stop MANAGING a daemon while still LINKING one — the management calls go and the crate edge stays, which is exactly the state the predicate caught on 2026-09-11"
-kill         = "K3 - if a capability genuinely cannot be served by a daemon the app does not own, it goes to the operator as a DECLARED per-platform exception with a DEFAULTS_LEDGER row and a review-by date. Windows is the first and currently the only such row."
+kill         = "K3 - in-process hosting is a DECLARED capability, not a fallback: a build that brings up a backend says so by name, with an owner and a reason. iOS is the standing case (no fork/exec, so a sidecar is impossible), and it is why the embedded sink is not retired. Anything else that cannot be served by a daemon the app does not own goes to the operator as a declared exception with a DEFAULTS_LEDGER row and a review-by date - never a silent in-process path."
 
 [[bar]]
 id           = "sv-attach-pure-client"
