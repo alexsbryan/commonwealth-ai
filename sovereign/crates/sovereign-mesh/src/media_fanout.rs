@@ -40,6 +40,7 @@ use crate::loopback_guard::enforce_localhost;
 use crate::media_reach::{
     offering_members, pick_member, player_url, MediaCandidate, MediaReachRefusal,
 };
+use crate::roster_repair::member_matches;
 
 /// A member that has not answered in this long is a `failed` row; the
 /// others are not waited on. Catalogue answers are small; a relay stall is not.
@@ -97,9 +98,14 @@ pub struct MediaFanoutResponse {
 pub enum Selected {
     /// A member to ask.
     Ask(MediaCandidate),
-    /// A member the caller named that the roster refuses, and why.
+    /// A member the caller named that the roster refuses, and why. `node_id`
+    /// is the one member the name resolved to when it resolved to one (a
+    /// member that offers nothing, is offline, or is self) — so the row is
+    /// attributed to the member the caller meant — and `None` when the name
+    /// matched nothing or more than one.
     Refused {
         name: String,
+        node_id: Option<NodeId>,
         refusal: MediaReachRefusal,
     },
 }
@@ -121,10 +127,20 @@ pub fn select_targets(
             .iter()
             .map(|name| match pick_member(candidates, self_id, name) {
                 Ok(c) => Selected::Ask(c),
-                Err(refusal) => Selected::Refused {
-                    name: name.clone(),
-                    refusal,
-                },
+                Err(refusal) => {
+                    let matched: Vec<&MediaCandidate> = candidates
+                        .iter()
+                        .filter(|c| c.active && member_matches(c.node_id, &c.name, name))
+                        .collect();
+                    Selected::Refused {
+                        name: name.clone(),
+                        node_id: match matched.as_slice() {
+                            [one] => Some(one.node_id),
+                            _ => None,
+                        },
+                        refusal,
+                    }
+                }
             })
             .collect(),
     }
@@ -257,17 +273,24 @@ impl EmbeddedDaemon {
                     },
                     None,
                 ),
-                Selected::Refused { name, refusal } => (
-                    FanoutTarget {
-                        // A refused name may match nothing; the row still
-                        // needs an identity, and the name the caller used
-                        // is the honest one.
-                        node_id: NodeId::from_u128(0),
-                        name,
-                        contact: contact_of(NodeId::from_u128(0)),
-                    },
-                    Some(refusal.to_string()),
-                ),
+                Selected::Refused {
+                    name,
+                    node_id,
+                    refusal,
+                } => {
+                    // A name that matched nothing has no member to attribute
+                    // the row to; the name the caller used stays on it and
+                    // the id is the nil one, which no member carries.
+                    let id = node_id.unwrap_or_else(|| NodeId::from_u128(0));
+                    (
+                        FanoutTarget {
+                            node_id: id,
+                            name,
+                            contact: contact_of(id),
+                        },
+                        Some(refusal.to_string()),
+                    )
+                }
             })
             .collect();
         let timeout = Duration::from_millis(req.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS));
@@ -394,6 +417,7 @@ mod tests {
             sel[1],
             Selected::Refused {
                 name: "Quiet".into(),
+                node_id: Some(NodeId::from_u128(0xC0DE)),
                 refusal: MediaReachRefusal::NoOrigin("Quiet".into())
             }
         );
@@ -401,6 +425,7 @@ mod tests {
             sel[2],
             Selected::Refused {
                 name: "Nobody".into(),
+                node_id: None,
                 refusal: MediaReachRefusal::UnknownMember("Nobody".into())
             }
         );
