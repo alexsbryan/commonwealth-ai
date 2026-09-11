@@ -17,9 +17,15 @@
 //! - **`ask_document`'s document-operation half** — a route plus a generation
 //!   is a TURN; serving it here mints a second driver beside `serve_turn`.
 //!
-//! Named degradation: `POST /{id}/skeleton` builds its manager with no
-//! `EntityExtractor` because a daemon holds none, so `build_skeleton` takes
-//! its documented LLM fallback — same shape, higher token cost.
+//! The T2 entity pass runs on the daemon's OWN NER model. This module said
+//! the opposite until 2026-09-11 — *"builds its manager with no
+//! `EntityExtractor` because a daemon holds none"* — and that sentence was
+//! false when it was written: `sovereign-runtime-recipe` fills
+//! `LaneSources::gliner` for every host it commissions (`lib.rs:665`), and
+//! the daemon commissions through it (`daemon_cmd/mod.rs:986`). The
+//! extractor was loaded, wired into the corpus engine, and then not offered
+//! to this surface — so `build_skeleton` took its LLM fallback on a host
+//! that had the NER model resident. See [`manager_for`].
 
 use std::sync::Arc;
 
@@ -381,6 +387,19 @@ fn store_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn StateStore>, Absenc
 /// makes that structurally the same object (§10.6). It also means the
 /// 503 here names the `Runtime`, which is the object whose absence
 /// actually stops the operation.
+///
+/// The NER extractor comes from the SAME `Runtime`, for the same reason
+/// and by the same rule (ARCH principle 8): `runtime.lane()` is the one
+/// snapshot a turn's stages read, so a document operation and a chat turn
+/// on this daemon cannot disagree about whether an entity model is
+/// resident. Reaching for `sovereign_gliner` here instead would be a
+/// second decider — and would put an ONNX dependency on the wire layer.
+///
+/// `None` is a real answer, not a failure: the model is not installed, and
+/// `build_skeleton` takes its documented LLM fallback. Both branches say
+/// which on the trace, because "ran the cheap NER path" and "spent 66% of
+/// the ingest's prompt tokens on a 4B" are the same response shape
+/// (ARCH principle 1).
 fn manager_for(daemon: &Arc<EmbeddedDaemon>) -> Result<DocumentAssetManager, Absence> {
     let store = store_for(daemon)?;
     let runtime = daemon.runtime().ok_or_else(|| {
@@ -390,7 +409,24 @@ fn manager_for(daemon: &Arc<EmbeddedDaemon>) -> Result<DocumentAssetManager, Abs
         )
     })?;
     let inference: Arc<dyn InferenceProvider> = Arc::clone(&runtime.inference);
-    Ok(DocumentAssetManager::new(inference, store))
+    let manager = DocumentAssetManager::new(inference, store);
+    match runtime.lane().gliner {
+        Some(ner) => {
+            tracing::debug!(
+                entity_path = "ner",
+                "documents_http: T2 entity pass runs on this daemon's resident NER model"
+            );
+            Ok(manager.with_entity_extractor(ner))
+        }
+        None => {
+            tracing::debug!(
+                entity_path = "llm",
+                "documents_http: no NER model on this daemon's lane — the T2 entity pass \
+                 falls back to the generative model, at ~66% of the ingest's prompt tokens"
+            );
+            Ok(manager)
+        }
+    }
 }
 
 fn not_found(id: &str) -> Response {
@@ -418,4 +454,64 @@ fn internal_error(op: &str, detail: &str) -> Response {
 #[allow(dead_code)]
 fn _answers(e: LegacyDocumentEntry, d: DocumentAsset) -> (LegacyDocumentEntry, DocumentAsset) {
     (e, d)
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every manager this module builds is offered the lane's NER model.
+    ///
+    /// A census over this file's own source rather than a behavioural
+    /// assertion, and the limit is worth naming: `DocumentAssetManager`
+    /// keeps `entity_extractor` `pub(super)` to `sovereign-tools`, so from
+    /// this crate there is no value to assert on and no accessor to ask.
+    /// What the census CAN do is refuse the regression that actually
+    /// happened — a `::new()` whose result is returned without the lane
+    /// ever being consulted, which is how this surface shipped for months
+    /// with a resident NER model it never offered.
+    ///
+    /// Watched red on 2026-09-11 by reverting the two lines in
+    /// [`super::manager_for`] that read the lane's `gliner` field.
+    ///
+    /// **Every needle is assembled at run time, and that is load-bearing.**
+    /// The first draft spelled them as literals and went red on its own
+    /// text — the file contained two `…::new(` occurrences, one of them the
+    /// test's. Worse than the red: the two `contains` asserts would have
+    /// been satisfied by the assertion MESSAGES alone, so removing the
+    /// wiring entirely would have left this green. A census that reads the
+    /// file it lives in has to be unable to author its own evidence
+    /// (ARCH principle 5).
+    ///
+    /// The structural fix that would retire this: one
+    /// `DocumentAssetManager::from_runtime(&Runtime, store)` in
+    /// `sovereign-tools`, so the four construction sites across this
+    /// workspace stop each deciding for themselves (ARCH principle 8).
+    /// That crate is out of this change's scope.
+    #[test]
+    fn no_manager_is_built_without_offering_the_lanes_ner_model() {
+        let src = include_str!("documents_http.rs");
+        let needle = |a: &str, b: &str| format!("{a}{b}");
+        let construction = needle("DocumentAsset", "Manager::new(");
+        let reads_lane = needle("runtime.lane()", ".gliner");
+        let hands_it_over = needle(".with_entity", "_extractor(");
+
+        let count = src.matches(&construction).count();
+        assert_eq!(
+            count, 1,
+            "this module now builds {count} managers. The two asserts below only prove \
+             the lane is consulted SOMEWHERE in the file, so a second construction site \
+             could ignore it while they stay green — re-read them before raising this"
+        );
+        assert!(
+            src.contains(&reads_lane),
+            "the only `DocumentAssetManager` this module builds no longer reads the \
+             Runtime lane's NER model. The daemon HAS one — runtime-recipe fills \
+             `LaneSources::gliner` for every host it commissions — so dropping this \
+             wiring does not disable the entity pass, it silently moves it back onto \
+             the generative model at ~66% of the ingest's prompt tokens, with nothing red"
+        );
+        assert!(
+            src.contains(&hands_it_over),
+            "the lane's NER model is read and then never handed to the manager"
+        );
+    }
 }

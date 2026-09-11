@@ -11,8 +11,16 @@
 //!
 //! Loopback posture is `reading_http`'s, unchanged.
 //!
-//! App-local by decision, not omission: the two GLiNER model commands manage
-//! a file the desktop downloads for its own extractor.
+//! NOT crossed, and NOT "app-local by decision" — which is what this line
+//! claimed until 2026-09-11. The two GLiNER model commands
+//! (`atlas_commands.rs:282`, `:303`) write a HOST-GLOBAL directory:
+//! `gliner_ner::models_root()` is `$SOVEREIGN_GLINER_MODEL_DIR` or
+//! `~/.svrnmesh/models/gliner` (`gliner_ner.rs:166`), and the daemon loads
+//! the same model from the same root (`daemon_cmd/mod.rs:752`). One file,
+//! two consumers — so on a desktop attached to a REMOTE daemon the download
+//! lands on the wrong machine. The commands stay here unmoved; what is
+//! corrected is the reason, because "by decision" is what stopped anyone
+//! looking.
 
 use std::sync::Arc;
 
