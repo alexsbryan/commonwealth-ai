@@ -2410,6 +2410,33 @@ impl TurnClient {
         }
     }
 
+    // ─── The mesh contribution ledger (sv-surface svt-3) ─────
+
+    /// `GET /internal/contribution/view` — every peer's dimensional
+    /// contributions over the daemon's default window, one entry per
+    /// node its `MeshStore` holds ledger events about.
+    ///
+    /// The wire form of `commonwealth_state::current_contributions`,
+    /// which this crate cannot name (see the note above
+    /// [`Self::corpus_atoms`]), so the caller supplies `T`. It is
+    /// `Vec<commonwealth_api::routes_internal::NodeContributionsView>`
+    /// for the daemon's own shape, and the desktop's
+    /// `Vec<NodeContributionsDto>` — the same field names — for the
+    /// Mesh Health Members panel.
+    ///
+    /// The host owns the ORDER: it sorts by node id before it answers.
+    /// A caller that re-sorts is a second decider for a question
+    /// already settled (ARCH principle 8).
+    ///
+    /// This is the LEDGER, not a liveness probe. An empty list means
+    /// the store holds no events — the right answer for a mesh of one
+    /// that has served nothing yet, and NOT a signal that the host is
+    /// unreachable, which arrives as an `Err`.
+    pub async fn contribution_view<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/internal/contribution/view".to_string(), &[])
+            .await
+    }
+
     // ─── The internal exchange: one sentence, six named shapes ────
     //
     // Every method above that talks to the host says one of six

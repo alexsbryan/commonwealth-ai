@@ -721,18 +721,26 @@ impl MeshStateResponse {
 
 // ─── Mesh Health: dimensional contributions + peer preferences ──
 //
-// Surfaces the new contribution ledger and the operator-private
-// per-peer affinity multiplier to the desktop UI. Local mode goes
-// through the in-process `EmbeddedDaemon`'s AppState; Attach mode
-// returns "not yet supported" — the daemon doesn't expose these
-// over HTTP yet (TODO). The UI degrades to "no data" in Attach
-// mode, which is honest about the gap and keeps the contract
-// simple.
+// Surfaces the contribution ledger and the operator-private per-peer
+// affinity multiplier to the desktop UI. The two halves are at
+// different rungs, and the comment that used to sit here claimed one
+// story for both:
+//
+// - CONTRIBUTIONS cross. `GET /internal/contribution/view` serves the
+//   whole answer and BOTH modes go through it (svt-3). There is no
+//   in-process arm left.
+// - PEER PREFERENCES do not, yet. No daemon route exposes them, so
+//   Attach mode REFUSES with the CLI command that does the job rather
+//   than quietly doing it against the wrong process (ARCH principle
+//   6). That refusal is the remaining work, not the design.
 
 /// Dimensional contributions for one peer, shaped for the desktop
-/// list. Mirrors `commonwealth_core::contributions::NodeContributions`
-/// but flattened into a serde shape the frontend can consume
-/// without depending on commonwealth-core's serde layout.
+/// list — and the parse shape for `/internal/contribution/view`,
+/// whose `NodeContributionsView` carries these same field names.
+///
+/// Flattened out of `commonwealth_core::contributions::NodeContributions`
+/// so the frontend does not depend on that crate's serde layout, and
+/// so this stays the ONE shape on both sides of the socket.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeContributionsDto {
     pub node_id: String,
@@ -764,87 +772,59 @@ pub struct PeerPreferenceDto {
     pub set_at: u64,
 }
 
-/// Snapshot of every peer's dimensional contributions. In Attach
-/// mode the daemon's `GET /internal/contribution/view` is the
-/// source of truth (the daemon owns the MeshStore the
-/// ContributionEmitter writes into). In Local mode the in-process
-/// `AppState` is read directly.
+/// Snapshot of every peer's dimensional contributions.
+///
+/// ONE path in both modes: the daemon's `GET
+/// /internal/contribution/view`, which owns the `MeshStore` the
+/// `ContributionEmitter` writes into and does the aggregation
+/// (`commonwealth-api/src/routes_internal/mesh_admin.rs`). Until
+/// svt-3 Attach mode hand-rolled a `reqwest` call to that route while
+/// Local mode ran `commonwealth_state::current_contributions`
+/// in-process — two implementations of one answer, free to drift
+/// apart in window, shape and order (ARCH principle 8). The
+/// in-process daemon binds the SAME `/internal` router beside its
+/// client listener (`sovereign_mesh::daemon::start_daemon`), so Local
+/// mode reaches that one handler over loopback.
+///
+/// Local mode still answers an EMPTY list, not an error, when no mesh
+/// daemon is running: there is no listener to ask, and "no mesh yet"
+/// is a fact the Members panel renders. It is read from the daemon's
+/// own state, never inferred from a refused connection — an
+/// unreachable host that IS running stays an `Err` (ARCH principle 6).
 #[tauri::command]
 pub async fn mesh_get_contributions(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<NodeContributionsDto>, String> {
-    if attached_port(&state).is_some() {
-        // Internal API is loopback-only on the daemon's internal port —
-        // resolved via `state.internal_base_url()`, matching every other
-        // `/internal/*` fetch in this crate.
-        let client = http_client()?;
-        let resp = client
-            .get(format!(
-                "{}/internal/contribution/view",
-                state.internal_base_url()
-            ))
-            .send()
-            .await
-            .map_err(|e| format!("GET /internal/contribution/view: {e}"))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(format!(
-                "daemon /internal/contribution/view returned {status}: {text}"
-            ));
+    let attached = attached_port(&state).is_some();
+    if !attached {
+        // Local mode: the in-process daemon binds `/internal` only
+        // once it is Running (no mesh created or joined = no
+        // listener). Ask only when there is something listening.
+        match state.mesh().await {
+            Some(mesh) if mesh.app_state().await.is_some() => {}
+            _ => {
+                tracing::debug!(
+                    target: "mesh_state",
+                    "mesh_get_contributions: local mode with no running mesh daemon \
+                     — empty ledger, not a failed read"
+                );
+                return Ok(Vec::new());
+            }
         }
-        return resp
-            .json::<Vec<NodeContributionsDto>>()
-            .await
-            .map_err(|e| format!("parse /internal/contribution/view response: {e}"));
     }
-    let Some(mesh) = state.mesh().await else {
-        return Ok(Vec::new());
-    };
-    let Some(app_state) = mesh.app_state().await else {
-        return Ok(Vec::new());
-    };
-    let store = app_state.inner.mesh_store.clone();
-    let mesh_view = app_state.inner.mesh.read().await;
-    let caps_map: std::collections::HashMap<_, _> = mesh_view
-        .members
-        .iter()
-        .map(|(id, member)| (*id, member.capabilities.clone()))
-        .collect();
-    drop(mesh_view);
-    let map = commonwealth_state::current_contributions(
-        &store,
-        &caps_map,
-        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
-    )
-    .map_err(|e| format!("read contributions: {e}"))?;
-    let mut out: Vec<NodeContributionsDto> = map
-        .into_iter()
-        .map(|(node_id, c)| NodeContributionsDto {
-            node_id: hex_node_id(&node_id),
-            window_days: c.window_days,
-            inference_served_requests: c.inference_served.requests,
-            inference_served_tokens: c.inference_served.total_tokens_generated,
-            inference_served_wall_seconds: c.inference_served.wall_seconds,
-            inference_consumed_requests: c.inference_consumed.requests,
-            inference_consumed_tokens: c.inference_consumed.total_tokens_generated,
-            corpora_hosted: c
-                .corpora_hosted
-                .into_iter()
-                .map(|h| CorpusHostingDto {
-                    corpus_id: h.corpus_id,
-                    corpus_name: h.corpus_name,
-                    size_gb: h.size_gb,
-                    queries_served: h.queries_served,
-                    is_sole_host: h.is_sole_host,
-                })
-                .collect(),
-            bytes_served: c.bytes_served,
-            bytes_received: c.bytes_received,
-        })
-        .collect();
-    out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-    Ok(out)
+    tracing::debug!(
+        target: "mesh_state",
+        attached,
+        base = %state.internal_base_url(),
+        "mesh_get_contributions: asking the daemon for the contribution view"
+    );
+    // Internal API is loopback-only on the daemon's internal port —
+    // resolved via `state.internal_base_url()`, matching every other
+    // `/internal/*` fetch in this crate.
+    sovereign_turn_client::TurnClient::new(state.internal_base_url())
+        .contribution_view::<Vec<NodeContributionsDto>>()
+        .await
+        .map_err(|e| format!("mesh_get_contributions: {e}"))
 }
 
 #[tauri::command]
@@ -923,7 +903,7 @@ pub async fn mesh_list_peer_preferences(
     Ok(entries
         .into_iter()
         .map(|(id, p)| PeerPreferenceDto {
-            node_id: hex_node_id(&id),
+            node_id: hex_node_id(id.as_bytes()),
             multiplier: p.multiplier(),
             reason: p.reason().map(|s| s.to_string()),
             set_at: p.set_at(),
@@ -931,10 +911,34 @@ pub async fn mesh_list_peer_preferences(
         .collect())
 }
 
-fn hex_node_id(id: &commonwealth_core::ids::NodeId) -> String {
-    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+/// The 32-char lowercase hex of a node id — the form the frontend
+/// keys peers by, and the inverse of [`parse_node_id_hex`].
+///
+/// Takes BYTES, not the id type. All it ever needed was the 16 bytes,
+/// and naming `commonwealth_core::ids::NodeId` in this signature was
+/// one of the sites holding that crate in the desktop's manifest
+/// (svt-3). `kernel_types::NodeId::to_hex()` produces these same 32
+/// chars and is where this belongs once the peer-preference commands
+/// stop needing the type at all — see [`parse_node_id_hex`].
+fn hex_node_id(bytes: &[u8; 16]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Parse the 32-char hex form back into a node id.
+///
+/// This one CANNOT take or return bytes: its two callers
+/// (`mesh_set_peer_preference`, `mesh_clear_peer_preference`) hand
+/// the result straight to `PeerPreferences::set`/`clear`, which take
+/// a `NodeId`. So `commonwealth_core::ids::NodeId` — itself a
+/// re-export of `kernel_types::NodeId` — stays named here, and
+/// `commonwealth-core` stays in `Cargo.toml`, until those two
+/// commands reach the daemon over a route. svt-3 scopes that as its
+/// own follow-up; this is the last thing holding the crate.
+///
+/// Deliberately NOT `NodeId::from_hex`, which trims surrounding
+/// whitespace and so accepts inputs this refuses. Narrowing to the
+/// canonical parser is a behaviour change, not a rename (ARCH
+/// principle 8 — the convergence is owed, but it is not free).
 fn parse_node_id_hex(s: &str) -> Result<commonwealth_core::ids::NodeId, String> {
     if s.len() != 32 {
         return Err(format!("expected 32-hex-char node id, got '{s}'"));
@@ -949,4 +953,268 @@ fn parse_node_id_hex(s: &str) -> Result<commonwealth_core::ids::NodeId, String> 
     Ok(commonwealth_core::ids::NodeId::from_u128(
         u128::from_be_bytes(bytes),
     ))
+}
+
+#[cfg(test)]
+mod contribution_view_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// Exactly what `commonwealth_api::routes_internal::mesh_admin::
+    /// contribution_view` serialises: `Vec<NodeContributionsView>`,
+    /// plain field names, no serde renames, already sorted by node id
+    /// (the handler's own `out.sort_by` is the last thing it does).
+    ///
+    /// Every one of the nine scalars and five nested fields carries a
+    /// DISTINCT non-zero value, so a field wired to the wrong
+    /// neighbour fails instead of matching by coincidence. Two nodes,
+    /// because a one-row fixture cannot show order surviving the hop.
+    const DAEMON_VIEW_JSON: &str = r#"[
+      {
+        "node_id": "0a0b0c0d0e0f101112131415161718aa",
+        "window_days": 30,
+        "inference_served_requests": 11,
+        "inference_served_tokens": 22,
+        "inference_served_wall_seconds": 33.5,
+        "inference_consumed_requests": 44,
+        "inference_consumed_tokens": 55,
+        "corpora_hosted": [
+          {"corpus_id":"sep","corpus_name":"Stanford Encyclopedia",
+           "size_gb":6.25,"queries_served":77,"is_sole_host":true},
+          {"corpus_id":"gutenberg","corpus_name":"Project Gutenberg",
+           "size_gb":8.5,"queries_served":88,"is_sole_host":false}
+        ],
+        "bytes_served": 99,
+        "bytes_received": 100
+      },
+      {
+        "node_id": "ff0b0c0d0e0f101112131415161718bb",
+        "window_days": 30,
+        "inference_served_requests": 1,
+        "inference_served_tokens": 2,
+        "inference_served_wall_seconds": 3.0,
+        "inference_consumed_requests": 4,
+        "inference_consumed_tokens": 5,
+        "corpora_hosted": [],
+        "bytes_served": 6,
+        "bytes_received": 7
+      }
+    ]"#;
+
+    /// NO REGRESSION, field for field.
+    ///
+    /// Before svt-3 the Local arm built these DTOs in-process from
+    /// `commonwealth_state::current_contributions` and the Attach arm
+    /// parsed them from this route. Both arms now parse this route, so
+    /// what used to be a mapping bug becomes a PARSE bug — and this is
+    /// where it lands. `NodeContributionsView` has no serde renames
+    /// (`mesh_admin.rs:1444-1465`), so a field renamed on either side
+    /// blanks the Members ledger; the comment above that struct says
+    /// exactly that, and until now nothing enforced it.
+    #[test]
+    fn the_daemon_view_parses_into_the_dto_field_for_field() {
+        let got: Vec<NodeContributionsDto> =
+            serde_json::from_str(DAEMON_VIEW_JSON).expect("the daemon's own shape parses");
+        assert_eq!(got.len(), 2);
+
+        let a = &got[0];
+        assert_eq!(a.node_id, "0a0b0c0d0e0f101112131415161718aa");
+        assert_eq!(a.window_days, 30, "the 30-day default window survives");
+        assert_eq!(a.inference_served_requests, 11);
+        assert_eq!(a.inference_served_tokens, 22);
+        assert_eq!(a.inference_served_wall_seconds, 33.5, "an f64, not rounded");
+        assert_eq!(a.inference_consumed_requests, 44);
+        assert_eq!(a.inference_consumed_tokens, 55);
+        assert_eq!(a.bytes_served, 99);
+        assert_eq!(a.bytes_received, 100);
+
+        assert_eq!(a.corpora_hosted.len(), 2, "nested rows are not flattened");
+        let sep = &a.corpora_hosted[0];
+        assert_eq!(sep.corpus_id, "sep");
+        assert_eq!(sep.corpus_name, "Stanford Encyclopedia");
+        assert_eq!(sep.size_gb, 6.25);
+        assert_eq!(sep.queries_served, 77);
+        assert!(sep.is_sole_host, "the sole-host flag is not defaulted");
+        assert!(!a.corpora_hosted[1].is_sole_host);
+
+        let b = &got[1];
+        assert_eq!(b.node_id, "ff0b0c0d0e0f101112131415161718bb");
+        assert!(
+            b.corpora_hosted.is_empty(),
+            "a peer hosting nothing is an empty list, not a missing key"
+        );
+        assert_eq!(b.inference_served_wall_seconds, 3.0);
+    }
+
+    /// THE WIRE HOP — the whole of what svt-3 changed.
+    ///
+    /// Drives the exact expression `mesh_get_contributions` now runs
+    /// in BOTH modes: `TurnClient::new(internal_base_url)
+    /// .contribution_view::<Vec<NodeContributionsDto>>()`. Asserts the
+    /// host saw `/internal/contribution/view` — the same path the
+    /// deleted hand-rolled `reqwest` call built by hand — and that the
+    /// answer arrives with its values and its ORDER intact.
+    ///
+    /// Order is the host's answer, not the client's: the handler sorts
+    /// by node id and the desktop's `out.sort_by` went with the local
+    /// arm (ARCH principle 8). So the fixture is served in the host's
+    /// order and must come back in it.
+    #[tokio::test]
+    async fn the_wire_hop_reaches_the_route_and_loses_nothing() {
+        use axum::{routing::get, Router};
+
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorder = Arc::clone(&seen);
+
+        let app = Router::new()
+            .route(
+                "/internal/contribution/view",
+                get(move || {
+                    let recorder = Arc::clone(&recorder);
+                    async move {
+                        recorder
+                            .lock()
+                            .unwrap()
+                            .push("/internal/contribution/view".to_string());
+                        (
+                            [(axum::http::header::CONTENT_TYPE, "application/json")],
+                            DAEMON_VIEW_JSON,
+                        )
+                    }
+                }),
+            )
+            // Anything else is a 404 the client must report as an
+            // error, so a client that drifts onto another path fails
+            // loudly here rather than returning an empty ledger.
+            .fallback(|| async { axum::http::StatusCode::NOT_FOUND });
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let got: Vec<NodeContributionsDto> = sovereign_turn_client::TurnClient::new(base)
+            .contribution_view()
+            .await
+            .expect("the daemon's contribution view is readable over the wire");
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            ["/internal/contribution/view"],
+            "the client asks the route the daemon actually registers \
+             (commonwealth-api/src/server.rs:516)"
+        );
+        assert_eq!(
+            got.iter().map(|c| c.node_id.as_str()).collect::<Vec<_>>(),
+            [
+                "0a0b0c0d0e0f101112131415161718aa",
+                "ff0b0c0d0e0f101112131415161718bb"
+            ],
+            "the host's order arrives unchanged — the client does not re-sort"
+        );
+        assert_eq!(got[0].inference_served_wall_seconds, 33.5);
+        assert_eq!(got[0].corpora_hosted.len(), 2);
+        assert_eq!(got[0].corpora_hosted[1].corpus_id, "gutenberg");
+        assert_eq!(got[1].bytes_received, 7);
+    }
+
+    /// A host that REFUSES is an error, never an empty ledger.
+    ///
+    /// The one way this migration could regress silently: Local mode
+    /// answers `Ok(vec![])` for "no mesh daemon yet", and that arm is
+    /// now a `state.mesh()` check rather than an in-process read. If a
+    /// failed HTTP call could also produce an empty vec, "the mesh has
+    /// served nothing" and "the daemon would not answer" would render
+    /// identically and the operator would have no way to tell
+    /// (ARCH principle 6). They must not collapse.
+    #[tokio::test]
+    async fn a_refusing_host_is_an_error_not_an_empty_ledger() {
+        use axum::{routing::get, Router};
+
+        let app = Router::new().route(
+            "/internal/contribution/view",
+            get(|| async {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "contribution_view: aggregate failed: store closed",
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let err = sovereign_turn_client::TurnClient::new(base)
+            .contribution_view::<Vec<NodeContributionsDto>>()
+            .await
+            .expect_err("a 500 is a refusal, not an empty ledger");
+        let text = err.to_string();
+        assert!(
+            text.contains("store closed"),
+            "the host's own words reach the operator; got {text}"
+        );
+    }
+
+    /// The FRONTEND contract. `mesh_get_contributions` serialises this
+    /// DTO back over the Tauri bridge, and the Members panel reads
+    /// these key names. The migration changed where the values come
+    /// from and must not have changed a single key.
+    #[test]
+    fn the_dto_reserialises_with_the_keys_the_members_panel_reads() {
+        let got: Vec<NodeContributionsDto> = serde_json::from_str(DAEMON_VIEW_JSON).unwrap();
+        let wire = serde_json::to_value(&got).unwrap();
+        let row = &wire[0];
+        for key in [
+            "node_id",
+            "window_days",
+            "inference_served_requests",
+            "inference_served_tokens",
+            "inference_served_wall_seconds",
+            "inference_consumed_requests",
+            "inference_consumed_tokens",
+            "corpora_hosted",
+            "bytes_served",
+            "bytes_received",
+        ] {
+            assert!(!row[key].is_null(), "the frontend reads `{key}`");
+        }
+        for key in [
+            "corpus_id",
+            "corpus_name",
+            "size_gb",
+            "queries_served",
+            "is_sole_host",
+        ] {
+            assert!(
+                !row["corpora_hosted"][0][key].is_null(),
+                "the frontend reads `corpora_hosted[].{key}`"
+            );
+        }
+        assert_eq!(
+            row.as_object().unwrap().len(),
+            10,
+            "no key added or dropped"
+        );
+    }
+
+    /// `hex_node_id` takes bytes now. It must still produce the same
+    /// 32 lowercase chars the peer-preference list has always keyed on
+    /// — and the same string `parse_node_id_hex` reads back.
+    #[test]
+    fn the_hex_round_trip_is_unchanged_by_taking_bytes() {
+        let bytes: [u8; 16] = [
+            0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+            0x18, 0xaa,
+        ];
+        let hex = hex_node_id(&bytes);
+        assert_eq!(hex, "0a0b0c0d0e0f101112131415161718aa");
+        let parsed = parse_node_id_hex(&hex).expect("the hex form parses back");
+        assert_eq!(hex_node_id(parsed.as_bytes()), hex, "round trip");
+        assert!(parse_node_id_hex("abc").is_err(), "a short id is refused");
+    }
 }
