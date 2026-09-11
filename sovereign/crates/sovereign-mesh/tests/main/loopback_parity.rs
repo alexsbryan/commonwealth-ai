@@ -1146,6 +1146,109 @@ async fn conversation_delete_route_is_204_and_removes_the_row() {
     assert_eq!(served, expected);
 }
 
+/// The two SCOPES a sidebar needs. Until sv-surface this route could only
+/// page everything, so the desktop listed from its own `SqliteStateStore` —
+/// and in attach that is not the store `create`, `rename` and `delete`
+/// write, so a conversation never appeared in the list it was created from.
+///
+/// The three `skill_id` states are the point: absent pages everything (the
+/// server's shape, unchanged), empty is the DEFAULT surface, and a named id
+/// is that surface. A route that could not say the middle one would have to
+/// serve a scoped sidebar from the unscoped listing, which widens
+/// cross-surface visibility silently (§18.3).
+#[tokio::test]
+async fn conversation_list_route_scopes_by_surface_and_by_corpus() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    // alpha + beta are default-surface. Add one tagged surface row and put
+    // an allow-list on alpha so the corpus scope has something to find.
+    store
+        .insert_empty_conversation("gamma", 300, Some("inner-work"))
+        .await
+        .unwrap();
+    store
+        .set_conversation_enabled_corpora("alpha", Some(vec!["sep".to_string()]))
+        .await
+        .unwrap();
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+    let http = reqwest::Client::new();
+
+    let ids = |v: &serde_json::Value| -> Vec<String> {
+        v["conversations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+
+    // Absent: everything, including the tagged row.
+    let all: serde_json::Value = http
+        .get(format!("{base}/v1/conversations"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut all_ids = ids(&all);
+    all_ids.sort();
+    assert_eq!(all_ids, vec!["alpha", "beta", "gamma"]);
+
+    // Empty: the DEFAULT surface only — gamma is not a sidebar row.
+    let default: serde_json::Value = http
+        .get(format!("{base}/v1/conversations?skill_id="))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut default_ids = ids(&default);
+    default_ids.sort();
+    assert_eq!(
+        default_ids,
+        vec!["alpha", "beta"],
+        "an empty skill_id must mean `skill_id IS NULL`, not 'no scoping'"
+    );
+
+    // Named: that surface only.
+    let inner: serde_json::Value = http
+        .get(format!("{base}/v1/conversations?skill_id=inner-work"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ids(&inner), vec!["gamma"]);
+
+    // Corpus: the default-surface rows whose allow-list names it. beta has
+    // a NULL allow-list — everything-scoped, so not one of this notebook's
+    // threads — and gamma is the wrong surface.
+    let notebook: serde_json::Value = http
+        .get(format!("{base}/v1/conversations?corpus_id=sep"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        ids(&notebook),
+        vec!["alpha"],
+        "an everything-scoped conversation is not a notebook's thread"
+    );
+
+    // Two scopes at once is a refusal, not a coin flip.
+    let resp = http
+        .get(format!("{base}/v1/conversations?skill_id=&corpus_id=sep"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+}
+
 /// Rename crosses the wire, and the three rules that shape a title travel
 /// WITH the write rather than with each surface that offers a rename box
 /// (§10.6). The desktop carried its own trim + empty-refusal + 200-char

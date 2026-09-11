@@ -53,37 +53,20 @@ pub async fn list_conversations(
     offset: Option<usize>,
     surface_skill_id: Option<String>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    // sv-surface D9b — NOT repointed, and the reason is a missing route,
-    // not an oversight. `GET /v1/conversations` takes `limit`/`offset` and
-    // nothing else; this listing is SURFACE-SCOPED
-    // (`list_conversations_for_surface`), and cross-surface visibility is a
-    // structural restriction, so serving it through the unscoped route
-    // would widen it silently — the §18.3 substitution, in the one place
-    // the redesign made load-bearing. Owed: `GET /v1/conversations?
-    // skill_id=` with `list_conversations_for_surface` as the decider.
+    // `GET /v1/conversations?skill_id=`, in BOTH modes — the read half of
+    // the row `create`, `rename` and `delete` already cross for. Leaving it
+    // local was the sharper half of the split: in attach the sidebar listed
+    // THIS process's rows while every write went to the daemon's, so a new
+    // conversation never appeared in the list it was created from.
     //
-    // Readiness gates on the DATABASE, not the chat Runtime: listing
-    // conversations is not a chat operation (Phase 0).
-    let _ = require_store!(state);
-    // Surface-scoped listing: each surface only sees its own
-    // conversations. The default-chat sidebar passes `None` and
-    // gets back only conversations with `skill_id IS NULL`; the
-    // Inner Work history drawer passes `Some("inner-work")`;
-    // Recipe Author passes `Some("recipe-author")`. No "all
-    // conversations" mode — cross-surface visibility is structurally
-    // restricted (2026-05-24 architecture redesign).
-    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .list_conversations_for_surface(
-                surface_skill_id.as_deref(),
-                limit.unwrap_or(50),
-                offset.unwrap_or(0),
-            )
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        return Err("list_conversations: sqlite store unavailable".to_string());
-    };
+    // The scoping travels with the request rather than being approximated
+    // here: `skill_id=` (empty) is the DEFAULT surface, a named id is that
+    // surface, and there is no spelling for "every surface" — which is what
+    // keeps the 2026-05-24 visibility restriction structural over the wire.
+    let convos = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_conversations_for_surface(surface_skill_id.as_deref(), limit.or(Some(50)), offset)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(convos
         .into_iter()
@@ -100,9 +83,7 @@ pub async fn list_conversations(
 /// — the notebook's Ask-tab history. Default-chat surface only;
 /// "everything"-scoped conversations are excluded (see
 /// `SqliteStateStore::list_conversations_for_corpus`).
-/// sv-surface D9b — NOT repointed: no corpus-scoped listing route exists.
-/// Owed: `GET /v1/conversations?corpus_id=` over
-/// `SqliteStateStore::list_conversations_for_corpus`.
+/// `GET /v1/conversations?corpus_id=` since sv-surface, in both modes.
 #[tauri::command]
 pub async fn notebook_conversations(
     state: State<'_, Arc<AppState>>,
@@ -110,15 +91,10 @@ pub async fn notebook_conversations(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    let _ = require_store!(state);
-    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
-        sqlite
-            .list_conversations_for_corpus(&corpus_id, limit.unwrap_or(20), offset.unwrap_or(0))
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        return Err("notebook_conversations: sqlite store unavailable".to_string());
-    };
+    let convos = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .list_conversations_for_corpus(&corpus_id, limit, offset)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(convos
         .into_iter()

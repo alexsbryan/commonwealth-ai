@@ -130,6 +130,20 @@ const RETIRED: &[Retired] = &[
         hay: ".set_conversation_enabled_corpora(",
         route: "PUT /v1/conversations/{id}/enabled-corpora (which also VALIDATES — the local write never did)",
     },
+    // The two SCOPED LISTINGS. The needle is each command's own
+    // store-unavailable sentence, not the method name: the method name is
+    // now the CLIENT call in the same file, and a census that fired on its
+    // own replacement would be the §18.1 smell.
+    Retired {
+        file: "src/commands/conversation.rs",
+        hay: "list_conversations: sqlite store unavailable",
+        route: "GET /v1/conversations?skill_id= (empty = the default surface)",
+    },
+    Retired {
+        file: "src/commands/conversation.rs",
+        hay: "notebook_conversations: sqlite store unavailable",
+        route: "GET /v1/conversations?corpus_id=",
+    },
     // ── document_asset.rs ────────────────────────────────────
     Retired {
         file: "src/commands/document_asset.rs",
@@ -264,6 +278,8 @@ fn every_repointed_command_reaches_the_family_client() {
                 ".set_skill_active::<SkillEntry>(",
                 ".rename_conversation(",
                 ".set_enabled_corpora(",
+                ".list_conversations_for_surface(",
+                ".list_conversations_for_corpus(",
             ],
         ),
         (

@@ -234,11 +234,34 @@ async fn create_conversation(
 // imported from `sovereign_contracts::types::projection`.
 
 /// `GET /v1/conversations?limit=&offset=` — the server's `ListQuery`, whose
-/// defaults (20 / 0) the handler applies identically.
+/// defaults (20 / 0) the handler applies identically — plus the two SCOPES
+/// sv-surface added.
+///
+/// The scopes are what let a sidebar cross the wire. The desktop listed
+/// conversations from its own `SqliteStateStore` because this route could
+/// only page EVERYTHING, and serving a surface-scoped list through an
+/// unscoped route would have widened cross-surface visibility silently —
+/// the §18.3 substitution in the one place the 2026-05-24 redesign made
+/// structural. So the scoping is on the wire rather than approximated.
+///
+/// `skill_id` carries three states on purpose, and the third is the one a
+/// sidebar needs:
+///
+/// | query | meaning |
+/// |---|---|
+/// | absent | no surface scoping — page every conversation (the server's shape, unchanged) |
+/// | `skill_id=` (empty) | the DEFAULT surface: rows whose `skill_id IS NULL` |
+/// | `skill_id=inner-work` | that surface, exact match |
+///
+/// An empty string is a safe sentinel because it is not a legal skill id;
+/// the alternative — a second `scoped=true` flag — encodes the same fact
+/// in two places and lets them disagree.
 #[derive(Debug, Default, Deserialize)]
 pub struct ListQuery {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+    pub skill_id: Option<String>,
+    pub corpus_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -323,7 +346,35 @@ async fn list_conversations(
     };
     let limit = params.limit.unwrap_or(20);
     let offset = params.offset.unwrap_or(0);
-    match store.list_conversations(limit, offset).await {
+    // Two scopes that mean different things cannot both apply: a notebook's
+    // Ask history IS the default surface, so `corpus_id` already implies it.
+    // Refusing beats picking one and being right half the time (§18.3).
+    if params.skill_id.is_some() && params.corpus_id.is_some() {
+        return bad_request(
+            "list conversations: skill_id and corpus_id are different scopes — send one.              A corpus-scoped listing is already default-surface only.",
+        );
+    }
+    let listed = match (&params.skill_id, &params.corpus_id) {
+        (_, Some(corpus_id)) => {
+            store
+                .list_conversations_for_corpus(corpus_id, limit, offset)
+                .await
+        }
+        // Empty string is the DEFAULT surface (`skill_id IS NULL`), not a
+        // skill called "" — see `ListQuery`.
+        (Some(skill), None) => {
+            let surface = if skill.is_empty() {
+                None
+            } else {
+                Some(skill.as_str())
+            };
+            store
+                .list_conversations_for_surface(surface, limit, offset)
+                .await
+        }
+        (None, None) => store.list_conversations(limit, offset).await,
+    };
+    match listed {
         Ok(convos) => Json(ConversationListResponse {
             conversations: convos
                 .into_iter()

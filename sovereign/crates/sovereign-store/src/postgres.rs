@@ -269,6 +269,31 @@ impl PostgresStateStore {
 }
 
 #[async_trait]
+/// The conversation row map, once. Three listings read the same seven
+/// columns and built the same `Conversation` by hand until sv-surface
+/// promoted the scoped listings to the trait — at which point copying it
+/// twice more would have been three chances for the shapes to drift
+/// (ARCH §10.6).
+fn conversation_row(r: &tokio_postgres::Row) -> Conversation {
+    let enabled_corpora: Option<serde_json::Value> = r.get("enabled_corpora");
+    let searched_sources: Option<serde_json::Value> = r.get("searched_sources");
+    Conversation {
+        id: r.get("id"),
+        title: r.get("title"),
+        messages: vec![],
+        created_at: r.get("created_at"),
+        updated_at: r.get("updated_at"),
+        version: 0,
+        deleted_at: None,
+        skill_id: r.get("skill_id"),
+        enabled_corpora: enabled_corpora
+            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok()),
+        searched_sources: searched_sources.and_then(|v| {
+            serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok()
+        }),
+    }
+}
+
 impl ConversationStore for PostgresStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
         let client = self
@@ -438,29 +463,76 @@ impl ConversationStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows
-            .iter()
-            .map(|r| {
-                let enabled_corpora: Option<serde_json::Value> = r.get("enabled_corpora");
-                let searched_sources: Option<serde_json::Value> = r.get("searched_sources");
-                Conversation {
-                    id: r.get("id"),
-                    title: r.get("title"),
-                    messages: vec![],
-                    created_at: r.get("created_at"),
-                    updated_at: r.get("updated_at"),
-                    version: 0,
-                    deleted_at: None,
-                    skill_id: r.get("skill_id"),
-                    enabled_corpora: enabled_corpora
-                        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok()),
-                    searched_sources: searched_sources.and_then(|v| {
-                        serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v)
-                            .ok()
-                    }),
-                }
-            })
-            .collect())
+        Ok(rows.iter().map(conversation_row).collect())
+    }
+
+    async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        // Two statements rather than one with `IS NOT DISTINCT FROM`,
+        // because `None` here means "the row's skill_id IS NULL" and a
+        // parameterised NULL would compare as unknown and match nothing.
+        let rows = match surface_skill_id {
+            None => client
+                .query(
+                    "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources FROM conversations \
+                     WHERE deleted_at IS NULL AND skill_id IS NULL \
+                     ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
+                    &[&(limit as i64), &(offset as i64)],
+                )
+                .await,
+            Some(skill) => client
+                .query(
+                    "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources FROM conversations \
+                     WHERE deleted_at IS NULL AND skill_id = $1 \
+                     ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
+                    &[&skill, &(limit as i64), &(offset as i64)],
+                )
+                .await,
+        }
+        .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(conversation_row).collect())
+    }
+
+    async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        // `jsonb_array_elements_text` is the postgres spelling of the
+        // sqlite statement's `json_each`, and the NOT NULL guard carries
+        // the same meaning in both: an everything-scoped conversation is
+        // not one of this notebook's threads.
+        let rows = client
+            .query(
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources FROM conversations \
+                 WHERE skill_id IS NULL AND deleted_at IS NULL \
+                   AND enabled_corpora IS NOT NULL \
+                   AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(enabled_corpora) e WHERE e = $1) \
+                 ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
+                &[&corpus_id, &(limit as i64), &(offset as i64)],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(rows.iter().map(conversation_row).collect())
     }
 
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>> {

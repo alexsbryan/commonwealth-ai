@@ -415,8 +415,62 @@ impl TurnClient {
         if let Some(offset) = offset {
             query.push(("offset", offset.to_string()));
         }
+        self.listed_conversations(&query).await
+    }
+
+    /// `GET /v1/conversations?skill_id=` — the conversations belonging to
+    /// ONE SURFACE, newest first.
+    ///
+    /// `None` is the DEFAULT surface (rows whose `skill_id IS NULL`), which
+    /// is what a chat sidebar renders; `Some("inner-work")` is that
+    /// surface. There is deliberately no "every surface" spelling here —
+    /// [`Self::list_conversations`] is that, and keeping them apart is what
+    /// stops a scoped caller widening its own visibility by passing a
+    /// nullable id.
+    pub async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ListedConversation>> {
+        // Always SENT, empty for the default surface: absent would mean
+        // "no scoping" and page everything (the route's own table).
+        let mut query = vec![("skill_id", surface_skill_id.unwrap_or("").to_string())];
+        Self::paged(&mut query, limit, offset);
+        self.listed_conversations(&query).await
+    }
+
+    /// `GET /v1/conversations?corpus_id=` — a notebook's Ask-tab history:
+    /// the default-surface conversations whose retrieval allow-list names
+    /// this corpus. Everything-scoped conversations are excluded, so the
+    /// tab shows only threads the user actually had while scoped to it.
+    pub async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<ListedConversation>> {
+        let mut query = vec![("corpus_id", corpus_id.to_string())];
+        Self::paged(&mut query, limit, offset);
+        self.listed_conversations(&query).await
+    }
+
+    fn paged(query: &mut Vec<(&'static str, String)>, limit: Option<usize>, offset: Option<usize>) {
+        if let Some(limit) = limit {
+            query.push(("limit", limit.to_string()));
+        }
+        if let Some(offset) = offset {
+            query.push(("offset", offset.to_string()));
+        }
+    }
+
+    /// The one GET + envelope fold the three listings share (§10.6).
+    async fn listed_conversations(
+        &self,
+        query: &[(&str, String)],
+    ) -> Result<Vec<ListedConversation>> {
         let wire: ConversationListWire = self
-            .internal_get("/v1/conversations".to_string(), &query)
+            .internal_get("/v1/conversations".to_string(), query)
             .await?;
         Ok(wire
             .conversations
