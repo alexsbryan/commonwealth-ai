@@ -186,10 +186,11 @@ note   = "The 13th of 100 instruments to carry a negative control, and the first
 [[rung]]
 id     = "vl-4"
 title  = "The bank is this week's"
-status = "open"
+status = "done"
+sha    = ["4d0fe7d57"]
 demo   = "D3"
 moves  = ["vl-bank-live"]
-note   = "Pairs with vl-3: a registered replay over a 29-day-old bank prices changes against a world that moved. Scheduling more than retention - the forensics flag is how all 1,049 existing records were made. ~1-2 days."
+note   = "Pairs with vl-3: a registered replay over a 29-day-old bank prices changes against a world that moved. Scheduling more than retention - the forensics flag is how all 1,049 existing records were made. ~1-2 days. LANDED 2026-09-12: --bank-age measures the newest REPLAYABLE episode (audit records only - citation rows carry a ts and no evidence window), ledgers are discovered not listed, and feed_replay_bank.sh + run-if-stale is the schedule. First feed run closed it end to end: 29.6 -> 0.0 days, and the case builder resolved 4 byte-faithful per_claim_judge rows from today's ledger (0 mismatches). The fed ledger is gitignored, so the bar is measured PER HOST until the operator decides whether to track it."
 
 [[rung]]
 id     = "vl-5"
