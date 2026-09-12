@@ -909,7 +909,7 @@ async fn build_context_augmented_message(
     let mut blocks: Vec<String> = Vec::new();
     for r in unique {
         let row = match client
-            .meshapp_chunk::<sovereign_meshapp::ChunkDto>(&r.corpus_id, r.chunk_id)
+            .meshapp_chunk::<sovereign_contracts::daemon_wire::ChunkDto>(&r.corpus_id, r.chunk_id)
             .await
         {
             Ok(row) => row,

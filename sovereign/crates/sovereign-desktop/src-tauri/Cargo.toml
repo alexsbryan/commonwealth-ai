@@ -38,7 +38,6 @@ sovereign-gliner = { workspace = true }
 # is a red gate, not a shortcut.
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
-sovereign-meshapp = { workspace = true }
 # `sovereign-cli-daemon` and `sovereign-compute` LEFT HERE at svt-2
 # (2026-09-11). The desktop used to link the daemon entry as a library so
 # `--daemon-child` could run the real daemon in this process, and the

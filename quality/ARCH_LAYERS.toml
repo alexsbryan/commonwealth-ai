@@ -1278,12 +1278,6 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
-to = "sovereign-meshapp"
-reason = "REACHED via sovereign-desktop → sovereign-meshapp. Holder: DocumentFeedDto/WrappedArtifact wire DTOs (belong in contracts) plus the in-process flag analysis in commands/meshapp.rs. Falls when `sovereign-meshapp` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
 to = "sovereign-recipe-author"
 reason = "REACHED via sovereign-desktop → sovereign-store → sovereign-recipe-author. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
