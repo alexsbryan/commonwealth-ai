@@ -79,11 +79,11 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
     if !status.is_success() {
-        let msg = serde_json::from_str::<serde_json::Value>(&body)
-            .ok()
-            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-            .unwrap_or(body);
-        eprintln!("{msg}");
+        eprint!(
+            "{}",
+            crate::mesh_skew::render_failure(&client, port, "GET /v1/mesh/media", status, body)
+                .await
+        );
         return 1;
     }
     let reach: sovereign_mesh::media_reach::MediaReach = match serde_json::from_str(&body) {
@@ -193,11 +193,17 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
     if !status.is_success() {
-        let msg = serde_json::from_str::<serde_json::Value>(&body)
-            .ok()
-            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-            .unwrap_or(body);
-        eprintln!("{msg}");
+        eprint!(
+            "{}",
+            crate::mesh_skew::render_failure(
+                client,
+                daemon_client_port(),
+                "GET /v1/mesh/media",
+                status,
+                body
+            )
+            .await
+        );
         return 1;
     }
     if json_out {
@@ -338,11 +344,17 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !status.is_success() {
-        let msg = serde_json::from_str::<serde_json::Value>(&text)
-            .ok()
-            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-            .unwrap_or(text);
-        eprintln!("{msg}");
+        eprint!(
+            "{}",
+            crate::mesh_skew::render_failure(
+                &client,
+                port,
+                "POST /v1/mesh/media/fanout",
+                status,
+                text
+            )
+            .await
+        );
         return 1;
     }
     if json_out {

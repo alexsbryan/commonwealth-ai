@@ -413,6 +413,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
+    // mesh_skew.rs (2026-09-12, hm-3): explains a mesh route's 404 by asking
+    // the daemon which build it is. It CONSTRUCTS no client in production —
+    // the caller hands it the one it already built — so all three sites are
+    // the inline `#[cfg(test)]` module's own fixtures. The one request the
+    // production path makes is `GET 127.0.0.1:<client_port>/status`, which is
+    // the LocalDaemon class on somebody else's client.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_skew.rs", Class::TestOnly, 3),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),

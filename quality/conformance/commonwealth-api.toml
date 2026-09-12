@@ -42,7 +42,7 @@ asserts = 2
 requirement = "FE-99"
 test = "commonwealth-api::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
 file = "commonwealth/crates/commonwealth-api/src/routes_status.rs"
-line = 661
+line = 675
 asserts = 4
 
 [[claim]]

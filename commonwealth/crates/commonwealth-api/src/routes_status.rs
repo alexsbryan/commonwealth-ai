@@ -5,6 +5,7 @@ use axum::extract::State;
 use axum::Json;
 use commonwealth_core::ids::NodeId;
 use serde::Serialize;
+use sovereign_core::run_identity::BuildStamp;
 
 use crate::state::AppState;
 
@@ -184,6 +185,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         process: ProcessStatus {
             pid: std::process::id(),
             run_id: sovereign_core::run_identity::run_id(),
+            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: state.inner.started_at.elapsed().as_secs(),
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -350,6 +352,17 @@ pub struct ProcessStatus {
     /// `sovereign_core::run_identity::run_id()` — the key every log line of
     /// this generation carries, so a reader can join `/status` to the log.
     pub run_id: &'static str,
+    /// Which BINARY this generation is, and when it was built — the tuple
+    /// the startup banner logs ("svrn daemon is running") and, until now,
+    /// discarded. Published because only this process can answer it: a
+    /// caller holding a port cannot see which code is behind it.
+    ///
+    /// This is the evidence for version skew across the socket. A CLI whose
+    /// verb 404s on a healthy daemon has two candidate explanations — the
+    /// route does not exist, or the route exists and this daemon predates it
+    /// — and they are indistinguishable from the 404 alone. `exe_mtime` is
+    /// the field that separates them; see [`BuildStamp`].
+    pub build: BuildStamp,
     pub uptime_seconds: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rss_mb: Option<u64>,
@@ -576,6 +589,7 @@ mod process_status_tests {
         let p = ProcessStatus {
             pid: std::process::id(),
             run_id: sovereign_core::run_identity::run_id(),
+            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: 42,
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),

@@ -15,6 +15,8 @@
 
 use std::sync::OnceLock;
 
+pub use sovereign_contracts::daemon_wire::{BuildStamp, Skew};
+
 /// Eight hex characters, unique per process start. Short enough to grep,
 /// long enough that two generations in one log do not collide.
 pub fn run_id() -> &'static str {
@@ -52,6 +54,26 @@ pub fn build() -> &'static BuildIdentity {
             exe_mtime,
         }
     })
+}
+
+/// This process's own [`BuildStamp`] — the tuple the daemon's startup banner
+/// logs and, until this existed, discarded. Published on `GET /status`
+/// (`commonwealth_api::routes_status::ProcessStatus::build`) because only the
+/// answering process can know it: a port names a listener, never the code
+/// behind it.
+///
+/// `version` is whatever `CARGO_PKG_VERSION` is at the CALL site's crate,
+/// which under this workspace's `version.workspace = true` is the workspace
+/// version either way — which is exactly why [`BuildStamp::compare`] reads
+/// `exe_mtime` and not `version`.
+pub fn stamp(version: &str) -> BuildStamp {
+    let b = build();
+    BuildStamp {
+        version: version.to_string(),
+        run_id: run_id().to_string(),
+        exe: b.exe.clone(),
+        exe_mtime: b.exe_mtime.clone(),
+    }
 }
 
 /// True when the binary on disk changed AFTER this process captured its

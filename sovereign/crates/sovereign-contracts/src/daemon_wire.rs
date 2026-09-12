@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 // Per-family files, re-exported flat so every wire shape keeps the one
 // path `sovereign_contracts::daemon_wire::Name` (the size ratchet is per
 // crate, not per file; the split is for the reader).
+pub mod build_stamp;
 pub mod documents;
 pub mod enrich;
 pub mod ingest;
@@ -45,6 +46,7 @@ pub mod recipe_projects;
 pub mod recipes;
 pub mod workflows;
 
+pub use build_stamp::*;
 pub use documents::*;
 pub use enrich::*;
 pub use ingest::*;
