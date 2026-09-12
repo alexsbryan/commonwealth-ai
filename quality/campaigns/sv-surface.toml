@@ -1780,8 +1780,28 @@ status       = "open"
 # notebook_list degrade to an empty vec, silently. attach_bootstrap() was NOT
 # written on that false premise; 49 is what D9b drives to zero and is
 # deliberately not minted as a ratchet while D5-D8 land in the same files.
+# RUNG R1, 2026-09-12 (thin-desktop): 6 -> 5 constructions, and this is the
+# first rung that moved the floor by DELETION rather than by a repoint. The
+# reader census above is why. `state.<slot>.read()` across src-tauri/src found
+# FOUR of the eight AppState slots written by this spine and read by NOTHING:
+# insight_service (0), entity_extractor (0), local_corpus (0),
+# health_monitor (0). Each had lost its consumer to a daemon route in an
+# earlier rung — insight to `insight_http`, the skeleton NER pass to the
+# daemon's manager (2d5b569f6), lc_pre_scan to `lc_http` (6e47d0abe), health
+# to `/status` — and the CONSTRUCTION stayed behind. That is ARCH principle
+# 12's smell read backwards: a count that had reached zero with the ability
+# fully intact somewhere else. ~115 lines of LocalCorpusManager commissioning,
+# the InsightService over the store's connection (and with it the store
+# builder's only reason to name an InferenceProvider), the health monitor and
+# its whole builder file, and the second GLiNER handle. Pinned at 0 in the
+# census FLOOR table, same convention as svt-3b's six.
+# What is LEFT is four, and they are repoints, not deletions: open_store,
+# CorpusEngine::new, build_folder_tiered_provider, load_gliner_extractor.
+# The reader counts that hold them: corpus_engine 1 (build_corpus_index —
+# whose daemon route and client method BOTH already exist and are called by
+# nothing), store 2, sqlite_store 2, inference 3.
 floor        = 12.0
-floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them"
+floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them. R1 (2026-09-12) took the census total 6 -> 5 by deleting four zero-reader constructions; the live number is the census assertion, not this line"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"

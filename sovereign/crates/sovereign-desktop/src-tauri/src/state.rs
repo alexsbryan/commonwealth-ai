@@ -6,11 +6,9 @@ use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
 
-use sovereign_core::health_monitor::HealthMonitor;
 use sovereign_core::insight::InsightService;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::local_corpus::LocalCorpusManager;
 use tokio_util::sync::CancellationToken;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
@@ -185,32 +183,12 @@ pub struct AppState {
     /// so this map is the surface's own knowledge of which conversation a
     /// card belonged to.
     pub session_conversations: RwLock<std::collections::HashMap<String, String>>,
-    /// Background health monitor. Populated during bootstrap; None before first boot.
-    pub health_monitor: RwLock<Option<Arc<HealthMonitor>>>,
-    /// CancellationToken to shut down the health monitor on exit.
+    /// Shuts down anything this app still spawns for the window's life.
+    /// It outlived the health monitor it was named for (2026-09-12) and is
+    /// kept because `main`'s exit path cancels it; the monitor, the insight
+    /// service, the local-corpus manager and the NER handle that were
+    /// declared here are all gone, each having had zero readers.
     pub health_shutdown: CancellationToken,
-    /// Insight capture service. Created during bootstrap from the same
-    /// SQLite connection as the state store.
-    pub insight_service: RwLock<Option<Arc<InsightService>>>,
-    /// Manager for locally-sourced corpora — backs the "Local
-    /// Knowledge" settings section. `None` until bootstrap completes
-    /// and the `CorpusEngine` is ready; commands check this and
-    /// surface a "finish setup first" error when unset.
-    pub local_corpus: RwLock<Option<Arc<LocalCorpusManager>>>,
-    /// Local NER model (GLiNER) for document-ingest entity extraction.
-    ///
-    /// The same `Arc` handed to `Runtime::with_gliner` for retrieval, kept
-    /// here so the document-ingest commands can drive it too: the T2
-    /// skeleton entity pass swaps a 4B LLM call for this NER model
-    /// (−70% of ingest prompt tokens; see `DocumentAssetManager::
-    /// with_entity_extractor`). `None` when the model isn't installed —
-    /// ingest then falls back to the LLM path, exactly as before.
-    ///
-    /// It's a `LazyGlinerExtractor`: empty until its background load
-    /// finishes (~1s post-boot), which `build_skeleton` treats as
-    /// fall-through-to-LLM per window — so a document attached in that
-    /// first second degrades gracefully rather than losing entities.
-    pub entity_extractor: RwLock<Option<Arc<dyn sovereign_core::traits::EntityExtractor>>>,
 }
 
 impl AppState {
@@ -332,14 +310,10 @@ impl AppState {
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             bootstrap_mode: mode,
-            health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
-            insight_service: RwLock::new(None),
             turn_wire: TurnWires::default(),
             pending_prompts: PendingPrompts::default(),
             session_conversations: RwLock::new(std::collections::HashMap::new()),
-            local_corpus: RwLock::new(None),
-            entity_extractor: RwLock::new(None),
         }
     }
 }
@@ -551,15 +525,8 @@ pub async fn bootstrap_with_progress(
         builders::inference::load_inference(&state.inference, &slots, &emit).await?;
 
     // Open database.
-    let store: Arc<dyn StateStore> = builders::store::open_store(
-        &state.store,
-        &state.sqlite_store,
-        &state.insight_service,
-        &config,
-        &inference,
-        &emit,
-    )
-    .await?;
+    let store: Arc<dyn StateStore> =
+        builders::store::open_store(&state.store, &state.sqlite_store, &config, &emit).await?;
 
     // The recipe-author `notes.db` + `features.db` opens stood here and went
     // with the commission (svt-3b). They had NO reader on the command surface
@@ -672,23 +639,12 @@ pub async fn bootstrap_with_progress(
     }
     if let Some(extractor) = chunk_entity_extractor.clone() {
         engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
-        // Document ingest wants an `EntityExtractor`, which is a different
-        // trait from the engine's `ChunkEntityExtractor` — so it is a second
-        // handle on the same model, not a second model. It used to arrive as
-        // `common.parts.lane.gliner`; the recipe built it with exactly the
-        // line below and the desktop is the only reader, so taking the line
-        // rather than the recipe changes nothing about what runs.
-        //
-        // Gated on the CHUNK extractor being `Some`, because that is
-        // `load_gliner_extractor`'s report of `probe_model_available` and the
-        // field's contract is `None` when the model is not installed —
-        // `DocumentAssetManager` then falls back to the LLM path. Deferred
-        // warm, as before: the lazy extractor answers empty for ~1s after
-        // boot, which `build_skeleton` treats as fall-through per window.
-        *state.entity_extractor.write().await = Some(Arc::new(
-            sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred(),
-        )
-            as Arc<dyn sovereign_core::traits::EntityExtractor>);
+        // A SECOND handle on the same model — a `LazyGlinerExtractor` as
+        // `dyn EntityExtractor` — was published to `state.entity_extractor`
+        // here for document ingest's skeleton pass. It is gone: that pass is
+        // the daemon's since 2d5b569f6, which hands its manager
+        // `runtime.lane().gliner`, and the slot had ZERO readers on this side
+        // afterwards.
     }
     // A custom acquirer must be registered on EVERY engine that can
     // ingest a recipe naming it, or the install fails at acquire time
@@ -698,122 +654,15 @@ pub async fn bootstrap_with_progress(
     let corpus_engine = Arc::new(engine_builder);
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
-    // Bring up the LocalCorpusManager alongside the engine. Loads any
-    // previously-registered corpora from their sidecar JSON so the
-    // "Local Knowledge" settings list populates immediately on launch.
-    {
-        let store_for_lcm = state
-            .store
-            .read()
-            .await
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| "state store not ready".to_string())?;
-        let snapshot_root = config.data_dir.join("vault-snapshots");
-        // Thread the ENGINE's recipes dir into the manager so its
-        // synthesized recipe TOMLs land where the engine's
-        // `fetch_recipe` reads them. Plain `init` defaults to
-        // `local-corpus-recipes`, which the engine (overrides_dir =
-        // `~/.svrnmesh/recipes`) can't see — every watched-folder sweep
-        // then errors "No registry entry for corpus '<id>'". Matches the
-        // standalone daemon's `init_with_recipes_dir` wiring.
-        match LocalCorpusManager::init_with_recipes_dir(
-            Arc::clone(&corpus_engine),
-            store_for_lcm,
-            Some(Arc::clone(&raw_inference)),
-            config.data_dir.clone(),
-            snapshot_root,
-            recipes_dir.clone(),
-        )
-        .await
-        {
-            Ok(mgr) => {
-                // Folder-ingest v1 §3.3 — install enrichment
-                // defaults so the UI's "Enable enrichment" path
-                // can synthesize an `EnrichConfig`. The chat /
-                // embed model ids come from the daemon's active
-                // config; without them, `enable_enrichment` fails
-                // fast with a "defaults not installed" error
-                // before touching the subprocess. Loopback URL
-                // mirrors what the rest of the desktop uses.
-                // Derive model ids from the configured paths.
-                // The daemon's slot manager uses path file_stem
-                // as the canonical model id elsewhere; mirror
-                // that here so the synthesized EnrichConfig
-                // points at the same slot the daemon is serving.
-                fn id_from_path(p: &std::path::Path) -> String {
-                    p.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string()
-                }
-                let chat_model = slots
-                    .primary
-                    .as_deref()
-                    .map(id_from_path)
-                    .unwrap_or_else(|| id_from_path(&slots.fast));
-                let embed_model = if slots.has_embed() {
-                    id_from_path(&slots.embed)
-                } else {
-                    String::new()
-                };
-                if !chat_model.is_empty() && !embed_model.is_empty() {
-                    // Loopback URL — resolved from the bootstrap mode
-                    // so a non-default client port works. Local mode
-                    // runs the embedded daemon on the configured port
-                    // (9741 by convention).
-                    let base_url = state.client_base_url();
-                    mgr.set_enrichment_defaults(
-                        sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
-                            chat_model,
-                            embed_model,
-                            base_url,
-                            cli_path: None,
-                        },
-                    )
-                    .await;
-                } else {
-                    tracing::info!(
-                        "local_corpus enrichment defaults not installed — \
-                         chat_model or embedding_model not configured; \
-                         per-folder enrichment will return an error \
-                         until the user picks models in Settings"
-                    );
-                }
-                // Install the tiered-enrichment deps so `enable_enrichment`
-                // routes folder / Obsidian "Make explorable" builds through
-                // the in-process tiered driver (`start_tiered_build`) instead
-                // of the legacy `sovereign-cli enrich` subprocess. Same stack
-                // the standalone daemon installs via `set_tiered_deps`; shares
-                // the GLiNER extractor already loaded for the engine above.
-                match sovereign_tools::enrichment_bootstrap::build_folder_tiered_deps(
-                    &config.data_dir,
-                    Arc::clone(&raw_inference),
-                    chunk_entity_extractor.clone(),
-                ) {
-                    Some(deps) => {
-                        mgr.set_tiered_deps(deps).await;
-                        tracing::info!(
-                            "local_corpus: tiered enrichment deps installed — \
-                             folder/obsidian 'Make explorable' runs in-process"
-                        );
-                    }
-                    None => tracing::warn!(
-                        "local_corpus: tiered deps unavailable (state store) — \
-                         folder enrichment would fall back to the legacy subprocess"
-                    ),
-                }
-                *state.local_corpus.write().await = Some(Arc::new(mgr));
-                tracing::info!("local_corpus manager initialised");
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "local_corpus manager init failed: {e} — \
-                     Local Knowledge section will show a setup error"
-                );
-            }
-        }
-    }
+    // The LocalCorpusManager stood here and is gone (thin-desktop, 2026-09-12).
+    // It had ZERO readers: `state.local_corpus` was written once at the end of
+    // this block and never read again, because `lc_pre_scan` (6e47d0abe) was
+    // the last command to hold a manager and it took the wire. What remained
+    // was ~115 lines commissioning a manager, its enrichment defaults and its
+    // tiered-enrichment deps so that nothing could ask it anything — a count
+    // that had reached zero with the ability fully intact on the daemon side
+    // (ARCH principle 12). `lc_http` serves all fifteen routes over the
+    // daemon's OWN manager.
 
     // Lazy-stamp canonical fingerprints for any installed canonicals
     // that don't yet carry one. Mirrors the daemon-mode bootstrap so
@@ -858,17 +707,12 @@ pub async fn bootstrap_with_progress(
         }
     }
 
-    // ── Health Monitor ────────────────────────────────────────────────────────
-    builders::health::build_health_monitor(
-        &state.health_monitor,
-        &state.health_shutdown,
-        &config,
-        &store,
-        &corpus_engine,
-        &inference,
-        &embed_model_name,
-    )
-    .await;
+    // The health monitor stood here and is gone (thin-desktop, 2026-09-12).
+    // `state.health_monitor` was written by the builder and never read: the
+    // app renders health from the daemon's own `/status` and
+    // `/{corpus}/health`. A monitor polling a store, an engine and an
+    // inference provider inside a client, whose verdict nothing could ask
+    // for, is the same zero-reader shape as the three slots beside it.
 
     // Background startup task: verify per-corpus vector index readiness and
     // write results to the store so handle_knowledge_query can gate correctly.

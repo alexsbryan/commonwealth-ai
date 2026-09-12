@@ -172,8 +172,23 @@ const FLOOR: &[Needle] = &[
     },
     Needle {
         hay: "LocalCorpusManager::init_with_recipes_dir(",
-        count: 1,
-        why: "the local-knowledge manager over that engine",
+        count: 0,
+        why: "the local-knowledge manager — DELETED thin-desktop R1 (2026-09-12). `state.local_corpus` was written at the end of its own ~115-line commissioning block and read by NOTHING: `lc_pre_scan` (6e47d0abe) was the last command holding a manager and it took the wire, so `lc_http` serves all fifteen routes over the DAEMON's manager. The enrichment defaults and tiered deps went with it",
+    },
+    Needle {
+        hay: "InsightService::new(",
+        count: 0,
+        why: "the insight capture service — DELETED thin-desktop R1 (2026-09-12), zero readers of `state.insight_service`; the insight surface is `insight_http` on the daemon (sv-surface rung 6). It was also the store builder's only reason to name an `InferenceProvider`",
+    },
+    Needle {
+        hay: "builders::health::build_health_monitor(",
+        count: 0,
+        why: "the background health monitor — DELETED thin-desktop R1 (2026-09-12), zero readers of `state.health_monitor`; the app renders health from the daemon's `/status` and `/{corpus}/health`. A monitor polling a store, an engine and a provider inside a client, whose verdict nothing could ask for",
+    },
+    Needle {
+        hay: "LazyGlinerExtractor::new_default_deferred(",
+        count: 0,
+        why: "a SECOND handle on the NER model as `dyn EntityExtractor` — DELETED thin-desktop R1 (2026-09-12), zero readers of `state.entity_extractor`; document ingest's skeleton pass is the daemon's since 2d5b569f6, which hands its manager `runtime.lane().gliner`",
     },
     Needle {
         hay: "builders::knowledge_view::build_knowledge_view(",
@@ -261,17 +276,20 @@ fn the_attach_construction_floor_is_pinned() {
         total += needle.count;
     }
     assert_eq!(
-        total, 5,
-        "sv-attach-pure-client floor: the pinned spine total must be 5 here, \
-         plus the daemon-provider needle pinned in the builders file = 6 \
-         (was 12 at sv-surface D0, and 14 before it). svt-3b took the six \
-         zeros above: the commission and everything whose ONLY consumer was \
-         the commission. What is left is what the desktop's own surfaces \
-         read — its `sovereign.db` handle, the corpus engine, the \
-         local-corpus manager, the tiered-enrichment provider and GLiNER — \
-         so the next rung is a repoint onto daemon routes, not a deletion. A \
-         needle added or removed without the campaign row moving is the exact \
-         silent drift this census exists to catch."
+        total, 4,
+        "sv-attach-pure-client floor: the pinned spine total must be 4 here, \
+         plus the daemon-provider needle pinned in the builders file = 5 \
+         (was 6 before thin-desktop R1, 12 at sv-surface D0, 14 before it). \
+         svt-3b took six zeros: the commission and everything whose only \
+         consumer was the commission. R1 took four more, and they were a \
+         different kind — not repointed onto a route, DELETED, because each \
+         was written by this spine and read by NOTHING. What is left is the \
+         four the desktop's own surfaces still read: its `sovereign.db` \
+         handle, the corpus engine, the tiered-enrichment provider and \
+         GLiNER. Those four ARE a repoint, and the reader count is the thing \
+         to watch — `build_corpus_index` is the corpus engine's last one. A \
+         needle added or removed without the campaign row moving is the \
+         exact silent drift this census exists to catch."
     );
 }
 

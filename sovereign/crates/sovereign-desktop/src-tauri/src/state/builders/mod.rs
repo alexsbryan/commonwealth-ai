@@ -5,8 +5,9 @@
 //! semantics — invoked in place from `bootstrap_with_progress`.
 //!
 //! Only phases that are genuinely contiguous and self-contained live
-//! here: `config`, `builtin_skills`, `health`, `store`, `inference`,
-//! and `knowledge_view`. Two parts of bootstrap are intentionally NOT
+//! here: `config`, `builtin_skills`, `store` and `inference`. (`health`
+//! went with the health monitor on 2026-09-12 — a client that renders the
+//! daemon's health does not poll for its own.) Two parts of bootstrap are intentionally NOT
 //! builders because they are *interleaved*, not contiguous:
 //!
 //! - The `tools` registry is mutated across the whole bootstrap (before
@@ -23,7 +24,6 @@
 //! startup path with no CI coverage (it needs a loaded GGUF). Both stay
 //! inline until they can be smoke-tested via `cargo tauri dev`.
 
-pub mod health;
 pub mod inference;
 pub mod store;
 
