@@ -1,0 +1,140 @@
+# The BOUNDED second pass — claim atoms over agent sessions, under a
+# declared ontology. NOT YET RUN. Written during the bs-1-oplog spike so
+# the ontology is reviewable before it costs anything.
+#
+# WHY A SECOND RECIPE AND NOT A SECOND BLOCK. `[enrichment.ontology]` is
+# atlas-only — recipe.rs:530 says so in as many words ("Custom atlas
+# ONTOLOGY for `type = "atlas"` recipes"), and `enrichment/tiered.rs`
+# never reads it. Ontology and RAPTOR+GLiNER are two enrichment TRACKS,
+# not two options on one. So the sibling `agent-sessions` recipe runs
+# tiered for retrieval, and this one runs atlas for claim atoms.
+#
+# THE RISK THIS RECIPE IS SHAPED AROUND. CONV_TIERED_PORT.md records the
+# atlas Phase-1b path hitting ~30% JSON parse-fail on a 16,404-chunk
+# conversational corpus and wedging in five days of restart loops. The
+# bound here is the input: `acquire.path` points at a FILTERED staging
+# dir (assistant prose + its evidence, no raw tool logs), not at the full
+# transcript set. Widen it only after a pass converges.
+
+[corpus]
+id = "agent-sessions-atlas"
+name = "Agent session claims"
+description = "Claim atoms mined from this machine's Claude Code sessions under a declared agent-session ontology. NEVER share."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/agent-sessions-claims"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "threaded_turns"
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "engineering"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a coding agent reporting to its operator. What matters is not
+the topic but WHEN each statement becomes decidable, and against what.
+
+A commitment to future work ("I'll wire the hook next") is decidable at the
+end of the session: either the work is in the session or it is not. An
+assertion about the code or the run ("the tests pass", "it lives at a.rs:12")
+is decidable now, against the tool output in the same turn. A universal
+("the only impl is X", "nothing else reads this") is decidable now and dies
+to a single counterexample. A measurement carries a number and an
+instrument. A judgement ("cleaner", "worth doing") is never decidable and
+must be marked as such rather than scored.
+
+Extract the artifacts a claim rests on — the file, the symbol, the gate that
+was run — because a claim with no anchor cannot be checked and that is
+itself the finding.
+"""
+
+[[enrichment.ontology.types]]
+name = "artifact"
+kind = "entity"
+description = "A file, module or path the session names."
+
+[[enrichment.ontology.types]]
+name = "symbol"
+kind = "entity"
+description = "A code symbol: a type, trait, function or CLI verb."
+
+[[enrichment.ontology.types]]
+name = "gate"
+kind = "entity"
+description = "An instrument that verifies: a test script, a lint, a bench lane, a build."
+
+[[enrichment.ontology.types]]
+name = "promise"
+kind = "claim"
+force = "commissive"
+description = "The agent commits itself to future work. Decidable at session end."
+attributes = [
+  { name = "decidable_at", type = "text", values = ["session-end"] },
+  { name = "about",        type = "ref",  of = "artifact" },
+]
+
+[[enrichment.ontology.types]]
+name = "assertion"
+kind = "claim"
+force = "assertive"
+description = "States what was done, observed, or exists. Decidable now, against this session's own tool output."
+attributes = [
+  { name = "decidable_at", type = "text", values = ["now"] },
+  { name = "anchor",       type = "ref",  of = "artifact" },
+  { name = "verified_by",  type = "ref",  of = "gate" },
+]
+
+[[enrichment.ontology.types]]
+name = "universal"
+kind = "claim"
+force = "assertive"
+specializes = "assertion"
+description = "Asserts all, none, only or never about a set. One counterexample kills it."
+attributes = [
+  { name = "quantifier", type = "text", values = ["only", "never", "every", "none", "no-other"] },
+  { name = "over",       type = "ref",  of = "symbol" },
+]
+
+[[enrichment.ontology.types]]
+name = "measurement"
+kind = "claim"
+force = "assertive"
+specializes = "assertion"
+description = "Carries a number produced by an instrument."
+attributes = [
+  { name = "value",      type = "quantity" },
+  { name = "instrument", type = "ref", of = "gate" },
+  { name = "taken_at",   type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "judgement"
+kind = "claim"
+force = "assertive"
+description = "Taste, preference, recommendation. NEVER decidable — recorded so it can be excluded from any score, never to be graded."
+attributes = [
+  { name = "decidable_at", type = "text", values = ["never"] },
+]
+
+[display]
+category = "conversation"
+icon = "chat-bubble"
+
+[retrieval]
+personal_scope = true

@@ -1,0 +1,47 @@
+[corpus]
+id = "agent-sessions"
+name = "Agent session history"
+description = "This machine's own Claude Code session transcripts, converted to turn blocks by scripts/co-transcript-export.py. SPIKE for order bs-1-oplog: the claims an agent made to the operator, with the tool output that bears on them in the same chunk. NEVER share — these carry the operator's private work, unreleased code, and third-party names."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+# Staging dir written by:
+#   python3 scripts/co-transcript-export.py --last 40
+# Nothing in the engine reads Claude Code's ~/.claude/projects/*.jsonl
+# shape; the shipped anthropic_export extractor is the claude.ai WEB
+# export, a different schema. The converter emits the "### [ts] role"
+# turn blocks threaded_turns already parses, so this spike needs no
+# engine change.
+[acquire]
+type = "local_file"
+path = "/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/5ab14d6d-b7c8-4803-8e2e-095013657e83/scratchpad/agent-sessions"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "threaded_turns"
+
+[index]
+fts = true
+vector = true
+
+# TIERED, not atlas — deliberately. CONV_TIERED_PORT.md records the atlas
+# Phase-1b claim-mining path hitting a ~30% JSON parse-fail rate on a
+# 16,404-chunk conversational corpus and wedging in five days of restart
+# loops. Tiered (per-conversation entity graph + RAPTOR + motifs) is the
+# path that landed. Claim atoms are a SECOND, bounded pass — not this one.
+[enrichment]
+enabled = true
+type = "tiered"
+domain = "conversational"
+
+[display]
+category = "conversation"
+icon = "chat-bubble"
+
+[retrieval]
+personal_scope = true
+dedup_by_source = true
