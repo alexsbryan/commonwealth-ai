@@ -9084,6 +9084,36 @@ this gate for a reason, and the two admitted here are package crates whose
 entire purpose is to be liftable — if a third arrives without that property,
 the answer is the split, not another row.
 
+### 10.1t Size OWED, not accepted — arch-gate at the thin-desktop landing (2026-09-12)
+
+**The baseline was NOT touched.** This entry exists so the separation is
+done once rather than redone by whoever pushes: `arch-gate` is red, and
+`--update-baseline` on this working tree would bank a peer's uncommitted
+edits along with the landing's own growth, which is the trap
+`AGENTS.md` names under "Definition of done".
+
+Gated state: `arch-gate FAILED (9 size, 0 doc)`, down from 11 — the two
+that this landing itself put over the ceiling were split instead
+(`corpus-engine/src/registry.rs` 1254 → 980, `research_http.rs` 1326 →
+661 + `research_run_dir.rs` 706). What is left, and whose it is:
+
+| Finding | Owner | Reading |
+|---|---|---|
+| `AGENTS.md` 46726 → 47980 bytes (+1254) | **PEER, uncommitted** | Not this landing's to bank. It is a dirty file in the shared tree (` M AGENTS.md` at session start) and re-baselining would make the next reader think this push grew the compass. |
+| `.claude/CLAUDE.md` 1750 → 1838 bytes (+88) | **PEER, uncommitted** | Same. |
+| `sovereign-mesh/src/scheduler_core.rs` 1282 → 1351 (+69) | **PEER, uncommitted** | Same — predicted-time / scheduler work in flight beside this landing. |
+| `sovereign-turn-client/src/lib.rs` 3781 → 4509 (+728) | **this landing, cumulative** | The client gained ~36 methods across sv-surface and thin-desktop (mesh view, recipe projects, workflows, documents, lc, atlas, meshapp, enrich, recipes, research) because that is what "the desktop calls the daemon" MEANS. It is now the campaign's god-file and the split is real work: by ROUTE FAMILY, one module per `*_http` it speaks to, which the section banners in it already mark. Owed, and the first thing the next thin-desktop rung should buy. |
+| `sovereign-tools/src/atlas_view/reader.rs` 1267 (NEW) | `10c140b3b` (slice 1) | The atlas readers took the DTO projections when they moved below the daemon. Just over; splits by reader (corpora / report / members / atoms / subgraph). |
+| `studio/crates/sovereign-tools-base/src/web/search/mod.rs` 1201 (NEW) | `e0dc72e99` | One line over, from the one-web-search-dispatch convergence. Cheapest of the five to clear. |
+| `sovereign-desktop/.../commands/chat.rs` 1399 → 1479 (+80) | `12bb2bc02` | The chat path reading metadata over the wire. Will shrink again when the focused-passage and starter blocks follow the rest of the presentation down. |
+| approach band: files 195 → 197 (+2) | mixed | `registry.rs` (980) and `research_run_dir.rs` (706 → not in band); the band grew because a split moves a file from ABOVE the ceiling into the 800–1200 queue. The gate's own message names this ("where a split refills"). |
+| approach band: lines 192272 → 193703 (+1431) | mixed | Same cause plus the landing's new route files. |
+
+The honest verdict on the gate itself is the one in §10.1s: it had been
+red for four commits before anyone ran it, and the fix is that
+`scripts/pre-push.sh` runs it. It now does, which is why this table
+exists at all.
+
 ### 10.1s Fan-in ACCEPTED — `sovereign-contracts` 27 → 28 (thin-desktop landing, 2026-09-11)
 
 One crate was added to the dependents of `sovereign-contracts`, and it is the
