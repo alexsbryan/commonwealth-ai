@@ -39,6 +39,7 @@ pub mod documents;
 pub mod ingest;
 pub mod local_corpus;
 pub mod mesh;
+pub mod meshapp;
 pub mod recipe_projects;
 pub mod workflows;
 
@@ -46,6 +47,7 @@ pub use documents::*;
 pub use ingest::*;
 pub use local_corpus::*;
 pub use mesh::*;
+pub use meshapp::*;
 pub use recipe_projects::*;
 pub use workflows::*;
 

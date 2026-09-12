@@ -13,6 +13,10 @@ sovereign-time = { workspace = true }
 # meshapp ops are projections over corpus-engine reads. No `treesitter`: these
 # ops touch atoms/prose, never the SCIP code graph.
 corpus-engine = { workspace = true }
+# The explorer DTOs live in `sovereign_contracts::daemon_wire::meshapp`; this
+# crate re-exports them at their historical path. Already reachable through
+# corpus-engine, so no new layer edge.
+sovereign-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Wrapped artifact builder: weekday/hour folds + read-only GLiNER

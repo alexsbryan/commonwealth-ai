@@ -27,10 +27,6 @@ sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
-# Workflow authoring parity: the recipe-author workspace commands validate a
-# workflow project's TOML via `Workflow::parse` (the same way they validate a
-# recipe via `Recipe::from_toml`). Core-only crate — no inference/tool deps.
-sovereign-workflow = { workspace = true }
 # `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`
 # LEFT HERE at svt-3 (2026-09-11), with `corpus-engine-scip` and `arc-swap`
 # below. The runtime recipe and the workflow-author bundle went when the app
@@ -63,7 +59,6 @@ sovereign-meshapp = { workspace = true }
 # peer-preference route was the LAST thing holding these two.
 corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-authoring-harness.workspace = true
-corpus-engine-notes = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }

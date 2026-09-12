@@ -29,10 +29,15 @@
 //! `GET /internal/meshapp/{corpus}/...`, which runs the very
 //! `sovereign_meshapp::*` projection this file used to call in-process —
 //! over the DAEMON's index dir, so an attached boot answers at all. The
-//! DTOs are unchanged (`sovereign-meshapp`'s own types, now `Deserialize`),
-//! so the frontend sees the same bytes. `resolve_index_path` is gone with
-//! them, and so are the page defaults and clamps each command re-applied:
-//! those live in the route, once (ARCH §10.6).
+//! DTOs are unchanged and named from `sovereign_contracts::daemon_wire`
+//! (their home since 2026-09-11; `sovereign-meshapp` re-exports them), so
+//! the frontend sees the same bytes without this crate linking the
+//! projection. The Wrapped deck is the one exception: a persisted schema
+//! defined beside its folds and verifier, which nothing here reads a
+//! field of, so `meshapp_wrapped_artifact` passes it through as
+//! `serde_json::Value`. `resolve_index_path` is gone with them, and so
+//! are the page defaults and clamps each command re-applied: those live
+//! in the route, once (ARCH §10.6).
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -47,9 +52,9 @@ use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, Flag
 use corpus_engine::enrichment::atlas::AtomEnvelope;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
-use sovereign_meshapp::{
-    ChunkDto, ClaimDto, CorpusStatsDto, FindingDto, GraphNodeDto, NodeDetailDto, QuestionDto,
-    ReconciliationMergeDto, SubgraphDto, TimelineDto,
+use sovereign_contracts::daemon_wire::{
+    ChunkDto, ClaimDto, CorpusStatsDto, DocumentFeedDto, FindingDto, GraphNodeDto, NodeDetailDto,
+    QuestionDto, ReconciliationMergeDto, SubgraphDto, TimelineDto,
 };
 
 /// Default SF business-tax take (~$1.4B) the flat land levy must replace.
@@ -326,8 +331,9 @@ pub async fn meshapp_parcel_analytics(
 // resolution, the subgraph/timeline/stats/reconciliation reads) lives in the
 // `sovereign-meshapp` lib, which the DAEMON now calls: each command below is
 // the `mesh_store_read` gate plus one `TurnClient::meshapp_*` call. The DTOs
-// are re-used from the lib so the wire contract is identical, and the
-// defaults/clamps each command used to apply belong to the route.
+// are the contract layer's (`daemon_wire::meshapp`) so the wire contract is
+// identical, and the defaults/clamps each command used to apply belong to
+// the route.
 
 /// `window.meshApp.graph(corpusId, nodeType?, limit?)` — gated on
 /// `mesh_store_read`. Degree-ranked entities, highest-degree first.
@@ -540,14 +546,11 @@ pub async fn meshapp_document_feed(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     limit_docs: Option<u32>,
-) -> Result<sovereign_meshapp::DocumentFeedDto, String> {
+) -> Result<DocumentFeedDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     wire(&state)
-        .meshapp_document_feed::<sovereign_meshapp::DocumentFeedDto>(
-            &corpus_id,
-            limit_docs.map(|n| n as usize),
-        )
+        .meshapp_document_feed::<DocumentFeedDto>(&corpus_id, limit_docs.map(|n| n as usize))
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
@@ -566,11 +569,11 @@ pub async fn meshapp_wrapped_artifact(
     webview: WebviewWindow,
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<sovereign_meshapp::wrapped::WrappedArtifact, String> {
+) -> Result<serde_json::Value, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     wire(&state)
-        .meshapp_wrapped_artifact::<sovereign_meshapp::wrapped::WrappedArtifact>(&corpus_id)
+        .meshapp_wrapped_artifact::<serde_json::Value>(&corpus_id)
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }

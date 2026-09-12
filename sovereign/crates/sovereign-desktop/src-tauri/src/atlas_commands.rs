@@ -4,9 +4,8 @@
 //! Read-only browsing today (Phase 1): list corpora that have an
 //! atlas, list/filter atoms within one corpus (Step 3), inspect a
 //! single atom (Step 4). Phase 2 will grow curation-edit commands
-//! here — overlay reads ride on `sovereign_tools::atlas_view`'s
-//! existing methods, so this module stays the only Tauri surface for
-//! atlas inspection.
+//! here — overlay reads ride on the daemon's `atlas_http` routes, so
+//! this module stays the only Tauri surface for atlas inspection.
 //!
 //! These commands live outside `commands.rs` deliberately:
 //! `commands.rs` is already the workspace's largest file (§3.3 in
@@ -20,12 +19,18 @@
 //! `sovereign_mesh::atlas_http`'s routes over `client_base_url()` — ONE
 //! path in both boot modes, because Local means the daemon is in-process
 //! over this process's own `corpus_engine`. Their return types are
-//! unchanged and unwrapped: the routes answer the same
-//! `sovereign_tools::atlas_view` types the local `FileAtlasReader`
-//! returned, so the frontend contract is byte-identical — and the
+//! passed through as `serde_json::Value`: the routes answer
+//! `sovereign_tools::atlas_view`'s types, every one of which closes over
+//! the engine's atom vocabulary (`AtomType`, `AtomId`, `EdgeType`,
+//! `OntologyCoverage`), and nothing here reads a field — so naming them
+//! bought the desktop a link to the whole knowledge engine for a
+//! re-serialisation of the same bytes. The frontend contract is
+//! byte-identical (a `Value` round-trip cannot drop a
+//! `skip_serializing_if` key the way a typed twin can), and the
 //! section→chunk map that makes `atlas_get_atom_detail`'s evidence rows
-//! clickable is now built and cached ONCE per host rather than once per
-//! surface.
+//! clickable is built and cached ONCE per host rather than once per
+//! surface. The on-disk fixture those routes read is pinned beside the
+//! reader, in `sovereign_tools::atlas_view::reader::tests`.
 //!
 //! The six conversation-tiered commands crossed on the same rung, over
 //! `/internal/atlas/conv/` and the daemon's own
@@ -38,10 +43,7 @@
 
 use std::sync::Arc;
 
-use sovereign_tools::atlas_view::{
-    AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
-    ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, PageCursor,
-};
+use serde_json::Value;
 use tauri::State;
 
 use crate::state::AppState;
@@ -58,11 +60,9 @@ fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {
 /// per-atom-type counts so the type tabs can show badges before the
 /// user clicks in.
 #[tauri::command]
-pub async fn atlas_list_corpora(
-    state: State<'_, Arc<AppState>>,
-) -> Result<Vec<AtlasCorpusSummary>, String> {
+pub async fn atlas_list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<Value>, String> {
     atlas_client(&state)
-        .atlas_corpora::<Vec<AtlasCorpusSummary>>()
+        .atlas_corpora::<Vec<Value>>()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
 }
@@ -78,9 +78,9 @@ pub async fn atlas_list_corpora(
 pub async fn atlas_build_report(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AtlasBuildReport, String> {
+) -> Result<Value, String> {
     atlas_client(&state)
-        .atlas_build_report::<AtlasBuildReport>(&corpus_id)
+        .atlas_build_report::<Value>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_build_report: {e}"))
 }
@@ -98,9 +98,9 @@ pub async fn atlas_build_report(
 pub async fn atlas_list_members(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<Vec<AtlasMemberSummary>, String> {
+) -> Result<Vec<Value>, String> {
     atlas_client(&state)
-        .atlas_members::<Vec<AtlasMemberSummary>>(&corpus_id)
+        .atlas_members::<Vec<Value>>(&corpus_id)
         .await
         .map_err(|e| format!("atlas_list_members: {e}"))
 }
@@ -117,16 +117,16 @@ pub async fn atlas_list_members(
 pub async fn atlas_list_atoms(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-    filter: Option<AtomFilter>,
-    page: Option<PageCursor>,
-) -> Result<AtomListPage, String> {
+    filter: Option<Value>,
+    page: Option<Value>,
+) -> Result<Value, String> {
     // `atlas_http::AtomBrowseRequest`'s two keys, carrying the SAME
     // `Option` semantics this command already had — an absent value is the
     // type's `Default`, now applied by the route so the default has one
     // decider rather than two (ARCH §10.6).
     let request = serde_json::json!({ "filter": filter, "page": page });
     atlas_client(&state)
-        .atlas_atoms::<_, AtomListPage>(&corpus_id, &request)
+        .atlas_atoms::<_, Value>(&corpus_id, &request)
         .await
         .map_err(|e| format!("atlas_list_atoms: {e}"))
 }
@@ -141,19 +141,19 @@ pub async fn atlas_subgraph(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     max_nodes: Option<usize>,
-) -> Result<sovereign_tools::atlas_view::AtlasSubgraph, String> {
+) -> Result<Value, String> {
     // `None` travels as an absent `max_nodes` and the route applies
     // `atlas_view::DEFAULT_MAX_NODES` — the cap keeps ONE decider, and it
     // is not this file.
     atlas_client(&state)
-        .atlas_subgraph::<sovereign_tools::atlas_view::AtlasSubgraph>(&corpus_id, max_nodes)
+        .atlas_subgraph::<Value>(&corpus_id, max_nodes)
         .await
         .map_err(|e| format!("atlas_subgraph: {e}"))
 }
 
 /// Full inspector record for one atom — full type-specific shape +
 /// one-hop related atoms + cross-corpus bridges + evidence
-/// excerpts. Drives the desktop's `AtomDetail.svelte`.
+/// excerpts. Drives the desktop's `Value.svelte`.
 ///
 /// The evidence excerpts arrive with their `section_id`s ALREADY
 /// resolved to numeric `chunk_id`s — the route does that half now, off
@@ -173,9 +173,9 @@ pub async fn atlas_get_atom_detail(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     atom_id: String,
-) -> Result<Option<AtomDetail>, String> {
+) -> Result<Option<Value>, String> {
     atlas_client(&state)
-        .atlas_atom_detail::<AtomDetail>(&corpus_id, &atom_id)
+        .atlas_atom_detail::<Value>(&corpus_id, &atom_id)
         .await
         .map_err(|e| format!("atlas_get_atom_detail: {e}"))
 }
@@ -221,9 +221,9 @@ pub async fn atlas_get_atom_detail(
 #[tauri::command]
 pub async fn atlas_list_conv_corpora(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<ConvCorpusSummary>, String> {
+) -> Result<Vec<Value>, String> {
     atlas_client(&state)
-        .conv_corpora::<ConvCorpusSummary>()
+        .conv_corpora::<Value>()
         .await
         .map_err(|e| format!("atlas_list_conv_corpora: {e}"))
 }
@@ -238,10 +238,10 @@ pub async fn atlas_list_conversations(
     corpus_id: String,
     filter: Option<String>,
     offset: Option<u64>,
-) -> Result<ConvListPage, String> {
+) -> Result<Value, String> {
     let filter = filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
     atlas_client(&state)
-        .conv_conversations::<ConvListPage>(&corpus_id, filter, offset)
+        .conv_conversations::<Value>(&corpus_id, filter, offset)
         .await
         .map_err(|e| format!("atlas_list_conversations: {e}"))
 }
@@ -259,9 +259,9 @@ pub async fn atlas_get_conv_detail(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     conv_uuid: String,
-) -> Result<Option<ConvDetailView>, String> {
+) -> Result<Option<Value>, String> {
     atlas_client(&state)
-        .conv_detail::<ConvDetailView>(&corpus_id, &conv_uuid)
+        .conv_detail::<Value>(&corpus_id, &conv_uuid)
         .await
         .map_err(|e| format!("atlas_get_conv_detail: {e}"))
 }
@@ -380,252 +380,9 @@ pub async fn atlas_get_conv_entities(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     conv_uuid: String,
-) -> Result<Vec<ConvEntityChip>, String> {
+) -> Result<Vec<Value>, String> {
     atlas_client(&state)
-        .conv_entities::<ConvEntityChip>(&corpus_id, &conv_uuid)
+        .conv_entities::<Value>(&corpus_id, &conv_uuid)
         .await
         .map_err(|e| format!("atlas_get_conv_entities: {e}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    // The browse commands no longer construct a reader (sv-surface D4);
-    // these two tests still drive `FileAtlasReader` DIRECTLY, because what
-    // they pin is the on-disk fixture the route will read, not the command.
-    use corpus_engine::enrichment::atlas::atoms::{
-        AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
-    };
-    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
-    use sovereign_tools::atlas_view::FileAtlasReader;
-
-    fn write_atoms(atlas_dir: &std::path::Path, atoms: Vec<AtomEnvelope>) {
-        std::fs::create_dir_all(atlas_dir).unwrap();
-        let file = AtomsFile::new(atoms);
-        std::fs::write(
-            atlas_dir.join("atoms.json"),
-            serde_json::to_vec_pretty(&file).unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn sample_entity(id: usize, name: &str) -> AtomEnvelope {
-        AtomEnvelope::Entity(Entity {
-            id: AtomId::entity(id),
-            canonical_name: name.into(),
-            aliases: vec![],
-            entity_type: EntityType::Concept,
-            first_appearance: ChunkRef::new("sec_0001", None),
-            description: "x".into(),
-            defining_quote: None,
-            salience: 0.5,
-            enrichment_depth: EnrichmentDepth::Extracted,
-            affiliation: None,
-            role: None,
-            participants: vec![],
-            provenance: Default::default(),
-            attributes: serde_json::Map::new(),
-            concept_kind: None,
-        })
-    }
-
-    // The Tauri command itself can't be unit-tested without a full
-    // AppState (which owns a corpus engine + runtime). The
-    // command's two ingredients ARE separately testable:
-    //
-    //   - FileAtlasReader::list_corpora — covered by 7 tests in
-    //     sovereign_tools::atlas_view::reader::tests.
-    //   - The DTO serialisation — covered by
-    //     `atlas_corpus_summary_serialises_cleanly` in the same
-    //     module.
-    //
-    // This test pins the *wire-level* end-to-end behaviour without
-    // a Tauri runtime: build a FileAtlasReader against a tempdir
-    // fixture (mimicking what the command does internally) and
-    // verify the JSON the desktop receives.
-
-    #[tokio::test]
-    async fn atlas_list_corpora_returns_serialisable_summaries() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_atoms(
-            &tmp.path().join("wikipedia").join("atlas"),
-            vec![sample_entity(1, "Earth"), sample_entity(2, "Mars")],
-        );
-        write_atoms(
-            &tmp.path().join("sep-mind").join("atlas"),
-            vec![sample_entity(1, "Consciousness")],
-        );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
-        let summaries = reader.list_corpora().await.expect("list_corpora succeeds");
-        // What the Tauri command Ok-arm returns:
-        let wire = serde_json::to_value(&summaries).unwrap();
-        assert!(wire.is_array());
-        let arr = wire.as_array().unwrap();
-        assert_eq!(arr.len(), 2);
-        // Sorted alphabetically — sep-mind first.
-        assert_eq!(arr[0]["corpus_id"], "sep-mind");
-        assert_eq!(arr[0]["total_atoms"], 1);
-        assert_eq!(arr[1]["corpus_id"], "wikipedia");
-        assert_eq!(arr[1]["total_atoms"], 2);
-    }
-
-    /// The numismatics real-mode fixture, validated through the SAME reader
-    /// the Tauri commands use.
-    ///
-    /// `numismatics.real.spec.ts` asserts a pill row, a filtered list and an
-    /// atom inspector over a checked-in atlas that global-setup overlays onto
-    /// a real ingested corpus. Every number in that spec comes from these
-    /// three files, so if the fixture drifts — a serde field renamed, a
-    /// hand-edited atom that no longer deserialises, `ontology.json` dropped
-    /// from the overlay list — the browser spec fails minutes into a real-mode
-    /// run with a UI-shaped error a long way from the cause. This fails in
-    /// milliseconds and says which file.
-    ///
-    /// Modelled on `governance_real_fixture_is_valid_or_regenerated`
-    /// (`governance_commands.rs`), including the "absent → skip" arm: the
-    /// fixture is committed, so absence means a partial checkout, not a
-    /// regression.
-    #[tokio::test]
-    async fn numismatics_real_fixture_carries_the_census_its_spec_asserts() {
-        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../tests/e2e/real/fixtures/numismatics-atlas");
-        if !fixture.join("ontology.json").exists() {
-            eprintln!(
-                "[skip] numismatics real-mode fixture absent at {}",
-                fixture.display()
-            );
-            return;
-        }
-
-        // Lay it out exactly as `plantNumismaticsCorpus` does: one index dir
-        // with an `atlas/` holding the three overlay files.
-        let tmp = tempfile::tempdir().unwrap();
-        let atlas_dir = tmp.path().join("numismatics-e2e").join("atlas");
-        std::fs::create_dir_all(&atlas_dir).unwrap();
-        for f in ["atoms.json", "edges.json", "ontology.json"] {
-            std::fs::copy(fixture.join(f), atlas_dir.join(f))
-                .unwrap_or_else(|e| panic!("copying {f}: {e}"));
-        }
-
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
-        let rows = reader.list_corpora().await.expect("list_corpora succeeds");
-        let row = rows
-            .iter()
-            .find(|r| r.corpus_id == "numismatics-e2e")
-            .expect("the fixture corpus is listed — if not, atoms.json failed to parse");
-
-        assert_eq!(row.total_atoms, 12);
-
-        // The declaration reached the summary. WITHOUT `ontology.json` in the
-        // overlay this vector is empty and the desktop falls back to the
-        // generic atom kinds — the spec would then assert nothing about
-        // ontology while still passing on the kind pills.
-        let declared: Vec<&str> = row.declared_types.iter().map(|t| t.name.as_str()).collect();
-        // ALPHABETICAL, not declaration order. The recipe declares coin,
-        // sceatta, ruler, mint, attribution; `_summary.json` v4 carries the
-        // declaration as a `BTreeMap<String, String>`, so the order is lost
-        // before `AtlasCorpusSummary` ever sees it — and the desktop's pill
-        // row therefore separates `sceatta` from the `coin` it specializes.
-        // Pinned as it IS rather than as the P6 design assumed, so a later
-        // order-preserving change is a deliberate edit here and not a
-        // surprise (§18.3).
-        assert_eq!(
-            declared,
-            vec!["attribution", "coin", "mint", "ruler", "sceatta"],
-            "the summary's declaration map is a BTreeMap — this is pill order",
-        );
-        let sceatta = row
-            .declared_types
-            .iter()
-            .find(|t| t.name == "sceatta")
-            .expect("sceatta is declared");
-        assert_eq!(
-            sceatta.specializes.as_deref(),
-            Some("coin"),
-            "the roll-up the `coin` pill's badge depends on",
-        );
-
-        // OWN counts. The spec's `coin` badge is 5 — 3 + the 2 sceattas —
-        // and nothing here carries that total.
-        assert_eq!(row.subtype_counts.get("coin"), Some(&3));
-        assert_eq!(row.subtype_counts.get("sceatta"), Some(&2));
-        assert_eq!(row.subtype_counts.get("mint"), Some(&2));
-        assert_eq!(row.subtype_counts.get("attribution"), Some(&2));
-        assert_eq!(
-            row.subtype_counts.get("ruler"),
-            Some(&1),
-            "a `role_of` type is counted across kinds, not inside Entity",
-        );
-        assert_eq!(row.atom_counts.values().sum::<u64>(), 12);
-
-        // Clicking the `coin` pill: exact match, no roll-up.
-        let page = reader
-            .list_atoms(
-                "numismatics-e2e",
-                AtomFilter {
-                    subtypes: vec!["coin".into()],
-                    ..Default::default()
-                },
-                PageCursor::default(),
-            )
-            .await
-            .unwrap();
-        let names: Vec<&str> = page.items.iter().map(|a| a.display_name.as_str()).collect();
-        assert_eq!(
-            names,
-            vec!["Marlow Field 1", "Marlow Field 2", "Marlow Field 3"],
-            "the three coins, NOT the two sceattas the badge counts",
-        );
-
-        // Clicking `ruler`: a State atom on the person, found without the
-        // caller naming a kind.
-        let page = reader
-            .list_atoms(
-                "numismatics-e2e",
-                AtomFilter {
-                    subtypes: vec!["ruler".into()],
-                    ..Default::default()
-                },
-                PageCursor::default(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(page.items.len(), 1);
-        assert_eq!(page.items[0].display_name, "King of Mercia");
-        assert_eq!(
-            page.items[0].atom_type,
-            corpus_engine::enrichment::atlas::atoms::AtomType::State,
-        );
-
-        // The attribution claim's "About" link, and the `ref` attribute that
-        // resolves beside one that is only what the source said.
-        let detail = reader
-            .get_atom_detail("numismatics-e2e", "claim-0001")
-            .await
-            .unwrap()
-            .expect("the attribution claim is in the fixture");
-        assert_eq!(
-            detail.referenced_atoms["entity-0008"].display_name, "Marlow Field 4",
-            "the claim's subject resolves",
-        );
-        let sceatta = reader
-            .get_atom_detail("numismatics-e2e", "entity-0008")
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            sceatta.referenced_atoms["entity-0003"].display_name, "Canterbury",
-            "the `mint` ref attribute resolves",
-        );
-        let unresolved = reader
-            .get_atom_detail("numismatics-e2e", "entity-0009")
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(
-            unresolved.referenced_atoms.is_empty(),
-            "\"an unidentified continental mint\" is the source's words, not a link: {:?}",
-            unresolved.referenced_atoms,
-        );
-    }
 }
