@@ -227,7 +227,10 @@ pub async fn publish_app(
     Json(req): Json<ClaimRequest>,
 ) -> impl IntoResponse {
     let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();
-    match daemon.published_apps.claim(&req.name, addr, ttl_of(req.ttl_secs)) {
+    match daemon
+        .published_apps
+        .claim(&req.name, addr, ttl_of(req.ttl_secs))
+    {
         Ok(claim) => (StatusCode::OK, Json(serde_json::json!(claim))).into_response(),
         Err(e) => publish_refusal(e),
     }

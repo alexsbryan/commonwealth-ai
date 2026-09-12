@@ -42,9 +42,7 @@ use std::sync::Arc;
 use commonwealth_core::ids::NodePubkey;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_media::{MemberCheck, MemberIdentity};
-use commonwealth_transport::iroh::{
-    Endpoint, Forward, IrohAcceptor, ALPN, APP_ALPN, MEDIA_ALPN,
-};
+use commonwealth_transport::iroh::{Endpoint, Forward, IrohAcceptor, ALPN, APP_ALPN, MEDIA_ALPN};
 use tokio::sync::RwLock;
 
 /// The roster consult the media arm makes on EVERY dial. Not cached: a member
@@ -141,12 +139,7 @@ pub fn spawn(
                 // above. The narrower grant is the inference daemon's
                 // `[iroh] app_allow`; here the honest statement is that
                 // publishing an app on a rails node offers it to the mesh.
-                return commonwealth_media::admit_app(
-                    who.as_ref(),
-                    dialer,
-                    &apps.snapshot(),
-                    &[],
-                );
+                return commonwealth_media::admit_app(who.as_ref(), dialer, &apps.snapshot(), &[]);
             }
             tracing::warn!(
                 target: "rails",
