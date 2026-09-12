@@ -346,6 +346,25 @@ load_bearing = [
 ]
 
 [[instrument]]
+id = "judge-funnel-gate"
+kind = "gate"
+claim = "invariant"
+command = "cargo xtask judge-funnel-gate"
+# 0.42s, n=3 (0.43 / 0.42 / 0.42 wall), 2026-09-12, quiet host. It reads 2,003
+# source files once; the cost is the walk, not the rule.
+cost_secs = 0.42
+enforcement = "hard"
+fidelity = "F0"
+# No baseline, deliberately: the target is ONE construction site, and a ratchet
+# that can be raised to two is a second judge register with a green gate over
+# it. The one live exception is a `judge-funnel: instrument-of-the-mechanism`
+# marker at the site, where its reason is readable.
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush", "ci:gates"]
+doc = "quality/campaigns/verifier-loop.toml §vl-one-primitive"
+
+[[instrument]]
 id = "instrument-gate"
 kind = "gate"
 claim = "invariant"

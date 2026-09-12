@@ -92,7 +92,14 @@ pub(crate) use judge::{verify_grounding, GateVerdict};
 // structural (ARCH §10.6) — and it means a future change to the register
 // moves BOTH sides, instead of leaving the calibration instrument behind.
 pub use judge::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
+// THE forced-choice primitive. Public because the bench critic and the
+// mechanism-fidelity harness are judge-side callers in other crates, and the
+// alternative — each building its own `x_forced_choice` body — is what made
+// two thirds of this system's judge traffic invisible to `call_census`
+// (`cargo xtask judge-funnel-gate` holds it at one).
+pub use call_census::JudgeCall;
 pub use judge::{claim_extraction_prompt, CLAIM_EXTRACTION_SYSTEM};
+pub use judge::{forced_choice_ab, JudgeRouting};
 // The FR-6 decorrelation driver (order deep-research-t0b, `tests/fr6_decorrelation.rs`)
 // measures these two strings against the labeled bank as a genuine out-of-crate
 // consumer; visibility per directives 13efc5dc + e39f87b2. Import-block addition only.

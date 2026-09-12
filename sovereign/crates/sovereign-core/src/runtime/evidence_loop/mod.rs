@@ -498,54 +498,33 @@ impl Runtime {
             excerpts.join("\n---\n"),
             message.chars().take(400).collect::<String>(),
         );
-        let req = CompletionRequest {
-            prompt,
-            system_message: Some(
-                "You are a careful evidence auditor. Answer with a single letter.".into(),
-            ),
-            // PRIMARY tier, not Fast. The `x_forced_choice` logit-distribution
-            // sentinel is NOT honored on the fast slot — it returns a sampled
-            // token ("\"B") instead of the {A,B} distribution, so the parse below
-            // fails and the loop silently degrades to round-0. This is the
-            // documented "recall pinned at 2/8" failure: the judge never worked.
-            // The gate's `forced_choice_ab` runs on primary for the same reason
-            // (the fast slot's support distributions are squashed). One
-            // prefill-dominated forced-choice per KQ is affordable for recall.
-            preferred_speed: Speed::Slow,
-            // SLOT_POLICY §7: OICP envelope instead of a `model_id:
-            // "primary"` pin (a latent privacy hole — see grounding/
-            // judge.rs). No `base_request` here, so posture comes from
-            // the session's skills exactly as `build_oicp` derives it.
-            oicp: Some(Workload::Judge.requirements(self.session_sharding())),
-            max_tokens: Some(1),
-            temperature: Some(0.0),
-            think_budget: Some(0),
-            enable_thinking: Some(false),
-            structured_output: Some(serde_json::json!({
-                "type": "string", "enum": ["A", "B"], "x_forced_choice": true
-            })),
-            ..Default::default()
+        // THE one forced-choice register (`runtime::forced_choice_ab`), not a
+        // fourth copy of its request body. Until 2026-09-12 this site built
+        // its own and called `complete` directly, so every call it made was
+        // invisible to `call_census` — see `GateCallMechanism::
+        // EvidenceSufficiency`, which also states why a row from here lands in
+        // no turn's census: the loop runs during retrieval, before the gate
+        // opens the window.
+        //
+        // The primitive pins PRIMARY, which this call requires: the
+        // `x_forced_choice` logit-distribution sentinel is NOT honored on the
+        // fast slot — it returns a sampled token ("\"B") instead of the {A,B}
+        // distribution, the parse fails, and the loop silently degrades to
+        // round-0. That is the documented "recall pinned at 2/8" failure: the
+        // judge never worked.
+        let Some((a, b)) = crate::runtime::forced_choice_ab(
+            &*self.inference,
+            "You are a careful evidence auditor. Answer with a single letter.",
+            &prompt,
+            None,
+            crate::runtime::JudgeRouting::Envelope(self.session_sharding()),
+            sovereign_contracts::types::GateCallMechanism::EvidenceSufficiency,
+        )
+        .await
+        else {
+            dbg("sufficiency judge: no distribution (call failed or unparseable)");
+            return None;
         };
-        let resp = match self.inference.complete(&req).await {
-            Ok(r) => r,
-            Err(e) => {
-                dbg(&format!("sufficiency judge: complete() error: {e}"));
-                return None;
-            }
-        };
-        let dist: std::collections::HashMap<String, f64> =
-            match serde_json::from_str(resp.text.trim()) {
-                Ok(d) => d,
-                Err(e) => {
-                    dbg(&format!(
-                        "sufficiency judge: parse error ({e}) on resp={:?}",
-                        resp.text.chars().take(80).collect::<String>()
-                    ));
-                    return None;
-                }
-            };
-        let a = dist.get("A").copied().unwrap_or(0.0);
-        let b = dist.get("B").copied().unwrap_or(0.0);
         let denom = a + b;
         if denom <= 0.0 {
             dbg("sufficiency judge: A+B logprob mass is 0 → None");

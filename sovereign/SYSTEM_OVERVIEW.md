@@ -3189,12 +3189,36 @@ pure prefill of the 28–36-chunk evidence window — and could not name the
 mechanism that issued a single one of them (note `221b3b71`, FINDING 3). Two
 candidate owners fit the shape and their fixes differ, so tuning without
 naming first would have been mole-whacking (ARCH §0).
-`call_census::gate_call` is now the **one funnel every gate model call goes
-through**, tagging each with a closed-set
+`call_census::gate_call` is now the **one funnel every judge model call goes
+through**, tagging each with a `call_census::JudgeCall`: either a closed-set
 `sovereign_contracts::types::GateCallMechanism` (`claim_extraction`,
 `claim_list`, `per_claim_judge`, `chunk_judge`, `specifics_scan`,
-`batched_support`, `surgery`, `rewrite`, `retry`, `short_guard_retry`,
-`citation`, `sentence_sweep`). Rows accumulate in a task-local opened by
+`batched_support`, `located_span_triage`, `surgery`, `rewrite`, `retry`,
+`short_guard_retry`, `citation`, `sentence_sweep`, `evidence_sufficiency`) or a
+`Harness(&'static str)` label for a caller outside any turn. **Only a `Gate`
+call produces a census ROW** — because only a gate turn has a census to put one
+in; a harness call is still timed, traced and failure-classified, which is the
+part a bench can use. The alternative, giving the bench critic's five scorers
+their own `GateCallMechanism` variants, was rejected: that type's contract is
+one variant per GATE call site (ARCH §12).
+
+**One register, enforced (`cargo xtask judge-funnel-gate`, 2026-09-12, rung
+`vl-1` of `quality/campaigns/verifier-loop.toml`).** Three judge-side sites
+built their own `x_forced_choice` request body — `grounding/judge.rs`,
+`bench_cmd/live_runner.rs` and an inline one in `runtime/evidence_loop` — and
+only the first reached the funnel, so two thirds of this system's judge traffic
+was invisible to the census that prices judge cost and attributes judge
+failure. `sovereign_core::runtime::forced_choice_ab` is now the only
+construction site; the other two are callers, parameterised by system message,
+`JudgeRouting` (OICP envelope vs a pinned slot) and `JudgeCall`. The gate holds
+it at one on two counts — sites == 1 AND sites whose file never calls
+`gate_call(` == 0, because either alone passes a split register. Its one
+exception, `bench_cmd/mechanism_fidelity.rs`, is declared by a
+`judge-funnel: instrument-of-the-mechanism` marker at the site rather than by a
+list in the gate: an instrument that measures the sentinel must build the wire
+shape or it measures its own caller (ARCH §7).
+
+Rows accumulate in a task-local opened by
 `gate_answer_with_progress` — the same funnel that owns the gate's wall clock —
 and ride out as `GroundingDecisionLine::calls` (counts only: `ms`,
 `prompt_chars`, `out_chars`, `ok`, `stable_prefix_bytes`, `start_offset_ms`;

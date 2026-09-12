@@ -285,9 +285,13 @@ async fn run(rest: &[String]) -> i32 {
     let mut judged: Vec<JudgedAtom> = Vec::new();
     let mut failures = 0usize;
     for (n, atom) in sampled.iter().enumerate() {
-        let verdict =
-            super::live_runner::forced_choice_ab(provider.as_ref(), &model, &judge_prompt(atom))
-                .await;
+        let verdict = super::live_runner::forced_choice_ab(
+            provider.as_ref(),
+            &model,
+            "bench_enrichment_adjudicate",
+            &judge_prompt(atom),
+        )
+        .await;
         let (junk, margin) = match verdict {
             Some((p_a, p_b)) => (Some(p_b > p_a), Some(p_b - p_a)),
             None => {
