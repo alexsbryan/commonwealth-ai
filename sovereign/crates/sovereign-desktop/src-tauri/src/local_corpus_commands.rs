@@ -102,9 +102,7 @@ use sovereign_tools::local_corpus::{
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
     LocalCorpusConfig,
 };
-use sovereign_workflow_host::workflow_http::{
-    JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
-};
+use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, WorkflowJobEvent};
 
 use crate::state::AppState;
 
@@ -839,7 +837,7 @@ async fn run_ingest_via_runner(
             }
         };
 
-        let terminal = job.status != sovereign_workflow_host::workflow_http::JobStatus::Running;
+        let terminal = job.status != sovereign_contracts::daemon_wire::JobStatus::Running;
         for event in job.events {
             after = after.max(event.seq);
             match event.event {

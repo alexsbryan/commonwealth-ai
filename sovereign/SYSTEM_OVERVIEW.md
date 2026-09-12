@@ -6219,6 +6219,18 @@ absent and the guards fail closed for *every* caller.
   the file was absent, a second minter of the daemon's identity; now a
   host that answered the reachability probe but not `/status` refuses the
   boot in its own words, never an invented id.
+- **The workflow job answers came down too** (svt-3, 2026-09-11, third
+  landing). `daemon_wire::workflows` holds the thirteen `/internal/workflows/*`
+  shapes (`WorkflowListEntry`, `WorkflowParamSpec`, `CapabilitiesQuery`,
+  `CapabilitiesResponse`, `RunRequest`, `RunResponse`, `JobQuery`,
+  `JobStatus`, `JobResponse`, `JobEvent`, `WorkflowJobEvent`,
+  `JobItemOutcome`, `WorkflowListResponse`); `sovereign_workflow_host::
+  workflow_http` re-exports them and the CLI's `workflow_cmd` is unchanged.
+  The desktop named them through the workflow ENGINE crate — the last code
+  reason for its `sovereign-workflow-host` edge. Orphan-rule consequence:
+  `From<WorkflowProgress> for WorkflowJobEvent` is the free function
+  `workflow_http::job_event_from_progress` and `JobStatus::from_event` is
+  `status_from_event`, each with its one caller.
 
 ### Foreground yield is bounded (2026-08-18)
 

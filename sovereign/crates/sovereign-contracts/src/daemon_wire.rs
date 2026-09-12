@@ -38,10 +38,12 @@ use serde::{Deserialize, Serialize};
 pub mod ingest;
 pub mod mesh;
 pub mod recipe_projects;
+pub mod workflows;
 
 pub use ingest::*;
 pub use mesh::*;
 pub use recipe_projects::*;
+pub use workflows::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 

@@ -20,7 +20,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use sovereign_workflow_host::workflow_http::{
+use sovereign_contracts::daemon_wire::{
     CapabilitiesResponse, JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
     WorkflowListEntry, WorkflowListResponse,
 };
@@ -265,8 +265,8 @@ pub async fn workflow_run(
             match resp {
                 Ok(r) if r.status().is_success() => match r.json::<JobResponse>().await {
                     Ok(job) => {
-                        let terminal = job.status
-                            != sovereign_workflow_host::workflow_http::JobStatus::Running;
+                        let terminal =
+                            job.status != sovereign_contracts::daemon_wire::JobStatus::Running;
                         for event in job.events {
                             after = after.max(event.seq);
                             let _ = app.emit(&channel, WorkflowRunEvent::from(event.event));
@@ -343,7 +343,7 @@ mod tests {
             ok: 2,
             failed: 0,
             corpus: Some("notes".into()),
-            items: vec![sovereign_workflow_host::workflow_http::JobItemOutcome {
+            items: vec![sovereign_contracts::daemon_wire::JobItemOutcome {
                 item: "a.md".into(),
                 ok: true,
                 output: Some("stored 3 chunks".into()),

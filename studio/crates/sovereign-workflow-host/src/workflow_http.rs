@@ -126,26 +126,14 @@ async fn loopback_only(request: axum::extract::Request, next: axum::middleware::
 // import these as their HTTP types so a field rename is a compile error on
 // both ends, not a runtime deserialization failure.
 
-/// One runnable workflow + the inputs it needs at run time — the shape the
-/// desktop's Run-a-workflow view renders.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowListEntry {
-    pub name: String,
-    pub description: String,
-    /// `"shipped:<name>"` | `"user:<name>"` | the resolved file path.
-    pub origin: String,
-    pub params: Vec<WorkflowParamSpec>,
-}
-
-/// One input field. `kind` lets the UI render a dedicated control for the
-/// well-known folder/corpus/glob params and a plain text box for the rest.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowParamSpec {
-    pub key: String,
-    /// `"folder"` | `"corpus"` | `"glob"` | `"text"`.
-    pub kind: String,
-    pub label: String,
-}
+/// The wire shapes — defined in `sovereign_contracts::daemon_wire::workflows`
+/// (svt-3) so a client parses them without linking this crate; re-exported
+/// here so the routes, the CLI and the tests keep naming this path.
+pub use sovereign_contracts::daemon_wire::{
+    CapabilitiesQuery, CapabilitiesResponse, JobEvent, JobItemOutcome, JobQuery, JobResponse,
+    JobStatus, RunRequest, RunResponse, WorkflowJobEvent, WorkflowListEntry, WorkflowListResponse,
+    WorkflowParamSpec,
+};
 
 fn classify_param(key: &str) -> WorkflowParamSpec {
     let kind = match key {
@@ -211,136 +199,18 @@ pub fn catalog_entries(user_dir: &path::Path) -> Vec<WorkflowListEntry> {
     entries
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CapabilitiesQuery {
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CapabilitiesResponse {
-    pub name: String,
-    /// Plain-language consent bullets ("run shell commands", "use your local
-    /// model"…) — the trust gate the caller shows before starting a run.
-    pub bullets: Vec<String>,
-}
-
-/// Body for `POST /run`. `toml` is set when the CALLER already resolved a
-/// file (the CLI with a local path against a remote `--daemon`); otherwise
-/// the daemon resolves `name_or_path` from its own catalog — same
-/// `~/.svrnmesh/workflows` dir, same shadowing rules.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RunRequest {
-    pub name_or_path: String,
-    #[serde(default)]
-    pub toml: Option<String>,
-    #[serde(default)]
-    pub params: BTreeMap<String, String>,
-    #[serde(default)]
-    pub concurrency: Option<usize>,
-    #[serde(default)]
-    pub no_cache: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RunResponse {
-    pub job_id: String,
-    /// Where the definition came from (echoed so a client can show it).
-    pub origin: String,
-    /// The corpus this run will build (it has a `tool:corpus_store` step and
-    /// a resolved `corpus` param) — so the UI can offer "chat with it".
-    pub corpus: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JobQuery {
-    /// Only events with `seq > after` are returned. Default 0 = everything.
-    #[serde(default)]
-    pub after: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobStatus {
-    Running,
-    Complete,
-    Failed,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JobResponse {
-    pub job_id: String,
-    pub status: JobStatus,
-    pub origin: String,
-    pub events: Vec<JobEvent>,
-}
-
-/// One retained progress event with its monotonic cursor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobEvent {
-    pub seq: u64,
-    #[serde(flatten)]
-    pub event: WorkflowJobEvent,
-}
-
-/// The wire progress enum: the Runner's [`WorkflowProgress`] variants plus
-/// the terminal `complete`/`failed` this runtime appends. Tagged on `kind`
-/// (snake_case) so a client can switch on it directly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum WorkflowJobEvent {
-    RunStarted {
-        workflow: String,
-        items: usize,
-        steps: usize,
-    },
-    StepDone {
-        item: String,
-        step: String,
-        uses: String,
-        for_each: bool,
-        cached: bool,
-        step_index: usize,
-        total_steps: usize,
-    },
-    ElementSkipped {
-        item: String,
-        step: String,
-        index: usize,
-        error: String,
-    },
-    ItemDone {
-        item: String,
-        ok: bool,
-        ran: usize,
-        cached: usize,
-    },
-    RunFinished {
-        ok: usize,
-        failed: usize,
-    },
-    /// Terminal: the run produced a report. `corpus` is the built corpus
-    /// when at least one item succeeded and the workflow stores one.
-    Complete {
-        workflow: String,
-        ok: usize,
-        failed: usize,
-        corpus: Option<String>,
-        items: Vec<JobItemOutcome>,
-    },
-    /// Terminal: the whole run errored before producing a report.
-    Failed {
-        error: String,
-    },
-}
-
-impl From<WorkflowProgress> for WorkflowJobEvent {
-    fn from(p: WorkflowProgress) -> Self {
+/// The Runner's progress event as the wire carries it. A free function
+/// rather than `impl From<WorkflowProgress> for WorkflowJobEvent`: both
+/// types are foreign here now (orphan rule). Still the one projection,
+/// still its one caller (the step observer in `run_handler`).
+pub fn job_event_from_progress(p: WorkflowProgress) -> WorkflowJobEvent {
+    {
         match p {
             WorkflowProgress::RunStarted {
                 workflow,
                 items,
                 steps,
-            } => Self::RunStarted {
+            } => WorkflowJobEvent::RunStarted {
                 workflow,
                 items,
                 steps,
@@ -353,7 +223,7 @@ impl From<WorkflowProgress> for WorkflowJobEvent {
                 cached,
                 step_index,
                 total_steps,
-            } => Self::StepDone {
+            } => WorkflowJobEvent::StepDone {
                 item,
                 step,
                 uses,
@@ -367,7 +237,7 @@ impl From<WorkflowProgress> for WorkflowJobEvent {
                 step,
                 index,
                 error,
-            } => Self::ElementSkipped {
+            } => WorkflowJobEvent::ElementSkipped {
                 item,
                 step,
                 index,
@@ -378,27 +248,17 @@ impl From<WorkflowProgress> for WorkflowJobEvent {
                 ok,
                 ran,
                 cached,
-            } => Self::ItemDone {
+            } => WorkflowJobEvent::ItemDone {
                 item,
                 ok,
                 ran,
                 cached,
             },
-            WorkflowProgress::RunFinished { ok, failed } => Self::RunFinished { ok, failed },
+            WorkflowProgress::RunFinished { ok, failed } => {
+                WorkflowJobEvent::RunFinished { ok, failed }
+            }
         }
     }
-}
-
-/// One item's outcome in the terminal `complete` event — the per-item report
-/// the CLI prints (`## item` + output / error).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobItemOutcome {
-    pub item: String,
-    pub ok: bool,
-    pub output: Option<String>,
-    pub error: Option<String>,
-    pub ran: usize,
-    pub cached: usize,
 }
 
 /// The run params after daemon-side defaulting: `corpus` defaults to the
@@ -504,7 +364,7 @@ impl WorkflowJobs {
                 let seq = Arc::clone(&seq);
                 Arc::new(move |ev: WorkflowProgress| {
                     let n = seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                    runtime.push_event(&job_id, n, ev.into());
+                    runtime.push_event(&job_id, n, job_event_from_progress(ev));
                 })
             };
             let extra = tool_feed();
@@ -560,7 +420,7 @@ impl WorkflowJobs {
     }
 
     fn finish(&self, job_id: &str, seq: u64, terminal: WorkflowJobEvent) {
-        let status = JobStatus::from_event(&terminal);
+        let status = status_from_event(&terminal);
         let mut jobs = self.jobs.lock().unwrap();
         if let Some(record) = jobs.get_mut(job_id) {
             record.events.push(JobEvent {
@@ -573,13 +433,13 @@ impl WorkflowJobs {
     }
 }
 
-impl JobStatus {
-    fn from_event(terminal: &WorkflowJobEvent) -> Self {
-        match terminal {
-            WorkflowJobEvent::Complete { .. } => Self::Complete,
-            WorkflowJobEvent::Failed { .. } => Self::Failed,
-            _ => Self::Running,
-        }
+/// The status a terminal event settles a job into. Free for the same
+/// reason as [`job_event_from_progress`].
+fn status_from_event(terminal: &WorkflowJobEvent) -> JobStatus {
+    match terminal {
+        WorkflowJobEvent::Complete { .. } => JobStatus::Complete,
+        WorkflowJobEvent::Failed { .. } => JobStatus::Failed,
+        _ => JobStatus::Running,
     }
 }
 
@@ -604,11 +464,6 @@ async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoRe
         workflows: catalog_entries(&crate::workflows_dir()),
     })
     .into_response()
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WorkflowListResponse {
-    pub workflows: Vec<WorkflowListEntry>,
 }
 
 async fn capabilities_handler(
