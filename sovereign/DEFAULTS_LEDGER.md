@@ -55,6 +55,16 @@ and the search runs through the registry `sovereign_tools::bundles` already
 exports. The exception is about WHERE THE EGRESS HAPPENS, not about the app
 owning a turn.
 
+**What thin-desktop R2 did change (2026-09-12).** The two MESSAGE WRITES
+crossed. The command saved the user's query and the formatted result block
+through the app's own `SqliteStateStore`, which on an attached boot is a
+different file from the one the sidebar lists — so a web search landed in a
+conversation nothing would ever render it in, at `Ok`. Both now go to
+`POST /v1/conversations/{id}/messages/record` in one call. That route is
+narrow on purpose: it records what a client authored and drives no turn, so
+nothing about this exception widened. The exception was always about the
+egress, and the egress did not move.
+
 **Flip condition (falsifiable).** The egress boundary gains a way for a client
 to prove a query was user-formed that a daemon can verify rather than trust —
 or the operator rules that a loopback-only daemon on the same machine inherits

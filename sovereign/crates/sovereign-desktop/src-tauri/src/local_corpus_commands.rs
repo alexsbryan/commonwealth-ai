@@ -658,14 +658,24 @@ pub async fn lc_enrich_reset(
 }
 
 /// Tauri command: the "flag a wrong summary → re-enrich just this note"
-/// revision loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). Persists the
-/// user's correction to the ledger (status `pending`), then asks the
-/// daemon to re-enrich that ONE note; the provider reads the pending
-/// correction, forces past the content-hash checkpoint, regenerates the
-/// summary with the hint injected, and flips the row to `applied`.
-/// Awaited (the ~1-min single-note build) so the caller can re-fetch the
-/// corrected summary on return. `correction_hint` / `original_summary`
-/// may be empty strings (stored as NULL).
+/// revision loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). ONE call —
+/// `POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` — which
+/// records the correction and drives the ~1-min single-note build, awaited
+/// so the caller can re-fetch the corrected summary on return.
+///
+/// **It was two steps until 2026-09-12 (thin-desktop R2), and the first one
+/// wrote to the wrong file.** Step 1 upserted `conv_summary_corrections`
+/// through this process's own `SqliteStateStore` — "same sqlite file the
+/// embedded daemon's provider reads", which held while the daemon was
+/// embedded. Since sv-surface R5 the provider runs in the daemon against
+/// its own data root, so the hint landed where nothing reads it and step 2's
+/// rebuild ran unhinted — indistinguishable from a note nobody had flagged,
+/// and it reported success. The hint rides the request now and
+/// `LocalCorpusManager::reenrich_note` writes the ledger through the handle
+/// the provider reads it back on.
+///
+/// `correction_hint` / `original_summary` may be empty strings; the host
+/// normalises them to SQL NULL.
 #[tauri::command]
 pub async fn lc_reenrich_note(
     state: State<'_, Arc<AppState>>,
@@ -674,44 +684,23 @@ pub async fn lc_reenrich_note(
     correction_hint: String,
     original_summary: String,
 ) -> Result<(), String> {
-    // 1. Persist the correction so the provider sees it during the build.
-    //    Same sqlite file the embedded daemon's provider reads.
-    {
-        let guard = state.sqlite_store.read().await;
-        let store = guard
-            .as_ref()
-            .ok_or_else(|| "enrichment store not ready".to_string())?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let hint = Some(correction_hint.trim()).filter(|s| !s.is_empty());
-        let original = Some(original_summary.trim()).filter(|s| !s.is_empty());
-        store
-            .upsert_summary_correction(&corpus_id, &source_doc_id, hint, original, "pending", now)
-            .await
-            .map_err(|e| format!("record correction: {e}"))?;
-    }
-
-    // 2. Ask the daemon to re-enrich just this note (awaits the build).
-    let daemon_url = state.client_base_url();
-    let url = format!("{daemon_url}/internal/corpus/watch/{corpus_id}/enrich/reenrich-note");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(|e| format!("build daemon client: {e}"))?;
-    let resp = client
-        .post(&url)
-        .json(&serde_json::json!({ "source_doc_id": source_doc_id }))
-        .send()
-        .await
-        .map_err(|e| format!("POST reenrich-note: {e}"))?;
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("daemon reenrich-note returned {status}: {body}"));
-    }
-    Ok(())
+    sovereign_turn_client::TurnClient::with_budget(
+        state.client_base_url(),
+        // The single-note RAPTOR rebuild is the thing being awaited, so the
+        // read budget is the build's, not the client family's default.
+        sovereign_turn_client::RequestBudget {
+            read: std::time::Duration::from_secs(300),
+            ..Default::default()
+        },
+    )
+    .reenrich_note(
+        &corpus_id,
+        &source_doc_id,
+        Some(correction_hint.as_str()),
+        Some(original_summary.as_str()),
+    )
+    .await
+    .map_err(|e| format!("reenrich_note: {e}"))
 }
 
 /// Ingest a folder corpus by submitting the shipped `notebook` workflow to

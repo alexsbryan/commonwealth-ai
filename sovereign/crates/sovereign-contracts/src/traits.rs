@@ -1168,6 +1168,21 @@ pub trait ConversationStore: Send + Sync {
         created_at: i64,
         surface_skill_id: Option<&str>,
     ) -> Result<()>;
+
+    /// Roll up this store's own chat usage over the last `window_secs`, from
+    /// the `ResponseProvenance` already persisted on each assistant message.
+    /// Served by `GET /v1/admin/chat-activity`. Defaults to `Err`, not an
+    /// all-zero summary: a store keeping no message metadata has nothing to
+    /// say, and a rendered zero reads as "you ran no turns" (principle 6).
+    #[allow(unused_variables)]
+    async fn summarize_chat_activity(
+        &self,
+        window_secs: i64,
+    ) -> Result<crate::daemon_wire::ChatActivitySummary> {
+        Err(crate::error::Error::NotImplemented(
+            "summarize_chat_activity: this store keeps no message metadata".to_string(),
+        ))
+    }
 }
 
 /// Whole-task snapshot persistence. Contrast `StepExecutionStore`, the per-attempt ledger (ARCH §5.3).
@@ -1491,6 +1506,39 @@ pub trait CorpusStateStore: Send + Sync {
     async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()>;
     /// Whether vector search may be used for this corpus; false = FTS-only fallback.
     async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool>;
+
+    /// Upsert the user's summary correction for one enriched note — the
+    /// WRITE half of the summary-revision loop
+    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`); the read half is
+    /// `sovereign_core::conv_tiered::ConvBrowseReader::get_active_correction`.
+    /// One active row per `(corpus_id, conv_uuid)`; re-flagging supersedes.
+    /// The row's EXISTENCE is load-bearing, not only the hint: a `"pending"`
+    /// row is what forces the provider past the content-hash checkpoint for
+    /// a note whose text did not change. Both text fields may be `None`.
+    ///
+    /// Two ports, one decider: both delegate to the same inherent
+    /// `SqliteStateStore` method. Separate traits because the readers reach
+    /// the store through the Runtime's lane source while the writer —
+    /// `LocalCorpusManager::reenrich_note` — holds a `StateStore`. It was
+    /// inherent-only until 2026-09-12, when its one caller was a desktop
+    /// command writing the daemon's ledger through a SECOND handle on the
+    /// file, so on an attached boot the row landed where the provider does
+    /// not read. Defaults to `Err`, never `Ok(())` — see
+    /// `insert_empty_conversation` for what a no-op default cost.
+    #[allow(unused_variables)]
+    async fn upsert_summary_correction(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        correction_hint: Option<&str>,
+        original_summary: Option<&str>,
+        status: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        Err(crate::error::Error::NotImplemented(
+            "upsert_summary_correction: this store keeps no summary-correction ledger".to_string(),
+        ))
+    }
 }
 
 /// Persistence for per-backend web-search quotas.

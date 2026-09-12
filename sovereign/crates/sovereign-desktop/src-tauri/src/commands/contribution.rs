@@ -304,23 +304,29 @@ pub async fn get_activity_recent(
         .map_err(|e| format!("decode /internal/activity/recent: {e}"))
 }
 
+/// `GET /v1/admin/chat-activity?window_secs=N`, in both modes since
+/// 2026-09-12 (thin-desktop R2).
+///
+/// It read THIS process's `SqliteStateStore` until then, and the rollup is
+/// derived from `metadata["provenance"]` on assistant messages — so it
+/// summarised whichever `sovereign.db` this app opened. Every turn has been
+/// the daemon's since sv-surface R5, so on an attached boot the pane
+/// aggregated a file with no turns in it and rendered honest-looking zeros
+/// beside the daemon's own activity feed two commands up.
+///
+/// The window still arrives in DAYS from the pane and crosses in seconds;
+/// the clamp is the host's (`max(86_400)`), one home for it.
 #[tauri::command]
 pub async fn get_chat_activity(
     state: State<'_, Arc<AppState>>,
     window_days: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     let window_secs = (window_days.unwrap_or(7).max(1) as i64) * 86_400;
-    let store = {
-        let guard = state.sqlite_store.read().await;
-        guard.as_ref().cloned()
-    };
-    let Some(store) = store else {
-        return Err("chat store not ready".into());
-    };
-    let summary = store
-        .summarize_chat_activity(window_secs)
-        .await
-        .map_err(|e| format!("summarize_chat_activity: {e}"))?;
+    let summary: sovereign_contracts::daemon_wire::ChatActivitySummary =
+        sovereign_turn_client::TurnClient::new(state.client_base_url())
+            .chat_activity(window_secs)
+            .await
+            .map_err(|e| format!("chat_activity: {e}"))?;
     serde_json::to_value(summary).map_err(|e| format!("serialize chat activity: {e}"))
 }
 

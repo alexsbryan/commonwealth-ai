@@ -6,8 +6,7 @@ use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
 
-use sovereign_contracts::traits::{InferenceProvider, StateStore};
-use sovereign_store::sqlite::SqliteStateStore;
+use sovereign_contracts::traits::InferenceProvider;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
@@ -138,12 +137,17 @@ pub struct AppState {
     pub config: RwLock<DesktopConfig>,
     /// Reusable across Runtime rebuilds (model stays loaded).
     pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
-    pub store: RwLock<Option<Arc<dyn StateStore>>>,
-    /// Concrete `Arc<SqliteStateStore>` kept alongside the trait-object
-    /// `store` so the KnowledgeView manager can be installed as an
-    /// observer via `set_observer` after the store is already Arc-
-    /// wrapped. Both handles point at the same underlying DB.
-    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,
+    // The `store` and `sqlite_store` slots stood here and are GONE
+    // (thin-desktop R2, 2026-09-12). They held this process's own handles on
+    // a `sovereign.db` — a SECOND opener beside the daemon's, and on an
+    // attached boot a different file from the one every turn is written to.
+    // Their five readers each took a route: `get_conversation` ->
+    // `GET /v1/conversations/{id}` (which grew `enabled_corpora` for it),
+    // `search_web` and `explore_insights` ->
+    // `POST /v1/conversations/{id}/messages/record`, `get_chat_activity` ->
+    // `GET /v1/admin/chat-activity`, and `lc_reenrich_note`'s correction
+    // ledger -> the widened `enrich/reenrich-note` body. The desktop opens
+    // no database and runs no migration on the daemon's data root.
     /// The shared corpus engine. Set during bootstrap and used by both
     /// the install/list/remove Tauri commands and the in-runtime
     /// epistemic tools (`ClaimSearchTool`, `EpistemicLandscapeTool`).
@@ -234,33 +238,12 @@ impl AppState {
         format!("http://127.0.0.1:{}", self.internal_port())
     }
 
-    /// Typed accessor for the desktop's OWN state store — the same
-    /// `Arc<dyn StateStore>` `builders::store::open_store` returns and
-    /// hands to `Runtime::new` further down this file, so both point at
-    /// one `sovereign.db`.
-    ///
-    /// Non-chat database work (conversation list/rename/delete, memory
-    /// tombstones, message search, answer export) reaches the store
-    /// through here rather than through `Runtime.store`. That is
-    /// daemon-convergence Phase 0: the desktop's dependency on
-    /// `sovereign_core::Runtime` narrows to the ports that actually
-    /// answer a turn, so the Runtime can later move into the daemon
-    /// without dragging the desktop's DB access with it.
-    ///
-    /// The store opens EARLIER in bootstrap than the Runtime is
-    /// installed, and survives a Runtime rebuild — so a caller that
-    /// switched from `runtime()`/`require_runtime!` to this accessor
-    /// stops reporting "still loading" during those two windows and
-    /// answers from the database instead. That is the one intended
-    /// behavioural delta of the repoint.
-    pub async fn store(&self) -> Result<Arc<dyn StateStore>, crate::error::DesktopError> {
-        self.store
-            .read()
-            .await
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or_else(|| crate::error::DesktopError::not_ready("The database is still loading."))
-    }
+    // `AppState::store()` stood here and is GONE with the slots above
+    // (thin-desktop R2). Its doc called it "daemon-convergence Phase 0: the
+    // desktop's dependency on `sovereign_core::Runtime` narrows to the ports
+    // that actually answer a turn, so the Runtime can later move into the
+    // daemon without dragging the desktop's DB access with it." The Runtime
+    // moved at svt-3b; this is the DB access following it.
 
     /// Construct `AppState` branching on the bootstrap mode probed at
     /// app start:
@@ -297,8 +280,6 @@ impl AppState {
             routing_events,
             config: RwLock::new(config),
             inference: RwLock::new(None),
-            store: RwLock::new(None),
-            sqlite_store: RwLock::new(None),
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             bootstrap_mode: mode,
@@ -515,9 +496,12 @@ pub async fn bootstrap_with_progress(
     let (raw_inference, inference) =
         builders::inference::load_inference(&state.inference, &slots, &emit).await?;
 
-    // Open database.
-    let store: Arc<dyn StateStore> =
-        builders::store::open_store(&state.store, &state.sqlite_store, &config, &emit).await?;
+    // The database open stood here and is GONE (thin-desktop R2). It was
+    // `builders::store::open_store`, and the builder file went with it —
+    // including its `busy_timeout` and its migration run, which is the half
+    // worth naming: a client must not run migrations on a data root it does
+    // not own, and this one did, on every boot, against the file the daemon
+    // was serving from.
 
     // The recipe-author `notes.db` + `features.db` opens stood here and went
     // with the commission (svt-3b). They had NO reader on the command surface
@@ -705,39 +689,61 @@ pub async fn bootstrap_with_progress(
     // inference provider inside a client, whose verdict nothing could ask
     // for, is the same zero-reader shape as the three slots beside it.
 
-    // Background startup task: verify per-corpus vector index readiness and
-    // write results to the store so handle_knowledge_query can gate correctly.
+    // Background startup task: probe each installed index's vector-search
+    // readiness, which SELF-HEALS the index's own on-disk
+    // `IndexMeta.vector_index_built`
+    // (`corpus_engine::index::create::is_vector_index_ready` — it calls
+    // `mark_vector_index_built` when LanceDB reports a complete index the
+    // meta had not recorded).
+    //
+    // **The store write went at thin-desktop R2 (2026-09-12), and it was
+    // inert, not merely misplaced.** It used to
+    // `set_vector_index_ready(&corpus, ready)` — the last thing in this file
+    // holding a `StateStore`. Its ONE reader in the workspace is
+    // `corpus_catalog_http::catalog`, which resolves readiness from the
+    // on-disk meta FIRST and consults the store flag only when the meta says
+    // not-built (`sovereign-mesh/src/corpus_catalog_http.rs:421-427`, the
+    // "two historical sources" comment). But the probe above self-heals the
+    // meta to true in exactly that case — so a `true` the flag could have
+    // carried was already carried by the meta, and a `false` matched the
+    // reader's own `unwrap_or(false)`. On an attached boot it was worse than
+    // inert: it wrote into this app's `sovereign.db` and the reader reads the
+    // daemon's.
+    //
+    // What remains crosses no ownership line: it reads the engine this
+    // process still holds and writes only inside the corpus index on the
+    // shared `~/.svrnmesh/indexes` root both processes open. The SWEEP
+    // ITSELF is the daemon's job by rights — it holds the same engine and
+    // serves the catalogue — and nothing in `sovereign-mesh` performs it;
+    // that is a named gap, not a silent local store path.
+    //
+    // The corpus list now comes from `installed_indexes()` rather than from
+    // `list_corpus_states()`. Named delta: a corpus present on disk with no
+    // `corpus_state` row used to be skipped and is now probed, which is the
+    // more truthful source for a question about an index on disk.
     {
-        let verify_store = Arc::clone(&store);
         let verify_engine = Arc::clone(&corpus_engine);
         tokio::spawn(async move {
-            let corpora = verify_store.list_corpus_states().await.unwrap_or_default();
-            for cs in corpora {
-                let Ok(indexes) = verify_engine.installed_indexes().await else {
-                    continue;
-                };
-                let Some(info) = indexes.iter().find(|i| i.corpus_id == cs.corpus_id) else {
-                    continue;
-                };
+            let Ok(indexes) = verify_engine.installed_indexes().await else {
+                tracing::debug!("state:index_readiness_sweep_skipped_unreadable_indexes_dir");
+                return;
+            };
+            for info in indexes {
                 let Ok(idx) = verify_engine.open_index(&info.path).await else {
                     continue;
                 };
-                let ready = idx.is_vector_index_ready().await;
-                let _ = verify_store
-                    .set_vector_index_ready(&cs.corpus_id, ready)
-                    .await;
-                if !ready {
+                if idx.is_vector_index_ready().await {
+                    tracing::info!(corpus = %info.corpus_id, "Vector index ready");
+                } else {
                     // Transient, self-resolving: a corpus whose vector index
                     // is still building (common on fresh installs) is served
                     // FTS-only until the build completes. This fires once per
                     // not-ready corpus on every boot, so it's info, not a
                     // warning — nothing is broken and no user action is needed.
                     tracing::info!(
-                        corpus = %cs.corpus_id,
+                        corpus = %info.corpus_id,
                         "Vector index not built yet — KnowledgeQuery will use FTS-only search until it finishes"
                     );
-                } else {
-                    tracing::info!(corpus = %cs.corpus_id, "Vector index ready");
                 }
             }
         });

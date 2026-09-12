@@ -400,6 +400,11 @@ pub struct ConversationHistory {
     pub messages: Vec<ConversationMessage>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// The conversation's retrieval allow-list. `None` is "all installed
+    /// corpora", the default state — the route omits the key rather than
+    /// nulling it, so `None` here means both "omitted" and "unscoped",
+    /// which are the same fact.
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 impl TurnClient {
@@ -615,7 +620,37 @@ impl TurnClient {
                 .collect(),
             created_at: wire.created_at,
             updated_at: wire.updated_at,
+            enabled_corpora: wire.enabled_corpora,
         })
+    }
+
+    /// `POST /v1/conversations/{id}/messages/record` — append messages the
+    /// CALLER authored, verbatim, without driving a turn. Returns the ids
+    /// the HOST minted, in request order.
+    ///
+    /// Not a turn, and deliberately a different method from
+    /// [`Self::send_message`]: that one runs the Runtime and the reply is
+    /// the daemon's. This one records work the daemon does not do — a web
+    /// search the surface ran under its own egress custody, an insight
+    /// preamble gathered from a local tray — into the conversation the
+    /// daemon owns. A surface that wants an ANSWER has no business here.
+    ///
+    /// An empty slice is the host's 400, not a silent no-op: send the
+    /// exchange whole or do not call.
+    pub async fn record_messages(
+        &self,
+        conversation_id: &str,
+        messages: &[sovereign_contracts::daemon_wire::RecordedMessage],
+    ) -> Result<Vec<String>> {
+        let wire: sovereign_contracts::daemon_wire::RecordMessagesResponse = self
+            .internal_post_json(
+                format!("/v1/conversations/{conversation_id}/messages/record"),
+                &sovereign_contracts::daemon_wire::RecordMessagesRequest {
+                    messages: messages.to_vec(),
+                },
+            )
+            .await?;
+        Ok(wire.message_ids)
     }
 
     /// `DELETE /v1/conversations/{id}` — 204 on success, the host's error
@@ -2748,6 +2783,75 @@ impl TurnClient {
             .await
     }
 
+    /// `GET /v1/admin/chat-activity?window_secs=N` — the user's own chat
+    /// usage over the window, rolled up from the store the DAEMON serves
+    /// turns against. `T` is
+    /// `sovereign_contracts::daemon_wire::ChatActivitySummary`.
+    ///
+    /// The host clamps the window to at least a day and defaults it to a
+    /// week; the clamp has one home, server-side. A daemon with no store
+    /// answers 503 and one that keeps no message metadata answers 501 —
+    /// both arrive here as errors with the host's words, never as an
+    /// all-zero summary.
+    pub async fn chat_activity<T: serde::de::DeserializeOwned>(
+        &self,
+        window_secs: i64,
+    ) -> Result<T> {
+        self.internal_get(
+            "/v1/admin/chat-activity".to_string(),
+            &[("window_secs", window_secs.to_string())],
+        )
+        .await
+    }
+
+    /// `POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` —
+    /// record the user's summary correction for one note and re-enrich just
+    /// that note, awaiting the (~1-min) single-note rebuild.
+    ///
+    /// ONE call, and that is the change: the flag flow used to write the
+    /// `conv_summary_corrections` row itself and then POST the id, which
+    /// only works while the writer and the provider share a sqlite file.
+    /// The hint rides the request now and the daemon's manager writes the
+    /// ledger through the handle the provider reads it back on.
+    ///
+    /// Empty hint / original are normalised to SQL `NULL` by the host: a
+    /// flag with no words is still a flag, and its row is what forces the
+    /// rebuild past the content-hash checkpoint.
+    pub async fn reenrich_note(
+        &self,
+        corpus_id: &str,
+        source_doc_id: &str,
+        correction_hint: Option<&str>,
+        original_summary: Option<&str>,
+    ) -> Result<()> {
+        /// The route's ack. `ok` is read rather than dropped: the field is
+        /// on the wire, and a host that ever answers `false` at HTTP 200
+        /// must not be reported as a success by its own client.
+        #[derive(Deserialize)]
+        struct AckWire {
+            #[serde(default)]
+            ok: bool,
+        }
+        let path = format!("/internal/corpus/watch/{corpus_id}/enrich/reenrich-note");
+        let ack: AckWire = self
+            .internal_post_json(
+                path.clone(),
+                &serde_json::json!({
+                    "source_doc_id": source_doc_id,
+                    "correction_hint": correction_hint,
+                    "original_summary": original_summary,
+                }),
+            )
+            .await?;
+        if ack.ok {
+            Ok(())
+        } else {
+            Err(Error::Inference(format!(
+                "POST {path}: the host answered ok=false at HTTP 200"
+            )))
+        }
+    }
+
     /// `POST /internal/inference/warmup` — eagerly load the daemon's
     /// primary chat slot so the next turn does not pay the lazy-load tax.
     /// Returns the load's latency in ms; `0` from a daemon with no
@@ -3396,6 +3500,8 @@ struct ConversationWire {
     messages: Vec<ConversationMessageWire>,
     created_at: i64,
     updated_at: i64,
+    #[serde(default)]
+    enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

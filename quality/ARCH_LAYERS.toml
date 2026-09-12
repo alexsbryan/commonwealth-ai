@@ -1279,13 +1279,13 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 [[exception]]
 from = "sovereign-desktop"
 to = "sovereign-recipe-author"
-reason = "REACHED via sovereign-desktop → sovereign-store → sovereign-recipe-author. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-gliner, sovereign-tools} → sovereign-store → sovereign-recipe-author. The DIRECT `sovereign-store` edge is gone (thin-desktop R2, 2026-09-12) and this row did NOT go stale, which is the reachability form earning its keep: `cargo tree -p sovereign-desktop -i sovereign-store` shows two surviving paths, so removing the manifest line alone would have turned a direct-edge gate green with the store still linked. Falls when both `sovereign-gliner` and `sovereign-tools` leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "sovereign-store"
-reason = "REACHED via sovereign-desktop → sovereign-store. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-gliner, sovereign-tools} → sovereign-store. The direct edge and every source reference are GONE (thin-desktop R2, 2026-09-12): no `.rs` under src-tauri/src names `sovereign_store` and the manifest does not name the crate, both pinned by `attach_construction_census.rs::the_desktop_names_no_state_store`. The app opened its own `sovereign.db` and RAN MIGRATIONS on a data root it does not own; its five readers took routes (GET /v1/conversations/{id} widened with `enabled_corpora`, POST /v1/conversations/{id}/messages/record, GET /v1/admin/chat-activity, the widened enrich/reenrich-note body). What holds this row now is transitive only — sovereign-gliner and sovereign-tools both link the store for their own reasons. Falls when both leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]

@@ -31,23 +31,7 @@ pub async fn search_web(
     // registry + egress path `submit_information_search` has run with no
     // Runtime since it landed; see its doc for why no daemon route serves this
     // and why egress custody keeps it in the app.
-    let store = state.store().await?;
     let config = state.config.read().await.clone();
-
-    // Save user message.
-    let user_msg = sovereign_contracts::types::Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        role: sovereign_contracts::types::Role::User,
-        content: query.clone(),
-        created_at: now_epoch(),
-        metadata: None,
-        version: now_epoch(),
-    };
-    store
-        .save_message(&user_msg)
-        .await
-        .map_err(|e| e.to_string())?;
 
     // Run the search.
     //
@@ -74,21 +58,52 @@ pub async fn search_web(
         ));
     }
 
-    // Save assistant message.
-    let msg_id = uuid::Uuid::new_v4().to_string();
-    let assistant_msg = sovereign_contracts::types::Message {
-        id: msg_id.clone(),
-        conversation_id,
-        role: sovereign_contracts::types::Role::Assistant,
-        content: content.clone(),
-        created_at: now_epoch(),
-        metadata: None,
-        version: now_epoch(),
-    };
-    store
-        .save_message(&assistant_msg)
+    // Record the exchange on the DAEMON —
+    // `POST /v1/conversations/{id}/messages/record`, in both modes since
+    // 2026-09-12 (thin-desktop R2).
+    //
+    // The SEARCH stays here; the two WRITES do not, and the split is the
+    // whole point. Egress custody is why the query never leaves this
+    // process through the daemon (`crate::state::web_search_once`, and the
+    // `DEFAULTS_LEDGER` row "`search_web` stays in the app"). But the
+    // conversation the exchange belongs to is the daemon's store, and until
+    // this rung both messages were saved into the app's own `sovereign.db`
+    // — on an attached boot a different file from the one the sidebar lists
+    // and a resume reads, so the search landed in a conversation nothing
+    // would ever show it in, at `Ok`.
+    //
+    // Recorded as ONE call, deliberately: a caller that wrote the query
+    // first and the results second left a window where the conversation
+    // held a question with no answer, and the second write could fail.
+    let recorded = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .record_messages(
+            &conversation_id,
+            &[
+                sovereign_contracts::daemon_wire::RecordedMessage {
+                    role: sovereign_contracts::types::Role::User,
+                    content: query.clone(),
+                    metadata: None,
+                },
+                sovereign_contracts::daemon_wire::RecordedMessage {
+                    role: sovereign_contracts::types::Role::Assistant,
+                    content: content.clone(),
+                    metadata: None,
+                },
+            ],
+        )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| DesktopError::upstream(e.to_string()))?;
+
+    // The HOST minted the ids; the assistant message is the second. A short
+    // list is reported rather than indexed into: the id is what the
+    // frontend keys the bubble on, and a fabricated one would render a
+    // message that cannot be found again (ARCH principle 6).
+    let msg_id = recorded.get(1).cloned().ok_or_else(|| {
+        DesktopError::upstream(format!(
+            "record: the daemon returned {} message ids for a 2-message exchange",
+            recorded.len()
+        ))
+    })?;
 
     Ok(MessageResponse {
         message_id: msg_id,

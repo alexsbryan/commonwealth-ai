@@ -22,7 +22,19 @@ sovereign-tools-base = { workspace = true }
 # dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
 sovereign-inference = { workspace = true }
-sovereign-store = { workspace = true }
+# `sovereign-store` LEFT HERE at thin-desktop R2 (2026-09-12). The app opened
+# its OWN `SqliteStateStore` over `config.data_dir/sovereign.db` — a second
+# opener beside the daemon's, running migrations on a data root it does not
+# own, and on an attached boot a different file from the one every turn since
+# sv-surface R5 has been written to. Five readers, five routes:
+# `GET /v1/conversations/{id}` (widened with `enabled_corpora`, the field that
+# had kept the store alive), `POST /v1/conversations/{id}/messages/record`
+# (twice: `search_web`, `explore_insights`), `GET /v1/admin/chat-activity`,
+# and the correction hint now riding `enrich/reenrich-note`. The crate is
+# still REACHED transitively via `sovereign-gliner` and `sovereign-tools`
+# (`cargo tree -p sovereign-desktop -i sovereign-store`), so its
+# `[[exception]]` row in quality/ARCH_LAYERS.toml stands — the direct edge is
+# what this rung cut, and `attach_construction_census.rs` pins the absence.
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
 # `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`

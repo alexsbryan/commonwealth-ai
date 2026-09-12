@@ -35,6 +35,18 @@
 //!
 //! After D9b: **33 reads across 10 files**.
 //!
+//! # thin-desktop R2 (2026-09-12) — the store's readers, and the macro
+//!
+//! `require_store!` is GONE, which takes the census's own needle list with
+//! it: there is no `state.store` slot, no `state.sqlite_store` slot and no
+//! `AppState::store()` accessor left to read. Five consumers crossed —
+//! `get_conversation`, `search_web`, `explore_insights`,
+//! `get_chat_activity` and `lc_reenrich_note`'s correction write — and a
+//! sixth (`state.rs`'s boot readiness sweep) lost its store write as
+//! provably inert rather than repointed; the row below cites the reader that
+//! makes it so. Each is pinned in both directions here: the retired
+//! primitive, and the family-client call that answers it now.
+//!
 //! # Watched to fail
 //!
 //! Each test below was planted against and watched red at landing — the
@@ -114,6 +126,16 @@ const RETIRED: &[Retired] = &[
         file: "src/commands/conversation.rs",
         hay: "project_message_metadata(&msg.metadata)",
         route: "GET /v1/conversations/{id} (the daemon runs the projection)",
+    },
+    // thin-desktop R2 (2026-09-12): `get_conversation` was the LAST
+    // `require_store!` caller in the crate, and the macro is gone with it.
+    // D9b left it local naming the blocker exactly — the route dropped
+    // `metadata` and `enabled_corpora`. `metadata` crossed at svt-3;
+    // `enabled_corpora` is what R2 added to `ConversationResponse`.
+    Retired {
+        file: "src/commands/conversation.rs",
+        hay: "require_store!",
+        route: "GET /v1/conversations/{id} (which grew `enabled_corpora` for it)",
     },
     // sv-surface correctness wave — the two wrong-store WRITES. A read that
     // came back from the wrong store rendered a stale sidebar; these two
@@ -225,6 +247,47 @@ const RETIRED: &[Retired] = &[
         hay: "state.runtime.read()",
         route: "GET /v1/ready",
     },
+    // ── models.rs ────────────────────────────────────────────
+    // The SEARCH stays in the app on egress custody; the two message
+    // WRITES do not. `state.store()` was this file's whole reason to hold
+    // a store handle, and the accessor it named is deleted.
+    Retired {
+        file: "src/commands/models.rs",
+        hay: "state.store()",
+        route: "POST /v1/conversations/{id}/messages/record",
+    },
+    Retired {
+        file: "src/commands/models.rs",
+        hay: ".save_message(",
+        route: "POST /v1/conversations/{id}/messages/record",
+    },
+    // ── contribution.rs ──────────────────────────────────────
+    Retired {
+        file: "src/commands/contribution.rs",
+        hay: "state.sqlite_store",
+        route: "GET /v1/admin/chat-activity?window_secs=N",
+    },
+    // ── insight_commands.rs ──────────────────────────────────
+    // Both halves crossed: the row that `save_message`'s conversation
+    // upsert used to mint implicitly (via an EMPTY user message whose own
+    // comment read "dummy to create conversation") and the preamble.
+    Retired {
+        file: "src/insight_commands.rs",
+        hay: ".save_message(",
+        route: "POST /v1/conversations + POST /v1/conversations/{id}/messages/record",
+    },
+    // ── local_corpus_commands.rs ─────────────────────────────
+    Retired {
+        file: "src/local_corpus_commands.rs",
+        hay: ".upsert_summary_correction(",
+        route: "POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note (the hint rides the body; the daemon's manager writes the ledger)",
+    },
+    // ── state.rs ─────────────────────────────────────────────
+    Retired {
+        file: "src/state.rs",
+        hay: ".set_vector_index_ready(",
+        route: "no route: the write was inert — its one reader (corpus_catalog_http::catalog) prefers the on-disk meta, which the readiness probe self-heals",
+    },
     // ── commands/mod.rs ──────────────────────────────────────
     Retired {
         file: "src/commands/mod.rs",
@@ -268,6 +331,13 @@ fn the_retired_local_primitives_do_not_return() {
 #[test]
 fn every_repointed_command_reaches_the_family_client() {
     const REPOINTED: &[(&str, &[&str])] = &[
+        ("src/commands/models.rs", &[".record_messages("]),
+        (
+            "src/insight_commands.rs",
+            &[".create_conversation(", ".record_messages("],
+        ),
+        ("src/commands/contribution.rs", &[".chat_activity("]),
+        ("src/local_corpus_commands.rs", &[".reenrich_note("]),
         (
             "src/commands/conversation.rs",
             &[

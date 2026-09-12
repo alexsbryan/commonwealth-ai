@@ -497,4 +497,12 @@ impl ConversationStore for SqliteStateStore {
         // back to this trait method.
         SqliteStateStore::insert_empty_conversation(self, id, created_at, surface_skill_id).await
     }
+
+    async fn summarize_chat_activity(&self, window_secs: i64) -> Result<ChatActivitySummary> {
+        // A door, not a second decider: the rollup itself is the inherent
+        // method in `sqlite/chat_activity.rs` and did not move. What moved
+        // is who may call it — `GET /v1/admin/chat-activity` reads it off
+        // an `Arc<dyn StateStore>`, which cannot see an inherent method.
+        SqliteStateStore::summarize_chat_activity(self, window_secs).await
+    }
 }

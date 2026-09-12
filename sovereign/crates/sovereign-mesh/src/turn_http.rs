@@ -130,6 +130,10 @@ pub fn turn_router_with(daemon: Arc<EmbeddedDaemon>, timers: SocketTimers) -> Ro
             put(put_enabled_corpora),
         )
         .route("/v1/conversations/{id}/messages", post(send_message))
+        .route(
+            "/v1/conversations/{id}/messages/record",
+            post(record_messages),
+        )
         .route("/v1/conversations/{id}/stream", get(ws_handler))
         .route("/v1/conversations/{id}/end", post(end_conversation))
         .route("/v1/memories/{id}", delete(delete_memory))
@@ -255,7 +259,10 @@ pub struct ListQuery {
 /// Defined in `sovereign-contracts` so a client can name them without
 /// linking this crate, re-exported here so the routes below and their tests
 /// keep naming them at this path (sv-surface svt-3).
-pub use sovereign_contracts::daemon_wire::{ConversationListEntry, CreateConversationResponse};
+pub use sovereign_contracts::daemon_wire::{
+    ConversationListEntry, CreateConversationResponse, RecordMessagesRequest,
+    RecordMessagesResponse, RecordedMessage,
+};
 
 #[derive(Debug, Serialize)]
 pub struct ConversationListResponse {
@@ -270,6 +277,22 @@ pub struct ConversationResponse {
     pub messages: Vec<MessageEntry>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// The conversation's retrieval allow-list, as `PUT
+    /// /v1/conversations/{id}/enabled-corpora` last wrote it. `None` is
+    /// "all installed corpora" — the default state — and is OMITTED rather
+    /// than nulled, the same discipline the title carries.
+    ///
+    /// Added 2026-09-12. It is the field that kept the desktop's
+    /// `get_conversation` on a local store handle: `CorpusFilterStrip`
+    /// renders the chips from it, so repointing without it would have
+    /// emptied the strip on every resume — the route would have looked
+    /// right and told the user their conversation searched everything. It
+    /// is one of the two divergences from `sovereign-server`'s mirror of
+    /// this envelope (the other is `MessageEntry::metadata`), for the same
+    /// reason: a client needed the field and the hub has no client that
+    /// does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -421,6 +444,7 @@ async fn get_conversation(
                 .collect(),
             created_at: convo.created_at,
             updated_at: convo.updated_at,
+            enabled_corpora: convo.enabled_corpora,
         })
         .into_response(),
         Err(sovereign_core::error::Error::NotFound(_)) => not_found("Conversation not found"),
@@ -584,6 +608,73 @@ async fn send_message(
         .into_response(),
         Err(e) => internal_error(&e.to_string()),
     }
+}
+
+/// `POST /v1/conversations/{id}/messages/record` — append messages the
+/// CLIENT authored, verbatim, without driving a turn.
+///
+/// The route beside it runs the turn, and that is the only way an ANSWER is
+/// written: the daemon holds the Runtime, so the daemon writes what the
+/// Runtime produced. This one exists for the work the daemon deliberately
+/// does not do. Web search stays in the app on egress custody (the
+/// `DEFAULTS_LEDGER` row "`search_web` stays in the app"), and the Explore
+/// button's insight preamble is gathered from a tray only the app has. In
+/// both cases the client did the work and the daemon owns the conversation
+/// it belongs to — so the client asks, and the store keeps ONE writer
+/// (ARCH principle 12: calling something is not owning it).
+///
+/// The desktop performed both writes against its own `SqliteStateStore`
+/// until 2026-09-12. On an attached boot that is a different file from the
+/// one the sidebar lists and the turn resumes from, so a web search
+/// recorded a two-message exchange into a conversation nothing would ever
+/// render it in — and reported success.
+///
+/// Three refusals, each naming itself rather than shaping like an answer:
+/// no store (mesh-admin), an empty `messages` list, and a store error. An
+/// empty list is a 400: a caller that meant to record an exchange and sent
+/// none has a bug, and answering `{"message_ids": []}` would hide it.
+async fn record_messages(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+    Json(body): Json<RecordMessagesRequest>,
+) -> Response {
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    if body.messages.is_empty() {
+        return bad_request("record: `messages` is empty — nothing to record");
+    }
+    // ONE stamp for the batch, and it is the honest one: these writes are
+    // microseconds apart, so calling `now()` per message would produce the
+    // same second anyway. That is also what the turn path does — the runtime
+    // stamps each save with `now()` and a real turn's two messages differ
+    // only because the model took time. Order within the tie is insertion
+    // order, which is what `ORDER BY created_at ASC` reads back
+    // (`sovereign-store/src/sqlite/conversation.rs:81`).
+    let now = sovereign_core::time::unix_now();
+    let mut message_ids = Vec::with_capacity(body.messages.len());
+    for recorded in body.messages {
+        let msg = sovereign_contracts::types::Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.clone(),
+            role: recorded.role,
+            content: recorded.content,
+            created_at: now,
+            metadata: recorded.metadata,
+            version: now,
+        };
+        if let Err(e) = store.save_message(&msg).await {
+            return internal_error(&format!("record: save_message({}): {e}", msg.id));
+        }
+        message_ids.push(msg.id);
+    }
+    tracing::debug!(
+        conversation_id,
+        recorded = message_ids.len(),
+        "turn_http:messages_recorded"
+    );
+    Json(RecordMessagesResponse { message_ids }).into_response()
 }
 
 /// `POST /v1/conversations/{id}/end`

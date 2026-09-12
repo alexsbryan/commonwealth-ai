@@ -878,16 +878,56 @@ impl LocalCorpusManager {
 
     /// Re-enrich a SINGLE note in-process — the "flag a wrong summary →
     /// re-enrich just this note" revision loop
-    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`). Thin proxy to the driver,
-    /// which serialises against any running full build (returns a
-    /// friendly "busy" error if one holds the permit). The correction
-    /// ledger (`conv_summary_corrections`) is written by the caller (the
-    /// desktop flag flow) BEFORE this runs; the provider's
-    /// `enrich_conversation` then reads it, forces past the content-hash
-    /// checkpoint, injects the hint, and flips the row to `applied`.
-    /// Awaits the (~1-min) build so the caller can show the corrected
-    /// summary on return.
-    pub async fn reenrich_note(&self, corpus_id: &str, source_doc_id: &str) -> Result<()> {
+    /// (`docs/specs/SUMMARY_REVISION_LOOP.md`). Records the user's
+    /// correction, then drives the build; the provider's
+    /// `enrich_conversation` reads the row back, forces past the
+    /// content-hash checkpoint, injects the hint, and flips it to
+    /// `applied`. Awaits the (~1-min) build so the caller can show the
+    /// corrected summary on return. The driver serialises against any
+    /// running full build (a friendly "busy" error if one holds the
+    /// permit).
+    ///
+    /// **The ledger write is HERE as of 2026-09-12, and that is the point
+    /// of the signature change.** It was the CALLER's — one Tauri command
+    /// in the desktop, which reached its own `SqliteStateStore` for a row
+    /// this process reads through `self.store`. Two handles on one file is
+    /// fine while there is one file; since sv-surface R5 the app that
+    /// flagged the summary and the daemon that rebuilds it are different
+    /// processes with different data roots, so on an attached boot the row
+    /// was written where nothing would read it and the rebuild ran with no
+    /// hint — silently, because a missing correction is indistinguishable
+    /// from one that was never flagged. The write and the read now share a
+    /// store handle by construction (ARCH principle 8).
+    ///
+    /// Both text fields may be `None`: a flag with no words still writes a
+    /// `"pending"` row, and that row's existence is what forces the
+    /// checkpoint. `status` is not a parameter — `"pending"` is the only
+    /// status a flag can create, and `set_correction_status` owns the other.
+    pub async fn reenrich_note(
+        &self,
+        corpus_id: &str,
+        source_doc_id: &str,
+        correction_hint: Option<&str>,
+        original_summary: Option<&str>,
+    ) -> Result<()> {
+        let now = sovereign_core::time::unix_now();
+        tracing::debug!(
+            corpus_id,
+            source_doc_id,
+            has_hint = correction_hint.is_some(),
+            has_original = original_summary.is_some(),
+            "local_corpus:reenrich_note_correction_recorded"
+        );
+        self.store
+            .upsert_summary_correction(
+                corpus_id,
+                source_doc_id,
+                correction_hint,
+                original_summary,
+                "pending",
+                now,
+            )
+            .await?;
         self.enrichment_driver
             .reenrich_source(corpus_id, source_doc_id)
             .await

@@ -419,38 +419,11 @@ pub use sovereign_core::conv_tiered::{
     SummaryCorrectionRow,
 };
 
-/// Per-corpus chunk-retrieval rollup for the chat activity surface.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ChatCorpusUsage {
-    pub origin: String,
-    pub chunks: u64,
-    /// True when these chunks came from a mesh peer (the provenance
-    /// `SourceSummary.from_peer` was set).
-    pub from_peer: bool,
-}
-
-/// Per-model turn + token rollup for the chat activity surface.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ChatModelUsage {
-    pub model: String,
-    pub turns: u64,
-    pub tokens_generated: u64,
-}
-
-/// Read-side rollup of the user's own chat usage, derived entirely
-/// from the `ResponseProvenance` already persisted under
-/// `metadata["provenance"]` on each assistant message. There is no new
-/// write path: chat runs in the in-process Runtime (it never crosses a
-/// daemon HTTP boundary, so the daemon's Activity ledger can't see it),
-/// but every turn already records tokens + retrieved sources, so the
-/// summary is *derived* rather than separately recorded — the data is
-/// durable because the messages are.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ChatActivitySummary {
-    pub window_days: u32,
-    pub turns: u64,
-    pub tokens_generated: u64,
-    pub chunks_retrieved: u64,
-    pub by_corpus: Vec<ChatCorpusUsage>,
-    pub by_model: Vec<ChatModelUsage>,
-}
+// The chat-activity rollup's three shapes moved to
+// `sovereign_contracts::daemon_wire::chat_activity` on 2026-09-12: the
+// surface that RENDERS the rollup now parses it off `GET
+// /v1/admin/chat-activity` rather than calling the method below, and it
+// must be able to name the answer without linking this crate. Re-exported
+// here so `sovereign_store::sqlite::ChatActivitySummary` still resolves —
+// a relocation, not a rename.
+pub use sovereign_core::daemon_wire::{ChatActivitySummary, ChatCorpusUsage, ChatModelUsage};

@@ -95,8 +95,9 @@ pub fn corpus_watch_router() -> Router {
             post(enrich_rebuild_handler),
         )
         // Re-enrich a SINGLE note (the "flag a wrong summary" revision
-        // loop). The correction ledger row is written desktop-side first;
-        // this just re-runs that one note's RAPTOR with the hint applied.
+        // loop). Records the correction ledger row and re-runs that one
+        // note's RAPTOR with the hint applied — one store handle for the
+        // write and the provider's read back.
         .route(
             "/internal/corpus/watch/{corpus_id}/enrich/reenrich-note",
             post(reenrich_note_handler),
@@ -1411,21 +1412,37 @@ async fn enrich_reset_handler(
     }
 }
 
-/// Body for [`reenrich_note_handler`]. `corpus_id` rides in the path;
-/// only the note id is in the body. The correction hint itself is NOT
-/// sent here — the desktop persists it to `conv_summary_corrections`
-/// before calling, and the provider reads it back during the build.
+/// Body for [`reenrich_note_handler`]. `corpus_id` rides in the path.
+///
+/// The correction CROSSES as of 2026-09-12. It did not before: the desktop
+/// wrote `conv_summary_corrections` itself and sent only the note id, on the
+/// premise that both processes hold the same sqlite file. Since sv-surface
+/// R5 they do not — the flag came from the app's data root and the provider
+/// reads the daemon's — so the hint was written where nobody would read it
+/// and the rebuild ran unhinted, indistinguishably from a note nobody had
+/// flagged. The manager writes the ledger now
+/// (`LocalCorpusManager::reenrich_note`), one store handle for the write and
+/// the read.
+///
+/// Both text fields are optional and empty strings are normalised to `None`
+/// by the handler: a flag with no words is still a flag, and its `"pending"`
+/// row is what forces the build past the content-hash checkpoint.
 #[derive(Debug, serde::Deserialize)]
 struct ReenrichNoteRequest {
     source_doc_id: String,
+    #[serde(default)]
+    correction_hint: Option<String>,
+    #[serde(default)]
+    original_summary: Option<String>,
 }
 
 /// `POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` — body
-/// `{ "source_doc_id": "…" }`. The "flag a wrong summary → re-enrich just
-/// this note" revision loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). Awaits
-/// the (~1-min) single-note RAPTOR rebuild, which regenerates the summary
-/// with the user's correction injected. Returns the driver's friendly
-/// "busy" message (BAD_REQUEST) if a full build currently holds the permit.
+/// `{ "source_doc_id": "…", "correction_hint": "…?", "original_summary":
+/// "…?" }`. The "flag a wrong summary → re-enrich just this note" revision
+/// loop (`docs/specs/SUMMARY_REVISION_LOOP.md`). Records the correction and
+/// awaits the (~1-min) single-note RAPTOR rebuild, which regenerates the
+/// summary with it injected. Returns the driver's friendly "busy" message
+/// (BAD_REQUEST) if a full build currently holds the permit.
 async fn reenrich_note_handler(
     _: LocalOnly,
     Path(corpus_id): Path<String>,
@@ -1434,7 +1451,23 @@ async fn reenrich_note_handler(
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
-    match manager.reenrich_note(&corpus_id, &req.source_doc_id).await {
+    // Empty string -> NULL column, the normalisation the desktop used to do
+    // before its own write. It belongs here: the route is the one place it
+    // holds for every caller, and a client that sent `""` meant "no words".
+    let hint = req
+        .correction_hint
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let original = req
+        .original_summary
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match manager
+        .reenrich_note(&corpus_id, &req.source_doc_id, hint, original)
+        .await
+    {
         Ok(()) => Json(AckResponse {
             corpus_id,
             ok: true,

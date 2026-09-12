@@ -112,19 +112,23 @@ pub async fn get_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<ConversationDetail, String> {
-    // sv-surface D9b — NOT repointed, and this one is a wire GAP, not a
-    // missing route. `GET /v1/conversations/{id}` exists and `export_answer`
-    // below rides it. But it answers the TYPED projection
-    // (provenance/citations/epistemic_state) and drops two fields this DTO
-    // carries: `metadata`, the verbatim blob the frontend types as `unknown`
-    // and reads with pointers, and `enabled_corpora`, which
-    // `CorpusFilterStrip` renders. Repointing today would quietly empty
-    // both. Two ways out, both outside this rung: widen the route's
-    // `ConversationResponse`, or convert the renderer onto the projections
-    // (`conversation_wire_census.rs` already names that as rung 6's job).
-    let store = require_store!(state);
-
-    let convo = store
+    // `GET /v1/conversations/{id}`, in BOTH modes since 2026-09-12 — the
+    // LAST reader of this process's own state store, and the reason the
+    // store was still open.
+    //
+    // D9b left it local and named the blocker precisely: the route answered
+    // the typed projection and dropped two fields this DTO carries. One of
+    // the two was already fixed — `metadata` rides the route verbatim as of
+    // svt-3 — and the other, `enabled_corpora`, is what this rung added to
+    // `ConversationResponse`. Repointing before that would have emptied
+    // `CorpusFilterStrip` on every resume: a conversation scoped to two
+    // notebooks would have rendered as scoped to everything, which is the
+    // silent wrong answer, not a missing one.
+    //
+    // The projections come back already applied (the daemon runs the same
+    // `sovereign_contracts::types::projection` deciders), so there is
+    // nothing to re-derive here — only the blob to pass through.
+    let convo = sovereign_turn_client::TurnClient::new(state.client_base_url())
         .get_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -136,7 +140,6 @@ pub async fn get_conversation(
             .messages
             .into_iter()
             .map(|m| {
-                let role = m.role_str().to_string();
                 // sv-surface D7/G9: `metadata` stays the verbatim blob.
                 // The frontend types it as `unknown` and reads it with
                 // pointers, so retyping this contract is a later rung —
@@ -146,7 +149,7 @@ pub async fn get_conversation(
                 // and `export_answer` below already renders from it.
                 MessageEntry {
                     id: m.id,
-                    role,
+                    role: m.role,
                     content: m.content,
                     created_at: m.created_at,
                     metadata: m.metadata,

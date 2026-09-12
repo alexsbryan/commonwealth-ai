@@ -336,24 +336,13 @@ pub(crate) async fn require_backend_ready(state: &Arc<AppState>) -> Result<(), S
     }
 }
 
-/// The `require_runtime!` shape for commands that need the DATABASE, not
-/// the chat Runtime — conversation list/rename/delete, memory tombstones,
-/// message search, answer export. Yields an owned `Arc<dyn StateStore>`
-/// (the same handle `Runtime::new` is given, see `AppState::store`) and
-/// drops the read guard, so no lock is held across the caller's awaits.
-///
-/// Same not-ready string as `require_runtime!` on purpose: the repoint
-/// (daemon-convergence Phase 0) must not change what the frontend renders
-/// while bootstrap is in flight.
-macro_rules! require_store {
-    ($state:expr) => {{
-        let guard = $state.store.read().await;
-        match guard.as_ref() {
-            Some(store) => std::sync::Arc::clone(store),
-            None => return Err("Backend is still loading. Please wait.".to_string()),
-        }
-    }};
-}
+// `require_store!` lived here and is GONE (thin-desktop R2, 2026-09-12). It
+// yielded an `Arc<dyn StateStore>` on the desktop's own `sovereign.db` for
+// "commands that need the DATABASE, not the chat Runtime". There is no such
+// database in this process any more: the daemon owns its data root, and
+// every read and write this macro served now crosses `TurnClient`. Its last
+// caller was `get_conversation`, whose one missing wire field
+// (`enabled_corpora`) is what had kept it alive.
 
 // ─── Concern submodules (PR5 split of the former 6557-line commands.rs) ───
 mod budget;

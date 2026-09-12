@@ -168,20 +168,22 @@ pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStat
 /// `missing` is reported, not dropped. `list_by_ids` silently omits an id
 /// that names no live row, so a short list alone would have seeded a
 /// conversation with fewer insights than the user selected and said nothing
-/// (ARCH §18.3). The conversation itself is still written to this process's
-/// store, which is where the chat surface reads it from.
+/// (ARCH §18.3).
+///
+/// The CONVERSATION crosses too, as of 2026-09-12 (thin-desktop R2). It was
+/// written to this process's store "which is where the chat surface reads it
+/// from" — and that stopped being true at sv-surface R5: the chat surface
+/// lists and resumes from the daemon's store, so on an attached boot Explore
+/// returned an id for a conversation that would never appear in the sidebar
+/// and whose first turn would mint a fresh, preamble-less row under the same
+/// id. Both halves are the daemon's now: `POST /v1/conversations` seeds the
+/// row and `POST /v1/conversations/{id}/messages/record` appends the
+/// preamble.
 #[tauri::command]
 pub async fn explore_insights(
     node_ids: Vec<String>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
-    let store = state
-        .store
-        .read()
-        .await
-        .clone()
-        .ok_or_else(|| "Store not initialized".to_string())?;
-
     // Parse first: an id the store could never match is the caller's error,
     // not an absence to report.
     for s in &node_ids {
@@ -217,41 +219,33 @@ pub async fn explore_insights(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // Create a new conversation with the preamble as a system message.
-    let conv_id = uuid::Uuid::new_v4().to_string();
-
-    // Save a system message with the insight context.
-    let system_msg = sovereign_contracts::types::Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conv_id.clone(),
-        role: sovereign_contracts::types::Role::System,
-        content: format!(
-            "The user has gathered the following insights from previous research. \
-             Use them as context for the conversation.\n\n{context_preamble}"
-        ),
-        created_at: now(),
-        metadata: None,
-        version: 0,
-    };
-
-    // Save conversation first, then the system message.
-    store
-        .save_message(&sovereign_contracts::types::Message {
-            id: uuid::Uuid::new_v4().to_string(),
-            conversation_id: conv_id.clone(),
-            role: sovereign_contracts::types::Role::User,
-            content: String::new(), // dummy to create conversation
-            created_at: now(),
-            metadata: None,
-            version: 0,
-        })
+    // Seed the row through the route that owns it, then append the
+    // preamble. The empty user message this used to write first is GONE and
+    // it is not a loss: its comment said "dummy to create conversation",
+    // which is what `save_message`'s conversation upsert made necessary and
+    // `POST /v1/conversations` makes unnecessary. The row is seeded
+    // properly — and an empty user turn in the history was visible to the
+    // model.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    let created = client
+        .create_conversation(None, None)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("explore_insights: create_conversation: {e}"))?;
 
-    store
-        .save_message(&system_msg)
+    client
+        .record_messages(
+            &created.id,
+            &[sovereign_contracts::daemon_wire::RecordedMessage {
+                role: sovereign_contracts::types::Role::System,
+                content: format!(
+                    "The user has gathered the following insights from previous research. \
+                     Use them as context for the conversation.\n\n{context_preamble}"
+                ),
+                metadata: None,
+            }],
+        )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("explore_insights: record preamble: {e}"))?;
 
-    Ok(conv_id)
+    Ok(created.id)
 }

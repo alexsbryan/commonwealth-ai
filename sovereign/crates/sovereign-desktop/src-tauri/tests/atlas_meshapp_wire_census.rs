@@ -235,6 +235,12 @@ const LOCAL_CONV_READS: &[&str] = &[
 #[test]
 fn the_conv_browse_surface_holds_no_store() {
     let code = production_source("src/atlas_commands.rs");
+    // NARROWED IN FORCE, not in meaning, at thin-desktop R2 (2026-09-12):
+    // there is no `sqlite_store` slot on `AppState` any more and the crate
+    // links no `sovereign-store`, so this needle can now only fire on
+    // someone re-adding both. It is kept because it names the RULE for this
+    // file; the crate-wide structural pin is
+    // `attach_construction_census.rs::the_desktop_names_no_state_store`.
     assert!(
         !code.contains("sqlite_store"),
         "sv-surface D4: atlas_commands.rs holds the SqliteStateStore again. \

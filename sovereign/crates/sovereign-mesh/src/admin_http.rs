@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! HTTP admin surface — `POST /v1/admin/reload` and
-//! `GET /v1/admin/context-window`.
+//! HTTP admin surface — `POST /v1/admin/reload`,
+//! `GET /v1/admin/context-window` and `GET /v1/admin/chat-activity`.
 //!
 //! When the desktop writes a new model path into `SetupConfig` and
 //! wants the running daemon to pick it up, it has two options:
@@ -31,16 +31,17 @@ use std::sync::Arc;
 
 use axum::extract::Extension;
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use sovereign_contracts::daemon_wire::ContextWindow;
+use sovereign_contracts::daemon_wire::{ChatActivitySummary, ContextWindow};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
 use crate::daemon::EmbeddedDaemon;
+use crate::http_response::{json_error, service_unavailable};
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 /// How the admin handler rebuilds an `InferenceProvider` from a new
@@ -67,7 +68,66 @@ pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/admin/reload", post(admin_reload))
         .route("/v1/admin/context-window", get(context_window))
+        .route("/v1/admin/chat-activity", get(chat_activity))
         .localhost_only_with(daemon)
+}
+
+/// Query of `GET /v1/admin/chat-activity`. The window is the CALLER's
+/// choice (the Mesh Health pane offers 7 / 30 / 90 days) and the default is
+/// a week, matching what the desktop passed.
+#[derive(Debug, Deserialize)]
+pub struct ChatActivityQuery {
+    /// Window in seconds, counted back from now. Clamped to at least one
+    /// day — a zero or negative window would summarise nothing and render
+    /// as "no activity", which is a different claim.
+    #[serde(default)]
+    pub window_secs: Option<i64>,
+}
+
+/// `GET /v1/admin/chat-activity?window_secs=N` — the user's own chat usage,
+/// rolled up from the store THIS daemon serves turns against.
+///
+/// Beside `context-window` for the same reason that route is here: both are
+/// a read of the serving process's own state that a Settings-style panel
+/// renders, and both were computed inside the desktop from a handle on
+/// something that no longer answers a turn. The desktop called
+/// `SqliteStateStore::summarize_chat_activity` on the `sovereign.db` IT
+/// opened; every turn has been the daemon's since sv-surface R5, so on an
+/// attached boot the pane summarised a file with no turns in it and
+/// reported real-looking zeros.
+///
+/// Absence is reported: a daemon with no store answers 503 and a store that
+/// keeps no message metadata answers 501 with the method named
+/// (`StateStore::summarize_chat_activity`'s default). Neither is an
+/// all-zero summary, because "there is nothing to ask" and "you ran no
+/// turns this week" render differently (ARCH principle 6).
+async fn chat_activity(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<ChatActivityQuery>,
+) -> Response {
+    let Some(store) = daemon.state_store() else {
+        return service_unavailable("this daemon holds no conversation store (mesh-admin)");
+    };
+    let window_secs = q.window_secs.unwrap_or(7 * 86_400).max(86_400);
+    match store.summarize_chat_activity(window_secs).await {
+        Ok(summary) => {
+            tracing::debug!(
+                window_secs,
+                turns = summary.turns,
+                tokens_generated = summary.tokens_generated,
+                "admin_http: chat activity served",
+            );
+            Json::<ChatActivitySummary>(summary).into_response()
+        }
+        Err(sovereign_core::error::Error::NotImplemented(msg)) => {
+            json_error(StatusCode::NOT_IMPLEMENTED, format!("chat-activity: {msg}"))
+        }
+        Err(e) => json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("chat-activity: {e}"),
+        ),
+    }
 }
 
 /// `GET /v1/admin/context-window` — the chat slot's context window, from
@@ -604,6 +664,195 @@ mod tests {
         // commissioned with — not a re-read of the serving process's
         // `~/.svrnmesh/config.toml`.
         assert_eq!(body.configured, initial_ctx);
+    }
+
+    /// Seed one assistant message whose metadata carries the provenance the
+    /// rollup reads, plus one that carries none, and assert the route serves
+    /// the DAEMON's store's numbers.
+    ///
+    /// The positive control is the point. Its partner below can only reach
+    /// the trait's `Err(NotImplemented)` default, which a handler
+    /// hard-coding a 501 would satisfy; this one cannot pass unless the
+    /// route actually asked a store that counted something (ARCH principle
+    /// 5, and the exact pairing `context_window`'s two tests carry).
+    ///
+    /// WATCHED TO FAIL: with the handler's
+    /// `store.summarize_chat_activity(window_secs)` replaced by an
+    /// all-zero `ChatActivitySummary`, this test fails on `turns`
+    /// (`left: 0, right: 1`) while
+    /// `chat_activity_reports_a_store_that_declines_the_rollup` still
+    /// passes. Restored after.
+    #[tokio::test]
+    async fn chat_activity_reports_the_daemons_own_store() {
+        use sovereign_core::traits::ConversationStore;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+
+        let store = Arc::new(
+            sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db"))
+                .expect("open sqlite state store"),
+        );
+        let now = sovereign_core::time::unix_now();
+        // The shape the runtime persists: provenance nested under
+        // `metadata["provenance"]`, `completion_tokens` preferred over
+        // `tokens_used`, one retrieved source per corpus.
+        //
+        // Built from the TYPE, not from hand-written JSON, and that is not
+        // style. My first draft spelled the object by hand with four of the
+        // eleven fields; `ResponseProvenance` requires `intent`,
+        // `search_method`, `oicp_match` and `total_latency_ms` with no serde
+        // default, so `from_value` failed, the rollup SKIPPED the message
+        // (it is best-effort by contract), and the route answered
+        // `turns: 0`. The test caught it — that is the positive control
+        // doing its job — but a fixture that cannot drift is better than one
+        // that is checked once (ARCH principle 10, and §18.4: validate the
+        // instrument before the result).
+        let provenance = sovereign_contracts::types::ResponseProvenance {
+            intent: "DeepQuery".into(),
+            search_method: Some("CorpusEngine".into()),
+            sources: vec![sovereign_contracts::types::SourceSummary {
+                origin: "wikipedia".into(),
+                count: 3,
+                from_peer: None,
+                display_name: None,
+            }],
+            inference_backend: "primary-122b".into(),
+            oicp_match: None,
+            total_latency_ms: 42,
+            tokens_used: 999,
+            coarse_intent: None,
+            router: None,
+            self_assessment: None,
+            routing_trigger: None,
+            coverage: None,
+            finish_reason: None,
+            max_tokens_budget: None,
+            completion_tokens: Some(64),
+            context_window: None,
+        };
+        store
+            .save_message(&sovereign_contracts::types::Message {
+                id: "m-1".into(),
+                conversation_id: "c-1".into(),
+                role: sovereign_contracts::types::Role::Assistant,
+                content: "an answer".into(),
+                created_at: now,
+                metadata: Some(serde_json::json!({
+                    "provenance": serde_json::to_value(&provenance).unwrap(),
+                })),
+                version: now,
+            })
+            .await
+            .unwrap();
+        // A message with no provenance is SKIPPED, not counted as a turn —
+        // so a route that merely counted rows would over-report and this
+        // asserts the fold, not the SELECT.
+        store
+            .save_message(&sovereign_contracts::types::Message {
+                id: "m-2".into(),
+                conversation_id: "c-1".into(),
+                role: sovereign_contracts::types::Role::Assistant,
+                content: "a pre-provenance answer".into(),
+                created_at: now,
+                metadata: None,
+                version: now,
+            })
+            .await
+            .unwrap();
+
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless_with_store(store),
+        );
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .get(format!("{base}/v1/admin/chat-activity?window_secs=86400"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: ChatActivitySummary = resp.json().await.unwrap();
+        assert_eq!(body.turns, 1, "one message carried provenance, not two");
+        assert_eq!(
+            body.tokens_generated, 64,
+            "completion_tokens wins over tokens_used"
+        );
+        assert_eq!(body.chunks_retrieved, 3);
+        assert_eq!(body.window_days, 1, "the window the caller asked for");
+        assert_eq!(body.by_model.len(), 1);
+        assert_eq!(body.by_model[0].model, "primary-122b");
+        assert_eq!(body.by_corpus.len(), 1);
+        assert_eq!(body.by_corpus[0].origin, "wikipedia");
+        assert!(!body.by_corpus[0].from_peer);
+    }
+
+    /// A store that keeps no message metadata REFUSES, by name — it does
+    /// not answer an all-zero summary. "There is nothing to ask" and "you
+    /// ran no turns this week" render differently in a usage pane
+    /// (principle 6), and the in-memory store is exactly the case: it
+    /// inherits `ConversationStore::summarize_chat_activity`'s
+    /// `Err(NotImplemented)` default.
+    #[tokio::test]
+    async fn chat_activity_reports_a_store_that_declines_the_rollup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless(),
+        );
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .get(format!("{base}/v1/admin/chat-activity"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            501,
+            "a declined rollup is Not Implemented, not 200 with zeros"
+        );
+        let body: serde_json::Value = resp.json().await.unwrap();
+        let err = body["error"].as_str().unwrap_or_default();
+        assert!(
+            err.contains("summarize_chat_activity"),
+            "the refusal must name the method that declined; got {err}"
+        );
+    }
+
+    /// The window is the HOST's to clamp: a caller asking for zero (or a
+    /// negative) window would summarise nothing and the pane would render
+    /// "no activity", which is a claim about the user rather than about the
+    /// request.
+    #[tokio::test]
+    async fn chat_activity_clamps_the_window_to_at_least_a_day() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        let store = Arc::new(
+            sovereign_store::sqlite::SqliteStateStore::open(&tmp.path().join("sovereign.db"))
+                .expect("open sqlite state store"),
+        );
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless_with_store(store),
+        );
+        let base = spawn(Arc::clone(&daemon)).await;
+        let body: ChatActivitySummary = reqwest::Client::new()
+            .get(format!("{base}/v1/admin/chat-activity?window_secs=0"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body.window_days, 1, "a zero window is clamped to one day");
     }
 
     #[tokio::test]

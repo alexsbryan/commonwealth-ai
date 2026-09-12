@@ -733,11 +733,33 @@ pub(crate) mod fixtures {
     pub(crate) fn serving_with_provider(
         inference_provider: Arc<dyn InferenceProvider>,
     ) -> ServingProfile {
+        serving_with(
+            inference_provider,
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+        )
+    }
+
+    /// `serving()` with a caller-supplied STORE, for the routes whose
+    /// answer is a rollup the in-memory store declines
+    /// (`summarize_chat_activity` defaults to `Err(NotImplemented)`).
+    /// A test that could only reach that default could only assert the
+    /// refusal, which is the weak half of a pair (ARCH principle 5).
+    pub(crate) fn serving_with_store(state_store: Arc<dyn StateStore>) -> ServingProfile {
+        serving_with(Arc::new(NullProvider), state_store)
+    }
+
+    /// The one `ServingProfile` literal — same rule as `headless_from`
+    /// below, and for the same reason: a second copy is how one of them
+    /// quietly stops setting a field the struct grows.
+    fn serving_with(
+        inference_provider: Arc<dyn InferenceProvider>,
+        state_store: Arc<dyn StateStore>,
+    ) -> ServingProfile {
         ServingProfile {
             core: ServingCore {
                 corpus_engine: engine(),
                 inference_provider,
-                state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                state_store,
                 runtime: runtime(),
                 insights: None,
                 features: None,
@@ -772,6 +794,11 @@ pub(crate) mod fixtures {
             serving_with_provider(inference_provider),
             Arc::new(NullFactory),
         )
+    }
+
+    /// Headless, serving over a caller-supplied store.
+    pub(crate) fn headless_with_store(state_store: Arc<dyn StateStore>) -> DaemonServices {
+        headless_from(serving_with_store(state_store), Arc::new(NullFactory))
     }
 
     pub(crate) fn headless_with_factory(

@@ -66,6 +66,17 @@ pub use sovereign_contracts::{
     skills, slot_policy, tool_manifest, tool_result_cache, traits, types,
 };
 
+// The daemon's wire shapes, at `sovereign_core::daemon_wire`. Added
+// 2026-09-12 for `sovereign-store`, whose `SqliteStateStore` must NAME
+// `daemon_wire::ChatActivitySummary` to implement
+// `ConversationStore::summarize_chat_activity`. Naming `sovereign-contracts`
+// directly from the store would have worked and `cargo xtask layer-gate`
+// refused it: the contracts crate's fan-in went 28 -> 29, which is the
+// god-crate ratchet doing its job. This re-export costs no new edge — the
+// store already depends on this crate — and follows the rule the block above
+// states, that a contracts module is reachable at its `sovereign_core::` path.
+pub use sovereign_contracts::daemon_wire;
+
 // Re-export commonly used items at the crate root.
 //
 // `traits::*` / `types::*` are BOUNDED globs (quality program R1,

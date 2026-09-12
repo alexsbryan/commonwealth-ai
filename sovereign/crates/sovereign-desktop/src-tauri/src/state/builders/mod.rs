@@ -5,10 +5,13 @@
 //! semantics — invoked in place from `bootstrap_with_progress`.
 //!
 //! Only phases that are genuinely contiguous and self-contained live
-//! here: `config`, `builtin_skills`, `store` and `inference`. (`health`
-//! went with the health monitor on 2026-09-12 — a client that renders the
-//! daemon's health does not poll for its own.) Two parts of bootstrap are intentionally NOT
-//! builders because they are *interleaved*, not contiguous:
+//! here: `config`, `builtin_skills` and `inference`. (`health` went with the
+//! health monitor on 2026-09-12 — a client that renders the daemon's health
+//! does not poll for its own; `store` went the same day at R2, because a
+//! client that asks the daemon for a conversation opens no database and runs
+//! no migration on a data root it does not own.) Two parts of bootstrap are
+//! intentionally NOT builders because they are *interleaved*, not
+//! contiguous:
 //!
 //! - The `tools` registry is mutated across the whole bootstrap (before
 //!   AND after the corpus / health phases, because the later tools
@@ -25,7 +28,6 @@
 //! inline until they can be smoke-tested via `cargo tauri dev`.
 
 pub mod inference;
-pub mod store;
 
 #[cfg(test)]
 pub(crate) mod test_support;

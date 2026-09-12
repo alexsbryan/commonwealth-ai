@@ -922,6 +922,16 @@ async fn conversation_fixture(
     );
     seed_conversation(&store, "alpha", Some("Free will"), true).await;
     seed_conversation(&store, "beta", None, false).await;
+    // `alpha` is SCOPED and `beta` is not, so the get route's
+    // `enabled_corpora` has both a present and an absent case to serve. The
+    // pair is the gate: a route hard-coding `None` passes the second alone.
+    store
+        .set_conversation_enabled_corpora(
+            "alpha",
+            Some(vec!["sep".to_string(), "wikipedia".to_string()]),
+        )
+        .await
+        .unwrap();
     (tmp, daemon, store)
 }
 
@@ -1041,6 +1051,12 @@ async fn conversation_get_route_serves_the_canonical_projection() {
             .collect(),
         created_at: convo.created_at,
         updated_at: convo.updated_at,
+        // Parity means the row's own allow-list, not a projection of it:
+        // `enabled_corpora` rides the route verbatim (2026-09-12), because
+        // the desktop's `CorpusFilterStrip` renders the chips from it and a
+        // route that dropped the field would have rendered every scoped
+        // conversation as unscoped.
+        enabled_corpora: convo.enabled_corpora.clone(),
     })
     .unwrap();
 
@@ -1065,6 +1081,37 @@ async fn conversation_get_route_serves_the_canonical_projection() {
     assert_eq!(
         served, expected,
         "the get route must serve the contracts-layer projection of the row"
+    );
+
+    // The allow-list rides the row (2026-09-12). Asserted HERE rather than
+    // only in the parity equality above because the parity build reads the
+    // same field from the same row — so both sides would be `None` together
+    // and the equality would pass with the field absent from the envelope.
+    // These two assertions are what actually fail when the field is not on
+    // the wire (watched: `enabled_corpora` removed from
+    // `ConversationResponse` and the handler, `alpha` fails `left: None,
+    // right: Some(["sep", "wikipedia"])`; restored after).
+    let served_now: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        served_now["enabled_corpora"],
+        serde_json::json!(["sep", "wikipedia"]),
+        "the scoped conversation's allow-list must ride the get route — \
+         the desktop's CorpusFilterStrip renders these chips, and an absent \
+         key reads as `all installed corpora`, which is the wrong answer \
+         wearing the default's shape"
+    );
+    let bare: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/v1/conversations/beta"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        bare.get("enabled_corpora").is_none(),
+        "an unscoped conversation OMITS the key rather than nulling it — \
+         same discipline the title carries; got {bare}"
     );
 
     // A bare row serves bare: beta has no metadata, so its wire form carries
@@ -2019,5 +2066,156 @@ async fn insights_by_id_returns_the_nodes_and_names_the_ones_that_are_gone() {
             .unwrap_or_default()
             .contains("not-a-uuid"),
         "the 400 names the id it could not parse: {body}"
+    );
+}
+
+/// `POST /v1/conversations/{id}/messages/record` appends what the CLIENT
+/// authored, verbatim, and drives no turn.
+///
+/// The route exists for the work the daemon deliberately does not do — a web
+/// search the surface ran under its own egress custody, an insight preamble
+/// gathered from a local tray. The desktop wrote both through its OWN
+/// `SqliteStateStore` until 2026-09-12; on an attached boot that is a
+/// different file from the one the sidebar lists, so the exchange landed in a
+/// conversation nothing would render it in and reported `Ok`.
+///
+/// Three things are asserted and each has a distinct way to be wrong: the
+/// messages land with the roles and metadata the caller sent (a route that
+/// re-derived the role would drop `system`), the HOST minted the ids (a
+/// client-chosen id is a second writer of the store's key), and NO extra
+/// message appeared — a route that fell through to `collect_turn` would have
+/// answered the "query" with the model and written a third row.
+#[tokio::test]
+async fn record_route_appends_client_authored_messages_without_a_turn() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let before = store
+        .get_conversation("alpha")
+        .await
+        .unwrap()
+        .messages
+        .len();
+
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/conversations/alpha/messages/record"))
+        .json(&serde_json::json!({
+            "messages": [
+                { "role": "user", "content": "web: compatibilism" },
+                {
+                    "role": "assistant",
+                    "content": "1. Compatibilism\nhttps://example.test\n",
+                    "metadata": { "search_backend": "tavily" }
+                },
+                { "role": "system", "content": "gathered insight preamble" }
+            ]
+        }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let ids: Vec<String> = body["message_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids.len(), 3, "one id per recorded message, in order");
+
+    let after = store.get_conversation("alpha").await.unwrap();
+    assert_eq!(
+        after.messages.len(),
+        before + 3,
+        "exactly the three recorded messages — a route that drove a turn \
+         would have written a fourth"
+    );
+    let tail = &after.messages[after.messages.len() - 3..];
+    assert_eq!(tail[0].role, Role::User);
+    assert_eq!(tail[0].content, "web: compatibilism");
+    assert_eq!(tail[1].role, Role::Assistant);
+    assert_eq!(
+        tail[1]
+            .metadata
+            .as_ref()
+            .and_then(|m| m["search_backend"].as_str()),
+        Some("tavily"),
+        "the metadata blob is stored verbatim, not projected"
+    );
+    assert_eq!(
+        tail[2].role,
+        Role::System,
+        "`system` is a role a client may record — the insight preamble is one"
+    );
+    // The ids the host minted are the ids the store keys on, so a client can
+    // name the message it just recorded.
+    let stored: Vec<&str> = tail.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(stored, ids.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+}
+
+/// An empty `messages` list is a 400, not `{"message_ids": []}`.
+///
+/// A caller that meant to record an exchange and sent none has a bug, and a
+/// success-shaped answer spends the caller's trust instead of their
+/// attention (ARCH principle 6). Watched to fail: with the emptiness check
+/// removed the route answers 200 and this test reads `left: 200, right:
+/// 400`.
+#[tokio::test]
+async fn record_route_refuses_an_empty_list() {
+    let (_tmp, daemon, store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let before = store
+        .get_conversation("alpha")
+        .await
+        .unwrap()
+        .messages
+        .len();
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/conversations/alpha/messages/record"))
+        .json(&serde_json::json!({ "messages": [] }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(resp.status(), 400);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("empty"),
+        "the refusal says what was wrong with the request: {body}"
+    );
+    assert_eq!(
+        store
+            .get_conversation("alpha")
+            .await
+            .unwrap()
+            .messages
+            .len(),
+        before,
+        "a refused record writes nothing"
+    );
+}
+
+/// An unknown role is serde's 422, not a string match with a fall-through
+/// arm — `role` is the closed set `Role` serialises (ARCH principle 9).
+#[tokio::test]
+async fn record_route_refuses_an_unknown_role() {
+    let (_tmp, daemon, _store) = conversation_fixture(TestProvider::new()).await;
+    let addr = crate::common::spawn_router(turn_router(daemon)).await;
+    let base = format!("http://{addr}");
+
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/conversations/alpha/messages/record"))
+        .json(&serde_json::json!({
+            "messages": [{ "role": "tool", "content": "x" }]
+        }))
+        .send()
+        .await
+        .expect("server reachable");
+    assert!(
+        resp.status().is_client_error(),
+        "an unknown role must be refused, not defaulted to `user`; got {}",
+        resp.status()
     );
 }

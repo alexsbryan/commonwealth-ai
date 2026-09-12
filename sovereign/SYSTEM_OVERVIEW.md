@@ -7204,6 +7204,59 @@ When `restart_required: true`, `save_config` falls back to
 `launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon` (macOS)
 or `systemctl --user restart sovereign` (Linux).
 
+**`GET /v1/admin/context-window`** (`admin_http`, loopback-only) serves
+`configured` / `effective` / `n_ctx_train` for the chat slot — three numbers
+that are allowed to disagree, which is why all three cross
+(`sovereign_contracts::daemon_wire::ContextWindow`,
+`TurnClient::context_window`). `effective` and `n_ctx_train` are `Option` and
+their `None` is reported, never folded into `configured`: a remote-only
+provider has no local slot. Added 2026-09-12 (`d44d57be9`) because the
+desktop's Settings panel read its OWN provider for two of the three and was
+describing a slot that served no turns.
+
+**`GET /v1/admin/chat-activity?window_secs=N`** (same router, same guard)
+serves `ChatActivitySummary` — turns, tokens generated, chunks retrieved, and
+the per-corpus / per-model rollups — derived from the `ResponseProvenance`
+already persisted under `metadata["provenance"]` on each assistant message.
+The window is clamped host-side to at least a day. Added thin-desktop R2
+(2026-09-12) for the same reason as its neighbour: the desktop computed the
+rollup over the `sovereign.db` IT opened, and every turn has been the daemon's
+since sv-surface R5, so an attached boot rendered honest-looking zeros beside
+the daemon's own activity feed. The rollup itself did not move — it is
+`SqliteStateStore::summarize_chat_activity`, reached through a
+`ConversationStore` trait method that defaults to `Err(NotImplemented)`, so a
+store keeping no message metadata answers 501 by name rather than an all-zero
+summary.
+
+**`POST /v1/conversations/{id}/messages/record`** (`turn_http`, loopback-only)
+appends messages a CLIENT authored, verbatim, and drives no turn — the sibling
+route `POST /v1/conversations/{id}/messages` is the one that runs the Runtime.
+It exists for the work the daemon deliberately does not do: web search, which
+stays in the app on egress custody, and the Explore button's insight preamble.
+Body is `RecordMessagesRequest { messages: [{ role, content, metadata? }] }`
+with `role` the closed `Role` set; an empty list is a 400 and the answer is
+`{ message_ids: [...] }` in request order, host-minted. Added thin-desktop R2
+— both callers wrote through the app's own store, so on an attached boot a web
+search landed in a conversation nothing would ever render it in, at `Ok`.
+
+**`GET /v1/conversations/{id}` gained `enabled_corpora`** at thin-desktop R2.
+It is the second named divergence from `sovereign-server`'s mirror of
+`ConversationResponse` (the first is `MessageEntry::metadata`), and it is what
+had kept the desktop's `get_conversation` on a local store handle: the
+`CorpusFilterStrip` renders the chips from it, so a route without the field
+would have rendered every scoped conversation as unscoped. Omitted rather than
+nulled when `None` ("all installed corpora").
+
+**`POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` gained
+`correction_hint` / `original_summary`.** The summary-revision loop was two
+steps and the first wrote to the wrong file: the desktop upserted
+`conv_summary_corrections` through its own handle, which held only while the
+daemon was embedded. `LocalCorpusManager::reenrich_note` writes the ledger now
+— one store handle for the write and the provider's read back — through
+`CorpusStateStore::upsert_summary_correction`, the write port beside
+`ConvBrowseReader::get_active_correction`'s read (two ports, one inherent
+decider). Empty strings normalise to SQL `NULL` host-side.
+
 ---
 
 ## 7. Build, test, run

@@ -1800,8 +1800,45 @@ status       = "open"
 # The reader counts that hold them: corpus_engine 1 (build_corpus_index —
 # whose daemon route and client method BOTH already exist and are called by
 # nothing), store 2, sqlite_store 2, inference 3.
+# RUNG R2, 2026-09-12 (thin-desktop): 5 -> 4 constructions. `open_store` was
+# the one on that list of four whose four readers were REPOINTS, and all four
+# crossed, plus a fifth the R1 count had missed:
+#   get_conversation       -> GET /v1/conversations/{id}, after widening
+#                             `ConversationResponse` with `enabled_corpora`.
+#                             That field is why D9b left this command local,
+#                             and repointing without it would have rendered
+#                             every scoped conversation as unscoped.
+#   search_web             -> POST /v1/conversations/{id}/messages/record
+#   explore_insights       -> POST /v1/conversations (row) + the same record
+#                             route (preamble). Its empty "dummy to create
+#                             conversation" user message went with it.
+#   get_chat_activity      -> GET /v1/admin/chat-activity?window_secs=N,
+#                             with ChatActivitySummary moved into
+#                             sovereign_contracts::daemon_wire.
+#   lc_reenrich_note       -> the widened enrich/reenrich-note body; the
+#                             ledger write moved to LocalCorpusManager, one
+#                             store handle for the write and the provider's
+#                             read back.
+# The fifth was state.rs's boot vector-index sweep, which R1's reader count
+# did not list: it wrote `set_vector_index_ready`. That write was INERT, not
+# repointed — its one reader (corpus_catalog_http::catalog, the "two
+# historical sources" comment) prefers the on-disk meta, and the probe beside
+# it self-heals the meta via `mark_vector_index_built`. Dropped with the
+# citation; the probe stays, because it touches only the shared indexes root
+# through the engine this process still holds.
+# ALSO MINTED: `attach_construction_census.rs::the_desktop_names_no_state_store`,
+# because the floor could not see what mattered. The floor counts construction
+# SITES in state.rs; the ABILITY to open a second sovereign.db is granted by
+# Cargo.toml, and principle 12 says look where the ability is granted. The new
+# test pins zero `sovereign_store` mentions under src/ AND zero manifest
+# lines. Note the store is still REACHABLE via sovereign-gliner and
+# sovereign-tools, so its ARCH_LAYERS [[exception]] rows stand and were
+# re-worded rather than deleted — half one of sv-no-daemon-management is the
+# instrument for that, and it did not move.
+# What is LEFT is three: CorpusEngine::new, build_folder_tiered_provider,
+# load_gliner_extractor.
 floor        = 12.0
-floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them. R1 (2026-09-12) took the census total 6 -> 5 by deleting four zero-reader constructions; the live number is the census assertion, not this line"
+floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them. R1 (2026-09-12) took the census total 6 -> 5 by deleting four zero-reader constructions and R2 took it 5 -> 4 by repointing open_store's five readers onto routes; the live number is the census assertion, not this line"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"

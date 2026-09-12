@@ -127,4 +127,28 @@ impl CorpusStateStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+
+    async fn upsert_summary_correction(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        correction_hint: Option<&str>,
+        original_summary: Option<&str>,
+        status: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        // A door, not a second decider — the same shape the
+        // `ConvBrowseReader` impl uses for the READ half of this ledger
+        // (`sqlite/conv_tiered.rs`). The upsert SQL did not move.
+        SqliteStateStore::upsert_summary_correction(
+            self,
+            corpus_id,
+            conv_uuid,
+            correction_hint,
+            original_summary,
+            status,
+            created_at,
+        )
+        .await
+    }
 }

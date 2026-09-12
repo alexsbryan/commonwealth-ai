@@ -111,6 +111,20 @@
 //! and a hoist before then deletes answers. The remaining consumers and the
 //! route each one needs are enumerated on the campaign's D9b row.
 //!
+//! # R2 took the store, and added the gate the floor could not be
+//!
+//! `open_store` was the last needle whose deletion was a REPOINT rather than
+//! a removal: five readers across the command surface, five daemon routes
+//! (the needle row names each). Floor 5 -> 4.
+//!
+//! It also exposed what a needle list cannot see. The floor counts
+//! CONSTRUCTION SITES in one file; the ABILITY to open a second
+//! `sovereign.db` is granted by `Cargo.toml`, and principle 12's own lesson
+//! is to look where the ability is granted rather than at the sites that use
+//! it. `the_desktop_names_no_state_store` below pins both halves of the cut
+//! — zero `sovereign_store` mentions under `src/`, zero dependency lines in
+//! the manifest — which is a property no count can drift past.
+//!
 //! Watched to fail: add or remove a construction site in `state.rs`'s
 //! bootstrap spine (or edit an expected count here) and this goes red
 //! naming the needle. Sabotage-verified at landing: one count edited,
@@ -137,8 +151,8 @@ struct Needle {
 const FLOOR: &[Needle] = &[
     Needle {
         hay: "builders::store::open_store(",
-        count: 1,
-        why: "the desktop's own sovereign.db handle — the second opener beside the daemon's",
+        count: 0,
+        why: "the desktop's own sovereign.db handle — DELETED thin-desktop R2 (2026-09-12), the builder file with it. It was the second opener beside the daemon's, and it ran MIGRATIONS on a data root this process does not own. Its five readers each took a route: get_conversation -> GET /v1/conversations/{id} (widened with `enabled_corpora`, the field that had kept the store alive), search_web + explore_insights -> POST /v1/conversations/{id}/messages/record, get_chat_activity -> GET /v1/admin/chat-activity, lc_reenrich_note's correction ledger -> the widened enrich/reenrich-note body. The boot vector-index sweep's `set_vector_index_ready` write went too and was inert: its one reader prefers the on-disk meta, which the probe self-heals",
     },
     Needle {
         hay: "match NoteStore::open(",
@@ -276,20 +290,117 @@ fn the_attach_construction_floor_is_pinned() {
         total += needle.count;
     }
     assert_eq!(
-        total, 4,
-        "sv-attach-pure-client floor: the pinned spine total must be 4 here, \
-         plus the daemon-provider needle pinned in the builders file = 5 \
-         (was 6 before thin-desktop R1, 12 at sv-surface D0, 14 before it). \
-         svt-3b took six zeros: the commission and everything whose only \
-         consumer was the commission. R1 took four more, and they were a \
-         different kind — not repointed onto a route, DELETED, because each \
-         was written by this spine and read by NOTHING. What is left is the \
-         four the desktop's own surfaces still read: its `sovereign.db` \
-         handle, the corpus engine, the tiered-enrichment provider and \
-         GLiNER. Those four ARE a repoint, and the reader count is the thing \
-         to watch — `build_corpus_index` is the corpus engine's last one. A \
-         needle added or removed without the campaign row moving is the \
-         exact silent drift this census exists to catch."
+        total, 3,
+        "sv-attach-pure-client floor: the pinned spine total must be 3 here, \
+         plus the daemon-provider needle pinned in the builders file = 4 \
+         (was 5 after thin-desktop R1, 6 before it, 12 at sv-surface D0, 14 \
+         before that). svt-3b took six zeros: the commission and everything \
+         whose only consumer was the commission. R1 took four more, and they \
+         were a different kind — not repointed onto a route, DELETED, \
+         because each was written by this spine and read by NOTHING. R2 took \
+         `open_store`, and that one IS a repoint: five readers, five routes, \
+         each named on the needle row. What is left is the three the \
+         desktop's own surfaces still read: the corpus engine, the \
+         tiered-enrichment provider and GLiNER. The reader count is the \
+         thing to watch — `build_corpus_index` is the corpus engine's last \
+         one. A needle added or removed without the campaign row moving is \
+         the exact silent drift this census exists to catch."
+    );
+}
+
+/// The STRUCTURAL half of R2 (ARCH principle 10): the desktop cannot name
+/// the state store at all, so the repoints above cannot be quietly undone
+/// one call at a time.
+///
+/// A needle list over `state.rs` says the CONSTRUCTION is gone. It says
+/// nothing about the ABILITY, which is granted by the manifest — and
+/// principle 12's own lesson is to look where the ability is granted, not at
+/// the sites that use it. Two pins, both cheap:
+///
+/// 1. No `.rs` under `src/` mentions `sovereign_store`. The needle is the
+///    CRATE PATH, not a type name, so a second handle reached through any
+///    type in it fires this.
+/// 2. `Cargo.toml` does not name `sovereign-store` outside a comment. Pin 1
+///    alone passes the day someone re-adds the dependency and has not
+///    imported from it yet, which is the state the rung must not drift back
+///    through.
+///
+/// What this deliberately does NOT claim is that the crate is UNREACHABLE.
+/// It still arrives transitively via `sovereign-gliner` and
+/// `sovereign-tools` (`cargo tree -p sovereign-desktop -i sovereign-store`,
+/// 2026-09-12), which is why its `[[exception]]` row in
+/// quality/ARCH_LAYERS.toml stands and why `layer-gate`'s reachability form
+/// is the instrument for that half. This is the direct edge and the source
+/// references.
+///
+/// Watched to fail at landing: `use sovereign_store::sqlite::
+/// SqliteStateStore;` re-added to `state.rs` (pin 1 red naming the file),
+/// then the dependency line re-added to `Cargo.toml` (pin 2 red). Both
+/// reverted.
+#[test]
+fn the_desktop_names_no_state_store() {
+    fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("read src dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                out.push(path);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    rust_files(&root.join("src"), &mut files);
+    assert!(
+        files.len() > 20,
+        "the walker found only {} files — it is not reading the command \
+         surface, so a green result here would mean nothing",
+        files.len()
+    );
+
+    let mut offenders: Vec<String> = Vec::new();
+    for path in &files {
+        let src = std::fs::read_to_string(path).expect("read source");
+        for (lineno, line) in src.lines().enumerate() {
+            // A doc comment that EXPLAINS the removal is documentation, not
+            // a handle — several of the repointed commands say what they no
+            // longer do, and a census firing on its own explanation is the
+            // §18.1 smell.
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if line.contains("sovereign_store") {
+                offenders.push(format!(
+                    "{}:{}: {}",
+                    path.strip_prefix(root).unwrap_or(path).display(),
+                    lineno + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "thin-desktop R2: the desktop names the state store again — \
+         {offenders:#?}. The daemon owns its data root: its `sovereign.db`, \
+         its migrations, and every conversation written to it. A handle here \
+         is a SECOND opener, and on an attached boot it is a different file \
+         from the one every turn is answered against — so the read is stale \
+         and the write is invisible, both at `Ok` (ARCH principle 12)."
+    );
+
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("read Cargo.toml");
+    let dep_lines: Vec<&str> = manifest
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .filter(|l| l.contains("sovereign-store"))
+        .collect();
+    assert!(
+        dep_lines.is_empty(),
+        "thin-desktop R2: `sovereign-store` is back in the desktop's \
+         manifest ({dep_lines:?}). The dependency is where the ability is \
+         GRANTED; the absence of import sites is not the gate."
     );
 }
 

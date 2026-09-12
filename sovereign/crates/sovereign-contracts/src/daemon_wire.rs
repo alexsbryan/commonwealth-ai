@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 // path `sovereign_contracts::daemon_wire::Name` (the size ratchet is per
 // crate, not per file; the split is for the reader).
 pub mod build_stamp;
+pub mod chat_activity;
 pub mod documents;
 pub mod enrich;
 pub mod ingest;
@@ -47,6 +48,7 @@ pub mod recipes;
 pub mod workflows;
 
 pub use build_stamp::*;
+pub use chat_activity::*;
 pub use documents::*;
 pub use enrich::*;
 pub use ingest::*;
@@ -278,6 +280,56 @@ pub struct CreateConversationResponse {
     /// (ARCH principle 6).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled_corpora: Option<Vec<String>>,
+}
+
+/// One message a CLIENT authored and asks the daemon to record verbatim —
+/// the body element of `POST /v1/conversations/{id}/messages/record`.
+///
+/// **Why a client may write a message at all.** It may not write an ANSWER:
+/// `POST /v1/conversations/{id}/messages` runs the turn, and the daemon is
+/// the only thing that drives one. This route is for the exchange the daemon
+/// deliberately does NOT perform — web search, which stays in the app on
+/// egress custody (`DEFAULTS_LEDGER` "`search_web` stays in the app"), and
+/// the insight preamble the Explore button gathers. The work happened
+/// outside the daemon; the conversation it belongs to is the daemon's. So
+/// the client asks, and the daemon stays the one writer of its own store
+/// (ARCH principle 12).
+///
+/// `role` is the closed set `Role` serialises — `user` / `assistant` /
+/// `system` — so an unknown role is a 422 from serde rather than a string
+/// match with a fall-through arm (principle 9).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordedMessage {
+    /// Author. Lowercase, as `sovereign_contracts::types::Role` serialises.
+    pub role: crate::types::Role,
+    /// The message text, as rendered.
+    pub content: String,
+    /// The metadata blob, stored verbatim. `None` attaches nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Body of `POST /v1/conversations/{id}/messages/record`.
+///
+/// A LIST, not one message, because both callers record a pair and a
+/// half-written exchange is the failure worth designing out: `search_web`
+/// saves the user's query and the result block, and a second round-trip
+/// between them is a window in which the query is stored with no answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordMessagesRequest {
+    /// The messages to append, in order. Empty is refused, not accepted as
+    /// a no-op write (principle 6).
+    pub messages: Vec<RecordedMessage>,
+}
+
+/// Answer of `POST /v1/conversations/{id}/messages/record`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordMessagesResponse {
+    /// The ids the HOST minted, in request order. The client does not
+    /// choose them: the id is the store's key and one writer owns it, which
+    /// is also what lets a caller name the assistant message it just
+    /// recorded without guessing.
+    pub message_ids: Vec<String>,
 }
 
 // ─── External MCP config — `/v1/mcp/servers` (`mcp_config_http`) ─
