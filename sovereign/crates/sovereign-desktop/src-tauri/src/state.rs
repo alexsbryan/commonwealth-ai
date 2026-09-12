@@ -4,8 +4,6 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use corpus_engine::CorpusEngine;
-
 use sovereign_contracts::traits::InferenceProvider;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
@@ -148,12 +146,14 @@ pub struct AppState {
     // `GET /v1/admin/chat-activity`, and `lc_reenrich_note`'s correction
     // ledger -> the widened `enrich/reenrich-note` body. The desktop opens
     // no database and runs no migration on the daemon's data root.
-    /// The shared corpus engine. Set during bootstrap and used by both
-    /// the install/list/remove Tauri commands and the in-runtime
-    /// epistemic tools (`ClaimSearchTool`, `EpistemicLandscapeTool`).
-    /// Built-in recipes ship as Rust source via `builtin_recipes()` —
-    /// no sidecar TOML or build-time `include_str!` magic.
-    pub corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
+    // The `corpus_engine` slot stood here and is GONE (svt-6). It held a
+    // FULL `CorpusEngine` over `~/.svrnmesh/{recipes,indexes}` — the
+    // daemon's own root, opened a second time by a client, with every
+    // `.with_*` in its builder chain paired one-for-one against
+    // `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296`. Its last
+    // reader was the recipe harness's rung-6 verify, which is
+    // `POST /internal/corpus/recipes/harness` now; the corpus pane reads
+    // `GET /internal/corpus/catalog` and has since 2a9a9e91e.
     pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
     /// How this process bootstrapped. Used by mesh_commands and the UI
     /// badge to decide whether to drive mesh via Rust or HTTP.
@@ -280,7 +280,6 @@ impl AppState {
             routing_events,
             config: RwLock::new(config),
             inference: RwLock::new(None),
-            corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             bootstrap_mode: mode,
             turn_wire: TurnWires::default(),
@@ -485,8 +484,12 @@ pub async fn bootstrap_with_progress(
     // Slow-slot work to a beefier peer. Both belonged to the daemon this
     // process was; it is no longer one, and peer routing is served by the
     // daemon at the other end (svt-3).
-    let (raw_inference, inference) =
-        builders::inference::load_inference(&state.inference, &slots, &emit).await?;
+    // Kept for TWO things, neither of which is a reader: the `?` is the
+    // boot's refusal when no embedding model is configured, and the slot it
+    // fills is `state.inference`, which svt-7 retires with the
+    // `sovereign-inference` dependency itself. Both halves of the pair were
+    // the same `Arc` already (`builders/inference.rs` module note).
+    let _ = builders::inference::load_inference(&state.inference, &slots, &emit).await?;
 
     // The database open stood here and is GONE (thin-desktop R2). It was
     // `builders::store::open_store`, and the builder file went with it —
@@ -502,124 +505,46 @@ pub async fn bootstrap_with_progress(
     // the same two files for its own commission, and `recipe_author_commands`
     // + `lessons` already reach them over `/v1/features/*` and `/v1/notes`.
 
-    // ── This bootstrap no longer assembles a turn ────────────────────────
+    // ── This bootstrap opens no knowledge engine ─────────────────────────
     //
-    // Everything between here and the corpus engine used to build the things
-    // a turn needs and hand them to the shared runtime recipe's `common_parts`
-    // -> `commission`: a `SkillRegistry` loaded from built-ins plus the user's
-    // skills dir, eleven `ToolBundle`s, the merged SCIP graph the code-intel
-    // tools hold, the mesh knowledge client, the landscape-digest provider and
-    // a `KnowledgeViewManager`. The daemon commissions all of it through the
-    // SAME recipe, and every turn has crossed the wire since sv-surface R5 —
-    // so the desktop's copy answered no question any surface asked. It is
-    // gone, and with it the `sovereign-runtime-recipe` dependency.
+    // Everything between here and the end of this function used to build the
+    // things a turn needs and hand them to the shared runtime recipe's
+    // `common_parts` -> `commission`, and then a FULL `CorpusEngine` beside
+    // it. The recipe went at svt-3b; the engine goes here (svt-6), and it is
+    // the same finding both times — the daemon builds the identical thing
+    // over the identical data root. `state.rs:622-645` and
+    // `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296` paired every
+    // `.with_*`: the same recipes dir, the same indexes dir, the same
+    // embedding model name, the same tiered provider, the same GLiNER
+    // extractor, the same `sec_edgar` acquirer.
     //
-    // What this phase still opens is what the desktop's OWN surfaces read: the
-    // corpus engine (the corpus pane, focused-passage augmentation), the
-    // local-corpus manager (Local Knowledge), the state store and the
-    // enrichment stack. Those are lance opens that scale with installed
-    // corpora, which is why the phase is announced.
+    // What fell with it, and where each answer comes from now:
+    //
+    // - `sovereign_tools::corpus::inference_to_{embed,batch_embed,inference}_fn`
+    //   — adapters that existed only to feed the engine's builder.
+    // - `sovereign_gliner::load_gliner_extractor` and
+    //   `sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider`
+    //   — the enrichment stack the engine held. The daemon holds its own.
+    // - `sovereign_tools::sec_edgar::register` — a custom acquirer must be
+    //   registered on every engine that can ingest a recipe naming it, and
+    //   there is no engine here to register it on. The daemon registers it
+    //   on the one that ingests (`bootstrap.rs`).
+    // - The `GET /status` node-id read, which existed ONLY to partition this
+    //   engine's directory names against the daemon's. No engine, no
+    //   partition, no reason to ask. `ensure_reachable` above is still the
+    //   boot's refusal when no host answers.
+    // - `state.corpus_engine` itself. Its last reader was
+    //   `commands/recipe_testing.rs`'s rung-6 verify, which is
+    //   `POST /internal/corpus/recipes/harness` now.
+    //
+    // `load_inference` above STAYS, and so does the slot it fills, even
+    // though nothing reads `state.inference` today: the call carries the
+    // boot's "no embedding model configured (Settings -> Embedding model)"
+    // refusal, and `SplitInferenceProvider` is svt-7's to retire together
+    // with the `sovereign-inference` dependency line
+    // (`attach_construction_census::the_attach_provider_construction_is_pinned`
+    // pins it there by name).
     emit(BootstrapPhase::WiringKnowledge);
-
-    // Construct a shared CorpusEngine. This single instance backs both
-    // the install/list/remove Tauri commands AND the in-runtime epistemic
-    // tools — there's no second corpus subsystem.
-    //
-    // Built-in recipes (Wikipedia, SEP, OpenAlex, …) live in Rust source
-    // via `corpus_engine::recipe::builtin_recipes()`. Users can drop
-    // additional `.toml` files into `~/.svrnmesh/recipes` for custom
-    // corpora; nothing is bundled at build time.
-    let sovereign_root = sovereign_contracts::rebrand::svrnmesh_root();
-    let recipes_dir = sovereign_root.join("recipes");
-    let indexes_dir = sovereign_root.join("indexes");
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
-    let batch_embed_fn =
-        sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
-    // Derive the embedding model identifier from the configured file path
-    // so `_corpus_meta.json` records the actual model rather than the
-    // hardcoded `"qwen3-embedding-0.6b"` default. We use the filename
-    // stem (without .gguf) as a stable, human-readable identifier.
-    let embed_model_name = slots
-        .embed
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("unknown-embed-model")
-        .to_string();
-    // Resolve the daemon's node_id so partition_path() returns a
-    // directory name this app's engine and the daemon both agree on
-    // (`<corpus>-partition-node-<hex>`). Without this the engine defaults
-    // to `self_node_id = "local"` and `in_progress_ingestions` silently
-    // misses partition-of-self directories, leaving the UI stuck on
-    // "Install" for corpora that are actively being ingested on disk.
-    //
-    // ASKED OF THE DAEMON, not read off its disk. Until svt-3 this read
-    // `<data_dir>/node_id`, then `mesh.json`, then GENERATED an id and
-    // wrote the file — a client minting the daemon's identity (ARCH
-    // principle 12), and a second minter of it beside the daemon's own
-    // `persist::load_or_generate_self_node_id`. `GET /status` carries the
-    // id in the same `NodeId` Display form `partition_path` keys on.
-    //
-    // The host answered `ensure_reachable` above, so a failure HERE is a
-    // host that is up and will not say who it is. That is a refusal of the
-    // boot, in the host's words — never a locally generated id: an engine
-    // partitioned under an invented id would report every in-flight ingest
-    // as absent and every partition as someone else's (ARCH principle 6).
-    let self_node_id = sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .daemon_status::<sovereign_contracts::daemon_wire::DaemonIdentity>()
-        .await
-        .map_err(|e| {
-            format!(
-                "the serving host on :{port} answered the reachability probe but not \
-                 `GET /status` ({e}); this app partitions its corpus engine by the \
-                 host's node id and will not invent one",
-                port = state.client_port(),
-            )
-        })?
-        .node_id;
-
-    // In-process tiered-enrichment stack — parity with the standalone
-    // daemon (`sovereign-cli-daemon` bootstrap). The embedded daemon used
-    // to wire NEITHER the engine-side tiered provider NOR the folder
-    // driver's deps, so `enable_enrichment` fell back to the legacy
-    // `sovereign-cli enrich` subprocess: exit 127 in a shipped bundle, and
-    // a build wedged at "Preparing to build the map" even in a dev tree.
-    // The shared builder constructs the same FolderTieredProvider + GLiNER
-    // extractor both daemons use. `gliner_raw` (the NoteStore T2 handle) is
-    // unused here — desktop notes wiring is separate.
-    let (_gliner_raw, chunk_entity_extractor) =
-        sovereign_gliner::load_gliner_extractor(&config.data_dir);
-    let folder_tiered_provider =
-        sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
-            &config.data_dir,
-            Arc::clone(&raw_inference),
-        );
-    let mut engine_builder =
-        corpus_engine::CorpusEngine::new(recipes_dir.clone(), indexes_dir, embed_fn)
-            .with_embedding_model(&embed_model_name)
-            .with_batch_embed_fn(batch_embed_fn)
-            .with_inference_fn(inference_fn.clone())
-            .with_self_node_id(self_node_id);
-    if let Some(tiered_provider) = folder_tiered_provider {
-        engine_builder = engine_builder.with_tiered_provider(tiered_provider);
-    }
-    if let Some(extractor) = chunk_entity_extractor.clone() {
-        engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
-        // A SECOND handle on the same model — a `LazyGlinerExtractor` as
-        // `dyn EntityExtractor` — was published to `state.entity_extractor`
-        // here for document ingest's skeleton pass. It is gone: that pass is
-        // the daemon's since 2d5b569f6, which hands its manager
-        // `runtime.lane().gliner`, and the slot had ZERO readers on this side
-        // afterwards.
-    }
-    // A custom acquirer must be registered on EVERY engine that can
-    // ingest a recipe naming it, or the install fails at acquire time
-    // with "No custom acquirer registered for kind 'sec_edgar'". The
-    // desktop's embedded daemon is one of those engines.
-    sovereign_tools::sec_edgar::register(&engine_builder);
-    let corpus_engine = Arc::new(engine_builder);
-    *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
     // The LocalCorpusManager stood here and is gone (thin-desktop, 2026-09-12).
     // It had ZERO readers: `state.local_corpus` was written once at the end of

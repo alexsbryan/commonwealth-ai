@@ -171,18 +171,18 @@ const FLOOR: &[Needle] = &[
     },
     Needle {
         hay: "sovereign_gliner::load_gliner_extractor(",
-        count: 1,
-        why: "GLiNER ONNX extractor, loaded host-side",
+        count: 0,
+        why: "GLiNER ONNX extractor, loaded host-side — DELETED svt-6 (2026-09-12). Its ONE consumer was the corpus engine's builder chain (`with_chunk_entity_extractor`); the daemon loads its own from the same `data_dir` in `daemon_cmd/bootstrap.rs`. NOTE the crate does NOT leave the manifest here: `sovereign-gliner` is svt-7's line, and its `[[exception]]` row stands until then",
     },
     Needle {
         hay: "sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(",
-        count: 1,
-        why: "the in-process tiered-enrichment provider",
+        count: 0,
+        why: "the in-process tiered-enrichment provider — DELETED svt-6 (2026-09-12) with the engine it was built for (`with_tiered_provider`). The daemon builds the same provider from the same `data_dir`, and one-shot enrichment already crossed at `/internal/corpus/enrich-once`",
     },
     Needle {
         hay: "corpus_engine::CorpusEngine::new(",
-        count: 1,
-        why: "a FULL local corpus engine — lance opens over installed indexes, constructed in attach mode too",
+        count: 0,
+        why: "a FULL local corpus engine — DELETED svt-6 (2026-09-12), and it was a DUPLICATE rather than a leftover: every `.with_*` in its builder chain paired one-for-one against `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296`, over the same `~/.svrnmesh/{recipes,indexes}`. Its four boot chores were the daemon's already (lazy fingerprint stamp, the embed-dimension probe, `validate_corpus_readiness`, the vector-index sweep); the ONE thing only it served was the recipe validate/test/harness surface, which is `POST /internal/corpus/recipes/{test,harness}` now. The `GET /status` node-id read went with it — it existed only to partition THIS engine's directory names against the daemon's",
     },
     Needle {
         hay: "LocalCorpusManager::init_with_recipes_dir(",
@@ -290,21 +290,27 @@ fn the_attach_construction_floor_is_pinned() {
         total += needle.count;
     }
     assert_eq!(
-        total, 3,
-        "sv-attach-pure-client floor: the pinned spine total must be 3 here, \
-         plus the daemon-provider needle pinned in the builders file = 4 \
-         (was 5 after thin-desktop R1, 6 before it, 12 at sv-surface D0, 14 \
-         before that). svt-3b took six zeros: the commission and everything \
-         whose only consumer was the commission. R1 took four more, and they \
-         were a different kind — not repointed onto a route, DELETED, \
-         because each was written by this spine and read by NOTHING. R2 took \
-         `open_store`, and that one IS a repoint: five readers, five routes, \
-         each named on the needle row. What is left is the three the \
-         desktop's own surfaces still read: the corpus engine, the \
-         tiered-enrichment provider and GLiNER. The reader count is the \
-         thing to watch — `build_corpus_index` is the corpus engine's last \
-         one. A needle added or removed without the campaign row moving is \
-         the exact silent drift this census exists to catch."
+        total, 0,
+        "sv-attach-pure-client floor: the pinned spine total must be 0 here, \
+         plus the daemon-provider needle pinned in the builders file = 1 \
+         (was 3 before svt-6, 4 before R2, 5 after R1, 6 before it, 12 at \
+         sv-surface D0, 14 before that). svt-3b took six zeros: the \
+         commission and everything whose only consumer was the commission. \
+         R1 took four more, and they were a different kind — not repointed \
+         onto a route, DELETED, because each was written by this spine and \
+         read by NOTHING. R2 took `open_store`, a repoint: five readers, \
+         five routes, each named on its needle row. svt-6 took the last \
+         three at once, because they were ONE thing — the corpus engine and \
+         the two builders that existed to feed it — and it was a duplicate \
+         of the daemon's, not a leftover. \
+         \
+         ZERO IS NOT THE END OF THIS INSTRUMENT, and it is important not to \
+         read it as one. The spine constructs nothing; the twelfth needle \
+         (`build_daemon_provider`, pinned in the builders file) is still \
+         there, and so are three dependency lines in Cargo.toml that svt-7 \
+         cuts. A needle added or removed without the campaign row moving is \
+         the exact silent drift this census exists to catch, and an addition \
+         is what it now watches for."
     );
 }
 

@@ -3,15 +3,57 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
+//!
+//! # These three ran a CorpusEngine in this process until svt-6
+//!
+//! `recipe_validate`, `recipe_test` and `recipe_run_harness` each built a
+//! stub `CorpusEngine` over a system temp dir and ran the real harness here;
+//! `recipe_run_harness`'s rung 6 then reached `state.corpus_engine` — the
+//! LAST reader of that slot — to verify atoms in the shared indexes root. A
+//! client that opens the knowledge engine to answer a question is the
+//! duplicate this campaign exists to remove (ARCH principle 12), and the
+//! duplicate was measurable: the frozen sample landed under the CLIENT's
+//! `~/.svrnmesh/harness`, and the atoms verified were reached through an
+//! engine this process partitioned for itself.
+//!
+//! All three are TurnClient calls now —
+//! `POST /internal/corpus/recipes/test` and
+//! `POST /internal/corpus/recipes/harness` (`sovereign_mesh::recipe_http`) —
+//! and the daemon runs the same `corpus_engine::harness` code over ITS engine
+//! and ITS data root. The two result shapes below are unchanged, so
+//! `RecipeTestingPanel.svelte` and `HarnessLadderCard.svelte` are untouched.
 use super::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::State;
 
+use sovereign_contracts::daemon_wire::{
+    IngestJobAck, RecipeDryRunProgress, RecipeDryRunReport, RecipeDryRunRequest,
+    RecipeHarnessProgress, RecipeHarnessRequest, RecipeJobState,
+};
+use sovereign_turn_client::TurnClient;
+
 use crate::state::AppState;
+
+/// How often a daemon-side recipe job is polled, and how many CONSECUTIVE
+/// poll failures end the wait with an error.
+///
+/// Same shape as the local-corpus ingest follow: one failure is a hiccup,
+/// ten in a row is a daemon that is not coming back, and a panel that spins
+/// forever is worse than one that says so (ARCH principle 6).
+const JOB_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
+const JOB_POLL_MAX_FAILURES: u32 = 10;
+
+/// Read the recipe the author picked in their own file dialog. The TOML
+/// travels to the daemon; the PATH does not, because a daemon that reads
+/// client-supplied paths is a different surface from one that reads its own
+/// data root.
+fn read_recipe(recipe_path: &Path) -> Result<String, String> {
+    std::fs::read_to_string(recipe_path)
+        .map_err(|e| format!("read recipe {}: {e}", recipe_path.display()))
+}
 
 // ─── Recipe Testing ──────────────────────────────────────────────────────────
 
@@ -43,44 +85,54 @@ pub struct RecipeTestResult {
 
 /// Validate a recipe's fields without downloading any data.
 ///
-/// Returns immediately — performs only static checks and an optional
-/// HTTP HEAD request to the source URL.
+/// `sample_size: 0` on the daemon's dry-run route: static checks plus, when
+/// `offline` is false, one HTTP HEAD on the source URL. Answered inline —
+/// nothing is acquired, so there is no job to follow.
+///
+/// `passed` here is "no validation ERRORS", deliberately weaker than the
+/// harness's `passed`: this affordance answers "is the recipe well-formed?",
+/// not "would it produce a usable corpus?".
 #[tauri::command]
 pub async fn recipe_validate(
+    state: State<'_, Arc<AppState>>,
     recipe_path: String,
     offline: bool,
 ) -> Result<RecipeValidateResult, String> {
-    let path = PathBuf::from(&recipe_path);
-    let engine = recipe_stub_engine();
-    let options = corpus_engine::TestOptions {
-        sample_size: 0,
-        embed: false,
-        offline,
-        ..Default::default()
-    };
-
-    let report = engine
-        .test_recipe(&path, &options)
+    let toml_text = read_recipe(Path::new(&recipe_path))?;
+    let report: RecipeDryRunReport = TurnClient::new(state.client_base_url())
+        .recipe_dry_run(&RecipeDryRunRequest {
+            toml_text,
+            sample_size: 0,
+            offline,
+        })
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("recipe_validate `{recipe_path}`: {e}"))?;
 
     Ok(RecipeValidateResult {
-        passed: report.validation.errors.is_empty(),
-        errors: report.validation.errors.clone(),
-        warnings: report.warnings(),
-        corpus_id: report.recipe_id.clone(),
-        corpus_name: report.recipe_name.clone(),
-        source_reachable: report.validation.source_reachable,
+        passed: report.errors.is_empty(),
+        errors: report.errors,
+        warnings: report.warnings,
+        corpus_id: report.recipe_id,
+        corpus_name: report.recipe_name,
+        source_reachable: report.source_reachable,
     })
 }
 
-/// Run the full recipe test harness: validate → acquire sample →
-/// extract → chunk → write TEST_REPORT.md.
+/// Run the full recipe test harness: validate → acquire sample → extract →
+/// chunk, on the DAEMON, then write `TEST_REPORT.md` beside the author's
+/// recipe.
 ///
-/// Embedding is not available in this code path — the embed phase is
-/// always skipped. The report is written to `<recipe_dir>/TEST_REPORT.md`.
+/// The report FILE is written here and not by the daemon, and that is an
+/// ownership line rather than an accident: the recipe directory is the
+/// author's own, reached through the file dialog they opened, while the
+/// daemon writes only inside the root it owns. The markdown itself is the
+/// daemon's — `report_markdown` verbatim, one renderer (ARCH principle 8).
+///
+/// Embedding is not available in this path — the embed phase is always
+/// skipped, as it was in-process.
 #[tauri::command]
 pub async fn recipe_test(
+    state: State<'_, Arc<AppState>>,
     recipe_path: String,
     sample_size: usize,
     offline: bool,
@@ -90,23 +142,31 @@ pub async fn recipe_test(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("TEST_REPORT.md");
-
-    let engine = recipe_stub_engine();
-    let options = corpus_engine::TestOptions {
+    let toml_text = read_recipe(&path)?;
+    let client = TurnClient::new(state.client_base_url());
+    let request = RecipeDryRunRequest {
+        toml_text,
         sample_size,
-        embed: false,
         offline,
-        output: Some(output_path.clone()),
-        ..Default::default()
     };
 
-    let report = engine
-        .test_recipe(&path, &options)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Two arms on one route, split on whether anything is acquired. A sample
+    // is a download, and a Tauri command never awaits a download — it
+    // follows the daemon's job (campaign ambiguity policy, 2026-09-12).
+    let report = if sample_size == 0 {
+        client
+            .recipe_dry_run::<_, RecipeDryRunReport>(&request)
+            .await
+            .map_err(|e| format!("recipe_test `{recipe_path}`: {e}"))?
+    } else {
+        let ack: IngestJobAck = client
+            .recipe_dry_run(&request)
+            .await
+            .map_err(|e| format!("recipe_test `{recipe_path}`: {e}"))?;
+        follow_dry_run(&client, &ack.job_id).await?
+    };
 
-    let markdown = report.to_markdown();
-
+    let markdown = report.report_markdown;
     if let Err(e) = std::fs::write(&output_path, &markdown) {
         tracing::warn!(
             "Failed to write TEST_REPORT.md to {}: {e}",
@@ -114,149 +174,150 @@ pub async fn recipe_test(
         );
     }
 
-    let (records_attempted, records_succeeded, extraction_rate) = report
-        .extraction
-        .as_ref()
-        .map(|e| (e.records_attempted, e.records_succeeded, e.extraction_rate))
-        .unwrap_or((0, 0, 0.0));
-
-    let (total_chunks, avg_chars) = report
-        .chunking
-        .as_ref()
-        .map(|c| (c.total_chunks, c.avg_chars))
-        .unwrap_or((0, 0.0));
-
     Ok(RecipeTestResult {
-        passed: report.passed(),
-        warnings: report.warnings(),
-        errors: report.validation.errors.clone(),
-        recipe_id: report.recipe_id.clone(),
-        recipe_name: report.recipe_name.clone(),
-        records_attempted,
-        records_succeeded,
-        extraction_rate,
-        total_chunks,
-        avg_chars,
+        passed: report.passed,
+        warnings: report.warnings,
+        errors: report.errors,
+        recipe_id: report.recipe_id,
+        recipe_name: report.recipe_name,
+        records_attempted: report.records_attempted,
+        records_succeeded: report.records_succeeded,
+        extraction_rate: report.extraction_rate,
+        total_chunks: report.total_chunks,
+        avg_chars: report.avg_chars,
         report_path: output_path.to_string_lossy().into_owned(),
         report_markdown: markdown,
     })
 }
 
-/// The deterministic verdict ladder, flattened for the UI. Mirrors the CLI's
-/// rendered ladder (Acquire→Extract→Filter→Chunk→Index) but as structured data
-/// the frontend renders as green/red/amber cards with expandable evidence.
-#[derive(Serialize)]
-pub struct HarnessRunCard {
-    /// Roll-up: all stages pass → green; any fail → red. Warns never gate.
-    pub green: bool,
-    /// The full per-stage verdict ladder (serializable `HarnessRun`).
-    pub run: sovereign_authoring_harness::HarnessRun,
-    pub ran_at_unix: u64,
-    /// Frozen-sample provenance — surfaced as a "❄ Frozen: N docs" chip.
-    pub frozen_docs: usize,
-    pub frozen_captured_at: i64,
-    /// True when THIS call performed the one networked capture step — lets the
-    /// UI say "froze N docs" the first time and "offline" thereafter.
-    pub frozen_captured_now: bool,
+/// Follow a daemon-side dry run to its report.
+///
+/// A run that ends in `Error` is an `Err` here, never an empty report: a
+/// zero-chunk zero-record report and a harness that could not run look
+/// identical on a panel and ask the author for opposite things (ARCH
+/// principle 6).
+async fn follow_dry_run(client: &TurnClient, job_id: &str) -> Result<RecipeDryRunReport, String> {
+    let mut failures = 0u32;
+    loop {
+        tokio::time::sleep(JOB_POLL_INTERVAL).await;
+        let progress: RecipeDryRunProgress = match client.recipe_dry_run_progress(job_id).await {
+            Ok(p) => {
+                failures = 0;
+                p
+            }
+            Err(e) => {
+                failures += 1;
+                tracing::warn!(job_id, failures, "recipe_test: progress poll failed: {e}");
+                if failures >= JOB_POLL_MAX_FAILURES {
+                    return Err(format!(
+                        "lost contact with the daemon while testing recipe job \
+                         `{job_id}` ({failures} consecutive failures): {e}"
+                    ));
+                }
+                continue;
+            }
+        };
+        match progress.state {
+            RecipeJobState::Running => {}
+            RecipeJobState::Complete => {
+                return progress.report.ok_or_else(|| {
+                    format!("recipe job `{job_id}` reported complete with no report")
+                })
+            }
+            RecipeJobState::Error => {
+                return Err(progress
+                    .error
+                    .unwrap_or_else(|| format!("recipe job `{job_id}` failed without a reason")))
+            }
+        }
+    }
 }
 
-/// Run the deterministic authoring harness over a frozen sample and return the
-/// per-stage verdict ladder. Rungs 1–5 (Acquire→Extract→Filter→Chunk→Index) are
-/// model-free + offline after the first run (the sample is captured once under
-/// `~/.svrnmesh/harness/<recipe-id>/`, then byte-identical, I1).
+// `HarnessRunCard` stood here and is GONE (svt-6). Its `run` field was
+// `sovereign_authoring_harness::HarnessRun` — a type this process cannot name
+// once it stops linking that crate, and the LAST thing holding the
+// dependency. The daemon serialises the same card through
+// `sovereign_contracts::daemon_wire::HarnessRunCardView<HarnessRun>`, whose
+// six keys `sovereign-mesh/tests/main/recipe_surface_e2e.rs` pins by name and
+// whose `types.ts` twin (`HarnessRunCard`) is unchanged.
+
+/// Run the deterministic authoring harness over a frozen sample and return
+/// the per-stage verdict ladder. Rungs 1–5 (Acquire→Extract→Filter→Chunk→
+/// Index) are model-free and offline after the first run — the sample is
+/// captured once under the DAEMON's `<data_dir>/harness/<recipe-id>/`, then
+/// byte-identical (I1).
 ///
-/// `enrich` adds rung 6 — but it does NOT stand up a parallel enrichment path.
-/// It REUSES the atoms the desktop's existing ingest/enrich flow already wrote
-/// for this corpus (via the shared `state.corpus_engine` — the daemon-backed
-/// OICP `InferenceProvider` seam) and only VERIFIES their integrity with
-/// `verify_atoms_at`. Returns no rung-6 verdict when the corpus isn't enriched
-/// yet — install/enrich it through the normal flow first.
+/// `enrich` adds rung 6, and it does NOT stand up a parallel enrichment
+/// path: the daemon verifies the atoms its own ingest/enrich already wrote
+/// for this corpus, in the index it serves retrieval from. No rung-6 verdict
+/// comes back when the corpus is not enriched yet — install/enrich it through
+/// the normal flow first.
+///
+/// Returns the daemon's card VERBATIM, as `serde_json::Value`: `HarnessRun`
+/// is defined in `sovereign-authoring-harness`, a crate this process no
+/// longer links. The bytes are one definition's and the shape is pinned on
+/// the serving side.
 #[tauri::command]
 pub async fn recipe_run_harness(
     state: State<'_, Arc<AppState>>,
     recipe_path: String,
     sample_size: usize,
     enrich: bool,
-) -> Result<HarnessRunCard, String> {
-    use corpus_engine::harness::{capture, verify_atoms_at, FrozenSample, HarnessRunner};
-    use sovereign_authoring_harness::{run_deterministic, Declaration};
-
-    let path = PathBuf::from(&recipe_path);
-    let recipe =
-        corpus_engine::Recipe::from_file(&path).map_err(|e| format!("load recipe: {e}"))?;
-    let engine = recipe_stub_engine();
-
-    // Frozen sample under ~/.svrnmesh/harness/<recipe-id>/ — capture once
-    // (network), iterate offline thereafter. Same store the CLI uses.
-    let harness_root = sovereign_contracts::rebrand::svrnmesh_root()
-        .join("harness")
-        .join(&recipe.corpus.id);
-
-    let mut frozen_captured_now = false;
-    if !harness_root.join("capture.json").exists() {
-        capture(&engine, &recipe, &harness_root, sample_size)
-            .await
-            .map_err(|e| format!("frozen-sample capture failed: {e}"))?;
-        frozen_captured_now = true;
-    }
-    let frozen = FrozenSample::load(&harness_root)
-        .map_err(|e| format!("load frozen sample: {e}"))?
-        .ok_or_else(|| "no frozen sample found after capture".to_string())?;
-
-    let work_dir = std::env::temp_dir().join(format!("harness-run-{}", recipe.corpus.id));
-    let outputs = HarnessRunner::new(&engine, &recipe, &frozen)
-        .run(&work_dir, sample_size)
+) -> Result<serde_json::Value, String> {
+    let toml_text = read_recipe(Path::new(&recipe_path))?;
+    let client = TurnClient::new(state.client_base_url());
+    let ack: IngestJobAck = client
+        .recipe_harness(&RecipeHarnessRequest {
+            toml_text,
+            sample_size,
+            enrich,
+        })
         .await
-        .map_err(|e| format!("harness run failed: {e}"))?;
+        .map_err(|e| format!("recipe_run_harness `{recipe_path}`: {e}"))?;
 
-    // Rung 6 (opt-in): verify the atoms the desktop's existing ingest/enrich
-    // flow already produced for this corpus — REUSE the shared daemon-backed
-    // `state.corpus_engine`, not a parallel enrichment pipeline. `None` (no
-    // rung-6 verdict) when the corpus isn't enriched yet.
-    let enrich_out = if enrich {
-        let daemon_engine = state
-            .corpus_engine
-            .read()
-            .await
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or_else(|| "corpus engine not ready (is the daemon connected?)".to_string())?;
-        verify_atoms_at(&daemon_engine.index_dir().join(&recipe.corpus.id))
-            .await
-            .map_err(|e| format!("enrich verify failed: {e}"))?
-    } else {
-        None
-    };
-
-    let run = run_deterministic(
-        &frozen.manifest,
-        &recipe,
-        &outputs,
-        enrich_out.as_ref(),
-        &Declaration::default(),
-    );
-
-    Ok(HarnessRunCard {
-        green: run.green(),
-        frozen_docs: frozen.manifest.docs.len(),
-        frozen_captured_at: frozen.manifest.captured_at,
-        frozen_captured_now,
-        ran_at_unix: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
-        run,
-    })
-}
-
-/// Build a `CorpusEngine` with a stub embed function for recipe testing.
-/// The stub is never called because the embed phase is always disabled.
-fn recipe_stub_engine() -> corpus_engine::CorpusEngine {
-    let stub: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-        Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) })
-    });
-    let tmp = std::env::temp_dir().join("sovereign-recipe-test");
-    corpus_engine::CorpusEngine::new(tmp.clone(), tmp, stub)
+    let mut failures = 0u32;
+    loop {
+        tokio::time::sleep(JOB_POLL_INTERVAL).await;
+        let progress: RecipeHarnessProgress =
+            match client.recipe_harness_progress(&ack.job_id).await {
+                Ok(p) => {
+                    failures = 0;
+                    p
+                }
+                Err(e) => {
+                    failures += 1;
+                    tracing::warn!(
+                        job_id = %ack.job_id,
+                        failures,
+                        "recipe_run_harness: progress poll failed: {e}"
+                    );
+                    if failures >= JOB_POLL_MAX_FAILURES {
+                        return Err(format!(
+                            "lost contact with the daemon while running the harness \
+                         (job `{}`, {failures} consecutive failures): {e}",
+                            ack.job_id
+                        ));
+                    }
+                    continue;
+                }
+            };
+        match progress.state {
+            RecipeJobState::Running => {}
+            RecipeJobState::Complete => {
+                return progress.card.ok_or_else(|| {
+                    format!(
+                        "harness job `{}` reported complete with no card",
+                        ack.job_id
+                    )
+                })
+            }
+            RecipeJobState::Error => {
+                return Err(progress.error.unwrap_or_else(|| {
+                    format!("harness job `{}` failed without a reason", ack.job_id)
+                }))
+            }
+        }
+    }
 }
 
 /// Kick off background installs for every corpus in the given tier.
