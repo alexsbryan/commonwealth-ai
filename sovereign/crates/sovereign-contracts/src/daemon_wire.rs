@@ -45,6 +45,7 @@ pub mod mesh;
 pub mod meshapp;
 pub mod recipe_projects;
 pub mod recipes;
+pub mod setup_plan;
 pub mod workflows;
 
 pub use build_stamp::*;
@@ -57,6 +58,7 @@ pub use mesh::*;
 pub use meshapp::*;
 pub use recipe_projects::*;
 pub use recipes::*;
+pub use setup_plan::*;
 pub use workflows::*;
 pub mod provenance;
 pub use provenance::*;

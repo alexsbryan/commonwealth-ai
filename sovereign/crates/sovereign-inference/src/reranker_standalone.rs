@@ -124,7 +124,7 @@ pub fn load_from_env() -> RerankLoad {
     // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
     // loads. The rerank slot is process-local additional weight alongside
     // whatever primary is already resident.
-    let hw = crate::hardware::HardwareProfile::detect();
+    let hw = crate::hardware::detect_hardware();
     let plan = [crate::capacity::SlotPlan {
         role: "rerank".into(),
         path: path.clone(),

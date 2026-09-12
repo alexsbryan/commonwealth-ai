@@ -1,72 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use serde::{Deserialize, Serialize};
+//! Hardware detection for model-loading decisions.
+//!
+//! The PROFILE TYPES moved down to `sovereign_contracts::daemon_wire` at
+//! sv-surface svt-7 (2026-09-12) — they are what `svrn setup --plan --json`
+//! prints, and a first-run client that parses that plan must not have to link
+//! the inference stack to name them. They are re-exported here at the paths
+//! every importer already spells.
+//!
+//! The DETECTION stays: `sysinfo` and the llama.cpp backend device list are
+//! this crate's business. It is a free function rather than
+//! `HardwareProfile::detect` because an inherent `impl` cannot cross a crate
+//! boundary.
 use sysinfo::System;
 
-/// Detected hardware capabilities used for model loading decisions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HardwareProfile {
-    pub system_ram_bytes: u64,
-    pub gpu_available: bool,
-    pub gpu_name: Option<String>,
-    pub gpu_memory_bytes: Option<u64>,
-    pub recommended_gpu_layers: u32,
-    /// True on Apple Silicon (M-series) where GPU and CPU share the same
-    /// unified memory pool. When true, `system_ram_bytes` is the effective
-    /// VRAM for profile selection.
-    pub is_unified_memory: bool,
-}
+pub use sovereign_contracts::daemon_wire::{HardwareProfile, ProfileName};
 
-/// Hardware-tier profile. Used to select the appropriate model sizes from
-/// the models.toml manifest (cpu_only → low_mem → default → high → very_high).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ProfileName {
-    CpuOnly,
-    LowMem,
-    Default,
-    High,
-    VeryHigh,
-}
+/// Probe this machine: RAM from `sysinfo`, GPU from the platform rule below.
+pub fn detect_hardware() -> HardwareProfile {
+    let sys = System::new_all();
+    let system_ram_bytes = sys.total_memory();
 
-impl HardwareProfile {
-    pub fn detect() -> Self {
-        let sys = System::new_all();
-        let system_ram_bytes = sys.total_memory();
+    let (gpu_available, gpu_name, gpu_memory_bytes, is_unified_memory) = detect_gpu();
 
-        let (gpu_available, gpu_name, gpu_memory_bytes, is_unified_memory) = detect_gpu();
+    let recommended_gpu_layers = if gpu_available { 999 } else { 0 };
 
-        let recommended_gpu_layers = if gpu_available { 999 } else { 0 };
+    eprintln!(
+        "Hardware: {:.1} GB RAM, GPU: {} (layers: {}, unified: {})",
+        system_ram_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+        gpu_name.as_deref().unwrap_or("none"),
+        recommended_gpu_layers,
+        is_unified_memory,
+    );
 
-        eprintln!(
-            "Hardware: {:.1} GB RAM, GPU: {} (layers: {}, unified: {})",
-            system_ram_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
-            gpu_name.as_deref().unwrap_or("none"),
-            recommended_gpu_layers,
-            is_unified_memory,
-        );
-
-        Self {
-            system_ram_bytes,
-            gpu_available,
-            gpu_name,
-            gpu_memory_bytes,
-            recommended_gpu_layers,
-            is_unified_memory,
-        }
-    }
-
-    pub fn system_ram_gb(&self) -> f64 {
-        self.system_ram_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
-    }
-
-    /// Effective VRAM available for model loading.
-    /// On unified memory systems (Apple Silicon) this is the full system RAM.
-    /// On discrete GPU systems this is the GPU's VRAM.
-    pub fn effective_vram_gb(&self) -> f32 {
-        if self.is_unified_memory {
-            self.system_ram_bytes as f32 / 1_073_741_824.0
-        } else {
-            self.gpu_memory_bytes.unwrap_or(0) as f32 / 1_073_741_824.0
-        }
+    HardwareProfile {
+        system_ram_bytes,
+        gpu_available,
+        gpu_name,
+        gpu_memory_bytes,
+        recommended_gpu_layers,
+        is_unified_memory,
     }
 }
 

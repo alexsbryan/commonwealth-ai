@@ -22,10 +22,10 @@ use tauri::{AppHandle, Emitter};
 
 use sovereign_contracts::gguf_validator::GgufExpectation;
 use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, HardwareProfile};
+use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile};
 use sovereign_inference::setup_planner::{
-    build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_slot,
-    SlotKind,
+    build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_byom_url,
+    resolve_slot, SlotKind,
 };
 
 use crate::state::{self, AppState, BootstrapPhase};
@@ -102,7 +102,7 @@ pub async fn run(
         SetupPhase::DetectingHardware,
         "Reading what this machine can do.",
     );
-    let hw = tokio::task::spawn_blocking(HardwareProfile::detect)
+    let hw = tokio::task::spawn_blocking(detect_hardware)
         .await
         .map_err(|e| failed(&app, false, format!("hardware detect panicked: {e}")))?;
     let profile = hardware::select_profile(&hw);
@@ -876,109 +876,4 @@ fn is_valid_gguf_at(path: &Path) -> bool {
         return false;
     }
     sovereign_contracts::gguf_validator::validate_gguf(path, &GgufExpectation::unknown()).is_ok()
-}
-
-/// Turn a user-pasted "bring your own model" URL into `(download_url,
-/// file_name)`, or an `Err` message the UI shows verbatim.
-///
-/// Accepts three shapes a "user who knows what they're doing" is likely
-/// to paste:
-///   1. a direct `…/resolve/main/<file>.gguf` raw link (used as-is);
-///   2. a `…/blob/main/<file>.gguf` browser link (HTML page — rewritten
-///      to the `/resolve/` raw path);
-///   3. a HuggingFace quant *page* URL of the form
-///      `…/<repo>?show_file_info=<file>.gguf` (what the HF file browser
-///      puts in the address bar) — rebuilt into the `/resolve/` link.
-/// Anything that doesn't resolve to a `.gguf` file (a repo root, a random
-/// page) is rejected with guidance rather than downloading an HTML stub.
-fn resolve_byom_url(raw: &str) -> Result<(String, String), String> {
-    let url = raw.trim();
-
-    // Shape 3: HF quant page `?show_file_info=<file>.gguf`.
-    if let Some((base, query)) = url.split_once('?') {
-        if let Some(file) = query
-            .split('&')
-            .find_map(|kv| kv.strip_prefix("show_file_info="))
-        {
-            let file = file.split(['&', '#']).next().unwrap_or(file);
-            if file.to_ascii_lowercase().ends_with(".gguf") {
-                let repo = base.trim_end_matches('/');
-                return Ok((format!("{repo}/resolve/main/{file}"), file.to_string()));
-            }
-        }
-    }
-
-    // Shapes 1 & 2: a direct file link. `/blob/` pages are HTML; the raw
-    // bytes live under `/resolve/`.
-    let dl = url.replace("/blob/", "/resolve/");
-    let file = dl
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(&dl)
-        .trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or("")
-        .to_string();
-    if file.to_ascii_lowercase().ends_with(".gguf") {
-        Ok((dl, file))
-    } else {
-        Err(format!(
-            "that link doesn't point at a .gguf file — paste the direct download \
-             link to the model file (or its HuggingFace quant page), not the repo \
-             root: {raw}"
-        ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::resolve_byom_url;
-
-    #[test]
-    fn passes_through_resolve_link() {
-        let (url, file) = resolve_byom_url(
-            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
-        )
-        .unwrap();
-        assert!(url.ends_with("/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"));
-        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
-    }
-
-    #[test]
-    fn rewrites_blob_to_resolve() {
-        let (url, file) = resolve_byom_url(
-            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/blob/main/Qwen3.5-9B-Q4_K_M.gguf",
-        )
-        .unwrap();
-        assert!(url.contains("/resolve/") && !url.contains("/blob/"));
-        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
-    }
-
-    #[test]
-    fn handles_hf_quant_page_show_file_info() {
-        let (url, file) = resolve_byom_url(
-            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF?show_file_info=gemma-4-31B-it-UD-Q4_K_XL.gguf",
-        )
-        .unwrap();
-        assert_eq!(
-            url,
-            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-UD-Q4_K_XL.gguf"
-        );
-        assert_eq!(file, "gemma-4-31B-it-UD-Q4_K_XL.gguf");
-    }
-
-    #[test]
-    fn strips_query_and_fragment_from_direct_link() {
-        let (_, file) =
-            resolve_byom_url("https://example.com/models/foo.gguf?download=true#frag").unwrap();
-        assert_eq!(file, "foo.gguf");
-    }
-
-    #[test]
-    fn rejects_repo_page_and_non_gguf() {
-        assert!(resolve_byom_url("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF").is_err());
-        assert!(resolve_byom_url("not even a url").is_err());
-        assert!(resolve_byom_url("https://example.com/readme.md").is_err());
-    }
 }

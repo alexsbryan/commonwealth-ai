@@ -402,8 +402,7 @@ pub fn describe_model_load_failure(
     // obvious ("0.0 GB on disk … likely didn't fit in memory").
     let size_gb = Some(crate::embedded::total_model_bytes(model_path) as f64 / 1_000_000_000.0)
         .filter(|g| *g > 0.0);
-    let ram_gb =
-        crate::hardware::HardwareProfile::detect().system_ram_bytes as f64 / 1_000_000_000.0;
+    let ram_gb = crate::hardware::detect_hardware().system_ram_bytes as f64 / 1_000_000_000.0;
     if let Some(g) = size_gb {
         s.push_str(&format!(
             "\n  model file: {g:.1} GB on disk; detected host RAM: {ram_gb:.1} GB"

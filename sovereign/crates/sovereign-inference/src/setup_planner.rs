@@ -19,23 +19,16 @@ use crate::{validate_gguf, GgufExpectation};
 
 // ─── Catalog ──────────────────────────────────────────────────────
 
-/// One row in the curated primary-model picker. Carries the slot
-/// definition plus a `recommended` flag so callers know which entry
-/// is the default for the detected hardware.
-#[derive(Clone, Debug)]
-pub struct PrimaryOption {
-    /// Profile this slot was drawn from — `"high"`, `"default"` etc.
-    pub profile: &'static str,
-    pub slot: SlotConfig,
-    pub recommended: bool,
-}
-
-impl std::ops::Deref for PrimaryOption {
-    type Target = SlotConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.slot
-    }
-}
+/// One row in the curated primary-model picker —
+/// `sovereign_contracts::daemon_wire::PrimaryOption`, re-exported at the path
+/// its callers already spell.
+///
+/// It MOVED to the contract layer at sv-surface svt-7 (2026-09-12) with
+/// `SlotConfig`: `svrn setup --plan --json` prints a catalog of these, and a
+/// first-run client parses it without linking this crate. `profile` became a
+/// `String` in the move — a `&'static str` cannot be deserialized, and the
+/// field was already carrying a borrowed display label rather than a tier.
+pub use sovereign_contracts::daemon_wire::PrimaryOption;
 
 #[derive(Clone, Copy, Debug)]
 pub enum SlotKind {
@@ -116,18 +109,20 @@ pub fn next_fim_rung(rung: &str) -> Option<(&'static str, SlotConfig)> {
 /// recommended), plus each smaller profile's thoughtful slot so the
 /// user can opt into a faster / smaller model if they prefer.
 pub fn build_primary_catalog(profile: &ProfileName) -> Vec<PrimaryOption> {
-    let order = [
-        ("very_high", ProfileName::VeryHigh),
-        ("high", ProfileName::High),
-        ("default", ProfileName::Default),
-        ("low_mem", ProfileName::LowMem),
-        ("cpu_only", ProfileName::CpuOnly),
-    ];
+    // Largest tier first, off the ONE tier list — the hand-written
+    // `(key, variant)` pairs that stood here were a fifth copy of the
+    // profile spelling (ARCH principle 8); `as_str` is the decider now.
+    let order = {
+        let mut o = ProfileName::ALL;
+        o.reverse();
+        o
+    };
     let max_tier_rank = tier_rank(profile);
 
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for (name, p) in order {
+    for p in order {
+        let name = p.as_str();
         if tier_rank(&p) > max_tier_rank {
             continue;
         }
@@ -146,7 +141,7 @@ pub fn build_primary_catalog(profile: &ProfileName) -> Vec<PrimaryOption> {
             continue;
         }
         out.push(PrimaryOption {
-            profile: name,
+            profile: name.to_string(),
             recommended: &p == profile,
             slot,
         });
@@ -165,7 +160,7 @@ pub fn build_primary_catalog(profile: &ProfileName) -> Vec<PrimaryOption> {
             .and_then(|p| p.thoughtful.clone())
         {
             out.push(PrimaryOption {
-                profile: "default",
+                profile: ProfileName::Default.as_str().to_string(),
                 recommended: false,
                 slot,
             });
@@ -189,13 +184,7 @@ pub fn tier_rank(p: &ProfileName) -> u8 {
 /// fallback to the `default` profile when the user's profile
 /// doesn't define one (rare, e.g. embed on cpu_only).
 pub fn resolve_slot(profile: &ProfileName, kind: SlotKind) -> Option<SlotConfig> {
-    let profile_name = match *profile {
-        ProfileName::CpuOnly => "cpu_only",
-        ProfileName::LowMem => "low_mem",
-        ProfileName::Default => "default",
-        ProfileName::High => "high",
-        ProfileName::VeryHigh => "very_high",
-    };
+    let profile_name = profile.as_str();
     // FIM resolves off the ladder, not off the hardware profile's own
     // table — `[profiles.high.fim]` intentionally does not exist. Doing
     // this before the profile lookup keeps the fallback below (which
@@ -249,6 +238,59 @@ pub fn hf_download_url(slot: &SlotConfig) -> String {
         slot.hf_url.clone()
     } else {
         format!("https://huggingface.co/{repo}/resolve/main/{}", slot.file)
+    }
+}
+
+/// Turn a user-pasted "bring your own model" URL into `(download_url,
+/// file_name)`, or an `Err` message the UI shows verbatim.
+///
+/// Accepts three shapes a "user who knows what they're doing" is likely
+/// to paste:
+///   1. a direct `…/resolve/main/<file>.gguf` raw link (used as-is);
+///   2. a `…/blob/main/<file>.gguf` browser link (HTML page — rewritten
+///      to the `/resolve/` raw path);
+///   3. a HuggingFace quant *page* URL of the form
+///      `…/<repo>?show_file_info=<file>.gguf` (what the HF file browser
+///      puts in the address bar) — rebuilt into the `/resolve/` link.
+/// Anything that doesn't resolve to a `.gguf` file (a repo root, a random
+/// page) is rejected with guidance rather than downloading an HTML stub.
+pub fn resolve_byom_url(raw: &str) -> Result<(String, String), String> {
+    let url = raw.trim();
+
+    // Shape 3: HF quant page `?show_file_info=<file>.gguf`.
+    if let Some((base, query)) = url.split_once('?') {
+        if let Some(file) = query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("show_file_info="))
+        {
+            let file = file.split(['&', '#']).next().unwrap_or(file);
+            if file.to_ascii_lowercase().ends_with(".gguf") {
+                let repo = base.trim_end_matches('/');
+                return Ok((format!("{repo}/resolve/main/{file}"), file.to_string()));
+            }
+        }
+    }
+
+    // Shapes 1 & 2: a direct file link. `/blob/` pages are HTML; the raw
+    // bytes live under `/resolve/`.
+    let dl = url.replace("/blob/", "/resolve/");
+    let file = dl
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(&dl)
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+    if file.to_ascii_lowercase().ends_with(".gguf") {
+        Ok((dl, file))
+    } else {
+        Err(format!(
+            "that link doesn't point at a .gguf file — paste the direct download \
+             link to the model file (or its HuggingFace quant page), not the repo \
+             root: {raw}"
+        ))
     }
 }
 
@@ -619,5 +661,57 @@ mod tests {
                 .count();
             assert_eq!(recommended_count, 1, "{p:?}: exactly one recommended entry");
         }
+    }
+}
+
+#[cfg(test)]
+mod byom_url_tests {
+    use super::resolve_byom_url;
+
+    #[test]
+    fn passes_through_resolve_link() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        )
+        .unwrap();
+        assert!(url.ends_with("/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"));
+        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn rewrites_blob_to_resolve() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/blob/main/Qwen3.5-9B-Q4_K_M.gguf",
+        )
+        .unwrap();
+        assert!(url.contains("/resolve/") && !url.contains("/blob/"));
+        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn handles_hf_quant_page_show_file_info() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF?show_file_info=gemma-4-31B-it-UD-Q4_K_XL.gguf",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-UD-Q4_K_XL.gguf"
+        );
+        assert_eq!(file, "gemma-4-31B-it-UD-Q4_K_XL.gguf");
+    }
+
+    #[test]
+    fn strips_query_and_fragment_from_direct_link() {
+        let (_, file) =
+            resolve_byom_url("https://example.com/models/foo.gguf?download=true#frag").unwrap();
+        assert_eq!(file, "foo.gguf");
+    }
+
+    #[test]
+    fn rejects_repo_page_and_non_gguf() {
+        assert!(resolve_byom_url("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF").is_err());
+        assert!(resolve_byom_url("not even a url").is_err());
+        assert!(resolve_byom_url("https://example.com/readme.md").is_err());
     }
 }

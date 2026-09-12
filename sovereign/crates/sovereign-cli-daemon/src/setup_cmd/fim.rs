@@ -42,7 +42,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, HardwareProfile, ProfileName};
+use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile, ProfileName};
 use sovereign_inference::setup_planner::{
     fim_rung_for_profile, fim_slot_for_rung, hf_download_url, next_fim_rung, resolve_slot, SlotKind,
 };
@@ -233,7 +233,7 @@ pub(super) async fn run_fim_setup(opts: &Opts) -> i32 {
 async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     eprint!("  Detecting hardware... ");
     io::stderr().flush().ok();
-    let hw = tokio::task::spawn_blocking(HardwareProfile::detect)
+    let hw = tokio::task::spawn_blocking(detect_hardware)
         .await
         .map_err(|e| format!("hardware detection panicked: {e}"))?;
     let profile = hardware::select_profile(&hw);
@@ -450,6 +450,8 @@ async fn download_models(plan: &Plan) -> Result<(), i32> {
         &plan.model_path,
         &label,
         plan.slot.size_gb,
+        // `--fim` has its own narration and refuses `--json` (args.rs).
+        None,
     )
     .await
     {

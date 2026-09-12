@@ -2326,7 +2326,7 @@ impl ModelSlot {
         let force_cpu = crate::cpu_compat::force_cpu_chat();
         // `&& n_gpu_layers > 0` matches the three sibling sites (`ModelSlot::load`,
         // `EmbedSlot::load`, `RerankSlot::load`). This constructor was the only one
-        // deciding on the OS alone, and that is a bug: `HardwareProfile::detect` has
+        // deciding on the OS alone, and that is a bug: `hardware::detect_hardware` has
         // ALREADY resolved whether this host has a usable GPU, and on an Intel Mac it
         // answers "no" on purpose ("Metal + llama.cpp on discrete AMD GPUs produces
         // garbage output" — see hardware.rs::detect_gpu), yielding n_gpu_layers == 0.

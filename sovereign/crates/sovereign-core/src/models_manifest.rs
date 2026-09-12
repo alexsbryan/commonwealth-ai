@@ -68,45 +68,14 @@ pub struct ProfileConfig {
     pub fim: Option<SlotConfig>,
 }
 
-/// A single slot's declared model. The fields we read right now
-/// are `file` (for matching loaded GGUFs) and `capabilities`
-/// (for OICP routing). Everything else is kept as documentation
-/// — serde ignores unknown TOML keys for structs by default, so
-/// `family`, `quant`, `hf_url`, `quirks_override`, etc. pass
-/// through untouched.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct SlotConfig {
-    pub file: String,
-    /// Optional model identity — the stable substring that
-    /// uniquely names this base model across quantisations and
-    /// repo uploads. `"Qwen3.5-27B"` matches both
-    /// `Qwen_Qwen3.5-27B-Q4_K_M.gguf` (bartowski's Q4) and
-    /// `Qwen3.5-27B.Q8_0.gguf` (a local Q8 dump) and any future
-    /// `*-Q5_K_S.gguf`. When absent, capability lookup falls
-    /// back to exact filename match only.
-    ///
-    /// Declaring `base_name` lets a single manifest row cover
-    /// every quantisation of the same weights — capabilities are
-    /// a property of the model, not the quant.
-    #[serde(default)]
-    pub base_name: String,
-    #[serde(default)]
-    pub family: String,
-    #[serde(default)]
-    pub quant: String,
-    #[serde(default)]
-    pub size_gb: f64,
-    #[serde(default)]
-    pub thinking: bool,
-    #[serde(default)]
-    pub hf_url: String,
-    /// OICP capability declarations for this base model. Empty
-    /// when absent — the mesh routing path falls back to
-    /// conservative defaults for BYOM or legacy entries that
-    /// haven't been annotated yet.
-    #[serde(default)]
-    pub capabilities: CapabilityProfile,
-}
+/// A single slot's declared model — `sovereign_contracts::daemon_wire::
+/// SlotConfig`, re-exported at the path ~40 importers already spell.
+///
+/// It MOVED to the contract layer at sv-surface svt-7 (2026-09-12): it is the
+/// shape `svrn setup --plan --json` describes a download with, and a first-run
+/// client that only parses that plan should not have to link the runtime hub
+/// to name it. One definition, two paths (ARCH principle 8).
+pub use sovereign_contracts::daemon_wire::SlotConfig;
 
 /// A `[[user_slots]]` entry — "bring your own model" override
 /// that replaces one slot of the active profile.

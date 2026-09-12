@@ -20,7 +20,7 @@ use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
 };
 
-use crate::hardware::HardwareProfile;
+use crate::hardware::{detect_hardware, HardwareProfile};
 use crate::llama::cpp::llama_backend::LlamaBackend;
 
 use super::EmbedSlot;
@@ -43,7 +43,7 @@ impl EmbedOnlyProvider {
             .map_err(|e| Error::Inference(format!("init llama backend: {e}")))?;
         crate::llama_logs::LlamaLogs::from_env().install(&mut backend);
         let backend = Arc::new(backend);
-        let n_gpu_layers = HardwareProfile::detect().recommended_gpu_layers;
+        let n_gpu_layers = detect_hardware().recommended_gpu_layers;
         let embed_quirks = embed_family.default_quirks().embed;
         let slot = EmbedSlot::load(&backend, embed_model_path, n_gpu_layers, embed_quirks)?;
         Ok(Self {

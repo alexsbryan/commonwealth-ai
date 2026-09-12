@@ -8,30 +8,31 @@ use std::io::{self, BufRead as _, Write as _};
 use sovereign_core::models_manifest::SlotConfig;
 use sovereign_inference::setup_planner::PrimaryOption;
 
+use super::emit::say;
 use super::Pick;
 
 /// Render the numbered picker, handle the `[b]` BYOM branch, and return
 /// the chosen slot. In `--yes` mode, auto-picks the recommended row.
 pub(super) fn pick_primary(catalog: &[PrimaryOption], yes: bool) -> Pick {
-    println!("  Pick your main responder:");
-    println!();
-    println!("    #   Model                          Size     Notes");
+    say!("  Pick your main responder:");
+    say!();
+    say!("    #   Model                          Size     Notes");
     for (i, opt) in catalog.iter().enumerate() {
         let tag = if opt.recommended {
             "← recommended"
         } else {
             ""
         };
-        println!(
+        say!(
             "    {}   {:30}  {:>5.1} GB {tag}",
             i + 1,
             display_name(&opt.slot),
             opt.size_gb,
         );
     }
-    println!();
-    println!("    [b] Bring my own GGUF files");
-    println!();
+    say!();
+    say!("    [b] Bring my own GGUF files");
+    say!();
 
     if yes {
         let rec = catalog

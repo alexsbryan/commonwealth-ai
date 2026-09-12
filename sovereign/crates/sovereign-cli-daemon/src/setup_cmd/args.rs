@@ -21,6 +21,9 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
         fim: false,
         quant: None,
         skip_editor: false,
+        plan: false,
+        json: false,
+        primary: None,
     };
     let mut i = 0;
     while i < args.len() {
@@ -55,6 +58,20 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--wizard-only" => opts.wizard_only = true,
             "--fim" => opts.fim = true,
             "--skip-editor" => opts.skip_editor = true,
+            "--plan" => opts.plan = true,
+            "--json" => opts.json = true,
+            "--primary" => {
+                i += 1;
+                opts.primary = Some(
+                    args.get(i)
+                        .ok_or_else(|| {
+                            "--primary needs a catalog file name, a .gguf URL, or a path to a \
+                             local .gguf"
+                                .to_string()
+                        })?
+                        .clone(),
+                );
+            }
             "--quant" => {
                 i += 1;
                 let raw = args
@@ -109,6 +126,21 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
     if opts.skip_editor && !opts.fim {
         return Err("--skip-editor only applies to --fim".to_string());
     }
+    // `--plan` has exactly one rendering, and it is the JSON one. Refusing
+    // rather than implying it keeps the caller's command line honest about
+    // what it will get back, and leaves room for a human plan later without
+    // changing what an existing invocation means (ARCH principle 6).
+    if opts.plan && !opts.json {
+        return Err("--plan prints machine-readable output only; pass --json".to_string());
+    }
+    // `--fim` and `--terminal` are different destinations with their own
+    // narration, and neither emits a `SetupProgressLine`. Silently ignoring
+    // `--json` there would hand a parser an empty stream and exit 0.
+    if opts.json && (opts.fim || opts.terminal.is_some()) {
+        return Err(
+            "--json applies to the model wizard; --fim and --terminal do not report it".to_string(),
+        );
+    }
     Ok(opts)
 }
 
@@ -129,13 +161,36 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
          onboarding instead.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn setup [--yes] [--reset] [--data-dir <path>]\n\
+            "svrn setup [--yes] [--reset] [--data-dir <path>] [--primary <spec>]\n\
+             svrn setup --plan --json\n\
              svrn setup --terminal <entry> [--reset] [--data-dir <path>] \
              [--client-port <n>]\n\
              svrn setup --fim [--quant <rung>] [--yes] [--skip-editor]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--yes, -y", "Non-interactive; accept recommended choices"),
+            (
+                "--plan",
+                "Print the first-run PLAN as JSON and exit — detected hardware, the \
+                 profile it selects, the primary catalog, and the fast + embed slots. \
+                 Reads nothing, writes nothing, downloads nothing, and works on a machine \
+                 with no config. Requires --json",
+            ),
+            (
+                "--json",
+                "Make stdout machine-readable: one JSON object per line \
+                 ({phase, message, file?, downloaded?, total?, fraction?, eta_seconds?}), \
+                 ending in {phase:\"done\", config_path} or {phase:\"failed\", error}. \
+                 The human narration moves to stderr. The exit code is still the verdict",
+            ),
+            (
+                "--primary <spec>",
+                "Which main responder to install, instead of the hardware \
+                 recommendation: a catalog file name (as printed by --plan), a direct \
+                 .gguf URL (HuggingFace resolve/blob links and quant pages are \
+                 understood), or the path of a .gguf already on this disk (used in \
+                 place, never copied)",
+            ),
             (
                 "--terminal <entry>",
                 "Set up a node that holds NO models: downloads nothing, writes no \

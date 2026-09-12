@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use crate::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 
+use super::emit::say;
 use super::opencode::{install_opencode_config, opencode_config_snippet, OpencodeInstall};
 use super::{ModelPaths, Opts};
 
@@ -62,7 +63,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             return 1;
         }
     };
-    println!("    \u{2713} Wrote {}", config_path.display());
+    say!("    \u{2713} Wrote {}", config_path.display());
 
     // ── opencode config — write the global file directly ─────────
     //
@@ -96,12 +97,12 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // `:9741`. The legacy `svrn setup` runs in this mode too —
     // service install moved to the explicit `svrn install-service`.
     if opts.wizard_only {
-        println!();
-        println!("  \u{2713} Wizard complete.");
-        println!();
-        println!("  Next steps:");
-        println!("    svrn daemon                   # start the daemon (foreground)");
-        println!("    svrn install-service          # register as a launchd/systemd service");
+        say!();
+        say!("  \u{2713} Wizard complete.");
+        say!();
+        say!("  Next steps:");
+        say!("    svrn daemon                   # start the daemon (foreground)");
+        say!("    svrn install-service          # register as a launchd/systemd service");
         return 0;
     }
 
@@ -115,7 +116,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         }
     };
     match sovereign_service::install_service(&bin_path) {
-        Ok(()) => println!("    \u{2713} Service registered"),
+        Ok(()) => say!("    \u{2713} Service registered"),
         Err(e) => {
             eprintln!("  warning: service registration failed: {e}");
             eprintln!("  run `svrn daemon run` manually to start the daemon.");
@@ -127,9 +128,9 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     eprint!("  Waiting for daemon to come up...");
     io::stderr().flush().ok();
     if wait_for_daemon(cfg.daemon.client_port, Duration::from_secs(30)).await {
-        println!(" ready");
+        say!(" ready");
     } else {
-        println!();
+        say!();
         eprintln!(
             "  warning: daemon didn't respond on :{} within 30s.",
             cfg.daemon.client_port
@@ -141,28 +142,28 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // ── Post-setup health check ──────────────────────────────────
     // Run doctor to verify everything is healthy. Print results so the
     // user gets immediate confirmation that setup succeeded end-to-end.
-    println!();
-    println!("  Verifying setup health...");
+    say!();
+    say!("  Verifying setup health...");
     let exit_code = crate::doctor_cmd::run_doctor(&[]).await;
     if exit_code != 0 {
-        println!();
-        println!("  \u{26a0} Setup completed but some checks failed.");
-        println!("    Run `svrn doctor --fix` to attempt repairs.");
+        say!();
+        say!("  \u{26a0} Setup completed but some checks failed.");
+        say!("    Run `svrn doctor --fix` to attempt repairs.");
     }
 
     // ── Banner ───────────────────────────────────────────────────
-    println!();
-    println!("  \u{2713} Mesh running — 1 node (you)");
-    println!(
+    say!();
+    say!("  \u{2713} Mesh running — 1 node (you)");
+    say!(
         "  \u{2713} Endpoint: localhost:{}/v1",
         cfg.daemon.client_port
     );
 
     // ── Next steps — the two commands a new user most wants next ──
-    println!();
-    println!("  Next steps:");
-    println!("    svrn chat session          # start talking");
-    println!("    svrn model list            # see the models it loaded; `svrn model set <slot> <file>` to change one (applies live)");
+    say!();
+    say!("  Next steps:");
+    say!("    svrn chat session          # start talking");
+    say!("    svrn model list            # see the models it loaded; `svrn model set <slot> <file>` to change one (applies live)");
 
     let _ = Arc::new(()); // placeholder; Arc usage removed post-refactor
     0
@@ -181,19 +182,19 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
 fn write_opencode_config(client_port: u16) {
     match install_opencode_config(client_port) {
         Ok(OpencodeInstall::Created(path)) => {
-            println!();
-            println!("  \u{2713} Wrote opencode config — {}", path.display());
+            say!();
+            say!("  \u{2713} Wrote opencode config — {}", path.display());
         }
         Ok(OpencodeInstall::MergedInto(path)) => {
-            println!();
-            println!(
+            say!();
+            say!(
                 "  \u{2713} Updated opencode config — {} (preserved your existing entries)",
                 path.display()
             );
         }
         Ok(OpencodeInstall::AlreadyConfigured(path)) => {
-            println!();
-            println!(
+            say!();
+            say!(
                 "  \u{2713} opencode already configured — {}",
                 path.display()
             );
@@ -254,7 +255,7 @@ fn register_setup_repo() {
 
     let decision = decide_registration(root.as_deref(), home.as_deref(), &registry);
     for line in decision.explain() {
-        println!("{line}");
+        say!("{line}");
     }
     let Registration::Register { corpus_id, root } = decision else {
         return;
@@ -264,11 +265,11 @@ fn register_setup_repo() {
     registry.upsert(ProjectEntry::new(corpus_id.clone(), root.clone()));
     match registry.save() {
         Ok(()) => {
-            println!(
+            say!(
                 "  \u{2713} Registered \"{corpus_id}\" for indexing — {}",
                 root.display()
             );
-            println!("    The daemon builds its call graph and starts watching on its next start.");
+            say!("    The daemon builds its call graph and starts watching on its next start.");
         }
         Err(e) => {
             eprintln!();

@@ -35,7 +35,7 @@ use sovereign_core::types::*;
 use sovereign_core::Result;
 
 use super::idle_slot::IdleSlot;
-use crate::hardware::HardwareProfile;
+use crate::hardware::{detect_hardware, HardwareProfile};
 
 /// Reserved extras-slot name for the dedicated code-editing model
 /// (`sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). The idle
@@ -1097,7 +1097,7 @@ impl EmbeddedLlamaCpp {
             primary: context_size,
             fast: fast_context_size,
         } = windows;
-        let hardware = HardwareProfile::detect();
+        let hardware = detect_hardware();
         // GPU offload layer count. Precedence: explicit config > env override
         // > hardware default (999 when a GPU is detected, else 0).
         //

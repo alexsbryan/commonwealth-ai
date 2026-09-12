@@ -29,10 +29,9 @@ pub struct HardwareInfo {
 
 #[tauri::command]
 pub async fn detect_hardware() -> Result<HardwareInfo, String> {
-    let profile =
-        tokio::task::spawn_blocking(sovereign_inference::hardware::HardwareProfile::detect)
-            .await
-            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+    let profile = tokio::task::spawn_blocking(sovereign_inference::hardware::detect_hardware)
+        .await
+        .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
     let gpu_memory_gb = profile
         .gpu_memory_bytes
@@ -148,10 +147,9 @@ impl From<&sovereign_core::models_manifest::SlotConfig> for SlotConfigDto {
 /// RAM otherwise — matching `HardwareProfile::effective_vram_gb`.
 #[tauri::command]
 pub async fn recommended_profile() -> Result<RecommendedProfileDto, String> {
-    let profile =
-        tokio::task::spawn_blocking(sovereign_inference::hardware::HardwareProfile::detect)
-            .await
-            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+    let profile = tokio::task::spawn_blocking(sovereign_inference::hardware::detect_hardware)
+        .await
+        .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
     let pname = sovereign_inference::hardware::select_profile(&profile);
     let effective_memory_gb = profile.effective_vram_gb() as f64;
@@ -171,11 +169,10 @@ pub async fn primary_catalog(profile: Option<String>) -> Result<Vec<PrimaryOptio
     let pname = match profile {
         Some(s) => parse_profile_name(&s)?,
         None => {
-            let hw = tokio::task::spawn_blocking(|| {
-                sovereign_inference::hardware::HardwareProfile::detect()
-            })
-            .await
-            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+            let hw =
+                tokio::task::spawn_blocking(|| sovereign_inference::hardware::detect_hardware())
+                    .await
+                    .map_err(|e| format!("Hardware detection failed: {e}"))?;
             sovereign_inference::hardware::select_profile(&hw)
         }
     };
@@ -321,11 +318,10 @@ pub async fn slot_recommendation(
     let pname = match profile {
         Some(s) => parse_profile_name(&s)?,
         None => {
-            let hw = tokio::task::spawn_blocking(|| {
-                sovereign_inference::hardware::HardwareProfile::detect()
-            })
-            .await
-            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+            let hw =
+                tokio::task::spawn_blocking(|| sovereign_inference::hardware::detect_hardware())
+                    .await
+                    .map_err(|e| format!("Hardware detection failed: {e}"))?;
             sovereign_inference::hardware::select_profile(&hw)
         }
     };

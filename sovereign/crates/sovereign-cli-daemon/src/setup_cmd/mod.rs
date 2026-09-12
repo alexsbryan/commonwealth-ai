@@ -13,10 +13,11 @@
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
 
+use sovereign_contracts::daemon_wire::{SetupPlan, SetupProgressPhase};
 use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, HardwareProfile};
+use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile};
 use sovereign_inference::setup_planner::{
-    build_primary_catalog, hf_download_url, resolve_slot, SlotKind,
+    build_primary_catalog, hf_download_url, resolve_slot, PrimaryOption, SlotKind,
 };
 
 // Imports used only by the in-file test modules. Kept behind
@@ -41,8 +42,11 @@ mod args;
 mod byom;
 mod catalog;
 mod download;
+mod emit;
 mod fim;
 mod finish;
+#[cfg(test)]
+mod json_surface_tests;
 mod opencode;
 mod terminal;
 
@@ -50,6 +54,7 @@ use args::{parse_args, print_usage};
 use byom::prompt_byom_paths;
 use catalog::pick_primary;
 use download::{download_silent, lookup_slot_size_gb};
+use emit::say;
 use finish::finish_with_paths;
 // Re-exported: `daemon_cmd` calls `crate::setup_cmd::download_with_progress`.
 pub(crate) use download::download_with_progress;
@@ -114,6 +119,33 @@ pub async fn run_setup(args: &[String]) -> i32 {
         return terminal::run_terminal_setup(&entry, &opts).await;
     }
 
+    // `--plan` is a READ, not a destination: it detects hardware, resolves the
+    // catalog and prints, and it touches no file. Dispatched here — before the
+    // deprecation shim below, which writes a banner to stdout and would land
+    // inside the JSON document, and before the `config exists` short-circuit,
+    // because a configured machine still has a plan to describe.
+    //
+    // This is the whole reason the verb grew a flag rather than the daemon
+    // growing a route: the sidecar exits 1 with no config off a TTY
+    // (`daemon_cmd/mod.rs`) and refuses a config with no `[models]`
+    // (`daemon_cmd/build/inference.rs`), so on a first run there is no HTTP to
+    // ask. A spawn links nothing.
+    if args.iter().any(|a| a == "--plan") {
+        let opts = match parse_args(args) {
+            Ok(o) => o,
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                print_usage();
+                return 2;
+            }
+        };
+        if opts.help {
+            print_usage();
+            return 0;
+        }
+        return print_plan().await;
+    }
+
     // Phase 4: `svrn setup` is now a wizard-only shim. The
     // service-install + opencode + doctor steps that used to run
     // here moved out — service registration is now `sovereign
@@ -154,6 +186,9 @@ pub async fn run_setup(args: &[String]) -> i32 {
         return 0;
     }
 
+    // From here on stdout belongs to whichever audience `--json` named.
+    emit::set_json_mode(opts.json);
+
     // ── --repair: scan installed models, delete corrupted ones ────
     //
     // Unblocks users who landed here after a previous setup run
@@ -185,62 +220,74 @@ pub async fn run_setup(args: &[String]) -> i32 {
     } else {
         let cfg_path = run_config_path(&opts);
         if cfg_path.exists() {
-            println!();
-            println!("  Already set up. Config at {}", cfg_path.display());
-            println!("  Run `svrn status` to check or `svrn setup --reset` to reconfigure.");
+            say!();
+            say!("  Already set up. Config at {}", cfg_path.display());
+            say!("  Run `svrn status` to check or `svrn setup --reset` to reconfigure.");
             return 0;
         }
     }
 
-    println!();
-    println!("  Sovereign Setup");
-    println!("  {}", "─".repeat(54));
-    println!();
+    say!();
+    say!("  Sovereign Setup");
+    say!("  {}", "─".repeat(54));
+    say!();
 
     // ── 1. Hardware detection ─────────────────────────────────────
     eprint!("  Detecting hardware... ");
     io::stderr().flush().ok();
     // Move the sync detection off the async runtime so we don't block
     // the reactor (sysinfo::System::new_all walks /proc).
-    let hw = match tokio::task::spawn_blocking(HardwareProfile::detect).await {
+    emit::narrate(
+        SetupProgressPhase::DetectingHardware,
+        "Reading what this machine can do.",
+    );
+    let hw = match tokio::task::spawn_blocking(detect_hardware).await {
         Ok(h) => h,
-        Err(e) => {
-            eprintln!("error: hardware detection panicked: {e}");
-            return 1;
-        }
+        Err(e) => return fail(format!("hardware detection panicked: {e}")),
     };
     let profile_name = hardware::select_profile(&hw);
-    println!(
+    say!(
         "{}, {:.0}GB {}memory",
         hardware_label(&hw),
         hw.system_ram_gb(),
         if hw.is_unified_memory { "unified " } else { "" }
     );
-    println!();
+    say!();
 
     // ── 2. Pick primary model ────────────────────────────────────
     let catalog = build_primary_catalog(&profile_name);
     if catalog.is_empty() {
-        eprintln!("error: no models available in the bundled manifest for your hardware");
-        return 1;
+        return fail("no models available in the bundled manifest for your hardware");
     }
 
-    let picked = match pick_primary(&catalog, opts.yes) {
-        Pick::Slot(slot) => slot,
-        Pick::Byom => match prompt_byom_paths(&opts) {
-            Ok(paths) => {
-                return finish_with_paths(paths, &opts).await;
-            }
-            Err(msg) => {
-                eprintln!("error: {msg}");
+    // `--primary <spec>` is the non-interactive form of the picker: it answers
+    // the same question the numbered rows and the `[b]` branch answer, so it
+    // resolves BEFORE the prompt rather than beside it. A client that spawned
+    // this process has no terminal to type into.
+    let chosen = match opts.primary.as_deref() {
+        Some(spec) => match resolve_primary_flag(spec, &catalog) {
+            Ok(c) => c,
+            Err(msg) => return fail(msg),
+        },
+        None => match pick_primary(&catalog, opts.yes) {
+            Pick::Slot(slot) => PrimaryChoice::Download {
+                url: hf_download_url(&slot),
+                slot,
+            },
+            Pick::Byom => match prompt_byom_paths(&opts) {
+                Ok(paths) => {
+                    return finish_with_paths(paths, &opts).await;
+                }
+                Err(msg) => return fail(msg),
+            },
+            Pick::Abort => {
+                eprintln!("Setup cancelled.");
+                emit::failed("setup cancelled");
                 return 1;
             }
         },
-        Pick::Abort => {
-            eprintln!("Setup cancelled.");
-            return 1;
-        }
     };
+    let picked = chosen.slot().clone();
 
     // Fast + embed come from the user's own profile — not curated. If
     // the profile doesn't define one (very rare for embed on cpu_only),
@@ -250,8 +297,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let (fast_slot, embed_slot) = match (fast_slot, embed_slot) {
         (Some(f), Some(e)) => (f, e),
         _ => {
-            eprintln!("error: bundled manifest is missing fast or embed slot for your profile");
-            return 1;
+            return fail("bundled manifest is missing fast or embed slot for your profile");
         }
     };
 
@@ -261,21 +307,28 @@ pub async fn run_setup(args: &[String]) -> i32 {
         .clone()
         .unwrap_or_else(sovereign_contracts::rebrand::svrnmesh_root);
     let models_dir = data_dir.join("models");
+    emit::narrate(
+        SetupProgressPhase::PreparingDataDir,
+        "Preparing your storage.",
+    );
     if let Err(e) = std::fs::create_dir_all(&models_dir) {
-        eprintln!("error: cannot create {}: {e}", models_dir.display());
-        return 1;
+        return fail(format!("cannot create {}: {e}", models_dir.display()));
     }
 
-    println!("  Downloading models...");
-    println!();
+    say!("  Downloading models...");
+    say!();
 
-    let primary_path = models_dir.join(&picked.file);
+    // A `--primary <path>` pick is used where it already sits: never copied,
+    // never re-fetched. Everything else lands in the data root's models dir.
+    let primary_path = match &chosen {
+        PrimaryChoice::InPlace { path, .. } => path.clone(),
+        PrimaryChoice::Download { .. } => models_dir.join(&picked.file),
+    };
     let fast_path = models_dir.join(&fast_slot.file);
     let embed_path = models_dir.join(&embed_slot.file);
 
     // The manifest's `hf_url` is the repo *landing page* — we derive the
     // actual GGUF download URL from it plus the slot's filename.
-    let primary_url = hf_download_url(&picked);
     let fast_url = hf_download_url(&fast_slot);
     let embed_url = hf_download_url(&embed_slot);
 
@@ -284,34 +337,76 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // apply a tighter floor than the 1 MB sentinel — a corrupt
     // 200 KB "35 GB" file is an obvious lie, a corrupt 200 KB
     // "0.4 GB" embed is too.
-    let primary_fut =
-        download_with_progress(&primary_url, &primary_path, &picked.file, picked.size_gb);
+    //
+    // `--json` mirrors that asymmetry rather than inventing a second
+    // reporting policy: per-chunk lines for the primary, a phase line each
+    // for fast and embed as they land. Three concurrent per-chunk streams on
+    // one stdout would be honest and unreadable.
+    let narrator = matches!(chosen, PrimaryChoice::Download { .. }).then(|| {
+        emit::DownloadNarrator::new(
+            SetupProgressPhase::DownloadingPrimary,
+            "Downloading the main responder.",
+            &picked.file,
+        )
+    });
+    let primary_fut = async {
+        match &chosen {
+            PrimaryChoice::InPlace { path, .. } => {
+                say!("    \u{2713} {} (already on disk)", path.display());
+                Ok(())
+            }
+            PrimaryChoice::Download { url, .. } => {
+                download_with_progress(
+                    url,
+                    &primary_path,
+                    &picked.file,
+                    picked.size_gb,
+                    narrator.as_ref(),
+                )
+                .await
+            }
+        }
+    };
     let fast_fut = download_silent(&fast_url, &fast_path, fast_slot.size_gb);
     let embed_fut = download_silent(&embed_url, &embed_path, embed_slot.size_gb);
-
     let (primary_res, fast_res, embed_res) = tokio::join!(primary_fut, fast_fut, embed_fut);
 
     if let Err(e) = primary_res {
         eprintln!("  \u{2717} Main responder: {e}");
+        emit::failed(&e);
         return 1;
     }
     if let Err(e) = fast_res {
         eprintln!("  \u{2717} Quick responder: {e}");
+        emit::failed(&e);
         return 1;
     } else {
-        println!("    \u{2713} {}", fast_slot.file);
+        say!("    \u{2713} {}", fast_slot.file);
+        emit::narrate(
+            SetupProgressPhase::DownloadingFast,
+            "The quick responder is ready.",
+        );
     }
     if let Err(e) = embed_res {
         eprintln!("  \u{2717} Knowledge embedder: {e}");
+        emit::failed(&e);
         return 1;
     } else {
-        println!("    \u{2713} {}", embed_slot.file);
+        say!("    \u{2713} {}", embed_slot.file);
+        emit::narrate(
+            SetupProgressPhase::DownloadingEmbed,
+            "The knowledge embedder is ready.",
+        );
     }
 
-    println!();
-    println!("  \u{2713} Models ready");
+    say!();
+    say!("  \u{2713} Models ready");
 
-    finish_with_paths(
+    emit::narrate(
+        SetupProgressPhase::WritingConfig,
+        "Writing your configuration.",
+    );
+    let code = finish_with_paths(
         ModelPaths {
             primary: primary_path,
             fast: fast_path,
@@ -325,7 +420,162 @@ pub async fn run_setup(args: &[String]) -> i32 {
         },
         &opts,
     )
-    .await
+    .await;
+    // The exit code is the verdict; the terminal line is what a parser reads
+    // it as. `finish_with_paths` has already named the reason on stderr.
+    if code == 0 {
+        emit::done(&run_config_path(&opts));
+    } else {
+        emit::failed("setup could not finish writing its configuration");
+    }
+    code
+}
+
+/// Report a wizard failure once — to the human on stderr, to a `--json`
+/// parser as the terminal line, and to the shell as exit 1.
+///
+/// One site, because the two audiences must never disagree: before this, every
+/// `return 1` on the wizard path told the human why and told a parser only
+/// that the process ended (ARCH principle 6).
+fn fail(msg: impl AsRef<str>) -> i32 {
+    let msg = msg.as_ref();
+    eprintln!("error: {msg}");
+    emit::failed(msg);
+    1
+}
+
+/// What `--primary <spec>` resolved to.
+#[derive(Debug)]
+enum PrimaryChoice {
+    /// Fetch it: a catalog row, or a `.gguf` URL the user pasted.
+    Download { slot: SlotConfig, url: String },
+    /// It is already on this disk. Used where it sits — never copied, never
+    /// re-fetched, because the user pointing at a file is the whole request.
+    InPlace { slot: SlotConfig, path: PathBuf },
+}
+
+impl PrimaryChoice {
+    fn slot(&self) -> &SlotConfig {
+        match self {
+            PrimaryChoice::Download { slot, .. } | PrimaryChoice::InPlace { slot, .. } => slot,
+        }
+    }
+}
+
+/// Resolve `--primary <spec>` against the catalog, then against the two BYOM
+/// shapes the desktop's onboarding "Advanced" affordance already accepted: a
+/// `.gguf` URL and a `.gguf` already on disk.
+///
+/// An unrecognised spec is REFUSED by name, listing what would have matched —
+/// never quietly demoted to the hardware recommendation, which would install
+/// a model the caller did not ask for and report success.
+fn resolve_primary_flag(spec: &str, catalog: &[PrimaryOption]) -> Result<PrimaryChoice, String> {
+    let spec = spec.trim();
+    if let Some(opt) = catalog.iter().find(|o| o.slot.file == spec) {
+        // Which of the three shapes a spec resolved to is NOT predictable from
+        // the argv — it depends on the tier's catalog and on what is on this
+        // disk — so each arm says which one it took (ARCH principle 1).
+        tracing::info!(
+            spec,
+            shape = "catalog",
+            file = %opt.slot.file,
+            "setup:primary_resolved"
+        );
+        return Ok(PrimaryChoice::Download {
+            url: hf_download_url(&opt.slot),
+            slot: opt.slot.clone(),
+        });
+    }
+    if spec.starts_with("http://") || spec.starts_with("https://") {
+        let (url, file) = sovereign_inference::setup_planner::resolve_byom_url(spec)?;
+        tracing::info!(spec, shape = "byom_url", %url, "setup:primary_resolved");
+        return Ok(PrimaryChoice::Download {
+            slot: SlotConfig {
+                file: file.clone(),
+                base_name: file,
+                quant: "custom (url)".to_string(),
+                hf_url: url.clone(),
+                ..Default::default()
+            },
+            url,
+        });
+    }
+    let path = PathBuf::from(spec);
+    if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
+        if !path.is_file() {
+            return Err(format!("--primary {spec}: no such file"));
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(spec)
+            .to_string();
+        tracing::info!(
+            spec,
+            shape = "local_gguf",
+            path = %path.display(),
+            "setup:primary_resolved — used in place, nothing is fetched"
+        );
+        return Ok(PrimaryChoice::InPlace {
+            slot: SlotConfig {
+                file: name.clone(),
+                base_name: name,
+                quant: "custom (local)".to_string(),
+                ..Default::default()
+            },
+            path,
+        });
+    }
+    Err(format!(
+        "--primary '{spec}' is not a catalog file, a .gguf URL, or a .gguf on disk. \
+         This tier offers: {}",
+        catalog
+            .iter()
+            .map(|o| o.slot.file.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+/// The plan for a probed machine — the same four lookups the wizard makes,
+/// taken apart from the probe so a test can pin the shape against a hardware
+/// profile it chose rather than one it inherited from the host.
+fn build_plan(hardware: HardwareProfile) -> SetupPlan {
+    let profile = hardware::select_profile(&hardware);
+    SetupPlan {
+        catalog: build_primary_catalog(&profile),
+        // Absent, not substituted: a manifest with no fast slot for this tier
+        // is a fact the caller has to see, and `null` says it (principle 6).
+        fast: resolve_slot(&profile, SlotKind::Fast),
+        embed: resolve_slot(&profile, SlotKind::Embed),
+        hardware,
+        profile,
+    }
+}
+
+/// `svrn setup --plan --json`: what a first run WOULD do on this machine.
+///
+/// Reads the same four functions the wizard reads, prints them, and exits.
+/// Nothing is created, downloaded or written — which is what lets a client
+/// call it on a machine that has never been set up, and call it again after.
+async fn print_plan() -> i32 {
+    let hardware = match tokio::task::spawn_blocking(detect_hardware).await {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("error: hardware detection panicked: {e}");
+            return 1;
+        }
+    };
+    match serde_json::to_string(&build_plan(hardware)) {
+        Ok(json) => {
+            say!("{json}");
+            0
+        }
+        Err(e) => {
+            eprintln!("error: could not render the setup plan: {e}");
+            1
+        }
+    }
 }
 
 // ─── Which root is this run configuring? ──────────────────────────
@@ -411,6 +661,19 @@ struct Opts {
     /// editor alone. For headless/CI hosts and for operators who
     /// manage their extensions themselves.
     skip_editor: bool,
+    /// `--plan`: print the first-run plan and exit, touching nothing.
+    /// A first-run client on a machine with no config has no daemon to
+    /// ask — the sidecar refuses to serve HTTP unconfigured — so it
+    /// spawns this verb and reads stdout instead (sv-surface svt-7).
+    plan: bool,
+    /// `--json`: stdout carries `SetupProgressLine`s and nothing else;
+    /// the human narration moves to stderr (`emit`).
+    json: bool,
+    /// `--primary <spec>`: the main responder to install, instead of the
+    /// hardware recommendation. A catalog file name, a `.gguf` URL, or a
+    /// `.gguf` already on this disk. The non-interactive form of the
+    /// picker's numbered rows and its `[b]` branch.
+    primary: Option<String>,
 }
 
 // ─── Model catalog + picker ───────────────────────────────────────
@@ -463,9 +726,9 @@ async fn run_repair(opts: &Opts) -> i32 {
         }
     };
 
-    println!();
-    println!("  Sovereign Setup — Repair");
-    println!("  {}", "─".repeat(54));
+    say!();
+    say!("  Sovereign Setup — Repair");
+    say!("  {}", "─".repeat(54));
 
     // Bundled manifest lookup provides each slot's advertised
     // `size_gb`. If a file isn't in the manifest (BYOM), the
@@ -502,7 +765,7 @@ async fn run_repair(opts: &Opts) -> i32 {
         };
         match sovereign_inference::validate_gguf(path, &expected) {
             Ok(()) => {
-                println!("  \u{2713} {role:<7} {} — valid", path.display());
+                say!("  \u{2713} {role:<7} {} — valid", path.display());
                 kept += 1;
             }
             Err(e) => {
@@ -517,8 +780,8 @@ async fn run_repair(opts: &Opts) -> i32 {
         }
     }
 
-    println!();
-    println!(
+    say!();
+    say!(
         "  Summary: {kept} valid, {removed} removed. \
          Run `svrn setup` to re-download the removed slots."
     );
@@ -593,6 +856,7 @@ mod download_failure_tests {
             &dest,
             "fake",
             18.5, // pretend this is a big model
+            None,
         )
         .await
         .unwrap_err();
@@ -640,9 +904,15 @@ mod download_failure_tests {
         // body passes the size check, so the GGUF magic check is
         // what fires. This is the important case: servers that
         // return HTML with an innocuous content-type header.
-        let err = download_with_progress(&format!("{base}/fake-model.gguf"), &dest, "fake", 0.001)
-            .await
-            .unwrap_err();
+        let err = download_with_progress(
+            &format!("{base}/fake-model.gguf"),
+            &dest,
+            "fake",
+            0.001,
+            None,
+        )
+        .await
+        .unwrap_err();
         assert!(
             err.contains("not a GGUF") || err.contains("GGUF") || err.contains("magic"),
             "err should mention magic mismatch: {err}"
@@ -679,9 +949,15 @@ mod download_failure_tests {
         let dest = tmp.path().join("real.gguf");
         // size_gb 0.001 so the 50% floor (512 KB) comfortably
         // accepts our 2 MB test payload.
-        download_with_progress(&format!("{base}/real-model.gguf"), &dest, "real", 0.001)
-            .await
-            .expect("happy path should succeed");
+        download_with_progress(
+            &format!("{base}/real-model.gguf"),
+            &dest,
+            "real",
+            0.001,
+            None,
+        )
+        .await
+        .expect("happy path should succeed");
         assert!(dest.exists(), "final path should hold the downloaded file");
         assert_eq!(dest.metadata().unwrap().len(), 2 * 1024 * 1024);
     }

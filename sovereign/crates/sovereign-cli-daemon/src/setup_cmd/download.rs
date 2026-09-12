@@ -29,6 +29,11 @@ pub(crate) async fn download_with_progress(
     dest: &Path,
     display: &str,
     size_gb: f64,
+    // `--json`'s view of the SAME download. Threaded through rather than
+    // wrapped around, because a second `download_gguf` call with its own
+    // callback would be a second answer to "how far along is this file"
+    // (ARCH principle 8). `None` for every human-only caller.
+    narrator: Option<&super::emit::DownloadNarrator>,
 ) -> Result<(), String> {
     let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
 
@@ -39,7 +44,7 @@ pub(crate) async fn download_with_progress(
     if dest.metadata().map(|m| m.len() > 0).unwrap_or(false)
         && sovereign_inference::validate_gguf(dest, &expected).is_ok()
     {
-        println!("    \u{2713} {display} (already present)");
+        super::emit::say!("    \u{2713} {display} (already present)");
         return Ok(());
     }
 
@@ -52,6 +57,9 @@ pub(crate) async fn download_with_progress(
         let mut lp = last_print.lock().unwrap();
         if lp.elapsed() > Duration::from_millis(250) || total.map(|t| done >= t).unwrap_or(false) {
             print_progress(&display_owned, done, total);
+            if let Some(n) = narrator {
+                n.emit(done, total);
+            }
             *lp = std::time::Instant::now();
         }
     })
