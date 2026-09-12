@@ -106,6 +106,7 @@ pub mod rail_bind;
 pub mod rail_kv_pump;
 pub mod reading_formatters;
 pub mod reading_http;
+pub mod recipe_http;
 pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;

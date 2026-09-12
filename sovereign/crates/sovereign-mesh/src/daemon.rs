@@ -3348,6 +3348,13 @@ impl EmbeddedDaemon {
                 Arc::clone(&self_arc),
             ));
             mount_names.push("corpus_catalog_http");
+            // thin-desktop order (2026-09-11) — the recipe-registry import and
+            // the `[parameters]` read, beside the catalogue they install into.
+            // Unconditional for `corpus_catalog_http`'s reason: a daemon with
+            // no corpus engine answers 503 naming that, which is a different
+            // fact from an unmounted router's 404.
+            mounted.push(crate::recipe_http::recipe_router(Arc::clone(&self_arc)));
+            mount_names.push("recipe_http");
             // sv-surface rung 6 — the insight surface. Mounted
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these

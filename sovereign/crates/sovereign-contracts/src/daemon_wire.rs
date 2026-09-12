@@ -42,6 +42,7 @@ pub mod local_corpus;
 pub mod mesh;
 pub mod meshapp;
 pub mod recipe_projects;
+pub mod recipes;
 pub mod workflows;
 
 pub use documents::*;
@@ -51,6 +52,7 @@ pub use local_corpus::*;
 pub use mesh::*;
 pub use meshapp::*;
 pub use recipe_projects::*;
+pub use recipes::*;
 pub use workflows::*;
 pub mod provenance;
 pub use provenance::*;

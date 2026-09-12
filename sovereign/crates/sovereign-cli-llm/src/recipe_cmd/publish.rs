@@ -117,29 +117,22 @@ pub(super) async fn cmd_publish(args: &[String]) -> i32 {
     };
     let sha256 = sha256_hex(raw.as_bytes());
 
-    if let Err(e) = std::fs::create_dir_all(&local_dir) {
-        eprintln!("error: failed to create {}: {e}", local_dir.display());
-        return 1;
-    }
-    let recipe_dir = local_dir.join(&recipe.corpus.id);
-    if let Err(e) = std::fs::create_dir_all(&recipe_dir) {
-        eprintln!("error: failed to create {}: {e}", recipe_dir.display());
-        return 1;
-    }
-    let dest_recipe_path = recipe_dir.join("recipe.toml");
-    if let Err(e) = std::fs::write(&dest_recipe_path, &raw) {
-        eprintln!(
-            "error: failed to copy recipe to {}: {e}",
-            dest_recipe_path.display()
-        );
-        return 1;
-    }
-
+    // The TOML write and the `registry.toml` upsert are
+    // `RecipeRegistry::install_local_recipe` — the ONE decider for "a user
+    // published a recipe" since 2026-09-11. This verb had its own copy and
+    // the desktop's import command had a third; the daemon's
+    // `/internal/corpus/recipes/import` route now shares this one.
     let registry_path = local_dir.join("registry.toml");
-    if let Err(e) = upsert_local_registry_entry(&registry_path, &recipe, &sha256) {
-        eprintln!("error: failed to update registry: {e}");
-        return 1;
-    }
+    let dest_recipe_path =
+        match corpus_engine::RecipeRegistry::from_bundled(Some(local_dir.clone()))
+            .install_local_recipe(&recipe, &raw)
+        {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("error: failed to install recipe into the local registry: {e}");
+                return 1;
+            }
+        };
 
     // Record the publish marker so the audit-time nudge knows to
     // stop offering this recipe for publishing.
@@ -173,67 +166,6 @@ pub(super) async fn cmd_publish(args: &[String]) -> i32 {
         println!("  4. Open a PR. Or pass `--submit-pr` next time to draft it via `gh`.");
     }
     0
-}
-
-/// Insert (or update) an entry in `~/.svrnmesh/recipes/registry.toml`
-/// for the recipe just published. Reads the existing TOML, removes
-/// any prior entry with the same id, appends the new one, writes
-/// atomically.
-fn upsert_local_registry_entry(
-    registry_path: &Path,
-    recipe: &corpus_engine::Recipe,
-    sha256: &str,
-) -> std::io::Result<()> {
-    use std::io::Write;
-
-    let existing = std::fs::read_to_string(registry_path).unwrap_or_default();
-    let mut snapshot: corpus_engine::RegistrySnapshot = if existing.is_empty() {
-        corpus_engine::RegistrySnapshot {
-            schema_version: 1,
-            generated_at: rfc3339_now(),
-            registry_url: String::new(),
-            entries: Vec::new(),
-        }
-    } else {
-        toml::from_str(&existing).unwrap_or_else(|_| corpus_engine::RegistrySnapshot {
-            schema_version: 1,
-            generated_at: rfc3339_now(),
-            registry_url: String::new(),
-            entries: Vec::new(),
-        })
-    };
-
-    snapshot.entries.retain(|e| e.id != recipe.corpus.id);
-    snapshot.entries.push(corpus_engine::RegistryEntry {
-        id: recipe.corpus.id.clone(),
-        name: recipe.corpus.name.clone(),
-        description: recipe.corpus.description.clone(),
-        license: recipe.corpus.license.clone(),
-        size_compressed_gb: recipe.corpus.size_compressed_gb,
-        size_indexed_gb: recipe.corpus.size_indexed_gb,
-        toml_url: format!("file://{}/recipe.toml", recipe.corpus.id),
-        sha256: sha256.to_string(),
-        enrichment_enabled: recipe
-            .enrichment
-            .as_ref()
-            .map(|e| e.enabled)
-            .unwrap_or(false),
-        mesh_sharing: recipe.corpus.mesh_sharing,
-        prebuilt: None,
-        parent_corpus_id: recipe.corpus.parent_corpus_id.clone(),
-        catalog_status: None,
-    });
-    snapshot.generated_at = rfc3339_now();
-
-    let serialized =
-        toml::to_string_pretty(&snapshot).map_err(|e| std::io::Error::other(format!("{e}")))?;
-    let part = registry_path.with_extension("toml.part");
-    {
-        let mut f = std::fs::File::create(&part)?;
-        f.write_all(serialized.as_bytes())?;
-    }
-    std::fs::rename(&part, registry_path)?;
-    Ok(())
 }
 
 /// Record a publish marker so `svrn project audit` doesn't

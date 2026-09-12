@@ -135,6 +135,8 @@ mod plaintext_join_over_iroh_e2e;
 mod port_config;
 #[path = "main/reading_http_e2e.rs"]
 mod reading_http_e2e;
+#[path = "main/recipe_surface_e2e.rs"]
+mod recipe_surface_e2e;
 #[path = "main/replication_sender_census.rs"]
 mod replication_sender_census;
 #[path = "main/responses_adapter_e2e.rs"]

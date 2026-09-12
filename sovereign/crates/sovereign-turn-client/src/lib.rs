@@ -2171,6 +2171,44 @@ impl TurnClient {
         .await
     }
 
+    // ── The recipe registry — `/internal/corpus/recipes` (`recipe_http`) ──
+    //
+    // Two routes for the authoring surface. The desktop validated a
+    // recipe with a `CorpusEngine` of its own and wrote into the recipes
+    // dir IT resolved, which was the daemon's only by coincidence of
+    // config; both now go to the daemon whose registry will resolve them.
+
+    /// `POST /internal/corpus/recipes/import` — validate an authored
+    /// recipe offline and install it into the daemon's registry. `B` is
+    /// `ImportRecipeRequest`, `T` is `ImportRecipeResult`. A recipe that
+    /// parses but fails validation is a 200 with `success: false` and the
+    /// errors; a body that is not a recipe, or a store the daemon cannot
+    /// write, is an `Err`.
+    pub async fn import_recipe<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/recipes/import".to_string(), body)
+            .await
+    }
+
+    /// `GET /internal/corpus/recipes/{corpus}/parameters` — the
+    /// `[parameters]` the recipe declares, for the install form. `T` is
+    /// `RecipeParameterSchema`. A recipe the daemon's registry cannot
+    /// resolve is a 404 and arrives as an `Err` naming it: "no
+    /// parameters" and "no such recipe" are different facts and the form
+    /// renders them differently.
+    pub async fn recipe_parameters<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/recipes/{corpus_id}/parameters"),
+            &[],
+        )
+        .await
+    }
+
     // ── Recipe-author projects (sv-surface D8) ───────────────────
     //
     // Generic for the family reason above: these payloads carry
