@@ -408,8 +408,6 @@ async fn run_turn_via_runtime(
     // sv-surface R5: a document question is a turn, and every turn rides
     // the wire — the REST one-shot (same driver the socket serves, through
     // the client family), exactly as the chat one-shot does.
-    state.approval.set_task_id(conversation_id).await;
-
     let turn = sovereign_turn_client::TurnClient::new(state.client_base_url())
         .send_message(conversation_id, question)
         .await

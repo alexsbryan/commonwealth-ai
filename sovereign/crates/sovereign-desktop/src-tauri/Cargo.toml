@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 # The one client family for the daemon's wire (sv-one-client). Attach mode
 # routes conversation search / memory / insight surfaces through it rather
 # than re-deriving local deciders (sv-surface rung 6).

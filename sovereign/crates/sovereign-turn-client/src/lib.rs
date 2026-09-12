@@ -281,6 +281,9 @@ pub struct ConversationMessage {
     pub provenance: Option<Provenance>,
     pub citations: Vec<Citation>,
     pub epistemic_state: Option<EpistemicState>,
+    /// The persisted metadata blob the three fields above are projected
+    /// from, verbatim; `None` for a message the host stored without one.
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// One hit of `GET /v1/conversations/search` — a matching message and the
@@ -607,6 +610,7 @@ impl TurnClient {
                     provenance: m.provenance,
                     citations: m.citations,
                     epistemic_state: m.epistemic_state,
+                    metadata: m.metadata,
                 })
                 .collect(),
             created_at: wire.created_at,
@@ -3134,6 +3138,8 @@ struct ConversationMessageWire {
     citations: Vec<Citation>,
     #[serde(default)]
     epistemic_state: Option<EpistemicState>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

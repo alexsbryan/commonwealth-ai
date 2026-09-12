@@ -9,11 +9,11 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
+use sovereign_contracts::traits::RoutingEventSink;
 use sovereign_contracts::types::{
-    NarrationEvent, NarrationPhase, TurnFrame, TurnMode, TurnNarration,
+    is_document_attached, NarrationEvent, NarrationPhase, TurnFrame, TurnMode, TurnNarration,
+    DEGENERATE_MESSAGE_HINT, OVERSIZE_MESSAGE_HINT,
 };
-use sovereign_core::runtime::message_metadata;
-use sovereign_core::traits::RoutingEventSink;
 
 use crate::state::AppState;
 
@@ -108,12 +108,7 @@ pub async fn send_message_stream(
     // answering a different question and, in attach, the wrong one.
     crate::commands::require_backend_ready(&state).await?;
 
-    state.approval.set_task_id(&conversation_id).await;
-
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     // Build the augmented message: prepend a passage-context block
     // for each focused chunk so the librarian can scope its answer
@@ -137,7 +132,7 @@ pub async fn send_message_stream(
     // `serve_turn` decides it with the same predicate. Asking it here too is
     // not a second decider — it is this command reporting, in its return
     // value, which shape the frontend should expect.
-    let streaming = !sovereign_core::runtime::is_document_attached(&augmented_message);
+    let streaming = !is_document_attached(&augmented_message);
 
     // Fallback id for a turn that never mints one: the graceful guards
     // (oversize paste, contentless message) answer without starting a turn,
@@ -175,7 +170,7 @@ pub async fn send_message_stream(
         stream,
         conversation_id,
         pending_id,
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 
@@ -273,7 +268,7 @@ async fn finish_wire_turn(
     stream: sovereign_turn_client::TurnStream,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
+    metadata_base_url: String,
 ) -> Result<String, String> {
     // Park the write half FIRST, keyed by conversation (RB5): a prompt can
     // arrive before the id does, and `cancel_stream` / the submit commands
@@ -327,7 +322,7 @@ async fn finish_wire_turn(
         frame_rx,
         conversation_id,
         message_id.clone(),
-        store_for_metadata,
+        metadata_base_url,
     ));
 
     Ok(message_id)
@@ -599,6 +594,35 @@ async fn pump_wire_frames(
     );
 }
 
+/// The persisted metadata blob of one message, read over
+/// `GET /v1/conversations/{id}`. `None` when the daemon cannot serve the
+/// conversation or the message carries no blob — the caller's `_` arm then
+/// marks the intent from the text, as it always did for a turn that never
+/// started.
+async fn wire_message_metadata(
+    base_url: &str,
+    conversation_id: &str,
+    message_id: &str,
+) -> Option<serde_json::Value> {
+    let history = sovereign_turn_client::TurnClient::new(base_url.to_string())
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|e| {
+            tracing::warn!(
+                conversation_id = %conversation_id,
+                message_id = %message_id,
+                error = %e,
+                "message-complete: metadata read failed; emitting without it"
+            )
+        })
+        .ok()?;
+    history
+        .messages
+        .into_iter()
+        .find(|m| m.id == message_id)
+        .and_then(|m| m.metadata)
+}
+
 /// The `turn-narration` payload for one `TurnFrame::Narration`, shaped
 /// exactly as `TurnNarrationPayload` in `src/lib/types.ts` expects — the
 /// same struct the in-process sink used to fill, so the frontend cannot
@@ -714,7 +738,7 @@ async fn render_turn_frames(
     mut frame_rx: tokio::sync::mpsc::UnboundedReceiver<TurnFrame>,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
+    metadata_base_url: String,
 ) {
     let mut full_text = String::new();
     let mut real_message_id: Option<String> = None;
@@ -758,23 +782,24 @@ async fn render_turn_frames(
                     .clone()
                     .unwrap_or_else(|| fallback_id.clone());
 
-                // The persisted blob, read IN PROCESS. The driver projects
-                // typed provenance for callers across a socket; this surface
-                // owns the store, and the frontend's
+                // The persisted blob, read from the daemon's conversation
+                // route (2026-09-11; until then from an in-process store this
+                // surface no longer holds). The frontend's
                 // `MessageCompletePayload.metadata` is the raw shape it has
-                // always received.
-                let metadata = match (&store_for_metadata, &real_message_id) {
-                    (Some(store), Some(id)) => {
-                        message_metadata(store.as_ref(), &conversation_id, id).await
+                // always received, so the route carries the blob verbatim
+                // beside the typed projections.
+                let metadata = match &real_message_id {
+                    Some(id) => {
+                        wire_message_metadata(&metadata_base_url, &conversation_id, id).await
                     }
                     // A turn that never started (a graceful guard) has no
                     // row to read. Mark the intent so the turn is visible
                     // to the provenance surface and the loading state
                     // clears, instead of an intent-less blank.
                     _ => Some(serde_json::json!({
-                        "intent": if full_text == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT {
+                        "intent": if full_text == OVERSIZE_MESSAGE_HINT {
                             "oversize_guidance"
-                        } else if full_text == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT {
+                        } else if full_text == DEGENERATE_MESSAGE_HINT {
                             "clarification"
                         } else {
                             "error"
@@ -805,11 +830,12 @@ async fn render_turn_frames(
                     .and_then(|p| p.get("finish_reason"))
                     .and_then(|f| f.as_str())
                     == Some("cancelled");
-                let full_text = if is_recipe_author || was_cancelled {
-                    std::mem::take(&mut full_text)
-                } else {
-                    sovereign_core::pipeline::presenter::present_answer(&full_text)
-                };
+                // The text arrives PRESENTED: `drive_stream_handle` runs
+                // `present_answer` on the daemon before the tokens leave
+                // (sovereign-core runtime/streaming.rs), so the envelope
+                // stripping this renderer used to repeat here is gone with
+                // the runtime dependency (2026-09-11).
+                let full_text = std::mem::take(&mut full_text);
 
                 let _ = app.emit(
                     "message-complete",
@@ -1029,8 +1055,6 @@ pub async fn send_message(
     // gate asks the port (see `send_message_stream`).
     crate::commands::require_backend_ready(&state).await?;
 
-    state.approval.set_task_id(&conversation_id).await;
-
     let augmented_message =
         augment_for_turn(&state, &message, &context_chunks, &attached_files).await;
 
@@ -1202,10 +1226,7 @@ pub async fn redirect_turn(
         )
     })?;
 
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
     let mut stream = client
@@ -1230,7 +1251,7 @@ pub async fn redirect_turn(
         stream,
         conversation_id,
         uuid::Uuid::new_v4().to_string(),
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 
@@ -1256,10 +1277,7 @@ pub async fn resume_session(
     session_id: String,
     intent_hint: String,
 ) -> Result<StreamStartedResponse, String> {
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     // sv-surface R5: the resume crosses the wire (`send_resume`). An
     // expired session is the daemon's call to make — it answers by
@@ -1285,7 +1303,7 @@ pub async fn resume_session(
         stream,
         conversation_id,
         uuid::Uuid::new_v4().to_string(),
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 

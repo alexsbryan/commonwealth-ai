@@ -333,7 +333,11 @@ pub async fn submit_approval(
     {
         return Ok(hit);
     }
-    Ok(state.approval.submit_approval(&key, approved))
+    // No wire prompt is parked under this key, and there is no other desk:
+    // the in-process one went with the Runtime (2026-09-11). Reported as
+    // "not matched", never answered on the caller's behalf (ARCH principle 6).
+    tracing::warn!(key = %key, "submit_approval: no pending prompt for key");
+    Ok(false)
 }
 
 #[tauri::command]
@@ -351,7 +355,11 @@ pub async fn submit_input(
     {
         return Ok(hit);
     }
-    Ok(state.approval.submit_input(&key, response))
+    // No wire prompt is parked under this key, and there is no other desk:
+    // the in-process one went with the Runtime (2026-09-11). Reported as
+    // "not matched", never answered on the caller's behalf (ARCH principle 6).
+    tracing::warn!(key = %key, "submit_input: no pending prompt for key");
+    Ok(false)
 }
 
 /// Resolve a pending information-request the agent surfaced via an
@@ -377,7 +385,11 @@ pub async fn submit_information_response(
     {
         return Ok(hit);
     }
-    Ok(state.approval.submit_information_response(&key, content))
+    // No wire prompt is parked under this key, and there is no other desk:
+    // the in-process one went with the Runtime (2026-09-11). Reported as
+    // "not matched", never answered on the caller's behalf (ARCH principle 6).
+    tracing::warn!(key = %key, "submit_information_response: no pending prompt for key");
+    Ok(false)
 }
 
 /// Per-source provenance row returned to the desktop when the search
@@ -457,9 +469,11 @@ pub async fn submit_information_search(
         // The active wire turn put this card up; the guard below is the
         // LOCAL desk's and cannot see it. The Answer's own named refusal
         // covers staleness daemon-side.
-    } else if !state.approval.has_pending_information(&key) {
-        // Stale submission — the request was already resolved
-        // (paste / skip / timed out). Don't spend a search budget.
+    } else {
+        // Stale submission — the request was already resolved (paste /
+        // skip / timed out), or never rode the wire. Don't spend a search
+        // budget. (The in-process desk this used to consult went with the
+        // Runtime, 2026-09-11; the wire park is the only desk.)
         return Err("no pending information request for this key".to_string());
     }
 
@@ -480,7 +494,7 @@ pub async fn submit_information_search(
             session_id: &key,
             conversation_id: conversation_id.as_deref(),
             tool_id: "knowledge_lookup",
-            outcome: sovereign_core::memory::ToolDecisionOutcome::NoResults,
+            outcome: sovereign_contracts::types::ToolDecisionOutcome::NoResults,
             reasoning: "user clicked Search-the-web on the INFORMATION REQUEST card \
                          — prior in-conversation lookup did not satisfy",
             // Tier 1: no summary/evidence_ids/turn_index — this write fires
@@ -541,76 +555,11 @@ pub async fn submit_information_search(
         })
         .collect();
 
-    // Marathon-graceful M3 — fold the new URLs into the conversation's
-    // cumulative `searched_sources` registry, through the ONE merge
-    // (`sovereign_core::searched_sources`) the daemon's Answer path also
-    // uses (sv-surface G3b; the inline copy this replaced was the second
-    // spelling).
-    //
-    // ONE predicate, not two (review C4, ARCH §10.6). This gate and the
-    // wire resolve below decide the SAME question — who folds these
-    // sources into the conversation — and they used to disagree: this one
-    // asked the boot-mode fork, the resolve asked whether a wire turn was
-    // parked. Since R5 a Local turn rides the wire too, so both were true
-    // at once and the sources were folded TWICE, once by this write and
-    // once by the daemon resolving the Answer. The wire turn's existence
-    // is the only fact either needs, and the daemon's fold is the atomic
-    // one (it stamps the conversation's REAL current turn), so the local
-    // write runs only when no wire turn will do it.
-    //
-    // Soft-fail: a missing conversation_id (legacy callers, tests
-    // without a wired conversation) skips the registry update; the
-    // search still feeds through to refinement so the bench's
-    // `submit_information_response` path is unaffected.
-    if let Some(ref cid) = conversation_id {
-        // sv-surface D9b — NOT repointed: `searched_sources` has no wire
-        // accessor (neither `get_conversation`'s response nor any write
-        // route carries it). This arm is already dead whenever a wire turn
-        // is parked, which since R5 is every real turn; it survives for
-        // legacy callers and for bench paths with no conversation wired.
-        // Owed with the enabled-corpora write above, or delete the arm once
-        // the daemon's fold is proven to be the only one.
-        if !state.turn_wire.has(cid).await {
-            let store_arc: Option<Arc<dyn sovereign_contracts::traits::StateStore>> = {
-                let guard = state.store.read().await;
-                guard.as_ref().map(Arc::clone)
-            };
-            if let Some(store) = store_arc {
-                match store.get_conversation(cid).await {
-                    Ok(conv) => {
-                        let current_turn = conv.messages.len();
-                        let fresh = out
-                            .results
-                            .iter()
-                            .map(|r| (r.url.clone(), r.title.clone(), query.to_string()));
-                        let merged = sovereign_core::searched_sources::merge_into(
-                            conv.searched_sources,
-                            fresh,
-                            current_turn,
-                        );
-                        if let Err(e) = store
-                            .set_conversation_searched_sources(cid, Some(merged))
-                            .await
-                        {
-                            tracing::warn!(
-                                conversation_id = %cid,
-                                error = %e,
-                                "submit_information_search: failed to persist searched_sources — search proceeds, model loses cumulative-URL awareness this turn"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::debug!(
-                            conversation_id = %cid,
-                            error = %e,
-                            "submit_information_search: could not load conversation for searched_sources update — skipping"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
+    // The registry fold is the DAEMON's, as part of resolving the wire
+    // answer below (sv-surface G3b): it stamps the conversation's real
+    // current turn, which this client cannot know. The in-process copy that
+    // stood here for "a turn that did not ride the wire" was deleted
+    // 2026-09-11 — every turn rides the wire, and the app holds no store.
     // Wire-first resolve (sv-surface R5/G3b): a search-built answer
     // carries its registry rows IN the Answer, and the daemon folds them
     // into the conversation as part of the resolve — one user action, one
@@ -658,9 +607,11 @@ pub async fn submit_information_search(
         });
     }
 
-    let accepted = state
-        .approval
-        .submit_information_response(&key, Some(formatted));
+    // No wire sender for this card's turn: the turn ended between the click
+    // and the search finishing. There is no other desk (2026-09-11), so the
+    // search result is returned and reported as NOT accepted.
+    tracing::warn!(key = %key, "submit_information_search: no wire turn to deliver the answer to");
+    let accepted = false;
     Ok(SearchAugmentation {
         query: query.to_string(),
         backend_id: out.backend_id,
@@ -781,9 +732,9 @@ pub async fn weaken_memory(
 pub async fn get_last_turn_provenance(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
-) -> Result<Option<sovereign_core::runtime::TurnProvenance>, String> {
+) -> Result<Option<sovereign_contracts::daemon_wire::TurnProvenance>, String> {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .last_turn_provenance::<sovereign_core::runtime::TurnProvenance>(&conversation_id)
+        .last_turn_provenance::<sovereign_contracts::daemon_wire::TurnProvenance>(&conversation_id)
         .await
         .map_err(|e| e.to_string())
 }

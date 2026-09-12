@@ -286,6 +286,12 @@ pub struct MessageEntry {
     /// twin field. `None` on old messages / kill switch off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub epistemic_state: Option<sovereign_contracts::types::EpistemicState>,
+    /// The persisted metadata blob, verbatim. The three typed fields above
+    /// are projections OF it; a client that renders the raw shape (the
+    /// desktop's `MessageCompletePayload.metadata`, since 2026-09-11 read
+    /// here instead of from an in-process store) needs the blob itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -400,6 +406,7 @@ async fn get_conversation(
                 .map(|m| {
                     let role = m.role_str().to_string();
                     let (provenance, citations) = project_message_metadata(&m.metadata);
+                    let epistemic_state = project_epistemic_state(&m.metadata);
                     MessageEntry {
                         id: m.id,
                         role,
@@ -407,7 +414,8 @@ async fn get_conversation(
                         created_at: m.created_at,
                         provenance,
                         citations,
-                        epistemic_state: project_epistemic_state(&m.metadata),
+                        epistemic_state,
+                        metadata: m.metadata,
                     }
                 })
                 .collect(),

@@ -58,7 +58,6 @@ use std::sync::Arc;
 use sovereign_contracts::launch::Launch;
 use tauri::{Emitter, Manager};
 
-use crate::approval::TauriApprovalChannel;
 use crate::state::AppState;
 
 /// What the app says when it is handed a daemon role it can no longer fill.
@@ -318,9 +317,6 @@ fn main() -> ExitCode {
 
             let handle = app.handle().clone();
 
-            // Create approval channel with app handle for event emission.
-            let approval = Arc::new(TauriApprovalChannel::new(handle.clone()));
-
             // Probe `:9741` to decide whether a CLI-started daemon is
             // already running. If so, we skip starting our own
             // `EmbeddedDaemon` (same port, same mesh.json — collision
@@ -353,7 +349,7 @@ fn main() -> ExitCode {
             }
 
             // Create app state (loads config, no Runtime yet).
-            let app_state = AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode);
+            let app_state = AppState::new_with_mode(handle.clone(), bootstrap_mode);
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 

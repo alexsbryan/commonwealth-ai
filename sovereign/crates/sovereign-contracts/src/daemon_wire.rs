@@ -44,12 +44,17 @@ pub mod recipe_projects;
 pub mod workflows;
 
 pub use documents::*;
+pub use enrich::*;
 pub use ingest::*;
 pub use local_corpus::*;
 pub use mesh::*;
 pub use meshapp::*;
 pub use recipe_projects::*;
 pub use workflows::*;
+pub mod provenance;
+pub use provenance::*;
+pub mod research;
+pub use research::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 

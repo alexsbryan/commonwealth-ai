@@ -13,8 +13,6 @@ use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 use tokio_util::sync::CancellationToken;
 
-use crate::approval::TauriApprovalChannel;
-
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
 mod config;
@@ -134,7 +132,6 @@ pub async fn web_search_once(
 // ─── App State ───────────────────────────────────────────────
 
 pub struct AppState {
-    pub approval: Arc<TauriApprovalChannel>,
     /// Sink for the `interpretation-proposed`, `clarification-request` and
     /// `turn-narration` Tauri events.
     ///
@@ -305,7 +302,7 @@ impl AppState {
     ///   just like before; it'll be started on demand when the user
     ///   creates or joins a mesh.
     pub fn new_with_mode(
-        approval: Arc<TauriApprovalChannel>,
+        app_handle: tauri::AppHandle,
         mode: crate::bootstrap::BootstrapMode,
     ) -> Self {
         let config = DesktopConfig::load();
@@ -317,16 +314,16 @@ impl AppState {
         // `is_attach_mode()` answers "should there ever be one?" so nobody
         // has to read `mesh.is_none()` as an answer to it.
 
-        // Mint a routing event sink from the same AppHandle the
-        // approval channel uses. Constructing it here (rather than
-        // plumbing a second AppHandle through the constructor) keeps
-        // the call sites tight and reuses the handle clone.
+        // The routing event sink — the one emitter of the three
+        // antifragile-routing events (`commands/chat.rs` feeds it from
+        // the wire frames). It used to borrow the AppHandle off the
+        // in-process approval channel; that channel went with the
+        // Runtime (2026-09-11), so the handle comes in directly.
         let routing_events = Arc::new(crate::routing_events::TauriRoutingEventSink::new(
-            approval.app_handle(),
+            app_handle,
         ));
 
         Self {
-            approval,
             routing_events,
             config: RwLock::new(config),
             inference: RwLock::new(None),

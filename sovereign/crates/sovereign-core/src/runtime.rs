@@ -31,67 +31,16 @@ use crate::types::*;
 /// arbitrary length.
 pub const MAX_TURN_MESSAGE_CHARS: usize = 16_000;
 
-/// The marker a host prepends when the user attached a document, and the
-/// ONE name for it.
-///
-/// This literal was written out at six production sites across four files
-/// (`runtime/streaming.rs`, `runtime/turn.rs` ×2, `runtime/retrieval/mod.rs`,
-/// and the two host fallbacks) — a magic string carrying a routing decision,
-/// which is ARCH §2.1 and §10.6 at the same time. A typo in any one of them
-/// silently reclassifies a document turn as an ordinary one, and nothing
-/// fails; it just answers the wrong way.
-pub const DOCUMENT_ATTACHED_PREFIX: &str = "[Document attached: ";
-
-/// Does this turn belong to the document-operation path?
-///
-/// **This is the only question that decides whether a turn can token-stream**,
-/// and it is a property of the message, not an error to be caught. Hosts used
-/// to discover the answer by calling [`Runtime::handle_message_stream`] and
-/// pattern-matching what came back — `sovereign-cli-llm`'s chat surface
-/// matched the error *string*, the eval harness matched the *variant*, and
-/// they dispatched to two different handlers as a result. Worse, the streaming
-/// path persists the user message BEFORE it bails, so those two fallbacks were
-/// not interchangeable: one of them wrote the user's turn to the conversation
-/// twice.
-///
-/// Asking first removes the round-trip and the ambiguity — see
-/// [`crate::runtime::serve_turn`], which is now the single host-facing
-/// implementation of the fallback.
-pub fn is_document_attached(message: &str) -> bool {
-    message.starts_with(DOCUMENT_ATTACHED_PREFIX)
-}
-
-/// Error text shown when a message exceeds `MAX_TURN_MESSAGE_CHARS`.
-/// Surfaced unchanged to the user via the Tauri command layer, so it
-/// needs to be action-guidance, not a stack trace. `pub` so the desktop
-/// can recognise this specific case and present it as a calm assistant
-/// turn (graceful guidance) rather than a raw "Error: Invalid input:"
-/// bubble that reads as a crash.
-pub const OVERSIZE_MESSAGE_HINT: &str =
-    "This message is too long for the chat pipeline (over 16,000 characters). \
-     For document-sized content, attach it as a file instead — Sovereign \
-     routes attachments through a map-reduce pipeline designed for long \
-     inputs. Or summarise your question into a paragraph or two.";
-
-/// Graceful clarification shown when a turn carries no actual question — empty,
-/// whitespace, or punctuation/symbols only (e.g. "?"). Without this the turn
-/// routed into the generative path and produced a generic essay over nothing,
-/// which the UX judge (rightly) scored as broken. Mirrors `OVERSIZE_MESSAGE_HINT`:
-/// `pub` so the desktop recognises it and renders a calm assistant turn instead
-/// of a raw error bubble. Brief, warm, points to a path forward.
-pub const DEGENERATE_MESSAGE_HINT: &str =
-    "I didn't catch a question there — what would you like to know? Ask about \
-     anything in your knowledge bases (a fact, a summary, or how two ideas \
-     connect) and I'll dig in.";
-
-/// A turn message carries no question to answer: it has no alphanumeric
-/// character at all (empty, whitespace, or punctuation/symbols only, like "?").
-/// Unicode-aware, so a question in any script (CJK, etc.) is NOT degenerate —
-/// only genuinely contentless input is. Guards the chat entry points alongside
-/// the oversize check.
-pub fn is_degenerate_message(message: &str) -> bool {
-    !message.chars().any(|c| c.is_alphanumeric())
-}
+/// MOVED DOWN 2026-09-11 (sv-surface svt-3). The document-attached prefix,
+/// the two graceful-guard hints and their predicates are facts about the
+/// TURN WIRE: the daemon answers a guard with the hint verbatim and a client
+/// recognises it by equality, so a client that could not name them could
+/// not render the calm turn. They live in `sovereign_contracts::types::turn`
+/// now; these are re-exports so every runtime site is unchanged.
+pub use sovereign_contracts::types::{
+    is_degenerate_message, is_document_attached, DEGENERATE_MESSAGE_HINT, DOCUMENT_ATTACHED_PREFIX,
+    OVERSIZE_MESSAGE_HINT,
+};
 
 pub use self::voice_prompts::{
     __voice_test_epistemic_contract_for, __voice_test_factual_base_prompt,

@@ -292,7 +292,7 @@ pub struct CorpusProgressPayload {
 
 use std::sync::Arc;
 
-use sovereign_core::time::unix_now as now_epoch;
+use sovereign_time::unix_now as now_epoch;
 
 use crate::state::AppState;
 
