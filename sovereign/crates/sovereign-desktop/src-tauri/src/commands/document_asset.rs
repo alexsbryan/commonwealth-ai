@@ -370,26 +370,25 @@ pub async fn ask_document(
 
     let sources_content: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
 
-    // Epistemic-humility hook. Detection is now the turn's gate
-    // abstention (I4-C retirement of gap.rs's LLM judge) — and the
-    // document-op path runs NO grounding gate, so it carries no
-    // abstention signal and never fires the card. That is the honest
-    // shape: the user attached THE document; the short-answer cases
-    // (off-topic, zero-hit RAG) already fell through to the gated
-    // runtime pipeline above, which does carry the signal.
-    let final_content = {
-        let runtime_guard = state.runtime.read().await;
-        if let Some(runtime) = runtime_guard.as_ref() {
-            // Approval-channel task id kept stamped for parity with the
-            // runtime path (a no-op when no card fires).
-            state.approval.set_task_id(&conversation_id).await;
-            runtime
-                .maybe_collaborate(&conversation_id, &question, &output.text, false)
-                .await
-        } else {
-            output.text.clone()
-        }
-    };
+    // The epistemic-humility hook stood here and was a value-preserving
+    // identity function, PROVABLY (sv-surface svt-3b).
+    //
+    // It called `Runtime::maybe_collaborate(.., abstained: false)`, and
+    // `run_collaboration` returns `NotAttempted` on `!abstained` before doing
+    // anything at all (`sovereign-core/src/runtime/collaboration.rs:177-180`,
+    // logging "turn answered — no gap card"), which `maybe_collaborate`
+    // flattens straight back to the input string
+    // (`runtime/system_message.rs:779-784`). The comment that stood here said
+    // as much in prose — "the document-op path runs NO grounding gate, so it
+    // carries no abstention signal and never fires the card" — so this is the
+    // §15 row "a comment asserting in English what a test could assert in
+    // code", except the code could just not do it.
+    //
+    // Removing it therefore changes no output, and it removes the desktop's
+    // last non-chat reason to hold a commissioned `Runtime`. The `set_task_id`
+    // stamp goes with it: it existed to key approval cards for a card this
+    // path cannot fire.
+    let final_content = output.text.clone();
 
     // Persist the assistant response with document operation metadata
     // (legacy `operation` / `sources` fields) plus the new rich

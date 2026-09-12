@@ -30,6 +30,44 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `search_web` stays in the app — a DECLARED exception on egress custody (sv-surface svt-3b, 2026-09-11)
+
+**What stays local.** `search_web` (`commands/models.rs`) dispatches a web
+search from the desktop process rather than asking the daemon to. So does
+`submit_information_search`; both now go through the one function,
+`state::web_search_once`.
+
+**Why it is not a route, and the honest version of the reason.** The campaign
+file listed `search_web` in its cannot-cross set and the svt-3 order called
+that case "weak as written", correctly: the backend is resolved from the
+SHARED `config.toml` (`sovereign-tools/src/bundles.rs:69`), not a
+desktop-private file, so "the desktop has the key" is not the ground. The
+ground is EGRESS CUSTODY. The query leaves this machine for a third-party
+provider, and the release gate that authorises it without a grant reads
+`user_formed: true` — a fact only the surface that took the keystrokes can
+assert. A daemon route would have to accept that flag from its caller, which
+turns a boundary check into a field the caller supplies (ARCH principle 5's
+"a guard asserting on a field the subject supplies").
+
+**What svt-3b did change.** It was reaching `runtime.tools.get("search")` —
+the desktop's last reason to hold a commissioned `Runtime`. It holds none now,
+and the search runs through the registry `sovereign_tools::bundles` already
+exports. The exception is about WHERE THE EGRESS HAPPENS, not about the app
+owning a turn.
+
+**Flip condition (falsifiable).** The egress boundary gains a way for a client
+to prove a query was user-formed that a daemon can verify rather than trust —
+or the operator rules that a loopback-only daemon on the same machine inherits
+the surface's custody, at which point this becomes a route like any other. Two
+smaller things settle first: `commands/conversation.rs:509` still spells its
+own copy of the dispatch and should call `web_search_once`
+(ARCH principle 8), and `search_web` has NO caller in the Svelte app — it is
+exported from `api.ts:629` and invoked nowhere — so the prior question is
+whether the command should exist at all.
+
+**Review by 2026-10-11.**
+
+
 ### Model-load safety guards — **NO OWNER** since 2026-09-11 (sv-surface svt-3a)
 
 **What is dark.** TWO guards, both of which asked "can this machine actually

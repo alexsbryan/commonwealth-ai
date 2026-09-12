@@ -142,18 +142,18 @@ const FLOOR: &[Needle] = &[
     },
     Needle {
         hay: "match NoteStore::open(",
-        count: 1,
-        why: "notes.db, the unconditional (attach-reachable) open at the spine — the two `corpus_engine_notes::NoteStore::open` sites below are the Local-only daemon-MCP opens",
+        count: 0,
+        why: "notes.db — DELETED svt-3b with the commission that was its only consumer (the `RecipeAuthoringTools` bundle); `lessons` reaches the daemon's `/v1/notes`",
     },
     Needle {
         hay: "RecipeProjectStore::open(",
-        count: 1,
-        why: "features.db, both modes",
+        count: 0,
+        why: "features.db — DELETED svt-3b, same reason; `recipe_author_commands` reaches `/v1/features/*`",
     },
     Needle {
         hay: "SkillRegistry::new(",
-        count: 1,
-        why: "the skill registry, built host-side",
+        count: 0,
+        why: "the skill registry — DELETED svt-3b: it fed the recipe and the knowledge view, and the skills PANE reads the daemon's `/v1/skills`",
     },
     Needle {
         hay: "sovereign_gliner::load_gliner_extractor(",
@@ -177,18 +177,18 @@ const FLOOR: &[Needle] = &[
     },
     Needle {
         hay: "builders::knowledge_view::build_knowledge_view(",
-        count: 1,
-        why: "the knowledge-view manager (attach-gated params, constructed both modes)",
+        count: 0,
+        why: "the knowledge-view manager — DELETED svt-3b (the builder file with it): its own attach guard already returned `None`, and attach is the only mode",
     },
     Needle {
         hay: "sovereign_runtime_recipe::common_parts(",
-        count: 1,
-        why: "the shared recipe's parts — tool registry, router, MCP, atlas, wiki graph, reranker — gathered host-side",
+        count: 0,
+        why: "the shared recipe's parts — DELETED svt-3b; the daemon commissions through the SAME recipe and every turn has crossed the wire since R5",
     },
     Needle {
         hay: "sovereign_runtime_recipe::commission(",
-        count: 1,
-        why: "THE Runtime, commissioned in attach mode too, over the remote provider (the C2 divergence's root)",
+        count: 0,
+        why: "THE Runtime — DELETED svt-3b. This was the C2 divergence's root and the blocker the D9b note named: eleven spine needles were consumed by it and nothing else",
     },
 ];
 
@@ -261,14 +261,17 @@ fn the_attach_construction_floor_is_pinned() {
         total += needle.count;
     }
     assert_eq!(
-        total, 11,
-        "sv-attach-pure-client floor: the pinned spine total must be 11 here, \
-         plus the attach-provider needle pinned in the builders file = the \
-         campaign file's floor_basis (12, sv-surface D0: was 14 — \
-         WatchedSubsystem::install was never attach-reachable and \
-         CompactionWorker::spawn is gated on the local wiring now). A needle \
-         added or removed without the campaign row moving is the exact silent \
-         drift this census exists to catch."
+        total, 5,
+        "sv-attach-pure-client floor: the pinned spine total must be 5 here, \
+         plus the daemon-provider needle pinned in the builders file = 6 \
+         (was 12 at sv-surface D0, and 14 before it). svt-3b took the six \
+         zeros above: the commission and everything whose ONLY consumer was \
+         the commission. What is left is what the desktop's own surfaces \
+         read — its `sovereign.db` handle, the corpus engine, the \
+         local-corpus manager, the tiered-enrichment provider and GLiNER — \
+         so the next rung is a repoint onto daemon routes, not a deletion. A \
+         needle added or removed without the campaign row moving is the exact \
+         silent drift this census exists to catch."
     );
 }
 

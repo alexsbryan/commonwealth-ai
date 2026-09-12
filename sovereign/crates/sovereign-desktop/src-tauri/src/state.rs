@@ -5,26 +5,15 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use sovereign_core::health_monitor::HealthMonitor;
 use sovereign_core::insight::InsightService;
-use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::InferenceConfig;
-use sovereign_core::SkillRegistry;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
-
-// Built-in skills live in a submodule (§3.3 state.rs decomposition).
-mod builtin_skills;
-#[cfg(debug_assertions)]
-use builtin_skills::dev_workspace_skills_dir;
-use builtin_skills::register_builtin_skills;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
@@ -50,15 +39,122 @@ pub use wire_turns::{PendingPrompts, TurnWires};
 /// (`DesktopConfig::migrate_legacy_search_backend`).
 pub use sovereign_tools::bundles::effective_search_registry;
 
+/// Run ONE web search through the desktop's configured backend, past the
+/// egress boundary, and hand back the formatted results block.
+///
+/// **Why this exists as a function.** `search_web` (`commands/models.rs`) used
+/// to reach `runtime.tools.get("search")` — the only thing in the desktop that
+/// still required a commissioned `Runtime` handle rather than a readiness
+/// gate. The daemon exposes no route that runs a named tool: `/mcp`'s
+/// `tools/call` is allowlisted by `sovereign_tools::mcp_surface` (which does
+/// not carry `"search"`) over a registry that holds only code-intel and notes
+/// tools, and the turn's `intent: SimpleAction { tool }` is accepted on the
+/// wire but discarded by both dispatchers (`sovereign-core/src/runtime/
+/// authority_guard.rs:386-394`). So the tool registry was not a capability the
+/// desktop could stop holding by pointing somewhere else.
+///
+/// It did not need to hold one. `submit_information_search`
+/// (`commands/conversation.rs:509-565`) has performed exactly this search with
+/// NO Runtime since it landed, through the registry re-exported above. This is
+/// that path, lifted so the two surfaces share it rather than agreeing
+/// (ARCH principle 8). **Owed: `conversation.rs` still spells its own copy;
+/// converting it is a one-call-site change in a file this session does not
+/// own.**
+///
+/// EGRESS CUSTODY is why this stays in the app rather than becoming a daemon
+/// route — see the `DEFAULTS_LEDGER` row. The query leaves this machine for a
+/// third-party search provider, and the release gate that authorises it reads
+/// `user_formed: true`, which is a fact only the surface that took the
+/// keystrokes can assert.
+pub async fn web_search_once(
+    query: &str,
+    config: &DesktopConfig,
+) -> Result<sovereign_tools::web::search::OrchestratedSearch, String> {
+    use sovereign_tools::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
+
+    let orchestrator = SearchOrchestrator::new(Arc::new(effective_search_registry()));
+    let client = sovereign_contracts::egress::search_client()
+        .map_err(|e| format!("egress boundary search client build: {e}"))?;
+    let provider_static: &'static str = match config.search_backend.provider.as_str() {
+        "tavily" => "tavily",
+        "brave" => "brave",
+        _ => "duckduckgo",
+    };
+    sovereign_contracts::egress::verify(
+        &sovereign_contracts::egress::EgressPayload {
+            privacy: SearchPrivacy::External {
+                provider: provider_static,
+            },
+            custody: sovereign_contracts::types::Custody::Personal,
+            what: "query",
+            target: provider_static,
+            detail: query,
+            user_formed: true,
+        },
+        None,
+    )
+    .map_err(|r| format!("web search refused: {r}"))?;
+    let prefer = match config.search_backend.provider.as_str() {
+        "tavily" => &["tavily", "duckduckgo"][..],
+        "brave" => &["brave", "duckduckgo"][..],
+        _ => &["duckduckgo"][..],
+    };
+    // Glassbox: the backend decision and the query LENGTH, never its text.
+    tracing::info!(
+        provider = %config.search_backend.provider,
+        query_len = query.len(),
+        "web_search_once: dispatching"
+    );
+    let out = orchestrator
+        .search(
+            &client,
+            SelectInputs {
+                query,
+                max_results: 5,
+                max_privacy: SearchPrivacy::External {
+                    provider: "duckduckgo",
+                },
+                prefer,
+            },
+        )
+        .await;
+    // Absence is REPORTED (ARCH principle 6). An empty result set and a
+    // refused egress are different facts and neither is "no results found",
+    // which is what the tool-registry path returned for both.
+    if out.results.is_empty() {
+        return Err(format!(
+            "web search returned 0 results via {} (DDG may be bot-blocking; \
+             try a tighter query)",
+            out.backend_id,
+        ));
+    }
+    Ok(out)
+}
+
 // ─── App State ───────────────────────────────────────────────
 
 pub struct AppState {
-    pub runtime: RwLock<Option<Arc<Runtime>>>,
     pub approval: Arc<TauriApprovalChannel>,
-    /// PR2 — sink for interpretation-proposed, clarification-request,
-    /// and turn-narration events. Constructed at app setup alongside
-    /// `approval` (both wrap the same Tauri AppHandle) and handed to
-    /// Runtime::with_routing_events during bootstrap.
+    /// Sink for the `interpretation-proposed`, `clarification-request` and
+    /// `turn-narration` Tauri events.
+    ///
+    /// **NOTHING READS IT, and that is a FEATURE GAP recorded here rather than
+    /// deleted.** It was handed to `RuntimeParts::routing_events` when this
+    /// process commissioned a Runtime; it no longer does (svt-3b), so no
+    /// in-process turn can reach it — and since sv-surface R5 put every turn
+    /// on the wire, none did in attach mode either. The three UI affordances
+    /// these drive (the interpretation banner, the `ClarificationCard`, the
+    /// mid-turn narration chip) are therefore dark on the shipped path, and
+    /// were before this commit.
+    ///
+    /// The wire ALREADY DELIVERS all three —
+    /// `TurnNotice::{InterpretationProposed, ClarificationRequest}` and
+    /// `TurnFrame::Narration` all arrive in `commands/chat.rs`'s
+    /// `render_turn_frames`. It uses the first two only to record the
+    /// session -> conversation pairing (`chat.rs:506-519`) and drops
+    /// `Narration` on the floor (`chat.rs:759-762`). Re-emitting them there is
+    /// the whole fix; this field and `crate::routing_events` are kept, inert,
+    /// so the payload shapes the UI expects stay next to the gap.
     pub routing_events: Arc<crate::routing_events::TauriRoutingEventSink>,
     pub config: RwLock<DesktopConfig>,
     /// Reusable across Runtime rebuilds (model stays loaded).
@@ -118,31 +214,6 @@ pub struct AppState {
     /// and the `CorpusEngine` is ready; commands check this and
     /// surface a "finish setup first" error when unset.
     pub local_corpus: RwLock<Option<Arc<LocalCorpusManager>>>,
-    /// Recipe-author project layer needs both notes (decision log,
-    /// research findings, capability requests, checkpoints) and
-    /// features (RecipeAuthoring-state FeatureRow per project).
-    /// Both opened during bootstrap from `<data_dir>/notes.db` and
-    /// `<data_dir>/features.db`; `None` until bootstrap completes
-    /// or when those DBs failed to open.
-    pub notes: RwLock<Option<Arc<NoteStore>>>,
-    pub features: RwLock<Option<Arc<RecipeProjectStore>>>,
-    /// Handle on the opt-in **Mobile access** `sovereign-server` child (the
-    /// phone-facing host). `Some` while the host runs; aborting the handle
-    /// drops the future holding the `Child`, whose `kill_on_drop(true)`
-    /// SIGKILLs `sovereign-server` — that is the toggle-off path. `None` when
-    /// Mobile access is off. See [`crate::mobile_host_setup`].
-    ///
-    /// It is a plain child, not a supervised one, since 2026-09-11: the
-    /// restart policy, backoff, heartbeat and crash-loop breaker this used to
-    /// carry went with the daemon supervisor (sv-surface svt-2). The desktop
-    /// owns the TOGGLE and nothing else about the host's life.
-    pub mobile_host_supervisor: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
-    /// Manager for external MCP servers loaded at bootstrap (the
-    /// `[[mcp_servers]]` array of the canonical config). Held only for its
-    /// connection statuses, which the Settings → MCP pane reads via
-    /// `mcp_list_servers`; the live HTTP transports are owned by the tools it
-    /// registered into the Runtime's registry. `None` until bootstrap runs.
-    pub mcp_servers: RwLock<Option<Arc<sovereign_tools::mcp::McpServerManager>>>,
     /// Local NER model (GLiNER) for document-ingest entity extraction.
     ///
     /// The same `Arc` handed to `Runtime::with_gliner` for retrieval, kept
@@ -210,22 +281,6 @@ impl AppState {
         format!("http://127.0.0.1:{}", self.internal_port())
     }
 
-    /// Typed accessor for the chat `Runtime` (§2D-3 DesktopError). Returns
-    /// `DesktopError::not_ready` while bootstrap is still loading it, so a
-    /// handler can `state.runtime().await?` instead of the stringly
-    /// `require_runtime!` macro. Additive — the `runtime` field and the
-    /// macro both keep working during the incremental migration. Cloning
-    /// the `Arc` also avoids holding the `RwLock` read guard across the
-    /// handler's later `.await` points.
-    pub async fn runtime(&self) -> Result<Arc<Runtime>, crate::error::DesktopError> {
-        self.runtime
-            .read()
-            .await
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or_else(|| crate::error::DesktopError::not_ready("The assistant is still loading."))
-    }
-
     /// Typed accessor for the desktop's OWN state store — the same
     /// `Arc<dyn StateStore>` `builders::store::open_store` returns and
     /// hands to `Runtime::new` further down this file, so both point at
@@ -285,7 +340,6 @@ impl AppState {
         ));
 
         Self {
-            runtime: RwLock::new(None),
             approval,
             routing_events,
             config: RwLock::new(config),
@@ -302,10 +356,6 @@ impl AppState {
             pending_prompts: PendingPrompts::default(),
             session_conversations: RwLock::new(std::collections::HashMap::new()),
             local_corpus: RwLock::new(None),
-            notes: RwLock::new(None),
-            features: RwLock::new(None),
-            mobile_host_supervisor: RwLock::new(None),
-            mcp_servers: RwLock::new(None),
             entity_extractor: RwLock::new(None),
         }
     }
@@ -320,6 +370,14 @@ impl AppState {
 /// monolithic chain and finer-grained signals would be noise. The
 /// three points below are the user-perceptible "I've started doing
 /// X" moments.
+///
+/// **Five of the seven have no emitter after svt-3b**, each for the same
+/// reason and each saying so on its own variant: they narrated work this
+/// process performed and the daemon performs now. They are kept for one
+/// commit because `setup_flow.rs`'s match over them is another worker's file
+/// this session, and a concurrent edit there is a collision rather than a fix.
+/// Deleting the five and their arms is OWED. What survives is what this
+/// bootstrap still does: `OpeningDatabase` and `WiringKnowledge`.
 #[derive(Debug, Clone, Copy)]
 pub enum BootstrapPhase {
     /// **Nothing emits this since svt-3**, and the variant survives only
@@ -336,26 +394,23 @@ pub enum BootstrapPhase {
     LoadingModel,
     /// About to open the SQLite store and run migrations.
     OpeningDatabase,
-    /// About to assemble the router classifier stack (4 embed-based
-    /// classifiers; ~ms when the exemplar embed cache is warm,
-    /// seconds when cold or after an embed-model swap).
+    /// **No emitter since svt-3b.** The router classifier stack is the shared
+    /// recipe's work and this process no longer commissions a turn; the
+    /// daemon assembles it, and this splash cannot narrate a wait happening
+    /// in another process. Same owed deletion as the two above.
     AssemblingRouter,
-    /// The router-embed cache missed (first launch, a cleared
-    /// `~/.svrnmesh`, or a genuinely swapped embed model), so the four
-    /// classifiers are re-embedding ~277 exemplars — minutes on a CPU-only
-    /// embed slot. Surfaced so the splash is honest instead of looking hung.
+    /// **No emitter since svt-3b** — the same router, on the cache-miss path
+    /// that re-embeds ~277 exemplars. It is still a real minutes-long wait on
+    /// a cold CPU embed slot; it is just the DAEMON's wait now, and narrating
+    /// it needs a readiness signal off `/status`, not a variant here.
     RebuildingRouterEmbeddings,
     /// About to wire tools, corpus engine, local-corpus manager and
     /// knowledge view (lance index opens scale with installed corpora).
     WiringKnowledge,
-    /// About to gather the turn's enrichment lane — atlases, the wiki link
-    /// graph, the reranker, GLiNER — and then commission the Runtime. The last
-    /// phase before `backend-ready`.
-    ///
-    /// Not "cheap", as this said until 2026-08-26: the meta-atlas warm it used
-    /// to name was moved off the boot path in 2026-06 and the rest of the lane
-    /// stayed here. Emitted by the shared recipe now (`RecipePhase::BuildingLane`
-    /// through `SplashProgress`), not by this file.
+    /// **No emitter since svt-3b.** It named the turn's enrichment lane —
+    /// atlases, the wiki link graph, the reranker, GLiNER — and was emitted by
+    /// the shared recipe through this file's `SplashProgress` adapter. There
+    /// is no recipe call and no adapter; the lane is built by the daemon.
     BuildingRuntime,
 }
 
@@ -363,34 +418,6 @@ pub enum BootstrapPhase {
 /// callback is invoked once per phase, in the order the phases
 /// occur (smoke test → model load → DB open).
 pub type BootstrapProgressCb = Box<dyn Fn(BootstrapPhase) + Send + Sync + 'static>;
-
-/// Routes the shared recipe's progress to the splash screen.
-///
-/// The recipe reports NAMED milestones (`RecipePhase`) rather than prose, so
-/// this mapping is an exhaustive `match`: adding a stage to the recipe is a
-/// build error here rather than a splash that quietly stops narrating. The
-/// alternative — matching on the wording of a log line — would make rewording
-/// a trace message a UI regression.
-struct SplashProgress<'a>(&'a (dyn Fn(BootstrapPhase) + Send + Sync));
-
-impl sovereign_runtime_recipe::RecipeProgress for SplashProgress<'_> {
-    fn note(&self, line: &str) {
-        tracing::info!(target: "bootstrap", "{line}");
-    }
-
-    fn phase(&self, phase: sovereign_runtime_recipe::RecipePhase) {
-        use sovereign_runtime_recipe::RecipePhase as P;
-        tracing::info!(target: "bootstrap", "{}", phase.label());
-        (self.0)(match phase {
-            // Tool wiring is the tail of the same splash step that opened the
-            // corpora; it does not get a caption of its own.
-            P::WiringTools => BootstrapPhase::WiringKnowledge,
-            P::AssemblingRouter => BootstrapPhase::AssemblingRouter,
-            P::RebuildingRouterEmbeddings => BootstrapPhase::RebuildingRouterEmbeddings,
-            P::BuildingLane => BootstrapPhase::BuildingRuntime,
-        });
-    }
-}
 
 /// Bootstrap the Runtime from the current config. Thin wrapper
 /// over `bootstrap_with_progress` for callers that don't need
@@ -551,100 +578,30 @@ pub async fn bootstrap_with_progress(
     )
     .await?;
 
-    // Open the recipe-author backing stores in BOTH bootstrap modes.
-    // The CLI live-trial uses these too; desktop must mirror them so
-    // the recipe-author workspace works whether or not the user has a
-    // separately-running CLI daemon. Failures here are warned-and-
-    // skipped — the rest of the desktop should not 503 because notes
-    // or features couldn't open.
-    if state.notes.read().await.is_none() {
-        let notes_path = config.data_dir.join("notes.db");
-        match NoteStore::open(&notes_path) {
-            Ok(s) => {
-                *state.notes.write().await = Some(Arc::new(s));
-                tracing::info!(path = %notes_path.display(), "recipe-author: NoteStore opened");
-            }
-            Err(e) => tracing::warn!(
-                path = %notes_path.display(),
-                error = %e,
-                "recipe-author: NoteStore open failed; recipe-author workspace will be disabled",
-            ),
-        }
-    }
-    if state.features.read().await.is_none() {
-        let features_path = config.data_dir.join("features.db");
-        match RecipeProjectStore::open(&features_path) {
-            Ok(s) => {
-                *state.features.write().await = Some(Arc::new(s));
-                tracing::info!(path = %features_path.display(), "recipe-author: RecipeProjectStore opened");
-            }
-            Err(e) => tracing::warn!(
-                path = %features_path.display(),
-                error = %e,
-                "recipe-author: RecipeProjectStore open failed; recipe-author workspace will be disabled",
-            ),
-        }
-    }
+    // The recipe-author `notes.db` + `features.db` opens stood here and went
+    // with the commission (svt-3b). They had NO reader on the command surface
+    // — measured, and it is why they survived D9b: their only consumer was
+    // the `RecipeAuthoringTools` bundle handed to the recipe. The daemon opens
+    // the same two files for its own commission, and `recipe_author_commands`
+    // + `lessons` already reach them over `/v1/features/*` and `/v1/notes`.
 
-    // Load skills. Two sources:
+    // ── This bootstrap no longer assembles a turn ────────────────────────
     //
-    //   1. **Built-in skills** — shipped with the binary via
-    //      `include_str!` (see `BUILTIN_SKILLS` below). Always
-    //      available regardless of install / CWD / Tauri resource
-    //      resolution. The whole point: the Settings → Skills panel
-    //      should never read "No skills found." on a fresh install.
+    // Everything between here and the corpus engine used to build the things
+    // a turn needs and hand them to the shared runtime recipe's `common_parts`
+    // -> `commission`: a `SkillRegistry` loaded from built-ins plus the user's
+    // skills dir, eleven `ToolBundle`s, the merged SCIP graph the code-intel
+    // tools hold, the mesh knowledge client, the landscape-digest provider and
+    // a `KnowledgeViewManager`. The daemon commissions all of it through the
+    // SAME recipe, and every turn has crossed the wire since sv-surface R5 —
+    // so the desktop's copy answered no question any surface asked. It is
+    // gone, and with it the `sovereign-runtime-recipe` dependency.
     //
-    //   2. **User skills dir** — `config.skills_dir` (e.g. on macOS
-    //      `~/Library/Application Support/sovereign/skills`). Loaded
-    //      after built-ins so user versions can override built-ins
-    //      with the same id (SkillRegistry keeps the last registered).
-    //
-    // Debug-mode escape hatch: when the workspace `skills/` directory
-    // exists (we're running `cargo tauri dev` from the repo), load
-    // anything we haven't already embedded — makes iterating on new
-    // built-ins painless without recompiling the binary.
-    let mut skills = SkillRegistry::new();
-    register_builtin_skills(&mut skills);
-    #[cfg(debug_assertions)]
-    {
-        if let Some(workspace_skills) = dev_workspace_skills_dir() {
-            if workspace_skills.exists() {
-                tracing::info!(
-                    "Loading dev-only skills overlay from {}",
-                    workspace_skills.display()
-                );
-                skills.load_and_register(&workspace_skills);
-            }
-        }
-    }
-    if config.skills_dir.exists() && config.skills_dir != std::path::PathBuf::new() {
-        skills.load_and_register(&config.skills_dir);
-    }
-    // Activate configured skills (or all background skills if none
-    // specified). Both paths skip Workspace skills — those are
-    // navigation-scoped surfaces, never globally activated from config
-    // (see SkillRegistry::activate_configured / activate_all).
-    if config.active_skills.is_empty() {
-        skills.activate_all();
-    } else {
-        skills.activate_configured(&config.active_skills);
-    }
-    tracing::info!("Skills: {} loaded", skills.list().len());
-    let skills = Arc::new(skills);
-
-    // The router classifier stack, the planner and the turn's tool registry
-    // are the shared recipe's work, not this file's — see the
-    // `sovereign_runtime_recipe::common_parts` call further down. Until
-    // 2026-08-26 all three were built here: a `build_llm_router` call, an
-    // `LlmPlanner::new`, and 24 `tools.register` sites spread over 900 lines
-    // and interleaved with the embedded daemon, the single-instance guard and
-    // the health monitor. What this bootstrap still owns is the collaborators
-    // only a desktop has; they are gathered below and handed over as
-    // `RecipeInputs` (TOPOLOGY §10 phase 7).
-    //
-    // This phase still opens the corpus engine, the local-corpus manager and
-    // the knowledge view — lance index opens that scale with installed corpora
-    // — so it is announced here rather than by the recipe.
+    // What this phase still opens is what the desktop's OWN surfaces read: the
+    // corpus engine (the corpus pane, focused-passage augmentation), the
+    // local-corpus manager (Local Knowledge), the state store and the
+    // enrichment stack. Those are lance opens that scale with installed
+    // corpora, which is why the phase is announced.
     emit(BootstrapPhase::WiringKnowledge);
 
     // Construct a shared CorpusEngine. This single instance backs both
@@ -724,6 +681,23 @@ pub async fn bootstrap_with_progress(
     }
     if let Some(extractor) = chunk_entity_extractor.clone() {
         engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
+        // Document ingest wants an `EntityExtractor`, which is a different
+        // trait from the engine's `ChunkEntityExtractor` — so it is a second
+        // handle on the same model, not a second model. It used to arrive as
+        // `common.parts.lane.gliner`; the recipe built it with exactly the
+        // line below and the desktop is the only reader, so taking the line
+        // rather than the recipe changes nothing about what runs.
+        //
+        // Gated on the CHUNK extractor being `Some`, because that is
+        // `load_gliner_extractor`'s report of `probe_model_available` and the
+        // field's contract is `None` when the model is not installed —
+        // `DocumentAssetManager` then falls back to the LLM path. Deferred
+        // warm, as before: the lazy extractor answers empty for ~1s after
+        // boot, which `build_skeleton` treats as fall-through per window.
+        *state.entity_extractor.write().await = Some(Arc::new(
+            sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred(),
+        )
+            as Arc<dyn sovereign_core::traits::EntityExtractor>);
     }
     // A custom acquirer must be registered on EVERY engine that can
     // ingest a recipe naming it, or the install fails at acquire time
@@ -850,44 +824,6 @@ pub async fn bootstrap_with_progress(
         }
     }
 
-    // KnowledgeView wire-up (desktop mirror of the server/CLI path).
-    // Gating precedence (attach mode → Settings toggle → build) and the
-    // full rationale (the attach-mode duplicate-observer hazard, the
-    // deferred-digest TODO) are documented on `build_knowledge_view`.
-    // The manager is consumed below as the Runtime's landscape-digest
-    // provider; here we only construct it — installing the SQLite write
-    // observer is the builder's only side effect.
-    let knowledge_view_manager = builders::knowledge_view::build_knowledge_view(
-        state.is_attach_mode(),
-        &config,
-        &skills,
-        &corpus_engine,
-        &inference_fn,
-        &inference,
-        &state.sqlite_store,
-    )
-    .await;
-    // No auto-backfill on launch.
-    //
-    // KnowledgeView ingest used to fire on a 30 s timer here, on the
-    // theory that the user wouldn't notice if it kicked off "after
-    // they opened the app." In practice, on a CPU-only fast slot a
-    // single Phase 2 entity-extraction call against an 8 K-token
-    // prompt takes ~4 minutes, and the phase fans out 4 of them. The
-    // calls serialise through the slot mutex, so a user who opens
-    // the app to chat lands behind a 16-minute queue.
-    //
-    // Phase 2 is now resumable (see corpus-engine
-    // `_phase_1b_parsed.jsonl`), so partial work survives a kill —
-    // but we still don't auto-trigger here. The debouncer (spawned
-    // during `KnowledgeViewManager::new` in Local mode) picks up
-    // `ConversationTouched` / `MemoryTouched` events, so new
-    // conversations land in the index incrementally. Backfill of
-    // existing-but-unfinished views is an explicit user action —
-    // call `KnowledgeViewManager::enrich(view_id)` from a UI button
-    // or a CLI command when the user wants a sweep.
-    let _ = knowledge_view_manager.as_ref();
-
     // Lazy-stamp canonical fingerprints for any installed canonicals
     // that don't yet carry one. Mirrors the daemon-mode bootstrap so
     // a Local/CliSetup desktop install gets the same legacy-corpus
@@ -943,403 +879,6 @@ pub async fn bootstrap_with_progress(
     )
     .await;
 
-    // `claim_search`, `epistemic_landscape` and `sec_facts` are
-    // `CoreTurnTools`, composed below — including the property this file used
-    // to have to state in a comment: `sec_facts` is what DECLARES authority
-    // over an installed SEC corpus, so it is never gated on a user switch. It
-    // now cannot be, because it declares no `ToolFamily` and the registry only
-    // withholds tools that do (`tests/authority_surface_census.rs`).
-    //
-    // Code Intelligence tools. Build the merged SCIP handle first so
-    // SymbolLookupTool can share it — exact-name lookup now reads
-    // SCIP directly (Lance kept only embeddings/content/mtime).
-    // `indexes_dir` was moved into `CorpusEngine::new` above; we have
-    // to re-derive the path from `sovereign_root` rather than reuse the binding.
-    // Code-intel SCIP graph. The merge imports every corpus's
-    // `scip_graph.db` into one in-memory graph; for a repo-scale code
-    // corpus that's hundreds of MB and ~17s (2026-06-29 boot trace). It
-    // is NOT needed to make chat usable, so register the tools against an
-    // EMPTY graph NOW and merge in the BACKGROUND, swapping the populated
-    // graph into the same `ArcSwap` handle the tools already hold. Until
-    // the swap lands the code-intel tools return empty (IndexHealthChecker
-    // reports "not ready") — graceful, and off the path to `backend-ready`.
-    let indexes_dir_for_scip = sovereign_root.join("indexes");
-    let symbols_graph: sovereign_mesh::reindexer::ScipGraphHandle =
-        Arc::new(arc_swap::ArcSwap::from_pointee(
-            corpus_engine_scip::ScipGraph::open_in_memory("merged")
-                .map_err(|e| format!("in-memory ScipGraph for symbols lookup: {e}"))?,
-        ));
-    {
-        let warm_dir = indexes_dir_for_scip.clone();
-        let warm_handle = Arc::clone(&symbols_graph);
-        tokio::spawn(async move {
-            let started = std::time::Instant::now();
-            let merged = match corpus_engine_scip::ScipGraph::open_in_memory("merged") {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::warn!(target: "bootstrap", error = %e, "scip-merge(bg): open failed; code-intel stays empty");
-                    return;
-                }
-            };
-            let mut imported = 0usize;
-            if let Ok(rd) = std::fs::read_dir(&warm_dir) {
-                for de in rd.flatten() {
-                    if !de.path().is_dir() {
-                        continue;
-                    }
-                    let scip_path = de.path().join("scip_graph.db");
-                    if scip_path.exists() && merged.import_from_path(&scip_path).await.is_ok() {
-                        imported += 1;
-                    }
-                }
-            }
-            warm_handle.store(Arc::new(merged));
-            tracing::info!(
-                target: "bootstrap",
-                imported,
-                elapsed_ms = started.elapsed().as_millis() as u64,
-                "scip-merge(bg): code-intel graph ready"
-            );
-        });
-    }
-
-    // ── The tool families this desktop carries ───────────────────────────
-    //
-    // Composed, not registered: each bundle holds the collaborators its tools
-    // need, and the shared recipe folds the list. What used to be 24
-    // `tools.register` calls — six of them wrapped in a hand-written
-    // `enabled_tools.iter().any(|t| t == "…")` match that was one of four
-    // drifting copies of the same five strings — is now a list of families
-    // plus one `ToolPermissions` (TOPOLOGY §10 phase 7b, ARCH §10.6).
-    //
-    // The user's switches are NOT applied here. They travel as
-    // `ToolSwitches::Chosen` and the registry withholds by declared
-    // `ToolFamily`, which is why `sec_facts` cannot be switched off by
-    // accident and why a family the user disabled comes back as a named
-    // withholding in a `BundleReport` instead of a line that never ran.
-    let notes_store = state.notes.read().await.as_ref().map(Arc::clone);
-    let features_store = state.features.read().await.as_ref().map(Arc::clone);
-    let tool_bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> = {
-        use sovereign_tools::bundles as fam;
-        let mut b =
-            sovereign_runtime_recipe::baseline_bundles(sovereign_runtime_recipe::BaselineDeps {
-                store: &store,
-                inference: &inference,
-                corpus_engine: &corpus_engine,
-                note_store: notes_store.as_ref(),
-                web: fam::WebReach::Granted(
-                    sovereign_core::egress::search_client()
-                        .expect("egress boundary search client build"),
-                ),
-                // Tier 3 web escalation, the operator's own setting. `Disabled`
-                // leaves the user-in-loop INFORMATION REQUEST card as the only
-                // web surface, which is the pre-2026-08 behaviour.
-                escalation: if config.auto_escalate_to_web {
-                    fam::WebEscalation::Enabled
-                } else {
-                    fam::WebEscalation::Disabled
-                },
-            });
-        // A family this surface deliberately does not carry, named so the
-        // decision is a value rather than a line missing from this list
-        // (ARCH §18.3). Composing it would ADD a tool the desktop has never
-        // had, which changes what the model may call and therefore changes
-        // answers — a §18.6 re-baseline, not part of adopting the recipe.
-        // The desktop's Wikipedia is an INSTALLED corpus and the link graph
-        // built from it, both wired below.
-        b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
-            "wikipedia",
-            "the desktop reads Wikipedia from an installed corpus; adding \
-             `wikipedia_fetch` here is a re-baseline, not a refactor",
-        )));
-        // Shell is composed unconditionally and GATED by the user's switch —
-        // that is the split this phase exists to make: what the host can
-        // provide, and what the person permitted, on two axes.
-        b.push(Box::new(fam::ShellTools));
-        b.push(Box::new(fam::DocumentOperations::new(
-            Arc::clone(&store),
-            Arc::clone(&inference),
-            // The one host that has somewhere to put pipeline phases.
-            fam::DocumentProgress::Streamed({
-                let approval_for_doc = Arc::clone(&state.approval);
-                Arc::new(move |p| approval_for_doc.emit_event("document-progress", &p))
-            }),
-        )));
-        // The privilege is the handle: this bundle cannot exist without the
-        // SCIP graph opened above, so the desktop can only offer code intel
-        // over an index it owns.
-        b.push(Box::new(fam::CodeIntelTools::new(
-            Arc::clone(&corpus_engine),
-            Arc::clone(&inference),
-            Arc::clone(&symbols_graph),
-        )));
-        // Recipe- and workflow-authoring, driven by the generic agent loop for
-        // a conversation tagged `skill_id = "recipe-author"` / `"workflow-
-        // author"`. Absent stores are a DEGRADATION, and the bundle reports
-        // which tools it dropped and why — the desktop used to say the same
-        // thing in two `tracing::warn!` calls nothing could read back.
-        b.push(Box::new({
-            let mut ra = fam::RecipeAuthoringTools::new();
-            if let Some(ns) = notes_store.as_ref() {
-                ra = ra.with_notes(Arc::new(
-                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(
-                        ns,
-                    )),
-                )
-                    as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
-            }
-            if let Some(fs) = features_store.as_ref() {
-                ra = ra.with_features(Arc::clone(fs));
-            }
-            ra
-        }));
-        b.push(Box::new(sovereign_workflow_host::WorkflowAuthoringTools));
-        b
-    };
-
-    // The user's answer to "which tool families may run here", read ONCE from
-    // the config that the settings panel writes. An id no family claims is
-    // reported rather than silently dropped.
-    let (permitted, unknown_tool_ids) =
-        sovereign_contracts::tool_bundle::ToolPermissions::from_wire_ids(&config.enabled_tools);
-    if !unknown_tool_ids.is_empty() {
-        tracing::warn!(
-            unknown = ?unknown_tool_ids,
-            "enabled_tools names ids no tool family claims; they govern nothing"
-        );
-    }
-
-    let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
-        Arc::clone(&state.approval) as Arc<dyn sovereign_core::traits::ApprovalChannel>;
-
-    let inference_config = {
-        let cfg = state.config.read().await;
-        InferenceConfig {
-            // Measurement lever: SOVEREIGN_SYNTH_TEMP forces the synthesis
-            // temperature (default 0.7 → high output variance) so a replay A/B
-            // isolates a code change instead of drowning it in sampling noise.
-            // Unset in production; set to 0 for deterministic measurement runs.
-            temperature: std::env::var("SOVEREIGN_SYNTH_TEMP")
-                .ok()
-                .and_then(|v| v.parse::<f32>().ok())
-                .unwrap_or(cfg.temperature),
-            max_tokens: cfg.max_tokens as usize,
-            think_budget: cfg.think_budget as usize,
-            top_k: cfg.top_k,
-            auto_collaborate: cfg.auto_collaborate,
-            custom_instructions: cfg
-                .custom_instructions
-                .as_ref()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-        }
-    };
-
-    // Mesh knowledge client — talks to our OWN local Commonwealth
-    // daemon at 127.0.0.1:9741. When no mesh is active, reqwest
-    // immediately gets ECONNREFUSED and the client returns an empty
-    // vec — so installing this unconditionally is safe: the Runtime
-    // path stays identical to the no-mesh world in that case, and
-    // "flips on" automatically the moment the user creates/joins.
-    //
-    // Client construction is infallible in practice (builder only
-    // errors on TLS config, which doesn't apply to localhost HTTP);
-    // if something truly goes wrong, skip mesh injection and log —
-    // the local-only retrieval path is still functional.
-    let mesh_client_base = state.client_base_url();
-    let mesh_knowledge: Option<Arc<dyn sovereign_core::traits::MeshKnowledgeSource>> =
-        match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new(&mesh_client_base) {
-            Ok(c) => {
-                tracing::info!(base_url = %mesh_client_base, "mesh knowledge client: wired");
-                Some(Arc::new(c))
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "mesh knowledge client build failed; local-only retrieval");
-                None
-            }
-        };
-
-    // Snapshot the local-only skill ids BEFORE the registry is
-    // consumed by `Runtime::new`. The attach-mode landscape-digest
-    // client below needs them to resolve `active_is_local_only`
-    // before sending each request to the daemon.
-    let local_only_skill_ids_for_digests = skills.local_only_skill_ids();
-
-    // No `emit` here. The recipe drives the remaining phases through
-    // `SplashProgress` — tools, then the router, then the lane — and emitting
-    // `BuildingRuntime` first would run the splash backwards.
-    //
-    // ── The desktop commissions through THE shared recipe ────────────────
-    //
-    // `quality/TOPOLOGY.md` §10 phase 7. Everything between this call and the
-    // struct update below used to live in this file, by hand: the tool
-    // registry, the router's authority probe, the MCP loader, the atlas
-    // manager and its cache init, the bump flusher, the wiki graph, the
-    // reranker, the deferred meta-atlas warm and the GLiNER load. Two of those
-    // were found MISSING from other hosts by diffing them against this recipe,
-    // and one — the adaptive-triage bump flusher — was missing HERE, on the
-    // one long-lived interactive surface where it mattered most (2026-08-25).
-    // That is the argument for one recipe rather than three good copies.
-    //
-    // What stays is what only a desktop has: a settings panel's tool
-    // switches, a document-progress channel, a compaction worker, an
-    // attach-mode digest client, a watched-folder oracle and a Tauri event
-    // sink. Each is a value below, not a builder call.
-    let common =
-        sovereign_runtime_recipe::common_parts(
-            sovereign_runtime_recipe::RecipeInputs {
-                inference: Arc::clone(&inference),
-                store: Arc::clone(&store),
-                // The concrete `SqliteStateStore` stashed at bootstrap also impls
-                // `ConvTieredReader` (spec CONV_TIERED_PORT.md); the same handle,
-                // so per-conversation RAPTOR signposts sit beside raw chunks.
-                conv_tiered: state.sqlite_store.read().await.as_ref().map(|ss| {
-                    Arc::clone(ss) as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>
-                }),
-                corpus_engine: Arc::clone(&corpus_engine),
-                // Tool-Mastery Layer 3 — drives the per-conversation
-                // `tool_decision` write hook and the Layer-2 dossier read at the
-                // top of the next turn. The already-opened store, not a second
-                // handle: one sqlite writer per data root.
-                note_store: notes_store.clone(),
-                skills: Arc::clone(&skills),
-                approval,
-                inference_config,
-                indexes_dir: sovereign_root.join("indexes"),
-                embed_model: embed_model_name.clone(),
-                tool_bundles,
-                switches: sovereign_runtime_recipe::ToolSwitches::Chosen(permitted),
-                // The desktop's MCP servers ARE the canonical array — the settings
-                // pane writes it — so there is nothing extra to add here.
-                mcp_extra: Vec::new(),
-                // A window the user is looking at must become interactive; the
-                // meta-atlas is a ~1 GB parse. This surface reached that
-                // conclusion in 2026-06 and the recipe now carries it for
-                // everyone, including GLiNER's ~950 ms load.
-                warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
-                // Serves every installed corpus, so every lane member is
-                // reachable. Byte-identical to the behaviour this host had
-                // before `LaneScope` existed.
-                scope: sovereign_runtime_recipe::LaneScope::All,
-                // The desktop's embedded engine has no rerank slot of its own, so
-                // a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is
-                // the only way this surface gets one. The VRAM pre-flight inside
-                // that loader is what keeps it from landing beside a resident
-                // primary that does not leave room for it (note `b57b0cd5`).
-                rerank: sovereign_runtime_recipe::RerankWiring::Standalone,
-            },
-            &SplashProgress(&emit),
-        )
-        .await;
-
-    // The Settings → MCP pane reads per-server status off this manager. The
-    // live transports belong to the tools now in the registry.
-    *state.mcp_servers.write().await = Some(Arc::new(common.mcp));
-
-    // Share the ONE extractor: retrieval (through the Runtime's lane) and
-    // document ingest (through `state.entity_extractor`) drive the same
-    // warming model rather than loading it twice.
-    if let Some(ref gliner) = common.parts.lane.gliner {
-        *state.entity_extractor.write().await = Some(Arc::clone(gliner));
-    }
-
-    // ── Commission ───────────────────────────────────────────────────────
-    // Every provider this host enriches with exists by now, so the Runtime is
-    // built ONCE, total. Nothing below this line can add one.
-    // ── Resolve every host-settable slot BEFORE commissioning ────────────
-    //
-    // Phase 5 (2026-08-25): the ten `with_*` builders are gone and
-    // `RuntimeParts` is total, so each slot below is decided here as a VALUE
-    // and written once. The desktop called eleven builders — more than the
-    // other two hosts combined — and which of the other hosts' omissions were
-    // policy versus oversight could not be read off any of the three. Now the
-    // three commissioning sites are diffable.
-
-    // Landscape-digest provider wiring. Three branches:
-    //
-    // 1. **Local mode + KnowledgeView enabled** — install the local
-    //    `KnowledgeViewManager` (already constructed above).
-    // 2. **Attach mode** — fetch digests from the daemon's
-    //    `POST /v1/knowledge/landscape_digest` endpoint via
-    //    `MeshLandscapeDigestClient`. The desktop sends the
-    //    caller-resolved `active_is_local_only` so the daemon
-    //    doesn't have to introspect the skill registry.
-    // 3. **KnowledgeView disabled** — the slot stays `None`, the splice path
-    //    is a no-op (identical to pre-KnowledgeView behaviour).
-    let landscape_digests: Option<Arc<dyn sovereign_core::traits::LandscapeDigestProvider>> =
-        if let Some(ref mgr) = knowledge_view_manager {
-            Some(Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
-        } else if state.is_attach_mode() && config.knowledge_view_enabled {
-            let digest_base = state.client_base_url();
-            match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
-                &digest_base,
-                local_only_skill_ids_for_digests,
-            ) {
-                Ok(client) => {
-                    tracing::info!(
-                        base_url = %digest_base,
-                        "knowledge_view: attach mode — landscape digest client wired \
-                         to {digest_base}/v1/knowledge/landscape_digest"
-                    );
-                    Some(Arc::new(client)
-                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "knowledge_view: attach-mode landscape digest client build \
-                         failed; chat splice will run without digests this session"
-                    );
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-    // Folder-ingest v1 §3.4 + §6.3: the watched-folder manager is both the
-    // sensitive-corpus oracle (which corpora to drop from ambient retrieval)
-    // and the folder-metadata oracle (the user-typed display names + skipped/
-    // failed counters the synthesis prompt and chat coverage chip depend on).
-    // When the manager isn't ready (init failed earlier) both stay absent —
-    // same shape as the landscape-digest wiring above.
-    let local_corpus_mgr = state.local_corpus.read().await.as_ref().map(Arc::clone);
-
-    // Six slots, and only six. `corpus_engine`, `note_store`, the router, the
-    // planner, the registry and the whole enrichment lane came back from the
-    // recipe already filled, so what is written here is exactly the set of
-    // capabilities that are DESKTOP-shaped — which is what makes this file
-    // diffable against the daemon's commission and the server's.
-    let runtime_arc = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
-        // The desktop never owns the `sovereign.db` a rolling-summary pass
-        // would compact — the daemon at the other end does, and runs its own
-        // worker. Spawning one here was two writers deriving summaries from
-        // each other's rows (sv-surface D0, then structural at svt-3).
-        compaction: None,
-        landscape_digests,
-        mesh_knowledge,
-        sensitive_corpora: local_corpus_mgr
-            .as_ref()
-            .map(|m| Arc::clone(m) as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>),
-        folder_metadata: local_corpus_mgr
-            .as_ref()
-            .map(|m| Arc::clone(m) as Arc<dyn sovereign_core::traits::FolderMetadataOracle>),
-        // PR2 — the Tauri routing-events sink, so the runtime can fire
-        // interpretation-proposed / clarification-request / turn-narration
-        // back to the desktop UI.
-        routing_events: Arc::clone(&state.routing_events)
-            as Arc<dyn sovereign_core::traits::RoutingEventSink>,
-        // Named absence: the desktop is single-user, so no principal resolver.
-        ..common.parts
-    });
-    *state.runtime.write().await = Some(Arc::clone(&runtime_arc));
-
-    // The deferred meta-atlas warm that stood here is the recipe's
-    // `LaneWarmth::Deferred` arm now. It fills `lane.meta_atlas` — the same
-    // `ArcSwapOption` cell `install_meta_atlas` stores into — and it starts
-    // BEFORE commissioning rather than after, so the window in which a turn
-    // could run without the cross-corpus boost got shorter, not longer.
-
     // Background startup task: verify per-corpus vector index readiness and
     // write results to the store so handle_knowledge_query can gate correctly.
     {
@@ -1382,10 +921,17 @@ pub async fn bootstrap_with_progress(
     Ok(())
 }
 
-/// Rebuild the Runtime with updated config. Reuses the loaded model and database.
+/// Re-run bootstrap after a config change. **There is no Runtime to rebuild
+/// any more** — the name is kept for one commit because its three callers live
+/// in `commands/config_setup.rs`, another worker's file this session, and a
+/// rename there is a collision rather than a fix. Owed: fold it into
+/// [`bootstrap`], which is now byte-for-byte what it does (ARCH principle 8 —
+/// two names for one decider).
+///
+/// What the callers actually want is unchanged and still happens: they set
+/// `state.inference` to `None` first, so bootstrap builds a fresh provider
+/// against whatever port and model ids the new config names.
 pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
-    // Drop existing runtime first to release Arc references.
-    *state.runtime.write().await = None;
     bootstrap(state).await
 }
 

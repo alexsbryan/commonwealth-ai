@@ -6630,6 +6630,92 @@ work pins the GPU while the user is chatting. Components:
   `sovereign/DEFAULTS_LEDGER.md` carries the row, for this and the GPU probe
   together.
 
+- **svt-3b — the desktop commissions no `Runtime` — 2026-09-11.** svt-3a took
+  the daemon; this takes the turn. `sovereign_runtime_recipe::{baseline_bundles,
+  common_parts, commission}` are gone from `state.rs` and
+  **`sovereign-runtime-recipe` leaves `src-tauri/Cargo.toml`** — one of the two
+  paths by which `sovereign-tools` was reachable, which is the case the
+  `[thin_surfaces]` reachability rule was built for.
+
+  The desktop built a full private turn — a `SkillRegistry`, eleven
+  `ToolBundle`s, the merged SCIP graph, the mesh knowledge client, the
+  landscape-digest provider, a `KnowledgeViewManager` — **in attach mode too**,
+  and every turn has crossed the wire since sv-surface R5. The attach-floor
+  census named this the blocker: eleven of its twelve needles were consumed by
+  the commission and nothing else. **Floor 12 -> 6.** What is left is what the
+  desktop's own surfaces read: its `sovereign.db` handle, the corpus engine,
+  the local-corpus manager, the tiered-enrichment provider, GLiNER, and the
+  daemon-routing inference provider.
+
+  **Four Runtime readers, and NOT ONE needed a new daemon route** (the audit is
+  the reason this landed in one pass rather than behind a route queue):
+
+  * `search_web` (`commands/models.rs`) reached `runtime.tools.get("search")`
+    and was the only reader wanting a HANDLE. No daemon route runs a named
+    tool — `/mcp`'s `tools/call` is allowlisted by
+    `sovereign_tools::mcp_surface`, which does not carry `"search"`, over a
+    registry holding only code-intel and notes tools; and the turn socket's
+    `intent: SimpleAction { tool }` is accepted on the wire and discarded by
+    both dispatchers (`sovereign-core/src/runtime/authority_guard.rs:386-394`).
+    It did not need one: `submit_information_search`
+    (`commands/conversation.rs:509`) has run this exact search with NO Runtime
+    since it landed. Lifted to `state::web_search_once` and shared.
+    **Behaviour delta, named:** the tool path collapsed every unhandled
+    `StepOutput` shape AND a zero-result search into the literal
+    `"No results found."`, saved it as an assistant message and returned `Ok`;
+    both are `Err` with the backend named now, and nothing is written.
+  * `ask_document`'s `Runtime::maybe_collaborate(.., abstained: false)`
+    (`commands/document_asset.rs`) was a value-preserving identity function,
+    provably: `run_collaboration` returns `NotAttempted` on `!abstained` before
+    doing anything (`runtime/collaboration.rs:177-180`) and
+    `maybe_collaborate` flattens that back to its input
+    (`runtime/system_message.rs:779-784`). The comment above it said so in
+    prose.
+  * `cancel_stream`'s local pair is served by the daemon's
+    `TurnRequest::Cancel` arm (`sovereign-mesh/src/turn_http.rs:1433-1449`),
+    which runs the same two operations PLUS `approvals.abandon()` — a strict
+    superset, on the process that owns the session store.
+  * `redirect_turn`'s session -> conversation fallback has no daemon
+    replacement BY DESIGN: `turn_extras_http.rs:22` says "NOT here … the
+    surface already learns that pairing from the routing cards it receives",
+    and `state.session_conversations` is that mechanism.
+
+  Gone with them: `AppState.{runtime, notes, features, mcp_servers}` (none had
+  a reader outside `state.rs`; `lessons`, `recipe_author_commands` and
+  `mcp_list_servers` already reach `/v1/notes`, `/v1/features/*` and the
+  daemon's MCP config), `state/builders/knowledge_view.rs` (its own attach
+  guard already returned `None`, and attach is the only mode),
+  `state/builtin_skills.rs`, and the `SplashProgress` recipe adapter.
+  `AppState.entity_extractor` keeps its feature and drops a duplicate load: it
+  used to arrive as `common.parts.lane.gliner` while this file loaded GLiNER
+  separately for the corpus engine, and is now one `LazyGlinerExtractor` beside
+  that load.
+
+  **A feature gap is RECORDED, not created.** `AppState.routing_events` has no
+  reader. The `interpretation-proposed`, `clarification-request` and
+  `turn-narration` Tauri events it emits drive an inline banner, the
+  `ClarificationCard` and the mid-turn narration chip, and they have been dark
+  on the shipped path since R5 — the sink was only ever installed on an
+  in-process `Runtime`. The wire ALREADY DELIVERS all three:
+  `commands/chat.rs`'s `render_turn_frames` receives
+  `TurnNotice::{InterpretationProposed, ClarificationRequest}` and uses them
+  only to record the session pairing (`chat.rs:506-519`), and drops
+  `TurnFrame::Narration` (`chat.rs:759-762`). Re-emitting them there is the
+  fix; the field and `routing_events.rs` are kept inert so the payload shapes
+  stay beside the gap.
+
+  **Two censuses moved with their subject, both watched red.** The attach floor
+  took six zeros and its total assertion went 11 -> 5.
+  `authority_surface_census` broke at hop 2 ("state.rs composes
+  `baseline_bundles`") and its own error text named the rewrite: the desktop can
+  STILL install an SEC corpus by ticker, so the invariant holds and its chain
+  now crosses a process — desktop installs into `rebrand::svrnmesh_root()/
+  indexes`, the daemon reads that root, the daemon composes `baseline_bundles`.
+  The shared root is asserted (hop 2a), because a privately-derived path on
+  either side would let the desktop install a corpus the answering process
+  cannot see, which reads as "no authority declared" and falls through to
+  ungrounded streaming.
+
   **One census row was owed elsewhere and is paid here.**
   `sovereign-mesh/tests/main/daemon_variant_census.rs` listed `state.rs` as a
   live `DaemonServices::Desktop` construction site; deleting the commission

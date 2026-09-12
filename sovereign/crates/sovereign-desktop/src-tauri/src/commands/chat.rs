@@ -1024,93 +1024,54 @@ pub async fn cancel_stream(
     // QUEUED, not acted. The acknowledgement is the turn's own terminal
     // frame (`Complete` with `provenance.finish_reason: "cancelled"`,
     // which the renderer already turns into `message-complete`), and it
-    // arrives later or not at all. So a queued send does NOT license
-    // skipping the local pair below: in Local mode the daemon's turn IS
-    // this process's, and tripping its session token is idempotent with
-    // the daemon's own abort; in attach mode there is no local session to
-    // trip and the block is a no-op. Only the wire send is skipped when
-    // no turn is parked here.
-    let wire_sent = match state.turn_wire.sender_for(&conversation_id).await {
+    // arrives later or not at all.
+    //
+    // sv-surface svt-3b: there is no local pair to fall back to, and losing
+    // it costs nothing. The daemon's `TurnRequest::Cancel` arm
+    // (`sovereign-mesh/src/turn_http.rs:1433-1449`) runs the SAME two
+    // operations this used to run in-process — `sessions
+    // .latest_for_conversation(..).cancel.cancel()` and
+    // `sessions.cancel_preparing(..)` — plus one this never did:
+    // `approvals.abandon()`, which unparks a turn blocked on a consent card
+    // (sv-surface RB2). It is a strict superset, on the process that owns the
+    // session store. The argument for keeping the local pair was that a queued
+    // send is not an ack; what it actually bought was tripping a token in a
+    // session store this process no longer has.
+    match state.turn_wire.sender_for(&conversation_id).await {
         Some(sender) => match sender.send_cancel() {
             Ok(()) => {
                 tracing::info!(
                     conversation_id,
                     "cancel_stream: wire cancel queued — the turn's Complete will say cancelled"
                 );
-                true
+                Ok(())
             }
+            // Absence is REPORTED (ARCH principle 6). The writer is gone, so
+            // nothing was cancelled; saying `Ok` would be the substitution.
             Err(e) => {
                 tracing::warn!(
                     conversation_id,
                     error = %e,
-                    "cancel_stream: the turn socket's writer is gone — falling back to the local pair"
+                    "cancel_stream: the turn socket's writer is gone — nothing was cancelled"
                 );
-                false
+                Err(format!(
+                    "cancel_stream: the turn socket for conversation {conversation_id} is \
+                     closed, so the cancel could not be delivered: {e}"
+                ))
             }
         },
+        // Not an error: the stream already finished, which is the common
+        // case behind a late Stop click. The UI recovers optimistically in
+        // `handleStop` either way.
         None => {
             tracing::info!(
                 conversation_id,
-                "cancel_stream: no wire turn is parked for this conversation"
+                "cancel_stream: no wire turn is parked for this conversation — \
+                 nothing in flight (already finished?)"
             );
-            false
-        }
-    };
-
-    let guard = state.runtime.read().await;
-    let Some(runtime) = guard.as_ref() else {
-        // No local turn machinery at all (attach mode, or bootstrap still
-        // in flight). If the wire took the cancel that is the whole
-        // answer; if it did not, nothing was cancelled and saying `Ok`
-        // would be the §18.3 substitution.
-        return if wire_sent {
             Ok(())
-        } else {
-            Err(format!(
-                "cancel_stream: no wire turn is parked for conversation {conversation_id} \
-                 and this surface holds no local runtime"
-            ))
-        };
-    };
-    // Cancel the registered session if one exists…
-    let hit_session = runtime
-        .sessions
-        .latest_for_conversation(&conversation_id)
-        .map(|session| {
-            session.cancel.cancel();
-            session.id.clone()
-        });
-    // …AND trip any reserved preparing-window token. On a slow model the
-    // Stop click races session registration: `latest_for_conversation`
-    // above may have cancelled the PREVIOUS (stale) session while the real
-    // turn is still in preparing (build-context + classify + retrieve, ~5s
-    // on a 4B). `cancel_preparing` trips the token `sessions.begin` will
-    // ADOPT, so the cancel carries through no matter which side of
-    // registration we landed on. (2026-07-07 slow-model race.)
-    let hit_preparing = runtime.sessions.cancel_preparing(&conversation_id);
-    match (&hit_session, hit_preparing) {
-        (Some(id), _) => tracing::info!(
-            session_id = %id,
-            preparing = hit_preparing,
-            conversation_id,
-            "cancel_stream: user requested abort"
-        ),
-        (None, true) => tracing::info!(
-            conversation_id,
-            "cancel_stream: cancelled a preparing turn (raced session registration)"
-        ),
-        (None, false) => tracing::info!(
-            // Neither a live session nor a preparing turn — the stream
-            // likely already finished. The desktop UI recovers optimistically
-            // in `handleStop` regardless; log the inventory so an id/timing
-            // mismatch stays legible.
-            conversation_id,
-            wire_sent,
-            live_sessions = ?runtime.sessions.conversation_ids(),
-            "cancel_stream: nothing in flight locally — cancel is a no-op (already finished?)"
-        ),
+        }
     }
-    Ok(())
 }
 
 /// PR2c — cancel the in-flight Propose-mode sampler AND start a new
@@ -1141,31 +1102,26 @@ pub async fn redirect_turn(
         let map = state.session_conversations.read().await;
         map.get(&session_id).cloned()
     };
-    let conversation_id = match conversation_id {
-        Some(cid) => cid,
-        None => {
-            // sv-surface D9 — the third no-fork degradation, named
-            // rather than left to read an empty register. The fallback
-            // asks whichever `Runtime` THIS process happens to host: in
-            // Local that is the same object the embedded daemon serves
-            // the turn from, so it answers; in attach this process has
-            // never seen the session and `require_runtime!` reported
-            // that as "Backend is still loading", which is a different
-            // and wrong fact (ARCH §18.3). A soft read, so the mode is
-            // not branched on — "Local" is just the boot where the
-            // daemon happens to be in-process — and a named refusal
-            // when nobody here knows the pairing.
-            let hosted = state.runtime.read().await;
-            hosted
-                .as_ref()
-                .and_then(|rt| rt.sessions.get(&session_id).map(|s| s.conversation_id.clone()))
-                .ok_or_else(|| {
-                    format!(
-                        "session {session_id} is not paired with a conversation on this surface                          — the routing card that would have recorded it never arrived, and this                          process does not host the session store that owns the pairing"
-                    )
-                })?
-        }
-    };
+    let conversation_id = conversation_id.ok_or_else(|| {
+        // sv-surface svt-3b: the in-process fallback that stood here asked
+        // whichever `Runtime` this process happened to host for the pairing.
+        // In Local mode that was the daemon's own session store and it
+        // answered; there is no Local mode and no hosted store, so the
+        // fallback could only ever return the same refusal this does.
+        //
+        // The daemon serves no replacement, and that is a DECISION rather
+        // than a gap: `sovereign-mesh/src/turn_extras_http.rs:22` says so by
+        // name — "NOT here: the session -> conversation lookup — the surface
+        // already learns that pairing from the routing cards it receives".
+        // Its only `sessions.get` in an HTTP file is an ownership GUARD that
+        // deliberately does not disclose the owning conversation
+        // (`turn_http.rs:1595-1611`). `state.session_conversations`, recorded
+        // as the routing cards arrive, IS the intended mechanism.
+        format!(
+            "session {session_id} is not paired with a conversation on this surface — the \
+             routing card that would have recorded it never arrived"
+        )
+    })?;
 
     let store_for_metadata = {
         let guard = state.store.read().await;
