@@ -116,7 +116,7 @@
 | `doc-coverage` | `cargo doc --no-deps (RUSTDOCFLAGS=--show-coverage, pinned nightly)` | tracked | F0 | unmeasured | **no** |
 | `drift-detect` | `sovereign drift detect` | tracked | F3 | unmeasured | **no** |
 | `inner-chaos-soak` | `sovereign-cli-llm eval inner-chaos --minutes <n> --journal <path>` | tracked | F3 | unmeasured | **no** |
-| `judge-replay-bank-feed` | `sovereign/bench/chaos_monkey/feed_replay_bank.sh` | advisory | F3 | unmeasured | **no** |
+| `judge-replay-bank-feed` | `sovereign/bench/chaos_monkey/feed_replay_bank.sh` | advisory | F3 | 15m | **no** |
 | `mesh-live-probe` | `python3 scripts/mesh-live-probe.py` | advisory | F3 | unmeasured | **no** |
 | `module-cycles` | `cargo modules dependencies --acyclic -p <crate>` | tracked | F0 | unmeasured | **no** |
 | `pre-commit` | `./scripts/pre-commit.sh` | advisory | F0 | unmeasured | **no** |
@@ -223,7 +223,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `judge-replay` | `port-listening:9741`<br>`slot-decodes:primary` | `--render-only` | the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register |
 |  |  | `--repeat N` | one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise |
 | `judge-replay-bank-feed` | `port-listening:9741`<br>`slot-decodes:primary`<br>`corpus-installed:chaos-secret-agent` | `SOVEREIGN_GATE_AUDIT_FORENSICS` | set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves |
-|  |  | `--limit` | the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode |
+|  |  | `--limit` | the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode. The DEFAULT is derived from the bank (the position of the first `present-maximal-*` id) rather than hand-set, because a number here goes stale silently when the bank is reordered — the lane would report could-not-judge forever and read as a flaky daemon |
 | `judge-replay-report` | — | `a second --verdicts arm` | ONE arm is a reading, not a trade — with no base to price against, the run reports never-ran rather than a pass |
 |  |  | `--tau` | the operating point the comparison is read at; a catch lost at 0.9 may not be lost at 0.6, and the trade is about the point production runs |
 | `knowledge-gym` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
@@ -388,5 +388,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**114 instruments, 13 with a negative control, 56 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
+**114 instruments, 13 with a negative control, 55 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
 
