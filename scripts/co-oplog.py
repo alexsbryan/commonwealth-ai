@@ -116,27 +116,80 @@ def sentences(text: str) -> list[str]:
                 out.append(s)
     return out
 
-def turns(path: Path) -> list[tuple[int, str]]:
-    """(turn index, assistant text) for every substantive message."""
-    out, i = [], 0
+def turns(path: Path) -> list[tuple[int, str, str, str]]:
+    """(turn index, assistant text, iso timestamp, audience) per message.
+
+    AUDIENCE is structural, not a judgement: a text block the operator
+    speaks after is addressed to the operator; one a TOOL CALL follows is
+    working narration the agent addressed to itself.
+
+    MEASURED 2026-09-12 over 38 sessions: 1,449 assistant text blocks of
+    120+ chars, of which **49 (3%) are terminal** and 1,400 (97%) are
+    narration. Adjudicating all of them is why the first promise run
+    returned 52 promises, 17 kept and ZERO broken — they were micro-
+    intentions ("Let me read the region before cutting") discharged by the
+    very next tool call, which no ledger should have been holding open.
+
+    The timestamp is not decoration. A claim is adjudicated against an
+    INTERVAL — the commit that was HEAD when it was made, to the commit
+    when it came due — so without the moment there is no T0 and the git
+    rung of the golden ladder cannot be reached at all."""
+    # Two passes: the audience of a block is decided by what comes AFTER
+    # it, so the sequence has to exist before any block can be labelled.
+    events: list[tuple[str, int, str, str]] = []   # (kind, idx, text, when)
+    i = 0
     with path.open() as fh:
         for line in fh:
             try:
                 rec = json.loads(line)
             except Exception:
                 continue
-            if rec.get("type") != "assistant":
-                continue
             content = (rec.get("message") or {}).get("content")
             if not isinstance(content, list):
                 continue
-            for b in content:
-                if isinstance(b, dict) and b.get("type") == "text":
-                    t = strip_reminders(b.get("text", ""))
-                    if len(t) >= 120:
-                        i += 1
-                        out.append((i, t))
+            when = rec.get("timestamp") or ""
+            if rec.get("type") == "assistant":
+                for b in content:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "text":
+                        t = strip_reminders(b.get("text", ""))
+                        if len(t) >= 120:
+                            i += 1
+                            events.append(("text", i, t, when))
+                    elif b.get("type") == "tool_use":
+                        events.append(("tool", 0, "", when))
+            elif rec.get("type") == "user":
+                is_result = any(isinstance(b, dict) and b.get("type") == "tool_result"
+                                for b in content)
+                events.append(("result" if is_result else "user", 0, "", when))
+
+    out = []
+    for n, (kind, idx, text, when) in enumerate(events):
+        if kind != "text":
+            continue
+        nxt = next((k for k, *_ in events[n + 1:] if k in ("tool", "user")), "user")
+        out.append((idx, text, when, "operator" if nxt == "user" else "self"))
     return out
+
+
+# ---- the git rung -------------------------------------------------------
+
+def git(*args: str) -> str:
+    import subprocess
+    return subprocess.run(["git", *args], capture_output=True, text=True,
+                          cwd=REPO).stdout.strip()
+
+REPO = os.environ.get("SOVEREIGN_REPO", str(Path.cwd()))
+
+def sha_at(when: str) -> str | None:
+    """The commit that was HEAD at `when`. None when git cannot say —
+    reported, never defaulted to HEAD, which would silently adjudicate a
+    claim against a tree it never saw."""
+    if not when:
+        return None
+    out = git("rev-list", "-1", f"--before={when}", "HEAD")
+    return out or None
 
 # ---- the daemon --------------------------------------------------------
 
@@ -225,6 +278,44 @@ def classify_batch(sents: list[str], pin: str,
         note = f"reply covered {len(got)} of {len(sents)} sentences"
     return [got.get(i + 1) for i in range(len(sents))], model, note
 
+# ---- rung 1: the git interval ------------------------------------------
+
+PROMISE_SYSTEM = """You decide whether a commitment was fulfilled by the changes shown.
+
+Answer exactly one word:
+KEPT          the changes contain the thing that was promised.
+BROKEN        the changes do not, and they are substantial enough that it would
+              be visible if it were there.
+CANNOT-JUDGE  the changes cannot settle it either way.
+
+A promise to investigate, look, or check is KEPT by evidence of looking.
+A promise to build something is KEPT only by that thing appearing."""
+
+# A stat is compact and names every file: enough to see whether a thing
+# landed, cheap enough to send once per interval.
+DIFF_CAP = 6000
+
+def interval_evidence(t0: str, t1: str) -> tuple[str, int]:
+    """-> (rendered evidence, commits in the interval)."""
+    if not t0 or not t1 or t0 == t1:
+        return "", 0
+    log = git("log", "--oneline", f"{t0}..{t1}")
+    stat = git("diff", "--stat", f"{t0}..{t1}")
+    n = len([l for l in log.splitlines() if l.strip()])
+    body = f"COMMITS IN THE INTERVAL ({n}):\n{log}\n\nFILES CHANGED:\n{stat}"
+    return (body[:DIFF_CAP] + "\n[…truncated]" if len(body) > DIFF_CAP else body), n
+
+def adjudicate_promise(text: str, evidence: str, pin: str,
+                       timeout: float) -> tuple[str, str]:
+    out, model, _ = call_daemon(
+        PROMISE_SYSTEM,
+        f"{evidence}\n\nPROMISE: {text}\n\nOne word:",
+        pin, 8, None, timeout,
+    )
+    word = out.strip().upper().split()[0] if out.strip() else ""
+    word = word.strip(".:,`\"'")
+    return (word if word in ("KEPT", "BROKEN", "CANNOT-JUDGE") else "CANNOT-JUDGE"), model
+
 # ---- rows --------------------------------------------------------------
 
 def now() -> str:
@@ -240,15 +331,34 @@ DECIDABLE_AT = {
 }
 
 def rows_for(session_id: str, path: Path, pin: str, batch: int,
-             timeout: float, use_daemon: bool) -> list[dict]:
+             timeout: float, use_daemon: bool,
+             include_self: bool = False) -> list[dict]:
+    """Rows for one session.
+
+    By default only OPERATOR-FACING sentences reach the daemon. 97% of
+    assistant text blocks are working narration the agent addressed to
+    itself (measured 2026-09-12, 1,400 of 1,449 over 38 sessions), and
+    classifying them cost 311s per session to produce 52 promises of which
+    zero could be broken. Narration is still recorded — `class: null,
+    decided_by: "not-classified"` — so the denominator stays honest and
+    `--include-self` can go back for it.
+    """
     rows, pending = [], []   # pending: (turn, sent, row_index)
-    for turn, text in turns(path):
+    for turn, text, when, audience in turns(path):
+        t0 = sha_at(when)
         for sent in sentences(text):
             cls = mechanical(sent)
             row = {
                 "kind": "claim", "schema": "claim-oplog/v1",
                 "session": session_id, "turn": turn,
                 "text": sent, "class": cls,
+                # T0: the tree this claim was made against. An assertion
+                # true when made and false now is not a broken claim.
+                "at_sha": t0, "at_time": when,
+                # Who the claim was made TO. Only operator-facing claims
+                # carry integrity weight; the rest is the agent talking to
+                # itself while it works.
+                "audience": audience,
                 "decided_by": "mechanical" if cls else None,
                 "engine": None,
                 "decidable_at": DECIDABLE_AT.get(cls) if cls else None,
@@ -257,7 +367,10 @@ def rows_for(session_id: str, path: Path, pin: str, batch: int,
             }
             rows.append(row)
             if cls is None:
-                pending.append((len(rows) - 1, sent))
+                if include_self or audience == "operator":
+                    pending.append((len(rows) - 1, sent))
+                else:
+                    row["decided_by"] = "not-classified"
 
     if not use_daemon:
         for idx, _ in pending:
@@ -304,7 +417,8 @@ def resolve(project: str, ident: str) -> Path:
 def cmd_extract(a) -> int:
     path = resolve(a.project, a.session)
     sid = path.stem
-    rows = rows_for(sid, path, a.pin, a.batch, a.timeout, not a.no_daemon)
+    rows = rows_for(sid, path, a.pin, a.batch, a.timeout, not a.no_daemon,
+                    getattr(a, "include_self", False))
     counts = {}
     for r in rows:
         counts[r["class"] or r["decided_by"]] = counts.get(r["class"] or r["decided_by"], 0) + 1
@@ -318,8 +432,65 @@ def cmd_extract(a) -> int:
             print(f"  {k:16} {counts[k]:5}")
         adjudicable = sum(counts.get(c, 0) for c in ("promissory", "universal", "retrospective"))
         print(f"  {'adjudicable':16} {adjudicable:5}  ({100*adjudicable/max(len(rows),1):.1f}%)")
+        to_op = sum(1 for r in rows if r["audience"] == "operator")
+        print(f"  {'to the operator':16} {to_op:5}  ({100*to_op/max(len(rows),1):.1f}%) — the rest is working narration")
         if a.append:
             print(f"appended {len(rows)} rows to {VERDICTS_LOG}")
+    return 0
+
+def cmd_promises(a) -> int:
+    """Adjudicate this session's promises against the git interval.
+
+    Rung 1 of the golden ladder: a promise opens at the commit that was
+    HEAD when it was made and closes at the commit at session end, and the
+    diff between them is the evidence. An EMPTY interval is could-not-judge
+    and NEVER broken — 6 of 40 recent sessions committed nothing at all,
+    and absence of commits is not evidence of absence of work (§18.3)."""
+    path = resolve(a.project, a.session)
+    sid = path.stem
+    rows = rows_for(sid, path, a.pin, a.batch, a.timeout, not a.no_daemon,
+                    a.include_self)
+    promises = [r for r in rows
+                if r["class"] in ("promise", "promissory")
+                and (a.include_self or r["audience"] == "operator")]
+    if not promises:
+        print(f"session {sid}: no promise rows (classified {len(rows)} sentences)")
+        return 0
+
+    turns_ = turns(path)
+    end_sha = sha_at(turns_[-1][2]) if turns_ else None
+    cache: dict[tuple, tuple[str, int]] = {}
+    counts: dict[str, int] = {}
+    print(f"session {sid}  promises={len(promises)}  T1={(end_sha or '—')[:12]}")
+    for r in promises:
+        t0 = r.get("at_sha")
+        key = (t0, end_sha)
+        if key not in cache:
+            cache[key] = interval_evidence(t0, end_sha)
+        evidence, n = cache[key]
+        if not evidence:
+            verdict, engine, why = "could-not-judge", None, "no commits in the interval"
+        else:
+            try:
+                word, engine = adjudicate_promise(r["text"], evidence, a.pin, a.timeout)
+            except DaemonDown as e:
+                word, engine = "could-not-judge", None
+                why = str(e)
+            else:
+                why = f"{n} commit(s) in the interval"
+            verdict = {"KEPT": "kept", "BROKEN": "broken",
+                       "CANNOT-JUDGE": "could-not-judge"}[word]
+        r.update({"status": "closed" if verdict != "could-not-judge" else "open",
+                  "verdict": verdict, "golden": "git-interval" if evidence else "none",
+                  "engine": engine, "reason": why, "t1_sha": end_sha})
+        counts[verdict] = counts.get(verdict, 0) + 1
+        if verdict == "broken" or a.all:
+            print(f"  [{verdict:16}] turn {r['turn']:>3}  {r['text'][:100]}")
+            print(f"      {why} · {(t0 or '—')[:10]}..{(end_sha or '—')[:10]}")
+    print("  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    if a.append:
+        append(promises)
+        print(f"appended {len(promises)} adjudicated rows to {VERDICTS_LOG}")
     return 0
 
 def cmd_self_test(_a) -> int:
@@ -337,6 +508,8 @@ def cmd_self_test(_a) -> int:
     eq(DECIDABLE_AT["evaluative"], "never", "evaluative never decidable")
     eq(TOKENS_PER_ENTRY >= 40, True, "entry budget fits the daemon's pretty JSON")
     eq("none" in CLASSES, True, "none is a real class, not a gap-filler")
+    eq(interval_evidence("abc", "abc"), ("", 0), "an empty interval yields no evidence")
+    eq(interval_evidence("", "def"), ("", 0), "a missing T0 yields no evidence")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
@@ -356,7 +529,22 @@ def main() -> int:
     e.add_argument("--no-daemon", action="store_true", help="mechanical stage only")
     e.add_argument("--append", action="store_true", help="write rows to the ledger")
     e.add_argument("--json", action="store_true")
+    e.add_argument("--include-self", action="store_true",
+                   help="also classify working narration (97% of blocks)")
     e.set_defaults(fn=cmd_extract)
+    pr = sub.add_parser("promises", help="adjudicate promises against the git interval")
+    pr.add_argument("session")
+    pr.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    pr.add_argument("--pin", default=DEFAULT_PIN)
+    pr.add_argument("--batch", type=int, default=10)
+    pr.add_argument("--timeout", type=float, default=180.0)
+    pr.add_argument("--no-daemon", action="store_true")
+    pr.add_argument("--append", action="store_true")
+    pr.add_argument("--all", action="store_true", help="print kept and unjudged too")
+    pr.add_argument("--include-self", action="store_true",
+                    help="also adjudicate working narration (97% of blocks)")
+    pr.add_argument("--json", action="store_true")
+    pr.set_defaults(fn=cmd_promises)
     a = ap.parse_args()
     if a.self_test:
         return cmd_self_test(a)
