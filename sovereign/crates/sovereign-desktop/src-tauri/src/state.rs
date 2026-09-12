@@ -6,10 +6,8 @@ use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
 
-use sovereign_core::insight::InsightService;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_store::sqlite::SqliteStateStore;
-use tokio_util::sync::CancellationToken;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
@@ -183,12 +181,6 @@ pub struct AppState {
     /// so this map is the surface's own knowledge of which conversation a
     /// card belonged to.
     pub session_conversations: RwLock<std::collections::HashMap<String, String>>,
-    /// Shuts down anything this app still spawns for the window's life.
-    /// It outlived the health monitor it was named for (2026-09-12) and is
-    /// kept because `main`'s exit path cancels it; the monitor, the insight
-    /// service, the local-corpus manager and the NER handle that were
-    /// declared here are all gone, each having had zero readers.
-    pub health_shutdown: CancellationToken,
 }
 
 impl AppState {
@@ -310,7 +302,6 @@ impl AppState {
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             bootstrap_mode: mode,
-            health_shutdown: CancellationToken::new(),
             turn_wire: TurnWires::default(),
             pending_prompts: PendingPrompts::default(),
             session_conversations: RwLock::new(std::collections::HashMap::new()),

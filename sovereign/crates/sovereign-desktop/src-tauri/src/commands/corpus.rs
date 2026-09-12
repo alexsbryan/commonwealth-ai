@@ -170,84 +170,100 @@ pub async fn notebook_list(
     Ok(notebooks)
 }
 
-/// Build the IVF-PQ vector index for an installed corpus in the background.
-/// Emits `index-build-progress`, `index-build-complete`, or `index-build-error`
-/// events to the frontend. Sets `vector_index_ready` on the store when done.
+/// Build the IVF-PQ vector index for an installed corpus. `POST
+/// /internal/corpus/{corpus}/index/build` since 2026-09-12, then a poll of
+/// `GET …/index/progress` re-emitting the same three events the webview has
+/// always listened for: `index-build-progress`, `index-build-complete`,
+/// `index-build-error`.
+///
+/// The job, the 409-by-name on a second concurrent build, the
+/// `(true, true)` flags that let the recipe decide FTS, and the
+/// `vector_index_ready` flip afterwards are all the daemon's
+/// (`corpus_catalog_http::index_build`). This command held a full copy of
+/// that loop over its OWN `CorpusEngine` and state store until now — the
+/// route landed at `f9ecf139f` and `TurnClient::corpus_index_build` with
+/// it, and nothing ever called either. Two writers on one LanceDB index
+/// was the thing that copy risked; there is one now.
 #[tauri::command]
 pub async fn build_corpus_index(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<(), String> {
-    let engine = {
-        let guard = state.corpus_engine.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Corpus engine not ready")?
-    };
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
+    use sovereign_contracts::daemon_wire::{IndexBuildProgress, IndexBuildState, IngestJobAck};
 
-    let cid = corpus_id.clone();
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    // A refused launch is the caller's error — 404 for a corpus that is not
+    // installed, 409 for one already building, each naming itself. The old
+    // in-process version reported both as an `index-build-error` event
+    // AFTER returning Ok, which is a refusal dressed as a failed build.
+    let ack: IngestJobAck = client
+        .corpus_index_build(&corpus_id)
+        .await
+        .map_err(|e| format!("build_corpus_index `{corpus_id}`: {e}"))?;
+    tracing::debug!(
+        corpus_id = %corpus_id,
+        job_id = %ack.job_id,
+        "build_corpus_index: accepted by the daemon; polling",
+    );
+
     tokio::spawn(async move {
-        let indexes = match engine.installed_indexes().await {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = app_handle.emit(
-                    "index-build-error",
-                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
-                );
-                return;
-            }
-        };
-        let Some(info) = indexes.iter().find(|i| i.corpus_id == cid) else {
+        let emit_error = |error: String| {
             let _ = app_handle.emit(
                 "index-build-error",
-                serde_json::json!({"corpus_id": cid, "error": "Corpus not found"}),
+                serde_json::json!({"corpus_id": &corpus_id, "error": error}),
             );
-            return;
         };
-        let idx = match engine.open_index(&info.path).await {
-            Ok(i) => i,
-            Err(e) => {
-                let _ = app_handle.emit(
-                    "index-build-error",
-                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
-                );
-                return;
-            }
-        };
-
-        let progress_handle = app_handle.clone();
-        let progress_cid = cid.clone();
-        let on_progress: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |done, total| {
-            let pct = if total > 0 { done * 100 / total } else { 0 };
-            let _ = progress_handle.emit(
-                "index-build-progress",
-                serde_json::json!({"corpus_id": &progress_cid, "phase": "building", "pct": pct}),
-            );
-        });
-
-        // Build both vector and FTS indexes. The recipe controls which
-        // are enabled; passing (true, true) lets the index builder respect
-        // those flags rather than hardcoding FTS off (which would corrupt
-        // the metadata by marking FTS as built without building it).
-        match idx.build_indexes(true, true, Some(&*on_progress)).await {
-            Ok(()) => {
-                let _ = store.set_vector_index_ready(&cid, true).await;
-                let _ = app_handle.emit(
-                    "index-build-complete",
-                    serde_json::json!({"corpus_id": cid}),
-                );
-            }
-            Err(e) => {
-                let _ = app_handle.emit(
-                    "index-build-error",
-                    serde_json::json!({"corpus_id": cid, "error": e.to_string()}),
-                );
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let p: IndexBuildProgress = match client.corpus_index_progress(&corpus_id).await {
+                Ok(p) => p,
+                Err(e) => {
+                    emit_error(format!("lost the daemon while polling: {e}"));
+                    return;
+                }
+            };
+            match p.state {
+                IndexBuildState::Building => {
+                    let _ = app_handle.emit(
+                        "index-build-progress",
+                        serde_json::json!({
+                            "corpus_id": &corpus_id,
+                            "phase": "building",
+                            "pct": p.pct,
+                        }),
+                    );
+                }
+                IndexBuildState::Complete => {
+                    let _ = app_handle.emit(
+                        "index-build-complete",
+                        serde_json::json!({"corpus_id": &corpus_id}),
+                    );
+                    return;
+                }
+                IndexBuildState::Error => {
+                    // The daemon's own sentence, never a re-spelling of it.
+                    // `Error` with no text is still an error — reported as
+                    // one rather than read as a finished build.
+                    emit_error(p.error.unwrap_or_else(|| {
+                        // Not a default STANDING IN for the reason — it says
+                        // the reason is missing, which is itself the fact.
+                        format!(
+                            "the daemon reported job {} as failed and gave no reason",
+                            ack.job_id
+                        )
+                    }));
+                    return;
+                }
+                // `Idle` means this daemon has no record of the job we were
+                // just acked for — it restarted under us. Not a completion.
+                IndexBuildState::Idle => {
+                    emit_error(format!(
+                        "the daemon no longer knows job {} — it restarted during the build",
+                        ack.job_id
+                    ));
+                    return;
+                }
             }
         }
     });
