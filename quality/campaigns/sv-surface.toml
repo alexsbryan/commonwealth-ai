@@ -1981,44 +1981,32 @@ instrument   = "cargo test -p sovereign-mobile --test census; a second client cr
 goodhart     = "counting client families reaches 1 when the SPELLINGS converge; a single named client that still assembles the stack in-process satisfies it while the predicate stays false"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."
 
-# ── THE LADDER — the tail, drafted 2026-09-12 ────────────────────────────────
+# ── THE LADDER — the tail, drafted 2026-09-12, collapsed the same day ─────────
 # Six dependency lines in sovereign-desktop/src-tauri/Cargo.toml hold all 24
 # rows; 18 are transitive and fall in one cascade. Rung detail (routes,
 # file:line, what deletes vs what becomes a route) is in
 # .sovereign/features/sv-surface/campaign.md; this table is what co-resume
-# reads. svt-0..svt-2 and svt-4 landed 2026-09-11/12 and are closed.
+# reads. svt-0..svt-4 landed 2026-09-11/12 and are closed. Operator's
+# efficiency pass (2026-09-12, "5 orders seems excessive"): the gliner and
+# setup rungs are one download-job shape and merged; the local_corpus type
+# move rides with the engine cut; close is the last rung's done-when.
 
 [[rung]]
 id = "svt-5-predicate"
 moves = ["sv-no-daemon-management"]
-one_line = "The row-count grep joins the predicate check and is watched red with 24 rows"
+one_line = "The row-count grep joins the predicate check and is watched red with 24 rows (ffff8041e)"
 
 [[rung]]
 id = "svt-3-route-migration"
 moves = ["sv-no-daemon-management", "sv-attach-pure-client"]
-one_line = "sovereign-store leaves: enabled_corpora on GET /v1/conversations/{id}, GET /v1/admin/chat-activity, POST .../messages/record, the correction hint on reenrich-note; open_store and require_store! deleted"
+one_line = "sovereign-store leaves: enabled_corpora on GET /v1/conversations/{id}, GET /v1/admin/chat-activity, POST .../messages/record, the correction hint on reenrich-note (ed959fe29)"
 
 [[rung]]
 id = "svt-6-engine"
 moves = ["sv-no-daemon-management", "sv-attach-pure-client", "sv-capability-twins"]
-one_line = "corpus-engine leaves: four boot chores deleted as daemon duplicates, POST /internal/corpus/recipes/{test,harness} as jobs, CorpusEngine::new and the slot gone"
+one_line = "corpus-engine, sovereign-authoring-harness and sovereign-tools leave: four boot chores deleted as daemon duplicates, POST /internal/corpus/recipes/{test,harness} as jobs, CorpusEngine::new and the slot gone, the 15 local_corpus DTOs moved to daemon_wire; desktop soak green"
 
 [[rung]]
-id = "svt-7-gliner"
-moves = ["sv-no-daemon-management"]
-one_line = "sovereign-gliner leaves: GET /internal/ner/model and a download job the desktop polls"
-
-[[rung]]
-id = "svt-8-setup"
-moves = ["sv-no-daemon-management", "sv-capability-twins"]
-one_line = "sovereign-inference and sovereign-core leave: GET /v1/admin/hardware, setup catalog/slot routes, a model-download job; the app never writes under models/ again"
-
-[[rung]]
-id = "svt-9-local-corpus"
-moves = ["sv-no-daemon-management"]
-one_line = "sovereign-tools leaves: the 15 local_corpus DTOs move to daemon_wire with re-exports"
-
-[[rung]]
-id = "svt-10-close"
-moves = ["sv-no-daemon-management", "sv-attach-pure-client"]
-one_line = "The 24 rows deleted as STALE, lifecycle-gate 0, predicate check exit 0, and the app RUN against a daemon it did not start"
+id = "svt-7-assets"
+moves = ["sv-no-daemon-management", "sv-capability-twins", "sv-attach-pure-client"]
+one_line = "sovereign-gliner, sovereign-inference and sovereign-core leave: one daemon asset-download job (gguf + gliner), GET /internal/ner/model, GET /v1/admin/hardware + setup catalog/slot; the 24 rows deleted as STALE, predicate check exit 0, app run by hand and by soak"
