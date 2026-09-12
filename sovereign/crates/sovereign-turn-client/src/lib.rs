@@ -2761,6 +2761,82 @@ impl TurnClient {
             .await
     }
 
+    // ── Deep research — `/v1/research` (`research_http`) ─────────
+    //
+    // Deep research is a daemon JOB since 2026-09-11. `T` is the matching
+    // `sovereign_contracts::daemon_wire::Research*` shape throughout; the
+    // names here follow the route, as the index-build pair above does.
+
+    /// `GET /v1/research/capabilities` — `T` is `ResearchCapabilities`.
+    /// `error` is set when this daemon cannot run research (no models
+    /// configured, say); reported, never defaulted.
+    pub async fn research_capabilities<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/capabilities".to_string(), &[])
+            .await
+    }
+
+    /// `POST /v1/research` — launch (or resume) a run as a daemon job.
+    /// `B` is `ResearchRequest`, `T` is `ResearchJobAck` (202). A run
+    /// already going answers 409 naming it; a refused launch (empty
+    /// question, unknown consent class, no models) answers 400 with the
+    /// daemon's sentence.
+    pub async fn research_start<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        request: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/v1/research".to_string(), request)
+            .await
+    }
+
+    /// `GET /v1/research/{job_id}/progress?after=N` — `T` is
+    /// `ResearchProgress`: the frames from cursor `after` on, the next
+    /// cursor, `finished`, and the elapsed/quiet clocks. 404 for a job
+    /// this daemon never accepted.
+    pub async fn research_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        job_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/research/{job_id}/progress"),
+            &[("after", after.to_string())],
+        )
+        .await
+    }
+
+    /// `POST /v1/research/{job_id}/abort` — `T` is `ResearchAbortAck`.
+    /// Not a kill: the loop lands on a truncated report with the
+    /// truncation declared. 404 for a job that is not live.
+    pub async fn research_abort<T: serde::de::DeserializeOwned>(&self, job_id: &str) -> Result<T> {
+        self.internal_post_bare(format!("/v1/research/{job_id}/abort"))
+            .await
+    }
+
+    /// `GET /v1/research/runs` — `T` is `Vec<ResearchRunSummary>`, newest
+    /// first.
+    pub async fn research_runs<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/runs".to_string(), &[])
+            .await
+    }
+
+    /// `GET /v1/research/active` — `T` is `Vec<ResearchActiveRun>`: the
+    /// runs the daemon is driving right now.
+    pub async fn research_active<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/active".to_string(), &[])
+            .await
+    }
+
+    /// `GET /v1/research/runs/{run_id}/report` — `T` is `ResearchReport`.
+    /// `Ok(None)` is the 404 and only the 404: no such run, or a run that
+    /// never reached a report (the body names which).
+    pub async fn research_report<T: serde::de::DeserializeOwned>(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<T>> {
+        self.internal_get_opt(format!("/v1/research/runs/{run_id}/report"), &[])
+            .await
+    }
+
     /// `GET /internal/corpus/{corpus}/health` — enrichment health for
     /// one installed corpus. `T` is
     /// `sovereign_mesh::corpus_catalog_http::CorpusHealth`.

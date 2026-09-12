@@ -110,6 +110,7 @@ pub mod recipe_http;
 pub mod recipe_project_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
+pub mod research_http;
 pub mod ring_roster;
 pub mod ring_sync;
 pub mod roster_repair;

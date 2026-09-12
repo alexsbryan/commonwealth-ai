@@ -139,6 +139,8 @@ mod reading_http_e2e;
 mod recipe_surface_e2e;
 #[path = "main/replication_sender_census.rs"]
 mod replication_sender_census;
+#[path = "main/research_surface_e2e.rs"]
+mod research_surface_e2e;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
 #[path = "main/rotate_pre_split_guard.rs"]

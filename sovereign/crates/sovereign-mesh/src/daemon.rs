@@ -3427,6 +3427,14 @@ impl EmbeddedDaemon {
             // runtime was never installed answers 503 naming that.
             mounted.push(crate::lc_http::lc_router());
             mount_names.push("lc_http");
+            // sv-surface (2026-09-11) — deep research as a daemon JOB. Takes
+            // no `Arc<Self>` for `lc_http`'s reason: `launch::prepare`
+            // resolves the daemon endpoint and models from `SetupConfig`
+            // itself, so the router is built from nothing. A daemon whose
+            // config names no models answers the capabilities route with
+            // that error and `POST /v1/research` with a 400 naming it.
+            mounted.push(crate::research_http::research_router());
+            mount_names.push("research_http");
             for (router, name) in self
                 .services
                 .host_routers()
