@@ -426,7 +426,7 @@ pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppSt
 /// daemon-computed `estimated_fraction` for the percent; falls back
 /// to a sensible phase + message when no progress event is known yet.
 fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
-    use corpus_engine::IngestProgress as P;
+    use sovereign_contracts::daemon_wire::IngestProgress as P;
 
     // Shard-scan progress is the primary signal. For filtered ingests
     // (Wikipedia Core, etc.) the iterator must scan the entire source
@@ -644,7 +644,7 @@ struct CorpusStatusEntry {
     corpus_id: String,
     #[allow(dead_code)]
     active: bool,
-    progress: Option<corpus_engine::IngestProgress>,
+    progress: Option<sovereign_contracts::daemon_wire::IngestProgress>,
     #[allow(dead_code)]
     shards_completed: usize,
     #[allow(dead_code)]
@@ -768,7 +768,7 @@ mod tests {
     /// one field it is about.
     fn entry(
         corpus_id: &str,
-        progress: Option<corpus_engine::IngestProgress>,
+        progress: Option<sovereign_contracts::daemon_wire::IngestProgress>,
     ) -> CorpusStatusEntry {
         CorpusStatusEntry {
             corpus_id: corpus_id.to_string(),
@@ -796,7 +796,7 @@ mod tests {
     fn failed_progress_maps_to_failed_phase_with_its_message() {
         let payload = status_entry_to_payload(&entry(
             "sep",
-            Some(corpus_engine::IngestProgress::Failed {
+            Some(sovereign_contracts::daemon_wire::IngestProgress::Failed {
                 message: "Download refused (401) — request access at https://example/repo".into(),
             }),
         ));
@@ -817,13 +817,13 @@ mod tests {
     fn failed_and_complete_are_distinguishable_phases() {
         let failed = status_entry_to_payload(&entry(
             "sep",
-            Some(corpus_engine::IngestProgress::Failed {
+            Some(sovereign_contracts::daemon_wire::IngestProgress::Failed {
                 message: "boom".into(),
             }),
         ));
         let complete = status_entry_to_payload(&entry(
             "sep",
-            Some(corpus_engine::IngestProgress::Complete {
+            Some(sovereign_contracts::daemon_wire::IngestProgress::Complete {
                 total_chunks: 10,
                 duration_secs: 1,
             }),
@@ -839,7 +839,7 @@ mod tests {
     fn failed_progress_does_not_report_a_complete_percent() {
         let payload = status_entry_to_payload(&entry(
             "sep",
-            Some(corpus_engine::IngestProgress::Failed {
+            Some(sovereign_contracts::daemon_wire::IngestProgress::Failed {
                 message: "boom".into(),
             }),
         ));
