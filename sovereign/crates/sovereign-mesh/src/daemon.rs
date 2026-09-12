@@ -3368,6 +3368,12 @@ impl EmbeddedDaemon {
             // different fact from an unmounted route's 404.
             mounted.push(crate::meshapp_http::meshapp_router(Arc::clone(&self_arc)));
             mount_names.push("meshapp_http");
+            // thin-desktop order (2026-09-11) — the enrichment-store reads:
+            // the enriched-corpus inventory and the starter questions the
+            // desktop used to fold from every atom it pulled over the wire.
+            // Unconditional for the same reason as the three above.
+            mounted.push(crate::enrich_http::enrich_router(Arc::clone(&self_arc)));
+            mount_names.push("enrich_http");
             // sv-surface D6 — notes CRUD over the store the `/mcp` surface and
             // `/v1/notes/tool-outcome` already write to. Unconditional; a
             // commission whose `notes.db` would not open answers 503 naming

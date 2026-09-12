@@ -20,10 +20,6 @@ sovereign-time = { workspace = true }
 # DARK. It gates code only — no dependency hangs off it, so it cannot move a
 # dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
-# The enrichment store the CLI and the daemon also read — `enrich_commands`
-# lists it rather than re-deriving the layout and the schema (rung
-# nc-16-shared-capability).
-sovereign-enrichment-catalog = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }

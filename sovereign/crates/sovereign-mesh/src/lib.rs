@@ -41,6 +41,7 @@ pub mod deep_link;
 pub mod documents_http;
 #[cfg(feature = "dst")]
 pub mod dst;
+pub mod enrich_http;
 pub mod entry_endpoint;
 pub mod features_http;
 pub mod fim_adapter;

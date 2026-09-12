@@ -1698,6 +1698,35 @@ impl TurnClient {
         .await
     }
 
+    /// `GET /internal/corpus/enriched` — every enrichment workspace under
+    /// the DAEMON's data root with a loadable config, newest first. The
+    /// wire form of `enrich_list_corpora`. `T` is
+    /// `sovereign_contracts::daemon_wire::EnrichedCorpusSummary`; an absent
+    /// store is `[]`, not an error.
+    pub async fn enriched_corpora<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/corpus/enriched".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/starter-questions?limit=` — starter
+    /// questions mined from the corpus's atlas, or `None` when the host
+    /// answered 404: the corpus is not installed or has no atlas, which is
+    /// the "excerpt starters" branch the chat empty state takes. An
+    /// unreachable host, or one that cannot read an atlas it HAS, is an
+    /// `Err` (ARCH principle 6). `T` is
+    /// `sovereign_contracts::daemon_wire::StarterQuestion`.
+    pub async fn starter_questions_if_present<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>> {
+        self.internal_get_opt(
+            format!("/internal/corpus/{corpus_id}/starter-questions"),
+            &[("limit", limit.to_string())],
+        )
+        .await
+    }
+
     /// One GET against a loopback `/internal/...` read surface, parsed
     /// as `T`. Every plain atlas and meshapp read goes through here, so
     /// the URL join, the non-success rendering and the parse-error

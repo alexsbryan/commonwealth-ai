@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 // path `sovereign_contracts::daemon_wire::Name` (the size ratchet is per
 // crate, not per file; the split is for the reader).
 pub mod documents;
+pub mod enrich;
 pub mod ingest;
 pub mod local_corpus;
 pub mod mesh;

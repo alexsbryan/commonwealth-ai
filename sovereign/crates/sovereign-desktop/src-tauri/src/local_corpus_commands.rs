@@ -92,6 +92,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, WorkflowJobEvent};
 use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
@@ -102,7 +103,6 @@ use sovereign_tools::local_corpus::{
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
     LocalCorpusConfig,
 };
-use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, WorkflowJobEvent};
 
 use crate::state::AppState;
 
