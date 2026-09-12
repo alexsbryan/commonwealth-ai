@@ -1,0 +1,29 @@
+# Prompt-climb v0 slice — one essay, tight loop (research/prompt-climb PRE-REG).
+
+[corpus]
+id = "climb-ostrom"
+name = "Prompt-climb v0 (Ostrom Summary)"
+description = "Single-essay scratch corpus for the tight-loop mechanism proof; not for retrieval."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "Ostrom Summary.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "tiered"

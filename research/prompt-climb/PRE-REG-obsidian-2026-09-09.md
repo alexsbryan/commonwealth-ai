@@ -119,6 +119,38 @@ reported as mechanism-evidence, never as a quality claim.
   a mid-pilot vault edit can move entries. Freeze the vault for the
   pilot's duration or re-baseline before judging.
 
+## Wall ledger (v0, live runs 2026-09-09/10)
+
+Fixed engine-side, committed: renderer/parser/prompt generalization
+(3b4439b3e), budget split (55758db48), counts contract (1d7085a3c),
+instrument profile serial+600s + artifact default target (2026-09-09
+commits). Fixture-side, fixed: destructive-reset checker (cached
+extraction masqueraded as ties — 31s runs vs 1:34 real).
+
+**WALL 7 — OPEN, blocks the flip.** The model has drafted the correct
+surname-resolution rule five times; no emission channel can land it on
+a 308-line prompt file:
+
+1. `write_file` refuses files >150 lines (anti-corruption threshold —
+   right for code, wrong for prompt files).
+2. Pathless `patch_lines`/`insert_before` route to `default_target` =
+   alphabetically-first artifact (README.md) — a SILENT SUBSTITUTION
+   (§18.3) that dies out-of-range. Wall-5's fallback was half right.
+3. Patch actions accept a path but the trial prompt never documents
+   it, so the model never sends one.
+
+Repair (one coherent change): pathless patch/insert on artifact
+workdirs REFUSES naming the fix instead of substituting; the
+`src`/path field on patch actions is documented in trial_prompt.md;
+and — separate hygiene bug from the same runs — a tie-promote landed
+line-number-anchor content (`N:` prefixes) into a prompt file despite
+the content check, so the anchor-prefix check must also run on
+PROMOTED bodies, not only on apply-input.
+
+Receipts for all three live in the 2026-09-10 session (job
+93740be1…): the `<suite error>` tests_before in its final result is
+the corrupted-terse base refusing to build — the checker working.
+
 ## Step 0 (before any climb)
 
 - (a) **Pipeline — CONFIRMED**: `philosophy_atlas` serves the obsidian

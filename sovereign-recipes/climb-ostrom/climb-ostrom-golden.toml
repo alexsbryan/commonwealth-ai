@@ -1,0 +1,42 @@
+# v0 subset golden — the obsidian golden's Ostrom-essay entries, copied
+# verbatim (research/prompt-climb/PRE-REG-obsidian-2026-09-09.md: no
+# re-authoring, no new judgment). Sourced from sovereign/bench/obsidian/golden.toml.
+
+[meta]
+corpus_id = "climb-ostrom"
+golden_path = "climb-ostrom-golden.toml"
+excluded_paths = []
+
+# ── persons ──────────────────────────────────────────────────────────
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Elinor Ostrom", "Ostrom"]
+description_keywords_any = ["Nobel", "commons", "common-pool", "Valencia", "Tribunal", "Hardin"]
+note = "Anchor of Ostrom Summary. The 2009 Nobel and the Valencia water court are the most likely description keywords."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Garrett Hardin", "Hardin"]
+description_keywords_any = ["Tragedy of the Commons", "1968", "thought experiment", "Ostrom"]
+note = "Foil to Ostrom. Surname-only references are common; alias resolution test."
+
+# ── forbidden persons ────────────────────────────────────────────────
+
+[[forbidden_person_atoms]]
+canonical_name_contains_any = ["the author", "the narrator", "the user", "the writer"]
+note = "Generic first-person referents are not Person atoms."
+
+[[forbidden_person_atoms]]
+canonical_name_contains_any = ["1968", "2009", "1974", "ERISA"]
+note = "Years and statute names are not Person atoms — relevant here: the essay names 1968 and 2009."
+
+# ── concepts ─────────────────────────────────────────────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["tragedy of the commons"]
+description_keywords_any = ["Hardin", "1968", "thought experiment", "model", "open access"]
+note = "The Ostrom-Hardin duality concept."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["common-pool resource", "commons", "polycentric"]
+description_keywords_any = ["Ostrom", "design principles", "Valencia", "Maine", "lobster", "irrigation"]
+note = "Ostrom's positive contribution. Tests whether the extractor lifts a domain-of-art concept."
