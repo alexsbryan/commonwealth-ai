@@ -587,40 +587,6 @@ fn main() -> ExitCode {
                             }
                         }
 
-                        // Install OCR context if the manager came up
-                        // and the Tesseract sidecar is bundled. No-op
-                        // when not available — `lc_ocr_available`
-                        // tells the UI to hide the OCR offer.
-                        if let Some(mgr) = state_clone.local_corpus.read().await.as_ref().cloned() {
-                            // Daemon client URL — resolved from the
-                            // bootstrap mode so a non-default port works.
-                            let daemon_url = state_clone.client_base_url();
-                            // Resolve the chat model's name (file stem)
-                            // so the cleanup pass can target it by name.
-                            // The daemon registers each loaded slot under
-                            // its file stem (see
-                            // `register_local_model_slots` in
-                            // sovereign-mesh), and there's no "fast"
-                            // alias in the routing layer — passing
-                            // `"fast"` would 503 on a CLI-daemon
-                            // setup. Falls back to "fast" only as a
-                            // last resort for older configs without a
-                            // model_path set.
-                            let cleanup_model = crate::state::ResolvedModelSlots::load_or_default()
-                                .fast
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .map(|s| s.to_string())
-                                .filter(|s| !s.is_empty())
-                                .unwrap_or_else(|| "fast".to_string());
-                            local_corpus_commands::install_ocr_ctx_for_app(
-                                &handle_clone,
-                                &mgr,
-                                daemon_url,
-                                cleanup_model,
-                            )
-                            .await;
-                        }
                     }
                     Err(e) => {
                         tracing::error!("Bootstrap failed: {e}");

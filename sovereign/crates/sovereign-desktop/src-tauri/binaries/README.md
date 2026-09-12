@@ -58,9 +58,13 @@ export SOVEREIGN_TESSDATA_DIR=/opt/homebrew/share/tessdata
 export SOVEREIGN_PDFIUM_LIB=/path/to/libpdfium.dylib
 ```
 
-`local_corpus_commands::install_ocr_ctx_for_app` honours these env
-vars first, before probing the resource directory. With them set,
-OCR works in dev without ever populating `src-tauri/binaries/`.
+The OCR context is the DAEMON's (`sovereign-cli-daemon`'s
+`daemon_cmd/ocr_install.rs`, feature `ocr`), installed on the manager
+that runs the ingest; the desktop installs none since 2026-09-11 (its
+own manager never served an ingest). That installer honours
+`SOVEREIGN_PADDLE_OCR_MODEL_DIR` and `SOVEREIGN_PDFIUM_LIB` first, then
+`{data_dir}` and `~/.svrnmesh`; set them in the daemon's environment.
+The tesseract variables above are read by no installer any more.
 
 ## Release builds
 

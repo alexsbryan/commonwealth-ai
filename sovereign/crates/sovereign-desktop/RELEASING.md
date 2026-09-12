@@ -294,8 +294,15 @@ missing the OCR button hides itself and ingest is unaffected.
 PaddleOCR runs **in-process** through `ort` (no second ML runtime —
 it reuses GLiNER's onnxruntime) and needs **no platform install**,
 which is the whole reason it replaced tesseract (see below). The
-desktop selects it automatically: `install_ocr_ctx_for_app` resolves
-the bundled models + pdfium and sets `OcrCtx.engine = Paddle`.
+DAEMON selects it: `sovereign-cli-daemon`'s `daemon_cmd/ocr_install.rs`
+(feature `ocr`) resolves the models from `SOVEREIGN_PADDLE_OCR_MODEL_DIR`,
+`{data_dir}/models/paddle-ocr` or `~/.svrnmesh/models/paddle-ocr` and
+sets `OcrCtx.engine = Paddle`. The desktop's own `install_ocr_ctx_for_app`
+was deleted 2026-09-11: it fed a manager that never ran an ingest. OPEN:
+the bundled `<resource_dir>/binaries/paddle-ocr` root is not among the
+daemon's probes, so a packaged app whose daemon finds no models under
+`{data_dir}` or `~/.svrnmesh` has no OCR until the kickstart hands the
+daemon that root (env var or a staged copy).
 
 ### The daemon sidecar
 
@@ -382,9 +389,10 @@ to 1600 (the merge-at-960 bug on dense pages — now the engine default):
 The Prince CER 0.0031 vs 0.0036, From Dictatorship 0.0212 vs 0.0652.
 
 Tesseract is **not deleted from the code** — it remains behind
-`OcrEngineKind::Tesseract` as a fallback (`install_ocr_ctx_for_app`
-uses it when the paddle models can't be resolved, or under
-`--no-default-features`). It's simply no longer bundled. If you want a
+`OcrEngineKind::Tesseract` in `sovereign-tools`, but no installer
+selects it any more: the daemon's `ocr_install` is Paddle-only, and the
+desktop's tesseract fallback went with `install_ocr_ctx_for_app`
+(2026-09-11). It's simply no longer bundled. If you want a
 tesseract-bundling build, restore the `externalBin`/`tessdata` entries
 in `tauri.release.conf.json` and stage a (statically linked) binary.
 

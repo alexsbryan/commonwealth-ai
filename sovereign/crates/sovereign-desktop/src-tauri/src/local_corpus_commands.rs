@@ -67,16 +67,22 @@
 //!
 //! # What crossing the ingest job changed for a user (ARCH §18.3)
 //!
-//! The OCR that runs is the HOST's. `install_ocr_ctx_for_app` still
-//! installs a resolved Tesseract/PDFium context on this process's
-//! manager, and in Local mode that manager IS the daemon's, so nothing
-//! moves. On an ATTACHED boot the daemon ingests with its own OCR
-//! context, and `lc_ocr_available` now reports that one — so the
-//! "Read them with OCR" affordance reflects the engine that would
-//! actually do the reading, instead of this app's sidecar answering for
-//! a job it no longer runs. `lc_ocr_available` is also an `Err` when the
-//! daemon has no local-corpus runtime, where it used to degrade to
-//! `false`: "OCR is unavailable" and "nobody could be asked" want
+//! The OCR that runs is the HOST's — and since 2026-09-11 this file
+//! installs none. `install_ocr_ctx_for_app` used to resolve
+//! Paddle/Tesseract/PDFium at boot and `set_ocr_ctx` it on
+//! `state.local_corpus`, under the belief that "in Local mode that
+//! manager IS the daemon's". It is not: `WatchedSubsystem::install` has
+//! ONE production caller, `sovereign-cli-daemon`'s bootstrap
+//! (`attach_construction_census` pins this process's count at zero), so
+//! the manager this app builds serves no ingest and the context it was
+//! handed read nothing. The daemon that ingests installs its own
+//! (`daemon_cmd/ocr_install.rs`, feature `ocr`), probing
+//! `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, `{data_dir}/models/paddle-ocr` and
+//! `~/.svrnmesh/models/paddle-ocr`; `lc_ocr_available` reports THAT
+//! context, so the "Read them with OCR" affordance reflects the engine
+//! that would actually do the reading. `lc_ocr_available` is an `Err`
+//! when the daemon has no local-corpus runtime, where it used to degrade
+//! to `false`: "OCR is unavailable" and "nobody could be asked" want
 //! different remedies from the pane.
 
 use std::collections::BTreeMap;
@@ -90,12 +96,11 @@ use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
     manager::{IncompleteJob, IngestStats, ProgressCallback},
-    ocr::{OcrCtx, OcrEngineKind},
     pre_scanner::PreScanResult,
     preview::VaultPreview,
     progress::{CompletionResult, LocalCorpusProgress},
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
-    LocalCorpusConfig, LocalCorpusManager,
+    LocalCorpusConfig,
 };
 use sovereign_workflow_host::workflow_http::{
     JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
@@ -155,313 +160,6 @@ pub async fn lc_ocr_available(state: State<'_, Arc<AppState>>) -> Result<bool, S
         .await
         .map_err(|e| format!("lc_ocr_available: {e}"))?;
     Ok(avail.available)
-}
-
-/// Install an OCR runtime context onto the running
-/// `LocalCorpusManager`. Called once at desktop boot after the manager
-/// is up. Resolves the bundled Tesseract binary via predictable paths,
-/// points pdfium at the bundled dynamic library (if present), and
-/// points cleanup at the local daemon.
-///
-/// Resolution order for the Tesseract binary:
-///   1. `SOVEREIGN_TESSERACT_BIN` env var — escape hatch for dev.
-///   2. `<resource_dir>/binaries/tesseract[-<target_triple>][.exe]`
-///      — what `tauri.conf.json`'s `bundle.externalBin` produces.
-///   3. `<exe_dir>/tesseract` — what bundled apps land at next to the
-///      main binary.
-///   4. Skip — leaving OCR unavailable. `lc_ocr_available` reports
-///      this so the UI hides the offer entirely.
-///
-/// Failure is non-fatal: a build without bundled binaries simply
-/// degrades to "OCR not offered" rather than erroring on boot.
-pub async fn install_ocr_ctx_for_app(
-    app: &AppHandle,
-    manager: &Arc<LocalCorpusManager>,
-    daemon_base_url: String,
-    cleanup_model: String,
-) {
-    use tauri::Manager;
-
-    let resource_dir = app.path().resource_dir().ok();
-
-    // pdfium rasterizes PDFs to page images regardless of which OCR
-    // engine reads them — required for BOTH paddle and tesseract. If we
-    // can locate the bundled dylib we pin pdfium-render to it; otherwise
-    // we fall back to its system-library probe (which surfaces a clear
-    // error at OCR-time).
-    let pdfium_lib_path = resolve_pdfium_lib(resource_dir.as_deref());
-
-    // Prefer PaddleOCR. It drives the ONNX Runtime already linked for
-    // GLiNER and needs NO external build dependency — unlike tesseract,
-    // which users must `brew/apt install` or we must statically build.
-    // The 2026-05-27 bake-off put paddle at/above tesseract quality once
-    // `det_limit_side_len` was raised to 1600 (now the engine default).
-    // Use it whenever its models resolve (bundled in the .app, or in
-    // ~/.svrnmesh for a dev machine); fall back to tesseract otherwise.
-    #[cfg(feature = "paddle-ocr")]
-    {
-        if let Some(model_root) = resolve_paddle_model_dir(resource_dir.as_deref()) {
-            // The engine resolves models via SOVEREIGN_PADDLE_OCR_MODEL_DIR
-            // → `paddle::models_root()`. Point it at whatever we found so a
-            // packaged app uses the bundled copy and a dev box uses
-            // ~/.svrnmesh — one code path, no per-build special-casing.
-            std::env::set_var("SOVEREIGN_PADDLE_OCR_MODEL_DIR", &model_root);
-            let ctx = OcrCtx {
-                // tesseract_* are inert when engine = Paddle.
-                tesseract_bin: PathBuf::from("tesseract"),
-                tessdata_dir: PathBuf::new(),
-                pdfium_lib_path,
-                daemon_base_url,
-                cleanup_model,
-                dpi: 300,
-                tesseract_timeout_secs: 30,
-                cleanup_timeout_secs: 30,
-                engine: OcrEngineKind::Paddle,
-            };
-            tracing::info!(
-                paddle_model_root = %model_root.display(),
-                pdfium = ?ctx.pdfium_lib_path,
-                cleanup_model = %ctx.cleanup_model,
-                "OCR context installed (PaddleOCR) — folder drop will offer OCR for scanned PDFs"
-            );
-            manager.set_ocr_ctx(ctx).await;
-            return;
-        }
-        tracing::info!(
-            "PaddleOCR models not found (.app bundle or ~/.svrnmesh/models/paddle-ocr) \
-             — falling back to tesseract"
-        );
-    }
-
-    // Fallback: the tesseract subprocess (needs a system/bundled binary).
-    let tesseract_bin = match resolve_tesseract_path(app) {
-        Some(p) => p,
-        None => {
-            tracing::info!("OCR not available: no PaddleOCR models and no tesseract sidecar");
-            return;
-        }
-    };
-    let tessdata_dir = match resolve_tessdata_dir(resource_dir.as_deref()) {
-        Some(p) => p,
-        None => {
-            tracing::warn!(
-                "OCR not available: tessdata/eng.traineddata missing — \
-                 expected under <resource_dir>/tessdata/ or alongside the tesseract binary"
-            );
-            return;
-        }
-    };
-    let ctx = OcrCtx {
-        tesseract_bin,
-        tessdata_dir,
-        pdfium_lib_path,
-        daemon_base_url,
-        cleanup_model,
-        dpi: 300,
-        tesseract_timeout_secs: 30,
-        cleanup_timeout_secs: 30,
-        engine: OcrEngineKind::Tesseract,
-    };
-    tracing::info!(
-        tesseract = %ctx.tesseract_bin.display(),
-        tessdata = %ctx.tessdata_dir.display(),
-        pdfium = ?ctx.pdfium_lib_path,
-        cleanup_model = %ctx.cleanup_model,
-        "OCR context installed (tesseract) — folder drop will offer OCR for scanned PDFs"
-    );
-    manager.set_ocr_ctx(ctx).await;
-}
-
-/// Compile-time absolute path to the `src-tauri/binaries/` directory
-/// inside this crate. Lets `cargo tauri dev` find the same binaries
-/// that release bundles ship via `externalBin`/`resources`, without
-/// needing the user to set env vars or relying on Tauri's runtime
-/// `resource_dir()` (which doesn't surface those entries in dev).
-const DEV_BINARIES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/binaries");
-
-fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
-    use tauri::Manager;
-
-    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSERACT_BIN") {
-        let p = PathBuf::from(env_path);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-
-    // Tauri externalBin layout: under `<resource_dir>/binaries/`
-    // Tauri may suffix the target triple — try the bare name and a
-    // couple of common triples before giving up.
-    let mut probes: Vec<PathBuf> = Vec::new();
-    let mut bin_dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(rd) = app.path().resource_dir() {
-        bin_dirs.push(rd.join("binaries"));
-        // macOS resource_dir is `Contents/Resources`, but
-        // externalBin sidecars land in `Contents/MacOS` next to
-        // the main exe — probe that too.
-        if let Some(parent) = rd.parent() {
-            bin_dirs.push(parent.join("MacOS"));
-        }
-    }
-    // Dev fallback: the canonical `src-tauri/binaries/` directory.
-    // Baked at compile time so it survives the working-directory
-    // changes Tauri's dev runner does on macOS.
-    bin_dirs.push(PathBuf::from(DEV_BINARIES_DIR));
-
-    for bins in &bin_dirs {
-        probes.push(bins.join("tesseract"));
-        probes.push(bins.join("tesseract.exe"));
-        for triple in [
-            "aarch64-apple-darwin",
-            "x86_64-apple-darwin",
-            "x86_64-unknown-linux-gnu",
-            "x86_64-pc-windows-msvc",
-        ] {
-            probes.push(bins.join(format!("tesseract-{triple}")));
-            probes.push(bins.join(format!("tesseract-{triple}.exe")));
-        }
-    }
-    if let Ok(rd) = app.path().resource_dir() {
-        probes.push(rd.join("tesseract"));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            probes.push(parent.join("tesseract"));
-            probes.push(parent.join("tesseract.exe"));
-        }
-    }
-    if let Some(p) = probes.into_iter().find(|p| p.exists()) {
-        return Some(p);
-    }
-    // $PATH fallback — covers Homebrew (`/opt/homebrew/bin/tesseract`)
-    // on Apple Silicon, `/usr/local/bin/tesseract` on Intel macOS,
-    // distro packages on Linux, and any operator who installed
-    // tesseract themselves. Without this, dev builds with no
-    // `binaries/tesseract` symlink silently report "OCR not available"
-    // even though the system can clearly run it.
-    //
-    // Tauri's launchd-spawned env has a minimal `PATH` (typically
-    // `/usr/bin:/bin:/usr/sbin:/sbin`), so we splice in the standard
-    // Homebrew + Linux locations before searching. The env var still
-    // takes precedence — operators with a hand-rolled `PATH` win.
-    let mut path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    for extra in [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/usr/local/sbin",
-        "/opt/local/bin",
-    ] {
-        let pb = PathBuf::from(extra);
-        if !path_dirs.contains(&pb) {
-            path_dirs.push(pb);
-        }
-    }
-    for dir in path_dirs {
-        for name in ["tesseract", "tesseract.exe"] {
-            let candidate = dir.join(name);
-            if candidate.is_file() {
-                tracing::info!(
-                    path = %candidate.display(),
-                    "OCR: tesseract located via PATH fallback"
-                );
-                return Some(candidate);
-            }
-        }
-    }
-    None
-}
-
-fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    let mut probes: Vec<PathBuf> = Vec::new();
-    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSDATA_DIR") {
-        probes.push(PathBuf::from(env_path));
-    }
-    if let Some(rd) = resource_dir {
-        probes.push(rd.join("tessdata"));
-        probes.push(rd.join("binaries").join("tessdata"));
-    }
-    // Dev fallback — same compile-time-baked binaries dir.
-    let dev_bins = PathBuf::from(DEV_BINARIES_DIR);
-    probes.push(dev_bins.join("tessdata"));
-    // System-install fallback. Tesseract's tessdata ships next to its
-    // binary on Homebrew + most Linux distros at predictable paths.
-    // Without these, a system-installed tesseract from the PATH probe
-    // above would be found but tessdata would still come up empty.
-    for p in [
-        "/opt/homebrew/share/tessdata",           // Homebrew Apple Silicon
-        "/usr/local/share/tessdata",              // Homebrew Intel
-        "/opt/local/share/tessdata",              // MacPorts
-        "/usr/share/tessdata",                    // Debian/Ubuntu
-        "/usr/share/tesseract-ocr/4.00/tessdata", // Older Debian
-        "/usr/share/tesseract-ocr/5/tessdata",    // Newer Debian
-        "/usr/share/tesseract/tessdata",          // RHEL/Fedora
-    ] {
-        probes.push(PathBuf::from(p));
-    }
-    probes
-        .into_iter()
-        .find(|p| p.join("eng.traineddata").exists())
-}
-
-fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    let mut probes: Vec<PathBuf> = Vec::new();
-    if let Ok(env_path) = std::env::var("SOVEREIGN_PDFIUM_LIB") {
-        probes.push(PathBuf::from(env_path));
-    }
-    let mut search_roots: Vec<PathBuf> = Vec::new();
-    if let Some(rd) = resource_dir {
-        search_roots.push(rd.to_path_buf());
-        search_roots.push(rd.join("binaries"));
-    }
-    // Dev fallback — same compile-time-baked binaries dir.
-    search_roots.push(PathBuf::from(DEV_BINARIES_DIR));
-    for root in &search_roots {
-        for lib in ["libpdfium.dylib", "pdfium.dll", "libpdfium.so"] {
-            probes.push(root.join("pdfium").join(lib));
-            probes.push(root.join(lib));
-        }
-    }
-    probes.into_iter().find(|p| p.exists())
-}
-
-/// Locate the PaddleOCR models ROOT — the directory that contains the
-/// `<model_id>/` set (`det.onnx` + `rec.onnx` + `dict.txt`). Returned so
-/// it can be handed straight to `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, which
-/// the engine's `paddle::models_root()` reads. A match is only returned
-/// when all three model files actually exist, so the caller can trust
-/// "Some" to mean "Paddle can run" rather than discovering a missing
-/// model per-document later.
-///
-/// Probe order: explicit env → bundled (`<resource>/binaries/paddle-ocr`)
-/// → dev binaries dir → the CLI/user models root (`~/.svrnmesh`).
-#[cfg(feature = "paddle-ocr")]
-fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
-
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(env_path) = sovereign_tools::local_corpus::ocr::paddle::model_root_override() {
-        roots.push(env_path);
-    }
-    if let Some(rd) = resource_dir {
-        roots.push(rd.join("binaries").join("paddle-ocr"));
-        roots.push(rd.join("paddle-ocr"));
-    }
-    roots.push(PathBuf::from(DEV_BINARIES_DIR).join("paddle-ocr"));
-    // Dev/user fallback: the root the CLI fetch populates.
-    roots.push(
-        sovereign_contracts::rebrand::svrnmesh_root()
-            .join("models")
-            .join("paddle-ocr"),
-    );
-    roots.into_iter().find(|root| {
-        let set = root.join(DEFAULT_MODEL_ID);
-        set.join("det.onnx").is_file()
-            && set.join("rec.onnx").is_file()
-            && set.join("dict.txt").is_file()
-    })
 }
 
 // ─── Command: lc_validate_path ───────────────────────────────────────
