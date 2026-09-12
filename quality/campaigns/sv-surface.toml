@@ -44,7 +44,11 @@ status    = "active"
 #      principle 8). The check calls the gate.
 [predicate]
 statement = "sovereign-desktop REACHES no crate that can assemble or host a daemon — none of sovereign-mesh, sovereign-cli-daemon, sovereign-compute, sovereign-workflow-host, sovereign-tools is in its Cargo dependency closure — AND no thin surface retains a process handle or tracks a lifecycle"
-check = "(cd corpus-engine && cargo xtask layer-gate && cargo xtask lifecycle-gate)"
+# AMENDED 2026-09-12: the two gates were GREEN with 24 `from = "sovereign-desktop"`
+# [[exception]] rows holding the door — a check green while the statement is
+# false (§5). The grep is the row count the operator named as the whole
+# scoreboard; it runs first and costs nothing. Watched red the day it landed.
+check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (cd corpus-engine && cargo xtask layer-gate && cargo xtask lifecycle-gate)"
 
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
@@ -1976,3 +1980,45 @@ direction    = "lower_is_better"
 instrument   = "cargo test -p sovereign-mobile --test census; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
 goodhart     = "counting client families reaches 1 when the SPELLINGS converge; a single named client that still assembles the stack in-process satisfies it while the predicate stays false"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."
+
+# ── THE LADDER — the tail, drafted 2026-09-12 ────────────────────────────────
+# Six dependency lines in sovereign-desktop/src-tauri/Cargo.toml hold all 24
+# rows; 18 are transitive and fall in one cascade. Rung detail (routes,
+# file:line, what deletes vs what becomes a route) is in
+# .sovereign/features/sv-surface/campaign.md; this table is what co-resume
+# reads. svt-0..svt-2 and svt-4 landed 2026-09-11/12 and are closed.
+
+[[rung]]
+id = "svt-5-predicate"
+moves = ["sv-no-daemon-management"]
+one_line = "The row-count grep joins the predicate check and is watched red with 24 rows"
+
+[[rung]]
+id = "svt-3-route-migration"
+moves = ["sv-no-daemon-management", "sv-attach-pure-client"]
+one_line = "sovereign-store leaves: enabled_corpora on GET /v1/conversations/{id}, GET /v1/admin/chat-activity, POST .../messages/record, the correction hint on reenrich-note; open_store and require_store! deleted"
+
+[[rung]]
+id = "svt-6-engine"
+moves = ["sv-no-daemon-management", "sv-attach-pure-client", "sv-capability-twins"]
+one_line = "corpus-engine leaves: four boot chores deleted as daemon duplicates, POST /internal/corpus/recipes/{test,harness} as jobs, CorpusEngine::new and the slot gone"
+
+[[rung]]
+id = "svt-7-gliner"
+moves = ["sv-no-daemon-management"]
+one_line = "sovereign-gliner leaves: GET /internal/ner/model and a download job the desktop polls"
+
+[[rung]]
+id = "svt-8-setup"
+moves = ["sv-no-daemon-management", "sv-capability-twins"]
+one_line = "sovereign-inference and sovereign-core leave: GET /v1/admin/hardware, setup catalog/slot routes, a model-download job; the app never writes under models/ again"
+
+[[rung]]
+id = "svt-9-local-corpus"
+moves = ["sv-no-daemon-management"]
+one_line = "sovereign-tools leaves: the 15 local_corpus DTOs move to daemon_wire with re-exports"
+
+[[rung]]
+id = "svt-10-close"
+moves = ["sv-no-daemon-management", "sv-attach-pure-client"]
+one_line = "The 24 rows deleted as STALE, lifecycle-gate 0, predicate check exit 0, and the app RUN against a daemon it did not start"
