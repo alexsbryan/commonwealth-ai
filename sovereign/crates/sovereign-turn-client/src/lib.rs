@@ -2576,6 +2576,32 @@ impl TurnClient {
         Ok(wire.report)
     }
 
+    /// `POST /internal/corpus/{corpus}/index/build` — build an installed
+    /// corpus's vector + FTS indexes as a daemon job. `T` is
+    /// `sovereign_contracts::daemon_wire::IngestJobAck` (202). A corpus
+    /// already building answers 409 by name; an unknown one 404.
+    pub async fn corpus_index_build<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/internal/corpus/{corpus_id}/index/build"),
+            &serde_json::json!({}),
+        )
+        .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/index/progress` — `T` is
+    /// `sovereign_contracts::daemon_wire::IndexBuildProgress`. `Idle` for a
+    /// corpus nobody asked to build in this daemon's lifetime.
+    pub async fn corpus_index_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/corpus/{corpus_id}/index/progress"), &[])
+            .await
+    }
+
     /// `GET /internal/corpus/{corpus}/health` — enrichment health for
     /// one installed corpus. `T` is
     /// `sovereign_mesh::corpus_catalog_http::CorpusHealth`.

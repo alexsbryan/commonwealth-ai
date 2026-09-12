@@ -367,3 +367,69 @@ async fn install_a_manager_if_none() {
         Arc::new(sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry::new()),
     );
 }
+
+/// The index build as a JOB: accepted with the ingest job's ack shape,
+/// progress readable until `complete`, unknown corpus a 404, never-asked
+/// corpus `idle`. The fixture index has zero chunks, so `build_indexes`
+/// returns immediately — what this pins is the route contract, not the
+/// builder (which has its own tests in corpus-engine).
+#[tokio::test]
+async fn index_build_is_a_job_with_progress() {
+    let (_e, _r, daemon) = daemon_with_indexes(&[("built-me", 1_757_000_100, false)]).await;
+    let addr = spawn_router(corpus_catalog_router(daemon)).await;
+    let client = reqwest::Client::new();
+
+    let idle: serde_json::Value = client
+        .get(format!(
+            "http://{addr}/internal/corpus/built-me/index/progress"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(idle["state"], "idle", "never asked: {idle}");
+
+    let missing = client
+        .post(format!("http://{addr}/internal/corpus/nope/index/build"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), 404);
+
+    let ack = client
+        .post(format!(
+            "http://{addr}/internal/corpus/built-me/index/build"
+        ))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ack.status(), 202);
+    let ack: serde_json::Value = ack.json().await.unwrap();
+    assert_eq!(ack["corpus_id"], "built-me");
+    assert!(ack["job_id"].as_str().unwrap().starts_with("index-build-"));
+
+    let mut last = serde_json::Value::Null;
+    for _ in 0..50 {
+        last = client
+            .get(format!(
+                "http://{addr}/internal/corpus/built-me/index/progress"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if last["state"] != "building" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(last["state"], "complete", "build did not complete: {last}");
+    assert_eq!(last["job_id"], ack["job_id"]);
+    assert_eq!(last["pct"], 100);
+}

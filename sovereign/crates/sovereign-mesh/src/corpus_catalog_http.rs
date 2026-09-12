@@ -23,7 +23,8 @@
 //!   in `registry_snapshot.toml`, and one copy is the precondition.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
@@ -39,6 +40,8 @@ use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSource
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+
+pub use sovereign_contracts::daemon_wire::{IndexBuildProgress, IndexBuildState, IngestJobAck};
 
 // ─── The wire projections ──────────────────────────────────────
 
@@ -169,7 +172,215 @@ pub fn corpus_catalog_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/corpus/{corpus}/retry-enrichment",
             post(retry_enrichment),
         )
+        .route("/internal/corpus/{corpus}/index/build", post(index_build))
+        .route(
+            "/internal/corpus/{corpus}/index/progress",
+            get(index_progress),
+        )
         .localhost_only_with(daemon)
+}
+
+// ─── The index build job ───────────────────────────────────────
+
+/// One build's live state, held per corpus in [`INDEX_BUILDS`]. The
+/// progress route reads it; the spawned build writes it. In-process on
+/// purpose, like `lc_http`'s cluster jobs: the index it narrates is this
+/// daemon's, and a log that outlived the daemon would describe a build
+/// that may not have finished.
+struct IndexBuild {
+    job_id: String,
+    pct: AtomicU64,
+    outcome: Mutex<Option<Result<(), String>>>,
+}
+
+static INDEX_BUILDS: OnceLock<Mutex<HashMap<String, Arc<IndexBuild>>>> = OnceLock::new();
+
+fn index_builds() -> &'static Mutex<HashMap<String, Arc<IndexBuild>>> {
+    INDEX_BUILDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn index_build_for(corpus_id: &str) -> Option<Arc<IndexBuild>> {
+    index_builds()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(corpus_id).cloned())
+}
+
+impl IndexBuild {
+    fn progress(&self, corpus_id: &str) -> IndexBuildProgress {
+        let outcome = self.outcome.lock().ok().and_then(|o| o.clone());
+        let (state, error) = match outcome {
+            None => (IndexBuildState::Building, None),
+            Some(Ok(())) => (IndexBuildState::Complete, None),
+            Some(Err(e)) => (IndexBuildState::Error, Some(e)),
+        };
+        IndexBuildProgress {
+            corpus_id: corpus_id.to_string(),
+            job_id: self.job_id.clone(),
+            state,
+            pct: self.pct.load(Ordering::SeqCst),
+            error,
+        }
+    }
+}
+
+/// POST `/internal/corpus/{corpus}/index/build` — build the vector + FTS
+/// indexes of an installed corpus as a JOB; answers `IngestJobAck` with
+/// `202 Accepted`. Wire form of the desktop's `build_corpus_index`, which
+/// opened the index with its own `CorpusEngine` until 2026-09-11.
+///
+/// Both flags are passed `true` so the builder respects the recipe's own
+/// enable flags; forcing FTS off here marked it built without building
+/// it (the desktop's comment at the old site records that corruption).
+/// On success the state store's `vector_index_ready` flips, which is what
+/// `GET /internal/corpus/catalog` reports.
+///
+/// A second build on a corpus still building is refused by name, not
+/// queued: two concurrent writers on one LanceDB index is the failure a
+/// refusal is cheaper than.
+async fn index_build(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus_id): Path<String>,
+) -> Result<Response, Absence> {
+    let engine = engine_for(&daemon)?;
+    let indexes = engine
+        .installed_indexes()
+        .await
+        .map_err(|e| Absence::unavailable(format!("installed_indexes: {e}")))?;
+    let Some(info) = indexes.iter().find(|i| i.corpus_id == corpus_id) else {
+        return Ok(json_error(
+            StatusCode::NOT_FOUND,
+            &format!("no installed corpus `{corpus_id}`"),
+        ));
+    };
+    if let Some(live) = index_build_for(&corpus_id) {
+        if live.outcome.lock().ok().is_some_and(|o| o.is_none()) {
+            return Ok(json_error(
+                StatusCode::CONFLICT,
+                &format!("`{corpus_id}` is already building (job {})", live.job_id),
+            ));
+        }
+    }
+
+    let job_id = format!("index-build-{}", uuid::Uuid::new_v4());
+    let job = Arc::new(IndexBuild {
+        job_id: job_id.clone(),
+        pct: AtomicU64::new(0),
+        outcome: Mutex::new(None),
+    });
+    if let Ok(mut jobs) = index_builds().lock() {
+        jobs.insert(corpus_id.clone(), Arc::clone(&job));
+    }
+    tracing::info!(
+        corpus_id = %corpus_id,
+        job_id = %job_id,
+        path = %info.path.display(),
+        "corpus_catalog_http: index build accepted",
+    );
+
+    let store = daemon.state_store().map(Arc::clone);
+    let path = info.path.clone();
+    let spawn_corpus = corpus_id.clone();
+    tokio::spawn(async move {
+        let result: Result<(), String> = async {
+            let idx = engine
+                .open_index(&path)
+                .await
+                .map_err(|e| format!("open_index: {e}"))?;
+            let pct = Arc::clone(&job);
+            let on_progress: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |done, total| {
+                let p = if total > 0 { done * 100 / total } else { 0 };
+                pct.pct.store(p, Ordering::SeqCst);
+            });
+            idx.build_indexes(true, true, Some(&*on_progress))
+                .await
+                .map_err(|e| format!("build_indexes: {e}"))?;
+            if let Some(store) = store {
+                if let Err(e) = store.set_vector_index_ready(&spawn_corpus, true).await {
+                    // The index IS built; the catalog flag is the part that
+                    // failed. Reported as the build's error rather than
+                    // swallowed, because a catalog that says "not ready"
+                    // over a ready index is the operator's next mystery.
+                    return Err(format!("set_vector_index_ready: {e}"));
+                }
+            }
+            Ok(())
+        }
+        .await;
+        match &result {
+            Ok(()) => {
+                job.pct.store(100, Ordering::SeqCst);
+                tracing::info!(
+                    corpus_id = %spawn_corpus,
+                    job_id = %job.job_id,
+                    "corpus_catalog_http: index build complete",
+                );
+            }
+            Err(e) => tracing::warn!(
+                corpus_id = %spawn_corpus,
+                job_id = %job.job_id,
+                error = %e,
+                "corpus_catalog_http: index build failed",
+            ),
+        }
+        if let Ok(mut o) = job.outcome.lock() {
+            *o = Some(result);
+        }
+    });
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(IngestJobAck {
+            progress_route: format!("/internal/corpus/{corpus_id}/index/progress"),
+            corpus_id,
+            job_id,
+            ok: true,
+        }),
+    )
+        .into_response())
+}
+
+/// GET `/internal/corpus/{corpus}/index/progress` — where the build
+/// stands. `Idle` for a corpus nobody asked to build in this daemon's
+/// lifetime (a 200, not a 404: the corpus exists, the build does not).
+async fn index_progress(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus_id): Path<String>,
+) -> Result<Response, Absence> {
+    let progress = match index_build_for(&corpus_id) {
+        Some(job) => job.progress(&corpus_id),
+        None => {
+            let engine = engine_for(&daemon)?;
+            let known = engine
+                .installed_indexes()
+                .await
+                .map_err(|e| Absence::unavailable(format!("installed_indexes: {e}")))?
+                .iter()
+                .any(|i| i.corpus_id == corpus_id);
+            if !known {
+                return Ok(json_error(
+                    StatusCode::NOT_FOUND,
+                    &format!("no installed corpus `{corpus_id}`"),
+                ));
+            }
+            IndexBuildProgress {
+                corpus_id: corpus_id.clone(),
+                job_id: String::new(),
+                state: IndexBuildState::Idle,
+                pct: 0,
+                error: None,
+            }
+        }
+    };
+    tracing::debug!(
+        corpus_id = %corpus_id,
+        state = ?progress.state,
+        pct = progress.pct,
+        "corpus_catalog_http: index progress served",
+    );
+    Ok(Json(progress).into_response())
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
