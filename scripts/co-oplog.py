@@ -436,6 +436,8 @@ CHECKS = {
     "exists":   "does this file or path exist, and what does it contain",
     "defined":  "is this symbol defined anywhere, and where",
     "impls":    "every implementation of this trait — a second one kills an `only`",
+    "count":    "HOW MANY times this appears, and where — settles `only`, `exactly one`, `N of them`",
+    "lines":    "how many lines a file has — settles a claim that cites a size",
     "mentions": "does this text appear anywhere in the repo",
     "in_diff":  "does this text appear in the interval's diff",
     "ran":      "did this session run a command matching this",
@@ -443,28 +445,66 @@ CHECKS = {
 
 def run_check(kind: str, arg: str, t0: str, t1: str,
               commands: list | None = None) -> tuple[str, str]:
-    """-> (rendered output, the command a reader would rerun). Bounded."""
-    arg = arg.strip().strip("`'\"")
+    """-> (rendered output, the command a reader would rerun). Bounded.
+
+    EVERY search runs AT T0, the tree the claim was made against — never at
+    HEAD. `git grep <pat> <sha>` and `git show <sha>:<path>` take a commit
+    for exactly this reason.
+
+    The defect this fixes (blind batch, 2026-09-12): searching HEAD called
+    22 of 25 real claims broken, because a claim naming `attach_bootstrap`
+    in a session weeks old is not false when that symbol has since been
+    renamed — it is TRUE AS OF ITS OWN COMMIT. The golden ladder in the
+    order says to pin to T0 and this function ignored it, which made the
+    instrument a detector of subsequent refactors."""
+    arg = arg.strip().strip("`'\"").rstrip("()")
     if not arg:
         return "", ""
+    at = t0 or "HEAD"
     if kind == "exists":
-        cmd = f"ls {arg} && head -3 {arg}"
-        path = Path(REPO) / arg
-        if path.is_dir():
-            out = "\n".join(sorted(x.name for x in path.iterdir())[:20])
-        elif path.is_file():
-            out = f"{arg} ({path.stat().st_size} bytes)\n" + \
-                  "\n".join(path.read_text(errors="replace").splitlines()[:8])
+        cmd = f"git show {at[:10]}:{arg} | head -8"
+        out = git("show", f"{at}:{arg}")
+        if out:
+            n = len(out.splitlines())
+            out = f"{arg} at {at[:10]} ({n} lines)\n" + "\n".join(out.splitlines()[:8])
         else:
-            out = "(no such path)"
+            # A claim names `state.rs`; the file is nested. Search by
+            # basename before reporting absence (§18.3: absence is a
+            # finding, so it must not be an artefact of a bad path).
+            base = arg.rsplit("/", 1)[-1]
+            tree = git("ls-tree", "-r", "--name-only", at)
+            hits = [l for l in tree.splitlines() if l.endswith("/" + base) or l == base]
+            out = ("\n".join(hits[:10]) if hits else "(no such path at this commit)")
     elif kind == "defined":
-        cmd = f"git grep -nE '(struct|enum|trait|fn|impl|const|type|mod) {arg}' -- '*.rs'"
-        out = git("grep", "-nE", f"(struct|enum|trait|fn|impl|const|type|mod) {arg}", "--", "*.rs")
+        cmd = f"git grep -nE '(struct|enum|trait|fn|impl|const|type|mod|def|class) {arg}' {at[:10]}"
+        out = git("grep", "-nE",
+                  f"(struct|enum|trait|fn|impl|const|type|mod|def|class) {arg}", at)
     elif kind == "impls":
-        cmd = "git grep -nE 'impl.* " + arg + "( for | [{])' -- '*.rs'"
-        out = git("grep", "-nE", "impl.* " + arg + "( for | [{])", "--", "*.rs")
+        cmd = f"git grep -nE 'impl.* {arg}( for | [{{])' {at[:10]} -- '*.rs'"
+        out = git("grep", "-nE", "impl.* " + arg + "( for | [{])", at, "--", "*.rs")
+    elif kind == "count":
+        cmd = f"git grep -cF '{arg}' {at[:10]} | sort -t: -k3 -rn"
+        raw = git("grep", "-cF", arg, at)
+        rows = [l for l in raw.splitlines() if l.strip()]
+        total = 0
+        for l in rows:
+            try:
+                total += int(l.rsplit(":", 1)[1])
+            except (IndexError, ValueError):
+                pass
+        out = (f"{total} occurrence(s) across {len(rows)} file(s)\n" +
+               "\n".join(r.split(":", 1)[1] for r in rows[:12])) if rows else ""
+    elif kind == "lines":
+        base = arg.rsplit("/", 1)[-1]
+        tree = git("ls-tree", "-r", "--name-only", at)
+        hits = [l for l in tree.splitlines() if l.endswith("/" + base) or l == base]
+        cmd = f"git show {at[:10]}:<path> | wc -l   (for every path named {base})"
+        out = "\n".join(
+            f"{h}: {len(git('show', f'{at}:{h}').splitlines())} lines" for h in hits[:8])
     elif kind == "in_diff":
-        cmd = f"git diff {t0}..{t1} | grep -n '{arg}'"
+        if not t0 or not t1 or t0 == t1:
+            return "", f"git diff {(t0 or '?')[:10]}..{(t1 or '?')[:10]} (empty interval)"
+        cmd = f"git diff {t0[:10]}..{t1[:10]} | grep -n '{arg}'"
         diff = git("diff", f"{t0}..{t1}")
         out = "\n".join(l for l in diff.splitlines() if arg.lower() in l.lower())
     elif kind == "ran":
@@ -473,8 +513,8 @@ def run_check(kind: str, arg: str, t0: str, t1: str,
         out = "\n".join(f"{'ERROR ' if c.is_error else ''}$ {c.invocation.splitlines()[0][:120]}"
                          for c in hits)
     else:  # mentions
-        cmd = f"git grep -ln '{arg}'"
-        out = git("grep", "-lnF", arg)
+        cmd = f"git grep -lF '{arg}' {at[:10]}"
+        out = git("grep", "-lF", arg, at)
     lines = [l for l in out.splitlines() if l.strip()]
     shown = "\n".join(lines[:20])
     if len(lines) > 20:
@@ -482,26 +522,42 @@ def run_check(kind: str, arg: str, t0: str, t1: str,
     return (shown if shown else "(no matches)"), cmd
 
 
+# A `mentions` search hitting this many files has told us nothing.
+SELECTIVITY_CAP = 8
+
 PLAN_SYSTEM = """A coding agent made a claim about this repository. Propose ONE check
 that would settle it.
 
 Checks available:
+  none     -           the claim asserts nothing this repository can settle
+                       (an opinion, a summary, a rhetorical line). Say this
+                       rather than inventing a check.
   defined  <symbol>   is this symbol defined anywhere, and where
   impls    <trait>    every implementation of a trait (use this for "the only impl")
+  count    <text>     HOW MANY times it appears, and where
+  lines    <path>     how many lines a file has
   mentions <text>     does this text appear anywhere in the repo
   in_diff  <text>     does this text appear in the changes made this session
   ran      <command>  did this session run a command matching this
 
 Pick the check whose OUTPUT would let a reader decide the claim by looking at
-it. Choose a distinctive argument — a symbol or path, never a common word.
+it. The argument must be DISTINCTIVE — a symbol, a path, a number, a quoted
+phrase. Never a common word: `constraint`, `nothing`, `measurement` and
+`structural` all match hundreds of files and settle nothing. If the claim
+contains no distinctive term, answer `none`.
 
-Reply as JSON: {"check": "...", "arg": "..."}"""
+Also say what the claim ASSERTS, because it decides what an empty result means:
+  presence  the claim says something IS there, was added, exists, or happened.
+  absence   the claim says something is NOT there, is the only one, or never happens.
+
+Reply as JSON: {"check": "...", "arg": "...", "asserts": "presence"|"absence"}"""
 
 PLAN_SCHEMA = {
     "type": "object",
-    "properties": {"check": {"type": "string", "enum": list(CHECKS)},
-                   "arg": {"type": "string"}},
-    "required": ["check", "arg"],
+    "properties": {"check": {"type": "string", "enum": list(CHECKS) + ["none"]},
+                   "arg": {"type": "string"},
+                   "asserts": {"type": "string", "enum": ["presence", "absence"]}},
+    "required": ["check", "arg", "asserts"],
 }
 
 RULE_SYSTEM = """You are shown a claim and the output of a check run against the
@@ -559,9 +615,14 @@ def verify_claim(text: str, t0: str, t1: str, pin: str, timeout: float,
                                     PLAN_SCHEMA, timeout)
         plan = json.loads(raw)
         kind, arg = plan.get("check", ""), str(plan.get("arg", ""))
+        asserts = plan.get("asserts", "presence")
     except (DaemonDown, json.JSONDecodeError) as e:
         return {"verdict": "unchecked", "reason": f"no check could be planned ({e})",
                 "check": None, "receipt": "", "engine": None}
+    if kind == "none":
+        return {"verdict": "unchecked",
+                "reason": "the claim asserts nothing this repository can settle",
+                "check": None, "receipt": "", "engine": model}
     if kind not in CHECKS or not arg.strip():
         return {"verdict": "unchecked", "reason": f"planned check is not one of {list(CHECKS)}",
                 "check": None, "receipt": "", "engine": model}
@@ -576,12 +637,46 @@ def verify_claim(text: str, t0: str, t1: str, pin: str, timeout: float,
                     "check": f"{kind} {arg}", "receipt": "", "engine": model}
 
     output, cmd = run_check(kind, arg, t0, t1, commands)
-    if not output:
-        return {"verdict": "unchecked", "reason": "the check produced nothing to read",
-                "check": cmd, "receipt": "", "engine": model}
+    empty = (not output) or output.strip() == "(no matches)"
+
+    # A check that matches a large share of the repo has not discriminated
+    # anything. Measured on blind batch v2: 5 of 9 BROKEN verdicts rested on
+    # `mentions` of a single common word — `nothing`, `constraint`,
+    # `measurement`, `structural`, `custodian` — each matching a file that
+    # has no bearing on the claim. Selectivity is a property of the OUTPUT,
+    # so it is gated here rather than trusted to the planner's judgement.
+    if not empty and kind == "mentions":  # count/lines are never gated: many hits IS the answer
+        hits = len([l for l in output.splitlines() if l.strip()])
+        if hits >= SELECTIVITY_CAP or len(arg.strip()) < 6:
+            return {"verdict": "unchecked",
+                    "reason": f"`{arg}` matches {hits}+ files — the check does not discriminate",
+                    "check": cmd, "receipt": output, "engine": model}
+
+    # POLARITY decides what an empty result means, and it is the whole
+    # difference between a finding and a false accusation.
+    #
+    # Measured on the first blind batch (2026-09-12): 9 of 25 claims were
+    # ruled BROKEN on a receipt reading "(no matches)", and 13 of 13
+    # empty-interval claims came back broken — a verdict deterministic on a
+    # property of the input is not a judgement. But case 3 of that same
+    # batch, "there is no /v1/sessions route today", got "(no matches)" and
+    # was correctly KEPT.
+    #
+    # A search that finds nothing PROVES an absence claim and says nothing
+    # whatever about a presence claim: the thing may be there under another
+    # name, another language, another spelling. Reading null as false in
+    # both directions is what produced 22 broken out of 25.
+    if empty:
+        if asserts == "absence":
+            return {"verdict": "kept", "reason": f"{cmd} — nothing found, which is the claim",
+                    "check": cmd, "receipt": "(no matches)", "engine": model}
+        return {"verdict": "unchecked",
+                "reason": "the check found nothing, which does not disprove a positive claim",
+                "check": cmd, "receipt": "(no matches)", "engine": model}
     try:
         raw2, model2, _ = call_daemon(
-            RULE_SYSTEM, f"CLAIM: {text}\n\nCHECK: {cmd}\n\nOUTPUT:\n{output}",
+            RULE_SYSTEM,
+            f"CLAIM: {text}\n\nThe claim asserts {asserts}.\n\nCHECK: {cmd}\n\nOUTPUT:\n{output}",
             pin, 40, RULE_SCHEMA, timeout)
         verdict = json.loads(raw2).get("verdict", "")
     except (DaemonDown, json.JSONDecodeError) as e:
@@ -835,6 +930,64 @@ def cmd_promises(a) -> int:
         print(f"appended {len(promises)} adjudicated rows to {VERDICTS_LOG}")
     return 0
 
+def cmd_batch(a) -> int:
+    """The blind batch: verify real claims and hand them to the operator unscored.
+
+    Sampling rule is fixed before the draw and printed with the output, so
+    the sample cannot be reshaped after seeing what it caught. No verdict of
+    mine appears as a label — the operator scores cold."""
+    import random
+    seen = set(a.exclude.split(",")) if a.exclude else set()
+    src = TRANSCRIPTS / a.project
+    files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    files = [f for f in files if not any(f.stem.startswith(x) for x in seen)][:a.sessions]
+
+    pool = []
+    for f in files:
+        try:
+            rows = rows_for(f.stem, f, a.pin, a.batch, a.timeout, True)
+        except Exception as e:
+            print(f"  skip {f.stem[:8]}: {e}", file=sys.stderr)
+            continue
+        ts = turns(f)
+        end = sha_at(ts[-1][2]) if ts else None
+        for r in rows:
+            if r["audience"] == "operator" and r["class"] in ("retrospective", "universal") \
+               and r.get("at_sha") and end:
+                r["t1_sha"] = end
+                pool.append(r)
+        print(f"  {f.stem[:8]}  pool={len(pool)}", file=sys.stderr)
+
+    random.seed(a.seed)
+    sample = random.sample(pool, min(a.n, len(pool)))
+    out = [f"""# Blind batch — order bs-1-oplog
+
+Rule, fixed before the draw: the {a.sessions} most recent sessions excluding
+{a.exclude or '(none)'}; OPERATOR-FACING claims only; classes retrospective and
+universal; {a.n} sampled uniformly with seed {a.seed}. Pool was {len(pool)}.
+
+For each: the claim as written, the check the judge proposed, and that check's
+output. Score the VERDICT — right or wrong — in the blank. `?` is legitimate.
+
+    r = the verdict is right     w = it is wrong     ? = cannot tell
+"""]
+    for i, r in enumerate(sample, 1):
+        v = verify_claim(r["text"], r["at_sha"], r["t1_sha"], a.pin, a.timeout)
+        receipt = (v["receipt"] or "—").splitlines()
+        out.append(f"""
+## {i}. [ ]   verdict: **{v['verdict']}**
+
+> {r['text'][:400]}
+
+    session {r['session'][:8]} turn {r['turn']} · {r['at_sha'][:10]}..{r['t1_sha'][:10]}
+    check:   {v['check'] or '—'}
+    receipt: {chr(10).join('             ' + l[:110] for l in receipt[:6]).strip()}
+""")
+        print(f"  {i}/{len(sample)} {v['verdict']}", file=sys.stderr)
+    Path(a.out).write_text("\n".join(out))
+    print(f"wrote {a.out} — {len(sample)} claims from {len(files)} sessions")
+    return 0
+
 def cmd_self_test(_a) -> int:
     fails = []
     def eq(got, want, what):
@@ -894,6 +1047,17 @@ def main() -> int:
     cal.add_argument("--timeout", type=float, default=180.0)
     cal.add_argument("--verbose", action="store_true")
     cal.set_defaults(fn=cmd_calibrate)
+    b = sub.add_parser("batch", help="blind batch for the operator to score")
+    b.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    b.add_argument("--sessions", type=int, default=20)
+    b.add_argument("--n", type=int, default=25)
+    b.add_argument("--seed", type=int, default=17)
+    b.add_argument("--exclude", default="")
+    b.add_argument("--pin", default=DEFAULT_PIN)
+    b.add_argument("--batch", type=int, default=10)
+    b.add_argument("--timeout", type=float, default=180.0)
+    b.add_argument("--out", default=".sovereign/features/bs-1-oplog/blind-batch.md")
+    b.set_defaults(fn=cmd_batch)
     a = ap.parse_args()
     if a.self_test:
         return cmd_self_test(a)
