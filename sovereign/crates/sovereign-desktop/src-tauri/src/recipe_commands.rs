@@ -63,7 +63,7 @@ pub async fn corpus_import_recipe(
     state: State<'_, Arc<AppState>>,
     toml_text: String,
 ) -> Result<ImportRecipeResult, String> {
-    TurnClient::new(state.internal_base_url())
+    TurnClient::new(state.client_base_url())
         .import_recipe::<_, ImportRecipeResult>(&ImportRecipeRequest { toml_text })
         .await
         .map_err(|e| format!("corpus_import_recipe: {e}"))
@@ -78,7 +78,7 @@ pub async fn corpus_get_recipe_parameters(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<RecipeParameterSchema, String> {
-    TurnClient::new(state.internal_base_url())
+    TurnClient::new(state.client_base_url())
         .recipe_parameters::<RecipeParameterSchema>(&corpus_id)
         .await
         .map_err(|e| format!("corpus_get_recipe_parameters `{corpus_id}`: {e}"))

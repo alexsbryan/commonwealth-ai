@@ -2932,6 +2932,40 @@ impl TurnClient {
         }
     }
 
+    /// WHICH LISTENER `self.base` MUST NAME (measured 2026-09-11 against a
+    /// live daemon, and the reason two desktop commands were 404ing).
+    ///
+    /// A daemon binds two ports, and `/internal/...` is served on BOTH by
+    /// different owners:
+    ///
+    /// - the CLIENT port (9741 by convention) carries
+    ///   `commonwealth_api::server::client_router` — a superset of the
+    ///   internal one — PLUS every router `EmbeddedDaemon` merges into it
+    ///   (`mounted`): `corpus_catalog_http`, `lc_http`, `atlas_http`,
+    ///   `meshapp_http`, `enrich_http`, `recipe_http`, `documents_http`,
+    ///   `research_http`, … So every `/internal/corpus/catalog`,
+    ///   `/internal/corpus/local/…`, `/internal/corpus/enriched`,
+    ///   `/internal/corpus/recipes/…`, `/internal/atlas/…` and
+    ///   `/internal/meshapp/…` method in this file — which is nearly all
+    ///   of them — reaches ONLY that port.
+    /// - the INTERNAL port (9742) carries
+    ///   `commonwealth_api::server::internal_router`, the mesh PEER
+    ///   surface: gossip, join, scheduling, model/index transfer,
+    ///   `/internal/corpus/install`, `/internal/contribution/…`. Only
+    ///   [`Self::contribution_view`] and its neighbours below may be
+    ///   reached there.
+    ///
+    /// Verified: `GET /internal/corpus/catalog` answers 200 on 9741 and
+    /// 404 on 9742; `/internal/gossip` is 404 on 9741 and 405 on 9742.
+    ///
+    /// The footgun is that the CALLER picks the port, so a new client of
+    /// a `mounted` route reads a neighbouring call site, copies
+    /// `internal_base_url()`, and gets a 404 that
+    /// `internal_get_opt` then reports as a legitimate absence. Moving
+    /// the choice into this type is the structural fix (ARCH principle
+    /// 12: the client owns which listener serves what, not each caller);
+    /// until then this comment is at the one place that spells the URL.
+    ///
     /// The url and the error-context string for one call — the two
     /// strings every shape below needs and none of them should spell.
     fn target(&self, method: &str, path: &str) -> (String, String) {

@@ -49,7 +49,7 @@ use crate::state::AppState;
 pub async fn enrich_list_corpora(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<EnrichedCorpusSummary>, String> {
-    TurnClient::new(state.internal_base_url())
+    TurnClient::new(state.client_base_url())
         .enriched_corpora::<EnrichedCorpusSummary>()
         .await
         .map_err(|e| format!("enrich_list_corpora: {e}"))
@@ -167,7 +167,7 @@ pub async fn enrich_get_starter_questions(
     corpus_id: String,
     limit: usize,
 ) -> Result<Vec<StarterQuestion>, String> {
-    match TurnClient::new(state.internal_base_url())
+    match TurnClient::new(state.client_base_url())
         .starter_questions_if_present::<StarterQuestion>(&corpus_id, limit)
         .await
         .map_err(|e| format!("enrich_get_starter_questions: {e}"))?
@@ -181,10 +181,18 @@ pub async fn enrich_get_starter_questions(
             Ok(starters)
         }
         None => {
+            // Say what is KNOWN — the host answered 404 — not what it is
+            // taken to mean. This line used to assert "has no atlas", and
+            // for the life of the wrong-port bug above that assertion was
+            // false: the 404 was a route that did not exist on the
+            // listener being asked. A trace that states a conclusion it
+            // cannot see is worse than no trace, because it is the line
+            // someone greps to rule this branch out.
             tracing::debug!(
                 corpus_id = %corpus_id,
-                "enrich_get_starter_questions: host has no atlas for this corpus \
-                 — excerpt starters, not a failed read"
+                "enrich_get_starter_questions: host answered 404 — no atlas for \
+                 this corpus, or no such route on the listener asked; either \
+                 way the UI falls back to excerpt starters"
             );
             Ok(Vec::new())
         }
