@@ -871,6 +871,8 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
 
     bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
 
+    bootstrap::spawn_vector_index_readiness_sweep(Arc::clone(&engine));
+
     bootstrap::spawn_tier2_enrichment_resume(&data_dir);
 
     let advertise_embed =

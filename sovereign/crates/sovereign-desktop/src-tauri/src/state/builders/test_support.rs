@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared `#[cfg(test)]` fixtures for the bootstrap builders: a no-op
-//! `InferenceProvider` stub and a temp `CorpusEngine`. These let each
-//! builder unit-test with the project's standard mocks — concrete proof
-//! that the bootstrap phases are CI-testable via dependency injection
-//! (only the literal model load is not).
+//! `InferenceProvider` stub. It lets each builder unit-test with the
+//! project's standard mocks — concrete proof that the bootstrap phases are
+//! CI-testable via dependency injection (only the literal model load is not).
 
 use std::pin::Pin;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use futures::Stream;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
 };
-use tempfile::TempDir;
 
 /// Minimal provider. Builders only *store* the provider (in a checker /
 /// InsightService) during construction — they never call it — so the
@@ -50,16 +47,6 @@ impl InferenceProvider for StubInference {
     }
 }
 
-/// A temp-dir-backed `CorpusEngine` with a zero-vector embed fn. Returns
-/// the `TempDir` guard too — keep it in scope for the engine's lifetime.
-pub(crate) fn temp_corpus_engine() -> (TempDir, Arc<CorpusEngine>) {
-    let tmp = tempfile::tempdir().expect("corpus tempdir");
-    let embed: corpus_engine::EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async move { Ok(vec![0.0f32; 8]) }));
-    let engine = Arc::new(CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        embed,
-    ));
-    (tmp, engine)
-}
+// `temp_corpus_engine` stood here and is GONE (svt-6). Zero callers: the
+// builders that took an engine went with the engine itself, and a fixture
+// nothing constructs is inventory, not coverage (ARCH principle 12).

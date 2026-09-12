@@ -367,20 +367,12 @@ pub async fn bootstrap_with_progress(
         }
     };
 
-    // Glassbox sub-phase timing. The `WiringKnowledge` and `BuildingRuntime`
-    // phases each bundle several loads; without per-step timing those two
-    // splash phases are opaque (a 2026-06-29 trace found ~17s + ~19s hiding
-    // inside them). `substep` logs each remaining critical-path step's
-    // duration at info on the `bootstrap` target so a slow boot keeps
-    // self-attributing even after the heavy loads moved to background warms.
-    let substep = |name: &str, started: std::time::Instant| {
-        tracing::info!(
-            target: "bootstrap",
-            substep = name,
-            elapsed_ms = started.elapsed().as_millis() as u64,
-            "boot substep"
-        );
-    };
+    // The `substep` glassbox timer stood here and is GONE (svt-6). Its two
+    // remaining callers were the embed probe and `validate_corpus_readiness`
+    // below, both of which went with the engine; a closure with no call site
+    // is a count that reached zero (ARCH principle 12). What it was for — a
+    // slow boot self-attributing — is the daemon's boot now, and the daemon
+    // times its own.
 
     let config = state.config.read().await.clone();
 
@@ -639,48 +631,29 @@ pub async fn bootstrap_with_progress(
     // (ARCH principle 12). `lc_http` serves all fifteen routes over the
     // daemon's OWN manager.
 
-    // Lazy-stamp canonical fingerprints for any installed canonicals
-    // that don't yet carry one. Mirrors the daemon-mode bootstrap so
-    // a Local/CliSetup desktop install gets the same legacy-corpus
-    // upgrade pass. Spawned so it doesn't block startup.
-    {
-        let engine_for_stamp = Arc::clone(&corpus_engine);
-        tokio::spawn(async move {
-            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
-        });
-    }
+    // The lazy canonical-fingerprint stamp stood here and is GONE (svt-6).
+    // Its own comment said it "mirrors the daemon-mode bootstrap", and it
+    // did, exactly: `bootstrap::spawn_lazy_stamp_fingerprints`
+    // (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:1658`, called from
+    // `daemon_cmd/mod.rs:872`) runs the same `lazy_stamp_legacy_fingerprints`
+    // over the same `~/.svrnmesh/indexes` root, supervised. Two processes
+    // racing one idempotent pass is not a second answer, it is a second
+    // writer — and the one that owns the root keeps it (ARCH principle 8).
 
-    // Startup dimension guard: probe the loaded embed model's actual output
-    // size and compare against every installed corpus index. A mismatch means
-    // the user swapped embed models after building their library — retrieval
-    // will silently return wrong results unless they rebuild.
+    // The startup dimension guard stood here and is GONE (svt-6). It probed
+    // THIS process's embed provider — which is the daemon's, over HTTP — and
+    // armed clause ST-8's geometry gate on an engine only this process held.
+    // The daemon arms its own gate from its own probe, over the engine that
+    // actually serves retrieval (`engine.set_expected_embedding_dimensions`,
+    // `sovereign-cli-daemon/src/daemon_cmd/mod.rs:886`), so the arming that
+    // matters was never this one.
     //
-    // It no longer ADVERTISES that dimension: `EmbedAdvertisement` was what a
-    // node tells its peers about its embedding model, and this process is not
-    // a node any more — the daemon it attaches to advertises its own (svt-3).
-    if slots.has_embed() {
-        // Err => embed not configured or failed — skip validation.
-        let t_embed_probe = std::time::Instant::now();
-        if let Ok(probe_vec) = inference.embed("probe").await {
-            substep("embed_probe", t_embed_probe);
-            let dims = probe_vec.len();
-            // Arm clause ST-8's geometry gate. Until this fires, `open_index`
-            // cannot tell a 768-dim corpus from a 1024-dim one and admits
-            // both; `oicp-types` on the maintainer's host is exactly that
-            // case, recording the SAME model name as the compatible corpora.
-            corpus_engine.set_expected_embedding_dimensions(dims);
-            let t_validate = std::time::Instant::now();
-            if let Err(e) = corpus_engine.validate_corpus_readiness(dims).await {
-                tracing::warn!(
-                    "Corpus readiness issue detected at startup: {} \
-                         Retrieval over the affected corpus is skipped (and the \
-                         user prompted to rebuild) until it is fixed.",
-                    e
-                );
-            }
-            substep("validate_corpus_readiness", t_validate);
-        }
-    }
+    // `validate_corpus_readiness` went with it, and it is the one thing here
+    // that is a DELETE rather than a duplicate: `state.rs` was its only
+    // caller in the workspace (`corpus-engine/src/engine/mod.rs:2141` is the
+    // definition), and its whole effect was a `tracing::warn!` in a client's
+    // log that no surface read. The geometry it warned about is refused at
+    // `open_index` by the gate the daemon arms above.
 
     // The health monitor stood here and is gone (thin-desktop, 2026-09-12).
     // `state.health_monitor` was written by the builder and never read: the
@@ -689,65 +662,21 @@ pub async fn bootstrap_with_progress(
     // inference provider inside a client, whose verdict nothing could ask
     // for, is the same zero-reader shape as the three slots beside it.
 
-    // Background startup task: probe each installed index's vector-search
-    // readiness, which SELF-HEALS the index's own on-disk
-    // `IndexMeta.vector_index_built`
-    // (`corpus_engine::index::create::is_vector_index_ready` — it calls
+    // The vector-index readiness sweep stood here and MOVED to the daemon
+    // (svt-6): `bootstrap::spawn_vector_index_readiness_sweep`, called beside
+    // the lazy stamp at `daemon_cmd/mod.rs`. It self-heals the index's own
+    // on-disk `IndexMeta.vector_index_built` — `is_vector_index_ready` calls
     // `mark_vector_index_built` when LanceDB reports a complete index the
-    // meta had not recorded).
+    // meta had not recorded — and its ONE reader in the workspace is
+    // `corpus_catalog_http::catalog`, which prefers exactly that meta field
+    // (`sovereign-mesh/src/corpus_catalog_http.rs:420-427`). Sweep and reader
+    // now run in one process over one engine.
     //
-    // **The store write went at thin-desktop R2 (2026-09-12), and it was
-    // inert, not merely misplaced.** It used to
-    // `set_vector_index_ready(&corpus, ready)` — the last thing in this file
-    // holding a `StateStore`. Its ONE reader in the workspace is
-    // `corpus_catalog_http::catalog`, which resolves readiness from the
-    // on-disk meta FIRST and consults the store flag only when the meta says
-    // not-built (`sovereign-mesh/src/corpus_catalog_http.rs:421-427`, the
-    // "two historical sources" comment). But the probe above self-heals the
-    // meta to true in exactly that case — so a `true` the flag could have
-    // carried was already carried by the meta, and a `false` matched the
-    // reader's own `unwrap_or(false)`. On an attached boot it was worse than
-    // inert: it wrote into this app's `sovereign.db` and the reader reads the
-    // daemon's.
-    //
-    // What remains crosses no ownership line: it reads the engine this
-    // process still holds and writes only inside the corpus index on the
-    // shared `~/.svrnmesh/indexes` root both processes open. The SWEEP
-    // ITSELF is the daemon's job by rights — it holds the same engine and
-    // serves the catalogue — and nothing in `sovereign-mesh` performs it;
-    // that is a named gap, not a silent local store path.
-    //
-    // The corpus list now comes from `installed_indexes()` rather than from
-    // `list_corpus_states()`. Named delta: a corpus present on disk with no
-    // `corpus_state` row used to be skipped and is now probed, which is the
-    // more truthful source for a question about an index on disk.
-    {
-        let verify_engine = Arc::clone(&corpus_engine);
-        tokio::spawn(async move {
-            let Ok(indexes) = verify_engine.installed_indexes().await else {
-                tracing::debug!("state:index_readiness_sweep_skipped_unreadable_indexes_dir");
-                return;
-            };
-            for info in indexes {
-                let Ok(idx) = verify_engine.open_index(&info.path).await else {
-                    continue;
-                };
-                if idx.is_vector_index_ready().await {
-                    tracing::info!(corpus = %info.corpus_id, "Vector index ready");
-                } else {
-                    // Transient, self-resolving: a corpus whose vector index
-                    // is still building (common on fresh installs) is served
-                    // FTS-only until the build completes. This fires once per
-                    // not-ready corpus on every boot, so it's info, not a
-                    // warning — nothing is broken and no user action is needed.
-                    tracing::info!(
-                        corpus = %info.corpus_id,
-                        "Vector index not built yet — KnowledgeQuery will use FTS-only search until it finishes"
-                    );
-                }
-            }
-        });
-    }
+    // It was MOVED, not deleted, and the difference is user-visible: with no
+    // sweep anywhere, a corpus whose LanceDB index finished but whose meta
+    // predates the field reports FTS-only forever, and the catalogue would
+    // keep saying so. The old comment here called that "a named gap"; this is
+    // the gap closed on the side that owns the root (ARCH principles 6, 12).
 
     tracing::info!("Runtime ready");
     Ok(())

@@ -1674,6 +1674,53 @@ pub(super) fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
     });
 }
 
+/// Spawn the vector-index readiness sweep over every installed corpus.
+///
+/// **This ran in the desktop until svt-6 (2026-09-12) and ran nowhere else.**
+/// It is a self-heal of the index's own on-disk `IndexMeta.vector_index_built`:
+/// `corpus_engine::index::create::is_vector_index_ready` calls
+/// `mark_vector_index_built` when LanceDB reports a complete index the meta
+/// had not recorded. The ONE reader of that field is
+/// `sovereign_mesh::corpus_catalog_http::catalog`, which prefers it over the
+/// state store's flag — so with no sweep, a corpus whose index finished but
+/// whose meta predates the field reports FTS-only forever.
+///
+/// It belongs here because this process owns the indexes root and serves the
+/// catalogue that reads the result (ARCH principle 12). Idempotent on every
+/// boot: a corpus already marked built is a read and no write.
+pub(super) fn spawn_vector_index_readiness_sweep(engine: Arc<CorpusEngine>) {
+    // Supervised one-shot: idempotent per the contract above —
+    // DAEMON_RESILIENCE.md P0.4.
+    crate::supervise::spawn_supervised("vector_index_readiness_sweep", move || {
+        let engine = Arc::clone(&engine);
+        async move {
+            let Ok(indexes) = engine.installed_indexes().await else {
+                tracing::debug!("bootstrap:index_readiness_sweep_skipped_unreadable_indexes_dir");
+                return;
+            };
+            for info in indexes {
+                let Ok(idx) = engine.open_index(&info.path).await else {
+                    continue;
+                };
+                if idx.is_vector_index_ready().await {
+                    tracing::info!(corpus = %info.corpus_id, "Vector index ready");
+                } else {
+                    // Transient, self-resolving: a corpus whose vector index
+                    // is still building (common on fresh installs) is served
+                    // FTS-only until the build completes. This fires once per
+                    // not-ready corpus on every boot, so it is info, not a
+                    // warning — nothing is broken and no user action is needed.
+                    tracing::info!(
+                        corpus = %info.corpus_id,
+                        "Vector index not built yet — KnowledgeQuery will use \
+                         FTS-only search until it finishes"
+                    );
+                }
+            }
+        }
+    });
+}
+
 /// Spawn the tier-2 enrichment resume scan for unfinished workspaces after a restart.
 pub(super) fn spawn_tier2_enrichment_resume(data_dir: &Path) {
     // Tier-2 enrichment resume: find any `<...>-tier2` workspace
