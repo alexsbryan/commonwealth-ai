@@ -12494,7 +12494,6 @@ dependencies = [
 name = "sovereign-desktop"
 version = "0.6.0"
 dependencies = [
- "arc-swap",
  "async-trait",
  "axum",
  "chrono",
@@ -12502,7 +12501,6 @@ dependencies = [
  "commonwealth-state",
  "corpus-engine",
  "corpus-engine-notes",
- "corpus-engine-scip",
  "dirs 6.0.0",
  "futures",
  "hostname",
@@ -12521,14 +12519,11 @@ dependencies = [
  "sovereign-enrichment-catalog",
  "sovereign-gliner",
  "sovereign-inference",
- "sovereign-mesh",
  "sovereign-meshapp",
- "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-turn-client",
  "sovereign-workflow",
- "sovereign-workflow-host",
  "syn 2.0.118",
  "sysinfo 0.35.2",
  "tauri",

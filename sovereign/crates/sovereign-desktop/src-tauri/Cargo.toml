@@ -31,14 +31,18 @@ sovereign-gliner = { workspace = true }
 # workflow project's TOML via `Workflow::parse` (the same way they validate a
 # recipe via `Recipe::from_toml`). Core-only crate — no inference/tool deps.
 sovereign-workflow = { workspace = true }
-# The workflow-author tool bundle (workflow_write/_structured/validate/test) the
-# desktop runtime registers so a Workflow-kind project's chat can compose a
-# workflow. Same agent loop as recipe authoring; only the tools + skill differ.
-sovereign-workflow-host = { workspace = true }
-# THE shared commissioning recipe. The desktop composes its tool bundles and
-# hands its host inputs over rather than building a router, a registry and a
-# lane of its own (TOPOLOGY §10 phase 7).
-sovereign-runtime-recipe = { workspace = true }
+# `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`
+# LEFT HERE at svt-3 (2026-09-11), with `corpus-engine-scip` and `arc-swap`
+# below. The runtime recipe and the workflow-author bundle went when the app
+# stopped commissioning a Runtime (svt-3b); the last thing holding the other
+# two was NAMING their wire shapes — `workflow_http::{RunRequest, JobResponse,
+# …}` and `mesh_http::{StatusResponse, KnownMeshDto}`, `types::{MeshStatus,
+# …}` — which now live in `sovereign_contracts::daemon_wire` (both crates
+# re-export them). The two reads that were not a type moved to the daemon:
+# invite preview is `POST /v1/mesh/join/preview`, the node id comes from
+# `GET /status`. `[thin_surfaces].may_not_reach` in quality/ARCH_LAYERS.toml
+# is reachability over `cargo tree`, so a type reached through one of these
+# is a red gate, not a shortcut.
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }
@@ -50,7 +54,6 @@ sovereign-meshapp = { workspace = true }
 # daemon this app talks to is the Tauri SIDECAR, built as a separate binary
 # by `scripts/stage-daemon-sidecar.sh`. Do not re-add either to reach a type
 # — that is the dependency edge `cargo xtask layer-gate` exists to hold.
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # `commonwealth-core` and `commonwealth-state` LEFT HERE at svt-3 chunk 3
 # (2026-09-11). The Mesh Health surfaces — peer preferences and dimensional
 # contributions — used to reach the in-process AppState's accessors directly,
@@ -61,7 +64,6 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-authoring-harness.workspace = true
 corpus-engine-notes = { workspace = true }
-corpus-engine-scip = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
@@ -82,7 +84,6 @@ tauri-plugin-deep-link = "2"
 # tag. See RELEASING.md §"Auto-updates" for the keypair + secret setup.
 tauri-plugin-updater = "2"
 reqwest = { workspace = true, features = ["stream"] }
-arc-swap = { workspace = true }
 futures = { workspace = true }
 walkdir = "2"
 dirs = "6"

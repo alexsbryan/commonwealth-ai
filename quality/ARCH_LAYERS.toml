@@ -1144,20 +1144,8 @@ tracking = "R6"
 
 [[exception]]
 from = "sovereign-desktop"
-to = "sovereign-mesh"
-reason = "11 desktop files name sovereign-mesh directly (mesh_commands, meshapp, health, state builders). svt-3 migrates them onto daemon routes through sovereign-turn-client."
-tracking = "sv-surface svt-3"
-
-[[exception]]
-from = "sovereign-desktop"
 to = "sovereign-tools"
-reason = "8 desktop files name sovereign-tools, and it also arrives transitively via sovereign-runtime-recipe and sovereign-mesh — which is the whole argument for making this rule reachability: removing the direct edge alone would turn a direct-edge gate green with the MCP listener still linked. svt-3."
-tracking = "sv-surface svt-3"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "sovereign-workflow-host"
-reason = "the workflow-author tool bundle the desktop runtime registers so a Workflow project's chat can compose a workflow. Same agent loop as recipe authoring; it moves to the daemon with the rest of the runtime in svt-3."
+reason = "the desktop names sovereign-tools DIRECTLY and that is now the ONLY path: `cargo tree -p sovereign-desktop -e normal -i sovereign-tools` (2026-09-11, after svt-3 cut sovereign-mesh and sovereign-runtime-recipe from src-tauri/Cargo.toml) shows one edge, the desktop's own. The reachability form of this rule is what made that measurable — while the two transitive paths existed, removing the direct edge alone would have turned a direct-edge gate green with the MCP listener still linked. The direct edge is a separate order."
 tracking = "sv-surface svt-3"
 
 # ── Thin-surface reaches under the ALLOWLIST form (2026-09-11, evening) ──────
@@ -1176,50 +1164,8 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
-to = "commonwealth-api"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-api. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-app"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-app. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
 to = "commonwealth-core"
 reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-core. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-discovery"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-discovery. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-inference"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-inference. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-knowledge"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-api → commonwealth-knowledge. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-media"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-media. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-rail"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-rail. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
@@ -1232,24 +1178,6 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 from = "sovereign-desktop"
 to = "commonwealth-state"
 reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-state. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-test-harness"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-test-harness. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-transport"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-transport. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-work"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-work. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
@@ -1358,12 +1286,6 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 from = "sovereign-desktop"
 to = "sovereign-recipe-author"
 reason = "REACHED via sovereign-desktop → sovereign-store → sovereign-recipe-author. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "sovereign-runtime-recipe"
-reason = "REACHED via sovereign-desktop → sovereign-runtime-recipe. Holder: freed at svt-3b, not yet removed from Cargo.toml — same in-flight order. Falls when `sovereign-runtime-recipe` leaves src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
