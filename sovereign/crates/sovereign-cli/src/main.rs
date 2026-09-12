@@ -83,6 +83,7 @@ mod quality_map_cmd;
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
 mod project_registry;
+mod report_audit;
 mod reflect_cmd;
 mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
@@ -183,6 +184,10 @@ const HELP: Help = Help {
                 "Multi-round research session; findings land in an estate corpus later sessions reuse",
             ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
+            (
+                "publish",
+                "Put a localhost port in front of the house by name — housemates reach it by mesh key, with your identity on every request",
+            ),
             (
                 "ring",
                 "Deploy an app to a trust ring — shared, signed, converging state (roster / dev / balances)",
@@ -291,6 +296,7 @@ const DEV_VERBS: &[&str] = &[
     // the feature falls to the unknown-verb catch-all, like the other
     // feature-gated arms.
     "atos",
+    "unpublish",
     "tools",
     "status",
     "charter",
@@ -379,6 +385,7 @@ const ALL_VERBS: &[&str] = &[
     "nudge",
     "path",
     "pipeline",
+    "publish",
     "plan",
     "portfolio",
     "posture",
@@ -873,7 +880,8 @@ async fn async_main() {
             // the sibling's main() installs the appropriate filter for
             // each verb.
             "mesh" | "meshapp" | "ring" | "job" | "mobile" | "alignment" | "corpus"
-            | "meta-atlas" | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer" => {
+            | "meta-atlas" | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer"
+            | "publish" | "unpublish" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

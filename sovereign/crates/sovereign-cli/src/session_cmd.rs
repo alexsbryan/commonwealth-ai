@@ -2189,7 +2189,7 @@ fn print_help() {
     );
 }
 
-fn find_transcript(dir: &Path, id: &str) -> Result<PathBuf, String> {
+pub(crate) fn find_transcript(dir: &Path, id: &str) -> Result<PathBuf, String> {
     let entries =
         std::fs::read_dir(dir).map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
     let mut matches: Vec<PathBuf> = entries
@@ -2599,6 +2599,13 @@ async fn run_distill(dir: &Path, id: &str, flags: &BTreeMap<String, String>) -> 
 }
 
 pub async fn run(args: &[String]) -> i32 {
+    // `audit` owns its own flag grammar (--transcript, --message-file,
+    // --root) and is the one subcommand a HOOK drives, so it is dispatched
+    // before this function's parser touches the arguments.
+    if args.first().map(String::as_str) == Some("audit") {
+        return crate::report_audit::run(&args[1..]);
+    }
+
     let mut sub: Option<String> = None;
     let mut id: Option<String> = None;
     let mut flags: BTreeMap<String, String> = BTreeMap::new();
