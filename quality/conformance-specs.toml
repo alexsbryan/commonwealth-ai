@@ -163,7 +163,7 @@ kind = '''rust-integration; but WIRING COMES FIRST — see catches'''
 # have no implementation anywhere. That is a truthful UNMET, replacing a
 # `landed` that rested on unreachable code.
 retired = '''subject deleted (orchestrator/, test-only construction) — departure countdown and fault detector are unimplemented; the requirement returns to write-work at its declared target'''
-landed = '''commonwealth-test-harness::integration::a_departing_orchestrator_announces_rebalances_and_drains_before_it_stops_anything (+ a_node_that_has_announced_its_departure_refuses_new_shard_plans)'''
+landed = '''sovereign-mesh-test-harness::integration::a_departing_orchestrator_announces_rebalances_and_drains_before_it_stops_anything (+ a_node_that_has_announced_its_departure_refuses_new_shard_plans)'''
 
 [[spec]]
 id = "FE-22"

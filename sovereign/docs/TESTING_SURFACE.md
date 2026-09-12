@@ -812,11 +812,11 @@ straightforward regressions).
 - **Real GPU inference quality.** Determinism-blocking. Manual smoke.
 - **launchd / systemd service install.** Platform-specific. Manual.
 - **Cross-machine real network (Tailscale, NAT).** Test harness
-  exists in `commonwealth-test-harness::SimulatedMesh` for the
+  exists in `sovereign_mesh_test_harness::SimulatedMesh` for the
   standalone daemon — applies less cleanly here. Manual.
 - **Standalone `commonwealth-daemon` paths that don't run in the
   embedded shape** (scheduler, orchestrator, `llama-server`/`rpc-server`
-  spawn). Covered by `commonwealth-test-harness`'s `SimulatedMesh`.
+  spawn). Covered by `sovereign-mesh-test-harness`'s `SimulatedMesh`.
 
 ## Conventions
 

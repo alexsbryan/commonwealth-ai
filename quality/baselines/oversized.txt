@@ -3,16 +3,16 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
-1447	commonwealth/crates/commonwealth-api/src/admission.rs
-5820	commonwealth/crates/commonwealth-api/src/frontdoor.rs
-2462	commonwealth/crates/commonwealth-api/src/next_edit_model.rs
-1412	commonwealth/crates/commonwealth-api/src/routes_edit_predictions.rs
-2342	commonwealth/crates/commonwealth-api/src/routes_inference.rs
-1496	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs
-1598	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
-2746	commonwealth/crates/commonwealth-api/src/routes_responses.rs
-1244	commonwealth/crates/commonwealth-api/src/server.rs
-2738	commonwealth/crates/commonwealth-api/src/state.rs
+1447	sovereign/crates/sovereign-api/src/admission.rs
+5820	sovereign/crates/sovereign-api/src/frontdoor.rs
+2462	sovereign/crates/sovereign-api/src/next_edit_model.rs
+1412	sovereign/crates/sovereign-api/src/routes_edit_predictions.rs
+2342	sovereign/crates/sovereign-api/src/routes_inference.rs
+1496	sovereign/crates/sovereign-api/src/routes_internal/corpus_ingest.rs
+1598	sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs
+2746	sovereign/crates/sovereign-api/src/routes_responses.rs
+1244	sovereign/crates/sovereign-api/src/server.rs
+2738	sovereign/crates/sovereign-api/src/state.rs
 1499	commonwealth/crates/commonwealth-state/src/store.rs
 1643	commonwealth/crates/commonwealth-transport/src/iroh.rs
 1304	commonwealth/crates/commonwealth-work/src/refusal.rs

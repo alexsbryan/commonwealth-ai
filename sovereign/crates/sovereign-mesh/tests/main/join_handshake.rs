@@ -24,11 +24,11 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use commonwealth_api::server::internal_router;
-use commonwealth_api::state::AppState;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
+use sovereign_api::server::internal_router;
+use sovereign_api::state::AppState;
 
 async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -54,7 +54,7 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
 
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = Arc::clone(&counter);
-    let hook: commonwealth_api::state::MeshMutationHook =
+    let hook: sovereign_api::state::MeshMutationHook =
         Arc::new(move |_mesh: &Mesh, _self_id: NodeId| {
             counter_clone.fetch_add(1, Ordering::Relaxed);
         });

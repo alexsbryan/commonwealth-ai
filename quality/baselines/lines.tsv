@@ -3,18 +3,18 @@
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
-17897	commonwealth/crates/commonwealth-api
-16261	commonwealth/crates/commonwealth-api::tests
-114	commonwealth/crates/commonwealth-app
-56	commonwealth/crates/commonwealth-app::tests
+17897	sovereign/crates/sovereign-api
+16261	sovereign/crates/sovereign-api::tests
+114	sovereign/crates/sovereign-meshapp-registry
+56	sovereign/crates/sovereign-meshapp-registry::tests
 2695	commonwealth/crates/commonwealth-core
 2230	commonwealth/crates/commonwealth-core::tests
 1127	commonwealth/crates/commonwealth-discovery
 564	commonwealth/crates/commonwealth-discovery::tests
-563	commonwealth/crates/commonwealth-inference
-493	commonwealth/crates/commonwealth-inference::tests
-1217	commonwealth/crates/commonwealth-knowledge
-1070	commonwealth/crates/commonwealth-knowledge::tests
+563	sovereign/crates/sovereign-serving
+493	sovereign/crates/sovereign-serving::tests
+1217	sovereign/crates/sovereign-grants
+1070	sovereign/crates/sovereign-grants::tests
 575	commonwealth/crates/commonwealth-media
 304	commonwealth/crates/commonwealth-media::tests
 954	commonwealth/crates/commonwealth-rail
@@ -25,14 +25,14 @@
 761	commonwealth/crates/commonwealth-rails::tests
 1501	commonwealth/crates/commonwealth-state
 1519	commonwealth/crates/commonwealth-state::tests
-1086	commonwealth/crates/commonwealth-test-harness
-585	commonwealth/crates/commonwealth-test-harness::tests
+1086	sovereign/crates/sovereign-mesh-test-harness
+585	sovereign/crates/sovereign-mesh-test-harness::tests
 1566	commonwealth/crates/commonwealth-transport
 2097	commonwealth/crates/commonwealth-transport::tests
 3207	commonwealth/crates/commonwealth-work
 1851	commonwealth/crates/commonwealth-work::tests
-942	commonwealth/crates/oicp-conformance
-221	commonwealth/crates/oicp-conformance::tests
+942	oicp-conformance
+221	oicp-conformance::tests
 77627	corpus-engine
 1297	corpus-engine-archaeology
 582	corpus-engine-archaeology::tests

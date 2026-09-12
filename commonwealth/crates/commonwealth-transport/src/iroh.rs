@@ -96,7 +96,7 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 ///
 /// So a guest gets its own protocol, forwarded to a SECOND bind of the client
 /// router whose auth layer does not trust loopback
-/// (`commonwealth_api::client_auth::ClientAuthPolicy`). A guest connection
+/// (`sovereign_api::client_auth::ClientAuthPolicy`). A guest connection
 /// cannot reach the trusted listener, and a peer's inference is untouched.
 pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 

@@ -56,7 +56,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_inference=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\
-     commonwealth_api=info,\
+     sovereign_api=info,\
      commonwealth_core=info,\
      prefix_state=info,\
      capability=info,\

@@ -3,6 +3,10 @@ resolver = "2"
 members = [
     # Wire-protocol types — bottom of the dep graph.
     "oicp-client",
+    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
+    # liftable by any third party certifying their own host. A root sibling of
+    # the two crates it certifies against (domains-2, 2026-09-11).
+    "oicp-conformance",
     "oicp-types",
     # The NEUTRAL kernel — identity + provenance owned by no product domain.
     # Minted 2026-08-20 (noun-convergence rung nc-1-kernel) because the 23
@@ -149,9 +153,9 @@ members = [
     # IP overlay today; iroh slots in behind the same trait later.
     "commonwealth/crates/commonwealth-transport",
     "commonwealth/crates/commonwealth-discovery",
-    "commonwealth/crates/commonwealth-inference",
-    "commonwealth/crates/commonwealth-api",
-    "commonwealth/crates/commonwealth-knowledge",
+    "sovereign/crates/sovereign-serving",
+    "sovereign/crates/sovereign-api",
+    "sovereign/crates/sovereign-grants",
     # The ring rail, split in two on 2026-09-04 (cw-lift 1b). `-rail-core` is
     # the pure fold — vocabulary, signing, admission, sync digest, zero I/O —
     # and `-rail` is the JSONL journal under `<root>/rings/<ns>/` that calls
@@ -176,16 +180,13 @@ members = [
     # process that IS your address on the mesh, with media registered on it
     # and nothing else. A PACKAGE binary: `commonwealth-{core,transport,media,
     # discovery}` plus axum/reqwest/tokio, because `scripts/cw-rails-lift.sh`
-    # builds and RUNS it outside this monorepo. `commonwealth-api`'s closure
+    # builds and RUNS it outside this monorepo. `sovereign-api`'s closure
     # is 743 crates and this one is 319; the whole point is the difference
     # (`cargo tree --edges normal`, measured 2026-09-11).
     "commonwealth/crates/commonwealth-rails",
-    "commonwealth/crates/commonwealth-test-harness",
-    "commonwealth/crates/commonwealth-app",
+    "sovereign/crates/sovereign-mesh-test-harness",
+    "sovereign/crates/sovereign-meshapp-registry",
     "commonwealth/crates/commonwealth-state",
-    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
-    # liftable by any third party certifying their own host.
-    "commonwealth/crates/oicp-conformance",
 
     # Quality program (2026-07-11) — schema + evaluator for the declared
     # layer map (quality/ARCH_LAYERS.toml). One parser shared by the xtask
@@ -308,15 +309,15 @@ sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
-commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
-commonwealth-api = { path = "commonwealth/crates/commonwealth-api" }
-commonwealth-knowledge = { path = "commonwealth/crates/commonwealth-knowledge" }
+sovereign-serving = { path = "sovereign/crates/sovereign-serving" }
+sovereign-api = { path = "sovereign/crates/sovereign-api" }
+sovereign-grants = { path = "sovereign/crates/sovereign-grants" }
 commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-media = { path = "commonwealth/crates/commonwealth-media" }
 commonwealth-rails = { path = "commonwealth/crates/commonwealth-rails" }
-commonwealth-app = { path = "commonwealth/crates/commonwealth-app" }
+sovereign-meshapp-registry = { path = "sovereign/crates/sovereign-meshapp-registry" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 
 # ── Shared external deps ────────────────────────────────────────────────

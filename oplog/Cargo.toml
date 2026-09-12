@@ -13,7 +13,7 @@ description = "Op and Oplog — one append-only JSONL journal with content-addre
 # of them and never be re-derived here.
 #
 # This crate was `corpus-engine/src/oplog.rs` until 2026-09-04. It moved
-# because `commonwealth-knowledge`'s ring rail names five of its types and
+# because `sovereign-grants`'s ring rail names five of its types and
 # inherited a 578-crate closure to reach a 547-line journal. A journal is not
 # knowledge-layer machinery; it is a primitive, and the closure was the proof.
 [dependencies]

@@ -101,3 +101,15 @@ commonwealth-knowledge/src/rail/
 # registrar for three platforms (fe5a85cc3, 2026-09-11), so the old path is
 # supposed to be absent. Same shape as discovery/tls.rs above.
 sovereign-cli-daemon/src/service_install.rs
+
+# §10's arch-gate incident record ("This is not the ontology wave's bill",
+# 2026-08) cites `commonwealth-test-harness/tests/integration.rs` at THREE
+# named commits — `abbd08b6f`, `851bf1784` and the merge — to say the file is
+# byte-identical across them, which is what makes the growth somebody else's.
+# The crate moved and was renamed at the domains-2 move (2026-09-11); it is
+# `sovereign/crates/sovereign-mesh-test-harness/tests/integration.rs` today.
+# Rewriting the citation to the new path would make the claim FALSE: at each
+# of those three commits the file was where this span says it was. The passage
+# is history, so the path stays the one history had. Same shape as
+# commonwealth-knowledge/src/rail/ above.
+commonwealth-test-harness/tests/integration.rs

@@ -573,7 +573,7 @@ impl JobExecutor for IngestExecutor {
 /// [`CorpusEngine::corpora_with_stranded_partitions`], gates against
 /// `active_ingests`, prefers a peer's healthier canonical via
 /// `find_best_peer_canonical`, and otherwise calls
-/// [`commonwealth_api::auto_recover::try_recover_stranded_partitions`] under a
+/// [`sovereign_api::auto_recover::try_recover_stranded_partitions`] under a
 /// per-corpus cooldown. All of that is reused unchanged.
 ///
 /// The ONE thing that loop cannot know is who else worked on the corpus. It

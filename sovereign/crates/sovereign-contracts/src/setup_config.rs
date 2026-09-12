@@ -1499,7 +1499,7 @@ pub struct DaemonSection {
     /// bound non-loopback, the daemon REQUIRES a bearer token of every
     /// non-loopback caller (auto-generated to `<data.dir>/client-token`
     /// unless `client_token` is set) — see `client_token` and
-    /// `commonwealth_api::client_auth`. The internal mesh port
+    /// `sovereign_api::client_auth`. The internal mesh port
     /// (`:9742`, mTLS) always binds `0.0.0.0` independently of this.
     #[serde(default = "default_client_bind")]
     pub client_bind: String,

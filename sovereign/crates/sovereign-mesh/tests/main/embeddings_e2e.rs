@@ -26,14 +26,14 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_api::server::client_router;
-use commonwealth_api::state::{AppState, LocalInferenceService};
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
+use sovereign_api::server::client_router;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{member, spawn_router, TestProvider};

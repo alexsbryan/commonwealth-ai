@@ -242,6 +242,21 @@ No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
 goes wherever it links.
 
+**Phase 0 — empty `commonwealth/crates/`.** Operator direction, run ahead of
+Phase A on branch `domains-1-empty-the-commonwealth-directory` and finished
+2026-09-11. Six crates whose names described a family they were not in left the
+directory in two commits, changing no logic: `commonwealth-{api,inference,
+knowledge,app}` became `sovereign-{api,serving,grants,meshapp-registry}`
+(domains-1), then `commonwealth-test-harness` became
+`sovereign/crates/sovereign-mesh-test-harness` and `oicp-conformance` moved to
+the repo root beside the two crates it certifies against (domains-2). What
+remains under `commonwealth/` is the nine-crate package and nothing else, and
+`scripts/cw-work-lift.sh --sandbox` reported verdict 1 after each move — that
+reading is the invariant, not the crate count. The ledger of what went where is
+`sovereign/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
+the builder): a small crate's destination is decided by where the big one
+lands, so moving it first moves it twice.
+
 **Phase A — name the ten, retire the shared words.** No code moves. The
 deliverable is this file plus the rename of `Peer*` per context (§5, call 1).
 State made unrepresentable: a type that is a mesh member and a serving candidate
@@ -272,7 +287,7 @@ Bars before data, or the verdict is not honest (ARCH §18.1).
 | `Atom*` definitions outside `enrichment/` after Phase B | 13 → 0 | any consumer still declares its own |
 | contexts with a named standalone artifact | 4 of 10 today → 10 of 10 | a context cannot answer "applicable as" and is kept anyway |
 | `sovereign-mesh` after Phase C + D | 82,241 → ≤ 20,000, and its name means the mesh | it still holds a scheduler |
-| crates whose name describes < half their contents | 3 (`sovereign-mesh`, `commonwealth-api`, `corpus-engine`) → 0 | any survives Phase D |
+| crates whose name describes < half their contents | 3 (`sovereign-mesh`, `commonwealth-api` — `sovereign-api` since Phase 0, same crate, and the rename does not move this bar — and `corpus-engine`) → 0 | any survives Phase D |
 
 **Kill bar.** If a context cannot name the standalone thing someone would use
 it for, it is not a context and this file is wrong about it — merge it into its

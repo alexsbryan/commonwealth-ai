@@ -32,14 +32,14 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use commonwealth_api::server::client_router;
-use commonwealth_api::state::{AppState, LocalInferenceService};
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::{MeshStore, PeerPreference};
+use sovereign_api::server::client_router;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{id_to_hex, member, spawn_router, TestProvider};

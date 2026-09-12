@@ -131,7 +131,7 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,
-/// lowercase — matches `commonwealth_api::headers::parse_x_node_id`.
+/// lowercase — matches `sovereign_api::headers::parse_x_node_id`.
 pub fn id_to_hex(id: &NodeId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -160,14 +160,14 @@ pub async fn spawn_router(router: Router) -> SocketAddr {
 
 /// An `AppState` with one member (self) and a client token installed.
 ///
-/// Shared by the tests that drive the REAL `commonwealth_api` client router
+/// Shared by the tests that drive the REAL `sovereign_api` client router
 /// over a transport — they differ only in the mesh's encryption posture, and a
 /// second copy of this would drift from the first.
 pub fn client_app_state(
     self_id: NodeId,
     token: Option<&str>,
     require_encryption: bool,
-) -> commonwealth_api::state::AppState {
+) -> sovereign_api::state::AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
@@ -184,7 +184,7 @@ pub fn client_app_state(
         members,
         peers: vec![],
     };
-    let state = commonwealth_api::state::AppState::new(self_id, mesh);
+    let state = sovereign_api::state::AppState::new(self_id, mesh);
     state.install_client_token(token.map(std::sync::Arc::<str>::from));
     state
 }

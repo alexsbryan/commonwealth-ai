@@ -1126,7 +1126,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-47-knowledge_search_returns_results_for_ass"
 requirement = "FE-47"
-target = "commonwealth/crates/commonwealth-test-harness/src/simulated_mesh.rs"
+target = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_mesh.rs"
 find = "    pub fn add_node(&mut self, builder: SimulatedNodeBuilder) -> usize {\n        let node = builder.build_and_register(&mut self.mesh_state);\n        let idx = self.nodes.len();\n        self.nodes.push(node);\n        idx\n    }"
 replace = "    pub fn add_node(&mut self, builder: SimulatedNodeBuilder) -> usize {\n        // MUTATION: Skip registration to break knowledge plan assignment propagation.\n        // This causes the test `knowledge_search_returns_results_for_assigned_corpora`\n        // to fail because the simulated node will not have its knowledge shards set up,\n        // leading to empty or incorrect search results when routing is exercised.\n        let _node = builder.build_and_register(&mut self.mesh_state);\n        let idx = self.nodes.len();\n        self.nodes.push(_node);\n        idx\n    }"
 mustFail = ["knowledge_search_returns_results_for_assigned_corpora"]

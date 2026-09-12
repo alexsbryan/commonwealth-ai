@@ -44,13 +44,13 @@ use tracing::{debug, info, warn};
 // `JoinRequestWire` and `JoinResponseWire` were mirrors of the founder's own
 // types, forked only because that side derived one half of serde each. Both
 // halves now; one type each.
-use commonwealth_api::routes_internal::{
+use sovereign_api::routes_internal::{
     JoinRequest as JoinRequestWire, JoinResponse as JoinResponseWire,
 };
 
 /// Members transit as a flat Vec because `HashMap<NodeId, _>` doesn't
 /// round-trip through JSON (NodeId is an array, not a string key).
-/// See `commonwealth_api::routes_internal::MeshWire`.
+/// See `sovereign_api::routes_internal::MeshWire`.
 // The fourth declaration of this shape lived here. One projection now:
 // `commonwealth_core::mesh::MeshSnapshot`.
 use commonwealth_core::mesh::MeshWire;

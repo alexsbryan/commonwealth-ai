@@ -28,7 +28,7 @@
 //! reachable", which is not "can anything serve this" — that gap is why
 //! `/v1/models` advertised ids chat completions refused. The manifest
 //! path's own gate lives in
-//! `commonwealth_api::routes_inference::list_models_tests`.
+//! `sovereign_api::routes_inference::list_models_tests`.
 //!
 //! Two assertions:
 //!
@@ -48,13 +48,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_api::server::client_router;
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_inference::model::{ModelArchitecture, ModelInfo};
 use commonwealth_state::MeshStore;
+use sovereign_api::server::client_router;
+use sovereign_api::state::AppState;
+use sovereign_meshapp_registry::registry::AppRegistry;
+use sovereign_serving::model::{ModelArchitecture, ModelInfo};
 
 use crate::common;
 use crate::common::{member, spawn_router};
@@ -186,7 +186,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
 
     // Construct a second store handle keyed to the offline peer so
     // any writes through it stamp `offline_peer_id` as the origin.
-    let peer_store = commonwealth_inference::InferenceStateStore::new(
+    let peer_store = sovereign_serving::InferenceStateStore::new(
         Arc::clone(&state.inner.mesh_store),
         offline_peer_id,
     );

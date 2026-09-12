@@ -26,7 +26,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_api::state::{AppState, RpcShardWarmer};
+use sovereign_api::state::{AppState, RpcShardWarmer};
 use sovereign_inference::embedded::{
     build_manifest, cache_file_name, tensor_device, warm_cache_for_device, Fnv1a, NodeShard,
     RpcWarmPlan,
