@@ -30,8 +30,11 @@ status    = "active"
 statement = "On one real gated longform turn: every threshold the gate consulted is named in its decision line together with the committed artifact it resolved through; re-running that artifact's fit script over the episode bank on disk reproduces it byte-for-byte; and the same turn replayed against a perturbed artifact takes a different action"
 check     = "cargo test -p sovereign-core --test main verifier_loop_operating_point_roundtrip"
 # NOT BUILT. The test name is declared here before the data, per §18.6, and is
-# rung vl-6's deliverable - the END STATE, not the first move. Until it exists this
+# rung vl-8's deliverable - the END STATE, not the first move. Until it exists this
 # predicate reads NEVER-RAN, which is the honest verdict and not a pass.
+# (Said "rung vl-6" until 2026-09-12: the reorder that day renumbered the rungs
+# and three of these bar-to-rung citations were left pointing at the old numbers.
+# vl-6 is now the segments rung and builds no part of this predicate.)
 #
 # LEG 3 IS NOT ALSO A BAR (reordered 2026-09-12). The perturbation leg lived as
 # `vl-ruler-decides` in the first draft, which made two readers of one fact
@@ -117,7 +120,7 @@ floor        = 0.0
 floor_basis  = "PERCENT of gate-decided thresholds resolving through a committed fit. 0, not 1: read at HEAD 8750c0442 on 2026-09-12, exactly ONE committed-fit reader exists in the workspace - sovereign-core/src/runtime/grounding/native_grounding/admission.rs:79 include_str!s sovereign/bench/calibration/h1-port/h1_admission_calibration.json, with one Platt fit, one effective_thresholds() accessor, env overrides deliberately retired, and TAU_SOURCE stamped on every event. Its decision path is enforced=false (telemetry only). Every other gate threshold is a literal: sovereign-core/src/runtime/grounding/config.rs:56 grounding_gate_threshold() returns 0.9 with an env override, and sovereign-cli-llm/src/bench_cmd/judge_replay.rs:9-10 records that the joint per-claim register's tau 'transfers from the singular chunk-judge register BY ANALOGY only (note d474ac24)' - 10-16 calls per longform turn on a borrowed number."
 target       = 100.0
 direction    = "higher_is_better"
-instrument   = "TO BUILD, rung vl-6: `cd corpus-engine && cargo xtask ruler-gate` - censuses the thresholds the gate ladder reads (same method as env-gate over env reads) and reports the share resolving through a committed calibration artifact whose derived_from hashes match files on disk. A threshold the census cannot classify is reported, never defaulted to either side."
+instrument   = "TO BUILD, rung vl-8: `cd corpus-engine && cargo xtask ruler-gate` - censuses the thresholds the gate ladder reads (same method as env-gate over env reads) and reports the share resolving through a committed calibration artifact whose derived_from hashes match files on disk. A threshold the census cannot classify is reported, never defaulted to either side."
 goodhart     = "this can hit target while the predicate is still false if the artifact is read at startup and a literal shadows it at the decision, or if the fit was taken over a bank the system labeled itself - a provenance chain to the system's own opinion is provenance with no independence in it"
 kill         = "K1 - ACCEPTED IN ADVANCE 2026-09-12 (operator), so an Uncalibrated landing on vl-8 is a result and not a miss: a threshold whose bank has too few labels to fit reports Uncalibrated, keeps the incumbent literal, and NAMES the substitution (ARCH principle 6). Ratifying this before the run is the point - the alternative to reporting Uncalibrated is a guessed operating point, and a bar agreed only after the data would read as a failure being rationalised. This is the LIKELY outcome at declaration and it is a legitimate landing: the only ground truth in the tree is 100 labeled claims in 20 clustered items (research/deep-research/bank/labeled/claims.jsonl - 20 questions x 5 claims sharing one evidence window), against the 4,207 scored samples the exemplar fit used. A guessed operating point is a fabricated fact with a unit attached; there is no arm of this campaign where one ships."
 
@@ -129,7 +132,7 @@ status       = "open"
 floor        = 0.0
 floor_basis  = "structural: PERCENT of audited claims rejected by a deterministic stratum before any model call. Zero today - sovereign-core/src/quote_verification.rs (638 lines) and sovereign-core/src/runtime/numeric_audit.rs (744 lines) both run POST-generation as freestanding special cases, not as strata ahead of the judge."
 direction    = "higher_is_better"
-instrument   = "TO BUILD, rung vl-7: share of audited claims killed by stratum 1 (span not verbatim in source) or stratum 2 (value does not parse from its span), read from the grounding journal's per-mechanism census. NO TARGET IS DECLARED and that is deliberate - see kill K4."
+instrument   = "TO BUILD, rung vl-9: share of audited claims killed by stratum 1 (span not verbatim in source) or stratum 2 (value does not parse from its span), read from the grounding journal's per-mechanism census. NO TARGET IS DECLARED and that is deliberate - see kill K4."
 goodhart     = "this can hit target while the predicate is still false if the strata reject claims the judge would have PASSED - a cheap rejection is only cheap if it is right, and the pair that catches it is vl-no-trade's timidity axis"
 kill = """K4 - NO CALL-REDUCTION TARGET IS DECLARED, because the measured mechanism for one does not exist. sovereign/bench/calibration/resolver-precision/resolver_precision_verdict.json reads `outcome: does_not_ship` - precision 0.7429 against a bar of 0.98 pinned before any data, n=130 - so certified-claims-skip-judge is CLOSED and 'per-claim verification stays exactly as it is'. The opposite direction is closed too: 77 of the 95 uncertified claims in that same artifact were verified by the incumbent, so rejecting on non-certification would false-reject 81% of them. What survives is rejection on deterministic INVALIDITY only. The achievable call reduction is an OPEN QUESTION the census answers first; a target declared before it would be a number with no derivation (ARCH principle 6)."""
 
@@ -205,10 +208,11 @@ note   = "THE LOAD-BEARING HALF OF THE OLD vl-5, and it needs no desktop work at
 [[rung]]
 id     = "vl-6"
 title  = "Segments populate - the prerequisite nobody had noticed"
-status = "open"
+status = "done"
+sha    = ["3096c6eab"]
 demo   = "none"
 moves  = []
-note   = "SCAFFOLDING, and it says so: it moves no bar and unblocks D5. `answer_segments` is written at streaming.rs:2363 but ONLY when the native path produced a verdict, and it is null on 794 of 794 banked turns (checked 2026-09-12) - zero populated segments, zero addresses. Without it the app click has nothing to click. sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md carries the same item as its prerequisite 4 and prices it 'small', so this rung pays two campaigns. Do it BEFORE vl-7 or vl-7 demos a null."
+note   = "SCAFFOLDING, and it says so: it moves no bar and unblocks D5. `answer_segments` is written at streaming.rs:2363 but ONLY when the native path produced a verdict, and it is null on 794 of 794 banked turns (checked 2026-09-12) - zero populated segments, zero addresses. Without it the app click has nothing to click. sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md carries the same item as its prerequisite 4 and prices it 'small', so this rung pays two campaigns. Do it BEFORE vl-7 or vl-7 demos a null. LANDED 2026-09-12: it was not scaffolding, it was a reported-absence bug. `Option<GroundingVerdict>` collapsed `Disabled` and `NoInstrument` into one `None`, so a DISPLAY stage read a MEASUREMENT slot absence as its own - and this host registers no reranker, H1's only margin source, so `NoInstrument` is EVERY turn here. `EvidenceContext::native_admission` is now a three-state `NativeAdmission` and the display sites read `ran()` while the gate keeps `verdict()`. Proven on one real SEP turn (conversation 4e095626): native_answerability `not_computed`, 17 segments, and the `segments` stage row (owner native, 18ms) that used to be suppressed on exactly these turns. FINDING for vl-7: ZERO of the 17 came back `grounded` - Verbatim needs a contiguous sentence and synthesis paraphrases, so the strip renders 14 not-found / 3 fuzzy on a well-grounded answer. The click target exists; the badge distribution is thin and is vl-7's input."
 
 [[rung]]
 id     = "vl-7"
