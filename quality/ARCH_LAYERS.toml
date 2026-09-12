@@ -1144,100 +1144,44 @@ tracking = "R6"
 
 [[exception]]
 from = "sovereign-desktop"
-to = "sovereign-tools"
-reason = "the desktop names sovereign-tools DIRECTLY and that is now the ONLY path: `cargo tree -p sovereign-desktop -e normal -i sovereign-tools` (2026-09-11, after svt-3 cut sovereign-mesh and sovereign-runtime-recipe from src-tauri/Cargo.toml) shows one edge, the desktop's own. The reachability form of this rule is what made that measurable — while the two transitive paths existed, removing the direct edge alone would have turned a direct-edge gate green with the MCP listener still linked. The direct edge is a separate order."
-tracking = "sv-surface svt-3"
-
-# ── Thin-surface reaches under the ALLOWLIST form (2026-09-11, evening) ──────
-# One row per crate a surface can still reach outside `may_reach`, generated
-# from the gate's own violation list the evening the rule inverted. Each names
-# the direct edge that holds it and what that edge carries; each fails as
-# STALE the moment its last path disappears, which is how the teardown banks
-# its removals. Delete a stale row; never re-point it. This is the burn-down
-# ledger for `[thin_surfaces]`, not a grant.
-
-[[exception]]
-from = "sovereign-desktop"
-to = "arch-layers"
-reason = "REACHED via sovereign-desktop → sovereign-tools → arch-layers. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-core"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-core. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-rail-core"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-rail → commonwealth-rail-core. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "commonwealth-state"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-state. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
 to = "corpus-engine"
-reason = "REACHED via sovereign-desktop → corpus-engine. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "corpus-engine-archaeology"
-reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-archaeology. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "corpus-engine-atos"
-reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-atos. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine. The DIRECT edge is GONE (svt-6, 2026-09-12) and so is every source reference: `grep -rn 'corpus_engine::' src-tauri/src` finds only prose. The in-process CorpusEngine was a full duplicate of the daemon's over the same data root and is deleted; the recipe test/harness it served is `POST /internal/corpus/recipes/{test,harness}`. This row did NOT go stale, which is the reachability form earning its keep — three surviving paths, all through crates svt-7 cuts. Falls when `sovereign-core`, `sovereign-gliner` and `sovereign-inference` all leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "corpus-engine-notes"
-reason = "REACHED via sovereign-desktop → corpus-engine-notes. Holder: one use site; goes with the engine. Falls when `corpus-engine-notes` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine → corpus-engine-notes. The direct edge went at svt-6 (2026-09-12) with corpus-engine itself. Falls when those three leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "corpus-engine-scip"
-reason = "REACHED via sovereign-desktop → corpus-engine-scip. Holder: freed, not yet removed from Cargo.toml — same in-flight order. Falls when `corpus-engine-scip` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine-scip. The direct edge went at svt-6 (2026-09-12). Falls when those three leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "corpus-engine-sections"
-reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-sections. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine → corpus-engine-sections. The desktop's DIRECT `corpus-engine` edge went at svt-6 (2026-09-12); what holds this row now is transitive only, through the three crates svt-7 cuts. Falls when `sovereign-core`, `sovereign-gliner` and `sovereign-inference` all leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "corpus-engine-vocab"
-reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-vocab. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "corpus-engine-watchers"
-reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-watchers. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine → corpus-engine-vocab. The desktop's DIRECT `corpus-engine` edge went at svt-6 (2026-09-12); what holds this row now is transitive only, through the three crates svt-7 cuts. Falls when `sovereign-core`, `sovereign-gliner` and `sovereign-inference` all leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "corpus-engine-yield"
-reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-yield. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine → corpus-engine-yield. The desktop's DIRECT `corpus-engine` edge went at svt-6 (2026-09-12); what holds this row now is transitive only, through the three crates svt-7 cuts. Falls when `sovereign-core`, `sovereign-gliner` and `sovereign-inference` all leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "oplog"
-reason = "REACHED via sovereign-desktop → corpus-engine → oplog. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → {sovereign-core, sovereign-gliner, sovereign-inference} → corpus-engine → oplog. The desktop's DIRECT `corpus-engine` edge went at svt-6 (2026-09-12); what holds this row now is transitive only, through the three crates svt-7 cuts. Falls when `sovereign-core`, `sovereign-gliner` and `sovereign-inference` all leave src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
@@ -1248,20 +1192,8 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
-to = "sovereign-atos"
-reason = "REACHED via sovereign-desktop → sovereign-tools → sovereign-atos. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
 to = "sovereign-core"
 reason = "REACHED via sovereign-desktop → sovereign-core. Holder: mostly contracts re-exports worn under the core name (setup_config, error, time, types, traits — import flips); the real runtime residue is runtime::{message_metadata, TurnProvenance}, title::try_auto_title, models_manifest, model_family, conv_tiered rows, deep_research::icd and the dead HealthMonitor. Falls when `sovereign-core` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "sovereign-enrichment-catalog"
-reason = "REACHED via sovereign-desktop → sovereign-enrichment-catalog. Holder: catalog/paths/EnrichedCorpusSummary in enrich_commands.rs — the store layout the daemon owns; two use sites. Falls when `sovereign-enrichment-catalog` leaves src-tauri/Cargo.toml."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
@@ -1279,19 +1211,13 @@ tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 [[exception]]
 from = "sovereign-desktop"
 to = "sovereign-recipe-author"
-reason = "REACHED via sovereign-desktop → {sovereign-gliner, sovereign-tools} → sovereign-store → sovereign-recipe-author. The DIRECT `sovereign-store` edge is gone (thin-desktop R2, 2026-09-12) and this row did NOT go stale, which is the reachability form earning its keep: `cargo tree -p sovereign-desktop -i sovereign-store` shows two surviving paths, so removing the manifest line alone would have turned a direct-edge gate green with the store still linked. Falls when both `sovereign-gliner` and `sovereign-tools` leave src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → sovereign-gliner → sovereign-store → sovereign-recipe-author. The DIRECT `sovereign-store` edge is gone (thin-desktop R2, 2026-09-12) and this row did NOT go stale, which is the reachability form earning its keep: `cargo tree -p sovereign-desktop -i sovereign-store` showed two surviving paths then, so removing the manifest line alone would have turned a direct-edge gate green with the store still linked. `sovereign-tools` left at svt-6 (2026-09-12), so `sovereign-gliner` is the ONE surviving path and this falls when it leaves src-tauri/Cargo.toml (svt-7)."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
 from = "sovereign-desktop"
 to = "sovereign-store"
-reason = "REACHED via sovereign-desktop → {sovereign-gliner, sovereign-tools} → sovereign-store. The direct edge and every source reference are GONE (thin-desktop R2, 2026-09-12): no `.rs` under src-tauri/src names `sovereign_store` and the manifest does not name the crate, both pinned by `attach_construction_census.rs::the_desktop_names_no_state_store`. The app opened its own `sovereign.db` and RAN MIGRATIONS on a data root it does not own; its five readers took routes (GET /v1/conversations/{id} widened with `enabled_corpora`, POST /v1/conversations/{id}/messages/record, GET /v1/admin/chat-activity, the widened enrich/reenrich-note body). What holds this row now is transitive only — sovereign-gliner and sovereign-tools both link the store for their own reasons. Falls when both leave src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
-from = "sovereign-desktop"
-to = "sovereign-work-atlas"
-reason = "REACHED via sovereign-desktop → sovereign-mesh → sovereign-work-atlas. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+reason = "REACHED via sovereign-desktop → sovereign-gliner → sovereign-store. The direct edge and every source reference are GONE (thin-desktop R2, 2026-09-12): no `.rs` under src-tauri/src names `sovereign_store` and the manifest does not name the crate, both pinned by `attach_construction_census.rs::the_desktop_names_no_state_store`. The app opened its own `sovereign.db` and RAN MIGRATIONS on a data root it does not own; its five readers took routes (GET /v1/conversations/{id} widened with `enabled_corpora`, POST /v1/conversations/{id}/messages/record, GET /v1/admin/chat-activity, the widened enrich/reenrich-note body). What holds this row now is transitive only, and as of svt-6 (2026-09-12) through ONE crate: `sovereign-tools` left the manifest with corpus-engine and the authoring harness, so sovereign-gliner is the last path. Falls when it leaves src-tauri/Cargo.toml (svt-7)."
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]

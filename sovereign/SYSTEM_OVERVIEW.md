@@ -5995,6 +5995,7 @@ or guest bind.
 | `GET /v1/skills`, `GET /v1/conversations/{id}/provenance` | the runtime's skills (`trust_level` lowercased HERE — the desktop held the only copy) and `Runtime::get_last_turn_provenance` (a null provenance is a 200, not a 404) | `turn_extras_http.rs` |
 | `/v1/documents`, `/v1/documents/legacy` | the document assets and the legacy-document listing + promotion over `ServingCore.state_store` + runtime (D9a; the desktop's nine document reads; ask-document's fall-through turn stays on the driver). Since 2026-09-11 the UPLOAD is a job here too: `POST /v1/documents` (`{path}` → 202 Pending record) + `GET /v1/documents/{id}/progress?after=N` (`DocumentIngestProgress`: the manager's `IngestProgress` frames with `asset_id` stamped, from an in-process log); and `POST /v1/documents/legacy` (`{path}` → `{source, chunks_created}`) is the old paperclip ingest. The desktop's `upload_document_asset` / `ingest_document` are call + poll. The ASK is a job as well: `POST /v1/documents/{id}/ask` (`{question, conversation_id}`; persists the user message, then route + execute + persist on the daemon's manager) + `GET /v1/documents/{id}/ask/{job_id}?after=N` (`AskProgress`: `OperationProgress` frames + a terminal `AskOutcome` — answered with the persisted message, fell_through for off-topic/empty-RAG which the client runs as an ordinary turn, or failed). `ask_document` on the desktop holds no manager. Since 2026-09-11 `manager_for` also hands the manager `runtime.lane().gliner`, so the T2 skeleton entity pass runs on the daemon's resident NER model rather than its LLM fallback — the module's own header asserted "a daemon holds none", which was never true: `sovereign-runtime-recipe` fills `LaneSources::gliner` for every host it commissions | `sovereign-mesh/src/documents_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `POST /internal/corpus/recipes/import`, `GET /internal/corpus/recipes/{corpus}/parameters` | the recipe-authoring writes and reads (thin-desktop order, 2026-09-11): validate a pasted recipe offline (`test_recipe`, sample size 0, staged beside the engine's own recipes dir) and install it through `RecipeRegistry::install_local_recipe` — the ONE decider for "a user published a recipe", which `svrn recipe publish` now calls as well; and the `[parameters]` block for the install form, resolved by `fetch_recipe` so a just-imported recipe answers with no reload. The desktop held a third copy of the install loop over a `CorpusEngine` of its own, resolving THIS process's default recipes dir rather than the daemon's. A validation failure is a 200 with `success: false` and the errors; a body that is not a recipe is a 400. DTOs in `daemon_wire::recipes` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
+| `POST /internal/corpus/recipes/test`, `GET /internal/corpus/recipes/test/{job}/progress`, `POST /internal/corpus/recipes/harness`, `GET /internal/corpus/recipes/harness/{job}/progress` | the recipe-authoring RUNS (sv-surface svt-6, 2026-09-12) — the last thing the desktop needed a `CorpusEngine` for. `…/test` is the dry run: `sample_size == 0` is validation-only (static checks plus, when `offline` is false, one HTTP HEAD on the source URL) and answers `RecipeDryRunReport` INLINE; a sample ACQUIRES, so it is a job — 202 + `IngestJobAck`, 409 by recipe id. Both arms project through one `dry_run_report`, so a sampled run and a validation run cannot disagree about a field. `…/harness` is the deterministic authoring harness over a frozen sample, always a job because the first run captures; the sample lands under the DAEMON's `<data_dir>/harness/<id>`, and rung 6 (`enrich: true`) is `verify_atoms_at(<index_dir>/<id>)` — the corpus this daemon installed, in the index it serves retrieval from. The drive is `sovereign_authoring_harness::run_over_frozen_sample`, the SAME function `svrn recipe test` calls; what differs is rung 6, which is a parameter rather than a flag inside the drive. **The trailing `/progress` is load-bearing**: spelled `…/recipes/test/{job}`, axum prefers the static `test` over `{corpus}` and a recipe named `test` loses its `…/parameters` form — caught by `the_dry_run_progress_route_does_not_shadow_the_parameters_route`, which went red on exactly that. DTOs in `daemon_wire::recipes` (`RecipeDryRun*`, `RecipeHarness*`, `RecipeJobState`, `HarnessRunCardView`); client `TurnClient::{recipe_dry_run, recipe_dry_run_progress, recipe_harness, recipe_harness_progress}` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `/internal/corpus/catalog`, `/notebooks`, `/diagnose`, `/{corpus}/health`, `/{corpus}/coverage-card`, `/{corpus}/retry-enrichment` | the corpus catalogue and the notebook shelf's five-source fold over `installed_indexes()` (the one decider), the atlas readers and conv-tiered buckets; in-flight state stays on `/internal/corpus/status` (D9a; nine desktop reads in corpus.rs, budget.rs, corpus_install.rs, recipe_testing.rs) | `sovereign-mesh/src/corpus_catalog_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `POST /v1/research` (202), `GET /v1/research/{job}/progress?after=N`, `POST /v1/research/{job}/abort`, `GET /v1/research/capabilities`, `GET /v1/research/runs`, `GET /v1/research/active`, `GET /v1/research/runs/{run}/report` | deep research as a daemon JOB (2026-09-11). Until then `sovereign_core::deep_research::run` was linked into BOTH the desktop's `dr_start` and the CLI verb and served by no route. `POST` launches through `launch::prepare` (the ONE `RunConfig` assembly), one run at a time (a second is a 409 naming the first); the job's frame log (`ResearchFrame`: `started`, every CHANGED `live` run-dir snapshot, one terminal `report_ready`/`failed`) is cursored by `after`, and the answer carries the elapsed/quiet clocks a client's `heartbeat` is made of. The run-dir readers (poller, shelf, report + constitution check) came down from the desktop whole and still read the loop's ICD artifacts as the single state source. The loop's web queries are machine-formed (`port.rs` passes `user_formed: false` at both `egress::verify` sites), so the daemon can host it without weakening the egress boundary. `ResearchLauncher` is the seam the e2e test stubs (`tests/main/research_surface_e2e.rs` pins the job contract; the loop has its own tests in `sovereign-core`) | `sovereign-mesh/src/research_http.rs`; DTOs in `sovereign-contracts/src/daemon_wire/research.rs`; client `TurnClient::research_*` | router `localhost_only` (no daemon handle — `launch::prepare` reads `SetupConfig` itself) |
 
@@ -6851,6 +6852,74 @@ work pins the GPU while the user is chatting. Components:
   stays: sv-surface's K3 keeps in-process hosting as a declared mode, and iOS
   — where fork/exec is forbidden, so a sidecar is impossible — is the standing
   case it is reserved for.
+
+- **svt-6 — the desktop's engine was the daemon's engine — 2026-09-12.**
+  `corpus-engine`, `sovereign-tools` and `sovereign-authoring-harness` leave
+  `src-tauri/Cargo.toml`, and the **attach construction floor goes 3 -> 0**
+  (`tests/attach_construction_census.rs`). What went is one thing wearing three
+  names: a full in-process `CorpusEngine` whose builder chain paired `.with_*`
+  for `.with_*` against `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs`, over
+  the same `~/.svrnmesh/{recipes,indexes}` root — the same recipes dir, indexes
+  dir, embedding-model name, tiered provider, GLiNER extractor and `sec_edgar`
+  acquirer as the daemon builds for itself.
+
+  **Four of its five boot chores were DELETED, not moved, because the daemon
+  already did them.** The lazy canonical-fingerprint stamp
+  (`bootstrap::spawn_lazy_stamp_fingerprints`), the embed-dimension probe that
+  armed clause ST-8's geometry gate (`daemon_cmd/mod.rs`), and — the one true
+  delete — `validate_corpus_readiness`, whose ONLY caller in the workspace was
+  this line and whose whole effect was a `tracing::warn!` in a client's log
+  that no surface read. The `substep` glassbox timer went with its last two
+  call sites.
+
+  **The fifth MOVED, and the difference is user-visible.** The vector-index
+  readiness sweep self-heals the index's own on-disk
+  `IndexMeta.vector_index_built`, and its ONE reader —
+  `corpus_catalog_http::catalog` — prefers that field over the state-store
+  flag. With no sweep anywhere, a corpus whose LanceDB index finished but whose
+  meta predates the field reports FTS-only forever. It is
+  `bootstrap::spawn_vector_index_readiness_sweep` on the daemon now, beside the
+  lazy stamp: sweep and reader in one process, over one engine. The old comment
+  at the desktop site called this "a named gap"; this is the gap closed on the
+  side that owns the root.
+
+  **The one surface only the desktop's engine served became two routes** —
+  `POST /internal/corpus/recipes/test` and `…/harness`, in the route table
+  above — and the harness DRIVE is shared with `svrn recipe test` rather than
+  pasted: `sovereign_authoring_harness::run_over_frozen_sample`, with rung 6 as
+  a parameter because the CLI verifies atoms it just ingested into a temp index
+  and the daemon verifies the corpus it actually installed. `HarnessRunCard`
+  is deleted from the desktop; its `run` field named
+  `sovereign_authoring_harness::HarnessRun`, the last thing holding that crate.
+  `RecipeTestingPanel.svelte` and `HarnessLadderCard.svelte` are UNTOUCHED —
+  all three commands were plain awaits with no events, so only the `use` lines
+  and the poll moved.
+
+  **The fifteen `local_corpus` DTOs moved DOWN rather than being reached
+  through `sovereign-tools`**, into `sovereign_contracts::daemon_wire::
+  local_corpus` with a `pub use` at every historical path (the dd8bb42e6
+  pattern). That is what CLOSED three generics whose own doc comments said they
+  were generic only because "the payload closes over a `sovereign-tools` type
+  with no home at this layer": `PreScanAnswerView`, `ClusterProgressView` and
+  `IngestProgressView`/`IngestOutcomeView` each name their type now. What
+  stayed in `sovereign-tools` is what names the ENGINE or the filesystem —
+  `recipe_toml`, `display_meta` (a free function now: it answers
+  `corpus_engine::recipe::DisplayMeta`, and an inherent impl must live in the
+  crate that defines the type), `file_meta_from_path`, and every manager,
+  walker, clusterer and write-back implementation.
+
+  **Eleven `[[exception]]` rows went STALE and were deleted in the same
+  commit** — `sovereign-tools`, `arch-layers`, `sovereign-atos`,
+  `sovereign-enrichment-catalog`, `sovereign-work-atlas`,
+  `corpus-engine-{archaeology,atos,watchers}` and the three
+  `commonwealth-{core,rail-core,state}` rows the mesh edge had held. `grep -c
+  'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml`: **24 -> 13**.
+  `corpus-engine` itself did NOT go stale and that is the reachability rule
+  earning its keep — it is still reached through `sovereign-core`,
+  `sovereign-gliner` and `sovereign-inference`, the three lines svt-7 cuts.
+  The `paddle-ocr` feature forward went too: it existed to make a
+  `#[cfg(feature = "paddle-ocr")]` gate meaningful and there is no such gate in
+  the desktop, and had not been for some time.
 
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port

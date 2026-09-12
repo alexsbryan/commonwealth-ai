@@ -35,7 +35,25 @@ sovereign-inference = { workspace = true }
 # (`cargo tree -p sovereign-desktop -i sovereign-store`), so its
 # `[[exception]]` row in quality/ARCH_LAYERS.toml stands — the direct edge is
 # what this rung cut, and `attach_construction_census.rs` pins the absence.
-sovereign-tools = { workspace = true, features = ["treesitter"] }
+# `sovereign-tools` LEFT HERE at svt-6 (2026-09-12), and `corpus-engine` +
+# `sovereign-authoring-harness` with it. What held all three was ONE thing
+# wearing three names: a full in-process `CorpusEngine` whose builder chain
+# paired `.with_*` for `.with_*` against the daemon's own
+# (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs:276-296`), over the same
+# `~/.svrnmesh/{recipes,indexes}` root. `sovereign-tools` supplied its embed /
+# batch-embed / inference adapters, its tiered-enrichment provider and its
+# `sec_edgar` acquirer; `sovereign-authoring-harness` supplied the verdict
+# ladder the recipe panel rendered. Four of the engine's five boot chores were
+# the daemon's already and were deleted; the fifth (the vector-index readiness
+# sweep) MOVED to the daemon's bootstrap; the one surface only it served —
+# recipe validate / test / harness — is `POST /internal/corpus/recipes/test`
+# and `POST /internal/corpus/recipes/harness` (`sovereign_mesh::recipe_http`).
+# The fifteen `local_corpus` DTOs the app still spells moved DOWN to
+# `sovereign_contracts::daemon_wire::local_corpus` rather than being reached
+# through here. `attach_construction_census.rs` pins the absence of the
+# constructions; `[thin_surfaces].may_not_reach` in quality/ARCH_LAYERS.toml
+# pins the absence of the reach, and it is reachability over `cargo tree`, so
+# a type reached through one of these is a red gate and not a shortcut.
 sovereign-gliner = { workspace = true }
 # `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`
 # LEFT HERE at svt-3 (2026-09-11), with `corpus-engine-scip` and `arc-swap`
@@ -66,8 +84,6 @@ sovereign-gliner = { workspace = true }
 # Both now ask the daemon: `/internal/contribution/view` and
 # `/internal/peer-preference/{set,clear,list}`, through `TurnClient`. The
 # peer-preference route was the LAST thing holding these two.
-corpus-engine = { workspace = true, features = ["treesitter"] }
-sovereign-authoring-harness.workspace = true
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
@@ -120,14 +136,13 @@ axum = { workspace = true }
 tower-http = { workspace = true }
 
 [features]
-# Default-on. Forwards to sovereign-tools so the `#[cfg(feature =
-# "paddle-ocr")]` gates in src/local_corpus_commands.rs are meaningful —
-# a desktop-local `#[cfg]` keys off THIS crate's features, not the dep's,
-# so without this forwarding feature the paddle OCR branch would silently
-# compile out. `--no-default-features` drops paddle and falls back to the
-# tesseract path.
-default = ["paddle-ocr"]
-paddle-ocr = ["sovereign-tools/paddle-ocr"]
+# The `paddle-ocr` forward stood here and is GONE (svt-6). Its whole job was
+# to make a `#[cfg(feature = "paddle-ocr")]` gate in
+# src/local_corpus_commands.rs meaningful — and there is no such gate: `grep
+# -rn 'cfg(feature' src-tauri/src` finds ZERO hits, and had before this
+# commit. It forwarded to a dependency this crate no longer has, for a
+# conditional that no longer exists. The OCR decision belongs to whoever runs
+# the extractor, which is the daemon.
 
 # Windows GPU backend selectors — forwarded to sovereign-inference, passed by
 # the release matrix's Windows GPU legs (`cargo tauri build --features ...`).
