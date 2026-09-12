@@ -237,7 +237,16 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // (`reload_applies_an_extra_slot_without_a_restart`, commit eb215a8b4)
     // builds the same loopback client to POST /v1/admin/reload. Same class,
     // same reason.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 8),
+    // 8 -> 10 (2026-09-12): the two `context_window_*` tests
+    // (`context_window_reports_the_daemons_slot`,
+    // `context_window_reports_absence_rather_than_echoing_configured`) build
+    // the same loopback client to GET /v1/admin/context-window. Reviewed
+    // here rather than deferred: every one of the ten sites is inside this
+    // file's `#[cfg(test)] mod tests` (opens at admin_http.rs:290) and dials
+    // a spawned admin router on loopback, so the class is unchanged and no
+    // new egress appears. Counted from a WORKING TREE another session had
+    // not yet committed — if those tests do not land, this goes back to 8.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 10),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
