@@ -192,7 +192,19 @@ fi
 
 # The compile gate resolves its crate scope from this. Colon-separated is the
 # spelling scripts/sovereign-lint.sh already reads.
-export SOVEREIGN_CHANGED_PATHS="$(printf '%s\n' "$CHANGED" | tr '\n' ':')"
+#
+# THE SHIPPED APP IS ALWAYS IN SCOPE, whatever this diff touched (2026-09-11).
+# Scoping purely to the diff answers "did I break something", and the thing
+# that actually reached origin today was `mod smoketest;` with no file behind
+# it — deleted by a campaign commit whose own diff was a .toml, so no push by
+# its author would ever have compiled the desktop. Several agents share this
+# checkout; the crate you did not touch is exactly the one nobody checked. The
+# desktop is the artifact a user installs, so it earns an unconditional
+# compile the way a release artifact does, not a conditional one.
+#
+# Cost is a warm no-op when nothing it depends on moved, and when something
+# did move this is the run that should have happened anyway.
+export SOVEREIGN_CHANGED_PATHS="$(printf '%s\n' "$CHANGED" | tr '\n' ':')sovereign/crates/sovereign-desktop/src-tauri/src/main.rs:"
 
 "$SVRN" quality check --trigger prepush
 rc=$?
