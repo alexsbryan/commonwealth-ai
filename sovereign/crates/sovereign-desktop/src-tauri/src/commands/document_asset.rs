@@ -3,7 +3,6 @@
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
 //! `generate_handler!` stay valid.
-use super::*;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -51,110 +50,111 @@ pub struct DocumentAskResponse {
 }
 
 /// Upload and ingest a document. The command returns immediately with
-/// a Pending asset. The full ingest pipeline (embed + skeleton) runs
-/// in a background task and emits `document:progress` events. The
-/// frontend shows these via the IngestBanner / DocOpProgress indicator.
+/// a Pending asset. The full ingest pipeline (embed + skeleton) runs on
+/// the DAEMON as a job — `POST /v1/documents` (2026-09-11) — and this
+/// command follows it over `GET /v1/documents/{id}/progress`, re-emitting
+/// every frame as `document:progress`. The frontend shows these via the
+/// IngestBanner / DocOpProgress indicator, unchanged: the frames are the
+/// manager's own `IngestProgress` values with `asset_id` stamped on
+/// (the route stamps it now; this command used to, per event), so the
+/// bytes on the event are the ones the banner already keys on.
+///
+/// The asset returned is the one `prepare` minted on the daemon, and it
+/// is the id every frame carries — the banner the UI shows and the
+/// events it receives agree on one id, which is the contract the old
+/// in-process split existed to keep.
 #[tauri::command]
 pub async fn upload_document_asset(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     file_path: String,
 ) -> Result<DocumentAssetResponse, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Inference not ready")?
-    };
-
-    let path = std::path::Path::new(&file_path);
-    if !path.exists() {
-        return Err(format!("File not found: {file_path}"));
-    }
-
-    // `prepare` parses + chunks + persists the Pending asset (no
-    // inference — fast). Crucially, the asset id it mints is the SAME
-    // id `run_ingest` emits every `document:progress` event under, so
-    // the banner we return here and the events the UI later receives
-    // agree. (The old path created the asset here AND let `ingest`
-    // mint a second id internally — the UI subscribed to the first,
-    // events fired under the second, and the banner sat on "Queued…"
-    // for the entire ingest while a duplicate record progressed to
-    // Ready unseen.)
-    // Swap the T2 skeleton entity pass from a 4B LLM call to the local
-    // NER model when it's installed (−70% of ingest prompt tokens; gated
-    // 2026-07-24, PROBE-6 held with both canaries and stevie 57→71%).
-    // `build_skeleton` falls back to the LLM per-window if the extractor
-    // is absent or not-yet-warm, so this is safe to attach unconditionally.
-    let mut manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, Arc::clone(&store));
-    if let Some(extractor) = state.entity_extractor.read().await.as_ref() {
-        manager = manager.with_entity_extractor(Arc::clone(extractor));
-    }
-    let prepared = manager
-        .prepare(path)
+    let base_url = state.client_base_url();
+    let asset = sovereign_turn_client::TurnClient::new(base_url.clone())
+        .upload_document::<sovereign_contracts::types::DocumentAsset>(&file_path)
         .await
-        .map_err(|e| format!("Prepare failed: {e}"))?;
-    let response_asset = prepared.asset.clone();
-
-    // Spawn the embed + enrichment pipeline in the background. Progress
-    // events update the UI in real time; the asset state transitions
-    // Pending → Indexing → PartiallyReady → BuildingSkeleton →
-    // MultiHopReady → Ready, all under `response_asset.id`.
-    let handle = app_handle.clone();
-    let event_asset_id = response_asset.id.clone();
-    tauri::async_runtime::spawn(async move {
-        match manager
-            .run_ingest(prepared, move |progress| {
-                // Every event MUST carry asset_id. The frontend listener
-                // drops events without one (it keys live state by id),
-                // but the high-frequency `Indexing` / `BuildingSkeleton`
-                // variants don't embed it — only the milestone events
-                // (Started / RagAvailable / MultiHopReady / Ready) do. So
-                // inject it here, where the id is known. Without this the
-                // per-batch progress that advances the % bar and feeds the
-                // ETA never reached the UI: the banner sat on "estimating…"
-                // for the entire embed phase, then jumped straight between
-                // milestones. `or_insert` preserves the id the milestone
-                // variants already carry.
-                let mut payload =
-                    serde_json::to_value(&progress).unwrap_or_else(|_| serde_json::json!({}));
-                if let serde_json::Value::Object(map) = &mut payload {
-                    map.entry("asset_id".to_string())
-                        .or_insert_with(|| serde_json::Value::String(event_asset_id.clone()));
-                }
-                let _ = handle.emit("document:progress", &payload);
-            })
-            .await
-        {
-            Ok(completed) => {
-                tracing::info!(
-                    filename = %completed.filename,
-                    chunks = completed.chunk_count,
-                    entities = completed
-                        .skeleton
-                        .as_ref()
-                        .map(|s| s.main_entities.len())
-                        .unwrap_or(0),
-                    "document asset ingest complete",
-                );
-            }
-            Err(e) => {
-                tracing::warn!("document asset ingest failed: {e}");
-            }
-        }
-    });
-
-    Ok(DocumentAssetResponse {
-        asset: response_asset,
-    })
+        .map_err(|e| format!("Upload failed: {e}"))?;
+    tracing::info!(
+        asset_id = %asset.id,
+        filename = %asset.filename,
+        "upload_document_asset: daemon accepted the ingest job"
+    );
+    tokio::spawn(follow_document_ingest(
+        base_url,
+        asset.id.clone(),
+        app_handle.clone(),
+    ));
+    Ok(DocumentAssetResponse { asset })
 }
 
+/// Follow a daemon-side document ingest, emitting each of the host's
+/// frames as `document:progress`. Same cadence and give-up rule as the
+/// local-corpus jobs (`INGEST_POLL_INTERVAL` / `INGEST_POLL_MAX_FAILURES`
+/// — one decider). Losing the daemon mid-ingest emits a `Failed` frame
+/// naming it, so the banner does not sit on "estimating…" forever.
+async fn follow_document_ingest(base_url: String, asset_id: String, app: tauri::AppHandle) {
+    use crate::local_corpus_commands::{INGEST_POLL_INTERVAL, INGEST_POLL_MAX_FAILURES};
+    let client = sovereign_turn_client::TurnClient::new(base_url);
+    let mut failures = 0u32;
+    let mut cursor = 0usize;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .document_ingest_progress::<sovereign_contracts::daemon_wire::DocumentIngestProgress>(
+                &asset_id, cursor,
+            )
+            .await
+        {
+            Ok(p) => {
+                failures = 0;
+                p
+            }
+            Err(e) => {
+                failures += 1;
+                tracing::warn!(
+                    %asset_id, failures,
+                    "upload_document_asset: progress poll failed: {e}"
+                );
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    let _ = app.emit(
+                        "document:progress",
+                        &serde_json::json!({
+                            "type": "Failed",
+                            "asset_id": asset_id,
+                            "reason": format!(
+                                "lost contact with the daemon while ingesting \
+                                 ({failures} consecutive failures): {e}"
+                            ),
+                        }),
+                    );
+                    return;
+                }
+                continue;
+            }
+        };
+        cursor = p.next;
+        for frame in p.frames {
+            let _ = app.emit("document:progress", &frame);
+        }
+        if p.finished {
+            tracing::info!(%asset_id, "upload_document_asset: ingest job finished");
+            return;
+        }
+    }
+}
+
+/// Ask a question of an attached document. Since 2026-09-11 the
+/// document-operation half is the daemon's JOB — `POST
+/// /v1/documents/{id}/ask` persists the question and runs route +
+/// execute + persist on the manager that holds the chunks; this command
+/// follows it over `GET /v1/documents/{id}/ask/{job_id}` and re-emits the
+/// host's `OperationProgress` frames as `document:operation`, verbatim.
+/// The two fall-throughs (off-topic, empty RAG) come back as an outcome
+/// and run the ordinary turn over the wire exactly as before.
+///
+/// `DocumentAskResponse` is built from the PERSISTED assistant message
+/// the outcome carries, so the live bubble renders identically to a
+/// reload — the contract the `metadata` field documents.
 #[tauri::command]
 pub async fn ask_document(
     app_handle: tauri::AppHandle,
@@ -163,20 +163,11 @@ pub async fn ask_document(
     question: String,
     conversation_id: String,
 ) -> Result<DocumentAskResponse, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Inference not ready")?
-    };
+    let base_url = state.client_base_url();
+    let client = sovereign_turn_client::TurnClient::new(base_url.clone());
 
-    let asset = store
-        .get_document_asset(&asset_id)
+    let asset = client
+        .get_document::<sovereign_contracts::types::DocumentAsset>(&asset_id)
         .await
         .map_err(|e| format!("Load failed: {e}"))?
         .ok_or("Document not found")?;
@@ -193,27 +184,37 @@ pub async fn ask_document(
     // rebuild in the background. The current turn still proceeds with the
     // skeleton-less asset (routing will be slightly less accurate); every
     // subsequent turn benefits from the rebuilt skeleton.
+    //
+    // The rebuild is `POST /v1/documents/{id}/skeleton` — the same route
+    // the user-initiated `rebuild_document_skeleton` command below takes,
+    // for the reason its comment gives: the manager that matters is the
+    // one on the store the chunks are in, with the daemon's own NER lane.
     if asset.skeleton.is_none() {
         tracing::info!(
             asset_id = %asset_id,
-            "ask_document: skeleton missing — spawning background rebuild"
+            "ask_document: skeleton missing — spawning background rebuild over the wire"
         );
-        let inf = Arc::clone(&inference);
-        let s = store.clone();
+        let heal_url = base_url.clone();
         let aid = asset_id.clone();
         let app = app_handle.clone();
-        let extractor = state.entity_extractor.read().await.as_ref().map(Arc::clone);
         tokio::spawn(async move {
-            let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(inf, s);
-            if let Some(g) = extractor {
-                manager = manager.with_entity_extractor(g);
-            }
-            match manager.rebuild_skeleton(&aid).await {
-                Ok(skeleton) => {
+            match sovereign_turn_client::TurnClient::new(heal_url)
+                .rebuild_document_skeleton::<sovereign_contracts::types::DocumentAsset>(&aid)
+                .await
+            {
+                Ok(refreshed) => {
                     tracing::info!(
                         asset_id = %aid,
-                        entities = skeleton.main_entities.len(),
-                        sections = skeleton.sections.len(),
+                        entities = refreshed
+                            .skeleton
+                            .as_ref()
+                            .map(|s| s.main_entities.len())
+                            .unwrap_or(0),
+                        sections = refreshed
+                            .skeleton
+                            .as_ref()
+                            .map(|s| s.sections.len())
+                            .unwrap_or(0),
                         "auto-heal: skeleton rebuilt"
                     );
                     let _ = app.emit("document:skeleton_rebuilt", &aid);
@@ -229,234 +230,114 @@ pub async fn ask_document(
         });
     }
 
-    // Persist the user's question first. This also upserts the conversations
-    // row so the conversation survives navigation and restart, and lets the
-    // runtime pipeline (below) see the question when it builds context.
-    let user_msg = sovereign_contracts::types::Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        role: sovereign_contracts::types::Role::User,
-        content: question.clone(),
-        created_at: now_epoch(),
-        metadata: Some(serde_json::json!({
-            "attached_asset_id": asset_id,
-        })),
-        version: now_epoch(),
-    };
-    store
-        .save_message(&user_msg)
-        .await
-        .map_err(|e| format!("Failed to save user message: {e}"))?;
-
-    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
-        Arc::clone(&inference),
-        store.clone(),
-    );
-
-    // Route first — a Fast-slot call that decides whether this question is
-    // about the document at all.
-    let operation = manager
-        .route(&asset, &question)
+    // The job: the daemon persists the question (tagged with the asset id)
+    // before it answers 202, then routes + executes on its own manager.
+    let ack = client
+        .ask_document::<sovereign_contracts::daemon_wire::AskJobAck>(
+            &asset_id,
+            &question,
+            &conversation_id,
+        )
         .await
         .map_err(|e| format!("Routing failed: {e}"))?;
-
     tracing::info!(
         asset_id = %asset_id,
-        operation = %operation.label(),
-        "ask_document: routed"
+        job_id = %ack.job_id,
+        "ask_document: daemon accepted the ask job"
     );
 
-    // When the question isn't about the document, hand it off to the normal
-    // conversation pipeline. The runtime will route, search installed corpora,
-    // synthesise with layered confidence, and save the assistant message. The
-    // user message is already in the conversation (tagged with the asset id,
-    // preserving "this turn had a document attached" context).
-    if matches!(
-        operation,
-        sovereign_contracts::types::DocumentAssetOperation::OffTopic { .. }
-    ) {
-        return run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await;
-    }
-
-    // Document operation path.
-    let handle = app_handle.clone();
-    let start = std::time::Instant::now();
-    let output = manager
-        .execute_operation(&asset, &question, &operation, &move |progress| {
-            let _ = handle.emit("document:operation", &progress);
-        })
-        .await
-        .map_err(|e| format!("Query failed: {e}"))?;
-
-    // RAG safety net: if retrieval returned zero matching chunks, the router
-    // mis-classified. Fall through to the runtime pipeline the same way
-    // OffTopic does. `execute_rag` signals this by returning an empty
-    // ExecutionOutput.
-    if matches!(
-        operation,
-        sovereign_contracts::types::DocumentAssetOperation::Rag { .. }
-    ) && output.citations.is_empty()
-        && output.text.is_empty()
-    {
-        tracing::info!(
-            asset_id = %asset_id,
-            "ask_document: RAG found no relevant passages — falling back to runtime"
-        );
-        return run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await;
-    }
-
-    let duration_ms = start.elapsed().as_millis() as u64;
-    let assistant_message_id = uuid::Uuid::new_v4().to_string();
-
-    // Build the `retrieved_chunks` + `provenance` shape the frontend expects
-    // for the routing-meta bar and rich citation popovers. The frontend
-    // matches `[Source: <label>]` spans in the prose against each chunk's
-    // `title`, so we use the citation label as the title here.
-    let retrieved_chunks: Vec<serde_json::Value> = output
-        .citations
-        .iter()
-        .map(|c| {
-            serde_json::json!({
-                "title": c.label,
-                "corpus_id": asset.title,
-                "url": serde_json::Value::Null,
-                "snippet": c.snippet,
-                "provenance_tier": "document",
+    let outcome = follow_ask_job(&client, &asset_id, &ack.job_id, &app_handle).await?;
+    use sovereign_contracts::daemon_wire::AskOutcome;
+    match outcome {
+        AskOutcome::Answered {
+            operation,
+            message,
+            sources,
+        } => {
+            tracing::info!(
+                asset_id = %asset_id,
+                operation = %operation.label(),
+                "ask_document: answered by the document"
+            );
+            let _ = app_handle.emit("conversations:changed", ());
+            let metadata = message.metadata.clone();
+            let (provenance, citations) =
+                sovereign_contracts::types::projection::project_message_metadata(&metadata);
+            Ok(DocumentAskResponse {
+                response: message.content,
+                operation: Some(operation),
+                sources,
+                metadata,
+                provenance,
+                citations,
             })
-        })
-        .collect();
-
-    let provenance = sovereign_contracts::types::ResponseProvenance {
-        // A document-asset op is not a routed turn — no router decided it, and
-        // `None` says exactly that rather than claiming a degraded one.
-        router: None,
-        intent: format!("DocumentAsk:{}", operation.label()),
-        search_method: Some("document".to_string()),
-        sources: vec![sovereign_contracts::types::SourceSummary {
-            origin: asset.title.clone(),
-            count: output.citations.len(),
-            from_peer: None,
-            display_name: None,
-        }],
-        inference_backend: if output.model_id.is_empty() {
-            "local".to_string()
-        } else {
-            output.model_id.clone()
-        },
-        oicp_match: None,
-        total_latency_ms: duration_ms,
-        tokens_used: output.tokens_used,
-        coarse_intent: None,
-        self_assessment: None,
-        routing_trigger: None,
-        coverage: None,
-        finish_reason: output.finish_reason.clone(),
-        // DocumentAsk uses the same inference_config.max_tokens
-        // budget any other handler does; surface it so the cutoff
-        // chip can say "hit the N-token limit" honestly. RwLockGuard
-        // derefs to `&DesktopConfig` so we can read the field
-        // directly — Some() because DesktopConfig.max_tokens is a
-        // bare number, not an Option.
-        max_tokens_budget: Some(state.config.read().await.max_tokens as usize),
-        completion_tokens: output.completion_tokens,
-        // DocumentAsk is a self-contained desktop-side path that
-        // doesn't share the `self.inference` field other handlers do
-        // — the ctx-budget glassbox here would need to thread the
-        // provider Arc through `output`. Leave `None` for now; the
-        // primary chat path (KnowledgeQuery / DeepQuery / Simple)
-        // already surfaces the budget where it matters most.
-        context_window: None,
-    };
-
-    let sources_content: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
-
-    // Epistemic-humility hook. Detection is now the turn's gate
-    // abstention (I4-C retirement of gap.rs's LLM judge) — and the
-    // document-op path runs NO grounding gate, so it carries no
-    // abstention signal and never fires the card. That is the honest
-    // shape: the user attached THE document; the short-answer cases
-    // (off-topic, zero-hit RAG) already fell through to the gated
-    // runtime pipeline above, which does carry the signal.
-    let final_content = {
-        let runtime_guard = state.runtime.read().await;
-        if let Some(runtime) = runtime_guard.as_ref() {
-            // Approval-channel task id kept stamped for parity with the
-            // runtime path (a no-op when no card fires).
-            state.approval.set_task_id(&conversation_id).await;
-            runtime
-                .maybe_collaborate(&conversation_id, &question, &output.text, false)
-                .await
-        } else {
-            output.text.clone()
         }
-    };
-
-    // Persist the assistant response with document operation metadata
-    // (legacy `operation` / `sources` fields) plus the new rich
-    // `provenance` / `retrieved_chunks` shape the AssistantMessage
-    // component reads for the routing-meta bar and citation popovers.
-    let assistant_msg = sovereign_contracts::types::Message {
-        id: assistant_message_id.clone(),
-        conversation_id: conversation_id.clone(),
-        role: sovereign_contracts::types::Role::Assistant,
-        content: final_content.clone(),
-        created_at: now_epoch(),
-        metadata: Some(serde_json::json!({
-            "attached_asset_id": asset_id,
-            "operation": operation,
-            "sources": sources_content,
-            "duration_ms": duration_ms,
-            "provenance": provenance,
-            "retrieved_chunks": retrieved_chunks,
-        })),
-        version: now_epoch(),
-    };
-    store
-        .save_message(&assistant_msg)
-        .await
-        .map_err(|e| format!("Failed to save assistant message: {e}"))?;
-
-    // Record the operation for analytics.
-    let _ = store
-        .save_document_operation(&assistant_message_id, &asset_id, &operation, duration_ms)
-        .await;
-
-    // Fire auto-title in the background after the first exchange.
-    {
-        let inf = Arc::clone(&inference);
-        let s = store.clone();
-        let cid = conversation_id.clone();
-        let app = app_handle.clone();
-        tokio::spawn(async move {
-            match sovereign_core::title::try_auto_title(inf.as_ref(), s.as_ref(), &cid).await {
-                Ok(Some(_)) => {
-                    let _ = app.emit("conversations:changed", ());
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    tracing::warn!(
-                        conversation_id = %cid,
-                        error = %e,
-                        "auto-title: generation failed (ask_document)"
-                    );
-                }
-            }
-        });
+        // When the question isn't about the document (or RAG found nothing),
+        // hand it to the normal conversation pipeline. The user message is
+        // already in the conversation, tagged with the asset id.
+        AskOutcome::FellThrough { operation, reason } => {
+            tracing::info!(
+                asset_id = %asset_id,
+                operation = %operation.label(),
+                reason,
+                "ask_document: falling back to the runtime turn"
+            );
+            run_turn_via_runtime(&app_handle, &state, &question, &conversation_id).await
+        }
+        AskOutcome::Failed { error } => Err(error),
     }
+}
 
-    let _ = app_handle.emit("conversations:changed", ());
-
-    let metadata = assistant_msg.metadata.clone();
-    let (provenance, citations) =
-        sovereign_contracts::types::projection::project_message_metadata(&metadata);
-    Ok(DocumentAskResponse {
-        response: final_content,
-        operation: Some(operation),
-        sources: sources_content,
-        metadata,
-        provenance,
-        citations,
-    })
+/// Follow an ask job to its outcome, re-emitting each of the host's
+/// `OperationProgress` frames as `document:operation`. Same cadence and
+/// give-up rule as the ingest follows (one decider); the job is short,
+/// so the cadence is also the upper bound on how late the answer lands.
+async fn follow_ask_job(
+    client: &sovereign_turn_client::TurnClient,
+    asset_id: &str,
+    job_id: &str,
+    app: &tauri::AppHandle,
+) -> Result<sovereign_contracts::daemon_wire::AskOutcome, String> {
+    use crate::local_corpus_commands::{INGEST_POLL_INTERVAL, INGEST_POLL_MAX_FAILURES};
+    let mut failures = 0u32;
+    let mut cursor = 0usize;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .ask_document_progress::<sovereign_contracts::daemon_wire::AskProgress>(
+                asset_id, job_id, cursor,
+            )
+            .await
+        {
+            Ok(p) => {
+                failures = 0;
+                p
+            }
+            Err(e) => {
+                failures += 1;
+                tracing::warn!(%asset_id, %job_id, failures, "ask_document: progress poll failed: {e}");
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    return Err(format!(
+                        "lost contact with the daemon while answering \
+                         ({failures} consecutive failures): {e}"
+                    ));
+                }
+                continue;
+            }
+        };
+        cursor = p.next;
+        for frame in p.frames {
+            let _ = app.emit("document:operation", &frame);
+        }
+        if p.finished {
+            // `end` sets the outcome before it flips `finished`, so this
+            // arm is a host contradiction, reported rather than answered
+            // with an empty success (§18.3).
+            return p.outcome.ok_or_else(|| {
+                format!("the daemon reported ask job '{job_id}' finished with no outcome")
+            });
+        }
+    }
 }
 
 /// Refresh a single document asset by id. Used by the frontend to pick up
@@ -527,8 +408,6 @@ async fn run_turn_via_runtime(
     // sv-surface R5: a document question is a turn, and every turn rides
     // the wire — the REST one-shot (same driver the socket serves, through
     // the client family), exactly as the chat one-shot does.
-    state.approval.set_task_id(conversation_id).await;
-
     let turn = sovereign_turn_client::TurnClient::new(state.client_base_url())
         .send_message(conversation_id, question)
         .await
@@ -587,8 +466,10 @@ pub async fn delete_document_asset(
 
 /// A document from the legacy chunks table (uploaded via the old paperclip
 /// path before DocumentAssetManager existed) — the route's own type, which
-/// `list_legacy_documents` parses with and returns verbatim.
-pub use sovereign_mesh::documents_http::LegacyDocumentEntry;
+/// `list_legacy_documents` parses with and returns verbatim. Named from
+/// `sovereign-contracts`, which is where `documents_http`'s route names it
+/// too (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::LegacyDocumentEntry;
 
 /// List documents from the legacy `documents` table that don't have
 /// a corresponding DocumentAsset record. These are shown in the picker

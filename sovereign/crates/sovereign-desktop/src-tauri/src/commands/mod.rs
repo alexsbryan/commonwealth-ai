@@ -32,12 +32,12 @@ pub struct TaskSummary {
 /// replaced had already drifted from the wire's `skip_serializing_if` (it
 /// emitted `"title": null` where the wire omits the key), which is the
 /// exact byte-compat break importing the one type makes impossible.
-pub use sovereign_mesh::turn_http::ConversationListEntry as ConversationEntry;
+pub use sovereign_contracts::daemon_wire::ConversationListEntry as ConversationEntry;
 
 /// The CREATE response is likewise the wire type; the `enabled_corpora`
 /// echo is `None` on the desktop's own create (it seeds no allow-list) and
 /// therefore omitted from the serialized bytes.
-pub use sovereign_mesh::turn_http::CreateConversationResponse;
+pub use sovereign_contracts::daemon_wire::CreateConversationResponse;
 
 // SANCTIONED UNTIL RUNG 6, named so the next reader doesn't "fix" them: the
 // two shapes below are the desktop's IN-PROCESS IPC contract, deliberately
@@ -292,7 +292,7 @@ pub struct CorpusProgressPayload {
 
 use std::sync::Arc;
 
-use sovereign_core::time::unix_now as now_epoch;
+use sovereign_time::unix_now as now_epoch;
 
 use crate::state::AppState;
 

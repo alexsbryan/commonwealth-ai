@@ -156,6 +156,15 @@ impl RecipeRegistry {
         }
     }
 
+    /// The dir this registry checks FIRST for a recipe TOML, when it has
+    /// one — the local root a publish writes into and resolution step 1
+    /// reads back. `pub(crate)` for `recipe_install`, which is the write
+    /// half of this type and lives in its own module for the file ceiling
+    /// (ARCH §3.2); one accessor rather than a widened field.
+    pub(crate) fn overrides_dir(&self) -> Option<&PathBuf> {
+        self.overrides_dir.as_ref()
+    }
+
     /// Merge a user-published local registry (`registry.toml` in
     /// `~/.svrnmesh/recipes/`). Local entries win by `id` over
     /// both `live` and `snapshot`, so `sovereign recipe publish`
@@ -517,11 +526,7 @@ async fn fetch_text(url: &str) -> Result<String> {
 }
 
 fn verify_sha256(data: &[u8], expected_hex: &str) -> std::result::Result<(), String> {
-    use sha2::Digest;
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(data);
-    let result: sha2::digest::Output<sha2::Sha256> = hasher.finalize();
-    let actual = format!("{result:x}");
+    let actual = crate::recipe_install::sha256_hex(data);
     if actual != expected_hex.to_lowercase() {
         return Err(format!("expected {expected_hex}, got {actual}"));
     }
@@ -674,7 +679,9 @@ mod tests {
         // + the 2026-08 sec-filings-company template (financial corpora,
         // FINANCIAL_CORPORA.md F3 — per-company installs materialize as
         // sec-cik<10-digit>; the template itself is never installed).
-        assert_eq!(entries.len(), 29, "snapshot should have 29 entries");
+        // + the 2026-09 federalist-starter onboarding corpus (hidden; the
+        // desktop's first-run install rides the daemon's prebuilt rail).
+        assert_eq!(entries.len(), 30, "snapshot should have 30 entries");
     }
 
     #[test]
@@ -790,7 +797,8 @@ sha256 = ""
         //   ingest). (`alignment` removed 2026-06-19.)
         //   + brothers-karamazov-book-1 (2026-08 literary-atlas bench corpus)
         //   + sec-filings-company (2026-08 financial-corpora template).
-        assert_eq!(catalog.len(), 29);
+        //   + federalist-starter (2026-09 hidden onboarding starter corpus).
+        assert_eq!(catalog.len(), 30);
         assert!(catalog.iter().any(|c| c.id == "brothers-karamazov-book-1"));
         assert!(catalog.iter().any(|c| c.id == "sec-filings-company"));
         assert!(catalog.iter().any(|c| c.id == "email-archive"));

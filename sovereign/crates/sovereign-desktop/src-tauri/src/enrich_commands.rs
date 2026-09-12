@@ -1,54 +1,58 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri command surface for atlas enrichment (read + install side).
 //!
-//! Enrichment BUILDS now run IN-PROCESS in the daemon (tiered
-//! GliNER/RAPTOR during ingest + the post-install structural-atlas
-//! hook), observed from the UI by polling `lc_enrichment_status`. The
-//! old CLI-shell commands (`enrich_build_async`, `enrich_cancel_build`,
-//! `enrich_init_for_local_corpus`, `recipe_enrich_init_from_corpus`,
-//! `enrich_estimate`, `enrich_get_active_job`) were removed once every
-//! desktop surface migrated to that path — `sovereign-cli` is not
-//! bundled with the desktop, so those shell-outs exited 127 in shipped
-//! builds.
+//! Enrichment BUILDS run IN-PROCESS in the daemon (tiered GliNER/RAPTOR
+//! during ingest + the post-install structural-atlas hook), observed from
+//! the UI by polling `lc_enrichment_status`. The old CLI-shell commands
+//! were removed once every desktop surface migrated to that path —
+//! `sovereign-cli` is not bundled with the desktop.
 //!
-//! What remains here needs no subprocess:
-//!   - `enrich_list_corpora` — inventory of the shared enrichment store.
-//!   - `install_starter_corpus` — restore the Federalist starter snapshot.
-//!   - `enrich_get_starter_questions` — mine starter chips from atoms.json.
-//!   - `is_first_run` / `mark_first_run_complete` — onboarding marker.
+//! What remains here is a THIN client of the daemon (thin-desktop order,
+//! 2026-09-11) — every read below is one `TurnClient` call, every write is
+//! the daemon's own install rail:
+//!   - `enrich_list_corpora` — `GET /internal/corpus/enriched`, the
+//!     DAEMON's enrichment store (this file read its own data root's tree
+//!     until 2026-09-11, which on an attached boot is the wrong machine).
+//!   - `install_starter_corpus` — `POST /internal/corpus/install` for the
+//!     bundled `federalist-starter` recipe, then wait for the catalog to
+//!     say `installed`. The HF repo, filename and sha256 live in
+//!     `sovereign-recipes/federalist-starter/recipe.toml`'s `[prebuilt]`
+//!     block — ONE copy, restored by `CorpusEngine::try_restore_prebuilt`
+//!     like every other prebuilt corpus, instead of a second restore path
+//!     in this process with the same three constants.
+//!   - `enrich_get_starter_questions` —
+//!     `GET /internal/corpus/{corpus}/starter-questions`; the ranker is
+//!     `corpus_engine::enrichment::atlas::analysis::starter_questions`.
+//!   - `is_first_run` / `mark_first_run_complete` — the onboarding marker,
+//!     app-local by the campaign's closed set.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use corpus_engine::enrichment::atlas::AtomEnvelope;
 use serde::Serialize;
-// The enrichment store, shared with the CLI and the daemon's watched-folder
-// driver (rung nc-16-shared-capability). This file used to carry its own
-// inventory loop, its own `config.json` field names and its own path
-// derivation; all three are gone.
-use sovereign_enrichment_catalog::{catalog, paths, EnrichedCorpusSummary};
-use tauri::AppHandle;
-use tauri::State;
+use sovereign_contracts::daemon_wire::{EnrichedCorpusSummary, StarterQuestion};
+use sovereign_turn_client::TurnClient;
+use tauri::{AppHandle, State};
 
+use crate::commands::{install_failure, request_daemon_install, CorpusEntry};
 use crate::state::AppState;
 
 // ─── Command: enrich_list_corpora ────────────────────────────────────
 
-/// Inventory of enrichment corpora on disk.
-///
-/// The listing, the config schema and the path layout all live in
-/// `sovereign-enrichment-catalog`, below this host and below the CLI and the
-/// daemon that write the same tree. Until 2026-08-20 this command walked
-/// `read_dir` itself and pulled `pipeline_id` / `source_path` / `created_at`
-/// out of an untyped JSON value by name — a fourth reader of a file it did not
-/// own, rooted on an accessor the CLI disagreed with.
+/// Inventory of enrichment corpora in the DAEMON's store.
 ///
 /// Errors flatten to a String for the Tauri boundary; an absent store is
-/// `Ok(vec![])`, not an error, because the UI branches on length.
+/// `Ok(vec![])`, not an error, because the UI branches on length — that is
+/// the route's rule, not a default applied here.
 #[tauri::command]
-pub async fn enrich_list_corpora() -> Result<Vec<EnrichedCorpusSummary>, String> {
-    catalog::list_enriched_corpora().map_err(|e| e.to_string())
+pub async fn enrich_list_corpora(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<EnrichedCorpusSummary>, String> {
+    TurnClient::new(state.client_base_url())
+        .enriched_corpora::<EnrichedCorpusSummary>()
+        .await
+        .map_err(|e| format!("enrich_list_corpora: {e}"))
 }
 
 /// Result of [`install_starter_corpus`].
@@ -56,293 +60,143 @@ pub async fn enrich_list_corpora() -> Result<Vec<EnrichedCorpusSummary>, String>
 pub struct StarterInstallResult {
     pub corpus_id: String,
     /// True when the corpus was already present (no work done) — the
-    /// caller can skip straight to chat.
+    /// onboarding flow skips the "restoring…" copy in that case.
     pub already_installed: bool,
 }
 
-/// Install the "Federalist Papers" starter corpus by downloading and restoring
-/// its pre-enriched snapshot — no inference, ~162 KB, a few seconds.
-///
-/// The snapshot is distributed like every other corpus: a `.tar.zst` on
-/// HuggingFace (`svrnmesh/federalist-starter`), embedded with
-/// `qwen-embedding-0.6b` (the app's embed model), fetched via the shared
-/// `BulkDownloader` and restored into `~/.svrnmesh/indexes` via the shared
-/// snapshot-restore primitive — the SAME root the daemon + desktop read corpora
-/// from. NO hardcoded paths: the data root resolves via the shared
-/// `sovereign_enrichment_catalog::paths` accessors. The restore gates on the
-/// snapshot's sha256 and refuses on an embedding-dimension mismatch.
-/// Idempotent — returns early if the corpus is already present.
-///
-/// HF-only as of 2026-06-19: the snapshot is no longer bundled into the app. It
-/// used to ship as a Tauri resource, but `tauri.release.conf.json`'s `resources`
-/// ARRAY overrode the base config's resource MAP, silently dropping it from every
-/// release build. Rather than re-bundle (and re-fight that clobber), it now rides
-/// the same registry/HF rails as the rest of the catalog. First run needs network
-/// — already true for the multi-GB model download that precedes it.
-///
-/// Dev override: `SOVEREIGN_STARTER_SNAPSHOT=<path>` points at a local archive
-/// (e.g. the in-repo `resources/starter/federalist-starter.tar.zst`) for an
-/// offline / no-network dev loop.
-#[tauri::command]
-pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResult, String> {
-    let _ = &app; // AppHandle no longer needed to resolve the bundled resource (HF download); kept for command signature stability.
-    const STARTER_ID: &str = "federalist-starter";
-    // The snapshot lives at
-    // https://huggingface.co/datasets/svrnmesh/federalist-starter/resolve/main/federalist-starter.tar.zst
-    const STARTER_HF_REPO: &str = "svrnmesh/federalist-starter";
-    const STARTER_HF_FILENAME: &str = "federalist-starter.tar.zst";
-    // sha256 of federalist-starter.tar.zst (gates restore against a corrupt or
-    // tampered download — same value verified on the HF artifact).
-    const STARTER_SHA256: &str = "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
+/// The bundled starter recipe's `[corpus] id`
+/// (`sovereign-recipes/federalist-starter/recipe.toml`, registered
+/// `catalog_status = "hidden"` so it is not a row in Settings → Knowledge).
+const STARTER_ID: &str = "federalist-starter";
+/// How long a first-run install may take before this command gives up
+/// waiting. The snapshot is ~162 KB; the bound is for a host that never
+/// answers, and the install itself keeps running on the daemon.
+const STARTER_INSTALL_WAIT: Duration = Duration::from_secs(15 * 60);
 
-    // Idempotent: a resolved atoms.json ⇒ already restored + enriched.
-    if paths::index_root(STARTER_ID)
-        .join("atlas")
-        .join("atoms.json")
-        .exists()
-    {
+/// Install the "Federalist Papers" starter corpus — a pre-enriched snapshot,
+/// no inference, a few seconds — through the daemon's install rail.
+///
+/// Idempotent: the catalog is asked first, and `installed` returns early.
+/// Otherwise `POST /internal/corpus/install` (the same request the Knowledge
+/// pane's Add button sends) and wait until the catalog says `installed` or
+/// `/internal/corpus/status` records a `Failed` outcome, whose message is
+/// the user's remedy (a 401 on the gated dataset, a sha mismatch, a full
+/// disk) and is returned verbatim. Progress meanwhile rides the ordinary
+/// `corpus-progress` events the status poller emits for every install.
+///
+/// Until 2026-09-11 this command downloaded and restored the archive
+/// IN-PROCESS, into this process's own data root, with the HF coordinates
+/// and sha256 hardcoded here — a second copy of a recipe and the one
+/// restore that ran on the wrong machine on an attached boot. The
+/// `SOVEREIGN_STARTER_SNAPSHOT` dev override went with it; the daemon's
+/// `SOVEREIGN_RECIPES_DIR` is the knob for a local recipe now.
+#[tauri::command]
+pub async fn install_starter_corpus(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<StarterInstallResult, String> {
+    if starter_installed(&state).await? {
         return Ok(StarterInstallResult {
             corpus_id: STARTER_ID.to_string(),
             already_installed: true,
         });
     }
 
-    // Resolve the snapshot archive. Dev escape hatch first (a local path for an
-    // offline loop); otherwise download it from HuggingFace exactly like every
-    // other corpus. The sha256 gate lives in restore_snapshot_archive below.
-    let dev_override = std::env::var("SOVEREIGN_STARTER_SNAPSHOT")
-        .ok()
-        .filter(|p| !p.is_empty());
-    let archive: PathBuf = match &dev_override {
-        Some(p) => {
-            let p = PathBuf::from(p);
-            if !p.exists() {
-                return Err(format!(
-                    "SOVEREIGN_STARTER_SNAPSHOT points at {} which does not exist",
-                    p.display()
-                ));
-            }
-            tracing::info!(path = %p.display(), "starter corpus: using local snapshot (dev override)");
-            p
-        }
-        None => {
-            let url = format!(
-                "https://huggingface.co/datasets/{STARTER_HF_REPO}/resolve/main/{STARTER_HF_FILENAME}"
-            );
-            // Conventional download cache, mirroring CorpusEngine::try_restore_prebuilt.
-            let download_dir = paths::indexes_dir().join("_downloads");
-            std::fs::create_dir_all(&download_dir).map_err(|e| {
-                format!(
-                    "create starter download dir {}: {e}",
-                    download_dir.display()
-                )
-            })?;
-            tracing::info!(url = %url, "starter corpus: downloading snapshot from HuggingFace");
-            corpus_engine::acquirers::bulk_download::BulkDownloader::new(&url, true)
-                .download(&download_dir, STARTER_ID, &None)
-                .await
-                .map_err(|e| format!("download starter snapshot from {url}: {e}"))?
-        }
-    };
-
-    // restore_snapshot_archive is blocking (tar extract + streaming sha) — run it
-    // off the async runtime. ~162 KB ⇒ milliseconds, but keep the hot path clean.
-    let data_dir = paths::data_root();
-    let archive_for_task = archive.clone();
-    let quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
-        .embed_quirks_for_model("qwen-embedding-0.6b");
-    let outcome = tokio::task::spawn_blocking(move || {
-        corpus_engine::restore_snapshot_archive(
-            &archive_for_task,
-            &data_dir,
-            STARTER_ID,
-            Some(STARTER_SHA256),
-            "qwen-embedding-0.6b",
-            corpus_engine::DEFAULT_EMBED_DIM,
-            // The config THIS build embeds with, from the same manifest the
-            // daemon and the snapshot publisher resolve through — not `None`,
-            // which would put the starter on the ConfigUnknown arm by default
-            // and accept a wrongly-pooled archive on the label alone.
-            quirks.as_ref(),
-        )
-    })
-    .await
-    .map_err(|e| format!("starter restore task join: {e}"))?
-    .map_err(|e| format!("restore starter snapshot from {}: {e}", archive.display()))?;
-
-    // Tidy the download cache (skip the dev override — we don't own that path).
-    // Removing it forces a fresh, sha-gated re-download on any future reinstall,
-    // so a stale cached archive can never mask an updated snapshot.
-    if dev_override.is_none() {
-        let _ = std::fs::remove_file(&archive);
-    }
-
+    request_daemon_install(&app, state.inner(), STARTER_ID)
+        .await
+        .map_err(|e| format!("install_starter_corpus: {e}"))?;
     tracing::info!(
-        corpus_id = %STARTER_ID,
-        index_dir = %outcome.index_dir.display(),
-        "starter corpus restored from HuggingFace snapshot (no inference)"
+        corpus_id = STARTER_ID,
+        "starter corpus: install requested of the daemon"
     );
-    Ok(StarterInstallResult {
-        corpus_id: STARTER_ID.to_string(),
-        already_installed: false,
-    })
+
+    let started = Instant::now();
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        if let Some(message) = install_failure(state.inner(), STARTER_ID).await? {
+            tracing::warn!(corpus_id = STARTER_ID, %message, "starter corpus: install failed");
+            return Err(format!("install_starter_corpus: {message}"));
+        }
+        if starter_installed(&state).await? {
+            tracing::info!(
+                corpus_id = STARTER_ID,
+                elapsed_secs = started.elapsed().as_secs(),
+                "starter corpus: installed by the daemon (prebuilt snapshot, no inference)"
+            );
+            return Ok(StarterInstallResult {
+                corpus_id: STARTER_ID.to_string(),
+                already_installed: false,
+            });
+        }
+        if started.elapsed() > STARTER_INSTALL_WAIT {
+            return Err(format!(
+                "install_starter_corpus: the daemon has not finished installing `{STARTER_ID}` \
+                 after {}s — it may still be running; check Settings → Knowledge",
+                STARTER_INSTALL_WAIT.as_secs()
+            ));
+        }
+    }
+}
+
+/// Whether the daemon's catalog lists the starter as `installed`.
+async fn starter_installed(state: &State<'_, Arc<AppState>>) -> Result<bool, String> {
+    let rows = TurnClient::new(state.client_base_url())
+        .corpus_catalog::<CorpusEntry>()
+        .await
+        .map_err(|e| format!("install_starter_corpus: catalog: {e}"))?;
+    Ok(rows
+        .iter()
+        .any(|r| r.id == STARTER_ID && r.status == "installed"))
 }
 
 // ─── Command: enrich_get_starter_questions ───────────────────────────
 
-#[derive(Debug, Serialize, Clone)]
-pub struct StarterQuestion {
-    pub text: String,
-    pub atom_id: String,
-    pub source_section: Option<String>,
-    pub question_type: String,
-}
-
-/// Return up to `limit` starter questions mined from the atlas.
+/// Return up to `limit` starter questions mined from the corpus's atlas,
+/// by the DAEMON (`GET /internal/corpus/{corpus}/starter-questions`).
 ///
-/// Heuristic (shipped question atoms lack a salience or `addressed_by`
-/// field — verified against three live corpora). Ranking:
-///
-///   1. Length window 25..=220 chars (drops too-terse fragments and
-///      run-on multi-clause questions).
-///   2. Question-type preference, in order: Thematic, Interpretive,
-///      Open, Factual, Rhetorical, Other.
-///   3. Diversify by first `raised_at.chunk_id`: at most one question
-///      per section in the returned set, as far as `limit` and corpus
-///      size permit.
-///
-/// Returns an empty vec (NOT an error) when atoms.json is absent — the
+/// Returns an empty vec (NOT an error) when the corpus has no atlas — the
 /// UI branches on vec length to decide whether to fall back to
-/// excerpt-based starters.
-/// The atoms come from the SERVING host, not this process's disk
-/// (sv-surface svt-3). `paths::index_root(&corpus_id).join("atlas")`
-/// named a directory only a co-located daemon shares: on an attached
-/// boot it is this laptop's index root while the corpus, the atlas and
-/// the answer all live on the daemon's, so the chips silently
-/// disappeared for every corpus the user actually had.
-/// `commands::meshapp` already reads atoms this way.
-///
-/// "No atlas" stays an EMPTY LIST and not an error, because that is the
-/// signal the UI branches on — but it is now the host's 404 saying so
-/// (`reading_http.rs:427`), carried through
-/// [`TurnClient::corpus_atoms_all_if_present`], rather than this
-/// process's guess from a `Path::exists` on the wrong machine. A host
-/// that is unreachable, or that cannot read an atlas it HAS, is an
-/// `Err` — the two were indistinguishable before (ARCH principle 6).
+/// excerpt-based starters. That is the host's 404 saying so, carried
+/// through [`TurnClient::starter_questions_if_present`]; a host that is
+/// unreachable, or that cannot read an atlas it HAS, is an `Err` (ARCH
+/// principle 6). The ranking heuristic is documented on
+/// `corpus_engine::enrichment::atlas::analysis::starter_questions`.
 #[tauri::command]
 pub async fn enrich_get_starter_questions(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     limit: usize,
 ) -> Result<Vec<StarterQuestion>, String> {
-    let atoms = match sovereign_turn_client::TurnClient::new(state.internal_base_url())
-        .corpus_atoms_all_if_present::<AtomEnvelope>(&corpus_id)
+    match TurnClient::new(state.client_base_url())
+        .starter_questions_if_present::<StarterQuestion>(&corpus_id, limit)
         .await
         .map_err(|e| format!("enrich_get_starter_questions: {e}"))?
     {
-        Some(atoms) => atoms,
-        None => {
+        Some(starters) => {
             tracing::debug!(
                 corpus_id = %corpus_id,
-                "enrich_get_starter_questions: host has no atlas for this corpus \
-                 — excerpt starters, not a failed read"
+                returned = starters.len(),
+                "enrich_get_starter_questions"
             );
-            return Ok(Vec::new());
+            Ok(starters)
         }
-    };
-
-    let starters = rank_starter_questions(&atoms, limit);
-    tracing::debug!(
-        corpus_id = %corpus_id,
-        total_atoms = atoms.len(),
-        question_atoms = atoms.iter().filter(|a| matches!(a, AtomEnvelope::Question(_))).count(),
-        returned = starters.len(),
-        "enrich_get_starter_questions"
-    );
-    Ok(starters)
-}
-
-/// Core ranker. Separated from the Tauri command so unit tests can
-/// feed it synthetic atom slices without touching the filesystem.
-fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQuestion> {
-    if limit == 0 {
-        return Vec::new();
-    }
-    // Tier score — lower is better.
-    fn tier(q_type: &str) -> u8 {
-        match q_type {
-            "thematic" => 0,
-            "interpretive" => 1,
-            "open" => 2,
-            "factual" => 3,
-            "rhetorical" => 4,
-            _ => 5,
+        None => {
+            // Say what is KNOWN — the host answered 404 — not what it is
+            // taken to mean. This line used to assert "has no atlas", and
+            // for the life of the wrong-port bug above that assertion was
+            // false: the 404 was a route that did not exist on the
+            // listener being asked. A trace that states a conclusion it
+            // cannot see is worse than no trace, because it is the line
+            // someone greps to rule this branch out.
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                "enrich_get_starter_questions: host answered 404 — no atlas for \
+                 this corpus, or no such route on the listener asked; either \
+                 way the UI falls back to excerpt starters"
+            );
+            Ok(Vec::new())
         }
     }
-    // Collect candidates that pass the length + shape filters.
-    let mut candidates: Vec<StarterQuestion> = atoms
-        .iter()
-        .filter_map(|a| match a {
-            AtomEnvelope::Question(q) => {
-                let text = q.content.trim();
-                let char_count = text.chars().count();
-                if !(25..=220).contains(&char_count) {
-                    return None;
-                }
-                // Normalise trailing punctuation to a question mark.
-                let cleaned = if text.ends_with('?') {
-                    text.to_string()
-                } else {
-                    let stripped = text.trim_end_matches(['.', '!', ',', ';', ':']);
-                    format!("{stripped}?")
-                };
-                let source_section = q
-                    .raised_at
-                    .first()
-                    .map(|r| r.chunk_id.clone())
-                    .filter(|s| !s.is_empty());
-                Some(StarterQuestion {
-                    text: cleaned,
-                    atom_id: q.id.as_str().to_string(),
-                    source_section,
-                    question_type: q.question_type.as_str_repr().to_string(),
-                })
-            }
-            _ => None,
-        })
-        .collect();
-    // Stable sort by (tier, then atom_id) so ties resolve deterministically.
-    candidates.sort_by(|a, b| {
-        tier(&a.question_type)
-            .cmp(&tier(&b.question_type))
-            .then_with(|| a.atom_id.cmp(&b.atom_id))
-    });
-    // Round-robin diversify by source_section. First pass: pick one
-    // per section in tier order. Second pass: fill remaining slots
-    // from the leftover pool.
-    let mut picked: Vec<StarterQuestion> = Vec::with_capacity(limit);
-    let mut used_sections: HashSet<String> = HashSet::new();
-    let mut leftovers: Vec<StarterQuestion> = Vec::new();
-    for q in candidates {
-        if picked.len() >= limit {
-            leftovers.push(q);
-            continue;
-        }
-        match &q.source_section {
-            Some(section) if !used_sections.contains(section) => {
-                used_sections.insert(section.clone());
-                picked.push(q);
-            }
-            _ => leftovers.push(q),
-        }
-    }
-    for q in leftovers {
-        if picked.len() >= limit {
-            break;
-        }
-        picked.push(q);
-    }
-    picked
 }
 
 // ─── Command: mark_first_run_complete / is_first_run ─────────────────
@@ -353,7 +207,7 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
 /// about when onboarding completed (e.g. re-onboarding after a major
 /// schema change).
 fn first_run_marker_path() -> PathBuf {
-    paths::data_root().join("first_run_complete")
+    sovereign_contracts::rebrand::data_dir().join("first_run_complete")
 }
 
 #[tauri::command]
@@ -376,155 +230,4 @@ pub async fn mark_first_run_complete() -> Result<(), String> {
     std::fs::write(&path, &ts).map_err(|e| format!("writing {}: {e}", path.display()))?;
     tracing::info!(path = %path.display(), "first_run_complete marker written");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn starter_question_ranker_prefers_thematic_then_interpretive() {
-        use corpus_engine::enrichment::atlas::{
-            AtomEnvelope, AtomId, ChunkRef, Question, ResolutionStatus,
-        };
-        use corpus_engine::enrichment::pipeline::{EnrichmentDepth, QuestionType};
-        let mk = |id: usize, text: &str, qtype: QuestionType, section: &str| {
-            AtomEnvelope::Question(Question {
-                id: AtomId::question(id),
-                content: text.into(),
-                question_type: qtype,
-                addressed_by: Vec::new(),
-                raised_at: vec![ChunkRef::new(section.to_string(), None)],
-                resolution_status: ResolutionStatus::Open,
-                enrichment_depth: EnrichmentDepth::Extracted,
-            })
-        };
-        let atoms = vec![
-            mk(
-                1,
-                "What is the factual date of the encounter between the brothers?",
-                QuestionType::Factual,
-                "sec_0001",
-            ),
-            mk(
-                2,
-                "How does faith change when grief meets doubt across chapters?",
-                QuestionType::Thematic,
-                "sec_0002",
-            ),
-            mk(
-                3,
-                "Does the ending dissolve or resolve the central question posed here?",
-                QuestionType::Interpretive,
-                "sec_0003",
-            ),
-        ];
-        let picks = rank_starter_questions(&atoms, 3);
-        assert_eq!(picks.len(), 3, "all three should pass length gate");
-        assert_eq!(picks[0].question_type, "thematic", "thematic wins tier 0");
-        assert_eq!(
-            picks[1].question_type, "interpretive",
-            "interpretive wins tier 1"
-        );
-        assert_eq!(picks[2].question_type, "factual", "factual in tier 3");
-    }
-
-    #[test]
-    fn starter_question_ranker_diversifies_by_section() {
-        use corpus_engine::enrichment::atlas::{
-            AtomEnvelope, AtomId, ChunkRef, Question, ResolutionStatus,
-        };
-        use corpus_engine::enrichment::pipeline::{EnrichmentDepth, QuestionType};
-        let mk = |id: usize, text: &str, section: &str| {
-            AtomEnvelope::Question(Question {
-                id: AtomId::question(id),
-                content: text.into(),
-                question_type: QuestionType::Thematic,
-                addressed_by: Vec::new(),
-                raised_at: vec![ChunkRef::new(section.to_string(), None)],
-                resolution_status: ResolutionStatus::Open,
-                enrichment_depth: EnrichmentDepth::Extracted,
-            })
-        };
-        // Three questions from the same section and two from different
-        // sections. Limit=3 should pull at most one from sec_0001
-        // before falling back to leftovers.
-        let atoms = vec![
-            mk(
-                1,
-                "A first long enough thematic question from section one opening?",
-                "sec_0001",
-            ),
-            mk(
-                2,
-                "A second long enough thematic question from section one opening?",
-                "sec_0001",
-            ),
-            mk(
-                3,
-                "A third long enough thematic question from section one opening?",
-                "sec_0001",
-            ),
-            mk(
-                4,
-                "A long enough thematic question from section two probing meaning?",
-                "sec_0002",
-            ),
-            mk(
-                5,
-                "A long enough thematic question from section three probing nuance?",
-                "sec_0003",
-            ),
-        ];
-        let picks = rank_starter_questions(&atoms, 3);
-        let sections: Vec<Option<String>> =
-            picks.iter().map(|p| p.source_section.clone()).collect();
-        let distinct_sections: HashSet<_> = picks
-            .iter()
-            .filter_map(|p| p.source_section.clone())
-            .collect();
-        assert_eq!(picks.len(), 3);
-        assert_eq!(
-            distinct_sections.len(),
-            3,
-            "should cover three distinct sections before revisiting one; got {:?}",
-            sections
-        );
-    }
-
-    #[test]
-    fn starter_question_ranker_rejects_too_short_and_too_long() {
-        use corpus_engine::enrichment::atlas::{
-            AtomEnvelope, AtomId, ChunkRef, Question, ResolutionStatus,
-        };
-        use corpus_engine::enrichment::pipeline::{EnrichmentDepth, QuestionType};
-        let mk = |id: usize, text: String| {
-            AtomEnvelope::Question(Question {
-                id: AtomId::question(id),
-                content: text,
-                question_type: QuestionType::Thematic,
-                addressed_by: Vec::new(),
-                raised_at: vec![ChunkRef::new("sec_0001".to_string(), None)],
-                resolution_status: ResolutionStatus::Open,
-                enrichment_depth: EnrichmentDepth::Extracted,
-            })
-        };
-        let atoms = vec![
-            mk(1, "Why?".into()),   // too short
-            mk(2, "a".repeat(300)), // too long
-            mk(
-                3,
-                "What actually grounds a claim like this in the shipped corpus?".into(),
-            ),
-        ];
-        let picks = rank_starter_questions(&atoms, 5);
-        assert_eq!(picks.len(), 1, "only the middle-length question survives");
-        assert!(picks[0].text.ends_with('?'));
-    }
-
-    #[test]
-    fn starter_question_ranker_limit_zero_returns_empty() {
-        let picks = rank_starter_questions(&[], 0);
-        assert!(picks.is_empty());
-    }
 }

@@ -10,6 +10,7 @@
 //! `investigation/` graph (UAP) or an `atlas/` enrichment (Enron) through the
 //! same DTOs ([`GraphNodeDto`] / [`EdgeDto`] / [`NodeDetailDto`]).
 
+pub mod parcels;
 pub mod wrapped;
 
 use std::collections::{HashMap, HashSet};
@@ -97,181 +98,15 @@ impl std::fmt::Display for MeshAppError {
 impl std::error::Error for MeshAppError {}
 
 // ─── DTOs (the bundle contract) ──────────────────────────────────────
+// Defined in `sovereign_contracts::daemon_wire::meshapp` since 2026-09-11 so
+// a client can name the answer without linking this crate; re-exported here
+// at the historical path. The projections below fill them unchanged.
 
-/// A degree-ranked node. `degree` = incident relationships; `alias_count` =
-/// surface forms the coalesce phase folded in.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphNodeDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-    pub degree: usize,
-    pub alias_count: usize,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-/// One relationship incident to a node, resolved to its other endpoint and
-/// carrying its cited evidence — the glassbox edge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EdgeDto {
-    pub relationship_type: String,
-    /// `"out"` — this node is the source; `"in"` — this node is the target.
-    pub direction: String,
-    pub other_id: String,
-    pub other_name: String,
-    pub other_type: String,
-    pub excerpt: String,
-    pub source_chunk: String,
-    pub confidence: f32,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-/// A node's full detail: attributes, folded aliases, every incident cited edge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeDetailDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-    pub aliases: Vec<String>,
-    pub edges: Vec<EdgeDto>,
-}
-
-/// A deterministic pattern finding (e.g. a sighting hotspot).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FindingDto {
-    pub pattern_name: String,
-    pub pattern_kind: String,
-    pub entities: Vec<FindingEntityDto>,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FindingEntityDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-}
-
-/// One cross-origin identity merge: a canonical entity + the surface forms
-/// folded into it + the signals that fired (the glassbox reason).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReconciliationMergeDto {
-    pub canonical_id: String,
-    pub canonical_name: String,
-    pub surface_forms: Vec<String>,
-    pub signals_fired: Vec<String>,
-    pub source_count: usize,
-}
-
-/// One undirected edge of a [`SubgraphDto`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubEdgeDto {
-    pub source: String,
-    pub target: String,
-    pub relationship_type: String,
-}
-
-/// Top-degree nodes + the edges induced among them, for a node-link map.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubgraphDto {
-    pub nodes: Vec<GraphNodeDto>,
-    pub edges: Vec<SubEdgeDto>,
-}
-
-/// Headline scale/provenance counts for a banner.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CorpusStatsDto {
-    pub atoms: usize,
-    pub entities: usize,
-    pub events: usize,
-    pub states: usize,
-    pub relations: usize,
-    pub claims: usize,
-    pub questions: usize,
-    pub edges: usize,
-    pub reconciled_merges: usize,
-    pub documents: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineBucketDto {
-    /// `YYYY-MM`.
-    pub ym: String,
-    pub count: usize,
-    /// A capped sample of chunk ids in this month, for click-to-drill.
-    pub chunk_ids: Vec<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineDto {
-    pub buckets: Vec<TimelineBucketDto>,
-    pub dated: usize,
-    pub total: usize,
-}
-
-/// Full source-chunk text behind a cited edge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChunkDto {
-    pub chunk_id: String,
-    pub content: String,
-    pub title: Option<String>,
-}
-
-/// One chunk inside a [`FeedDocDto`] — carries the raw-metadata-derived
-/// `outbound_links` (wikilink target titles for newsworthy; empty for
-/// corpora whose extractor doesn't stamp links).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedChunkDto {
-    pub chunk_id: String,
-    pub content: String,
-    pub title: Option<String>,
-    pub outbound_links: Vec<String>,
-}
-
-/// One source document in a [`document_feed`] response — for the
-/// newsworthy corpus, one portal day (`source_doc_id = "YYYY-MM-DD"`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedDocDto {
-    pub source_doc_id: String,
-    pub chunks: Vec<FeedChunkDto>,
-}
-
-/// [`document_feed`] response: documents newest-first by
-/// `source_doc_id` (dates sort correctly lexicographically).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentFeedDto {
-    pub corpus_id: String,
-    pub docs: Vec<FeedDocDto>,
-}
-
-/// A claim atom projected for the explorer's "arguments" view — the entity
-/// graph ops don't surface claims, so this carries the proposition, its
-/// discourse + epistemic framing, who it's attributed to (entity name,
-/// resolved), and its first cited evidence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClaimDto {
-    pub id: String,
-    pub content: String,
-    pub discourse_act: String,
-    pub epistemic_status: String,
-    pub quotable_excerpt: Option<String>,
-    pub attributed_to: Option<String>,
-    pub source_chunk: String,
-    pub excerpt: String,
-}
-
-/// A question atom projected for the explorer — the inquiry, its type +
-/// resolution status, how many claims address it, and where it's raised.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuestionDto {
-    pub id: String,
-    pub content: String,
-    pub question_type: String,
-    pub resolution_status: String,
-    pub addressed_by: usize,
-    pub source_chunk: String,
-}
+pub use sovereign_contracts::daemon_wire::{
+    ChunkDto, ClaimDto, CorpusStatsDto, DocumentFeedDto, EdgeDto, FeedChunkDto, FeedDocDto,
+    FindingDto, FindingEntityDto, GraphNodeDto, NodeDetailDto, ParcelAnalyticsDto, ParcelDto,
+    QuestionDto, ReconciliationMergeDto, SubEdgeDto, SubgraphDto, TimelineBucketDto, TimelineDto,
+};
 
 // ─── The dispatched graph ────────────────────────────────────────────
 

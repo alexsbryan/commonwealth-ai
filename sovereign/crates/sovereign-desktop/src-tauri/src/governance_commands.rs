@@ -36,9 +36,9 @@
 //!     pipeline.
 //!   * the view's five joins (section titles, section→chunk deep-links,
 //!     scope names, recipe vocabulary, decision metadata) and the
-//!     staleness heuristic. `GovernanceViewPayload` is re-exported from
-//!     the route below rather than mirrored, so the bytes the webview
-//!     receives are the route's own (ARCH §10.6).
+//!     staleness heuristic. The route's `GovernanceViewPayload` is
+//!     forwarded as `serde_json::Value` rather than mirrored, so the bytes
+//!     the webview receives are the route's own (ARCH §10.6).
 //!
 //! # User-visible change, named rather than absorbed (ARCH §18.3)
 //!
@@ -61,16 +61,16 @@ use tauri::State;
 
 use crate::state::AppState;
 
-/// Everything the Conflicts panel renders for a corpus, in one call —
-/// the ROUTE's type, re-exported rather than mirrored. Field-for-field
-/// what this module used to declare (`view`, `section_titles`,
-/// `section_chunks`, `scope_names`, `vocabulary`, `decisions`,
-/// `docs_changed_since_build`), so the webview sees the same bytes.
-///
-/// (`DecisionMeta` and `VocabularyPayload` ride inside it and are named
-/// there, not here — this is a binary crate, so a re-export nothing calls
-/// is dead weight.)
-pub use sovereign_mesh::governance_http::GovernanceViewPayload;
+// Everything the Conflicts panel renders for a corpus arrives in one call
+// as `serde_json::Value` — the ROUTE's bytes, forwarded. The route's type
+// (`sovereign_mesh::governance_http::GovernanceViewPayload`) closes over
+// `corpus_engine::enrichment`'s governance read-model and cannot live in
+// the contract crate; naming it here cost a `sovereign-desktop ->
+// sovereign-mesh` layer edge, and this command reads no field of it. A
+// forwarded `Value` is the same bytes the webview always received (`view`,
+// `section_titles`, `section_chunks`, `scope_names`, `vocabulary`,
+// `decisions`, `docs_changed_since_build`), with no second declaration to
+// drift (sv-surface svt-3).
 
 /// The client for the daemon's governance surface — the same oplog under
 /// the same `index_dir`, reached over loopback instead (sv-surface D8).
@@ -88,9 +88,9 @@ fn gov_client(state: &AppState) -> sovereign_turn_client::TurnClient {
 pub async fn governance_get_view(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<GovernanceViewPayload, String> {
+) -> Result<serde_json::Value, String> {
     gov_client(&state)
-        .governance_view::<GovernanceViewPayload>(&corpus_id)
+        .governance_view::<serde_json::Value>(&corpus_id)
         .await
         .map_err(|e| format!("governance_get_view: {e}"))
 }

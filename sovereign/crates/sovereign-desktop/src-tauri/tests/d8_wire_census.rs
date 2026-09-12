@@ -125,7 +125,7 @@ fn the_governance_panel_holds_no_oplog() {
 fn the_mcp_pane_reads_the_daemons_config() {
     let code = production_source("src/commands/mcp_servers.rs");
     assert!(
-        code.contains(".mcp_servers::<sovereign_mesh::mcp_config_http::McpServersResponse>()"),
+        code.contains(".mcp_servers::<sovereign_contracts::daemon_wire::McpServersResponse>()"),
         "sv-surface D8: commands/mcp_servers.rs no longer lists servers over \
          GET /v1/mcp/servers. The pane used to render THIS process's \
          config.toml and THIS process's secret dir while the daemon \

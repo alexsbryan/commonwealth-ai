@@ -734,3 +734,204 @@ async fn register_then_ingest_a_folder_no_manager_has_seen() {
         serde_json::json!(corpus_id)
     );
 }
+
+/// The cluster job (2026-09-11): `POST …/{c}/cluster` answers 202 with the
+/// host's job id and the progress route; `GET …/{c}/cluster/progress`
+/// serves the frames the job appended, from a cursor, and says when the
+/// job ended. This harness has no inference and its folder carries no
+/// enrichment config, so the job's terminal frame is an `Error` NAMING
+/// the manager's refusal — which is the frame a desktop re-emits on its
+/// channel, and which an unmounted route cannot produce.
+///
+/// The cursor contract is asserted too: a second poll from `next` returns
+/// no frames already served.
+#[tokio::test]
+async fn cluster_is_a_job_whose_progress_route_serves_its_frames() {
+    let (manager, addr) = harness().await;
+    let (id, _folder) = register_folder(&manager, "cluster").await;
+
+    // Progress before any job: a 404 naming the corpus, not an empty 200.
+    let (status, body) = get(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster/progress"),
+    )
+    .await;
+    assert_eq!(status, 404, "no job yet: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains(&id),
+        "the 404 must NAME the corpus: {body:#?}"
+    );
+
+    let (status, ack) = post(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 202, "cluster: {ack:#?}");
+    assert_eq!(ack["corpus_id"], serde_json::json!(id));
+    let job_id = ack["job_id"].as_str().unwrap_or_default().to_string();
+    assert!(
+        job_id.starts_with("lc-cluster-"),
+        "the ack carries a job id: {ack:#?}"
+    );
+    assert_eq!(
+        ack["progress_route"],
+        serde_json::json!(format!("/internal/corpus/local/{id}/cluster/progress")),
+        "the ack NAMES the route that reports THIS job: {ack:#?}"
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut cursor = 0u64;
+    let mut frames: Vec<serde_json::Value> = Vec::new();
+    let mut last = serde_json::Value::Null;
+    loop {
+        let (status, p) = get(
+            addr,
+            &format!("/internal/corpus/local/{id}/cluster/progress?after={cursor}"),
+        )
+        .await;
+        assert_eq!(status, 200, "progress: {p:#?}");
+        assert_eq!(p["job_id"], serde_json::json!(job_id));
+        cursor = p["next"].as_u64().unwrap_or(cursor);
+        frames.extend(p["frames"].as_array().cloned().unwrap_or_default());
+        last = p.clone();
+        if p["finished"] == serde_json::json!(true) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the cluster job never reported finished; last poll: {p:#?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let terminal = frames.last().expect("a finished job has a terminal frame");
+    assert_eq!(
+        terminal["phase"],
+        serde_json::json!("error"),
+        "frames: {frames:#?}"
+    );
+    let message = terminal["data"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("does not support clustering")
+            || message.contains("requires an inference provider"),
+        "the terminal frame names the manager's refusal verbatim, not a \
+         generic failure: {message:?}"
+    );
+
+    // Cursor: nothing already served comes back, and `finished` holds.
+    let (status, again) = get(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster/progress?after={cursor}"),
+    )
+    .await;
+    assert_eq!(status, 200, "re-poll: {again:#?}");
+    assert_eq!(
+        again["frames"],
+        serde_json::json!([]),
+        "already-served frames: {again:#?}"
+    );
+    assert_eq!(
+        again["finished"],
+        serde_json::json!(true),
+        "{again:#?} (last: {last:#?})"
+    );
+
+    // Unregistered corpus: the job route 404s naming it, BEFORE any spawn.
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/no-such-corpus/cluster",
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 404, "{body:#?}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no-such-corpus"),
+        "the 404 must NAME the corpus: {body:#?}"
+    );
+}
+
+/// `POST /internal/corpus/local/pre-scan` (2026-09-11): the user-picked
+/// path is registered on the DAEMON's manager and classified there. The
+/// answer's `corpus_id` is the one the registry kept, and the registry
+/// holds it afterwards — which is the fact the desktop's D9c 404 turned
+/// on. A path that is not a directory and an unknown source kind are
+/// 400s naming the input, before anything is registered.
+#[tokio::test]
+async fn pre_scan_registers_on_the_daemons_manager_and_classifies_the_folder() {
+    let (manager, addr) = harness().await;
+    let root = manager.index_dir_root();
+    let folder = root.parent().unwrap_or(&root).join("lc-fixture-pre-scan");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("a.md"), "alpha").unwrap();
+    std::fs::write(folder.join("b.md"), "beta").unwrap();
+    std::fs::write(folder.join("c.xyz"), "not a supported type").unwrap();
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({
+            "path": folder.to_string_lossy(),
+            "source_type": "folder",
+            "display_name": "Pre-scan fixture",
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "pre-scan: {body:#?}");
+    let id = body["corpus_id"].as_str().unwrap_or_default().to_string();
+    assert!(!id.is_empty(), "the answer names the corpus: {body:#?}");
+    assert_eq!(body["display_name"], serde_json::json!("Pre-scan fixture"));
+    assert_eq!(
+        body["result"]["readable"].as_array().map(Vec::len),
+        Some(2),
+        "two markdown files are readable: {body:#?}"
+    );
+    assert_eq!(body["result"]["total_visited"], serde_json::json!(3));
+    assert!(
+        manager.get(&id).await.is_some(),
+        "the daemon's manager holds '{id}' after the pre-scan — the ingest \
+         that follows reads THIS registry"
+    );
+
+    // Re-registering the same folder keeps the id (the manager's
+    // path-identity guard), which is why the answer carries the id back.
+    let (status, again) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.to_string_lossy(), "source_type": "folder" }),
+    )
+    .await;
+    assert_eq!(status, 200, "{again:#?}");
+    assert_eq!(
+        again["corpus_id"],
+        serde_json::json!(id),
+        "same path, same id: {again:#?}"
+    );
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.join("a.md").to_string_lossy(), "source_type": "folder" }),
+    )
+    .await;
+    assert_eq!(status, 400, "a file is not a directory: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("a.md"),
+        "the 400 names the path: {body:#?}"
+    );
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.to_string_lossy(), "source_type": "zip" }),
+    )
+    .await;
+    assert_eq!(status, 400, "unknown source kind: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("zip"),
+        "the 400 names the kind: {body:#?}"
+    );
+}

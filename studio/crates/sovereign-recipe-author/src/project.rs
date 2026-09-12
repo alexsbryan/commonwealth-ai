@@ -83,32 +83,15 @@ pub fn maintainer_inbox_dir() -> Result<PathBuf> {
 /// `workflow.toml`. `#[default] Recipe` + `#[serde(default)]` on the carrying
 /// fields means every existing `project.json` / `meta.json` (written before this
 /// tag existed) decodes as `Recipe`, restoring byte-identically.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ArtifactKind {
-    #[default]
-    Recipe,
-    Workflow,
-}
-
-impl ArtifactKind {
-    /// The snapshot filename inside a checkpoint dir. `recipe.toml` is unchanged
-    /// (existing checkpoints restore identically); `workflow.toml` is the new arm.
-    pub fn snapshot_basename(self) -> &'static str {
-        match self {
-            ArtifactKind::Recipe => "recipe.toml",
-            ArtifactKind::Workflow => "workflow.toml",
-        }
-    }
-
-    /// Lowercase noun for prose surfaces (`[Current <label> TOML]`, errors).
-    pub fn label(self) -> &'static str {
-        match self {
-            ArtifactKind::Recipe => "recipe",
-            ArtifactKind::Workflow => "workflow",
-        }
-    }
-}
+///
+/// Defined in `sovereign_contracts::daemon_wire` since svt-3 (2026-09-11):
+/// every `/v1/recipe-projects` answer tags a project with it, and a client
+/// parsing the answer should not link this crate to name a two-variant
+/// enum. Re-exported here so every `ArtifactKind` path in this crate and in
+/// `sovereign_tools::recipe_author` holds; `snapshot_basename` and `label`
+/// travel with the enum (an inherent impl cannot stay behind on a foreign
+/// type).
+pub use sovereign_contracts::daemon_wire::ArtifactKind;
 
 /// On-disk per-project summary, kept small so `RecipeProject::load`
 /// doesn't have to walk the whole project directory. Updated by
@@ -158,37 +141,10 @@ pub struct DecisionFrontier {
     pub note_count: usize,
 }
 
-/// On-disk metadata for one checkpoint. The `restored_from` field
-/// is set on checkpoints created by `RecipeProject::restore`; the
-/// dashboard renders these with a "↳ restored from <name>" marker.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CheckpointMeta {
-    /// Stable id (the directory basename: `<ts>-<slug>`).
-    pub checkpoint_id: String,
-    /// What was snapshotted (recipe vs workflow) — so a checkpoint dir is
-    /// self-describing. `#[serde(default)]` → pre-tag checkpoints decode as
-    /// `Recipe` (they hold a `recipe.toml`).
-    #[serde(default)]
-    pub artifact_kind: ArtifactKind,
-    /// Human-readable name supplied by the agent / partner.
-    pub name: String,
-    /// Why the checkpoint was created. Set to one of the
-    /// agent-spec triggers (`auto_scale_up`, `auto_strategy_change`,
-    /// `partner_request`, `project_creation`) or `restore` for
-    /// restoration-anchor checkpoints.
-    pub trigger: String,
-    /// Optional one-paragraph summary of where the project stands.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub summary: String,
-    /// Set when this checkpoint was created by a restore from
-    /// another. Carries the source checkpoint id; the dashboard
-    /// uses this together with the `kind=checkpoint_restored`
-    /// NoteStore entry to render the temporal narrative.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub restored_from: Option<String>,
-    /// RFC 3339 timestamp of creation.
-    pub created_at: String,
-}
+/// On-disk metadata for one checkpoint (`meta.json`) and the row the
+/// dashboard lists — one shape, so defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+pub use sovereign_contracts::daemon_wire::CheckpointMeta;
 
 /// Live handle on a recipe-author project. Cheap to construct;
 /// every disk-touching method is async and goes through `tokio::fs`.

@@ -68,6 +68,10 @@ use sovereign_contracts::error::{Error, Result};
 // "Ensure a backend is reachable" belongs to the client, not to the
 // application — sv-surface's `sv-no-daemon-management` bar. See `reach.rs`.
 pub mod reach;
+// The mesh half of the client: `/v1/mesh/*` on the client port and the two
+// `/internal/*` mesh-admin reads. An `impl TurnClient` block, so the surface
+// is unchanged — see `mesh.rs` for why it is not in this file.
+mod mesh;
 
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
@@ -277,6 +281,9 @@ pub struct ConversationMessage {
     pub provenance: Option<Provenance>,
     pub citations: Vec<Citation>,
     pub epistemic_state: Option<EpistemicState>,
+    /// The persisted metadata blob the three fields above are projected
+    /// from, verbatim; `None` for a message the host stored without one.
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// One hit of `GET /v1/conversations/search` — a matching message and the
@@ -603,6 +610,7 @@ impl TurnClient {
                     provenance: m.provenance,
                     citations: m.citations,
                     epistemic_state: m.epistemic_state,
+                    metadata: m.metadata,
                 })
                 .collect(),
             created_at: wire.created_at,
@@ -1271,7 +1279,7 @@ impl TurnClient {
 
     // ── Notes CRUD (sv-surface D6) ───────────────────────────────
     //
-    // The answers are `sovereign_mesh::notes_http::NoteEntry`, a
+    // The answers are `sovereign_contracts::daemon_wire::NoteEntry`, a
     // twenty-field projection of `corpus_engine_notes::Note`. Generic
     // over `T` for the same reason the two families below are: a twin
     // here would be twenty fields this crate would have to keep in step
@@ -1280,7 +1288,7 @@ impl TurnClient {
     // type from anywhere.
 
     /// `POST /v1/notes/query` — filtered notes, newest first when
-    /// `query` is absent. `T` is `sovereign_mesh::notes_http::NoteEntry`.
+    /// `query` is absent. `T` is `sovereign_contracts::daemon_wire::NoteEntry`.
     ///
     /// A POST because the filter carries three LISTS (`symbols`,
     /// `files`, `kinds`) and no flat query string expresses those
@@ -1312,7 +1320,7 @@ impl TurnClient {
     }
 
     /// `GET /v1/notes/{id}` — one note. `T` is
-    /// `sovereign_mesh::notes_http::NoteEntry`.
+    /// `sovereign_contracts::daemon_wire::NoteEntry`.
     ///
     /// `Ok(None)` for a 404, and that mapping is safe HERE where it is
     /// not on the meshapp routes: this path has exactly one 404 — "no
@@ -1435,6 +1443,23 @@ impl TurnClient {
     ) -> Result<T> {
         self.internal_get(format!("/internal/meshapp/{corpus_id}/nodes/{id}"), &[])
             .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/chunks/{chunk_id}` — one chunk's
+    /// title and content by numeric id. `T` is
+    /// `sovereign_meshapp::ChunkDto`. Added 2026-09-11 so the desktop's
+    /// focused-passage preamble (`commands/chat.rs`) reads the chunk from
+    /// the daemon instead of opening the index with its own engine.
+    pub async fn meshapp_chunk<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/chunks/{chunk_id}"),
+            &[],
+        )
+        .await
     }
 
     /// `GET /internal/meshapp/{corpus}/findings?pattern=` — the wire
@@ -1619,6 +1644,89 @@ impl TurnClient {
             .await
     }
 
+    /// `GET /internal/meshapp/{corpus}/parcels?ids=` — the requested
+    /// parcel atoms with provenance; each id matches by atom id OR parcel
+    /// number. The wire form of `meshapp_read_corpus`. `T` is
+    /// `Vec<sovereign_contracts::daemon_wire::ParcelDto>`.
+    pub async fn meshapp_parcels<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        ids: &[String],
+    ) -> Result<T> {
+        let ids = ids.join(",");
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/parcels"),
+            &[("ids", ids)],
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/parcels/search?q=&limit=` — parcel
+    /// number (exact) or address (substring) search. The wire form of
+    /// `meshapp_search_parcels`. `T` is `Vec<ParcelDto>`.
+    pub async fn meshapp_search_parcels<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        let mut q: Vec<(&str, String)> = vec![("q", query.to_string())];
+        if let Some(n) = limit {
+            q.push(("limit", n.to_string()));
+        }
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/parcels/search"), &q)
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/parcel-analytics?business_tax_target=`
+    /// — the revenue-neutral land-levy aggregate with its derivation. The
+    /// wire form of `meshapp_parcel_analytics`. `T` is
+    /// `sovereign_contracts::daemon_wire::ParcelAnalyticsDto`.
+    pub async fn meshapp_parcel_analytics<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        business_tax_target: Option<f64>,
+    ) -> Result<T> {
+        let q: Vec<(&str, String)> = business_tax_target
+            .into_iter()
+            .map(|v| ("business_tax_target", v.to_string()))
+            .collect();
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/parcel-analytics"),
+            &q,
+        )
+        .await
+    }
+
+    /// `GET /internal/corpus/enriched` — every enrichment workspace under
+    /// the DAEMON's data root with a loadable config, newest first. The
+    /// wire form of `enrich_list_corpora`. `T` is
+    /// `sovereign_contracts::daemon_wire::EnrichedCorpusSummary`; an absent
+    /// store is `[]`, not an error.
+    pub async fn enriched_corpora<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.internal_get("/internal/corpus/enriched".to_string(), &[])
+            .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/starter-questions?limit=` — starter
+    /// questions mined from the corpus's atlas, or `None` when the host
+    /// answered 404: the corpus is not installed or has no atlas, which is
+    /// the "excerpt starters" branch the chat empty state takes. An
+    /// unreachable host, or one that cannot read an atlas it HAS, is an
+    /// `Err` (ARCH principle 6). `T` is
+    /// `sovereign_contracts::daemon_wire::StarterQuestion`.
+    pub async fn starter_questions_if_present<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>> {
+        self.internal_get_opt(
+            format!("/internal/corpus/{corpus_id}/starter-questions"),
+            &[("limit", limit.to_string())],
+        )
+        .await
+    }
+
     /// One GET against a loopback `/internal/...` read surface, parsed
     /// as `T`. Every plain atlas and meshapp read goes through here, so
     /// the URL join, the non-success rendering and the parse-error
@@ -1671,7 +1779,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/ocr-available` — whether this daemon
     /// can OCR a scanned PDF. `T` is
-    /// `sovereign_mesh::lc_http::OcrAvailability`.
+    /// `sovereign_contracts::daemon_wire::OcrAvailability`.
     ///
     /// The command it replaces degraded a missing manager to `false`;
     /// this does not, because "OCR unavailable" and "no runtime" want
@@ -1710,7 +1818,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/cancel` — ask an in-flight
-    /// ingest to stop. `T` is `sovereign_mesh::lc_http::CancelAck`.
+    /// ingest to stop. `T` is `sovereign_contracts::daemon_wire::CancelAck`.
     ///
     /// `cancelled: false` on a 200 means there was nothing running —
     /// a successful call, not a failure.
@@ -1807,7 +1915,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/search` — search one local
-    /// corpus. `T` is `sovereign_mesh::lc_http::LocalSearchHit`.
+    /// corpus. `T` is `sovereign_contracts::daemon_wire::LocalSearchHit`.
     ///
     /// `limit: None` is the host's 10.
     pub async fn lc_search<T: serde::de::DeserializeOwned>(
@@ -1825,7 +1933,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/ingest` — submit the
-    /// ingest as a JOB. `T` is `sovereign_mesh::lc_http::IngestJobAck`.
+    /// ingest as a JOB. `T` is `sovereign_contracts::daemon_wire::IngestJobAck`.
     ///
     /// Answers `202` as soon as the job is spawned; the ack carries
     /// `progress_route`, the EXISTING watch-status route that reports
@@ -2001,7 +2109,7 @@ impl TurnClient {
 
     /// `GET /v1/mcp/servers` — the host's configured MCP servers and what
     /// its live tool registry holds for each. `T` is
-    /// `sovereign_mesh::mcp_config_http::McpServersResponse`.
+    /// `sovereign_contracts::daemon_wire::McpServersResponse`.
     ///
     /// Read `mount.reason` before rendering any connection affordance:
     /// the host reports `live_tool_count` and deliberately reports NO
@@ -2063,6 +2171,44 @@ impl TurnClient {
         .await
     }
 
+    // ── The recipe registry — `/internal/corpus/recipes` (`recipe_http`) ──
+    //
+    // Two routes for the authoring surface. The desktop validated a
+    // recipe with a `CorpusEngine` of its own and wrote into the recipes
+    // dir IT resolved, which was the daemon's only by coincidence of
+    // config; both now go to the daemon whose registry will resolve them.
+
+    /// `POST /internal/corpus/recipes/import` — validate an authored
+    /// recipe offline and install it into the daemon's registry. `B` is
+    /// `ImportRecipeRequest`, `T` is `ImportRecipeResult`. A recipe that
+    /// parses but fails validation is a 200 with `success: false` and the
+    /// errors; a body that is not a recipe, or a store the daemon cannot
+    /// write, is an `Err`.
+    pub async fn import_recipe<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/recipes/import".to_string(), body)
+            .await
+    }
+
+    /// `GET /internal/corpus/recipes/{corpus}/parameters` — the
+    /// `[parameters]` the recipe declares, for the install form. `T` is
+    /// `RecipeParameterSchema`. A recipe the daemon's registry cannot
+    /// resolve is a 404 and arrives as an `Err` naming it: "no
+    /// parameters" and "no such recipe" are different facts and the form
+    /// renders them differently.
+    pub async fn recipe_parameters<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/recipes/{corpus_id}/parameters"),
+            &[],
+        )
+        .await
+    }
+
     // ── Recipe-author projects (sv-surface D8) ───────────────────
     //
     // Generic for the family reason above: these payloads carry
@@ -2073,7 +2219,7 @@ impl TurnClient {
 
     /// `GET /v1/recipe-projects` — every project with its sidecar
     /// summary, newest-updated first. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeProjectListEntry`.
+    /// `sovereign_contracts::daemon_wire::RecipeProjectListEntry`.
     ///
     /// An empty vec is a real answer: a fresh install has no projects and
     /// a Welcome pane branches on exactly that.
@@ -2102,7 +2248,7 @@ impl TurnClient {
     }
 
     /// `GET /v1/recipe-projects/{id}/dashboard` — the one big read. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeAuthorDashboardState`.
+    /// `sovereign_contracts::daemon_wire::RecipeAuthorDashboardState`.
     ///
     /// Its `validation` is an OPTION and `validation_unavailable` says
     /// why when it is `None`. A host that cannot judge an artifact
@@ -2117,7 +2263,7 @@ impl TurnClient {
 
     /// `PUT /v1/recipe-projects/{id}/toml` — validate, then write only if
     /// valid. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeValidationReport`.
+    /// `sovereign_contracts::daemon_wire::RecipeValidationReport`.
     ///
     /// A recipe that does not parse comes back `Ok` with `ok: false` and
     /// the errors, and NOTHING was written — that is a successful
@@ -2159,7 +2305,7 @@ impl TurnClient {
 
     /// `POST /v1/recipe-projects/{id}/checkpoints/{checkpoint}/restore` —
     /// restore a snapshot and lay down the restore anchor. `T` is
-    /// `sovereign_mesh::recipe_project_http::RestoreCheckpointOutcome`.
+    /// `sovereign_contracts::daemon_wire::RestoreCheckpointOutcome`.
     pub async fn recipe_project_restore_checkpoint<T: serde::de::DeserializeOwned>(
         &self,
         feature_id: &str,
@@ -2205,7 +2351,9 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
     /// along an ingest is, and what it INDEXED once it is done. `T` is
-    /// `sovereign_mesh::lc_http::IngestProgress`.
+    /// `sovereign_contracts::daemon_wire::IngestProgressView<Stats>` (the
+    /// route's `sovereign_mesh::lc_http::IngestProgress` for a caller that
+    /// links the daemon).
     ///
     /// This is the route [`Self::lc_ingest`]'s ack names, and the one to
     /// poll. Read `finished`, not the phase: the phase file describes the
@@ -2222,6 +2370,57 @@ impl TurnClient {
         self.internal_get(
             format!("/internal/corpus/local/{corpus_id}/ingest/progress"),
             &[],
+        )
+        .await
+    }
+
+    /// `POST /internal/corpus/local/{corpus}/cluster` — run clustering +
+    /// LLM labelling on an ingested vault as a JOB. Answers the ingest
+    /// job's ack shape (`T` is
+    /// `sovereign_contracts::daemon_wire::IngestJobAck`): the host's job
+    /// id and the progress route that reports it. `config` serialises to
+    /// a `ClusterConfig`; `None` leaves the thresholds to the host's
+    /// `ClusterConfig::default()` — the same one decider `lc_preview`
+    /// defers to.
+    pub async fn lc_cluster<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        config: Option<&B>,
+    ) -> Result<T> {
+        let body = match config {
+            Some(c) => serde_json::json!({ "config": c }),
+            None => serde_json::json!({}),
+        };
+        self.internal_post_json(format!("/internal/corpus/local/{corpus_id}/cluster"), &body)
+            .await
+    }
+
+    /// `POST /internal/corpus/local/pre-scan` — register the corpus for a
+    /// user-picked path on the daemon's manager and classify what an
+    /// ingest would read. `body` serialises to
+    /// `sovereign_mesh::lc_http::PreScanRequest` (`path`, `source_type`,
+    /// optional `display_name`); `T` is `sovereign_contracts::daemon_wire::PreScanAnswerView<_>`, whose
+    /// `corpus_id` is the id the registry KEPT — use that one.
+    pub async fn lc_pre_scan<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/local/pre-scan".to_string(), body)
+            .await
+    }
+
+    /// `GET /internal/corpus/local/{corpus}/cluster/progress?after=N` —
+    /// the frames a cluster job has appended from the caller's cursor
+    /// on. `T` is `sovereign_contracts::daemon_wire::ClusterProgressView<_>`; its `next`
+    /// is the cursor to send on the following call.
+    pub async fn lc_cluster_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/local/{corpus_id}/cluster/progress"),
+            &[("after", after.to_string())],
         )
         .await
     }
@@ -2372,7 +2571,7 @@ impl TurnClient {
 
     /// `GET /v1/documents/legacy` — documents in the old `documents`
     /// table that no asset owns. `T` is
-    /// `sovereign_mesh::documents_http::LegacyDocumentEntry`.
+    /// `sovereign_contracts::daemon_wire::LegacyDocumentEntry`.
     pub async fn list_legacy_documents<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
         #[derive(Deserialize)]
         struct Wire<T> {
@@ -2382,6 +2581,88 @@ impl TurnClient {
             .internal_get("/v1/documents/legacy".to_string(), &[])
             .await?;
         Ok(wire.documents)
+    }
+
+    /// `POST /v1/documents` — ingest a local file as a document asset,
+    /// as a JOB. Answers the PENDING record (202) whose id every progress
+    /// frame is stamped with; poll [`Self::document_ingest_progress`]
+    /// for the frames. `T` is `sovereign_core::types::DocumentAsset`.
+    pub async fn upload_document<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            document: T,
+        }
+        let wire: Wire<T> = self
+            .internal_post_json(
+                "/v1/documents".to_string(),
+                &serde_json::json!({ "path": path }),
+            )
+            .await?;
+        Ok(wire.document)
+    }
+
+    /// `GET /v1/documents/{id}/progress?after=N` — the frames an upload
+    /// job appended from the caller's cursor on. `T` is
+    /// `sovereign_contracts::daemon_wire::DocumentIngestProgress`; its
+    /// `next` is the cursor to send on the following call.
+    pub async fn document_ingest_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/documents/{asset_id}/progress"),
+            &[("after", after.to_string())],
+        )
+        .await
+    }
+
+    /// `POST /v1/documents/legacy` — chunk a local file into the legacy
+    /// `documents` table (the old paperclip path). `T` is
+    /// `sovereign_contracts::daemon_wire::IngestLegacyResponse`.
+    pub async fn ingest_legacy_document<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            "/v1/documents/legacy".to_string(),
+            &serde_json::json!({ "path": path }),
+        )
+        .await
+    }
+
+    /// `POST /v1/documents/{id}/ask` — ask a question of a document asset,
+    /// as a JOB. The daemon persists the question into `conversation_id`
+    /// before answering 202; poll [`Self::ask_document_progress`] for the
+    /// operation frames and the outcome. `T` is
+    /// `sovereign_contracts::daemon_wire::AskJobAck`.
+    pub async fn ask_document<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        question: &str,
+        conversation_id: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/v1/documents/{asset_id}/ask"),
+            &serde_json::json!({ "question": question, "conversation_id": conversation_id }),
+        )
+        .await
+    }
+
+    /// `GET /v1/documents/{id}/ask/{job_id}?after=N` — the frames an ask
+    /// job appended from the caller's cursor on, and its `outcome` once
+    /// `finished`. `T` is `sovereign_contracts::daemon_wire::AskProgress`.
+    pub async fn ask_document_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        job_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/documents/{asset_id}/ask/{job_id}"),
+            &[("after", after.to_string())],
+        )
+        .await
     }
 
     /// `POST /v1/documents/legacy/promote` — mint an asset over chunks
@@ -2452,6 +2733,108 @@ impl TurnClient {
             .internal_get("/internal/corpus/diagnose".to_string(), &[])
             .await?;
         Ok(wire.report)
+    }
+
+    /// `POST /internal/corpus/{corpus}/index/build` — build an installed
+    /// corpus's vector + FTS indexes as a daemon job. `T` is
+    /// `sovereign_contracts::daemon_wire::IngestJobAck` (202). A corpus
+    /// already building answers 409 by name; an unknown one 404.
+    pub async fn corpus_index_build<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/internal/corpus/{corpus_id}/index/build"),
+            &serde_json::json!({}),
+        )
+        .await
+    }
+
+    /// `GET /internal/corpus/{corpus}/index/progress` — `T` is
+    /// `sovereign_contracts::daemon_wire::IndexBuildProgress`. `Idle` for a
+    /// corpus nobody asked to build in this daemon's lifetime.
+    pub async fn corpus_index_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/internal/corpus/{corpus_id}/index/progress"), &[])
+            .await
+    }
+
+    // ── Deep research — `/v1/research` (`research_http`) ─────────
+    //
+    // Deep research is a daemon JOB since 2026-09-11. `T` is the matching
+    // `sovereign_contracts::daemon_wire::Research*` shape throughout; the
+    // names here follow the route, as the index-build pair above does.
+
+    /// `GET /v1/research/capabilities` — `T` is `ResearchCapabilities`.
+    /// `error` is set when this daemon cannot run research (no models
+    /// configured, say); reported, never defaulted.
+    pub async fn research_capabilities<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/capabilities".to_string(), &[])
+            .await
+    }
+
+    /// `POST /v1/research` — launch (or resume) a run as a daemon job.
+    /// `B` is `ResearchRequest`, `T` is `ResearchJobAck` (202). A run
+    /// already going answers 409 naming it; a refused launch (empty
+    /// question, unknown consent class, no models) answers 400 with the
+    /// daemon's sentence.
+    pub async fn research_start<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        request: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/v1/research".to_string(), request)
+            .await
+    }
+
+    /// `GET /v1/research/{job_id}/progress?after=N` — `T` is
+    /// `ResearchProgress`: the frames from cursor `after` on, the next
+    /// cursor, `finished`, and the elapsed/quiet clocks. 404 for a job
+    /// this daemon never accepted.
+    pub async fn research_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        job_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/research/{job_id}/progress"),
+            &[("after", after.to_string())],
+        )
+        .await
+    }
+
+    /// `POST /v1/research/{job_id}/abort` — `T` is `ResearchAbortAck`.
+    /// Not a kill: the loop lands on a truncated report with the
+    /// truncation declared. 404 for a job that is not live.
+    pub async fn research_abort<T: serde::de::DeserializeOwned>(&self, job_id: &str) -> Result<T> {
+        self.internal_post_bare(format!("/v1/research/{job_id}/abort"))
+            .await
+    }
+
+    /// `GET /v1/research/runs` — `T` is `Vec<ResearchRunSummary>`, newest
+    /// first.
+    pub async fn research_runs<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/runs".to_string(), &[])
+            .await
+    }
+
+    /// `GET /v1/research/active` — `T` is `Vec<ResearchActiveRun>`: the
+    /// runs the daemon is driving right now.
+    pub async fn research_active<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/research/active".to_string(), &[])
+            .await
+    }
+
+    /// `GET /v1/research/runs/{run_id}/report` — `T` is `ResearchReport`.
+    /// `Ok(None)` is the 404 and only the 404: no such run, or a run that
+    /// never reached a report (the body names which).
+    pub async fn research_report<T: serde::de::DeserializeOwned>(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<T>> {
+        self.internal_get_opt(format!("/v1/research/runs/{run_id}/report"), &[])
+            .await
     }
 
     /// `GET /internal/corpus/{corpus}/health` — enrichment health for
@@ -2560,92 +2943,6 @@ impl TurnClient {
         }
     }
 
-    // ─── The mesh contribution ledger (sv-surface svt-3) ─────
-
-    /// `GET /internal/contribution/view` — every peer's dimensional
-    /// contributions over the daemon's default window, one entry per
-    /// node its `MeshStore` holds ledger events about.
-    ///
-    /// The wire form of `commonwealth_state::current_contributions`,
-    /// which this crate cannot name (see the note above
-    /// [`Self::corpus_atoms`]), so the caller supplies `T`. It is
-    /// `Vec<sovereign_api::routes_internal::NodeContributionsView>`
-    /// for the daemon's own shape, and the desktop's
-    /// `Vec<NodeContributionsDto>` — the same field names — for the
-    /// Mesh Health Members panel.
-    ///
-    /// The host owns the ORDER: it sorts by node id before it answers.
-    /// A caller that re-sorts is a second decider for a question
-    /// already settled (ARCH principle 8).
-    ///
-    /// This is the LEDGER, not a liveness probe. An empty list means
-    /// the store holds no events — the right answer for a mesh of one
-    /// that has served nothing yet, and NOT a signal that the host is
-    /// unreachable, which arrives as an `Err`.
-    pub async fn contribution_view<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        self.internal_get("/internal/contribution/view".to_string(), &[])
-            .await
-    }
-
-    // ─── Per-peer affinity preferences (sv-surface svt-3) ────────
-
-    /// `GET /internal/peer-preference/list` — every affinity
-    /// preference the host holds, in the store's own scan order.
-    ///
-    /// `T` is `Vec<sovereign_api::routes_internal::PeerPreferenceView>`
-    /// for the daemon's shape and the desktop's `Vec<PeerPreferenceDto>`
-    /// — identical field names — for the Mesh Health panel. This crate
-    /// cannot name either (see the note above [`Self::corpus_atoms`]).
-    ///
-    /// An empty list means the operator has set no preferences, which
-    /// is the default state of every node. It is NOT "the host could
-    /// not be asked" — that arrives as an `Err` (ARCH principle 6).
-    pub async fn peer_preferences<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
-        self.internal_get("/internal/peer-preference/list".to_string(), &[])
-            .await
-    }
-
-    /// `POST /internal/peer-preference/set` — set or replace one
-    /// peer's multiplier.
-    ///
-    /// `multiplier` is NOT validated here. The `(0.0, 1.0]` clamp is
-    /// `commonwealth_state::PeerPreference::new`'s and a second copy in
-    /// this client would be a second decider free to drift from it
-    /// (ARCH principle 8); an out-of-range value comes back as the
-    /// host's own 400 text.
-    pub async fn set_peer_preference(
-        &self,
-        node_id: &str,
-        multiplier: f64,
-        reason: Option<&str>,
-    ) -> Result<()> {
-        let body = serde_json::json!({
-            "node_id": node_id,
-            "multiplier": multiplier,
-            "reason": reason,
-        });
-        self.internal_write_no_answer(
-            reqwest::Method::POST,
-            "/internal/peer-preference/set".to_string(),
-            Some(&body),
-        )
-        .await
-    }
-
-    /// `POST /internal/peer-preference/clear` — drop one peer's
-    /// preference, answering whether one was there.
-    ///
-    /// The bool is the host's, not an inference from a status code:
-    /// "cleared it" and "there was nothing set" are different facts and
-    /// the caller renders them differently.
-    pub async fn clear_peer_preference(&self, node_id: &str) -> Result<bool> {
-        self.internal_post_json(
-            "/internal/peer-preference/clear".to_string(),
-            &serde_json::json!({ "node_id": node_id }),
-        )
-        .await
-    }
-
     // ─── The internal exchange: one sentence, six named shapes ────
     //
     // Every method above that talks to the host says one of six
@@ -2711,6 +3008,40 @@ impl TurnClient {
         }
     }
 
+    /// WHICH LISTENER `self.base` MUST NAME (measured 2026-09-11 against a
+    /// live daemon, and the reason two desktop commands were 404ing).
+    ///
+    /// A daemon binds two ports, and `/internal/...` is served on BOTH by
+    /// different owners:
+    ///
+    /// - the CLIENT port (9741 by convention) carries
+    ///   `sovereign_api::server::client_router` — a superset of the
+    ///   internal one — PLUS every router `EmbeddedDaemon` merges into it
+    ///   (`mounted`): `corpus_catalog_http`, `lc_http`, `atlas_http`,
+    ///   `meshapp_http`, `enrich_http`, `recipe_http`, `documents_http`,
+    ///   `research_http`, … So every `/internal/corpus/catalog`,
+    ///   `/internal/corpus/local/…`, `/internal/corpus/enriched`,
+    ///   `/internal/corpus/recipes/…`, `/internal/atlas/…` and
+    ///   `/internal/meshapp/…` method in this file — which is nearly all
+    ///   of them — reaches ONLY that port.
+    /// - the INTERNAL port (9742) carries
+    ///   `sovereign_api::server::internal_router`, the mesh PEER
+    ///   surface: gossip, join, scheduling, model/index transfer,
+    ///   `/internal/corpus/install`, `/internal/contribution/…`. Only
+    ///   [`Self::contribution_view`] and its neighbours below may be
+    ///   reached there.
+    ///
+    /// Verified: `GET /internal/corpus/catalog` answers 200 on 9741 and
+    /// 404 on 9742; `/internal/gossip` is 404 on 9741 and 405 on 9742.
+    ///
+    /// The footgun is that the CALLER picks the port, so a new client of
+    /// a `mounted` route reads a neighbouring call site, copies
+    /// `internal_base_url()`, and gets a 404 that
+    /// `internal_get_opt` then reports as a legitimate absence. Moving
+    /// the choice into this type is the structural fix (ARCH principle
+    /// 12: the client owns which listener serves what, not each caller);
+    /// until then this comment is at the one place that spells the URL.
+    ///
     /// The url and the error-context string for one call — the two
     /// strings every shape below needs and none of them should spell.
     fn target(&self, method: &str, path: &str) -> (String, String) {
@@ -2720,7 +3051,7 @@ impl TurnClient {
     }
 
     /// `GET`, parsed answer. Any non-success is the host's words.
-    async fn internal_get<T: serde::de::DeserializeOwned>(
+    pub(crate) async fn internal_get<T: serde::de::DeserializeOwned>(
         &self,
         path: String,
         query: &[(&str, String)],
@@ -2760,7 +3091,10 @@ impl TurnClient {
 
     /// `POST` with a JSON body, parsed answer. The POST twin of
     /// [`Self::internal_get`].
-    async fn internal_post_json<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+    pub(crate) async fn internal_post_json<
+        B: serde::Serialize + ?Sized,
+        T: serde::de::DeserializeOwned,
+    >(
         &self,
         path: String,
         body: &B,
@@ -2783,7 +3117,10 @@ impl TurnClient {
     /// from [`Self::internal_post_empty`]: the two put different bytes
     /// on the wire, and a route whose handler takes no body extractor
     /// must keep receiving none.
-    async fn internal_post_bare<T: serde::de::DeserializeOwned>(&self, path: String) -> Result<T> {
+    pub(crate) async fn internal_post_bare<T: serde::de::DeserializeOwned>(
+        &self,
+        path: String,
+    ) -> Result<T> {
         let (url, ctx) = self.target("POST", &path);
         let answer = self.required(self.http.post(&url), &url, &ctx).await?;
         parse(&answer, &ctx)
@@ -2847,7 +3184,7 @@ impl TurnClient {
     /// `POST …/end` and `POST …/tool-outcome` shape. `body` is
     /// `None` for the routes that take no body at all, and their
     /// request stays byte-for-byte the bodiless one they always sent.
-    async fn internal_write_no_answer<B: serde::Serialize + ?Sized>(
+    pub(crate) async fn internal_write_no_answer<B: serde::Serialize + ?Sized>(
         &self,
         method: reqwest::Method,
         path: String,
@@ -3032,6 +3369,8 @@ struct ConversationMessageWire {
     citations: Vec<Citation>,
     #[serde(default)]
     epistemic_state: Option<EpistemicState>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -22,7 +22,10 @@ pub use backend_trait::{
     BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost, TavilyBackendImpl,
     WebSearchBackend, WebSearchRegistry,
 };
-pub use configured::{configured_search, ConfiguredSearch, FALLBACK_BACKEND};
+pub use configured::{
+    configured_search, effective_search_registry, search_orchestrator, ConfiguredSearch,
+    FALLBACK_BACKEND,
+};
 // The privacy posture type moved down to the shared contract crate
 // (so the egress boundary in sovereign-core can consult it); kept
 // here at its historical path so every importer is unaffected.

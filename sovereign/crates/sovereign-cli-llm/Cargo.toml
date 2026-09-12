@@ -51,6 +51,10 @@ sovereign-enrichment-catalog = { workspace = true }
 # `enrich_cmd/mod.rs`.
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
+# `declare`: write this node's own origin credential to the 0600 secret
+# store. One implementation of where a declaration lives, shared with the
+# acceptor that reads it.
+commonwealth-media = { workspace = true }
 # Phase 6: the chat surface asks the daemon for a turn instead of building
 # a Runtime to run one itself (TOPOLOGY §10).
 sovereign-turn-client = { workspace = true }

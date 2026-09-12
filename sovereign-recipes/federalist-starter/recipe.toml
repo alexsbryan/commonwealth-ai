@@ -1,0 +1,55 @@
+# The Federalist Papers — the onboarding STARTER corpus.
+#
+# Installed by the desktop's first-run flow (`install_starter_corpus`) and by
+# `svrn corpus install federalist-starter`, through the SAME rail as every
+# other prebuilt corpus: the daemon's `/internal/corpus/install` resolves this
+# recipe, `CorpusEngine::try_restore_prebuilt` downloads the `[prebuilt]`
+# archive and restores it sha-gated, refusing on an embedding-space mismatch.
+# Until 2026-09-11 the desktop did that restore in-process with the same HF
+# repo, filename and sha256 hardcoded in `enrich_commands.rs` — a second
+# copy of a recipe (ARCH principle 8) and a knowledge-engine link in a thin
+# client. This file is the one copy now.
+#
+# `[acquire]`/`[extract]`/`[chunk]` describe how the snapshot was built and
+# are what a from-source rebuild would run; the shipped path is `[prebuilt]`.
+
+[corpus]
+id = "federalist-starter"
+name = "The Federalist Papers (starter)"
+description = "Hamilton, Madison and Jay's 85 essays (Project Gutenberg #1404) with a pre-built epistemic atlas — the small, grounded corpus a first-time user chats with before installing their own. ~162 KB snapshot, restores in seconds, no inference."
+license = "Public Domain"
+kind = "knowledge"
+mesh_sharing = false
+size_compressed_gb = 0.0002
+size_indexed_gb = 0.002
+
+[acquire]
+type = "bulk_download"
+url = "https://www.gutenberg.org/cache/epub/1404/pg1404.txt"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "philosophy"
+prompt_version = "v1"
+
+[prebuilt]
+# https://huggingface.co/datasets/svrnmesh/federalist-starter/resolve/main/federalist-starter.tar.zst
+hf_repo = "svrnmesh/federalist-starter"
+hf_filename = "federalist-starter.tar.zst"
+# sha256 of the archive, verified on the HF artifact (the value
+# `enrich_commands.rs` carried as STARTER_SHA256).
+sha256 = "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f"
+compatible_embedding_model = "qwen-embedding-0.6b"

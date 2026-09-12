@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 # The one client family for the daemon's wire (sv-one-client). Attach mode
 # routes conversation search / memory / insight surfaces through it rather
 # than re-deriving local deciders (sv-surface rung 6).
@@ -19,29 +20,24 @@ sovereign-contracts = { workspace = true }
 # DARK. It gates code only — no dependency hangs off it, so it cannot move a
 # dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
-# The enrichment store the CLI and the daemon also read — `enrich_commands`
-# lists it rather than re-deriving the layout and the schema (rung
-# nc-16-shared-capability).
-sovereign-enrichment-catalog = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
-# Workflow authoring parity: the recipe-author workspace commands validate a
-# workflow project's TOML via `Workflow::parse` (the same way they validate a
-# recipe via `Recipe::from_toml`). Core-only crate — no inference/tool deps.
-sovereign-workflow = { workspace = true }
-# The workflow-author tool bundle (workflow_write/_structured/validate/test) the
-# desktop runtime registers so a Workflow-kind project's chat can compose a
-# workflow. Same agent loop as recipe authoring; only the tools + skill differ.
-sovereign-workflow-host = { workspace = true }
-# THE shared commissioning recipe. The desktop composes its tool bundles and
-# hands its host inputs over rather than building a router, a registry and a
-# lane of its own (TOPOLOGY §10 phase 7).
-sovereign-runtime-recipe = { workspace = true }
+# `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`
+# LEFT HERE at svt-3 (2026-09-11), with `corpus-engine-scip` and `arc-swap`
+# below. The runtime recipe and the workflow-author bundle went when the app
+# stopped commissioning a Runtime (svt-3b); the last thing holding the other
+# two was NAMING their wire shapes — `workflow_http::{RunRequest, JobResponse,
+# …}` and `mesh_http::{StatusResponse, KnownMeshDto}`, `types::{MeshStatus,
+# …}` — which now live in `sovereign_contracts::daemon_wire` (both crates
+# re-export them). The two reads that were not a type moved to the daemon:
+# invite preview is `POST /v1/mesh/join/preview`, the node id comes from
+# `GET /status`. `[thin_surfaces].may_not_reach` in quality/ARCH_LAYERS.toml
+# is reachability over `cargo tree`, so a type reached through one of these
+# is a red gate, not a shortcut.
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
-sovereign-meshapp = { workspace = true }
 # `sovereign-cli-daemon` and `sovereign-compute` LEFT HERE at svt-2
 # (2026-09-11). The desktop used to link the daemon entry as a library so
 # `--daemon-child` could run the real daemon in this process, and the
@@ -50,7 +46,6 @@ sovereign-meshapp = { workspace = true }
 # daemon this app talks to is the Tauri SIDECAR, built as a separate binary
 # by `scripts/stage-daemon-sidecar.sh`. Do not re-add either to reach a type
 # — that is the dependency edge `cargo xtask layer-gate` exists to hold.
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # `commonwealth-core` and `commonwealth-state` LEFT HERE at svt-3 chunk 3
 # (2026-09-11). The Mesh Health surfaces — peer preferences and dimensional
 # contributions — used to reach the in-process AppState's accessors directly,
@@ -60,8 +55,6 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # peer-preference route was the LAST thing holding these two.
 corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-authoring-harness.workspace = true
-corpus-engine-notes = { workspace = true }
-corpus-engine-scip = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
@@ -82,7 +75,6 @@ tauri-plugin-deep-link = "2"
 # tag. See RELEASING.md §"Auto-updates" for the keypair + secret setup.
 tauri-plugin-updater = "2"
 reqwest = { workspace = true, features = ["stream"] }
-arc-swap = { workspace = true }
 futures = { workspace = true }
 walkdir = "2"
 dirs = "6"

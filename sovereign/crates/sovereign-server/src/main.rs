@@ -17,6 +17,7 @@ mod routes_mcp;
 #[cfg(feature = "dev-routes")]
 mod routes_tdd;
 mod scheduler;
+mod shutdown;
 mod startup;
 mod tenant;
 mod ws;
@@ -709,7 +710,11 @@ async fn main() {
         )
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
-        .merge(routes_documents::document_router());
+        .merge(routes_documents::document_router())
+        // `POST /v1/admin/shutdown`. Inside the auth stack deliberately: a
+        // stop takes the same bearer key every other `/v1` route takes, so
+        // no second credential exists to leak. See `shutdown.rs`.
+        .merge(shutdown::shutdown_router());
 
     // Authoring surfaces — corpus path-ingest and the TDD solver. Both
     // assume the caller owns the box: the solver hands a client-supplied
@@ -720,9 +725,15 @@ async fn main() {
         .merge(corpus_upload::corpus_upload_router())
         .merge(routes_tdd::tdd_router());
 
+    // The stop signal. Built from the SAME `auth_enabled` the CORS posture
+    // and the exposure check read, so "is a stop safe to expose here" has
+    // one answer in this process (ARCH principle 8).
+    let stopping = shutdown::Shutdown::new(auth_enabled);
+
     let authed = authed
         .layer(middleware::from_fn(auth::auth_middleware))
-        .layer(Extension(auth_state));
+        .layer(Extension(auth_state))
+        .layer(Extension(stopping.clone()));
 
     // Build the TDD ChatBackend once at startup. Provider URL =
     // the server's own bind address by default — the daemon hosts
@@ -838,10 +849,23 @@ async fn main() {
     // access. Without this the extractor fails and every MCP request
     // is rejected.
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
-    if let Err(e) = axum::serve(listener, service).await {
+
+    // Until 2026-09-11 this was a bare `axum::serve(..).await` and the
+    // process had no stop path at all — no route, no signal handler, no
+    // pidfile. The only thing that ever stopped it was an external SIGKILL
+    // from the desktop's Mobile-access toggle, i.e. a client owning this
+    // server's lifetime. The graceful-shutdown future is what lets the
+    // server own it instead; the watchdog is what keeps a held-open
+    // conversation stream from making an accepted stop indefinite.
+    stopping.spawn_watchdog();
+    let serve = axum::serve(listener, service).with_graceful_shutdown(async move {
+        stopping.requested().await;
+    });
+    if let Err(e) = serve.await {
         eprintln!("Server error: {e}");
         sovereign_inference::fast_exit_skip_destructors(1);
     }
+    tracing::info!("mobile host stopped");
 }
 
 /// Resolve the embedding model path. An explicit `[inference] embed_model`

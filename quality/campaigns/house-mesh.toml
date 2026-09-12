@@ -19,9 +19,16 @@ status    = "active"
 # The denominator is the wire between two real daemons, not a needle list an
 # author wrote. That is the sv-surface lesson applied before the fact rather
 # than after it.
+# SHARPENED 2026-09-11 after review. The first draft said A's origin "required
+# an auth header that B never held" — which a test origin answering 200
+# regardless would satisfy without the header ever arriving. The origin is now
+# the JUDGE, and the predicate is a PAIR: the same fanout must fail without the
+# declaration and succeed with it, on the same origin, in the same run.
 [predicate]
-statement = "On a two-node mesh, a service published via `svrn publish` on node A is returned as a `served` row by node B's media fanout, where A's origin required an auth header that B never held and neither node's config.toml was edited by hand"
+statement = "On a two-node mesh: node A's origin answers 401 to any request lacking the exact declared header value and 200 only with it; node B's media fanout returns a `failed`/401 row before A declares the secret and a `served` 200 row after, with the value never present on B and neither config.toml hand-edited"
 check     = "cargo test -p commonwealth-rails --test two_daemons house_mesh_publish_roundtrip"
+# The negative leg is the load-bearing half. Without it this bar cannot
+# distinguish "the header arrived" from "the origin did not care."
 
 # ── BARS ─────────────────────────────────────────────────────────────────────
 
@@ -31,22 +38,81 @@ demo     = "Someone else's library, and I hold none of their keys"
 rung     = "hm-1"
 statement = "library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
 target   = "catalogue non-empty; tokens.json absent"
-status   = "never-ran"
+status   = "passed (mechanism); never-ran (against a live Jellyfin)"
+# LANDED 2026-09-11, commit c866c91cb. The mechanism is proven on the wire by
+# the predicate test; tokens.json is gone from ~/dev/house-mesh (664abcc) and
+# library.py is one fanout call again. What has NOT run is the same flow
+# against a real Jellyfin: the /Items query string and the stream path come
+# from Jellyfin's API docs, not from a run. That half stays never-ran and is
+# honest about it.
 # Why this is the first rung despite P1 being the more visible verb: it deletes
 # a PRACTICE (25 people mailing each other API keys), and `Forward::Http` at
 # commonwealth-media/src/identity.rs:106-109 already carries the header vec.
 # P1 only deletes typing.
+#
+# CORRECTED 2026-09-11 after review. The draft put the token in config.toml.
+# That contradicts an already-litigated decision, not merely a preference:
+# `secret_store.rs:3-16` keeps MCP tokens at ~/.svrnmesh/secrets/mcp/<NAME>.token
+# "separate from config.toml and from the SQLite store — so the secret never
+# rides along with anything the app shares, syncs, backs up, or gossips to a
+# mesh peer", after full keychain due-diligence across mac/Linux/Windows and
+# headless. `mcp/auth.rs:3-9` states the rule: "never from the on-disk
+# config.toml (ARCH §7)". Files 0600, dir 0700, pinned by
+# `token_file_is_owner_only` (secret_store.rs:130-142).
+#
+# WHAT SHIPPED DIVERGED FROM THAT PLAN, and the divergence is the better half.
+# The plan kept the header NAME in config and the value in a file, mirroring
+# McpAuthConfig. Shipped keeps BOTH in the file -- the filename IS the header
+# name -- because `MediaSection` is `#[serde(deny_unknown_fields)]`
+# (commonwealth-rails/src/config.rs:62-78), so ANY new key there makes an
+# un-upgraded daemon REFUSE TO BOOT rather than ignore it. In a house where 8
+# upgrade on the install evening and 17 do not, a config field hands those 17 a
+# dead daemon. A directory nobody's parser reads cannot do that.
+#
+# So the rollout hazard is not "handled" -- it is STRUCTURALLY ABSENT. Zero
+# config change, zero new key, one fewer place to look. A node without the
+# feature simply has an empty directory. (Sovereign's `SetupConfig` fails the
+# opposite way on unknown keys -- they parse, then vanish on the next save() --
+# which is worth knowing for any future rung that does add a field.)
+#
+# Shipped shape: <data_dir>/secrets/media/<header-name>, file 0600, dir 0700,
+# read once at acceptor construction. commonwealth-media/src/declared.rs.
 
 [[bar]]
 id       = "hm-publish-no-config-edit"
 demo     = "I published my Jellyfin and never opened a config file"
 rung     = "hm-2"
-statement = "A node publishes and unpublishes an origin with no hand edit to config.toml, and `svrn publish` lists it with the header value redacted"
+statement = "A node declares and clears an origin credential with no hand edit to config.toml, and the list prints the header name with the value never shown"
 target   = "round-trip clean; no secret in stdout"
-status   = "never-ran"
+status   = "passed"
+# LANDED 2026-09-11 as `svrn mesh media declare`, exercised against a temp
+# SVRNMESH_DATA_DIR: help renders; empty list is informative; a piped value is
+# stored -rw------- and read back byte-exact; --list prints "x-emby-token
+# <set>" and never the value; "../escape" is refused by name; --clear removes
+# the file; empty and whitespace-only stdin store nothing and exit 2.
+#
+# NARROWER THAN DRAFTED, deliberately: this declares a CREDENTIAL, it does not
+# publish an ORIGIN. media_origin is still a config line. The full publish verb
+# waits on multi-origin rather than shipping a verb that can only ever hold one
+# thing -- which is the stop condition this campaign already names.
 # The hand-edit is not merely tedious: this dev host already carries an [iroh]
 # section, so the obvious `>>` append produces invalid TOML. Twenty-five
 # newcomers would hit that, and the failure reads as "the software is broken".
+#
+# REUSE, found in review: `PUT /v1/mcp/servers/{name}/token`
+# (sovereign-mesh/src/mcp_config_http.rs:230-252) IS this verb's shape — set a
+# secret over the loopback socket instead of hand-editing TOML, landing 0600
+# in the directory the daemon's own loader reads at boot. Copy its log
+# discipline verbatim: the token is never logged; whether one is now set is.
+#
+# Redaction has no library to call. There is NO Secret<T>/Redacted<T> newtype
+# in the tree (no `secrecy`, `zeroize`, `SecretString`), so masking follows one
+# of three bespoke precedents (pinned_transport.rs:79-90,
+# backend_trait.rs:256-264 and :306-313), all rendering the literal
+# "<redacted>". And `svrn mesh status` prints join keys and the client token
+# verbatim on purpose (mesh_cmd.rs:2787-2789, :3271-3273) — they are share
+# surfaces — so there is no existing "list a config value with the secret
+# masked" helper to reach for.
 
 [[bar]]
 id       = "hm-version-skew-legible"
@@ -60,6 +126,39 @@ status   = "never-ran"
 # route 404s on a running, healthy daemon with nothing explaining why.
 # library.py currently maps that 404 by hand — a workaround standing in for a
 # missing primitive.
+#
+# REDIRECTED 2026-09-11 after review. The draft said "extend the dispatcher's
+# stale-sibling warning across the socket". That warning
+# (sovereign-cli/src/sibling.rs:39-67) compares artifact MTIMES WITHIN A SHARED
+# PARENT DIRECTORY and bails when the binaries sit in different locations
+# (:52-54) — which is every socket case. Worse, sibling.rs:22-27 is a WRITTEN
+# REJECTION of the socket version: SHA stamping "needs a build.rs in all four
+# binaries plus a subprocess handshake per dispatch, and it flaps in exactly
+# the loop that matters — dirty trees stamp `-dirty` on both sides while their
+# code differs." hm-3 must answer that paragraph, not cite it as a model.
+#
+# The cheap shape instead: the daemon ALREADY computes the right tuple and
+# throws it away. `daemon_cmd/mod.rs:1358-1369` logs run_id, pid, exe,
+# exe_mtime, version at startup — to daemon.err only. `exe_mtime` is the field
+# that catches THIS incident, where both sides read 0.6.0. hm-3 is putting
+# three already-computed fields on `StatusResponse` (mesh_http.rs:127).
+#
+# Two better precedents to imitate rather than re-derive:
+#   - `run_identity::exe_rebuilt_since_start()` (sovereign-core:66-90) consumed
+#     as a HARD REFUSAL in solve_http.rs:506-511 — the daemon catching its own
+#     staleness, with the cost on the record ("six solve attempts served by a
+#     pre-dawn daemon").
+#   - The sentence this bar wants is already written once: `JobKind::is_skew_of`
+#     (oicp-types/src/job.rs:185-188) -> commonwealth-work/src/refusal.rs:160-166,
+#     "this donor offers {offered} and the unit is {wanted} — same kind,
+#     different contract revision."
+#
+# Also noted, out of scope but adjacent: `cwth/media/0`'s version suffix is
+# documented as allowing "a future class-aware protocol to coexist during
+# migration" (iroh.rs:50-51) but is NEVER negotiated — flat .alpns() at :249,
+# exact match at :1065-1076. A `cwth/media/1` would fail TLS selection and
+# close with no version-aware message. If the media wire ever changes, that
+# break is hard and illegible.
 
 [[bar]]
 id       = "hm-week-1-publishers"

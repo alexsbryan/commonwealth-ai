@@ -40,10 +40,15 @@
 //! | `lc_cancel` | the engine's cancellation registry | the ingest job |
 //! | `lc_ocr_available` | an instance's `OcrCtx` | the ingest job's OCR arm |
 //!
-//! Two stay, still paired, and the census still fires on them:
-//! `lc_get_preview` and `lc_write_tags` read the `cluster_results` cache
-//! that `lc_cluster` — app-local — fills. Plus `lc_validate_path` and
-//! the SCAN half of `lc_pre_scan`: a user-picked path, pre-corpus.
+//! The cluster pair crossed on 2026-09-11: `lc_cluster` is now `POST
+//! /internal/corpus/local/{c}/cluster` (a job, followed over
+//! `…/cluster/progress` and re-emitted frame for frame), so
+//! `lc_get_preview` and `lc_write_tags` — which read the
+//! `cluster_results` cache that job fills — cross with it. The same day
+//! `lc_pre_scan` crossed WHOLE over `POST /internal/corpus/local/pre-scan`
+//! (register + scan on the daemon's manager, with the daemon's snapshot
+//! root). No command in this file holds a manager any more; what stays
+//! local is `lc_validate_path`, a pre-corpus path probe.
 //!
 //! # D9c: `lc_pre_scan`'s REGISTRATION crosses (2026-09-10)
 //!
@@ -62,16 +67,22 @@
 //!
 //! # What crossing the ingest job changed for a user (ARCH §18.3)
 //!
-//! The OCR that runs is the HOST's. `install_ocr_ctx_for_app` still
-//! installs a resolved Tesseract/PDFium context on this process's
-//! manager, and in Local mode that manager IS the daemon's, so nothing
-//! moves. On an ATTACHED boot the daemon ingests with its own OCR
-//! context, and `lc_ocr_available` now reports that one — so the
-//! "Read them with OCR" affordance reflects the engine that would
-//! actually do the reading, instead of this app's sidecar answering for
-//! a job it no longer runs. `lc_ocr_available` is also an `Err` when the
-//! daemon has no local-corpus runtime, where it used to degrade to
-//! `false`: "OCR is unavailable" and "nobody could be asked" want
+//! The OCR that runs is the HOST's — and since 2026-09-11 this file
+//! installs none. `install_ocr_ctx_for_app` used to resolve
+//! Paddle/Tesseract/PDFium at boot and `set_ocr_ctx` it on
+//! `state.local_corpus`, under the belief that "in Local mode that
+//! manager IS the daemon's". It is not: `WatchedSubsystem::install` has
+//! ONE production caller, `sovereign-cli-daemon`'s bootstrap
+//! (`attach_construction_census` pins this process's count at zero), so
+//! the manager this app builds serves no ingest and the context it was
+//! handed read nothing. The daemon that ingests installs its own
+//! (`daemon_cmd/ocr_install.rs`, feature `ocr`), probing
+//! `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, `{data_dir}/models/paddle-ocr` and
+//! `~/.svrnmesh/models/paddle-ocr`; `lc_ocr_available` reports THAT
+//! context, so the "Read them with OCR" affordance reflects the engine
+//! that would actually do the reading. `lc_ocr_available` is an `Err`
+//! when the daemon has no local-corpus runtime, where it used to degrade
+//! to `false`: "OCR is unavailable" and "nobody could be asked" want
 //! different remedies from the pane.
 
 use std::collections::BTreeMap;
@@ -81,19 +92,16 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, WorkflowJobEvent};
 use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
     manager::{IncompleteJob, IngestStats, ProgressCallback},
-    ocr::{OcrCtx, OcrEngineKind},
     pre_scanner::PreScanResult,
     preview::VaultPreview,
     progress::{CompletionResult, LocalCorpusProgress},
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
-    LocalCorpusConfig, LocalCorpusManager,
-};
-use sovereign_workflow_host::workflow_http::{
-    JobResponse, RunRequest, RunResponse, WorkflowJobEvent,
+    LocalCorpusConfig,
 };
 
 use crate::state::AppState;
@@ -132,26 +140,6 @@ fn lc_client(state: &AppState) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
-/// The desktop's OWN manager. Still required by the surfaces whose
-/// answer is a function of ONE manager instance's in-memory state rather
-/// than of the registry on disk — `lc_cluster`, `lc_get_preview`,
-/// `lc_write_tags` — plus `lc_pre_scan`'s Obsidian arm, which reads this
-/// process's `snapshot_root()`. See the module header.
-async fn require_manager(
-    state: &State<'_, Arc<AppState>>,
-) -> Result<Arc<LocalCorpusManager>, String> {
-    state
-        .local_corpus
-        .read()
-        .await
-        .as_ref()
-        .cloned()
-        .ok_or_else(|| {
-            "Local corpus manager not ready. Finish setup (model + embedding model) first."
-                .to_string()
-        })
-}
-
 // ─── Command: lc_ocr_available ───────────────────────────────────────
 
 /// Whether the OCR pipeline is wired up on the daemon that would run
@@ -166,317 +154,10 @@ async fn require_manager(
 #[tauri::command]
 pub async fn lc_ocr_available(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
     let avail = lc_client(&state)
-        .lc_ocr_available::<sovereign_mesh::lc_http::OcrAvailability>()
+        .lc_ocr_available::<sovereign_contracts::daemon_wire::OcrAvailability>()
         .await
         .map_err(|e| format!("lc_ocr_available: {e}"))?;
     Ok(avail.available)
-}
-
-/// Install an OCR runtime context onto the running
-/// `LocalCorpusManager`. Called once at desktop boot after the manager
-/// is up. Resolves the bundled Tesseract binary via predictable paths,
-/// points pdfium at the bundled dynamic library (if present), and
-/// points cleanup at the local daemon.
-///
-/// Resolution order for the Tesseract binary:
-///   1. `SOVEREIGN_TESSERACT_BIN` env var — escape hatch for dev.
-///   2. `<resource_dir>/binaries/tesseract[-<target_triple>][.exe]`
-///      — what `tauri.conf.json`'s `bundle.externalBin` produces.
-///   3. `<exe_dir>/tesseract` — what bundled apps land at next to the
-///      main binary.
-///   4. Skip — leaving OCR unavailable. `lc_ocr_available` reports
-///      this so the UI hides the offer entirely.
-///
-/// Failure is non-fatal: a build without bundled binaries simply
-/// degrades to "OCR not offered" rather than erroring on boot.
-pub async fn install_ocr_ctx_for_app(
-    app: &AppHandle,
-    manager: &Arc<LocalCorpusManager>,
-    daemon_base_url: String,
-    cleanup_model: String,
-) {
-    use tauri::Manager;
-
-    let resource_dir = app.path().resource_dir().ok();
-
-    // pdfium rasterizes PDFs to page images regardless of which OCR
-    // engine reads them — required for BOTH paddle and tesseract. If we
-    // can locate the bundled dylib we pin pdfium-render to it; otherwise
-    // we fall back to its system-library probe (which surfaces a clear
-    // error at OCR-time).
-    let pdfium_lib_path = resolve_pdfium_lib(resource_dir.as_deref());
-
-    // Prefer PaddleOCR. It drives the ONNX Runtime already linked for
-    // GLiNER and needs NO external build dependency — unlike tesseract,
-    // which users must `brew/apt install` or we must statically build.
-    // The 2026-05-27 bake-off put paddle at/above tesseract quality once
-    // `det_limit_side_len` was raised to 1600 (now the engine default).
-    // Use it whenever its models resolve (bundled in the .app, or in
-    // ~/.svrnmesh for a dev machine); fall back to tesseract otherwise.
-    #[cfg(feature = "paddle-ocr")]
-    {
-        if let Some(model_root) = resolve_paddle_model_dir(resource_dir.as_deref()) {
-            // The engine resolves models via SOVEREIGN_PADDLE_OCR_MODEL_DIR
-            // → `paddle::models_root()`. Point it at whatever we found so a
-            // packaged app uses the bundled copy and a dev box uses
-            // ~/.svrnmesh — one code path, no per-build special-casing.
-            std::env::set_var("SOVEREIGN_PADDLE_OCR_MODEL_DIR", &model_root);
-            let ctx = OcrCtx {
-                // tesseract_* are inert when engine = Paddle.
-                tesseract_bin: PathBuf::from("tesseract"),
-                tessdata_dir: PathBuf::new(),
-                pdfium_lib_path,
-                daemon_base_url,
-                cleanup_model,
-                dpi: 300,
-                tesseract_timeout_secs: 30,
-                cleanup_timeout_secs: 30,
-                engine: OcrEngineKind::Paddle,
-            };
-            tracing::info!(
-                paddle_model_root = %model_root.display(),
-                pdfium = ?ctx.pdfium_lib_path,
-                cleanup_model = %ctx.cleanup_model,
-                "OCR context installed (PaddleOCR) — folder drop will offer OCR for scanned PDFs"
-            );
-            manager.set_ocr_ctx(ctx).await;
-            return;
-        }
-        tracing::info!(
-            "PaddleOCR models not found (.app bundle or ~/.svrnmesh/models/paddle-ocr) \
-             — falling back to tesseract"
-        );
-    }
-
-    // Fallback: the tesseract subprocess (needs a system/bundled binary).
-    let tesseract_bin = match resolve_tesseract_path(app) {
-        Some(p) => p,
-        None => {
-            tracing::info!("OCR not available: no PaddleOCR models and no tesseract sidecar");
-            return;
-        }
-    };
-    let tessdata_dir = match resolve_tessdata_dir(resource_dir.as_deref()) {
-        Some(p) => p,
-        None => {
-            tracing::warn!(
-                "OCR not available: tessdata/eng.traineddata missing — \
-                 expected under <resource_dir>/tessdata/ or alongside the tesseract binary"
-            );
-            return;
-        }
-    };
-    let ctx = OcrCtx {
-        tesseract_bin,
-        tessdata_dir,
-        pdfium_lib_path,
-        daemon_base_url,
-        cleanup_model,
-        dpi: 300,
-        tesseract_timeout_secs: 30,
-        cleanup_timeout_secs: 30,
-        engine: OcrEngineKind::Tesseract,
-    };
-    tracing::info!(
-        tesseract = %ctx.tesseract_bin.display(),
-        tessdata = %ctx.tessdata_dir.display(),
-        pdfium = ?ctx.pdfium_lib_path,
-        cleanup_model = %ctx.cleanup_model,
-        "OCR context installed (tesseract) — folder drop will offer OCR for scanned PDFs"
-    );
-    manager.set_ocr_ctx(ctx).await;
-}
-
-/// Compile-time absolute path to the `src-tauri/binaries/` directory
-/// inside this crate. Lets `cargo tauri dev` find the same binaries
-/// that release bundles ship via `externalBin`/`resources`, without
-/// needing the user to set env vars or relying on Tauri's runtime
-/// `resource_dir()` (which doesn't surface those entries in dev).
-const DEV_BINARIES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/binaries");
-
-fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
-    use tauri::Manager;
-
-    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSERACT_BIN") {
-        let p = PathBuf::from(env_path);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-
-    // Tauri externalBin layout: under `<resource_dir>/binaries/`
-    // Tauri may suffix the target triple — try the bare name and a
-    // couple of common triples before giving up.
-    let mut probes: Vec<PathBuf> = Vec::new();
-    let mut bin_dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(rd) = app.path().resource_dir() {
-        bin_dirs.push(rd.join("binaries"));
-        // macOS resource_dir is `Contents/Resources`, but
-        // externalBin sidecars land in `Contents/MacOS` next to
-        // the main exe — probe that too.
-        if let Some(parent) = rd.parent() {
-            bin_dirs.push(parent.join("MacOS"));
-        }
-    }
-    // Dev fallback: the canonical `src-tauri/binaries/` directory.
-    // Baked at compile time so it survives the working-directory
-    // changes Tauri's dev runner does on macOS.
-    bin_dirs.push(PathBuf::from(DEV_BINARIES_DIR));
-
-    for bins in &bin_dirs {
-        probes.push(bins.join("tesseract"));
-        probes.push(bins.join("tesseract.exe"));
-        for triple in [
-            "aarch64-apple-darwin",
-            "x86_64-apple-darwin",
-            "x86_64-unknown-linux-gnu",
-            "x86_64-pc-windows-msvc",
-        ] {
-            probes.push(bins.join(format!("tesseract-{triple}")));
-            probes.push(bins.join(format!("tesseract-{triple}.exe")));
-        }
-    }
-    if let Ok(rd) = app.path().resource_dir() {
-        probes.push(rd.join("tesseract"));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            probes.push(parent.join("tesseract"));
-            probes.push(parent.join("tesseract.exe"));
-        }
-    }
-    if let Some(p) = probes.into_iter().find(|p| p.exists()) {
-        return Some(p);
-    }
-    // $PATH fallback — covers Homebrew (`/opt/homebrew/bin/tesseract`)
-    // on Apple Silicon, `/usr/local/bin/tesseract` on Intel macOS,
-    // distro packages on Linux, and any operator who installed
-    // tesseract themselves. Without this, dev builds with no
-    // `binaries/tesseract` symlink silently report "OCR not available"
-    // even though the system can clearly run it.
-    //
-    // Tauri's launchd-spawned env has a minimal `PATH` (typically
-    // `/usr/bin:/bin:/usr/sbin:/sbin`), so we splice in the standard
-    // Homebrew + Linux locations before searching. The env var still
-    // takes precedence — operators with a hand-rolled `PATH` win.
-    let mut path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    for extra in [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/usr/local/sbin",
-        "/opt/local/bin",
-    ] {
-        let pb = PathBuf::from(extra);
-        if !path_dirs.contains(&pb) {
-            path_dirs.push(pb);
-        }
-    }
-    for dir in path_dirs {
-        for name in ["tesseract", "tesseract.exe"] {
-            let candidate = dir.join(name);
-            if candidate.is_file() {
-                tracing::info!(
-                    path = %candidate.display(),
-                    "OCR: tesseract located via PATH fallback"
-                );
-                return Some(candidate);
-            }
-        }
-    }
-    None
-}
-
-fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    let mut probes: Vec<PathBuf> = Vec::new();
-    if let Ok(env_path) = std::env::var("SOVEREIGN_TESSDATA_DIR") {
-        probes.push(PathBuf::from(env_path));
-    }
-    if let Some(rd) = resource_dir {
-        probes.push(rd.join("tessdata"));
-        probes.push(rd.join("binaries").join("tessdata"));
-    }
-    // Dev fallback — same compile-time-baked binaries dir.
-    let dev_bins = PathBuf::from(DEV_BINARIES_DIR);
-    probes.push(dev_bins.join("tessdata"));
-    // System-install fallback. Tesseract's tessdata ships next to its
-    // binary on Homebrew + most Linux distros at predictable paths.
-    // Without these, a system-installed tesseract from the PATH probe
-    // above would be found but tessdata would still come up empty.
-    for p in [
-        "/opt/homebrew/share/tessdata",           // Homebrew Apple Silicon
-        "/usr/local/share/tessdata",              // Homebrew Intel
-        "/opt/local/share/tessdata",              // MacPorts
-        "/usr/share/tessdata",                    // Debian/Ubuntu
-        "/usr/share/tesseract-ocr/4.00/tessdata", // Older Debian
-        "/usr/share/tesseract-ocr/5/tessdata",    // Newer Debian
-        "/usr/share/tesseract/tessdata",          // RHEL/Fedora
-    ] {
-        probes.push(PathBuf::from(p));
-    }
-    probes
-        .into_iter()
-        .find(|p| p.join("eng.traineddata").exists())
-}
-
-fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    let mut probes: Vec<PathBuf> = Vec::new();
-    if let Ok(env_path) = std::env::var("SOVEREIGN_PDFIUM_LIB") {
-        probes.push(PathBuf::from(env_path));
-    }
-    let mut search_roots: Vec<PathBuf> = Vec::new();
-    if let Some(rd) = resource_dir {
-        search_roots.push(rd.to_path_buf());
-        search_roots.push(rd.join("binaries"));
-    }
-    // Dev fallback — same compile-time-baked binaries dir.
-    search_roots.push(PathBuf::from(DEV_BINARIES_DIR));
-    for root in &search_roots {
-        for lib in ["libpdfium.dylib", "pdfium.dll", "libpdfium.so"] {
-            probes.push(root.join("pdfium").join(lib));
-            probes.push(root.join(lib));
-        }
-    }
-    probes.into_iter().find(|p| p.exists())
-}
-
-/// Locate the PaddleOCR models ROOT — the directory that contains the
-/// `<model_id>/` set (`det.onnx` + `rec.onnx` + `dict.txt`). Returned so
-/// it can be handed straight to `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, which
-/// the engine's `paddle::models_root()` reads. A match is only returned
-/// when all three model files actually exist, so the caller can trust
-/// "Some" to mean "Paddle can run" rather than discovering a missing
-/// model per-document later.
-///
-/// Probe order: explicit env → bundled (`<resource>/binaries/paddle-ocr`)
-/// → dev binaries dir → the CLI/user models root (`~/.svrnmesh`).
-#[cfg(feature = "paddle-ocr")]
-fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
-    use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
-
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(env_path) = sovereign_tools::local_corpus::ocr::paddle::model_root_override() {
-        roots.push(env_path);
-    }
-    if let Some(rd) = resource_dir {
-        roots.push(rd.join("binaries").join("paddle-ocr"));
-        roots.push(rd.join("paddle-ocr"));
-    }
-    roots.push(PathBuf::from(DEV_BINARIES_DIR).join("paddle-ocr"));
-    // Dev/user fallback: the root the CLI fetch populates.
-    roots.push(
-        sovereign_contracts::rebrand::svrnmesh_root()
-            .join("models")
-            .join("paddle-ocr"),
-    );
-    roots.into_iter().find(|root| {
-        let set = root.join(DEFAULT_MODEL_ID);
-        set.join("det.onnx").is_file()
-            && set.join("rec.onnx").is_file()
-            && set.join("dict.txt").is_file()
-    })
 }
 
 // ─── Command: lc_validate_path ───────────────────────────────────────
@@ -521,91 +202,44 @@ pub struct PreScanResponse {
 }
 
 /// Register (or re-register) a corpus for the supplied path + source
-/// type, then run a pre-scan. Returns the classification and the new
-/// corpus_id. Progress events are emitted on
-/// `local-corpus://progress/{job_id}` but the command is synchronous
-/// end-to-end — callers await the return value.
+/// type, then run a pre-scan. Returns the classification and the
+/// corpus id + display name AS REGISTERED.
 ///
-/// `source_type` is `"obsidian"` or `"folder"`. `display_name` defaults
-/// to the folder's basename.
+/// ONE call since 2026-09-11: `POST /internal/corpus/local/pre-scan`
+/// builds the config (the Obsidian arm with the DAEMON's snapshot root —
+/// this command's last local manager read), registers it on the manager
+/// that will run the ingest, and scans the config the registry kept.
+/// D9c had crossed the registration alone; the scan stayed because the
+/// path was "user-picked", which stopped being a reason once the engine
+/// reading that path was the daemon's.
 ///
-/// # The REGISTRATION crosses; the path probe and the scan stay
-///
-/// The two halves answer different questions, and D8 shipped them as
-/// one. The probe and the scan read the FOLDER the user just picked —
-/// no manager state — so they belong here. `register` writes the
-/// REGISTRY ON DISK, which is the state this file's rule says both
-/// managers must share, and it is the producer for every route that can
-/// answer `not registered locally`: the ingest job, cancel, search,
-/// preview, the config read below. D8 crossed those consumers and left
-/// this producer behind, so on an ATTACHED boot the corpus went into
-/// this process's manager and the daemon 404'd the ingest that followed
-/// (real-mode journeys, run 5). It now goes over
-/// `POST /internal/corpus/local`, into the manager that will run the
-/// ingest.
-///
-/// The corpus id and the display name come BACK from the route rather
-/// than off the config that was sent: `register`'s path-identity guard
-/// keeps an existing id when this folder is already registered under
-/// one, and using the id we sent is the same 404 under a new name.
+/// `job_id` is kept on the response for the TS shape (`LcPreScanResponse`)
+/// only. No listener subscribes to it — `FolderDropFlow.svelte` reads
+/// `corpus_id`, `display_name` and `result` and nothing else (checked
+/// 2026-09-11) — and the scan no longer narrates `Scanning` frames from
+/// this process, so the id names no channel anything emits on.
 #[tauri::command]
 pub async fn lc_pre_scan(
-    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     path: String,
     source_type: String,
     display_name: Option<String>,
 ) -> Result<PreScanResponse, String> {
-    let p = PathBuf::from(&path);
-    if !p.exists() || !p.is_dir() {
-        return Err(format!("Path does not exist or is not a directory: {path}"));
-    }
-
-    let config = match source_type.as_str() {
-        "obsidian" => {
-            // The one manager read left in this command, and it is a
-            // read of THIS process's storage layout, not of corpus
-            // state: `snapshot_root()` is `{data_dir}/vault-snapshots`.
-            // It lands in the config as `write_back.snapshot_dir` and is
-            // then the daemon's to honour. Named rather than hidden —
-            // see the census header's remaining-pair note.
-            let manager = require_manager(&state).await?;
-            let snap = manager.snapshot_root().to_path_buf();
-            LocalCorpusConfig::obsidian_vault(p, snap)
-        }
-        "folder" => {
-            let name = display_name.unwrap_or_else(|| {
-                std::path::Path::new(&path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Documents")
-                    .to_string()
-            });
-            LocalCorpusConfig::document_folder(PathBuf::from(&path), name)
-        }
-        other => return Err(format!("Unknown source_type: {other}")),
-    };
-
-    let job_id = new_job_id();
-    let progress = Some(make_emitter(app.clone(), job_id.clone()));
-    let registered: LocalCorpusConfig = lc_client(&state)
-        .lc_register::<LocalCorpusConfig, LocalCorpusConfig>(&config)
-        .await
-        .map_err(|e| format!("register: {e}"))?;
-    let corpus_id = registered.id.clone();
-    let display_name = registered.display_name.clone();
-
-    // Scanned from the config the DAEMON kept, so the panel classifies
-    // the same extensions and thresholds the ingest will read.
-    let result = sovereign_tools::local_corpus::pre_scan_config(registered, progress)
+    let answer = lc_client(&state)
+        .lc_pre_scan::<serde_json::Value, sovereign_contracts::daemon_wire::PreScanAnswerView<PreScanResult>>(
+            &serde_json::json!({
+                "path": path,
+                "source_type": source_type,
+                "display_name": display_name,
+            }),
+        )
         .await
         .map_err(|e| format!("pre_scan: {e}"))?;
-
     Ok(PreScanResponse {
-        job_id,
-        result,
-        corpus_id,
-        display_name,
+        job_id: new_job_id(),
+        result: answer.result,
+        corpus_id: answer.corpus_id,
+        display_name: answer.display_name,
     })
 }
 
@@ -629,9 +263,7 @@ pub async fn lc_ingest(
     let progress = make_emitter(app.clone(), job_id.clone());
     let daemon_url = state.client_base_url();
     // The corpus's config is a REGISTRY read and crosses (sv-surface D5).
-    // Both dispatch arms below branch on it, and neither needs a local
-    // manager to do so — which is why `require_manager` is now taken
-    // inside the bespoke arm only.
+    // Both dispatch arms below branch on it; no arm holds a manager.
     let registered = lc_client(&state)
         .lc_get::<LocalCorpusConfig>(&corpus_id)
         .await
@@ -754,7 +386,7 @@ pub async fn lc_ingest(
     // daemon's, so minting a second id here for the same job would be two
     // names for one thing.
     let ack = lc_client(&state)
-        .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)
+        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)
         .await
         .map_err(|e| format!("lc_ingest: {e}"))?;
     tracing::info!(
@@ -779,13 +411,13 @@ pub async fn lc_ingest(
 /// phase writes to ~50 across a whole embed pass, so a tighter interval
 /// would re-read the same numbers; a looser one would visibly lag the
 /// progress bar.
-const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
+pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
 
 /// How many CONSECUTIVE poll failures end the follow with an error frame.
 /// One failure is a hiccup; ten in a row (~7.5s) is a daemon that is not
 /// coming back, and a progress panel that spins forever is worse than one
 /// that says so.
-const INGEST_POLL_MAX_FAILURES: u32 = 10;
+pub(crate) const INGEST_POLL_MAX_FAILURES: u32 = 10;
 
 /// Follow a daemon-side ingest job to its terminal receipt, emitting the
 /// desktop's own progress frames as it goes.
@@ -811,7 +443,9 @@ async fn follow_ingest_job(
     loop {
         tokio::time::sleep(INGEST_POLL_INTERVAL).await;
         let p = match client
-            .lc_ingest_progress::<sovereign_mesh::lc_http::IngestProgress>(&corpus_id)
+            .lc_ingest_progress::<sovereign_contracts::daemon_wire::IngestProgressView<
+                sovereign_tools::local_corpus::manager::IngestStats,
+            >>(&corpus_id)
             .await
         {
             Ok(p) => {
@@ -1203,7 +837,7 @@ async fn run_ingest_via_runner(
             }
         };
 
-        let terminal = job.status != sovereign_workflow_host::workflow_http::JobStatus::Running;
+        let terminal = job.status != sovereign_contracts::daemon_wire::JobStatus::Running;
         for event in job.events {
             after = after.max(event.seq);
             match event.event {
@@ -1369,7 +1003,7 @@ pub async fn lc_incomplete_jobs(
 #[tauri::command]
 pub async fn lc_cancel(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<bool, String> {
     let ack = lc_client(&state)
-        .lc_cancel::<sovereign_mesh::lc_http::CancelAck>(&corpus_id)
+        .lc_cancel::<sovereign_contracts::daemon_wire::CancelAck>(&corpus_id)
         .await
         .map_err(|e| format!("lc_cancel: {e}"))?;
     // `cancelled` is "there WAS a job and it is now cancelled", which the
@@ -1394,15 +1028,18 @@ pub async fn lc_check_git(
 
 // ─── Command: lc_write_tags ──────────────────────────────────────────
 
+/// Crossed with `lc_cluster`, the producer that pinned it: `write_tags`
+/// reaches the `cluster_results` cache through `get_preview`, and that
+/// cache is filled on the manager that RAN the cluster job — the
+/// daemon's, since 2026-09-11.
 #[tauri::command]
 pub async fn lc_write_tags(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     git_commit: Option<bool>,
 ) -> Result<WriteBackResult, String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .write_tags(&corpus_id, git_commit.unwrap_or(false))
+    lc_client(&state)
+        .lc_write_tags::<WriteBackResult>(&corpus_id, git_commit.unwrap_or(false))
         .await
         .map_err(|e| format!("write_tags: {e}"))
 }
@@ -1452,14 +1089,29 @@ pub async fn lc_clean(
 /// The hit shape the frontend already matches — the ROUTE's own type, not
 /// a twin of it. `lc_search` below both parses the route's answer with this
 /// and returns it to the webview, so one definition owns both ends and the
-/// serialized bytes cannot drift (ARCH §10.6).
-pub use sovereign_mesh::lc_http::LocalSearchHit;
+/// serialized bytes cannot drift (ARCH principle 8). It is the SAME
+/// definition `lc_http`'s route emits: both sides name
+/// `sovereign_contracts::daemon_wire`, so this client no longer links the
+/// serving host to parse four primitives (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::LocalSearchHit;
 
 // ─── Command: lc_cluster ─────────────────────────────────────────────
 
 /// Begin clustering + LLM labelling for an already-ingested Obsidian
 /// vault. Returns a `job_id` immediately; caller subscribes to the
 /// progress channel as with ingestion.
+///
+/// THE PRODUCER THAT CROSSED (2026-09-11). `POST
+/// /internal/corpus/local/{c}/cluster` runs exactly the `manager.cluster`
+/// call this command used to make, on the DAEMON's manager — the one
+/// whose `cluster_results` cache `…/preview` and `…/write-tags` read, so
+/// `lc_get_preview` and `lc_write_tags` cross with it. The contract is
+/// unchanged and is not the returned id: it is the Tauri channel
+/// `local-corpus://progress/{job_id}`, and every frame on it is the
+/// host's own `LocalCorpusProgress`, re-emitted verbatim from the poll
+/// — including the terminal `Complete { result: Ingest(zero stats) }`
+/// this command used to mint itself. The id returned IS the host's job
+/// id, as for `lc_ingest`.
 #[tauri::command]
 pub async fn lc_cluster(
     app: AppHandle,
@@ -1467,57 +1119,100 @@ pub async fn lc_cluster(
     corpus_id: String,
     config: Option<ClusterConfig>,
 ) -> Result<String, String> {
-    let manager = require_manager(&state).await?;
-    let cfg = config.unwrap_or_default();
-    let job_id = new_job_id();
+    let daemon_url = state.client_base_url();
+    let ack = lc_client(&state)
+        .lc_cluster::<ClusterConfig, sovereign_contracts::daemon_wire::IngestJobAck>(
+            &corpus_id,
+            config.as_ref(),
+        )
+        .await
+        .map_err(|e| format!("cluster: {e}"))?;
+    tracing::info!(
+        %corpus_id,
+        job_id = %ack.job_id,
+        progress_route = %ack.progress_route,
+        "lc_cluster: daemon accepted the cluster job"
+    );
+    let job_id = ack.job_id;
     let progress = make_emitter(app.clone(), job_id.clone());
+    tokio::spawn(follow_cluster_job(
+        daemon_url,
+        corpus_id,
+        job_id.clone(),
+        progress,
+    ));
+    Ok(job_id)
+}
 
-    tokio::spawn(async move {
-        match manager.cluster(&corpus_id, &cfg, progress.clone()).await {
-            Ok(_) => {
-                // Emit a terminal Complete event. The UI calls
-                // `lc_get_preview` next to fetch the renderable
-                // shape; we don't inline it here because the preview
-                // blob can be large (per-note assignments) and
-                // progress events are meant to be cheap.
-                progress(LocalCorpusProgress::Complete {
-                    result: sovereign_tools::local_corpus::progress::CompletionResult::Ingest(
-                        sovereign_tools::local_corpus::manager::IngestStats {
-                            corpus_id: corpus_id.clone(),
-                            files_indexed: 0,
-                            chunks_written: 0,
-                            runtime_failures: Vec::new(),
-                            excerpt_chunks: Vec::new(),
-                            duration_secs: 0,
-                        },
-                    ),
-                });
+/// Follow a daemon-side cluster job, re-emitting every frame the host
+/// appended on the desktop's channel. Same cadence and give-up rule as
+/// [`follow_ingest_job`]; the frames need no translation because the
+/// route serves the manager's `LocalCorpusProgress` verbatim, and the
+/// terminal frame is the host's too.
+async fn follow_cluster_job(
+    daemon_url: String,
+    corpus_id: String,
+    job_id: String,
+    progress: ProgressCallback,
+) {
+    let client = sovereign_turn_client::TurnClient::new(daemon_url);
+    let mut failures = 0u32;
+    let mut cursor = 0usize;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .lc_cluster_progress::<sovereign_contracts::daemon_wire::ClusterProgressView<LocalCorpusProgress>>(&corpus_id, cursor)
+            .await
+        {
+            Ok(p) => {
+                failures = 0;
+                p
             }
             Err(e) => {
-                progress(LocalCorpusProgress::Error {
-                    message: e.to_string(),
-                    recoverable: false,
-                });
+                failures += 1;
+                tracing::warn!(
+                    %corpus_id, %job_id, failures,
+                    "lc_cluster: progress poll failed: {e}"
+                );
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    progress(LocalCorpusProgress::Error {
+                        message: format!(
+                            "lost contact with the daemon while clustering \
+                             '{corpus_id}' ({failures} consecutive failures): {e}"
+                        ),
+                        recoverable: false,
+                    });
+                    return;
+                }
+                continue;
             }
+        };
+        cursor = p.next;
+        for frame in p.frames {
+            progress(frame);
         }
-    });
-    Ok(job_id)
+        if p.finished {
+            tracing::info!(%corpus_id, %job_id, "lc_cluster: job finished");
+            return;
+        }
+    }
 }
 
 // ─── Command: lc_get_preview ─────────────────────────────────────────
 
 /// Fetch the computed preview for a corpus that has had `lc_cluster`
-/// run recently. Returns `NotFound` if no cluster result is cached.
+/// run recently. The route answers a named 500 ("no clustering run on
+/// record") when nothing is cached — on the DAEMON's manager, which is
+/// the one `lc_cluster` now fills. `None` config is the host's
+/// `ClusterConfig::default()`, one decider.
 #[tauri::command]
 pub async fn lc_get_preview(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     config: Option<ClusterConfig>,
 ) -> Result<VaultPreview, String> {
-    let manager = require_manager(&state).await?;
-    let cfg = config.unwrap_or_default();
-    manager
-        .get_preview(&corpus_id, &cfg)
+    lc_client(&state)
+        .lc_preview::<ClusterConfig, VaultPreview>(&corpus_id, config.as_ref())
         .await
         .map_err(|e| format!("get_preview: {e}"))
 }

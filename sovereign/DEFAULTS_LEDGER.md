@@ -30,6 +30,128 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `search_web` stays in the app — a DECLARED exception on egress custody (sv-surface svt-3b, 2026-09-11)
+
+**What stays local.** `search_web` (`commands/models.rs`) dispatches a web
+search from the desktop process rather than asking the daemon to. So does
+`submit_information_search`; both now go through the one function,
+`state::web_search_once`.
+
+**Why it is not a route, and the honest version of the reason.** The campaign
+file listed `search_web` in its cannot-cross set and the svt-3 order called
+that case "weak as written", correctly: the backend is resolved from the
+SHARED `config.toml` (`sovereign-tools/src/bundles.rs:69`), not a
+desktop-private file, so "the desktop has the key" is not the ground. The
+ground is EGRESS CUSTODY. The query leaves this machine for a third-party
+provider, and the release gate that authorises it without a grant reads
+`user_formed: true` — a fact only the surface that took the keystrokes can
+assert. A daemon route would have to accept that flag from its caller, which
+turns a boundary check into a field the caller supplies (ARCH principle 5's
+"a guard asserting on a field the subject supplies").
+
+**What svt-3b did change.** It was reaching `runtime.tools.get("search")` —
+the desktop's last reason to hold a commissioned `Runtime`. It holds none now,
+and the search runs through the registry `sovereign_tools::bundles` already
+exports. The exception is about WHERE THE EGRESS HAPPENS, not about the app
+owning a turn.
+
+**Flip condition (falsifiable).** The egress boundary gains a way for a client
+to prove a query was user-formed that a daemon can verify rather than trust —
+or the operator rules that a loopback-only daemon on the same machine inherits
+the surface's custody, at which point this becomes a route like any other.
+`commands/conversation.rs` spelled its own copy of the dispatch until
+2026-09-11; it calls `web_search_once` now (ARCH principle 8). Still open:
+`search_web` has NO caller in the Svelte app — it is exported from
+`api.ts:629` and invoked nowhere — so the prior question is whether the
+command should exist at all.
+
+**How the exception coexists with the dependency gate (2026-09-11).** The
+search stack the app uses was never in `sovereign-tools` proper: `web::search`
+is `sovereign-tools-base`'s, a studio contract crate the thin-surface rule
+does not forbid. The one resolver, `effective_search_registry`, moved down to
+sit beside `configured_search` in that crate, and `sovereign_tools::bundles`
+re-exports it — so the desktop and every host resolve the operator's `[search]`
+through the same function without the app linking `sovereign-tools`.
+
+**Review by 2026-10-11.**
+
+
+### Model-load safety guards — **NO OWNER** since 2026-09-11 (sv-surface svt-3a)
+
+**What is dark.** TWO guards, both of which asked "can this machine actually
+load this GGUF?" before loading it, and neither of which now runs anywhere.
+
+1. **The CPU/arch gate.** Some architectures — Qwen3.5 "Gated DeltaNet"
+   (`qwen35`), Mamba/SSM, RWKV — SIGSEGV inside ggml's recurrent `SET` op
+   during CPU prefill. Nothing decides, on any surface, whether the configured
+   chat model is one of them.
+2. **The GPU crash probe** (`sovereign-desktop/src-tauri/src/smoketest.rs`,
+   deleted; 302 lines). It forked `current_exe() --smoketest`, loaded the chat
+   GGUF and decoded ONE token in a throwaway process. If the child died on a
+   signal — the Gemma-4-on-Apple-Metal SIGSEGV in llama-cpp-2 0.1.145 is the
+   case it was built for — the parent set `SOVEREIGN_FORCE_CPU_CHAT=1`, loaded
+   on CPU instead, and recorded a `CrashRecord`. Verdicts were cached per
+   (model, gpu_layers, ctx), so an unchanged config paid nothing.
+
+**What is NOT lost, and it is the larger half.** The reason the probe mattered
+was `DAEMON_RESILIENCE.md:75` — "daemon + ggml run in-process → any native
+crash kills the app". That has not been true since svt-2 removed supervision
+and svt-3a removed in-process hosting: the weights are in a process the app
+does not own, so a ggml crash kills the DAEMON and the window survives it.
+`attach_watch` notices and drives the ReconnectBanner; `attach_restart_daemon`
+is the recovery button. What is genuinely gone is the PRE-EMPTION — avoiding
+the crash rather than surviving it — and with it the automatic CPU fallback
+that kept such a machine usable at all.
+
+**Why it went, and why putting it back where it was would be worse.** The
+desktop held it (`state/builders/model_compat.rs`, deleted): on a CPU machine
+it read the GGUF header, picked a dense substitute discovered alongside the
+configured model, mutated its in-memory `ResolvedModelSlots`, and raised a
+`model-notice` banner. That was correct exactly while the desktop loaded the
+weights. It never wrote `config.toml` — so the moment the daemon became the
+loader, the substitution could not reach the weights at all. All it still did
+was make `build_daemon_provider` derive a model id the daemon never loaded,
+while telling the user a swap had happened that had not (ARCH principle 6).
+That defect was live in attach mode before svt-3; svt-3 made attach the only
+mode, which is why the removal lands with it rather than after it.
+
+**Where both belong.** With whoever loads the weights, and BOTH deciders are
+already shared crates, so neither implementation moves — only its caller, into
+`sovereign-cli-daemon`'s slot build beside the `force_cpu_chat()` reads that
+are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
+
+* `sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model,
+  is_cpu_incompatible_arch}` — the arch gate.
+* `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
+  probe's whole implementation, which has always lived in the shared crate.
+  The daemon's `Launch::parse` ALREADY accepts the flag
+  (`sovereign-cli-daemon/src/lib.rs:316`, `launch_smoketest_flag_matches_owner`
+  pins the two spellings together); it has never spawned it.
+
+Measured 2026-09-11: `grep -rn choose_cpu_safe_chat_model
+sovereign/crates/sovereign-cli-daemon` returns **zero hits**, and the only
+`smoketest` hits in that crate are the flag-name test just cited — so today no
+process applies either guard.
+
+**Flip condition (falsifiable), both halves.** The daemon (a) refuses or
+substitutes a CPU-incompatible chat model at slot-build time and (b) probes the
+GPU path in a child before its own in-process load, saying which on its startup
+trace — and a desktop attached to it renders that refusal rather than watching
+a port die. Settled by: an svt-3 follow-up order against
+`sovereign-cli-daemon`. The `model-notice` Tauri listener
+(`src/lib/components/ModelNoticeBanner.svelte`) is left in place and inert —
+the banner text is the user-facing half and is worth keeping for whatever emits
+it next; a daemon-side guard reaches it through `/status` or a turn error, not
+through a Tauri event.
+
+**Review by 2026-10-11.** If the daemon-side guards have not landed by then,
+the question for the operator is whether a CPU-only machine with a
+recurrent-arch model, or a Metal machine with a Gemma-4-class model, is a shape
+this build still ships to — not whether to re-add an in-memory substitution
+that cannot reach the loader, or a fork in a client that probes somebody else's
+weights (ARCH principle 12).
+
+
 ### `sovereign-turn-client/bundled-backend` — a surface now ships a backend → **GRADUATED 2026-09-11** (declared by `sovereign-desktop`; the crate default stays OFF)
 
 **What ships NOW.** `sovereign-desktop` declares

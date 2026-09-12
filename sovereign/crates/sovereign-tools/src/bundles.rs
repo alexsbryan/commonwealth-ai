@@ -65,28 +65,11 @@ use async_trait::async_trait;
 /// fallback-chain invariants the orchestrator applies — an operator who
 /// configured Tavily got it in the desktop and DuckDuckGo everywhere else
 /// (ARCH §10.6).
-pub fn effective_search_registry() -> crate::web::search::WebSearchRegistry {
-    let search_cfg = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.search)
-        .unwrap_or_default();
-    let env_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
-        .and_then(|v| v.into_string().ok());
-    let configured = crate::web::search::configured_search(&search_cfg, env_key.as_deref());
-    tracing::info!(
-        backend = %configured.preferred,
-        "web search: operator backend resolved (duckduckgo always available)"
-    );
-    configured.registry
-}
-
-/// A `SearchOrchestrator` over [`effective_search_registry`] — the one
-/// construction, so every surface that reaches the open web applies the same
-/// privacy, budget and fallback-chain rules.
-pub fn search_orchestrator() -> Arc<crate::web::search::SearchOrchestrator> {
-    Arc::new(crate::web::search::SearchOrchestrator::new(Arc::new(
-        effective_search_registry(),
-    )))
-}
+/// MOVED DOWN 2026-09-11 to `sovereign_tools_base::web::search` (studio
+/// contract package) so the desktop — a thin surface that may not link this
+/// crate — resolves the same registry through the same function. Re-exported
+/// here so every host that reached it by this name still does.
+pub use crate::web::search::{effective_search_registry, search_orchestrator};
 
 /// Whether this host's turn can reach the open internet, and if not, why.
 ///

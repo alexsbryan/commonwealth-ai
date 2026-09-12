@@ -40,6 +40,8 @@ DONE_FILE="ralph/DONE"
 STOP_FILE="ralph/STOP"
 NEEDS_HUMAN="ralph/NEEDS_HUMAN.md"
 LAST_REVIEW="ralph/.last_review"
+STATE="ralph/STATE.md"
+REVIEW_MODEL=""
 NOTIFY=0
 PLAN=0
 
@@ -57,6 +59,8 @@ while [ $# -gt 0 ]; do
     --stop-file) STOP_FILE="$2"; shift 2 ;;
     --needs-human-file) NEEDS_HUMAN="$2"; shift 2 ;;
     --last-review) LAST_REVIEW="$2"; shift 2 ;;
+    --state) STATE="$2"; shift 2 ;;
+    --review-model) REVIEW_MODEL="$2"; shift 2 ;;
     --notify) NOTIFY=1; shift ;;
     --plan) PLAN=1; shift ;;
     -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
@@ -86,6 +90,14 @@ commits_since_review() {
   git rev-list --count "$base..HEAD" 2>/dev/null || echo 0
 }
 
+# The unit a session is about to run: the one in progress (`[~]`), else the
+# first pending (`[ ]`). Used only to route reviews to --review-model.
+current_unit() {
+  [ -f "$STATE" ] || return 0
+  awk '/^- \[~\]/{print $3; exit} /^- \[ \]/{print $3; exit}' "$STATE"
+}
+MODEL_ARGS=""
+
 # One session: the agent's output streams to this process's stdout (the log);
 # a watchdog kills it past the wall-clock timeout; permission auto-rejections
 # are counted from the log.
@@ -107,7 +119,8 @@ run_session() { # prompt_file
   # tree — cargo, rustc, the embedded Postgres postmasters — and leaves no
   # orphans for the next session to fight.
   set -m
-  opencode run "$(cat "$input")" &
+  # shellcheck disable=SC2086
+  opencode run $MODEL_ARGS "$(cat "$input")" &
   child=$!
   set +m
   SESSION_PGID="$child"
@@ -158,6 +171,8 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
 
   if [ "$REVIEW_EVERY" -gt 0 ] && [ -n "$REVIEW_PROMPT" ] && [ "$(commits_since_review)" -ge "$REVIEW_EVERY" ]; then
     echo "[ralph] review iteration $iter ($(commits_since_review) commits since last review)"
+    MODEL_ARGS=""
+    [ -n "$REVIEW_MODEL" ] && MODEL_ARGS="--model $REVIEW_MODEL"
     run_session "$REVIEW_PROMPT"
     iter=$((iter - 1))
     continue
@@ -165,6 +180,12 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
 
   before=$(git rev-parse HEAD 2>/dev/null || echo none)
   echo "[ralph] === iteration $iter $(date -u +%FT%TZ) from $(git rev-parse --short HEAD 2>/dev/null || echo none) ==="
+  unit=$(current_unit)
+  MODEL_ARGS=""
+  if [ -n "$REVIEW_MODEL" ] && printf '%s' "$unit" | grep -qi 'review'; then
+    MODEL_ARGS="--model $REVIEW_MODEL"
+    echo "[ralph] unit $unit is a review — model $REVIEW_MODEL"
+  fi
   run_session "$PROMPT"
   after=$(git rev-parse HEAD 2>/dev/null || echo none)
   if [ "$before" = "$after" ]; then

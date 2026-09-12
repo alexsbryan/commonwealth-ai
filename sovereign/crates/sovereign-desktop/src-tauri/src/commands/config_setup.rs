@@ -17,30 +17,36 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<DesktopConfig
 
 /// Pairing card for the Settings → Mobile access panel (address + tenant +
 /// token the phone enters, plus the no-VPN iroh pairing code once the
-/// supervised server reports one). Reads/creates `~/.svrnmesh/mobile-host.toml`.
+/// running server reports one). Reads/creates `~/.svrnmesh/mobile-host.toml`.
 #[tauri::command]
 pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePairing, String> {
     crate::mobile_host_setup::pairing().await
 }
 
-/// Start or stop the supervised mobile host at runtime (the toggle's runtime
-/// half — persistence rides the normal `save_config`). Starting spawns a
-/// `sovereign-server` child that delegates inference to the daemon; stopping
-/// aborts the supervise task, whose `kill_on_drop` SIGKILLs the child.
+/// Start or stop the mobile host at runtime (the toggle's runtime half —
+/// persistence rides the normal `save_config`).
+///
+/// Two HTTP calls, and no handle either way (sv-surface svt-2). This took
+/// `State<AppState>` until 2026-09-11 so it could store, and later abort, a
+/// `JoinHandle` whose drop SIGKILLed a `sovereign-server` child — a client
+/// deciding a resident server's lifetime, which is the line ARCH principle
+/// 12 draws. `ensure_running` reaches the host through the sanctioned
+/// bring-up and `stop` asks the host's own `POST /v1/admin/shutdown`, so
+/// the desktop holds nothing between the two and the toggle still works
+/// both ways.
+///
+/// A consequence worth knowing at the call site: toggle-off now stops
+/// whatever is serving that port, including a host this app did not start
+/// (`svrn mobile serve`, or a previous run of the app). That is the honest
+/// reading of the toggle — it says whether mobile access is on for this
+/// node, not whether this window's child is alive.
 #[tauri::command]
-pub async fn set_mobile_access(
-    state: State<'_, Arc<AppState>>,
-    enabled: bool,
-) -> Result<(), String> {
-    let mut guard = state.mobile_host_supervisor.write().await;
+pub async fn set_mobile_access(enabled: bool) -> Result<(), String> {
     if enabled {
-        if guard.is_none() {
-            *guard = Some(crate::mobile_host_setup::start()?);
-        }
-    } else if let Some(handle) = guard.take() {
-        handle.abort();
+        crate::mobile_host_setup::ensure_running().await
+    } else {
+        crate::mobile_host_setup::stop().await
     }
-    Ok(())
 }
 
 #[tauri::command]
@@ -1071,12 +1077,13 @@ pub async fn complete_setup(
 
     // Relaunch so the fresh instance reads the config this wizard just wrote
     // at startup, where `serving_host::ensure_reachable` runs — this session
-    // never bound :9741, so there is nothing to hand over. On `false`
-    // (harnesses / kill-switch / spawn failure) keep the in-process completion
-    // below. See `setup_flow::relaunch_after_setup`.
-    if crate::setup_flow::daemon_runs_elsewhere()
-        && crate::setup_flow::relaunch_after_setup(&app_handle).await
-    {
+    // never bound :9741, so there is nothing to hand over. The in-process
+    // completion below is for the harnesses and the kill-switch, which
+    // `daemon_runs_elsewhere()` is false for; the relaunch itself no longer
+    // has a failure arm to fall back from. See
+    // `setup_flow::relaunch_after_setup`.
+    if crate::setup_flow::daemon_runs_elsewhere() {
+        crate::setup_flow::relaunch_after_setup(&app_handle).await;
         return Ok(());
     }
 

@@ -17,30 +17,22 @@
 use std::path::Path;
 
 use corpus_engine::error::{Error, Result};
-use serde::Serialize;
 
 use crate::config::EnrichConfig;
 use crate::paths;
 
-/// One enrichment workspace, as the corpus list wants to show it.
-#[derive(Debug, Clone, Serialize)]
-pub struct EnrichedCorpusSummary {
-    pub corpus_id: String,
-    pub pipeline_id: String,
-    /// The configured source, rendered for display. `EnrichConfig::source_path`
-    /// is a `PathBuf`; this is the string a UI puts on screen.
-    pub source_path: String,
-    pub created_at: String,
-}
+/// One enrichment workspace, as the corpus list wants to show it. Defined in
+/// `sovereign_contracts::daemon_wire::enrich` since 2026-09-11 (the daemon
+/// serves it at `GET /internal/corpus/enriched`); re-exported here so every
+/// `sovereign_enrichment_catalog::EnrichedCorpusSummary` path is unchanged.
+pub use sovereign_contracts::daemon_wire::EnrichedCorpusSummary;
 
-impl EnrichedCorpusSummary {
-    fn from_config(cfg: &EnrichConfig) -> Self {
-        Self {
-            corpus_id: cfg.corpus_id.clone(),
-            pipeline_id: cfg.pipeline_id.clone(),
-            source_path: cfg.source_path.display().to_string(),
-            created_at: cfg.created_at.clone(),
-        }
+fn summary_from_config(cfg: &EnrichConfig) -> EnrichedCorpusSummary {
+    EnrichedCorpusSummary {
+        corpus_id: cfg.corpus_id.clone(),
+        pipeline_id: cfg.pipeline_id.clone(),
+        source_path: cfg.source_path.display().to_string(),
+        created_at: cfg.created_at.clone(),
     }
 }
 
@@ -62,6 +54,13 @@ pub fn enriched_corpus_ids() -> Result<Vec<String>> {
 /// Returns `Ok(vec![])` when the enrichment tree does not exist yet.
 pub fn list_enriched_corpora() -> Result<Vec<EnrichedCorpusSummary>> {
     list_in(&paths::enrichment_dir())
+}
+
+/// [`list_enriched_corpora`] over an explicit store root — the daemon's
+/// `<data_dir>/enrichment`, which is not this process's default root on an
+/// attached boot. Added 2026-09-11 for `sovereign_mesh::enrich_http`.
+pub fn list_enriched_corpora_in(root: &Path) -> Result<Vec<EnrichedCorpusSummary>> {
+    list_in(root)
 }
 
 fn ids_in(root: &Path) -> Result<Vec<String>> {
@@ -98,7 +97,7 @@ fn list_in(root: &Path) -> Result<Vec<EnrichedCorpusSummary>> {
             continue;
         }
         match load_at(&config_path) {
-            Ok(cfg) => out.push(EnrichedCorpusSummary::from_config(&cfg)),
+            Ok(cfg) => out.push(summary_from_config(&cfg)),
             Err(e) => {
                 unreadable += 1;
                 tracing::warn!(

@@ -127,19 +127,17 @@ pub struct NodeCapabilities {
     pub anchor: Option<AnchorProfile>,
 }
 
+/// A kind of local origin a node can serve to members over the mesh.
+///
+/// Defined in `oicp_types::origin` since 2026-09-11 (sv-surface svt-3) so the
+/// wire shapes that carry it — this crate's gossiped `NodeCapabilities` and
+/// the daemon's `/v1/mesh/status` rows — can be named below the family line;
+/// re-exported here so every gossip, media and rails site keeps its path.
+pub use crate::oicp::OriginKind;
+
 /// A node's shared-model anchor-tier advertisement. Gossiped so the host (and
 /// any anchor that may become host on failover) can build the eligible-anchor
 /// set and sum pooled VRAM without probing every peer.
-/// A kind of local origin a node can serve to members over the mesh. A
-/// closed set (ARCH §2): every kind has one ALPN and one acceptor route, so a
-/// new kind is a new variant beside a new route, never a string.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum OriginKind {
-    /// An HTTP media origin (`[iroh] media_origin`), served on `MEDIA_ALPN`.
-    Media,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AnchorProfile {
     /// True when this node is configured to hold a shard of the shared model

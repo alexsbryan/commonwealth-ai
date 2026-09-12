@@ -2,24 +2,23 @@
 //! What THIS desktop process became, decided once in `main` and read wherever
 //! it is needed.
 //!
-//! `main.rs` already runs the one `Launch::parse` for this binary and
-//! dispatches on it — child re-execs never reach Tauri. But `state::bootstrap`
-//! runs deep inside the Tauri setup closure, far from that decision, and it
-//! has to name a `Launch` when it commissions the in-process daemon through
-//! `sovereign_mesh::assemble`.
+//! **Only half of it survives svt-3, and the half that went is the reason it
+//! was written.** It existed so `state::bootstrap` could name a `Launch` when
+//! it commissioned the in-process daemon through `sovereign_mesh::assemble`,
+//! without either hardcoding `Launch::Desktop` at that site or running a
+//! second `Launch::parse` (the §10.6 duplicate `quality/TOPOLOGY.md` §1
+//! records). There is no commissioning site: the desktop assembles no daemon,
+//! so nothing downstream asks what this process is.
 //!
-//! The two wrong answers are a literal `Launch::Desktop` at the commissioning
-//! site (a second place deciding what the process is — the §10.6 duplicate
-//! `Launch` exists to remove) and a second `Launch::parse` (the same call with
-//! a different default arm, which is how two argv scans disagreed here in the
-//! first place; `quality/TOPOLOGY.md` §1). So `main` publishes its answer and
-//! everything downstream reads it.
+//! What remains is `DaemonHost`, which is a different question — where the
+//! daemon RUNS — resolved once here rather than at each point of use.
+//! `publish` still takes the `Launch` it is handed so `main` keeps one call
+//! at one place; it no longer stores it.
 
 use std::sync::OnceLock;
 
 use sovereign_contracts::launch::{DaemonHost, Launch};
 
-static LAUNCH: OnceLock<Launch> = OnceLock::new();
 static DAEMON_HOST: OnceLock<DaemonHost> = OnceLock::new();
 
 /// Publish `main`'s parse, and resolve the launch-topology environment ONCE
@@ -28,20 +27,8 @@ static DAEMON_HOST: OnceLock<DaemonHost> = OnceLock::new();
 /// Called exactly once, immediately after `Launch::parse`, before any
 /// subsystem starts — which is what makes "resolved at construction" true
 /// rather than aspirational.
-pub(crate) fn publish(launch: Launch) {
-    let _ = LAUNCH.set(launch);
+pub(crate) fn publish(_launch: Launch) {
     let _ = DAEMON_HOST.set(DaemonHost::from_env());
-}
-
-/// What this process is.
-///
-/// Falls back to [`Launch::Desktop`] only if `publish` never ran, which means
-/// a test or a harness drove `state::bootstrap` without going through `main`.
-/// That is the honest default for this binary — reaching a Tauri bootstrap at
-/// all means the launch fell through `main`'s dispatch, and `Desktop` is the
-/// arm it falls through to.
-pub(crate) fn get() -> Launch {
-    LAUNCH.get().cloned().unwrap_or(Launch::Desktop)
 }
 
 /// Where this desktop's daemon runs — supervised child, or in-process and why.

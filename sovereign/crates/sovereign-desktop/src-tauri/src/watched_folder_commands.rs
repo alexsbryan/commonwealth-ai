@@ -45,60 +45,70 @@ fn build_client() -> reqwest::Client {
         .expect("reqwest client builds")
 }
 
-// ─── Request types ───────────────────────────────────────────────
+// ─── Wire types: none named here ─────────────────────────────────
 //
-// Imported, not re-declared — the same rule the response types below
-// already follow. This is the config the user's choices travel in, so
-// it MUST be the daemon's own type.
+// Every command below is a PASS-THROUGH: the request body the webview
+// hands over goes to the route, the route's answer goes back to the
+// webview, and nothing in this file reads a field of either. So the
+// types cross as `serde_json::Value` — the daemon's own bytes, forwarded —
+// rather than as the route's Rust types, which are
+// `sovereign_mesh::corpus_watch_http`'s and close over
+// `sovereign_tools::local_corpus` (`WatchedFolderStatus`, `FailedFile`,
+// `WatchedIncompleteJob`, `WatchedFolderConfig`). Naming them here cost a
+// `sovereign-desktop -> sovereign-mesh` layer edge, and a thin client
+// does not link the daemon to forward its answer (sv-surface svt-3).
 //
-// Until 2026-08-21 this was a hand-copied five-field `WatchedFolderConfigWire`
-// (follow_symlinks, deletion_guard, sweep_interval_secs,
-// soft_delete_grace_secs, exclude_globs). `src/lib/types.ts` declares ten
-// fields NON-OPTIONAL and `WatchedFolderRegisterFlow.svelte` binds five of the
-// missing ones to live controls, so serde dropped them on the way through this
-// command and `RegisterRequest.config`'s per-field `#[serde(default)]` filled
-// them back in with defaults on the daemon side. The user's sensitive toggle,
-// sync-mode radio, OCR checkbox, additional-roots picker and enrichment choice
-// were all inert, silently.
-pub use sovereign_tools::local_corpus::config::WatchedFolderConfig;
-
-// ─── Wire types ──────────────────────────────────────────────────
+// This is NOT the hand-copied-mirror shape that drifted before 2026-08-21
+// (seven local structs, `ListEntry` missing three fields, the register
+// config a five-field twin that silently dropped the user's sensitive
+// toggle, sync mode, OCR choice, extra roots and enrichment choice on the
+// way through). A forwarded `Value` carries every field the webview sent
+// and every field the route answered; there is no second declaration to
+// fall behind. The Svelte-facing shape (`src/lib/types.ts`) is unchanged:
+// it was always the route's bytes.
 //
-// Imported, not re-declared: these ARE the daemon's response types from
-// `/internal/corpus/watch/*`, so a field rename on the server side is now a
-// compile error here instead of a runtime deserialization failure. Until
-// 2026-08-21 (nc-21) this file carried seven hand-copied mirrors that had
-// already drifted — `ListEntry` was missing `sync_mode`, `sensitive` and
-// `additional_roots_count`, and typed the nested payloads as
-// `serde_json::Value`. The commands below only pass these through to the
-// frontend; nothing here reads a field.
-pub use sovereign_mesh::corpus_watch_http::{
-    AckResponse, IncompleteJobsResponse, ListResponse, RegisterResponse, StateResponse,
-    StatusResponse,
-};
+// `config` on register: `None` OMITS the key, and `RegisterRequest.config`
+// is `#[serde(default)]` on the daemon — the same `WatchedFolderConfig::
+// default()` the old `config.unwrap_or_default()` serialised client-side.
+// An explicit `null` would NOT do: `serde(default)` fills an absent key,
+// not a null one.
 
 // ─── Commands ────────────────────────────────────────────────────
+
+/// The `POST /internal/corpus/watch/register` body, exactly as sent. A
+/// function so the test below exercises the same code the command runs.
+fn register_body(
+    path: PathBuf,
+    display_name: Option<String>,
+    config: Option<serde_json::Value>,
+    sync_initial: Option<bool>,
+) -> serde_json::Value {
+    let mut body = json!({
+        "path": path,
+        "display_name": display_name,
+        "sync_initial": sync_initial.unwrap_or(false),
+    });
+    if let Some(config) = config {
+        body["config"] = config;
+    }
+    body
+}
 
 #[tauri::command]
 pub async fn lc_watch_register(
     state: State<'_, Arc<AppState>>,
     path: PathBuf,
     display_name: Option<String>,
-    config: Option<WatchedFolderConfig>,
+    config: Option<serde_json::Value>,
     sync_initial: Option<bool>,
-) -> Result<RegisterResponse, String> {
-    let body = json!({
-        "path": path,
-        "display_name": display_name,
-        "config": config.unwrap_or_default(),
-        "sync_initial": sync_initial.unwrap_or(false),
-    });
+) -> Result<serde_json::Value, String> {
+    let body = register_body(path, display_name, config, sync_initial);
     let url = format!("{}/internal/corpus/watch/register", base_url(&state));
     post_json(&url, body).await
 }
 
 #[tauri::command]
-pub async fn lc_watch_list(state: State<'_, Arc<AppState>>) -> Result<ListResponse, String> {
+pub async fn lc_watch_list(state: State<'_, Arc<AppState>>) -> Result<serde_json::Value, String> {
     let url = format!("{}/internal/corpus/watch/list", base_url(&state));
     get_json(&url).await
 }
@@ -107,7 +117,7 @@ pub async fn lc_watch_list(state: State<'_, Arc<AppState>>) -> Result<ListRespon
 pub async fn lc_watch_status(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<StatusResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/status/{corpus_id}",
         base_url(&state)
@@ -119,7 +129,7 @@ pub async fn lc_watch_status(
 pub async fn lc_watch_state(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<StateResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/state/{corpus_id}",
         base_url(&state)
@@ -132,7 +142,7 @@ pub async fn lc_watch_pause(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     reason: Option<String>,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/pause/{corpus_id}",
         base_url(&state)
@@ -144,7 +154,7 @@ pub async fn lc_watch_pause(
 pub async fn lc_watch_resume(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/resume/{corpus_id}",
         base_url(&state)
@@ -156,7 +166,7 @@ pub async fn lc_watch_resume(
 pub async fn lc_watch_confirm_deletion(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/confirm-deletion/{corpus_id}",
         base_url(&state)
@@ -171,7 +181,7 @@ pub async fn lc_watch_confirm_deletion(
 pub async fn lc_watch_sync_now(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/sync-now/{corpus_id}",
         base_url(&state)
@@ -186,7 +196,7 @@ pub async fn lc_watch_add_root(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     path: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/{corpus_id}/roots",
         base_url(&state)
@@ -200,7 +210,7 @@ pub async fn lc_watch_remove_root(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     idx: u32,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/{corpus_id}/roots/{idx}",
         base_url(&state)
@@ -231,7 +241,7 @@ pub async fn lc_watch_enrich_enable(
 pub async fn lc_watch_enrich_disable(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/corpus/watch/{corpus_id}/enrich/disable",
         base_url(&state)
@@ -309,7 +319,7 @@ fn url_encode_segment(s: &str) -> String {
 pub async fn lc_watch_remove(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<AckResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!("{}/internal/corpus/watch/{corpus_id}", base_url(&state));
     delete_json(&url).await
 }
@@ -317,7 +327,7 @@ pub async fn lc_watch_remove(
 #[tauri::command]
 pub async fn lc_watch_incomplete_jobs(
     state: State<'_, Arc<AppState>>,
-) -> Result<IncompleteJobsResponse, String> {
+) -> Result<serde_json::Value, String> {
     let url = format!("{}/internal/corpus/watch/incomplete-jobs", base_url(&state));
     get_json(&url).await
 }
@@ -412,26 +422,32 @@ mod tests {
     }
 
     /// Every field the register flow sets must survive the Tauri command
-    /// boundary — deserialize into the config type, then re-serialize into
-    /// the HTTP body exactly as `lc_watch_register` does.
+    /// boundary — the body `lc_watch_register` sends carries the webview's
+    /// `config` byte-for-byte.
     ///
     /// This is the guard for the 2026-08-21 defect: the command took a
     /// hand-copied five-field mirror, so `with_ocr`, `sync_mode`,
     /// `sensitive`, `additional_roots` and `enrichment` were silently
     /// dropped here and then re-defaulted by `RegisterRequest`'s per-field
     /// `#[serde(default)]` on the daemon side. Against that mirror this
-    /// test fails on all five; it cannot be satisfied by anything short of
-    /// carrying the daemon's own type.
+    /// test fails on all five; against a forwarded `Value` it cannot fail
+    /// on ANY field, present or future, which is the point of forwarding.
     #[test]
     fn register_config_survives_the_command_boundary() {
-        let cfg: WatchedFolderConfig = serde_json::from_value(register_flow_payload())
-            .expect("the register flow's payload deserializes into the daemon's config type");
-
-        // What `lc_watch_register` actually puts on the wire.
-        let body = json!({ "config": cfg });
+        let payload = register_flow_payload();
+        let body = register_body(
+            PathBuf::from("/tmp/root"),
+            Some("Root".into()),
+            Some(payload.clone()),
+            Some(false),
+        );
         let sent = &body["config"];
+        assert_eq!(
+            sent, &payload,
+            "the body must carry the webview's config unchanged"
+        );
 
-        // The five fields the fork dropped.
+        // The five fields the fork dropped, named so a regression reads.
         assert_eq!(sent["with_ocr"], serde_json::json!(true));
         assert_eq!(sent["sync_mode"], serde_json::json!("manual"));
         assert_eq!(sent["sensitive"], serde_json::json!(true));
@@ -440,29 +456,21 @@ mod tests {
             serde_json::json!("/tmp/extra")
         );
         assert_eq!(sent["enrichment"]["kind"], serde_json::json!("off"));
-
-        // The five it carried, so this test also pins the fork's own surface.
-        assert_eq!(sent["follow_symlinks"], serde_json::json!(true));
-        assert_eq!(sent["sweep_interval_secs"], serde_json::json!(900));
-        assert_eq!(sent["soft_delete_grace_secs"], serde_json::json!(172_800));
-        assert_eq!(sent["exclude_globs"][0], serde_json::json!("*.tmp"));
-        assert_eq!(
-            sent["deletion_guard"]["absolute_threshold"],
-            serde_json::json!(7)
-        );
     }
 
-    /// `config: None` must still be the daemon's defaults, not a local
-    /// re-statement of them. The fork carried its own `Default` impl with
-    /// hand-copied constants (120s / 7d / absolute 100 / fractional 0.25);
-    /// those now come from one place.
+    /// `config: None` must be the DAEMON's defaults, not a local
+    /// re-statement of them. Structurally: the key is absent from the
+    /// body, so `RegisterRequest.config`'s `#[serde(default)]` supplies
+    /// `WatchedFolderConfig::default()` on the daemon — the one place those
+    /// constants live. An explicit `null` would be a 422, not a default,
+    /// which is why this pins ABSENCE and not a null.
     #[test]
-    fn absent_config_defaults_to_the_daemon_type() {
-        let cfg = Option::<WatchedFolderConfig>::None.unwrap_or_default();
-        let sent = json!(cfg);
-        assert_eq!(sent["sync_mode"], serde_json::json!("continuous"));
-        assert_eq!(sent["sensitive"], serde_json::json!(false));
-        assert_eq!(sent["with_ocr"], serde_json::json!(false));
-        assert_eq!(sent["enrichment"]["kind"], serde_json::json!("off"));
+    fn absent_config_is_omitted_so_the_daemon_defaults_it() {
+        let body = register_body(PathBuf::from("/tmp/root"), None, None, None);
+        assert!(
+            body.get("config").is_none(),
+            "config must be absent, not null: {body}"
+        );
+        assert_eq!(body["sync_initial"], serde_json::json!(false));
     }
 }

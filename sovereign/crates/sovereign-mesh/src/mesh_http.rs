@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+use crate::types::JoinConfirmation;
 
 /// Build the mesh HTTP router. Merged into the daemon's client router
 /// next to `mcp_router`. Call once at `start_daemon` time and hand the
@@ -35,8 +36,10 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/status", get(mesh_status))
         .route("/v1/mesh/create", post(mesh_create))
         .route("/v1/mesh/join", post(mesh_join))
+        .route("/v1/mesh/join/preview", post(mesh_join_preview))
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/switch", post(mesh_switch))
+        .route("/v1/mesh/forget", post(mesh_forget))
         .route("/v1/mesh/leave", post(mesh_leave))
         .route(
             "/v1/mesh/forget-member",
@@ -344,59 +347,15 @@ pub fn is_shared_model_host() -> bool {
     SHARED_MODEL_HOST.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MemberDto {
-    pub node_id: String,
-    pub name: String,
-    pub is_self: bool,
-    /// `"online"` | `"busy"` | `"away"` | `"offline"` — matches the
-    /// `MemberStatus` serde rename in `crate::types`.
-    pub status: String,
-    /// Advertised total GPU VRAM (GB) summed across this member's GPUs — the
-    /// live input for `svrn mesh plan --from-mesh`. `0` if the member advertises
-    /// no GPU (or gossip from an older daemon that didn't carry it).
-    #[serde(default)]
-    pub vram_gb: u32,
-    /// This member advertises itself as a shared-model anchor (an eligible
-    /// tensor-split worker). `svrn mesh plan --from-mesh` places the model
-    /// across the anchors + self.
-    #[serde(default)]
-    pub can_anchor: bool,
-    /// Routable addresses (typically tailnet `host:port`) advertised
-    /// by this member. Empty until the first gossip round populates
-    /// them. Consumed by `sovereign mesh status` to render the per-
-    /// member address row and to power `--self --addr-only` for
-    /// scripting the SOVEREIGN_FOUNDER_ADDR capture pattern in
-    /// pod-deployment workflows.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub addresses: Vec<String>,
-    /// The local origins this member serves over the mesh — `["media"]` when
-    /// its `[iroh] media_origin` is live. What `svrn mesh media` (no peer)
-    /// lists; empty for a daemon that predates the field.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub origins: Vec<commonwealth_core::capabilities::OriginKind>,
-    /// The endpoint key this member is dialed on, lowercase hex. See
-    /// [`crate::types::MeshMember::node_pubkey`] — two ACTIVE members sharing
-    /// one is the roster's identity collision, and this is the read surface
-    /// that makes it visible to an operator and to the live invariant check.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub node_pubkey: Option<String>,
-    /// `removed_at.is_none()` — not a tombstone. The alias rule is scoped on
-    /// this, not on `status`.
-    #[serde(default = "crate::types::default_true")]
-    pub active: bool,
-    /// Stable hash of this member's advertised hardware. Part of the
-    /// measurement cache key `svrn mesh plan` builds — a throughput number is
-    /// only valid on the hardware it was measured on. `None` for peers on a
-    /// daemon that predates the field; `mesh plan` then reports "not measured"
-    /// rather than guessing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hw_fingerprint: Option<u64>,
-    /// GPU compute backend as advertised (`cuda` | `rocm` | `metal` | `vulkan`),
-    /// shown beside a measurement so the reader knows which stack produced it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend: Option<String>,
-}
+/// One member row, the known-mesh row, and the client's read of the
+/// whole answer — wire shapes, so defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+/// `MeshStatusSummary` is the subset a client that does not link this
+/// crate parses off `StatusResponse`; `tests/main/wire_view_drift.rs`
+/// pins the two to each other.
+pub use sovereign_contracts::daemon_wire::{
+    JoinPreviewRequest, KnownMeshDto, MemberDto, MeshStatusSummary,
+};
 
 fn default_node_name(override_name: Option<String>) -> String {
     override_name.unwrap_or_else(|| {
@@ -891,6 +850,41 @@ async fn mesh_create(
     }
 }
 
+/// `POST /v1/mesh/join/preview` — what `POST /v1/mesh/join` WOULD join,
+/// as a [`JoinConfirmation`] for a confirmation dialog, without joining.
+///
+/// The HOST parses the invite (`parse_join_argument`: bare key, https URL
+/// or `sovereign://` link — exactly the forms `mesh_join` accepts) so the
+/// desktop links no parser of its own. Until svt-3 it ran
+/// `parse_deep_link` + `join_confirmation_from_link` in-process, which
+/// accepted ONE of the three forms the join route takes: a preview that
+/// refused an invite the join would have accepted (ARCH principle 8). A
+/// guest link is not a join and previews as 400 — the conversion refuses
+/// it by construction.
+async fn mesh_join_preview(_: LocalOnly, Json(req): Json<JoinPreviewRequest>) -> impl IntoResponse {
+    let Some(link) = crate::deep_link::parse_join_argument(&req.link) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "link must be a bare cwth-… key, an https://sovereign.dev/join/… URL, or a sovereign://join/… deep link"
+            })),
+        )
+            .into_response();
+    };
+    match crate::deep_link::join_confirmation_from_link(&link) {
+        Some(confirmation) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(confirmation).unwrap()),
+        )
+            .into_response(),
+        None => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "not a join invite" })),
+        )
+            .into_response(),
+    }
+}
+
 /// `POST /v1/mesh/join` — join an existing mesh by key or URL.
 async fn mesh_join(
     _: LocalOnly,
@@ -953,25 +947,43 @@ fn known_mesh_dtos(daemon: &Arc<EmbeddedDaemon>) -> Vec<KnownMeshDto> {
         .collect()
 }
 
-/// One membership in the known-mesh list.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnownMeshDto {
-    /// Hex `MeshId` — the stable handle `POST /v1/mesh/switch` takes.
-    pub mesh_id: String,
-    pub name: String,
-    pub members_total: usize,
-    /// Exactly one entry is `true` whenever the daemon is in a mesh.
-    pub is_active: bool,
-    /// Newest `last_seen` across the roster — "when was this mesh last live
-    /// for us", which is what a parked row wants to show.
-    pub last_seen_unix: u64,
-}
-
-/// Body for [`mesh_switch`].
+/// Body for [`mesh_switch`] and [`mesh_forget`].
+///
+/// ONE type for the two, because the two take ONE thing and resolve it
+/// through the same `persist::resolve_known` — a second struct with the
+/// same field would be a second place for the reference syntax to drift
+/// (ARCH principle 8), which is the exact bug `forget_mesh` shipped when
+/// it refused the id prefix `switch_mesh` accepted.
 #[derive(Debug, Deserialize)]
 pub struct SwitchRequest {
     /// Mesh name, full hex id, or an unambiguous id prefix (≥8 chars).
     pub mesh: String,
+}
+
+/// `POST /v1/mesh/forget` — drop a PARKED mesh from this node.
+///
+/// Delegates wholly to [`EmbeddedDaemon::forget_mesh`], which refuses the
+/// active one. Written at sv-surface svt-3 because until then the desktop
+/// could forget a mesh ONLY through an in-process daemon: attach mode
+/// answered "not yet exposed over HTTP — run `svrn mesh forget` instead",
+/// and once the app stopped commissioning a daemon of its own that arm
+/// became unreachable, so the button worked in neither mode.
+async fn mesh_forget(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<SwitchRequest>,
+) -> impl IntoResponse {
+    match daemon.forget_mesh(&req.mesh) {
+        Ok(name) => (StatusCode::OK, Json(serde_json::json!({ "forgot": name }))).into_response(),
+        // The daemon distinguishes "no such mesh" from "that one is
+        // active"; both arrive as its own words rather than a status the
+        // caller has to interpret (ARCH principle 6).
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 /// `POST /v1/mesh/switch` — set the active mesh down and bring another up.

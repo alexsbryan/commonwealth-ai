@@ -304,7 +304,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the red — the re-home review at landing found it dispatched
     // External queries and its construction moved into the boundary;
     // the row is gone with the site.)
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 8),
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 9),
+    // 8 -> 9 (2026-09-11, thin-desktop slice 4, registered 2026-09-12): the
+    // starter-corpus install stopped downloading `federalist-starter.tar.zst`
+    // in-process and became `POST /internal/corpus/install` + a poll; the new
+    // construction is `install_failure`, which reads
+    // `/internal/corpus/status` to recover the daemon's OWN failure sentence
+    // rather than inventing one. Same loopback surface, class unchanged. The
+    // census caught this a commit late because nothing ran it at slice 4 —
+    // the review moment is here rather than there, and the answer is the same.
     // 7 -> 8 (2026-09-09, sv-surface rung 5): the workflow surfaces became
     // job-submission clients of the daemon's /internal/workflows/* — this
     // file's site is the Local Knowledge panel's watch-route client, one
@@ -326,14 +334,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 at svt-2 (1a35260e2): `stop()` posts `/v1/admin/shutdown` to the
+    // mobile host on loopback instead of killing a child it no longer holds;
+    // `fetch_iroh_dial` is the other. Both talk to 127.0.0.1.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
-    // state.rs: B4's identity probe (65b92cd15) — on a run-lock refusal the
-    // desktop asks the client port WHO holds it, reading /status.process.pid
-    // over loopback before attaching to the holder. Its own daemon's port;
-    // nothing leaves the machine.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", Class::LocalDaemon, 1),
+    // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
+    // read /status.process.pid on a run-lock refusal; the app takes no run
+    // lock now — it never hosts a daemon — so the site is gone with it.
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
@@ -674,7 +683,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("studio/crates/sovereign-recipe-author/src/http_tester.rs", Class::LocalDaemon, 1),
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
-    ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
+    ("sovereign/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 3),
     // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
     // plugin Step 5). What was left behind — the `/v1/models` reconstruction
     // probe, `embed_model_info` — had ZERO callers, so the file went with the
@@ -707,11 +716,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside
     // `gossip_client()`. The gossip round already replicated the row.
-    ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
-    ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),
-    ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-api/src/routes_knowledge.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
-    ("commonwealth/crates/commonwealth-app/src/proxy.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
     // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
     // moved to the package crate later the same day (0eccf5664) — same two

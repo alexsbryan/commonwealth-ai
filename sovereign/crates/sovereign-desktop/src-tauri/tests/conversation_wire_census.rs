@@ -84,8 +84,9 @@ fn the_conversation_surface_defines_no_wire_envelope() {
         assert!(
             banned.is_empty(),
             "sv-surface rung 3: a wire envelope is defined in {file} again \
-             ({banned:?}). The conversation list/create shapes ARE \
-             sovereign_mesh::turn_http's types (re-exported in mod.rs); a \
+             ({banned:?}). The conversation list/create shapes ARE the \
+             served schema — `sovereign_contracts::daemon_wire`'s types, \
+             which `turn_http` emits and `mod.rs` re-exports; a \
              local definition is a second spelling of a served schema, and \
              hand-kept compatibility is not compatibility (the rung-4 \
              lesson)."
@@ -97,8 +98,11 @@ fn the_conversation_surface_defines_no_wire_envelope() {
     // less watched.
     let src = read(&manifest_src("src/commands/mod.rs"));
     assert!(
-        src.contains("sovereign_mesh::turn_http::ConversationListEntry"),
-        "the conversation list entry must be the wire type, re-exported"
+        src.contains("sovereign_contracts::daemon_wire::ConversationListEntry"),
+        "the conversation list entry must be the wire type, re-exported. It \
+         moved out of `sovereign_mesh::turn_http` at sv-surface svt-3 — same \
+         definition, same bytes, one layer down — so this pin follows it \
+         rather than the desktop growing a twin."
     );
 }
 

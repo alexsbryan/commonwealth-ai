@@ -24,7 +24,7 @@
 use std::time::Duration;
 
 use serde::Serialize;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 use crate::state::DesktopConfig;
 
@@ -347,7 +347,7 @@ mod tests {
             engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
-            models: Some(sovereign_core::setup_config::ModelsSection {
+            models: Some(sovereign_contracts::setup_config::ModelsSection {
                 primary: "/p".into(),
                 fast: Some("/f".into()),
                 embed: "/e".into(),
@@ -360,12 +360,12 @@ mod tests {
                 edit: None,
             }),
             node: Default::default(),
-            daemon: sovereign_core::setup_config::DaemonSection {
+            daemon: sovereign_contracts::setup_config::DaemonSection {
                 client_port: 19_741,
                 internal_port: 19_742,
                 ..Default::default()
             },
-            data: sovereign_core::setup_config::DataSection::default(),
+            data: sovereign_contracts::setup_config::DataSection::default(),
             watched_folders: Default::default(),
             memory: Default::default(),
             iroh: Default::default(),

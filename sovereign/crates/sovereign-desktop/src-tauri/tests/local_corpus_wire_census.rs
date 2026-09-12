@@ -70,15 +70,16 @@
 //! the wire, no `.register(` may run on a local manager, and
 //! `.lc_register::<` must be here.
 //!
-//! The one manager read that legitimately remains in `lc_pre_scan` is
-//! `snapshot_root()` — this process's storage LAYOUT
-//! (`{data_dir}/vault-snapshots`), not corpus state. It lands in the
-//! config as `write_back.snapshot_dir`, so the daemon honours the path
-//! it was handed. Both boots resolve the same `data_dir` today; a boot
-//! where they diverge would put an attached vault's snapshots under the
-//! app's root rather than the daemon's, and the fix then is a
-//! daemon-side default stamped by the register route, not a second
-//! guess here.
+//! `snapshot_root()` was the one manager read that remained in
+//! `lc_pre_scan` after D9c — this process's storage LAYOUT, stamped into
+//! the config as `write_back.snapshot_dir`. On 2026-09-11 the whole
+//! command crossed to `POST /internal/corpus/local/pre-scan`, which
+//! builds the Obsidian config with the DAEMON's snapshot root, registers,
+//! and scans the config the registry kept. The divergent-`data_dir` boot
+//! the paragraph above used to hedge against is now structurally the
+//! daemon's root. `.lc_pre_scan::<` is therefore a registration producer
+//! too, and `the_registration_producer_crossed_with_its_consumers`
+//! accepts either spelling.
 //!
 //! # Calibration (ARCH §18.1 — name the failing input)
 //!
@@ -136,6 +137,17 @@ const CROSSED_MANAGER_CALLS: &[&str] = &[
     ".ingest(&corpus_id",
     ".cancel(&corpus_id)",
     ".ocr_available()",
+    // 2026-09-11: the cluster job and the two surfaces it pinned. The
+    // `cluster_results` cache is filled on the manager that RAN the job,
+    // so the consumers moved with the producer, as the ingest pair did.
+    ".cluster(&corpus_id",
+    ".get_preview(",
+    ".write_tags(",
+    // 2026-09-11: the pre-scan crossed whole. The scan is a function of
+    // the config the registry KEPT, and the snapshot root is the layout
+    // of the engine that writes the snapshots — the daemon's.
+    ".snapshot_root()",
+    "pre_scan_config(",
 ];
 
 /// The routes that REFUSE an unregistered corpus — every one answers
@@ -242,36 +254,35 @@ fn the_library_listing_reads_the_registry_over_the_wire() {
     );
 }
 
-/// Every command that STAYS local is paired with the producer that pins
-/// it. While the producer is local, the consumer must be too — see the
-/// module header. Each assertion goes quiet on its own the moment its
-/// producer crosses, so this does not stand in the way of the next rung.
+/// The cluster PRODUCER crossed with the consumers that need it
+/// (2026-09-11) — the rule of the former `the_paired_stays_are_still_paired`,
+/// which guarded `lc_get_preview` / `lc_write_tags` crossing ahead of
+/// `lc_cluster` behind an `if code.contains(".cluster(&corpus_id")`. That
+/// guard can no longer be true, and a conditional whose premise is false
+/// proves nothing (ARCH §18.1), so the three manager calls moved into
+/// `CROSSED_MANAGER_CALLS` and this is the POSITIVE half: while either
+/// consumer reads the wire, the producer must too, and vice versa.
+///
+/// Watched to fail 2026-09-11 (run, red, restored): `.lc_cluster::<` in
+/// `lc_cluster` respelled `.lc_cluster ::<` — compiles, the needle
+/// misses — while `.lc_preview::<` and `.lc_write_tags::<` stayed:
+/// `producer crossed: false, consumers crossed: 2/2`.
 #[test]
-fn the_paired_stays_are_still_paired() {
+fn the_cluster_producer_crossed_with_its_consumers() {
     let code = production_source(LC_COMMANDS);
-
-    if code.contains(".cluster(&corpus_id") {
-        assert!(
-            code.contains(".get_preview("),
-            "sv-surface D5: lc_get_preview reads the wire while lc_cluster \
-             still runs here. `get_preview` reads the `cluster_results` \
-             cache that `cluster` filled ON THIS INSTANCE — repointing the \
-             consumer alone makes the Organizer answer `no clustering run \
-             on record` on an attached boot. Move lc_cluster across first."
-        );
-        assert!(
-            code.contains(".write_tags("),
-            "sv-surface D5: lc_write_tags reads the wire while lc_cluster \
-             still runs here. `write_tags` reaches the same \
-             `cluster_results` cache through `get_preview`. Move lc_cluster \
-             across first."
-        );
-    }
-
-    // The ingest pair (lc_cancel, lc_ocr_available) is GONE from this test,
-    // not silently satisfied: D8 crossed the producer, so both consumers
-    // crossed with it and are pinned by `CROSSED_MANAGER_CALLS` above. A
-    // conditional whose guard can no longer be true proves nothing.
+    let producer = code.contains(".lc_cluster::<");
+    let consumers = [".lc_preview::<", ".lc_write_tags::<"]
+        .iter()
+        .filter(|n| code.contains(**n))
+        .count();
+    assert!(
+        producer && consumers == 2,
+        "sv-surface: the cluster pair is split across the wire — producer \
+         crossed: {producer}, consumers crossed: {consumers}/2. `…/preview` \
+         and `…/write-tags` read the `cluster_results` cache on the manager \
+         that ran `…/cluster`; on an attached boot a split pair makes the \
+         Organizer answer `no clustering run on record`."
+    );
 }
 
 /// The registration PRODUCER crosses with the consumers that need it.
@@ -333,10 +344,11 @@ fn the_registration_producer_crossed_with_its_consumers() {
     );
 
     assert!(
-        code.contains(".lc_register::<"),
+        code.contains(".lc_register::<") || code.contains(".lc_pre_scan::<"),
         "sv-surface D9c: nothing in local_corpus_commands.rs registers a \
          corpus over the wire, yet {consumers:?} require one to be \
          registered on the daemon's manager. A consumer with no producer \
-         is the 404 this pairing exists to prevent."
+         is the 404 this pairing exists to prevent. (`POST \
+         /internal/corpus/local/pre-scan` registers too, since 2026-09-11.)"
     );
 }

@@ -76,9 +76,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-/// The three hosts that build a turn tool registry, and where each starts.
+/// The hosts that build a turn tool registry, and where each starts — two
+/// since 2026-09-11, three before (the desktop row is the comment below).
 ///
-/// These are the same three sites `runtime_commission_census` tracks — a host
+/// These are the same sites `runtime_commission_census` tracks — a host
 /// that commissions a `Runtime` is exactly a host that must hand it tools.
 const TURN_REGISTRIES: &[(&str, &str, Extraction)] = &[
     // Was `sovereign-cli-llm/src/chat_cmd/bootstrap.rs` until 2026-08-25.
@@ -107,11 +108,12 @@ const TURN_REGISTRIES: &[(&str, &str, Extraction)] = &[
     // 23 `tools.register` calls in a 1,659-line function; the span scanner
     // that read them found NO span the moment the desktop adopted the recipe,
     // which is the instrument guard doing its job rather than a regression.
-    (
-        "desktop",
-        "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
-        Extraction::Bundles(&["sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"]),
-    ),
+    // The DESKTOP ROW LEFT 2026-09-11 (504c6b6d3, svt-3b). It commissions no
+    // `Runtime` and composes no bundle — a turn reaches it over
+    // `sovereign-turn-client`, so the registry it uses IS the recipe row's.
+    // Kept as a comment rather than deleted silently: the extractor returned
+    // 0 for it the day the commission site went, and this census's guard
+    // (`every_host_yields_a_registry`) refused to read that as agreement.
     // Composed since 2026-08-26 as well, which leaves NO host on the direct
     // path. `Extraction::Direct` is kept because the next host to appear will
     // arrive that way, and deleting the arm would make the census silently

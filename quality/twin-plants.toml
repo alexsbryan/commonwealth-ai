@@ -363,7 +363,7 @@ target      = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_com
 # beside it.
 expect_red  = "on a local LocalCorpusManager again"
 find        = '''    let ack = lc_client(&state)
-        .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)'''
+        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)'''
 replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the bespoke arm, back:
     // a second ingest, on this process's manager, into an index the daemon
     // is not the one writing.
@@ -374,7 +374,7 @@ replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the bespo
             .await;
     }
     let ack = lc_client(&state)
-        .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)'''
+        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)'''
 
 [[family]]
 id          = "insight-gather"

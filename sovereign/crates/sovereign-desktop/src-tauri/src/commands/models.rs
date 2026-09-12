@@ -24,13 +24,15 @@ pub async fn search_web(
     query: String,
     conversation_id: String,
 ) -> Result<MessageResponse, DesktopError> {
-    // The Runtime is held for one reason only: `tools`. `AppState` carries
-    // no tool registry of its own, so the search-tool lookup below cannot be
-    // repointed the way the two message saves are (daemon-convergence
-    // Phase 0). Resolve it first — it is strictly the later of the two to
-    // become available, so its not-ready message is the one the user sees.
-    let runtime = state.runtime().await?;
+    // sv-surface svt-3b: this was the LAST reader of a commissioned `Runtime`
+    // on the desktop, and the only one that wanted a HANDLE rather than a
+    // readiness answer — it reached into `runtime.tools` for the search tool.
+    // It does not need one. `crate::state::web_search_once` is the same
+    // registry + egress path `submit_information_search` has run with no
+    // Runtime since it landed; see its doc for why no daemon route serves this
+    // and why egress custody keeps it in the app.
     let store = state.store().await?;
+    let config = state.config.read().await.clone();
 
     // Save user message.
     let user_msg = sovereign_contracts::types::Message {
@@ -47,39 +49,30 @@ pub async fn search_web(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Execute search tool directly.
-    let tool = runtime
-        .tools
-        .get("search")
-        .or(runtime.tools.get("web_search"))
-        .map_err(|_| DesktopError::invalid_request("Search tool is not enabled."))?;
-
-    let params = serde_json::json!({ "query": query });
-    let ctx = sovereign_contracts::types::ToolContext {
-        conversation_id: conversation_id.clone(),
-        task_id: None,
-        working_directory: None,
-        in_reasoning_loop: false,
-        agent_session_token: None,
-        turn_index: 0,
-        ..Default::default()
-    };
-
-    let output = tool
-        .execute(&params, &ctx)
+    // Run the search.
+    //
+    // BEHAVIOUR DELTA, named (ARCH principle 6). The tool path collapsed every
+    // unhandled `StepOutput` shape AND a zero-result search into the literal
+    // string "No results found.", saved it as an assistant message, and
+    // returned `Ok` — a failure wearing an answer's shape. A search that
+    // returns nothing, and an egress the boundary refused, are now both `Err`
+    // with the backend named, and nothing is written to the conversation.
+    let out = crate::state::web_search_once(&query, &config)
         .await
-        .map_err(|e| DesktopError::upstream(format!("Web search failed: {e}")))?;
-
-    let content = match output {
-        sovereign_contracts::types::StepOutput::Text(t) => t,
-        sovereign_contracts::types::StepOutput::Json(ref v) => v
-            .get("answer")
-            .and_then(|a| a.as_str())
-            .unwrap_or("No results found.")
-            .to_string(),
-        sovereign_contracts::types::StepOutput::ReasonWithToolsResult { text, .. } => text,
-        _ => "No results found.".to_string(),
-    };
+        .map_err(DesktopError::upstream)?;
+    let mut content = format!(
+        "Web search results for \"{}\" (via {}):\n\n",
+        query, out.backend_id
+    );
+    for (i, r) in out.results.iter().enumerate() {
+        content.push_str(&format!(
+            "{}. {}\n{}\n{}\n\n",
+            i + 1,
+            r.title,
+            r.url,
+            r.snippet
+        ));
+    }
 
     // Save assistant message.
     let msg_id = uuid::Uuid::new_v4().to_string();

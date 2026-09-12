@@ -255,49 +255,24 @@ pub async fn build_corpus_index(
     Ok(())
 }
 
-#[derive(serde::Serialize)]
-pub struct IngestDocumentResult {
-    pub source: String,
-    pub chunks_created: usize,
-}
+/// The route's own answer shape, parsed and returned verbatim so the
+/// webview sees the same bytes — ONE definition, the contracts one
+/// (ARCH principle 8); the command's historical name kept for `main.rs`.
+pub use sovereign_contracts::daemon_wire::IngestLegacyResponse as IngestDocumentResult;
 
+/// The legacy paperclip path (ChatView's `handleLegacyAttach`): chunk a
+/// file into the `documents` table. `POST /v1/documents/legacy` since
+/// 2026-09-11 — the daemon's store is the one the legacy listing and
+/// promotion read, and it embeds with the Runtime it answers turns with.
 #[tauri::command]
 pub async fn ingest_document(
     state: State<'_, Arc<AppState>>,
     file_path: String,
 ) -> Result<IngestDocumentResult, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
-
-    let path = std::path::Path::new(&file_path);
-    if !path.exists() {
-        return Err(format!("File not found: {file_path}"));
-    }
-
-    let chunks_created = sovereign_tools::rag::ingest::ingest_file(
-        path,
-        store.as_ref(),
-        inference.as_ref().map(|i| i.as_ref()),
-    )
-    .await
-    .map_err(|e| format!("Ingest failed: {e}"))?;
-
-    let source = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(&file_path)
-        .to_string();
-
-    tracing::info!(source = %source, chunks = chunks_created, "document ingested");
-
-    Ok(IngestDocumentResult {
-        source,
-        chunks_created,
-    })
+    let result = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .ingest_legacy_document::<IngestDocumentResult>(&file_path)
+        .await
+        .map_err(|e| format!("Ingest failed: {e}"))?;
+    tracing::info!(source = %result.source, chunks = result.chunks_created, "document ingested");
+    Ok(result)
 }

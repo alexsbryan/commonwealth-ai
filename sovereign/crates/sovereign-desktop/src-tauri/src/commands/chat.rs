@@ -9,8 +9,11 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
-use sovereign_contracts::types::{TurnFrame, TurnMode};
-use sovereign_core::runtime::message_metadata;
+use sovereign_contracts::traits::RoutingEventSink;
+use sovereign_contracts::types::{
+    is_document_attached, NarrationEvent, NarrationPhase, TurnFrame, TurnMode, TurnNarration,
+    DEGENERATE_MESSAGE_HINT, OVERSIZE_MESSAGE_HINT,
+};
 
 use crate::state::AppState;
 
@@ -105,12 +108,7 @@ pub async fn send_message_stream(
     // answering a different question and, in attach, the wrong one.
     crate::commands::require_backend_ready(&state).await?;
 
-    state.approval.set_task_id(&conversation_id).await;
-
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     // Build the augmented message: prepend a passage-context block
     // for each focused chunk so the librarian can scope its answer
@@ -134,7 +132,7 @@ pub async fn send_message_stream(
     // `serve_turn` decides it with the same predicate. Asking it here too is
     // not a second decider — it is this command reporting, in its return
     // value, which shape the frontend should expect.
-    let streaming = !sovereign_core::runtime::is_document_attached(&augmented_message);
+    let streaming = !is_document_attached(&augmented_message);
 
     // Fallback id for a turn that never mints one: the graceful guards
     // (oversize paste, contentless message) answer without starting a turn,
@@ -172,7 +170,7 @@ pub async fn send_message_stream(
         stream,
         conversation_id,
         pending_id,
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 
@@ -270,7 +268,7 @@ async fn finish_wire_turn(
     stream: sovereign_turn_client::TurnStream,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
+    metadata_base_url: String,
 ) -> Result<String, String> {
     // Park the write half FIRST, keyed by conversation (RB5): a prompt can
     // arrive before the id does, and `cancel_stream` / the submit commands
@@ -324,7 +322,7 @@ async fn finish_wire_turn(
         frame_rx,
         conversation_id,
         message_id.clone(),
-        store_for_metadata,
+        metadata_base_url,
     ));
 
     Ok(message_id)
@@ -503,12 +501,28 @@ async fn pump_wire_frames(
                             state.pending_prompts.resolve(id).await;
                         }
                     },
+                    // The three antifragile-routing frames. Until 2026-09-11
+                    // these two arms recorded the session pairing and
+                    // nothing more, and `Narration` fell through to the
+                    // renderer's no-op arm — so the interpretation banner,
+                    // the `ClarificationCard` and the mid-turn narration chip
+                    // were DARK on the shipped path from R5 (every turn on
+                    // the wire) to svt-3b (no in-process Runtime left to
+                    // feed the sink). The sink and the payload types were
+                    // always here; the wire was always delivering. Pair,
+                    // then emit: a redirect chip clicked before the pairing
+                    // is written would fail `redirect_interpretation`'s
+                    // lookup, so the order is load-bearing.
                     TurnNotice::InterpretationProposed(p) => {
                         state
                             .session_conversations
                             .write()
                             .await
                             .insert(p.session_id.clone(), p.conversation_id.clone());
+                        state
+                            .routing_events
+                            .emit_interpretation_proposed(p.clone())
+                            .await;
                     }
                     TurnNotice::ClarificationRequest(p) => {
                         state
@@ -516,6 +530,10 @@ async fn pump_wire_frames(
                             .write()
                             .await
                             .insert(p.session_id.clone(), p.conversation_id.clone());
+                        state
+                            .routing_events
+                            .emit_clarification_request(p.clone())
+                            .await;
                     }
                     // The socket's own closer (RB1). `Complete` is the
                     // terminal frame of the TURN, not of the host's
@@ -539,6 +557,27 @@ async fn pump_wire_frames(
                     TurnNotice::TurnStarted { .. } => {}
                 }
             }
+            TurnFrame::Narration {
+                phase,
+                text,
+                elapsed_ms,
+                ..
+            } => {
+                // The frame carries no session id (it is minted before any
+                // `QuerySession` may exist); the FSM's narration reducer
+                // reads only `payload.event` (`routing.machine.ts`,
+                // `applyNarration`). Recover the pairing when one is
+                // already written, else send it empty rather than invent one.
+                let session_id = session_for_conversation(&state, &conversation_id).await;
+                let payload = narration_payload(
+                    session_id,
+                    conversation_id.clone(),
+                    phase.clone(),
+                    text.clone(),
+                    *elapsed_ms,
+                );
+                state.routing_events.emit_turn_narration(payload).await;
+            }
             _ => {}
         }
         let _ = frames.send(frame);
@@ -553,6 +592,73 @@ async fn pump_wire_frames(
         released,
         "pump_wire_frames: turn unparked"
     );
+}
+
+/// The persisted metadata blob of one message, read over
+/// `GET /v1/conversations/{id}`. `None` when the daemon cannot serve the
+/// conversation or the message carries no blob — the caller's `_` arm then
+/// marks the intent from the text, as it always did for a turn that never
+/// started.
+async fn wire_message_metadata(
+    base_url: &str,
+    conversation_id: &str,
+    message_id: &str,
+) -> Option<serde_json::Value> {
+    let history = sovereign_turn_client::TurnClient::new(base_url.to_string())
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|e| {
+            tracing::warn!(
+                conversation_id = %conversation_id,
+                message_id = %message_id,
+                error = %e,
+                "message-complete: metadata read failed; emitting without it"
+            )
+        })
+        .ok()?;
+    history
+        .messages
+        .into_iter()
+        .find(|m| m.id == message_id)
+        .and_then(|m| m.metadata)
+}
+
+/// The `turn-narration` payload for one `TurnFrame::Narration`, shaped
+/// exactly as `TurnNarrationPayload` in `src/lib/types.ts` expects — the
+/// same struct the in-process sink used to fill, so the frontend cannot
+/// tell which side of the wire produced it. Pure so the test below can pin
+/// the serialized keys against the TypeScript interface.
+fn narration_payload(
+    session_id: String,
+    conversation_id: String,
+    phase: NarrationPhase,
+    text: String,
+    elapsed_ms: u64,
+) -> TurnNarration {
+    TurnNarration {
+        session_id,
+        conversation_id,
+        event: NarrationEvent {
+            phase,
+            text,
+            elapsed_ms,
+        },
+    }
+}
+
+/// Reverse lookup on the session -> conversation pairing the two notice
+/// arms write. Empty when no routing notice has paired this conversation
+/// yet — which is the common case for early narration (`retrieval_start`
+/// lands before the router has proposed anything).
+async fn session_for_conversation(state: &AppState, conversation_id: &str) -> String {
+    state
+        .session_conversations
+        .read()
+        .await
+        .iter()
+        .find(|(_, c)| c.as_str() == conversation_id)
+        .map(|(s, _)| s.clone())
+        .unwrap_or_default()
 }
 
 /// One parked prompt becomes one card — the same events, payloads and
@@ -632,7 +738,7 @@ async fn render_turn_frames(
     mut frame_rx: tokio::sync::mpsc::UnboundedReceiver<TurnFrame>,
     conversation_id: String,
     fallback_id: String,
-    store_for_metadata: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
+    metadata_base_url: String,
 ) {
     let mut full_text = String::new();
     let mut real_message_id: Option<String> = None;
@@ -676,23 +782,24 @@ async fn render_turn_frames(
                     .clone()
                     .unwrap_or_else(|| fallback_id.clone());
 
-                // The persisted blob, read IN PROCESS. The driver projects
-                // typed provenance for callers across a socket; this surface
-                // owns the store, and the frontend's
+                // The persisted blob, read from the daemon's conversation
+                // route (2026-09-11; until then from an in-process store this
+                // surface no longer holds). The frontend's
                 // `MessageCompletePayload.metadata` is the raw shape it has
-                // always received.
-                let metadata = match (&store_for_metadata, &real_message_id) {
-                    (Some(store), Some(id)) => {
-                        message_metadata(store.as_ref(), &conversation_id, id).await
+                // always received, so the route carries the blob verbatim
+                // beside the typed projections.
+                let metadata = match &real_message_id {
+                    Some(id) => {
+                        wire_message_metadata(&metadata_base_url, &conversation_id, id).await
                     }
                     // A turn that never started (a graceful guard) has no
                     // row to read. Mark the intent so the turn is visible
                     // to the provenance surface and the loading state
                     // clears, instead of an intent-less blank.
                     _ => Some(serde_json::json!({
-                        "intent": if full_text == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT {
+                        "intent": if full_text == OVERSIZE_MESSAGE_HINT {
                             "oversize_guidance"
-                        } else if full_text == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT {
+                        } else if full_text == DEGENERATE_MESSAGE_HINT {
                             "clarification"
                         } else {
                             "error"
@@ -723,11 +830,12 @@ async fn render_turn_frames(
                     .and_then(|p| p.get("finish_reason"))
                     .and_then(|f| f.as_str())
                     == Some("cancelled");
-                let full_text = if is_recipe_author || was_cancelled {
-                    std::mem::take(&mut full_text)
-                } else {
-                    sovereign_core::pipeline::presenter::present_answer(&full_text)
-                };
+                // The text arrives PRESENTED: `drive_stream_handle` runs
+                // `present_answer` on the daemon before the tokens leave
+                // (sovereign-core runtime/streaming.rs), so the envelope
+                // stripping this renderer used to repeat here is gone with
+                // the runtime dependency (2026-09-11).
+                let full_text = std::mem::take(&mut full_text);
 
                 let _ = app.emit(
                     "message-complete",
@@ -747,9 +855,10 @@ async fn render_turn_frames(
             }
             // Everything that is not a token, an error or the terminal
             // frame is already handled UPSTREAM, by `pump_wire_frames`:
-            // narration, queue position, the prompt cards and every
-            // notice are emitted there against the frontend vocabulary
-            // that expects them. They pass through here so this renderer
+            // narration (`turn-narration`, since 2026-09-11 — before that
+            // this arm was where it was dropped), the prompt cards and
+            // every notice are emitted there against the frontend
+            // vocabulary that expects them. They pass through here so this renderer
             // stays the single place a turn's `message-chunk` /
             // `message-complete` / `message-error` are decided — not
             // because they belong to some other path. (This comment said
@@ -779,10 +888,16 @@ async fn build_context_augmented_message(
     user_message: &str,
     refs: &[FocusedChunkRef],
 ) -> String {
-    let engine_opt = state.corpus_engine.read().await.clone();
-    let Some(engine) = engine_opt else {
+    if refs.is_empty() {
         return user_message.to_string();
-    };
+    }
+    // Chunks come from the daemon's index over `GET
+    // /internal/meshapp/{corpus}/chunks/{id}` (2026-09-11). Until then this
+    // opened the corpus index with the desktop's own `CorpusEngine` — the
+    // last reader of that engine on the chat path. A chunk the daemon
+    // cannot serve is skipped with a warning, exactly as an unopenable
+    // index was before; the message still goes, without that passage.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
 
     // Dedupe by (corpus_id, chunk_id) — preserves first-seen order.
     let mut seen = std::collections::HashSet::new();
@@ -793,31 +908,21 @@ async fn build_context_augmented_message(
 
     let mut blocks: Vec<String> = Vec::new();
     for r in unique {
-        let index = match engine.open_index_for_corpus(&r.corpus_id).await {
-            Ok(i) => i,
+        let row = match client
+            .meshapp_chunk::<sovereign_contracts::daemon_wire::ChunkDto>(&r.corpus_id, r.chunk_id)
+            .await
+        {
+            Ok(row) => row,
             Err(e) => {
                 tracing::warn!(
                     corpus = %r.corpus_id,
                     chunk_id = r.chunk_id,
                     error = %e,
-                    "context preamble: open_index failed; skipping chunk",
+                    "context preamble: daemon could not serve chunk; skipping",
                 );
                 continue;
             }
         };
-        let mut rows = match index.chunks_by_ids(&[r.chunk_id]).await {
-            Ok(rs) => rs,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %r.corpus_id,
-                    chunk_id = r.chunk_id,
-                    error = %e,
-                    "context preamble: chunks_by_ids failed; skipping chunk",
-                );
-                continue;
-            }
-        };
-        let Some(row) = rows.pop() else { continue };
         let title = row.title.as_deref().unwrap_or("untitled passage");
         let content = if row.content.chars().count() > CONTEXT_PASSAGE_CHAR_BUDGET {
             let truncated: String = row
@@ -950,8 +1055,6 @@ pub async fn send_message(
     // gate asks the port (see `send_message_stream`).
     crate::commands::require_backend_ready(&state).await?;
 
-    state.approval.set_task_id(&conversation_id).await;
-
     let augmented_message =
         augment_for_turn(&state, &message, &context_chunks, &attached_files).await;
 
@@ -1024,93 +1127,54 @@ pub async fn cancel_stream(
     // QUEUED, not acted. The acknowledgement is the turn's own terminal
     // frame (`Complete` with `provenance.finish_reason: "cancelled"`,
     // which the renderer already turns into `message-complete`), and it
-    // arrives later or not at all. So a queued send does NOT license
-    // skipping the local pair below: in Local mode the daemon's turn IS
-    // this process's, and tripping its session token is idempotent with
-    // the daemon's own abort; in attach mode there is no local session to
-    // trip and the block is a no-op. Only the wire send is skipped when
-    // no turn is parked here.
-    let wire_sent = match state.turn_wire.sender_for(&conversation_id).await {
+    // arrives later or not at all.
+    //
+    // sv-surface svt-3b: there is no local pair to fall back to, and losing
+    // it costs nothing. The daemon's `TurnRequest::Cancel` arm
+    // (`sovereign-mesh/src/turn_http.rs:1433-1449`) runs the SAME two
+    // operations this used to run in-process — `sessions
+    // .latest_for_conversation(..).cancel.cancel()` and
+    // `sessions.cancel_preparing(..)` — plus one this never did:
+    // `approvals.abandon()`, which unparks a turn blocked on a consent card
+    // (sv-surface RB2). It is a strict superset, on the process that owns the
+    // session store. The argument for keeping the local pair was that a queued
+    // send is not an ack; what it actually bought was tripping a token in a
+    // session store this process no longer has.
+    match state.turn_wire.sender_for(&conversation_id).await {
         Some(sender) => match sender.send_cancel() {
             Ok(()) => {
                 tracing::info!(
                     conversation_id,
                     "cancel_stream: wire cancel queued — the turn's Complete will say cancelled"
                 );
-                true
+                Ok(())
             }
+            // Absence is REPORTED (ARCH principle 6). The writer is gone, so
+            // nothing was cancelled; saying `Ok` would be the substitution.
             Err(e) => {
                 tracing::warn!(
                     conversation_id,
                     error = %e,
-                    "cancel_stream: the turn socket's writer is gone — falling back to the local pair"
+                    "cancel_stream: the turn socket's writer is gone — nothing was cancelled"
                 );
-                false
+                Err(format!(
+                    "cancel_stream: the turn socket for conversation {conversation_id} is \
+                     closed, so the cancel could not be delivered: {e}"
+                ))
             }
         },
+        // Not an error: the stream already finished, which is the common
+        // case behind a late Stop click. The UI recovers optimistically in
+        // `handleStop` either way.
         None => {
             tracing::info!(
                 conversation_id,
-                "cancel_stream: no wire turn is parked for this conversation"
+                "cancel_stream: no wire turn is parked for this conversation — \
+                 nothing in flight (already finished?)"
             );
-            false
-        }
-    };
-
-    let guard = state.runtime.read().await;
-    let Some(runtime) = guard.as_ref() else {
-        // No local turn machinery at all (attach mode, or bootstrap still
-        // in flight). If the wire took the cancel that is the whole
-        // answer; if it did not, nothing was cancelled and saying `Ok`
-        // would be the §18.3 substitution.
-        return if wire_sent {
             Ok(())
-        } else {
-            Err(format!(
-                "cancel_stream: no wire turn is parked for conversation {conversation_id} \
-                 and this surface holds no local runtime"
-            ))
-        };
-    };
-    // Cancel the registered session if one exists…
-    let hit_session = runtime
-        .sessions
-        .latest_for_conversation(&conversation_id)
-        .map(|session| {
-            session.cancel.cancel();
-            session.id.clone()
-        });
-    // …AND trip any reserved preparing-window token. On a slow model the
-    // Stop click races session registration: `latest_for_conversation`
-    // above may have cancelled the PREVIOUS (stale) session while the real
-    // turn is still in preparing (build-context + classify + retrieve, ~5s
-    // on a 4B). `cancel_preparing` trips the token `sessions.begin` will
-    // ADOPT, so the cancel carries through no matter which side of
-    // registration we landed on. (2026-07-07 slow-model race.)
-    let hit_preparing = runtime.sessions.cancel_preparing(&conversation_id);
-    match (&hit_session, hit_preparing) {
-        (Some(id), _) => tracing::info!(
-            session_id = %id,
-            preparing = hit_preparing,
-            conversation_id,
-            "cancel_stream: user requested abort"
-        ),
-        (None, true) => tracing::info!(
-            conversation_id,
-            "cancel_stream: cancelled a preparing turn (raced session registration)"
-        ),
-        (None, false) => tracing::info!(
-            // Neither a live session nor a preparing turn — the stream
-            // likely already finished. The desktop UI recovers optimistically
-            // in `handleStop` regardless; log the inventory so an id/timing
-            // mismatch stays legible.
-            conversation_id,
-            wire_sent,
-            live_sessions = ?runtime.sessions.conversation_ids(),
-            "cancel_stream: nothing in flight locally — cancel is a no-op (already finished?)"
-        ),
+        }
     }
-    Ok(())
 }
 
 /// PR2c — cancel the in-flight Propose-mode sampler AND start a new
@@ -1141,36 +1205,28 @@ pub async fn redirect_turn(
         let map = state.session_conversations.read().await;
         map.get(&session_id).cloned()
     };
-    let conversation_id = match conversation_id {
-        Some(cid) => cid,
-        None => {
-            // sv-surface D9 — the third no-fork degradation, named
-            // rather than left to read an empty register. The fallback
-            // asks whichever `Runtime` THIS process happens to host: in
-            // Local that is the same object the embedded daemon serves
-            // the turn from, so it answers; in attach this process has
-            // never seen the session and `require_runtime!` reported
-            // that as "Backend is still loading", which is a different
-            // and wrong fact (ARCH §18.3). A soft read, so the mode is
-            // not branched on — "Local" is just the boot where the
-            // daemon happens to be in-process — and a named refusal
-            // when nobody here knows the pairing.
-            let hosted = state.runtime.read().await;
-            hosted
-                .as_ref()
-                .and_then(|rt| rt.sessions.get(&session_id).map(|s| s.conversation_id.clone()))
-                .ok_or_else(|| {
-                    format!(
-                        "session {session_id} is not paired with a conversation on this surface                          — the routing card that would have recorded it never arrived, and this                          process does not host the session store that owns the pairing"
-                    )
-                })?
-        }
-    };
+    let conversation_id = conversation_id.ok_or_else(|| {
+        // sv-surface svt-3b: the in-process fallback that stood here asked
+        // whichever `Runtime` this process happened to host for the pairing.
+        // In Local mode that was the daemon's own session store and it
+        // answered; there is no Local mode and no hosted store, so the
+        // fallback could only ever return the same refusal this does.
+        //
+        // The daemon serves no replacement, and that is a DECISION rather
+        // than a gap: `sovereign-mesh/src/turn_extras_http.rs:22` says so by
+        // name — "NOT here: the session -> conversation lookup — the surface
+        // already learns that pairing from the routing cards it receives".
+        // Its only `sessions.get` in an HTTP file is an ownership GUARD that
+        // deliberately does not disclose the owning conversation
+        // (`turn_http.rs:1595-1611`). `state.session_conversations`, recorded
+        // as the routing cards arrive, IS the intended mechanism.
+        format!(
+            "session {session_id} is not paired with a conversation on this surface — the \
+             routing card that would have recorded it never arrived"
+        )
+    })?;
 
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
     let mut stream = client
@@ -1195,7 +1251,7 @@ pub async fn redirect_turn(
         stream,
         conversation_id,
         uuid::Uuid::new_v4().to_string(),
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 
@@ -1221,10 +1277,7 @@ pub async fn resume_session(
     session_id: String,
     intent_hint: String,
 ) -> Result<StreamStartedResponse, String> {
-    let store_for_metadata = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
+    let metadata_base_url = state.client_base_url();
 
     // sv-surface R5: the resume crosses the wire (`send_resume`). An
     // expired session is the daemon's call to make — it answers by
@@ -1250,7 +1303,7 @@ pub async fn resume_session(
         stream,
         conversation_id,
         uuid::Uuid::new_v4().to_string(),
-        store_for_metadata,
+        metadata_base_url,
     )
     .await?;
 
@@ -1272,6 +1325,33 @@ mod tests {
             text: "reading the corpus".to_string(),
             elapsed_ms: 12,
         }
+    }
+
+    /// `TurnNarrationPayload` in `src/lib/types.ts` is `{ session_id,
+    /// conversation_id, event: { phase, text, elapsed_ms } }`, and the FSM's
+    /// `applyNarration` reads `payload.event`. This pins the Rust side to
+    /// those keys — the only contract between the wire frame and the chip.
+    #[test]
+    fn narration_payload_serializes_to_the_shape_the_fsm_reads() {
+        let TurnFrame::Narration {
+            phase,
+            text,
+            elapsed_ms,
+            ..
+        } = narration()
+        else {
+            unreachable!()
+        };
+        let payload = narration_payload(String::new(), "conv-1".into(), phase, text, elapsed_ms);
+        let v = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["session_id"], "");
+        assert_eq!(v["conversation_id"], "conv-1");
+        assert_eq!(v["event"]["phase"], "routing_committed");
+        assert_eq!(v["event"]["text"], "reading the corpus");
+        assert_eq!(v["event"]["elapsed_ms"], 12);
+        let mut keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        keys.sort();
+        assert_eq!(keys, ["conversation_id", "event", "session_id"]);
     }
 
     fn approval_prompt() -> TurnFrame {

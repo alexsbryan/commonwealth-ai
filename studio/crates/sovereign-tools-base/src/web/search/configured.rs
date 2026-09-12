@@ -11,11 +11,45 @@
 
 use std::sync::Arc;
 
-use sovereign_contracts::setup_config::SearchSection;
+use sovereign_contracts::setup_config::{SearchSection, SetupConfig};
 
 use super::backend_trait::{
     BraveBackendImpl, DuckDuckGoBackendImpl, TavilyBackendImpl, WebSearchRegistry,
 };
+use super::orchestrator::SearchOrchestrator;
+
+/// The operator's registry, resolved from the shared `config.toml`
+/// `[search]` section plus the legacy `SVRNMESH_TAVILY_API_KEY` — the ONE
+/// resolver every surface that reaches the open web goes through.
+///
+/// Lived in `sovereign-desktop`'s `state.rs` until 2026-08-26, then in
+/// `sovereign_tools::bundles` (which still re-exports it) until 2026-09-11.
+/// It sits here now because the desktop is a thin surface that may not
+/// link `sovereign-tools` (`quality/ARCH_LAYERS.toml` `[thin_surfaces]`),
+/// and web search stays IN the app on egress-custody grounds
+/// (`sovereign/DEFAULTS_LEDGER.md`, "`search_web` stays in the app"). This
+/// crate is the studio contract package the desktop may reach, and it
+/// already owned everything the resolver needs.
+pub fn effective_search_registry() -> WebSearchRegistry {
+    let search_cfg = SetupConfig::load().map(|c| c.search).unwrap_or_default();
+    let env_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
+        .and_then(|v| v.into_string().ok());
+    let configured = configured_search(&search_cfg, env_key.as_deref());
+    tracing::info!(
+        backend = %configured.preferred,
+        "web search: operator backend resolved (duckduckgo always available)"
+    );
+    configured.registry
+}
+
+/// A `SearchOrchestrator` over [`effective_search_registry`] — the one
+/// construction, so every surface that reaches the open web applies the same
+/// privacy, budget and fallback-chain rules.
+pub fn search_orchestrator() -> Arc<SearchOrchestrator> {
+    Arc::new(SearchOrchestrator::new(Arc::new(
+        effective_search_registry(),
+    )))
+}
 
 /// The zero-config backend. Always registered, never needs a key, and
 /// the answer whenever the operator's preference is absent or unkeyed.

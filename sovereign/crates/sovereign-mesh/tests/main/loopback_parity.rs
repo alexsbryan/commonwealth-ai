@@ -1031,6 +1031,11 @@ async fn conversation_get_route_serves_the_canonical_projection() {
                     provenance,
                     citations,
                     epistemic_state: project_epistemic_state(&m.metadata),
+                    // The blob rides the route verbatim (svt-3: the desktop
+                    // reads its `MessageCompletePayload.metadata` from here
+                    // now), so parity means the same blob, not a projection
+                    // of it.
+                    metadata: m.metadata.clone(),
                 }
             })
             .collect(),

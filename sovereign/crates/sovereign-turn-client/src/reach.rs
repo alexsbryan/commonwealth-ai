@@ -75,11 +75,14 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 /// this module sees no change in behaviour.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// The readiness endpoint. Any 2xx means serving — the contract
-/// `attach_watch.rs`, the supervisor heartbeat and `daemon start`'s
-/// readiness wait have all used since they were written. This daemon has no
-/// `/healthz` (it 404s); `/v1/models` and `/status` are the liveness doors.
-const READY_PATH: &str = "/v1/models";
+/// The readiness endpoint, and the DEFAULT — see [`ServingHost::ready_at`]
+/// for the backends that answer a different door.
+///
+/// Any 2xx means serving — the contract `attach_watch.rs`, the supervisor
+/// heartbeat and `daemon start`'s readiness wait have all used since they
+/// were written. This daemon has no `/healthz` (it 404s); `/v1/models` and
+/// `/status` are the liveness doors.
+pub const DEFAULT_READY_PATH: &str = "/v1/models";
 
 /// Does this build ship a backend it can bring up?
 ///
@@ -98,6 +101,9 @@ pub const CAN_BRING_UP_A_BACKEND: bool = cfg!(feature = "bundled-backend");
 #[derive(Debug, Clone)]
 pub struct ServingHost {
     base: String,
+    /// The path a probe asks. [`DEFAULT_READY_PATH`] unless a caller named another
+    /// with [`ServingHost::ready_at`].
+    ready_path: String,
     http: reqwest::Client,
     #[cfg(feature = "bundled-backend")]
     backend: Option<BundledBackend>,
@@ -180,6 +186,7 @@ impl ServingHost {
         }
         Self {
             base,
+            ready_path: DEFAULT_READY_PATH.to_string(),
             http: reqwest::Client::new(),
             #[cfg(feature = "bundled-backend")]
             backend: None,
@@ -189,6 +196,24 @@ impl ServingHost {
     /// The base URL this host is asked for.
     pub fn base(&self) -> &str {
         &self.base
+    }
+
+    /// Probe a different readiness door than [`DEFAULT_READY_PATH`].
+    ///
+    /// Not every backend a surface brings up is a svrn daemon.
+    /// `sovereign-server` — the phone-facing mobile host — serves no
+    /// `/v1/models` at all; its unauthenticated liveness door is `/health`
+    /// (`sovereign-server/src/main.rs:778`), and probing the default against
+    /// it returns 404 forever, which this module would report as "brought up
+    /// a backend that has not answered" for a host that is serving fine.
+    ///
+    /// The alternative was a private probe loop in the mobile toggle, which
+    /// is the fourteenth copy of "is it answering" this module exists to
+    /// retire (ARCH principle 8). A path is a parameter; a second
+    /// implementation is a decider.
+    pub fn ready_at(mut self, path: impl Into<String>) -> Self {
+        self.ready_path = path.into();
+        self
     }
 
     /// Name the backend this client may bring up if nothing answers.
@@ -205,15 +230,15 @@ impl ServingHost {
 
     /// Is a host answering right now? One probe, [`PROBE_TIMEOUT`] at most.
     pub async fn is_serving(&self) -> bool {
-        let url = format!("{}{READY_PATH}", self.base);
+        let url = format!("{}{}", self.base, self.ready_path);
         match self.http.get(&url).timeout(PROBE_TIMEOUT).send().await {
             Ok(resp) => {
                 let status = resp.status();
-                tracing::debug!(base = %self.base, %status, "reach: probe answered");
+                tracing::debug!(base = %self.base, path = %self.ready_path, %status, "reach: probe answered");
                 status.is_success()
             }
             Err(e) => {
-                tracing::debug!(base = %self.base, error = %e, "reach: probe did not answer");
+                tracing::debug!(base = %self.base, path = %self.ready_path, error = %e, "reach: probe did not answer");
                 false
             }
         }
@@ -462,6 +487,74 @@ mod tests {
             }
         });
         (port, handle)
+    }
+
+    /// A host that answers 200 on exactly ONE path and 404 on every other.
+    ///
+    /// The shape of `sovereign-server`, which serves `/health` and has no
+    /// `/v1/models` at all — and the only fixture that can tell a probe
+    /// which door it knocked on. `serving_host()` above answers 200 to
+    /// anything, so a `ready_at` that silently ignored its argument would
+    /// pass against it (ARCH principle 5: assert on something the subject
+    /// cannot author).
+    async fn host_serving_only(path: &'static str) -> (u16, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 1024];
+                    let n = sock.read(&mut buf).await.unwrap_or(0);
+                    // "GET /health HTTP/1.1" -> "/health"
+                    let asked = String::from_utf8_lossy(&buf[..n])
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or_default()
+                        .to_string();
+                    let resp: &[u8] = if asked == path {
+                        b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok"
+                    } else {
+                        b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    };
+                    let _ = sock.write_all(resp).await;
+                    let _ = sock.flush().await;
+                });
+            }
+        });
+        (port, handle)
+    }
+
+    /// The default door is `/v1/models`, byte for byte.
+    ///
+    /// Pinned because every existing caller inherits it by omission: a
+    /// `ready_at` that changed the default would move `attach_watch`, the
+    /// daemon's readiness wait and the desktop's startup reach all at once,
+    /// and each of them would simply stop finding a live daemon.
+    #[tokio::test]
+    async fn the_default_ready_path_is_v1_models() {
+        let (port, srv) = host_serving_only("/v1/models").await;
+        assert!(
+            host_at(port).is_serving().await,
+            "the default probe no longer asks /v1/models"
+        );
+        srv.abort();
+    }
+
+    /// A backend that answers a different door is reachable once it is named.
+    #[tokio::test]
+    async fn a_named_ready_path_reaches_a_host_the_default_would_miss() {
+        let (port, srv) = host_serving_only("/health").await;
+        // The regression, first: this is `sovereign-server` under the
+        // default, and it is a LIVE host reported as absent.
+        assert!(
+            !host_at(port).is_serving().await,
+            "the fixture answered /v1/models — it cannot prove anything about paths"
+        );
+        assert!(
+            host_at(port).ready_at("/health").is_serving().await,
+            "`ready_at` did not change the door the probe knocks on"
+        );
+        srv.abort();
     }
 
     /// A port nothing is listening on.

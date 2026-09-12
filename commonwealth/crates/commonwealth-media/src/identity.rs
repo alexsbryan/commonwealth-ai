@@ -76,6 +76,7 @@ pub fn admit_media(
     dialer: NodePubkey,
     origin: Option<SocketAddr>,
     allow: &[String],
+    declared: &[(String, String)],
 ) -> Option<Forward> {
     let Some(who) = who else {
         tracing::warn!(
@@ -103,10 +104,16 @@ pub fn admit_media(
         node_id = %who.node_id,
         "media: dial admitted — the origin is told who is asking"
     );
-    Some(Forward::Http {
-        origin,
-        headers: who.headers(dialer),
-    })
+    // The verified identity FIRST, then this node's own credentials for its
+    // own origin. Both go through the one `headers` vec because
+    // `rewrite_head` gives every name in it the same guarantee: a client's
+    // copy of that name is stripped before ours is appended, so exactly one
+    // reaches the origin and it is the one this node chose. Declared values
+    // are secrets read from 0600 files (`crate::declared`) and are never
+    // logged -- that one is SET is logged where it is read.
+    let mut headers = who.headers(dialer);
+    headers.extend(declared.iter().cloned());
+    Some(Forward::Http { origin, headers })
 }
 
 #[cfg(test)]
@@ -135,8 +142,8 @@ mod tests {
     /// reaching the origin.
     #[test]
     fn a_non_member_is_closed_and_a_member_is_forwarded_with_its_name() {
-        assert!(admit_media(None, dialer(), origin(), &[]).is_none());
-        match admit_media(Some(&who()), dialer(), origin(), &[]) {
+        assert!(admit_media(None, dialer(), origin(), &[], &[]).is_none());
+        match admit_media(Some(&who()), dialer(), origin(), &[], &[]) {
             Some(Forward::Http { origin, headers }) => {
                 assert_eq!(origin, "127.0.0.1:8096".parse::<SocketAddr>().unwrap());
                 assert!(headers.contains(&("X-Mesh-Member".to_string(), "LittleMac".to_string())));
@@ -151,27 +158,76 @@ mod tests {
     /// `media_allow` narrows WHICH members reach the origin, by name or
     /// by a ≥4-char id prefix; everyone else on the roster is closed. The
     /// failing input is the check disabled — `Quiet` forwarded.
+    /// The declared credential rides in the SAME `headers` vec as the verified
+    /// identity, because `rewrite_head` gives every name in that vec the same
+    /// guarantee: a client's copy is stripped before ours is appended. Two vecs
+    /// would be two rules, and only one of them would have been the strict one.
+    #[test]
+    fn a_declared_header_rides_beside_the_verified_identity() {
+        let declared = vec![("x-emby-token".to_string(), "the-holders-key".to_string())];
+        match admit_media(Some(&who()), dialer(), origin(), &[], &declared) {
+            Some(Forward::Http { headers, .. }) => {
+                assert!(
+                    headers.contains(&("X-Mesh-Member".to_string(), "LittleMac".to_string())),
+                    "the verified identity still reaches the origin"
+                );
+                assert!(
+                    headers.contains(&("x-emby-token".to_string(), "the-holders-key".to_string())),
+                    "and so does this node's own credential for its own origin"
+                );
+            }
+            other => panic!("expected an Http forward, got {other:?}"),
+        }
+    }
+
+    /// A declaration is not an admission. It is added AFTER the roster and the
+    /// allow-list have both said yes, so it can never widen who gets in — a
+    /// refused dial carries no credential anywhere.
+    #[test]
+    fn a_declaration_does_not_admit_anyone_who_was_refused() {
+        let declared = vec![("x-emby-token".to_string(), "the-holders-key".to_string())];
+        assert!(
+            admit_media(None, dialer(), origin(), &[], &declared).is_none(),
+            "a non-member stays closed"
+        );
+        assert!(
+            admit_media(
+                Some(&who()),
+                dialer(),
+                origin(),
+                &["somebody-else".to_string()],
+                &declared
+            )
+            .is_none(),
+            "a member outside the allow-list stays closed"
+        );
+        assert!(
+            admit_media(Some(&who()), dialer(), None, &[], &declared).is_none(),
+            "a node with no origin stays closed"
+        );
+    }
+
     #[test]
     fn the_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest() {
         let by_name = vec!["LittleMac".to_string()];
-        assert!(admit_media(Some(&who()), dialer(), origin(), &by_name).is_some());
+        assert!(admit_media(Some(&who()), dialer(), origin(), &by_name, &[]).is_some());
         // `node-` plus four hex digits: the floor. Eight characters would
         // leave three hex digits, which is BELOW the floor by design.
         let prefix = who().node_id.to_string()[..9].to_string();
-        assert!(admit_media(Some(&who()), dialer(), origin(), &[prefix]).is_some());
+        assert!(admit_media(Some(&who()), dialer(), origin(), &[prefix], &[]).is_some());
         let other = MemberIdentity {
             name: "Quiet".into(),
             node_id: NodeId::from_u128(0xC0DE),
         };
-        assert!(admit_media(Some(&other), dialer(), origin(), &by_name).is_none());
+        assert!(admit_media(Some(&other), dialer(), origin(), &by_name, &[]).is_none());
         // A three-character prefix is not a name for anyone.
-        assert!(admit_media(Some(&who()), dialer(), origin(), &["nod".to_string()]).is_none());
+        assert!(admit_media(Some(&who()), dialer(), origin(), &["nod".to_string()], &[]).is_none());
     }
 
     /// No declared origin means the protocol is not advertised; a member's
     /// dial is closed, not forwarded to a port nothing listens on.
     #[test]
     fn no_declared_origin_closes_even_a_member() {
-        assert!(admit_media(Some(&who()), dialer(), None, &[]).is_none());
+        assert!(admit_media(Some(&who()), dialer(), None, &[], &[]).is_none());
     }
 }

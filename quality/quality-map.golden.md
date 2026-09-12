@@ -269,11 +269,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-<<<<<<< HEAD
-### What CI does not run (73 of 99)
-=======
-### What CI does not run (71 of 98)
->>>>>>> origin
+### What CI does not run (73 of 100)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -357,9 +353,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-<<<<<<< HEAD
-**99 instruments, 12 with a negative control, 48 unmeasured cost, 33 by-hand only.** (0 run nowhere at all.)
-=======
-**98 instruments, 12 with a negative control, 48 unmeasured cost, 31 by-hand only.** (0 run nowhere at all.)
->>>>>>> origin
+**100 instruments, 12 with a negative control, 48 unmeasured cost, 33 by-hand only.** (0 run nowhere at all.)
 

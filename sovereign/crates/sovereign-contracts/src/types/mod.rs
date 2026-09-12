@@ -187,7 +187,11 @@ pub mod answer_doc;
 // 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary
 // crate is one no other process can speak.
 mod turn;
-pub use turn::{TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest};
+pub use turn::{
+    is_degenerate_message, is_document_attached, TurnAnswer, TurnFrame, TurnMode, TurnNotice,
+    TurnPrompt, TurnRequest, DEGENERATE_MESSAGE_HINT, DOCUMENT_ATTACHED_PREFIX,
+    OVERSIZE_MESSAGE_HINT,
+};
 
 /// Desk-domain outcome types that cross the wire. A submodule since
 /// sv-surface R1 (2026-09-09), when `TurnNotice` started carrying them:

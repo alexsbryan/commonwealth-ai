@@ -30,7 +30,6 @@ mod recipe_commands;
 mod routing_events;
 mod serving_host;
 mod setup_flow;
-mod smoketest;
 mod state;
 mod tray;
 mod turn_report;
@@ -59,7 +58,6 @@ use std::sync::Arc;
 use sovereign_contracts::launch::Launch;
 use tauri::{Emitter, Manager};
 
-use crate::approval::TauriApprovalChannel;
 use crate::state::AppState;
 
 /// What the app says when it is handed a daemon role it can no longer fill.
@@ -113,25 +111,21 @@ fn main() -> ExitCode {
     // this match saw rather than re-deriving one.
     launch_mode::publish(launch.clone());
     match launch {
-        // Skip Tauri entirely: load one model, decode one token, exit. The
-        // parent spawns this to detect ggml backend crashes (e.g. the Gemma 4
-        // Metal SIGSEGV) before loading into the user-facing slot.
-        // `detect_and_run` re-reads the FULL argv for `--model` / `--gpu-layers`
-        // / `--ctx`; `None` means it declined, and falling through to the GUI
-        // is what this path did before.
-        Launch::Smoketest { .. } => {
-            if let Some(code) = smoketest::detect_and_run(&argv) {
-                return code;
-            }
-        }
-
-        // The daemon roles this binary can no longer fill. Nothing in the tree
+        // The roles this binary can no longer fill. Nothing in the tree
         // spawns them at the desktop any more, so reaching here means a stale
         // service definition, a stale script, or a habit — and the answer is
         // to SAY SO, not to open a window (ARCH principle 6: never silently
         // substitute; a GUI is not a daemon). Named individually rather than
         // wildcarded so a new `Launch` variant still has to be decided.
-        Launch::Daemon { .. }
+        //
+        // `Smoketest` joined them at svt-3. It re-entered this binary to load
+        // one GGUF and decode one token in a child, so a ggml backend crash
+        // (the Gemma-4-on-Metal SIGSEGV) killed the probe instead of the
+        // window — a guard over an in-process model load, and this process no
+        // longer performs one. The daemon is what loads models, and the
+        // crash-isolation question is its to answer.
+        Launch::Smoketest { .. }
+        | Launch::Daemon { .. }
         | Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
         | Launch::Worker { .. } => {
@@ -323,9 +317,6 @@ fn main() -> ExitCode {
 
             let handle = app.handle().clone();
 
-            // Create approval channel with app handle for event emission.
-            let approval = Arc::new(TauriApprovalChannel::new(handle.clone()));
-
             // Probe `:9741` to decide whether a CLI-started daemon is
             // already running. If so, we skip starting our own
             // `EmbeddedDaemon` (same port, same mesh.json — collision
@@ -358,31 +349,37 @@ fn main() -> ExitCode {
             }
 
             // Create app state (loads config, no Runtime yet).
-            let app_state = AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode);
+            let app_state = AppState::new_with_mode(handle.clone(), bootstrap_mode);
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
-            // Opt-in Mobile access: if enabled in the desktop config, start the
-            // supervised `sovereign-server` host at launch. It delegates all
-            // inference to the local daemon, so it loads no models of its own.
+            // Opt-in Mobile access: if enabled in the desktop config, make sure
+            // the `sovereign-server` phone-facing host is reachable. It
+            // delegates all inference to the daemon, so it loads no models.
+            //
+            // `ensure_running`, not `start` + a `JoinHandle` stashed on
+            // `AppState`. The handle was the bring-up TASK, not the child, so
+            // aborting it stopped nothing — the app held a lifecycle it could
+            // not actually exercise. Toggle-off is an authenticated
+            // `POST /v1/admin/shutdown` on the host itself.
             {
                 let st = Arc::clone(&app_state);
-                let enabled = tauri::async_runtime::block_on(async {
-                    st.config.read().await.mobile_access_enabled
-                });
-                if enabled {
-                    match mobile_host_setup::start() {
-                        Ok(h) => {
-                            tauri::async_runtime::block_on(async {
-                                *st.mobile_host_supervisor.write().await = Some(h);
-                            });
-                            tracing::info!("mobile-access: started at launch (config enabled)");
-                        }
-                        Err(e) => {
-                            tracing::warn!("mobile-access: failed to start at launch: {e}")
-                        }
+                tauri::async_runtime::block_on(async move {
+                    if !st.config.read().await.mobile_access_enabled {
+                        return;
                     }
-                }
+                    match mobile_host_setup::ensure_running().await {
+                        Ok(()) => tracing::info!(
+                            "mobile-access: host reachable at launch (config enabled)"
+                        ),
+                        // Named, not swallowed: Mobile access is ON in the
+                        // config and is not available this session.
+                        Err(e) => tracing::warn!(
+                            error = %e,
+                            "mobile-access: enabled in config but the host could not be reached"
+                        ),
+                    }
+                });
             }
 
             // Set up system tray.
@@ -586,40 +583,6 @@ fn main() -> ExitCode {
                             }
                         }
 
-                        // Install OCR context if the manager came up
-                        // and the Tesseract sidecar is bundled. No-op
-                        // when not available — `lc_ocr_available`
-                        // tells the UI to hide the OCR offer.
-                        if let Some(mgr) = state_clone.local_corpus.read().await.as_ref().cloned() {
-                            // Daemon client URL — resolved from the
-                            // bootstrap mode so a non-default port works.
-                            let daemon_url = state_clone.client_base_url();
-                            // Resolve the chat model's name (file stem)
-                            // so the cleanup pass can target it by name.
-                            // The daemon registers each loaded slot under
-                            // its file stem (see
-                            // `register_local_model_slots` in
-                            // sovereign-mesh), and there's no "fast"
-                            // alias in the routing layer — passing
-                            // `"fast"` would 503 on a CLI-daemon
-                            // setup. Falls back to "fast" only as a
-                            // last resort for older configs without a
-                            // model_path set.
-                            let cleanup_model = crate::state::ResolvedModelSlots::load_or_default()
-                                .fast
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .map(|s| s.to_string())
-                                .filter(|s| !s.is_empty())
-                                .unwrap_or_else(|| "fast".to_string());
-                            local_corpus_commands::install_ocr_ctx_for_app(
-                                &handle_clone,
-                                &mgr,
-                                daemon_url,
-                                cleanup_model,
-                            )
-                            .await;
-                        }
                     }
                     Err(e) => {
                         tracing::error!("Bootstrap failed: {e}");

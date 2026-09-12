@@ -406,11 +406,8 @@ pub async fn run(
                 indeterminate: false,
             },
         );
-        if relaunch_after_setup(&app).await {
-            return Ok(());
-        }
-        // Restart didn't take (spawn failure) — continue in-process;
-        // the duplicate marker/report writes below are idempotent.
+        relaunch_after_setup(&app).await;
+        return Ok(());
     }
 
     // ── 6. Bootstrap with progress narration ────────────────────
@@ -635,24 +632,44 @@ pub(crate) fn daemon_runs_elsewhere() -> bool {
 
 /// Relaunch the app so the next session starts with a config on disk.
 ///
-/// Returns `true` when the relaunch was initiated — the process is on its way
-/// out and the caller must NOT bootstrap in-process. `false` when the spawn
-/// failed, in which case the caller keeps the in-process completion.
-///
 /// This was `supervisor_setup::maybe_restart_into_supervised` and it relaunched
 /// into a SUPERVISED topology; the reason it still exists without a supervisor
 /// is that the app's one look for a serving host (`serving_host::
 /// ensure_reachable`) happens at startup, before the wizard has written
 /// `config.toml`. The wizard session therefore has no daemon and cannot
 /// acquire one; the fresh instance can.
-pub(crate) async fn relaunch_after_setup(app_handle: &AppHandle) -> bool {
-    let exe = match std::env::current_exe() {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!(error = %e, "setup-restart: current_exe failed — finishing in-process");
-            return false;
-        }
-    };
+///
+/// # Why this asks Tauri rather than spawning
+///
+/// It used to be `std::process::Command::new(current_exe()).spawn()` followed
+/// by `exit(0)`, and sv-surface's lifecycle census counted that as a thin
+/// surface starting a process (`quality/ARCH_LAYERS.toml`, the row this
+/// deletes). `AppHandle::request_restart` grants no ability the census is
+/// refusing — it restarts THIS app and can address nothing else — and it is
+/// strictly better at the job in three ways the hand-rolled version got wrong:
+///
+/// - **macOS bundles.** `current_exe()` inside a `.app` is
+///   `Contents/MacOS/<binary>`; spawning that path directly re-launches the
+///   executable outside its bundle. Tauri reads `CFBundleExecutable` out of
+///   `Contents/Info.plist` and launches the bundle
+///   (`tauri-2.11.1/src/process.rs:92-128`).
+/// - **Argv.** The old spawn passed NONE, so a launch carrying arguments lost
+///   them across setup. Tauri forwards `args_os[1..]` (`process.rs:83`).
+/// - **Teardown.** `cleanup_before_exit` runs (`app.rs:606`); the old path
+///   skipped it, taking the tray icon and any window state with it.
+///
+/// It returns `()` rather than the old `bool`: the caller's `false` branch
+/// existed for `spawn()` failing, and there is no longer a spawn to fail.
+/// `request_restart` sets the restart flag and asks the event loop to exit,
+/// falling back to an immediate restart if that request cannot be delivered
+/// (`app.rs:621-624`) — so every path leaves through a restart and the caller
+/// must never bootstrap in-process after calling this.
+///
+/// What it does NOT do is make the relaunch unnecessary. That needs the app's
+/// serving-host look to happen AFTER the wizard writes `config.toml`, which
+/// means re-resolving `bootstrap_mode` — `main.rs` and `state.rs`, neither of
+/// which this change owns.
+pub(crate) async fn relaunch_after_setup(app_handle: &AppHandle) {
     // Let the wizard UI say why the window is about to close, and give the
     // webview a beat to paint it.
     let _ = app_handle.emit(
@@ -660,17 +677,8 @@ pub(crate) async fn relaunch_after_setup(app_handle: &AppHandle) -> bool {
         serde_json::json!({ "reason": "connecting to your local backend" }),
     );
     tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-    match std::process::Command::new(&exe).spawn() {
-        Ok(_) => {
-            tracing::info!("setup complete — relaunching so the new config is read at startup");
-            app_handle.exit(0);
-            true
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "setup-restart: relaunch spawn failed — finishing in-process");
-            false
-        }
-    }
+    tracing::info!("setup complete — relaunching so the new config is read at startup");
+    app_handle.request_restart();
 }
 
 /// Write `~/.svrnmesh/first_run_complete` with an ISO-8601

@@ -1,6 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Installing a recipe the user wrote, by path — putting the file where
+//! Installing a recipe the user wrote — putting the file where
 //! [`crate::registry::RecipeRegistry`] will find it.
+//!
+//! TWO journeys live here, and they are not the same one (which is why
+//! neither absorbed the other on 2026-09-12, when the second arrived):
+//!
+//! - [`register`] — "install THIS FILE": the caller has a path to a
+//!   `.toml` an author just wrote. It re-serialises the doc (because it
+//!   REWRITES the relative `[acquire] path` on the way through) and
+//!   writes no registry entry, because the id it returns is about to be
+//!   installed by the caller and resolution step 1 reads the file
+//!   directly.
+//! - [`RecipeRegistry::install_local_recipe`] — "PUBLISH this recipe":
+//!   `svrn recipe publish` and the daemon's
+//!   `/internal/corpus/recipes/import` want the recipe to show up in
+//!   `list_entries` afterwards, which means a `registry.toml` entry
+//!   carrying a sha256 OF THE BYTES ON DISK. So it writes the text
+//!   VERBATIM, and both writes are staged-and-renamed.
+//!
+//! What they DO share is the layout — `<recipes_dir>/<id>/recipe.toml` —
+//! and that is [`recipe_path_in`], called by both. Two functions deciding
+//! one path is the smell (ARCH principle 8); two functions doing
+//! different things to it is not.
 //!
 //! A corpus is addressed by ID, and the registry resolves that ID through a
 //! hand-written recipe only at `<recipes_dir>/<id>/recipe.toml` (`registry.rs`
@@ -29,6 +50,10 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::error::Error;
+use crate::recipe::Recipe;
+use crate::registry::{RecipeRegistry, RegistryEntry, RegistrySnapshot};
+
 /// What [`register`] did, so the caller can report it and then install `id`.
 #[derive(Debug)]
 pub struct Registered {
@@ -39,6 +64,24 @@ pub struct Registered {
     /// `Some((before, after))` when a relative `[acquire] path` was resolved
     /// against the recipe's own directory.
     pub acquire_rewrite: Option<(String, String)>,
+}
+
+/// WHERE a recipe for `id` lives under `recipes_dir` — the one place this
+/// layout is decided. `registry.rs`'s resolution step 1 reads exactly this
+/// path, and both writers below produce it.
+///
+/// The dir is exposed alongside the file because both writers need to
+/// `create_dir_all` it first. Deriving it back out of the path with
+/// `.parent().expect(..)` is a panic that cannot fire and still has to be
+/// read by the next person; two functions that agree by construction say
+/// it better.
+pub fn recipe_dir_in(recipes_dir: &Path, id: &str) -> PathBuf {
+    recipes_dir.join(id)
+}
+
+/// The recipe file itself: [`recipe_dir_in`] plus `recipe.toml`.
+pub fn recipe_path_in(recipes_dir: &Path, id: &str) -> PathBuf {
+    recipe_dir_in(recipes_dir, id).join("recipe.toml")
 }
 
 /// Does this argument name a recipe FILE rather than a corpus id?
@@ -88,9 +131,9 @@ pub fn register(path: &Path, recipes_dir: &Path) -> Result<Registered, String> {
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let acquire_rewrite = resolve_acquire_path(&mut doc, &recipe_dir)?;
 
-    let dir = recipes_dir.join(&id);
+    let dir = recipe_dir_in(recipes_dir, &id);
     std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
-    let dest = dir.join("recipe.toml");
+    let dest = recipe_path_in(recipes_dir, &id);
     let body =
         toml::to_string_pretty(&doc).map_err(|e| format!("re-serializing the recipe: {e}"))?;
     std::fs::write(&dest, body).map_err(|e| format!("writing {}: {e}", dest.display()))?;
@@ -155,9 +198,296 @@ fn resolve_acquire_path(
     Ok(Some((before, after)))
 }
 
+impl RecipeRegistry {
+    /// Install an authored recipe into THIS registry's overrides dir: the
+    /// TOML at `<overrides_dir>/<id>/recipe.toml` and an upserted entry in
+    /// `<overrides_dir>/registry.toml`. Returns the recipe's path.
+    ///
+    /// The ONE decider for "a user published a recipe" (ARCH principle 8).
+    /// Two copies of this loop preceded it — `svrn recipe publish`'s
+    /// `upsert_local_registry_entry` and the desktop's
+    /// `corpus_import_recipe` — and they could not agree by construction,
+    /// because each resolved its own local root: the desktop's wrote into
+    /// `~/.svrnmesh/recipes` whatever recipes dir the daemon was actually
+    /// commissioned with. Installing through the registry that will RESOLVE
+    /// the recipe is what makes the round trip hold, and is why this takes
+    /// no path argument.
+    ///
+    /// `toml_text` is written VERBATIM, not reserialised: the digest in the
+    /// registry entry is over these bytes, so a round trip through
+    /// `toml::to_string` would record a sha256 of something other than what
+    /// is on disk. Both writes are staged-and-renamed.
+    ///
+    /// An `overrides_dir` of `None` is an error naming it, never a silent
+    /// skip (ARCH principle 6) — a caller with no local root did not
+    /// publish anything, and `cache_recipe`'s `Ok(None)` above is about an
+    /// absent CACHE, which is a different fact.
+    pub fn install_local_recipe(
+        &self,
+        recipe: &Recipe,
+        toml_text: &str,
+    ) -> crate::error::Result<PathBuf> {
+        let local_root = self.overrides_dir().ok_or_else(|| {
+            Error::Recipe(
+                "this registry has no overrides dir, so there is nowhere to install a \
+                 recipe; build it with `from_bundled(Some(recipes_dir))`"
+                    .to_string(),
+            )
+        })?;
+        if recipe.corpus.id.is_empty() {
+            return Err(Error::Recipe(
+                "recipe `[corpus] id` must not be empty".to_string(),
+            ));
+        }
+
+        std::fs::create_dir_all(recipe_dir_in(local_root, &recipe.corpus.id))?;
+        let recipe_path = recipe_path_in(local_root, &recipe.corpus.id);
+        write_atomically(&recipe_path, toml_text.as_bytes())?;
+
+        let registry_path = local_root.join("registry.toml");
+        // ABSENT and UNREADABLE are not the same fact, and the difference
+        // matters here because the next thing this function does is
+        // overwrite the file: a first publish has no registry (fresh
+        // snapshot), while a registry we cannot READ — a permission, a
+        // directory in its place — must refuse rather than be replaced by
+        // one entry. Both prior copies of this loop said
+        // `unwrap_or_default()` and would have silently discarded the
+        // user's whole published set (ARCH principle 6).
+        let existing = match std::fs::read_to_string(&registry_path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => {
+                return Err(Error::Recipe(format!(
+                    "local registry at {} exists but cannot be read ({e}); refusing to \
+                     replace it",
+                    registry_path.display()
+                )))
+            }
+        };
+        // A local registry we cannot parse is replaced rather than refused:
+        // both prior copies did this, and the alternative is a user whose
+        // one corrupt file blocks every future publish.
+        let mut snapshot: RegistrySnapshot = toml::from_str(&existing).unwrap_or_else(|_| {
+            if !existing.is_empty() {
+                tracing::warn!(
+                    path = %registry_path.display(),
+                    "local registry did not parse — replacing it with a fresh snapshot"
+                );
+            }
+            RegistrySnapshot {
+                schema_version: 1,
+                generated_at: String::new(),
+                registry_url: String::new(),
+                entries: Vec::new(),
+            }
+        });
+        snapshot.entries.retain(|e| e.id != recipe.corpus.id);
+        snapshot.entries.push(RegistryEntry {
+            id: recipe.corpus.id.clone(),
+            name: recipe.corpus.name.clone(),
+            description: recipe.corpus.description.clone(),
+            license: recipe.corpus.license.clone(),
+            size_compressed_gb: recipe.corpus.size_compressed_gb,
+            size_indexed_gb: recipe.corpus.size_indexed_gb,
+            toml_url: format!("file://{}/recipe.toml", recipe.corpus.id),
+            sha256: sha256_hex(toml_text.as_bytes()),
+            enrichment_enabled: recipe
+                .enrichment
+                .as_ref()
+                .map(|e| e.enabled)
+                .unwrap_or(false),
+            mesh_sharing: recipe.corpus.mesh_sharing,
+            prebuilt: None,
+            parent_corpus_id: recipe.corpus.parent_corpus_id.clone(),
+            catalog_status: None,
+        });
+        snapshot.generated_at = chrono::Utc::now().to_rfc3339();
+
+        let serialized = toml::to_string_pretty(&snapshot)
+            .map_err(|e| Error::Recipe(format!("serialise local registry: {e}")))?;
+        write_atomically(&registry_path, serialized.as_bytes())?;
+
+        tracing::debug!(
+            corpus = %recipe.corpus.id,
+            path = %recipe_path.display(),
+            entries = snapshot.entries.len(),
+            "installed recipe into the local registry"
+        );
+        Ok(recipe_path)
+    }
+}
+
+/// Lowercase hex SHA-256 — the digest form every `registry.toml` entry
+/// carries, and the one [`verify_sha256`] below checks against.
+pub(crate) fn sha256_hex(data: &[u8]) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(data);
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Stage beside the destination, then rename: a reader never sees a
+/// half-written recipe or registry. `.part` is the suffix both prior
+/// copies used.
+fn write_atomically(path: &Path, bytes: &[u8]) -> crate::error::Result<()> {
+    let part = path.with_extension("toml.part");
+    std::fs::write(&part, bytes)?;
+    std::fs::rename(&part, path)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A minimal recipe that passes `Recipe::from_toml`, parameterised by
+    /// id so each test owns its own entry.
+    fn round_trip_recipe_toml(id: &str) -> String {
+        format!(
+            r#"
+[corpus]
+id = "{id}"
+name = "NAME"
+description = "d"
+license = "Public Domain"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.001
+
+[acquire]
+type = "bulk_download"
+url = "https://example.invalid/x.txt"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+"#
+        )
+    }
+
+    /// The round trip the recipe-import route depends on: a recipe
+    /// installed through a registry is then RESOLVED by the same registry,
+    /// out of the overrides dir it was installed into — the fault being
+    /// prevented is a publisher writing where the resolver does not read.
+    #[tokio::test]
+    async fn install_local_recipe_lands_where_fetch_recipe_resolves() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let registry = RecipeRegistry::from_bundled(Some(tmp.path().to_path_buf()));
+        let toml_text = round_trip_recipe_toml("install-round-trip");
+        let recipe = Recipe::from_toml(&toml_text).expect("recipe parses");
+        let path = registry
+            .install_local_recipe(&recipe, &toml_text)
+            .expect("install succeeds");
+
+        assert_eq!(path, tmp.path().join("install-round-trip/recipe.toml"));
+        // Written verbatim: the digest in the entry is over THESE bytes.
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read back"),
+            toml_text
+        );
+        let registry_toml =
+            std::fs::read_to_string(tmp.path().join("registry.toml")).expect("registry written");
+        let snapshot: RegistrySnapshot =
+            toml::from_str(&registry_toml).expect("registry parses back");
+        assert_eq!(snapshot.entries.len(), 1);
+        assert_eq!(snapshot.entries[0].id, "install-round-trip");
+        assert_eq!(snapshot.entries[0].sha256, sha256_hex(toml_text.as_bytes()));
+        assert!(!snapshot.generated_at.is_empty());
+        // No `.part` survives either write.
+        assert!(!tmp.path().join("registry.toml.part").exists());
+
+        // The resolver reads the subdir layout off disk, so the recipe is
+        // installable with no reload of this registry.
+        let resolved = registry
+            .fetch_recipe("install-round-trip")
+            .await
+            .expect("the same registry resolves what it installed");
+        assert_eq!(resolved.corpus.id, "install-round-trip");
+    }
+
+    /// A second install of the same id replaces the entry rather than
+    /// appending a duplicate, and a corrupt local registry is replaced
+    /// rather than blocking every future publish.
+    #[test]
+    fn install_local_recipe_upserts_and_survives_a_corrupt_registry() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("registry.toml"), "this is not toml {{{")
+            .expect("seed a corrupt registry");
+        let registry = RecipeRegistry::from_bundled(Some(tmp.path().to_path_buf()));
+        let base = round_trip_recipe_toml("upsert-me");
+        let first = Recipe::from_toml(&base).expect("parses");
+        registry
+            .install_local_recipe(&first, &base)
+            .expect("first install");
+        let renamed_text = base.replace("name = \"NAME\"", "name = \"RENAMED\"");
+        let second = Recipe::from_toml(&renamed_text).expect("parses");
+        registry
+            .install_local_recipe(&second, &renamed_text)
+            .expect("second install");
+
+        let snapshot: RegistrySnapshot = toml::from_str(
+            &std::fs::read_to_string(tmp.path().join("registry.toml")).expect("read"),
+        )
+        .expect("parses");
+        assert_eq!(snapshot.entries.len(), 1, "upsert, not append");
+        assert_eq!(snapshot.entries[0].name, "RENAMED");
+        assert_eq!(
+            snapshot.entries[0].sha256,
+            sha256_hex(renamed_text.as_bytes()),
+            "the digest follows the bytes that are now on disk"
+        );
+    }
+
+    /// A registry file that EXISTS and cannot be read refuses, rather
+    /// than being replaced by a one-entry snapshot. A directory in its
+    /// place is the failing input: `read_to_string` returns an error that
+    /// is not `NotFound`, which is exactly the case `unwrap_or_default()`
+    /// used to swallow.
+    #[test]
+    fn install_local_recipe_refuses_an_unreadable_registry() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(tmp.path().join("registry.toml"))
+            .expect("put a directory where the registry file goes");
+        let registry = RecipeRegistry::from_bundled(Some(tmp.path().to_path_buf()));
+        let toml_text = round_trip_recipe_toml("unreadable-registry");
+        let recipe = Recipe::from_toml(&toml_text).expect("parses");
+
+        let err = registry
+            .install_local_recipe(&recipe, &toml_text)
+            .expect_err("an unreadable registry refuses");
+        assert!(
+            err.to_string().contains("cannot be read"),
+            "the refusal says the registry could not be read: {err}"
+        );
+        // And it is still there — not replaced by one entry.
+        assert!(tmp.path().join("registry.toml").is_dir());
+    }
+
+    /// A registry with no overrides dir REFUSES rather than quietly
+    /// installing nowhere (ARCH principle 6).
+    #[test]
+    fn install_local_recipe_refuses_without_an_overrides_dir() {
+        let registry = RecipeRegistry::from_bundled(None);
+        let toml_text = round_trip_recipe_toml("nowhere");
+        let recipe = Recipe::from_toml(&toml_text).expect("parses");
+        let err = registry
+            .install_local_recipe(&recipe, &toml_text)
+            .expect_err("no overrides dir is an error, not a silent skip");
+        assert!(
+            err.to_string().contains("overrides dir"),
+            "the refusal names what is missing: {err}"
+        );
+    }
 
     fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
         let p = dir.join(name);

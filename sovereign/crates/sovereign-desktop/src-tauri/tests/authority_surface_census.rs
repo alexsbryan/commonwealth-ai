@@ -16,7 +16,36 @@
 //! DO register it. `SYSTEM_OVERVIEW.md` (authority guard) carries the general
 //! shape: arming reads the registry of the process that serves the turn.
 //!
-//! # The census now follows the composition, and that is a rewrite
+//! # The chain CROSSED A PROCESS at svt-3b, and this is the second rewrite
+//!
+//! The desktop composed the recipe and answered turns. It does neither now:
+//! `state.rs` commissions no `Runtime` and registers no tool, so hop 2 —
+//! "state.rs composes `baseline_bundles`" — went red, and the census's own
+//! error text said what to do ("if the desktop stopped using the shared
+//! recipe … this census must be rewritten to the path it actually takes").
+//!
+//! **Hop 1 still holds and that is the whole reason this file survives**: the
+//! desktop can STILL install an SEC corpus by ticker
+//! (`sec_edgar::register(&engine_builder)`, `state.rs`). What changed is who
+//! answers a question about it — the daemon, which composes the SAME
+//! `baseline_bundles`. So the invariant is unchanged and its chain now runs
+//! across two processes:
+//!
+//!   desktop installs into `svrnmesh_root()/indexes`
+//!     -> daemon's engine reads THAT SAME ROOT
+//!       -> daemon composes `baseline_bundles`
+//!         -> `CoreTurnTools` registers `sec_facts`
+//!           -> no `ToolFamily`, so no switch can withhold it
+//!
+//! The shared root is what makes the split safe and it is asserted (hop 2a):
+//! both processes resolve their index directory through
+//! `rebrand::svrnmesh_root()`, so a corpus the desktop installs is one the
+//! daemon's `authority_domains()` covers. If either side ever derived its own
+//! path, the desktop could install a corpus the answering process cannot see
+//! — which reads as "no authority declared" and falls through to ungrounded
+//! KnowledgeQuery streaming, the exact fabrication this census exists to stop.
+//!
+//! # The composition census, and the rewrite before this one
 //!
 //! Until 2026-08-26 this scanned `state.rs` for the literal
 //! `sec_facts::SecFactsTool::new(`, because that is where the registration
@@ -46,6 +75,8 @@
 
 const STATE_RS: &str = include_str!("../src/state.rs");
 const RECIPE_RS: &str = include_str!("../../../sovereign-runtime-recipe/src/lib.rs");
+/// The process that ANSWERS a question about a corpus the desktop installed.
+const DAEMON_RS: &str = include_str!("../../../sovereign-cli-daemon/src/daemon_cmd/mod.rs");
 const BUNDLES_RS: &str = include_str!("../../../sovereign-tools/src/bundles.rs");
 const SEC_FACTS_RS: &str = include_str!("../../../sovereign-tools/src/sec_facts.rs");
 
@@ -74,13 +105,41 @@ fn registering_the_sec_acquirer_obliges_registering_the_sec_facts_tool() {
          moved, move this census with it rather than deleting it"
     );
 
-    // Hop 2 — and it composes the shared baseline.
+    // Hop 2a — the two processes share ONE index root, which is what lets the
+    // install and the authority declaration live on opposite sides of a wire.
+    let root = format!("rebrand::svrnmesh_{}", "root()");
     assert!(
-        STATE_RS.contains(&baseline),
-        "state.rs registers the sec_edgar acquirer ({acquirer}) but no longer \
-         composes {baseline}. If the desktop stopped using the shared recipe, \
-         it must name {tool} itself, and this census must be rewritten to the \
-         path it actually takes."
+        STATE_RS.contains(&root),
+        "state.rs installs an SEC corpus but no longer resolves its index \
+         directory through {root}. A privately-derived path means the desktop \
+         can install a corpus the ANSWERING process cannot see, which reads as \
+         `not armed — no evidence corpus declares authority` and falls through \
+         to ungrounded streaming."
+    );
+    assert!(
+        DAEMON_RS.contains(&root) || DAEMON_RS.contains("data.dir"),
+        "the daemon no longer resolves its index root from the shared config \
+         or the branded root, so it and the desktop can disagree about where \
+         an installed corpus lives"
+    );
+
+    // Hop 2b — and the process that ANSWERS composes the shared baseline.
+    //
+    // This was `STATE_RS.contains(&baseline)` until svt-3b, when the desktop
+    // stopped commissioning a Runtime. The subject moved to the daemon; the
+    // invariant did not.
+    assert!(
+        DAEMON_RS.contains(&baseline),
+        "the daemon serves turns over a corpus the desktop can install \
+         ({acquirer}) but no longer composes {baseline}. It must then name \
+         {tool} itself, and this census must be rewritten to the path it \
+         actually takes."
+    );
+    assert!(
+        !STATE_RS.contains(&baseline),
+        "state.rs composes {baseline} again — the desktop is assembling a turn \
+         (sv-surface svt-3b removed that). If in-process hosting came back as \
+         a DECLARED mode, this census needs the hop restored, not deleted."
     );
 
     // Hop 3 — the baseline carries the core turn family.

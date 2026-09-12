@@ -1673,11 +1673,16 @@ status       = "open"
 # rule a passing subject and a failing one on the same run; a green over one
 # input is an absence of input, not a claim (ARCH principle 5).
 #
-# corpus-engine is NOT on the may_not_reach list although this bar's
-# floor_basis names it: sovereign-core reaches it, so forbidding it makes the
-# rule unsatisfiable for any surface that keeps core — and it binds no
-# listener and hosts nothing. It is on the floor as SIZE, which size-gate is
-# the instrument for.
+# corpus-engine was NOT on the may_not_reach list when the rule landed, on
+# the argument that sovereign-core reaches it and forbidding it made the rule
+# unsatisfiable for any surface that keeps core. SUPERSEDED THE SAME EVENING:
+# the operator called the engine in the app "leaking off domain boundary",
+# and the honest reading is that a surface which keeps core is not thin
+# either. `[thin_surfaces]` is the ALLOWLIST form now — `may_reach` names the
+# contract layer plus sovereign-tools-base (web search's declared exception)
+# and everything else a surface reaches is a violation. Each crate the
+# desktop still reaches is an [[exception]] row naming what holds it; the
+# rows are the burn-down and go stale as the teardown lands.
 #
 # HALF TWO: `cargo xtask lifecycle-gate`. Four rules — starts / detaches /
 # retains / reaps — over `src/**/*.rs` of the SAME surface list, plus the

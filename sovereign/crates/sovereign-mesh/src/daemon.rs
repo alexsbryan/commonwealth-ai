@@ -481,20 +481,9 @@ pub struct IrohPeerPath {
 
 /// The founder's OWN iroh reachability (Track W hardening), for
 /// `/v1/mesh/status.self_reachability` and the desktop "Reachable /
-/// Reconnecting" indicator. Flattens the reachability watchdog's live health
-/// snapshot so the wire object is one flat record.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SelfReachability {
-    /// This node's current dial-by-key string (all relays + direct addrs), or
-    /// `None` before any reachable address is known.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub dial: Option<String>,
-    /// iroh endpoint id (hex).
-    pub endpoint_id: String,
-    /// Live watchdog health: relay-homed, discovery probe, recovery history.
-    #[serde(flatten)]
-    pub health: crate::iroh_watchdog::ReachabilityStatus,
-}
+/// Reconnecting" indicator. A wire record, so it is defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+pub use sovereign_contracts::daemon_wire::SelfReachability;
 
 /// Result of joining an existing mesh.
 pub struct JoinMeshResult {
@@ -3357,6 +3346,13 @@ impl EmbeddedDaemon {
                 Arc::clone(&self_arc),
             ));
             mount_names.push("corpus_catalog_http");
+            // thin-desktop order (2026-09-11) — the recipe-registry import and
+            // the `[parameters]` read, beside the catalogue they install into.
+            // Unconditional for `corpus_catalog_http`'s reason: a daemon with
+            // no corpus engine answers 503 naming that, which is a different
+            // fact from an unmounted router's 404.
+            mounted.push(crate::recipe_http::recipe_router(Arc::clone(&self_arc)));
+            mount_names.push("recipe_http");
             // sv-surface rung 6 — the insight surface. Mounted
             // unconditionally on serving daemons; a commission that built no
             // `InsightService` answers 503 with that named reason on these
@@ -3377,6 +3373,12 @@ impl EmbeddedDaemon {
             // different fact from an unmounted route's 404.
             mounted.push(crate::meshapp_http::meshapp_router(Arc::clone(&self_arc)));
             mount_names.push("meshapp_http");
+            // thin-desktop order (2026-09-11) — the enrichment-store reads:
+            // the enriched-corpus inventory and the starter questions the
+            // desktop used to fold from every atom it pulled over the wire.
+            // Unconditional for the same reason as the three above.
+            mounted.push(crate::enrich_http::enrich_router(Arc::clone(&self_arc)));
+            mount_names.push("enrich_http");
             // sv-surface D6 — notes CRUD over the store the `/mcp` surface and
             // `/v1/notes/tool-outcome` already write to. Unconditional; a
             // commission whose `notes.db` would not open answers 503 naming
@@ -3423,6 +3425,14 @@ impl EmbeddedDaemon {
             // runtime was never installed answers 503 naming that.
             mounted.push(crate::lc_http::lc_router());
             mount_names.push("lc_http");
+            // sv-surface (2026-09-11) — deep research as a daemon JOB. Takes
+            // no `Arc<Self>` for `lc_http`'s reason: `launch::prepare`
+            // resolves the daemon endpoint and models from `SetupConfig`
+            // itself, so the router is built from nothing. A daemon whose
+            // config names no models answers the capabilities route with
+            // that error and `POST /v1/research` with a 400 naming it.
+            mounted.push(crate::research_http::research_router());
+            mount_names.push("research_http");
             for (router, name) in self
                 .services
                 .host_routers()

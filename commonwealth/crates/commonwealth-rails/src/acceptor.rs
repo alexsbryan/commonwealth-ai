@@ -59,6 +59,7 @@ pub fn spawn(
     mesh: Arc<RwLock<Mesh>>,
     media_origin: Option<SocketAddr>,
     media_allow: Vec<String>,
+    media_declared: Vec<(String, String)>,
 ) -> IrohAcceptor {
     let check = member_check(mesh);
     tracing::info!(
@@ -66,11 +67,16 @@ pub fn spawn(
         internal = %internal_addr,
         media_origin = ?media_origin,
         media_allow = ?media_allow,
+        // NAMES only. The values are this node's credentials for its own
+        // origin; whether one is set is operational, what it is never is.
+        media_declared = ?media_declared.iter().map(|(n, _)| n).collect::<Vec<_>>(),
         "acceptor: serving cwth/http/0 (gossip) and cwth/media/0 (origin)"
     );
+    let media_declared = Arc::new(media_declared);
     IrohAcceptor::spawn_admitting_forward(endpoint, move |alpn, dialer| {
         let check = check.clone();
         let allow = media_allow.clone();
+        let declared = media_declared.clone();
         async move {
             if alpn == ALPN {
                 tracing::debug!(
@@ -83,7 +89,13 @@ pub fn spawn(
             }
             if alpn == MEDIA_ALPN {
                 let who = check(dialer).await;
-                return commonwealth_media::admit_media(who.as_ref(), dialer, media_origin, &allow);
+                return commonwealth_media::admit_media(
+                    who.as_ref(),
+                    dialer,
+                    media_origin,
+                    &allow,
+                    &declared,
+                );
             }
             tracing::warn!(
                 target: "rails",
