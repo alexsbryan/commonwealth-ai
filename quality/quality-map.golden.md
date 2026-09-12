@@ -32,6 +32,7 @@
 | `feature-powerset` | `cargo hack check --feature-powerset --depth 2 --no-dev-deps` | advisory | F0 | unmeasured | **no** |
 | `hook-wiring` | `bash .claude/hooks/tests/settings-wiring.sh` | hard | F0 | 0.30s | **no** |
 | `instrument-gate` | `cargo xtask instrument-gate` | hard | F0 | 0.04s | yes |
+| `judge-funnel-gate` | `cargo xtask judge-funnel-gate` | hard | F0 | 0.42s | yes |
 | `layer-gate` | `cargo xtask layer-gate` | hard | F0 | 0.10s | yes |
 | `layout-gate` | `cargo xtask layout-gate` | hard | F0 | 3s | yes |
 | `lifecycle-gate` | `cargo xtask lifecycle-gate` | hard | F0 | 0.10s | yes |
@@ -76,6 +77,7 @@
 | `ci-bench` | `./scripts/sovereign-ci-bench.sh --quick` | hard | F3 | 40m | **no** |
 | `desktop-ttfi` | `npm run test:ttfi` | tracked | F1 | 5m | **no** |
 | `enrichment-f1` | `svrn quality lane bench --id enrichment-f1` | hard | F2 | unmeasured | **no** |
+| `judge-replay` | `svrn bench judge-replay` | advisory | F3 | unmeasured | **no** |
 | `knowledge-gym` | `svrn quality lane bench --id knowledge-gym` | hard | F3 | 36s | **no** |
 | `mesh-soak-gate` | `sovereign mesh soak-gate mesh-soak-findings.jsonl` | advisory | F0 | unmeasured | **no** |
 | `mtp-probe` | `scripts/mtp-probe.sh --n 5 --max-tokens 200` | tracked | F3 | 3m | **no** |
@@ -92,6 +94,8 @@
 |---|---|---|---|---|---|
 | `arch-report` | `sovereign code arch-report` | tracked | F2 | unmeasured | **no** |
 | `capability-map` | `sovereign code capability-map` | tracked | F2 | unmeasured | **no** |
+| `co-drift` | `python3 scripts/co-drift.py` | advisory | F3 | unmeasured | **no** |
+| `co-liveness` | `python3 scripts/co_liveness.py verify` | advisory | F3 | unmeasured | **no** |
 | `co-sweep` | `scripts/co-sweep.sh` | tracked | F0 | unmeasured | **no** |
 | `cw-rails-lift` | `scripts/cw-rails-lift.sh --sandbox` | tracked | F4 | 2m | **no** |
 | `cw-work-lift` | `scripts/cw-work-lift.sh --sandbox` | tracked | F3 | 1m | **no** |
@@ -112,6 +116,8 @@
 | `doc-coverage` | `cargo doc --no-deps (RUSTDOCFLAGS=--show-coverage, pinned nightly)` | tracked | F0 | unmeasured | **no** |
 | `drift-detect` | `sovereign drift detect` | tracked | F3 | unmeasured | **no** |
 | `inner-chaos-soak` | `sovereign-cli-llm eval inner-chaos --minutes <n> --journal <path>` | tracked | F3 | unmeasured | **no** |
+| `judge-replay-bank-feed` | `sovereign/bench/chaos_monkey/feed_replay_bank.sh` | advisory | F3 | unmeasured | **no** |
+| `mesh-live-probe` | `python3 scripts/mesh-live-probe.py` | advisory | F3 | unmeasured | **no** |
 | `module-cycles` | `cargo modules dependencies --acyclic -p <crate>` | tracked | F0 | unmeasured | **no** |
 | `pre-commit` | `./scripts/pre-commit.sh` | advisory | F0 | unmeasured | **no** |
 | `rustsec-advisories` | `cargo deny check advisories` | advisory | F0 | unmeasured | **no** |
@@ -128,15 +134,23 @@
 | `desktop-judge-calibration` | `node tests/e2e/scripts/calibrate-judge.mjs` | hard | F3 | unmeasured | **no** |
 | `desktop-sabotage` | `npm run sabotage` | hard | F1 | unmeasured | yes |
 | `inner-chaos-calibrate` | `sovereign-cli-llm eval inner-chaos --calibrate` | hard | F3 | 5m | **no** |
+| `judge-replay-control` | `python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test` | hard | F0 | 0.03s | yes |
 | `pre-push-fail-closed` | `bash scripts/tests/pre-push-fail-closed.sh` | hard | F2 | unmeasured | yes |
 | `run-if-stale` | `scripts/run-if-stale.sh --self-test` | advisory | F0 | unmeasured | **no** |
+| `sabotage` | `python3 scripts/sabotage.py` | advisory | F0 | unmeasured | **no** |
 | `settings-wiring-self-test` | `bash .claude/hooks/tests/settings-wiring.sh --self-test` | hard | F0 | 0.10s | yes |
+| `twin-census` | `python3 scripts/twin-census.py` | advisory | F0 | unmeasured | **no** |
 
 ### check — a composed lane runner with its own lane table
 
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
 | `cli-contract-live-verify` | `sovereign/scripts/cli-contract-live-verify.sh` | tracked | F3 | unmeasured | **no** |
+| `co-lineage` | `python3 scripts/co-lineage.py` | advisory | F0 | 0.05s | **no** |
+| `evidence-verdict` | `python3 scripts/evidence-verdict.py` | advisory | F0 | unmeasured | **no** |
+| `judge-replay-bank` | `python3 sovereign/bench/chaos_monkey/judge_replay_cases.py --bank-age` | advisory | F0 | 0.13s | **no** |
+| `judge-replay-report` | `python3 sovereign/bench/chaos_monkey/judge_replay_report.py` | advisory | F0 | 0.03s | **no** |
+| `nc-thesis` | `python3 scripts/nc-thesis.py` | advisory | F0 | 0.04s | **no** |
 | `oicp-conformance` | `scripts/oicp-conformance-lane.sh` | hard | F3 | unmeasured | **no** |
 | `quality-check` | `svrn quality check` | hard | F3 | 29m | **no** |
 
@@ -146,10 +160,10 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `doc-coverage`, `docs-gate`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
-| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `knowledge-gym`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
+| F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `co-drift`, `co-liveness`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `judge-replay`, `judge-replay-bank-feed`, `knowledge-gym`, `mesh-live-probe`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
 | F4 | a supervised child process | `cw-rails-lift`, `desktop-e2e-faults` |
 | F5 | the packaged boot chain a shipped install takes | `desktop-smoke`, `wizard-verify` |
 
@@ -169,6 +183,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `cli-journey-selftest` | — | `(ten negative controls)` | it drives the real journey runner against a stub CLI and a loopback stub daemon and proves it FAILS a wrong exit code, a missing substring, a non-reversing mutation, and that it aborts a sequence after a failed step |
 | `cli-journey-verify` | `port-listening:9741` | `--mutating` | REFUSES unless SOVEREIGN_JOURNEY_ISOLATED=1 and the daemon URL is not the default :9741 — mutating steps install/remove corpora and join/leave meshes |
 | `clippy-json` | — | `--message-format=json` | lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child |
+| `co-drift` | `port-listening:9741` | — | — |
+| `co-liveness` | `port-listening:9741` | — | — |
 | `concept-gate` | — | `(advisory only)` | it relays `svrn code converge status`, which reads a SCIP graph that exists only on an indexed machine. On a clean checkout its only answers are COULD-NOT-JUDGE and NEVER-RAN, which is why it is in no CI job |
 | `contract-nightly` | `port-listening:9741` | — | — |
 | `daemon-concurrency-soak` | `port-listening:9741`<br>`corpus-installed:sep` | `NO host-quiet precondition` | contention is the condition to measure under, not one to wait out. The 1-minute load is recorded per turn and reported as a covariate; a soak that only runs on a quiet box measures a state that never occurs in use |
@@ -204,7 +220,14 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `hook-selftests` | — | `(non-blocking)` | the suite sits at 16 known failures; it is non-blocking in CI for the reason it was warn_gate in the hook. Promote it the day the backlog reaches zero |
 | `inner-chaos-calibrate` | `port-listening:9741`<br>`slot-decodes:primary` | `sensitivity floor 0.85 / specificity floor 0.8` | no rubric or judge change may score runs without passing it — the judge-calibration gate (ARCH §18.6) |
 | `inner-chaos-soak` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
+| `judge-replay` | `port-listening:9741`<br>`slot-decodes:primary` | `--render-only` | the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register |
+|  |  | `--repeat N` | one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise |
+| `judge-replay-bank-feed` | `port-listening:9741`<br>`slot-decodes:primary`<br>`corpus-installed:chaos-secret-agent` | `SOVEREIGN_GATE_AUDIT_FORENSICS` | set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves |
+|  |  | `--limit` | the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode |
+| `judge-replay-report` | — | `a second --verdicts arm` | ONE arm is a reading, not a trade — with no base to price against, the run reports never-ran rather than a pass |
+|  |  | `--tau` | the operating point the comparison is read at; a catch lost at 0.9 may not be lost at 0.6, and the trade is about the point production runs |
 | `knowledge-gym` | `port-listening:9741`<br>`slot-decodes:primary` | — | — |
+| `mesh-live-probe` | `port-listening:9741` | — | — |
 | `mesh-soak` | `binary:podman` | `the podman backend` | real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled |
 |  |  | ``continue-on-error: true` on the weekly job` | .github/workflows/mesh-soak-nightly.yml:35 — the job is advisory, so a red soak does not fail the workflow. `runs_in` says it is scheduled and this says what the schedule can do about a failure, which is nothing |
 |  |  | `the declared `binary:podman` precondition matches no code path` | the script compares BACKEND only against "local" (mesh-soak.sh:126,133) and its own comments say "all rootless, no podman" (:63,:836). MESH_QA.md:100 documents MESH_SOAK_BACKEND=podman, which would just skip the netns re-exec and run on the bare host. Left as declared rather than silently corrected: which of the doc, the script and this row is wrong is a mesh-QA decision, not a registry edit |
@@ -242,18 +265,18 @@ A flag here is one whose absence does not fail anything; it just makes the green
 
 | venue | instruments |
 |---|---|
-| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `cw-rails-lift`, `cw-work-lift`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `lint-gate`, `mesh-soak`, `mesh-soak-gate`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
+| `by-hand` | `arch-report`, `capability-map`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `clippy-json`, `co-drift`, `co-lineage`, `co-liveness`, `cw-rails-lift`, `cw-work-lift`, `daemon-soak`, `desktop-a11y`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-e2e-faults`, `desktop-e2e-real`, `desktop-invoke-coverage`, `desktop-invoke-coverage-real`, `desktop-journeys`, `desktop-judge-calibration`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-smoke`, `desktop-soak`, `desktop-soak-py`, `desktop-ttfi`, `drift-detect`, `dst-scenarios`, `evidence-verdict`, `judge-replay`, `judge-replay-bank`, `judge-replay-report`, `lint-gate`, `mesh-live-probe`, `mesh-soak`, `mesh-soak-gate`, `nc-thesis`, `pre-commit`, `pre-push`, `pre-push-fail-closed`, `quality-check`, `run-if-stale`, `sabotage`, `settings-wiring-self-test`, `sovereign-lint`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `wizard-verify`, `xtask-quality` |
 | `check` | `chaos-monkey`, `chat-ask`, `enrichment-f1`, `knowledge-gym`, `retrieval-prod`, `routing`, `synth`, `throughput` |
 | `ci:cli-release` | `check-desktop-version` |
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
 | `ci:desktop-release` | `check-desktop-version` |
 | `ci:fmt` | `rustfmt` |
-| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `size-gate` |
+| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `size-gate` |
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
-| `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `oicp-conformance` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
 | `smoke:2` | `inner-chaos-calibrate`, `quality-check` |
@@ -269,7 +292,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (73 of 100)
+### What CI does not run (85 of 114)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -282,6 +305,9 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `cli-journey-sandbox` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-verify` — sovereign/docs/cli-contract.toml (journeys) · runs in: by-hand
 - `clippy-json` — corpus-engine/xtask/src/lint_gate.rs · runs in: by-hand
+- `co-drift` — scripts/co-drift.py (module header — the per-commit claim/scope audit) · runs in: by-hand
+- `co-lineage` — quality/campaigns/ (the campaign files this loads and measures) · runs in: by-hand
+- `co-liveness` — scripts/co_liveness.py (module header — does a backlog item still reproduce at HEAD?) · runs in: by-hand
 - `co-sweep` — scripts/run-if-stale.sh (header) · runs in: run-if-stale
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
@@ -315,17 +341,24 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `doc-coverage` — .github/workflows/weekly.yml (header) · runs in: weekly:doc-coverage
 - `drift-detect` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
 - `enrichment-f1` — sovereign/bench/literary/README.md · runs in: check
+- `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
+- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header) · runs in: by-hand
+- `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
+- `judge-replay-bank-feed` — sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
+- `judge-replay-report` — sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand
 - `knowledge-gym` — sovereign/bench/knowledge-gym/RUNBOOK.md · runs in: check
 - `lint-gate` — scripts/pre-push.sh (header — why it is not a push gate) · runs in: by-hand
+- `mesh-live-probe` — scripts/mesh-live-probe.py (module header — routing behaviour against the real fleet) · runs in: by-hand
 - `mesh-soak` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `mesh-soak-gate` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
 - `mtp-probe` — sovereign/bench/README.md · runs in: smoke:1
+- `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand
 - `oicp-conformance` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
 - `pre-commit` — scripts/pre-commit.sh (header) · runs in: by-hand
 - `pre-push` — scripts/pre-push.sh (header — the one-minute budget) · runs in: by-hand
@@ -335,12 +368,14 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `routing-replay` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:3
 - `run-if-stale` — scripts/run-if-stale.sh (header) · runs in: by-hand
 - `rustsec-advisories` — .github/workflows/weekly.yml (header) · runs in: weekly:advisories
+- `sabotage` — quality/sabotage/all.toml (the mutant bank this adjudicates) · runs in: by-hand
 - `smoke-attach-mode` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1
 - `sovereign-lint` — AGENTS.md §Compilation and test feedback · runs in: smoke:0, by-hand
 - `sovereign-lint-scoped` — scripts/pre-push.sh (header — why the compile runs alongside the ratchets) · runs in: prepush
 - `synth` — sovereign/bench/sep/README.md · runs in: check
 - `throughput` — scripts/throughput_probe.py (the probe this lane wraps and finally compares) · runs in: check
 - `throughput-probe` — sovereign/bench/README.md · runs in: smoke:1
+- `twin-census` — quality/twin-plants.toml (the families and their plants) · runs in: by-hand
 - `windows-crosscheck` — .github/workflows/desktop-release.yml · runs in: by-hand
 - `wizard-verify` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: smoke:6, by-hand
 - `xtask-quality` — corpus-engine/xtask/src/quality_cmd.rs · runs in: by-hand
@@ -353,5 +388,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**100 instruments, 12 with a negative control, 48 unmeasured cost, 33 by-hand only.** (0 run nowhere at all.)
+**114 instruments, 13 with a negative control, 56 unmeasured cost, 43 by-hand only.** (0 run nowhere at all.)
 
