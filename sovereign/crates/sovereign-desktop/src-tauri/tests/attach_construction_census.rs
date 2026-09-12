@@ -207,23 +207,34 @@ fn builders_inference_rs() -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
-/// The fourteenth needle, pinned in its own test because it lives in the
-/// builders file: the provider that makes attach mode's Runtime "local" —
-/// an OpenAI-compatible HTTP client pointed at the daemon
-/// (`builders/inference.rs:339`). Deleting it is rung 6's centre.
+/// The twelfth needle, pinned in its own test because it lives in the
+/// builders file: the provider that makes the desktop's Runtime "local" —
+/// an OpenAI-compatible HTTP client pointed at the daemon. Deleting it is
+/// rung 6's centre.
+///
+/// RENAMED at svt-3, `build_attach_provider` -> `build_daemon_provider`, when
+/// the OTHER arm of that file was deleted. There is no attach/local fork left
+/// to name it against: this is how the desktop gets inference, full stop.
 #[test]
 fn the_attach_provider_construction_is_pinned() {
     let src = builders_inference_rs();
     assert_eq!(
-        src.match_indices("build_attach_provider(slots)?").count(),
+        src.match_indices("build_daemon_provider(slots)?").count(),
         1,
-        "sv-attach-pure-client: the attach-mode provider call site moved or \
-         multiplied. This is the construction that lets an attached desktop \
-         assemble its own Runtime over the daemon's models — the C2 \
-         divergence's root. The floor only moves through a campaign rung row."
+        "sv-attach-pure-client: the daemon-provider call site moved or \
+         multiplied. This is the construction that lets the desktop assemble \
+         its own Runtime over the daemon's models — the C2 divergence's root. \
+         The floor only moves through a campaign rung row."
+    );
+    assert!(
+        !src.contains("EmbeddedLlamaCpp"),
+        "svt-3: the builders file names the in-process llama loader again. \
+         A desktop that mmaps a GGUF is the daemon it is supposed to be a \
+         client of (ARCH principle 12), and the crash-isolation subprocess \
+         that guarded that load was deleted on the strength of this absence."
     );
     assert_eq!(
-        src.match_indices("fn build_attach_provider(").count(),
+        src.match_indices("fn build_daemon_provider(").count(),
         1,
         "the provider's definition moved or multiplied — one implementation, \
          one site, pinned"
@@ -261,61 +272,86 @@ fn the_attach_construction_floor_is_pinned() {
     );
 }
 
+/// Every construction that was Local-mode-only, pinned at ZERO (sv-surface
+/// svt-3).
+///
+/// Until svt-3 these sat behind a `local_daemon_wiring` Option that was
+/// `None` in attach, and this test pinned that GUARD. The guard is not what
+/// was load-bearing — the ability was. `bootstrap_with_progress` commissioned
+/// an `EmbeddedDaemon` over an assembled `ServingCapability`, claimed the data
+/// root's `RunLock`, installed the watched-folder scheduler and spawned a
+/// rolling-summary compaction worker whenever the boot concluded `Local`; a
+/// desktop that does that is a daemon wearing a UI, whatever the count of
+/// guarded call sites is (ARCH principle 12 — look where the ability is
+/// GRANTED).
+///
+/// So the pins are zeros now, and a zero here is a real positive control:
+/// each string names a call that USED to exist in this file and whose
+/// reappearance is the regression. Watched to fail at landing: each needle
+/// re-added by hand in turn, red, reverted.
+///
+/// What it deliberately does NOT pin is the `mesh` FIELD, which survives as a
+/// permanently-`None` slot `mesh_commands.rs` still reads. The field grants
+/// nothing; `EmbeddedDaemon::new` is the grant, and that is the needle below.
 #[test]
-fn the_local_only_constructions_stay_local() {
-    // The constructions that are Local-mode-only today must keep an
-    // attach-visible guard: `sovereign_mesh::assemble` (the EmbeddedDaemon
-    // commission), the RunLock claim, the watched-folder subsystem and the
-    // compaction worker all sit behind the `local_daemon_wiring` Option,
-    // which is None in attach. If any ever runs in attach mode, that is not
-    // a needle-count change — it is the whole bar inverting, and it should
-    // fail HERE first.
+fn the_in_process_daemon_is_gone() {
     let src = state_rs();
-    assert_eq!(
-        src.match_indices("sovereign_mesh::assemble(").count(),
-        1,
-        "the EmbeddedDaemon commission site moved or multiplied — the one \
-         exhaustive assembler must be called from exactly one site in the \
-         desktop, behind the Local-only wiring"
-    );
-    assert_eq!(
-        src.match_indices("corpus_engine_notes::NoteStore::open(")
-            .count(),
-        2,
-        "the daemon-MCP NoteStore opens moved or multiplied — they are \
-         Local-only constructions (inside the local wiring) and are pinned \
-         HERE so they can never silently join the attach-reachable spine"
-    );
-    assert!(
-        src.contains("local_daemon_wiring"),
-        "the Local-only guard binding assemble+RunLock to Local mode was \
-         renamed or removed — attach mode constructing a daemon is the bar \
-         inverting, not a count moving"
-    );
-
-    // sv-surface D0 — the two that came OFF the attach floor. Both still
-    // exist; what is pinned here is that each stays behind the local wiring.
-    assert_eq!(
-        src.match_indices("sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(")
-            .count(),
-        1,
-        "the watched-folder subsystem install moved or multiplied — it is \
-         Local-only (inside the `if let Some((daemon_handle, cli_cfg)) = \
-         local_daemon_wiring` arm) and is pinned HERE so it can never \
-         silently join the attach-reachable spine"
-    );
-    assert_eq!(
-        src.match_indices("CompactionWorker::spawn(").count(),
-        1,
-        "the memory-compaction worker spawn moved or multiplied — one per \
-         host Runtime, and only where the host OWNS the memory store"
-    );
-    assert!(
-        src.contains("let compaction_worker = compaction_config_for_runtime.map(|cfg| {"),
-        "sv-surface D0: the compaction worker is spawned unconditionally \
-         again. The config it needs is `Some` only under the local daemon \
-         wiring; in attach the daemon owns that `sovereign.db` and runs its \
-         own worker, so a second pass here is two writers deriving rolling \
-         summaries from each other's rows."
-    );
+    const GONE: &[(&str, &str)] = &[
+        (
+            "sovereign_mesh::assemble(",
+            "the one exhaustive assembler — calling it is how a host declares \
+             itself a daemon",
+        ),
+        (
+            "sovereign_mesh::EmbeddedDaemon::new(",
+            "the daemon itself, built over that assembly",
+        ),
+        (
+            "DeferredDaemon",
+            "the late binding the in-process cycle needed: a provider that \
+             wanted a peer source before the daemon existed",
+        ),
+        (
+            "RunLock::acquire(",
+            "the single-writer claim on the data root — a client does not own \
+             the root and must never take it",
+        ),
+        (
+            "local_daemon_wiring",
+            "the Option that gated all of the above; its absence is what makes \
+             the zeros above unconditional rather than guarded",
+        ),
+        (
+            "corpus_engine_notes::NoteStore::open(",
+            "the daemon-MCP notes opens (two of them), distinct from the \
+             spine's `NoteStore::open` on the floor list above",
+        ),
+        (
+            "sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(",
+            "the watched-folder scheduler — the attached daemon owns it",
+        ),
+        (
+            "CompactionWorker::spawn(",
+            "a second rolling-summary pass over a `sovereign.db` this process \
+             does not own (sv-surface D0, structural here)",
+        ),
+        (
+            "sovereign_mesh::EmbedAdvertisement",
+            "what a NODE tells peers about its embedding model; this process \
+             is not a node",
+        ),
+        (
+            "sovereign_workflow_host::workflow_http_router(",
+            "the workflow job routes the in-process daemon served",
+        ),
+    ];
+    for (needle, why) in GONE {
+        assert_eq!(
+            src.match_indices(needle).count(),
+            0,
+            "svt-3: `{needle}` is back in the desktop's bootstrap spine. {why}. \
+             The desktop holds no weights and commissions no daemon; a build \
+             that does is the bar inverting, not a count moving."
+        );
+    }
 }

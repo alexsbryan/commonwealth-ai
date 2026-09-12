@@ -10,11 +10,10 @@ use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use sovereign_core::health_monitor::HealthMonitor;
 use sovereign_core::insight::InsightService;
-use sovereign_core::model_family::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
-use sovereign_core::{SkillRegistry, ToolRegistry};
+use sovereign_core::SkillRegistry;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 use tokio_util::sync::CancellationToken;
@@ -77,35 +76,6 @@ pub struct AppState {
     /// no sidecar TOML or build-time `include_str!` magic.
     pub corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
     pub install_progress: RwLock<HashMap<String, crate::commands::CorpusProgressPayload>>,
-    /// Embedded Commonwealth daemon — started on-demand when the user
-    /// creates or joins a mesh.
-    ///
-    /// Two distinct `None`s, and neither is a half-wired daemon:
-    ///
-    /// - **Attach mode** — the CLI (`sovereign daemon run` under
-    ///   launchd/systemd) already owns `:9741`. Mesh mutations route through
-    ///   its HTTP API (`/v1/mesh/create/join/rotate/leave`). Stays `None`
-    ///   forever; ask [`AppState::is_attach_mode`] to tell the two apart.
-    /// - **Local mode, before `bootstrap`** — the daemon's services (engine,
-    ///   provider, tool mount, routers) do not exist yet, so neither does the
-    ///   daemon. It used to be constructed empty here and filled in by 17
-    ///   setters, which is why a request arriving mid-bootstrap could reach a
-    ///   daemon that answered 404 for half its surface.
-    ///
-    /// Read it through [`AppState::mesh`]; `bootstrap` commissions it once.
-    pub mesh: RwLock<Option<Arc<sovereign_mesh::EmbeddedDaemon>>>,
-    /// The single-writer claim on the data root the in-process daemon writes.
-    ///
-    /// `Some` only in in-process Local mode, and only once `bootstrap` has
-    /// taken it — holding it here is what keeps it alive for the process's
-    /// lifetime, since dropping a [`RunLock`] releases it. `None` in Attach
-    /// mode (the daemon at the other end holds its own) and in supervised
-    /// Local (the child holds it), which together are every shipped default.
-    ///
-    /// It gates `mesh`: bootstrap commissions no daemon when the claim is
-    /// refused, because a second writer on one root is store corruption, a
-    /// pidfile naming the wrong process, and double model RAM.
-    pub run_lock: RwLock<Option<sovereign_contracts::run_lock::RunLock>>,
     /// How this process bootstrapped. Used by mesh_commands and the UI
     /// badge to decide whether to drive mesh via Rust or HTTP.
     ///
@@ -114,25 +84,6 @@ pub struct AppState {
     /// turn a `Local` boot into a client after this field is set, and
     /// only the accessor folds that in.
     pub bootstrap_mode: crate::bootstrap::BootstrapMode,
-    /// sv-surface B4 — set when the run-lock claim on the data root was
-    /// REFUSED and the holder turned out to be a live sovereign
-    /// answering the client port with its own identity.
-    ///
-    /// A lock on the data root means another sovereign on THIS machine.
-    /// Before B4 that refusal commissioned no daemon and said so in a
-    /// log line, leaving a process that believed it was `Local`,
-    /// answered `is_attach_mode() == false`, and — since R5 put every
-    /// turn on the wire — sent its turns to the holder anyway while
-    /// telling every other surface it owned the root. This flag makes
-    /// the boot's own conclusion legible instead: it IS a client, of
-    /// the process holding the lock.
-    ///
-    /// `AtomicBool` rather than swapping `bootstrap_mode` because
-    /// `is_attach_mode`, `client_port` and `internal_port` are sync
-    /// accessors and the ports do not move — the holder is a sovereign
-    /// on this machine reading the same `config.toml`. Never cleared:
-    /// a boot that concluded this cannot un-conclude it.
-    pub attached_to_lock_holder: std::sync::atomic::AtomicBool,
     /// The write halves of the LIVE wire turns (sv-surface R5), keyed by
     /// conversation (RB5): parked by the streaming commands when they open
     /// a turn socket, so `cancel_stream` and the `submit_*` commands can
@@ -167,12 +118,6 @@ pub struct AppState {
     /// and the `CorpusEngine` is ready; commands check this and
     /// surface a "finish setup first" error when unset.
     pub local_corpus: RwLock<Option<Arc<LocalCorpusManager>>>,
-    /// Watched-folder reconciliation subsystem. The handle inside
-    /// holds the scheduler's JoinHandle alive — dropping `AppState`
-    /// stops the dispatcher loop. `None` in Attach mode (the
-    /// standalone daemon owns the scheduler) and before the embedded
-    /// daemon's wire-up completes in Local mode.
-    pub watched_subsystem: RwLock<Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem>>,
     /// Recipe-author project layer needs both notes (decision log,
     /// research findings, capability requests, checkpoints) and
     /// features (RecipeAuthoring-state FeatureRow per project).
@@ -215,25 +160,23 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// True when this process is talking to an external CLI daemon at
-    /// `:9741` rather than running its own embedded daemon.
+    /// True. Always, since svt-3 — kept as a function because a constant
+    /// would not say WHY, and because every caller is a fork that still has
+    /// to come out.
     ///
-    /// **Never ask `mesh().is_none()` instead.** Since the daemon is
-    /// commissioned at the END of bootstrap, `None` also means "Local mode,
-    /// not yet built"; only this accessor answers "should there ever be one?".
-    /// Since sv-surface B4 there are TWO ways to be a client and this
-    /// is the one decider over both: the boot probe found a daemon on
-    /// the client port (`BootstrapMode::Attach`), or the run-lock claim
-    /// was refused by a holder that then answered the port with its own
-    /// identity. A `matches!` on `bootstrap_mode` at a call site sees
-    /// only the first and is a §10.6 second decider.
+    /// This used to be a real question with three answers folded into one
+    /// decider: the boot probe found a daemon (`BootstrapMode::Attach`), or
+    /// the run-lock claim was refused by a holder that then answered the port
+    /// (sv-surface B4), or this process was about to become the daemon
+    /// itself. The third is gone — `bootstrap` commissions no daemon and
+    /// loads no weights — and with it the only way the answer could be
+    /// `false`. The desktop is a client of a daemon it does not own; the only
+    /// remaining question is which port, which [`Self::client_port`] answers.
+    ///
+    /// Callers do not have to change to be correct, which is the point: each
+    /// one already had an attach arm, and that arm is now the only arm.
     pub fn is_attach_mode(&self) -> bool {
-        matches!(
-            self.bootstrap_mode,
-            crate::bootstrap::BootstrapMode::Attach { .. }
-        ) || self
-            .attached_to_lock_holder
-            .load(std::sync::atomic::Ordering::Relaxed)
+        true
     }
 
     /// Client port (`/v1/*`) of the daemon this desktop talks to. Attach: the
@@ -311,12 +254,6 @@ impl AppState {
             .ok_or_else(|| crate::error::DesktopError::not_ready("The database is still loading."))
     }
 
-    /// The in-process daemon, once `bootstrap` has commissioned it. `None` in
-    /// Attach mode (permanently) and in Local mode until bootstrap completes.
-    pub async fn mesh(&self) -> Option<Arc<sovereign_mesh::EmbeddedDaemon>> {
-        self.mesh.read().await.clone()
-    }
-
     /// Construct `AppState` branching on the bootstrap mode probed at
     /// app start:
     ///
@@ -357,10 +294,7 @@ impl AppState {
             sqlite_store: RwLock::new(None),
             corpus_engine: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
-            mesh: RwLock::new(None),
-            run_lock: RwLock::new(None),
             bootstrap_mode: mode,
-            attached_to_lock_holder: std::sync::atomic::AtomicBool::new(false),
             health_monitor: RwLock::new(None),
             health_shutdown: CancellationToken::new(),
             insight_service: RwLock::new(None),
@@ -368,7 +302,6 @@ impl AppState {
             pending_prompts: PendingPrompts::default(),
             session_conversations: RwLock::new(std::collections::HashMap::new()),
             local_corpus: RwLock::new(None),
-            watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),
             features: RwLock::new(None),
             mobile_host_supervisor: RwLock::new(None),
@@ -389,12 +322,17 @@ impl AppState {
 /// X" moments.
 #[derive(Debug, Clone, Copy)]
 pub enum BootstrapPhase {
-    /// About to spawn the smoke-test subprocess (a 1-token decode
-    /// in an isolated child to detect Metal/CUDA backend crashes
-    /// before we load the model in-process).
+    /// **Nothing emits this since svt-3**, and the variant survives only
+    /// because `setup_flow`'s match over these phases is another worker's
+    /// file this session. It named the crash-isolation subprocess that
+    /// guarded an in-process GGUF load; this process performs no such load,
+    /// so there is nothing to smoke-test. Deleting it and its arm is owed.
     SmokeTesting,
-    /// About to call `EmbeddedLlamaCpp::load_full_with_families`,
-    /// which mmaps the GGUF and brings the model online.
+    /// **Nothing emits this since svt-3** — same reason as [`Self::SmokeTesting`]
+    /// above, and the same owed deletion. It named
+    /// `EmbeddedLlamaCpp::load_full_with_families` mmapping a GGUF in this
+    /// process; the daemon is what does that now, and the wait a user sees is
+    /// the daemon's readiness, not this process's.
     LoadingModel,
     /// About to open the SQLite store and run migrations.
     OpeningDatabase,
@@ -461,79 +399,6 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     bootstrap_with_progress(state, None).await
 }
 
-/// Ask whoever is on `client_port` who they are — sv-surface B4's half
-/// of "a port is not an identity" (3c7ad5933).
-///
-/// Returns the answering process's own pid, or `None` when nothing
-/// answers, when the answer is not a sovereign daemon (no
-/// `process.pid` in `/status`), or when the pid IS this process —
-/// which would mean we are probing ourselves and learning nothing.
-///
-/// Deliberately NOT `bootstrap::is_daemon_live`: that probe asks
-/// `/v1/models`, which proves only that SOMETHING sovereign-shaped is
-/// there. B4 needs the stronger fact, because its whole question is
-/// "is the process that took my lock the process on my port".
-async fn probe_daemon_identity(client_port: u16) -> Option<u32> {
-    let url = format!("http://127.0.0.1:{client_port}/status");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
-        .build()
-        .ok()?;
-    let body = match client.get(&url).send().await {
-        Ok(r) if r.status().is_success() => r.text().await.ok()?,
-        Ok(r) => {
-            tracing::info!(
-                target: "bootstrap",
-                client_port,
-                status = %r.status(),
-                "b4 probe: the client port answered /status non-2xx — not a sovereign daemon"
-            );
-            return None;
-        }
-        Err(e) => {
-            tracing::info!(
-                target: "bootstrap",
-                client_port,
-                error = %e,
-                "b4 probe: nothing answered /status on the client port"
-            );
-            return None;
-        }
-    };
-    let pid = serde_json::from_str::<serde_json::Value>(&body)
-        .ok()
-        .and_then(|v| v.get("process")?.get("pid")?.as_u64())
-        .map(|p| p as u32);
-    match pid {
-        Some(p) if p == std::process::id() => {
-            tracing::warn!(
-                target: "bootstrap",
-                client_port,
-                pid = p,
-                "b4 probe: /status names THIS process — probing ourselves proves nothing"
-            );
-            None
-        }
-        Some(p) => {
-            tracing::info!(
-                target: "bootstrap",
-                client_port,
-                holder_pid = p,
-                "b4 probe: the client port is held by a live sovereign daemon"
-            );
-            Some(p)
-        }
-        None => {
-            tracing::info!(
-                target: "bootstrap",
-                client_port,
-                "b4 probe: /status answered without process.pid — not a sovereign daemon"
-            );
-            None
-        }
-    }
-}
-
 /// Bootstrap the Runtime, optionally narrating phase transitions
 /// via `on_progress`. See `BootstrapPhase` for the emission points.
 pub async fn bootstrap_with_progress(
@@ -580,7 +445,7 @@ pub async fn bootstrap_with_progress(
     // the single source of truth, shared with the daemon. Resolve them once
     // here; the CPU-compat policy may mutate this in memory, and the
     // inference builder loads from it.
-    let mut slots = ResolvedModelSlots::load()
+    let slots = ResolvedModelSlots::load()
         .map_err(|e| format!("No model configuration found ({e}). Complete setup first."))?;
 
     if slots.fast.as_os_str().is_empty() || !slots.fast.exists() {
@@ -590,52 +455,90 @@ pub async fn bootstrap_with_progress(
         ));
     }
 
-    // CPU/arch compatibility gate. Before loading anything, substitute a dense
-    // model (or fail with a clear, in-app explanation) when the configured chat
-    // model is a recurrent architecture that SIGSEGVs in ggml's CPU prefill —
-    // so a model the machine can't run degrades gracefully instead of crashing
-    // the app on the first message. No-op on GPU machines. The swap is
-    // IN-MEMORY only (mutates `slots`, never rewrites `config.toml`). See
-    // `builders::model_compat`.
-    builders::model_compat::apply_cpu_compat_policy(&mut slots, &state.approval.app_handle())?;
-
-    // Load inference. We end up with two distinct provider Arcs:
+    // ── A serving host, or a named refusal ───────────────────────────────
     //
-    //   • `raw_inference` — the plain `EmbeddedLlamaCpp`. Handed to
-    //     the embedded Commonwealth daemon so when a PEER POSTs
-    //     `/v1/chat/completions` to our `:9741`, their request is
-    //     served by this raw local model. NEVER the mesh wrapper,
-    //     or a peer hitting us would trigger our own re-routing
-    //     loop.
+    // This process holds no weights and commissions no daemon (svt-3), so a
+    // boot that cannot reach one has nothing to attach to. Reporting that is
+    // the whole handling: a desktop that carried on would build an HTTP
+    // provider pointed at a dark port and report itself ready (ARCH
+    // principle 6).
     //
-    //   • `inference` — `raw_inference` wrapped in a
-    //     `MeshInferenceProvider`. Handed to the Runtime. This is
-    //     the one that routes THIS user's synthesis requests to a
-    //     beefier mesh peer when one is online. Fast/Medium stays
-    //     local; only Slow-slot work crosses the wire.
+    // Asked HERE and not only in `main` because `main`'s look runs BEFORE the
+    // setup wizard writes `config.toml` — on a first launch there is no port
+    // to probe and no models for a daemon to load, so `ensure_reachable`
+    // returns `None` by construction and says so. The `ResolvedModelSlots`
+    // load above is `SetupConfig::load()`, so reaching this line means a
+    // config is on disk: this is the first moment the question can be
+    // answered, which is what `setup_flow::relaunch_after_setup` means when
+    // it says the relaunch exists only because the look happened too early.
     //
-    // Both share the same underlying weights — there's no double-
-    // load. The wrapper is a thin router over an Arc clone.
-    // In Local mode this process IS the daemon, and the daemon it will be is
-    // commissioned at the bottom of this function. `MeshInferenceProvider`
-    // needs a peer source NOW, and the daemon needs the provider — a genuine
-    // cycle. `DeferredDaemon` is the one late binding left in the assembly and
-    // it carries no capability: before `bind` it answers "no peers", which is
-    // what a constructed-but-stopped daemon answered before.
-    let deferred_daemon: Option<Arc<sovereign_mesh::DeferredDaemon>> = match &state.bootstrap_mode {
-        crate::bootstrap::BootstrapMode::Attach { .. } => None,
-        crate::bootstrap::BootstrapMode::Local { .. } => {
-            Some(Arc::new(sovereign_mesh::DeferredDaemon::new()))
+    // It is a REACH, not a start: `ensure_reachable` retains no handle, no
+    // retry and no policy, and a host it did not bring up is the common case.
+    match crate::serving_host::ensure_reachable().await {
+        Some(reached) => tracing::info!(
+            target: "bootstrap",
+            ?reached,
+            client_port = state.client_port(),
+            "bootstrap: a serving host answered — this desktop is its client"
+        ),
+        None => {
+            // Two refusals, because they ask the operator for different
+            // things and a single sentence would send half of them looking in
+            // the wrong place.
+            let host = crate::launch_mode::daemon_host();
+            return Err(match host {
+                sovereign_contracts::launch::DaemonHost::InProcess(_) => format!(
+                    "this launch asked THIS process to run the weights ({why}), and the app can \
+                     no longer do that: it loads no models and starts no daemon. Unset that \
+                     variable and launch again, or start a daemon yourself with `svrn daemon \
+                     start`.",
+                    why = host.as_str(),
+                ),
+                sovereign_contracts::launch::DaemonHost::SupervisedChild => format!(
+                    "no daemon is serving :{port} and this app could not bring one up. Start one \
+                     with `svrn daemon start`, or reinstall so the bundled backend is beside the \
+                     app. The app is a client; it does not run the models itself.",
+                    port = state.client_port(),
+                ),
+            });
         }
-    };
-    let (raw_inference, inference) = builders::inference::load_inference(
-        &state.inference,
-        deferred_daemon.as_ref(),
-        &slots,
-        &config,
-        &emit,
-    )
-    .await?;
+    }
+
+    // ── The CPU/arch compatibility gate is GONE from here, and that is a fix ──
+    //
+    // `builders::model_compat::apply_cpu_compat_policy` ran at this line. On a
+    // CPU-only machine whose configured chat model is a recurrent arch that
+    // SIGSEGVs in ggml's CPU prefill (qwen35, Mamba/SSM, RWKV) it substituted a
+    // dense model IN MEMORY — mutating `slots`, never `config.toml` — and
+    // raised a `model-notice` banner saying so.
+    //
+    // That was correct while THIS process loaded the weights. It has been
+    // wrong in attach mode the whole time it has existed, and svt-3 makes
+    // attach the only mode: the substitution cannot reach the daemon (it is
+    // in-memory, and the daemon reads the file), so all it did was change
+    // which model id `build_daemon_provider` derives — the desktop asking
+    // `/v1/chat/completions` for a slot the daemon never loaded — while
+    // telling the user a swap had happened that had not (ARCH principle 6).
+    //
+    // Deciding which weights are safe to load is the job of whoever loads
+    // them. `sovereign_inference::cpu_compat` is already a shared crate, so
+    // the decider does not move — only its caller does, to the daemon's slot
+    // build. Until it lands the guard has NO owner: `sovereign/DEFAULTS_LEDGER.md`
+    // carries the row, with the flip condition and a review-by.
+
+    // Inference is the DAEMON's, over HTTP, and there is one provider rather
+    // than two. `load_inference` returns the pair because the tiered-enrichment
+    // builders below take an owned handle each; both halves are now the same
+    // `Arc` (`SplitInferenceProvider`, `builders/inference.rs`).
+    //
+    // What used to stand here was the split that in-process hosting needed: a
+    // `raw_inference` for peers POSTing `/v1/chat/completions` at our own
+    // `:9741`, and a `MeshInferenceProvider` wrapper routing THIS user's
+    // Slow-slot work to a beefier peer. Both belonged to the daemon this
+    // process was; it is no longer one, and peer routing is served by the
+    // daemon at the other end (svt-3).
+    let (raw_inference, inference) =
+        builders::inference::load_inference(&state.inference, &slots, &emit).await?;
 
     // Open database.
     let store: Arc<dyn StateStore> = builders::store::open_store(
@@ -996,396 +899,17 @@ pub async fn bootstrap_with_progress(
         });
     }
 
-    // ── Wire the embedded daemon's full HTTP surface for CLI-setup mode ────────
-    // In Local mode this process IS the sovereign daemon on :9741, and the
-    // pieces built in this block become the daemon's declared capability at
-    // the commissioning site near the end of bootstrap.
-    //
-    // **This used to key on `ConfigSource::CliSetup`, and that was a bug.**
-    // `ConfigSource` is a snapshot taken by `bootstrap::detect()` at app
-    // start; the setup wizard writes `config.toml` AFTER that probe and then
-    // calls `state::bootstrap` with the mode still reading `Fresh`. On the
-    // in-process completion path (`maybe_restart_into_supervised` returns
-    // false: harness, kill switch, or spawn failure) the desktop therefore
-    // came up with an engine, a provider and NO `/v1/mesh/*`, NO `/mcp` and
-    // NO registered model slots — a shape no one designed and nothing
-    // reported. Bootstrap hard-requires `ResolvedModelSlots::load()`, which is
-    // `SetupConfig::load()`, so a config is on disk on EVERY path that reaches
-    // here. Read it now rather than trusting the probe-time snapshot.
-    let local_daemon_wiring: Option<(
-        Arc<sovereign_mesh::DeferredDaemon>,
-        sovereign_core::setup_config::SetupConfig,
-    )> = match (&state.bootstrap_mode, deferred_daemon.as_ref()) {
-        (crate::bootstrap::BootstrapMode::Local { source }, Some(handle)) => {
-            let cfg = match source {
-                crate::bootstrap::ConfigSource::CliSetup(c) => c.clone(),
-                // Probe-time snapshot predates the wizard's write; the
-                // file exists by now or we would not have got this far.
-                _ => sovereign_core::setup_config::SetupConfig::load().map_err(|e| {
-                    format!("Local mode reached bootstrap with no readable config.toml: {e}")
-                })?,
-            };
-            Some((Arc::clone(handle), cfg))
-        }
-        _ => None,
-    };
-
-    // ── Single-instance guard for the IN-PROCESS daemon ────────────
-    //
-    // Local mode means THIS process becomes the writer of `cfg.data.dir` —
-    // the same root a standalone `svrn daemon run` claims. It is reached only
-    // when no daemon answered the client port at `bootstrap::detect` AND
-    // `serving_host::ensure_reachable` could not bring one up (no binary, or
-    // `SOVEREIGN_FORCE_LOCAL=1` asking this process to run the weights). That
-    // is the one remaining shape where the desktop process itself owns a data
-    // root — and it is the in-process hosting svt-3 removes.
-    //
-    // A refusal means a daemon owns that root but was not answering `:9741`
-    // when `bootstrap::detect()` probed it: starting up, unloading an 18GB
-    // model on the way out, or wedged. Attaching is not possible (nothing is
-    // serving) and becoming a second writer corrupts the store, so we
-    // commission NO daemon and say which lock stopped us. Every desktop
-    // surface that does not need the mesh keeps working; `AppState::mesh`
-    // stays `None`, which callers already handle.
-    let local_daemon_wiring = match local_daemon_wiring {
-        Some((handle, cfg)) => {
-            // The port the holder would be serving on if the claim below
-            // is refused — the SAME `config.toml` this process read, so
-            // a sovereign on this data root binds it (sv-surface B4).
-            let client_port = cfg.daemon.client_port;
-            // Same classification the standalone daemon applies, from the
-            // same decider — a desktop and a daemon that each drew the "is
-            // this the right root" line for themselves is how the split-brain
-            // arose. Stranded means starting fresh on top of live data
-            // elsewhere; a Split is residue and only worth saying.
-            let roots = sovereign_contracts::data_roots::classify(&cfg.data.dir);
-            let claim = if roots.is_refusal() {
-                Err(format!("{roots}"))
-            } else {
-                if !roots.others().is_empty() {
-                    tracing::warn!(
-                        target: "bootstrap",
-                        root = %cfg.data.dir.display(),
-                        "data roots: {roots}"
-                    );
-                }
-                sovereign_contracts::run_lock::RunLock::acquire(&cfg.data.dir)
-                    .map_err(|e| format!("{e}"))
-            };
-            match claim {
-                Ok(lock) => {
-                    tracing::debug!(
-                        target: "bootstrap",
-                        lock = %lock.path().display(),
-                        enforced = lock.is_enforced(),
-                        "run lock: desktop claimed the data root for its in-process daemon"
-                    );
-                    *state.run_lock.write().await = Some(lock);
-                    Some((handle, cfg))
-                }
-                Err(why) => {
-                    // ── sv-surface B4 — the refusal is not a shrug ──
-                    //
-                    // A lock on this root means another sovereign on THIS
-                    // machine. Until R5 that was survivable: chat was
-                    // in-process, so "every desktop surface that does not
-                    // need the mesh keeps working" was true. Every turn
-                    // rides the wire now, so a process that concludes
-                    // `Local` here is a client that has not admitted it —
-                    // it sends turns to whoever answers :9741 while
-                    // telling the rest of the app it owns the root.
-                    //
-                    // So ask the holder. A PORT IS NOT AN IDENTITY
-                    // (3c7ad5933): `/status.process.pid` is the answering
-                    // process's own word, and it must be a pid that is
-                    // not ours. A daemon that answers -> attach to it and
-                    // say so. Nothing answering -> FATAL with the lock
-                    // named, because the alternative is the silent total
-                    // outage this row exists to close.
-                    tracing::warn!(
-                        target: "bootstrap",
-                        root = %cfg.data.dir.display(),
-                        client_port,
-                        "desktop: run-lock refused — {why}; re-probing the client port for the holder"
-                    );
-                    match probe_daemon_identity(client_port).await {
-                        Some(holder_pid) => {
-                            state
-                                .attached_to_lock_holder
-                                .store(true, std::sync::atomic::Ordering::Relaxed);
-                            tracing::info!(
-                                target: "bootstrap",
-                                root = %cfg.data.dir.display(),
-                                client_port,
-                                holder_pid,
-                                "bootstrap: attach mode — the run-lock holder is serving the \
-                                 client port, so this desktop is its client (sv-surface B4)"
-                            );
-                            None
-                        }
-                        None => {
-                            return Err(format!(
-                                "another sovereign holds the data root {root} ({why}) and nothing \
-                                 is serving :{client_port} — this desktop can neither own the root \
-                                 nor attach to whoever does. Stop the other process, or wait for \
-                                 it to finish starting, and launch again.",
-                                root = cfg.data.dir.display(),
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-        None => None,
-    };
-
-    // Snapshot the compaction config out of the CliSetup wiring so
-    // the Runtime construction below can spawn a worker even though
-    // `cli_cfg` only survives inside the `if let` arm. CliSetup is
-    // the only mode where this state.rs codepath builds a Runtime
-    // with a load-bearing memory store; attach-mode leaves the
-    // worker `None` (the daemon at the other end runs its own).
-    //
-    // `Option`, not `unwrap_or_default()` (sv-surface D0). The comment above
-    // has claimed the attach-leaves-it-None behaviour since it was written and
-    // the code did the opposite: a default config still spawned a worker, so
-    // an attached desktop ran a SECOND rolling-summary compaction pass over
-    // the same `sovereign.db` the daemon was already compacting — two writers
-    // deriving summaries from each other's rows. The absence is carried in the
-    // type now, so the worker cannot be spawned without the local config that
-    // authorises it (§7: structural, not remembered).
-    let compaction_config_for_runtime: Option<sovereign_core::memory_compaction::CompactionConfig> =
-        local_daemon_wiring
-            .as_ref()
-            .map(|(_, cfg)| cfg.memory.compaction.clone());
-    // What the daemon will be commissioned with, once this block has built it.
-    let mut daemon_services: Option<(
-        Arc<sovereign_mesh::DeferredDaemon>,
-        sovereign_core::setup_config::SetupConfig,
-        sovereign_mesh::ServingCapability,
-    )> = None;
-    if let Some((daemon_handle, cli_cfg)) = local_daemon_wiring {
-        let data_dir = cli_cfg.data.dir.clone();
-        let indexes_dir = data_dir.join("indexes");
-        let _ = std::fs::create_dir_all(&indexes_dir);
-
-        // /mcp — ToolRegistry backed by the already-loaded CorpusEngine.
-        // Absence is NAMED, not an empty Option: "this host serves no tools"
-        // and "notes.db would not open" are different facts (ARCH §18.3), and
-        // the daemon renders the reason in its startup log.
-        let mcp_surface: sovereign_mesh::McpSurface;
-        let notes_path = data_dir.join("notes.db");
-        // Open the NoteStore once at the top so both the MCP arm
-        // (consumes it via set_mcp) and the reindexer commit
-        // harvester (Phase 7.1, configured below) can share the
-        // same connection pool. None on failure means MCP doesn't
-        // mount AND no commit harvesting — same graceful-degrade
-        // posture as before.
-        let notes_for_harvester: Option<Arc<corpus_engine_notes::NoteStore>> =
-            match corpus_engine_notes::NoteStore::open(&notes_path) {
-                Ok(s) => Some(Arc::new(s)),
-                Err(_) => None,
-            };
-        match corpus_engine_notes::NoteStore::open(&notes_path) {
-            Ok(notes_store) => {
-                let notes = Arc::new(notes_store);
-                let mut mcp_tools = ToolRegistry::new();
-                // Call-graph tools with initial merged SCIP state.
-                // Built before the code-intel tools below so
-                // `SymbolLookupTool` can share the same handle —
-                // exact-name lookup now reads from SCIP rather than
-                // the Lance chunk projection.
-                let initial_graph = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-                    .map_err(|e| format!("in-memory ScipGraph for MCP call-graph tools: {e}"))?;
-                if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
-                    for de in rd.flatten() {
-                        if !de.path().is_dir() {
-                            continue;
-                        }
-                        let scip_path = de.path().join("scip_graph.db");
-                        if scip_path.exists() {
-                            let _ = initial_graph.import_from_path(&scip_path).await;
-                        }
-                    }
-                }
-                let graph_handle: sovereign_mesh::reindexer::ScipGraphHandle =
-                    Arc::new(arc_swap::ArcSwap::from_pointee(initial_graph));
-                // Code-intel tools — reuse the already-loaded CorpusEngine.
-                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-                    &graph_handle,
-                )));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::SymbolLookupTool::new(
-                        Arc::clone(&corpus_engine),
-                        Arc::clone(&graph_handle),
-                    )
-                    .with_health_checker(Arc::clone(&hc))
-                    .declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine)).declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::FindCallersTool::new(
-                        Arc::clone(&corpus_engine),
-                        Arc::clone(&graph_handle),
-                    )
-                    .with_health_checker(Arc::clone(&hc))
-                    .declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::FindCalleesTool::new(
-                        Arc::clone(&corpus_engine),
-                        Arc::clone(&graph_handle),
-                    )
-                    .with_health_checker(Arc::clone(&hc))
-                    .declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
-                        .with_health_checker(Arc::clone(&hc))
-                        .declared(),
-                ));
-                // Notes tools.
-                mcp_tools.register(Box::new(
-                    sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::ReadNotesTool::new(Arc::clone(&notes)).declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes)).declared(),
-                ));
-                mcp_tools.register(Box::new(
-                    sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes)).declared(),
-                ));
-                let session_id = format!("desktop-{}", uuid::Uuid::new_v4());
-                tracing::info!(tools = mcp_tools.count(), "desktop daemon: wiring /mcp");
-                mcp_surface = sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
-                    tools: Arc::new(mcp_tools),
-                    notes: Arc::clone(&notes),
-                    session_id,
-                });
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "desktop daemon: notes.db unavailable — /mcp will not be mounted"
-                );
-                mcp_surface = sovereign_mesh::McpSurface::Unavailable {
-                    reason: format!("notes.db unavailable: {e}"),
-                };
-            }
-        }
-
-        // `/v1/mesh/*`, `/v1/admin/reload` and the reading surface are no
-        // longer installed here. They are pure functions of the daemon, so the
-        // daemon builds them itself at start — which is what dissolves the
-        // measured desktop-vs-CLI router delta rather than papering it over.
-
-        // /v1/projects — project freshness pipeline.
-        let merged_for_indexer = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-            .map_err(|e| format!("in-memory ScipGraph for project pipeline: {e}"))?;
-        let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
-            Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
-        let mut reindexer =
-            sovereign_mesh::reindexer::Reindexer::new(indexes_dir.clone(), merged_handle);
-        // Phase 7.1: hook the commit-message harvester so the
-        // desktop daemon's git-HEAD poll persists committed-source
-        // notes alongside the SCIP rebuild. The harvester opens
-        // its own NoteStore handle (`notes_for_harvester` above) —
-        // the MCP arm's `notes` is moved into set_mcp and out of
-        // scope here. Same DB file, separate Arc handles.
-        if let Some(notes) = notes_for_harvester.as_ref() {
-            sovereign_mesh::reindexer::Reindexer::with_commit_harvester(
-                &mut reindexer,
-                Arc::clone(notes),
-            );
-        }
-        let project_http = sovereign_mesh::project_http::project_router(Arc::clone(&reindexer));
-        // Resume any previously-registered projects so FS watchers restart.
-        let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
-            tracing::warn!(
-                error = %e,
-                "desktop daemon: project registry unavailable; starting empty"
-            );
-            sovereign_mesh::projects::Registry::default()
-        });
-        for entry in registry.entries() {
-            reindexer.register(entry.clone()).await;
-            tracing::info!(corpus = %entry.corpus_id, "desktop daemon: resumed project");
-        }
-        // The project router's Extension holds an Arc<Reindexer> keeping
-        // watchers alive for the process lifetime — the local clone can drop.
-        drop(reindexer);
-
-        // /internal/corpus/watch/* — watched-folder reconciliation. The ROUTE
-        // is mounted unconditionally below; only the runtime singleton behind
-        // it is conditional, and its handlers answer 503 with a named reason
-        // when it is absent rather than 404ing as an unmounted route did.
-        if let Some(lc_mgr) = state.local_corpus.read().await.as_ref().cloned() {
-            let max_concurrent = cli_cfg.watched_folders.max_concurrent_sweeps;
-            let subsystem = sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
-                Arc::clone(&corpus_engine),
-                lc_mgr,
-                max_concurrent,
-                // Living trigger: desktop deferred to the recipe×workflow merge (v1).
-                None,
-            )
-            .await;
-            // Stash the subsystem on the AppState so its
-            // JoinHandle outlives this scope. AppState is held in an
-            // Arc for the desktop's lifetime, so the loop runs as
-            // long as the desktop process does.
-            *state.watched_subsystem.write().await = Some(subsystem);
-            tracing::info!("desktop daemon: /internal/corpus/watch/* router + scheduler wired");
-        }
-
-        // sv-surface rung 5: the embedded desktop daemon serves the same
-        // workflow job routes as the standalone one, so the Run view's job
-        // submission works unchanged in both modes. The runtime routes
-        // `model:`/`embed:` steps back through this daemon's loopback and
-        // injects the corpus/atlas tools.
-        let workflow_http = sovereign_workflow_host::workflow_http_router(
-            format!("http://127.0.0.1:{}", cli_cfg.daemon.client_port),
-            Arc::new(sovereign_tools::workflow_corpus_tools),
-        );
-        daemon_services = Some((
-            daemon_handle,
-            cli_cfg,
-            sovereign_mesh::ServingCapability {
-                mcp: mcp_surface,
-                project_http,
-                corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
-                workflow_http,
-            },
-        ));
-    }
-
     // Startup dimension guard: probe the loaded embed model's actual output
     // size and compare against every installed corpus index. A mismatch means
     // the user swapped embed models after building their library — retrieval
     // will silently return wrong results unless they rebuild.
     //
-    // The probe also gives us the real dimension count for `EmbedModelInfo`,
-    // which the collaborative ingestion planner uses to validate that peers
-    // are embedding with the same model before assigning them a partition.
-    // What this node advertises to peers about its embedding model. An explicit
-    // named value in both directions: a peer reading silence would otherwise
-    // fall back to a default model id and partition collaborative ingestion
-    // here anyway (ARCH §18.3).
-    let mut advertise_embed = sovereign_mesh::EmbedAdvertisement::Unavailable {
-        reason: "no embed model configured".to_string(),
-    };
+    // It no longer ADVERTISES that dimension: `EmbedAdvertisement` was what a
+    // node tells its peers about its embedding model, and this process is not
+    // a node any more — the daemon it attaches to advertises its own (svt-3).
     if slots.has_embed() {
         // Err => embed not configured or failed — skip validation.
         let t_embed_probe = std::time::Instant::now();
-        advertise_embed = sovereign_mesh::EmbedAdvertisement::Unavailable {
-            reason: "embed probe failed".to_string(),
-        };
         if let Ok(probe_vec) = inference.embed("probe").await {
             substep("embed_probe", t_embed_probe);
             let dims = probe_vec.len();
@@ -1404,33 +928,6 @@ pub async fn bootstrap_with_progress(
                 );
             }
             substep("validate_corpus_readiness", t_validate);
-
-            // Derive pooling and normalization from the embed family quirks
-            // (set at model-load time). Unknown/mean-pool models have no
-            // quirks entry and correctly default to Mean + Application.
-            let embed_quirks = config.embed_family.default_quirks().embed;
-            let pooling = embed_quirks
-                .as_ref()
-                .map(|q| q.pooling)
-                .unwrap_or(PoolingStrategy::Mean);
-            let normalization = embed_quirks
-                .as_ref()
-                .map(|q| q.normalize)
-                .unwrap_or(NormalizationStrategy::Application);
-            let embed_info = EmbedModelInfo {
-                model_id: embed_model_name.clone(),
-                dimensions: dims,
-                pooling,
-                normalization,
-                query_instruction_prefix: String::new(),
-            };
-            tracing::info!(
-                model_id = %embed_info.model_id,
-                dims,
-                pooling = ?embed_info.pooling,
-                "embed model info: advertising to mesh peers"
-            );
-            advertise_embed = sovereign_mesh::EmbedAdvertisement::Advertised(embed_info);
         }
     }
 
@@ -1746,25 +1243,6 @@ pub async fn bootstrap_with_progress(
         *state.entity_extractor.write().await = Some(Arc::clone(gliner));
     }
 
-    // Rolling-summary compaction worker. Spawn one per Runtime so
-    // the save-time hook in `end_conversation` can fire-and-forget
-    // a compaction pass without blocking the writer's turn. The
-    // worker holds its own Arc<MemoryStore> + Arc<InferenceProvider>
-    // and serialises passes across conversations via a single mpsc
-    // consumer. Pre-2026-05-23 behaviour is preserved when the
-    // operator sets `[memory.compaction] mode = "disabled"`.
-    // `None` in attach: the daemon at the other end owns that db and runs its
-    // own worker (sv-surface D0).
-    let compaction_worker = compaction_config_for_runtime.map(|cfg| {
-        sovereign_core::memory_compaction::CompactionWorker::spawn(
-            Arc::clone(&store) as Arc<dyn sovereign_core::traits::MemoryStore>,
-            // Was `Arc::clone(&runtime.inference)` — the same handle, read
-            // from the local rather than back out of a Runtime that does not
-            // exist yet at this point.
-            Arc::clone(&inference),
-            cfg,
-        )
-    });
     // ── Commission ───────────────────────────────────────────────────────
     // Every provider this host enriches with exists by now, so the Runtime is
     // built ONCE, total. Nothing below this line can add one.
@@ -1833,7 +1311,11 @@ pub async fn bootstrap_with_progress(
     // capabilities that are DESKTOP-shaped — which is what makes this file
     // diffable against the daemon's commission and the server's.
     let runtime_arc = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
-        compaction: compaction_worker,
+        // The desktop never owns the `sovereign.db` a rolling-summary pass
+        // would compact — the daemon at the other end does, and runs its own
+        // worker. Spawning one here was two writers deriving summaries from
+        // each other's rows (sv-surface D0, then structural at svt-3).
+        compaction: None,
         landscape_digests,
         mesh_knowledge,
         sensitive_corpora: local_corpus_mgr
@@ -1857,167 +1339,6 @@ pub async fn bootstrap_with_progress(
     // `ArcSwapOption` cell `install_meta_atlas` stores into — and it starts
     // BEFORE commissioning rather than after, so the window in which a turn
     // could run without the cross-corpus boost got shorter, not longer.
-    // Auto-resume a previously-persisted mesh so the founder sees
-    // their mesh on restart and existing joiners pick up where they
-    // left off. Fails soft — a missing or corrupt mesh.json never
-    // blocks startup.
-    //
-    // Attach mode skips this: the CLI daemon has already resumed its
-    // own mesh state before we probed `:9741`. Running `try_resume`
-    // from this process would either be a no-op (if our `mesh` is
-    // None) or fight the CLI daemon for the same mesh.json.
-    // ── Commission the in-process daemon ──────────────────────────────
-    //
-    // Everything it needs exists by now, so it is built ONCE, total, and
-    // there is no window in which a request can reach a daemon that is
-    // missing half its surface. Before daemon-convergence Phase 2 this was
-    // an empty daemon constructed in `AppState::new_with_mode` and filled in
-    // by 17 setters spread across this function.
-    if let Some((daemon_handle, cli_cfg, capability)) = daemon_services {
-        // ── Commission, through THE assembler ─────────────────────────
-        //
-        // The desktop no longer names its own variant. It hands its parts to
-        // `sovereign_mesh::assemble` — the one exhaustive match over `Launch`
-        // that constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3) —
-        // together with the launch `main` published, and that match decides
-        // what an in-process desktop daemon composes into. A refusal is fatal:
-        // a daemon that came up as the wrong shape is the hazard itself.
-        let services = sovereign_mesh::assemble(
-            &crate::launch_mode::get(),
-            sovereign_mesh::LaunchParts::Serving {
-                // `headless: None` is a CLAIM, checked by the assembler: the
-                // desktop has never carried a provider factory, a shared mesh
-                // store or a convergence recorder, and since Phase 3 it is not
-                // distinguished by a state store either.
-                headless: None,
-                serving: sovereign_mesh::ServingProfile {
-                    core: sovereign_mesh::ServingCore {
-                        // The engine peers gossip-probe over
-                        // `/internal/knowledge/search`, and that `/v1/knowledge/
-                        // search` reads. Present BEFORE `try_resume`, so the
-                        // first gossip round already advertises real
-                        // `hosted_corpora`.
-                        corpus_engine: Arc::clone(&corpus_engine),
-                        // The RAW provider, not the mesh-wrapped one: a peer
-                        // POSTing `/v1/chat/completions` here must be served
-                        // from our local model, not re-entered into our own
-                        // routing wrapper and ping-ponged back out.
-                        inference_provider: Arc::clone(&raw_inference),
-                        // Resolves `conversation-history` chunks back to their
-                        // conversation for the reading surface; without it
-                        // citations render with no title. THE SAME handle this
-                        // process already opened — the desktop and its in-process
-                        // daemon are one writer of one `sovereign.db`, which is
-                        // the invariant `RunLock` keys on the data root to hold.
-                        state_store: Arc::clone(&store),
-                        // Phase 5c: THE SAME `Runtime` this process commissioned
-                        // above — not a second one for the in-process daemon.
-                        // One process, one thing that answers; the desktop's chat
-                        // commands and anything the daemon serves are the same
-                        // assembly by construction rather than by review.
-                        runtime: Arc::clone(&runtime_arc),
-                        // sv-surface rung 6: the insight surface over the SAME
-                        // connection `open_store` opened — the service the
-                        // in-process `/v1/insights/*` routes serve, and the twin
-                        // of what the daemon commissions for the attached case.
-                        insights: state.insight_service.read().await.as_ref().map(Arc::clone),
-                        // sv-surface D6: the feature-project store the in-process
-                        // /v1/features/* routes serve — the same handle this
-                        // process opened, the twin of what the CLI daemon
-                        // commissions for the attached case.
-                        features: state.features.read().await.as_ref().map(Arc::clone),
-                    },
-                    capability,
-                    advertise_embed,
-                },
-            },
-        )
-        .unwrap_or_else(|refusal| {
-            panic!("desktop: cannot commission the in-process daemon: {refusal}")
-        });
-        let client_port = cli_cfg.daemon.client_port;
-        let daemon =
-            sovereign_mesh::EmbeddedDaemon::new(config.data_dir.clone(), cli_cfg, services);
-        daemon_handle.bind(Arc::clone(&daemon));
-        *state.mesh.write().await = Some(Arc::clone(&daemon));
-
-        let started = match daemon.try_resume().await {
-            Ok(true) => {
-                tracing::info!("mesh: resumed from persisted state");
-                true
-            }
-            Ok(false) => {
-                // sv-surface R4/B1: a fresh install has no mesh.json, and
-                // try_resume returns WITHOUT binding — until now the
-                // desktop's listener existed only after an explicit
-                // create/join, so a first-time user had no port at all.
-                // The CLI daemon already answers this (daemon_cmd's `None`
-                // arm): create a silent solo mesh, which brings the
-                // listener up inside `create_mesh`. Loopback profile by
-                // default — binding wide is what the explicit create flow
-                // opts into via `expose_client_api`.
-                let hostname = hostname::get()
-                    .ok()
-                    .and_then(|h| h.into_string().ok())
-                    .unwrap_or_else(|| "sovereign".to_string());
-                let mesh_name = format!("{hostname}'s Mesh");
-                match daemon.create_mesh(&mesh_name, &hostname).await {
-                    Ok(_) => {
-                        tracing::info!(%mesh_name, "mesh: solo mesh created on first boot");
-                        true
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "mesh: could not create the first-boot solo mesh"
-                        );
-                        false
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "mesh: try_resume failed — no mesh, no listener");
-                false
-            }
-        };
-
-        // sv-surface B3, fatal at R5 as the row said: every turn now rides
-        // the wire, so a Local boot whose own daemon holds no client
-        // listener has NOTHING to serve chat — and worse than nothing, its
-        // wire client would connect to whoever else answers on the port.
-        // Watched live 2026-09-10: the first-launch e2e journey booted
-        // Local while a fixture daemon held :9741; the embedded bind failed
-        // best-effort, the turn was served by the fixture daemon and
-        // persisted in ITS store, and this process read metadata back from
-        // its own empty one. A port is not an identity. The bind outcome is
-        // the serve task's own word (`ClientListener`), read here rather
-        // than inferred from a port probe a stranger can answer.
-        if !started {
-            return Err(format!(
-                "the local daemon did not start, so nothing serves chat on :{client_port} — see the log for the mesh error"
-            ));
-        }
-        match daemon
-            .client_listener(std::time::Duration::from_secs(30))
-            .await
-        {
-            sovereign_mesh::ClientListener::Bound(addr) => {
-                tracing::info!(%addr, "mesh: client listener bound — this process owns its port");
-            }
-            sovereign_mesh::ClientListener::Failed(e) => {
-                return Err(format!(
-                    "the local daemon could not bind :{client_port} — {e}. Another sovereign on this machine is holding the port: stop it, or give this one a different client_port."
-                ));
-            }
-            sovereign_mesh::ClientListener::Pending => {
-                return Err(format!(
-                    "the local daemon's bind on :{client_port} did not settle within 30s — refusing to report a backend that may be serving nothing"
-                ));
-            }
-        }
-    } else {
-        tracing::info!("mesh: attach mode — CLI daemon owns mesh state");
-    }
 
     // Background startup task: verify per-corpus vector index readiness and
     // write results to the store so handle_knowledge_query can gate correctly.
@@ -2071,74 +1392,6 @@ pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ── sv-surface B4 — the identity half of the run-lock refusal ──
-    //
-    // `probe_daemon_identity` is what turns "something is on the port"
-    // into "the process holding my data root is serving it". Each case
-    // below is a fixture the production probe cannot tell apart from
-    // the real thing by shape alone — which is the whole point: the
-    // 2026-09-10 incident was a STRANGER answering a liveness probe
-    // (3c7ad5933), and a bare `/v1/models` check would accept every
-    // one of these.
-
-    /// Serve `body` at `GET /status` on a kernel-assigned port.
-    async fn status_fixture(body: serde_json::Value) -> u16 {
-        use axum::{routing::get, Json, Router};
-        let app = Router::new().route(
-            "/status",
-            get(move || {
-                let body = body.clone();
-                async move { Json(body) }
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, app).await;
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        port
-    }
-
-    #[tokio::test]
-    async fn b4_probe_names_a_foreign_daemon_holding_the_port() {
-        // A live sovereign that is NOT us: the lock holder. This is the
-        // one shape that may flip a refused Local boot into a client.
-        let foreign = std::process::id() + 1;
-        let port = status_fixture(serde_json::json!({
-            "process": { "pid": foreign, "run_id": "abc", "uptime_seconds": 12 }
-        }))
-        .await;
-        assert_eq!(probe_daemon_identity(port).await, Some(foreign));
-    }
-
-    #[tokio::test]
-    async fn b4_probe_refuses_a_status_that_names_this_process() {
-        // Probing ourselves proves nothing, and accepting it would let
-        // a desktop declare itself its own daemon's client.
-        let port = status_fixture(serde_json::json!({
-            "process": { "pid": std::process::id() }
-        }))
-        .await;
-        assert_eq!(probe_daemon_identity(port).await, None);
-    }
-
-    #[tokio::test]
-    async fn b4_probe_refuses_a_stranger_with_no_process_block() {
-        // Something answers `/status` with 200 and is not a sovereign.
-        // A port is not an identity: no `process.pid`, no attach.
-        let port = status_fixture(serde_json::json!({ "ok": true })).await;
-        assert_eq!(probe_daemon_identity(port).await, None);
-    }
-
-    #[tokio::test]
-    async fn b4_probe_refuses_a_silent_port() {
-        // The B4 FATAL case: the lock is held and nobody answers. This
-        // returning `None` is what makes bootstrap refuse rather than
-        // come up as a Local process that is really a client.
-        assert_eq!(probe_daemon_identity(59_743).await, None);
-    }
 
     #[test]
     fn legacy_config_without_auto_collaborate_upgrades_to_on() {

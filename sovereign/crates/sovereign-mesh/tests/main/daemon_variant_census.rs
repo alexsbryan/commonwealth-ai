@@ -60,16 +60,20 @@ fn repo_root() -> PathBuf {
 /// that variant through the assembler. Listed rather than globbed so that a
 /// host which stops constructing a daemon fails here instead of silently
 /// shrinking the census.
+///
+/// **`Desktop` came off this list on 2026-09-11 (sv-surface svt-3a), and the
+/// census did exactly what it was built to do on the way.** Its own header
+/// names "delete the last host that builds `Desktop`" as one of the two
+/// failing inputs it exists to catch; `sovereign-desktop`'s `state.rs` stopped
+/// calling `EmbeddedDaemon::new` and this went red naming the row. Removing
+/// the row is therefore the OWED half of that deletion, not a way around it —
+/// and the claim the row used to carry does not evaporate, it moves to
+/// [`the_desktop_variant_has_no_first_party_host`] below.
 const LIVE_CONSTRUCTION_SITES: &[(&str, &str, &str)] = &[
     (
         "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs",
         "Headless",
         "headless: Some(",
-    ),
-    (
-        "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
-        "Desktop",
-        "headless: None",
     ),
     (
         "sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs",
@@ -222,6 +226,81 @@ fn each_live_path_supplies_the_parts_for_its_variant() {
              this file, so either the host changed shape or the assembler did"
         );
     }
+}
+
+/// `DaemonServices::Desktop` is REPRESENTABLE and has no first-party host.
+///
+/// The desktop was the only one. It commissioned a daemon whenever its boot
+/// concluded `Local` — loading the GGUFs, claiming the data root's `RunLock`
+/// and serving `:9741` from the window's own process — and svt-3a deleted
+/// that: a client does not become the thing it is a client of (ARCH principle
+/// 12).
+///
+/// The variant is deliberately NOT deleted with its host. `sv-surface`'s K3
+/// kill-bar keeps in-process hosting as a DECLARED mode with a named owner,
+/// and iOS is the standing case — the App Store forbids fork/exec, so a phone
+/// running on-device weights cannot use a sidecar and must host in-process.
+/// This test is what keeps that reservation honest in the meantime: the moment
+/// a first-party file reaches the arm again, it fails and asks for the
+/// declaration rather than letting a host appear by habit.
+///
+/// Watched to fail at landing: `headless: None` re-added to `state.rs` inside
+/// a `LaunchParts::Serving`, red naming the file, reverted.
+#[test]
+fn the_desktop_variant_has_no_first_party_host() {
+    let root = repo_root();
+    // Scanned rather than listed, because the claim is an ABSENCE and a list
+    // of places it is absent from proves nothing (ARCH principle 5). The mesh
+    // crate's own source and tests are excluded: `daemon_services.rs` declares
+    // the arm and its tests exercise it, which is what a reserved variant
+    // looks like.
+    let mut hosts: Vec<String> = Vec::new();
+    let mut stack = vec![
+        root.join("sovereign/crates"),
+        root.join("commonwealth/crates"),
+    ];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|n| n == "target") {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .to_string();
+            if rel.starts_with("sovereign/crates/sovereign-mesh/") {
+                continue;
+            }
+            let Ok(body) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let body = code_only(&body);
+            if body.contains("LaunchParts::Serving") && body.contains("headless: None") {
+                hosts.push(rel);
+            }
+        }
+    }
+    assert!(
+        hosts.is_empty(),
+        "these files reach `DaemonServices::Desktop` — in-process daemon hosting \
+         outside `sovereign-mesh`: {hosts:?}. sv-surface's K3 bar makes that a \
+         DECLARED mode with a named owner and a `sovereign/DEFAULTS_LEDGER.md` \
+         row, never a fallback a surface grows back into. If this is the iOS \
+         case the variant is reserved for, add the row and the host to \
+         LIVE_CONSTRUCTION_SITES in the same commit."
+    );
 }
 
 /// The router delta this phase dissolves. Before 2026-08-24 the desktop

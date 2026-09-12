@@ -30,6 +30,82 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Model-load safety guards — **NO OWNER** since 2026-09-11 (sv-surface svt-3a)
+
+**What is dark.** TWO guards, both of which asked "can this machine actually
+load this GGUF?" before loading it, and neither of which now runs anywhere.
+
+1. **The CPU/arch gate.** Some architectures — Qwen3.5 "Gated DeltaNet"
+   (`qwen35`), Mamba/SSM, RWKV — SIGSEGV inside ggml's recurrent `SET` op
+   during CPU prefill. Nothing decides, on any surface, whether the configured
+   chat model is one of them.
+2. **The GPU crash probe** (`sovereign-desktop/src-tauri/src/smoketest.rs`,
+   deleted; 302 lines). It forked `current_exe() --smoketest`, loaded the chat
+   GGUF and decoded ONE token in a throwaway process. If the child died on a
+   signal — the Gemma-4-on-Apple-Metal SIGSEGV in llama-cpp-2 0.1.145 is the
+   case it was built for — the parent set `SOVEREIGN_FORCE_CPU_CHAT=1`, loaded
+   on CPU instead, and recorded a `CrashRecord`. Verdicts were cached per
+   (model, gpu_layers, ctx), so an unchanged config paid nothing.
+
+**What is NOT lost, and it is the larger half.** The reason the probe mattered
+was `DAEMON_RESILIENCE.md:75` — "daemon + ggml run in-process → any native
+crash kills the app". That has not been true since svt-2 removed supervision
+and svt-3a removed in-process hosting: the weights are in a process the app
+does not own, so a ggml crash kills the DAEMON and the window survives it.
+`attach_watch` notices and drives the ReconnectBanner; `attach_restart_daemon`
+is the recovery button. What is genuinely gone is the PRE-EMPTION — avoiding
+the crash rather than surviving it — and with it the automatic CPU fallback
+that kept such a machine usable at all.
+
+**Why it went, and why putting it back where it was would be worse.** The
+desktop held it (`state/builders/model_compat.rs`, deleted): on a CPU machine
+it read the GGUF header, picked a dense substitute discovered alongside the
+configured model, mutated its in-memory `ResolvedModelSlots`, and raised a
+`model-notice` banner. That was correct exactly while the desktop loaded the
+weights. It never wrote `config.toml` — so the moment the daemon became the
+loader, the substitution could not reach the weights at all. All it still did
+was make `build_daemon_provider` derive a model id the daemon never loaded,
+while telling the user a swap had happened that had not (ARCH principle 6).
+That defect was live in attach mode before svt-3; svt-3 made attach the only
+mode, which is why the removal lands with it rather than after it.
+
+**Where both belong.** With whoever loads the weights, and BOTH deciders are
+already shared crates, so neither implementation moves — only its caller, into
+`sovereign-cli-daemon`'s slot build beside the `force_cpu_chat()` reads that
+are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
+
+* `sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model,
+  is_cpu_incompatible_arch}` — the arch gate.
+* `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
+  probe's whole implementation, which has always lived in the shared crate.
+  The daemon's `Launch::parse` ALREADY accepts the flag
+  (`sovereign-cli-daemon/src/lib.rs:316`, `launch_smoketest_flag_matches_owner`
+  pins the two spellings together); it has never spawned it.
+
+Measured 2026-09-11: `grep -rn choose_cpu_safe_chat_model
+sovereign/crates/sovereign-cli-daemon` returns **zero hits**, and the only
+`smoketest` hits in that crate are the flag-name test just cited — so today no
+process applies either guard.
+
+**Flip condition (falsifiable), both halves.** The daemon (a) refuses or
+substitutes a CPU-incompatible chat model at slot-build time and (b) probes the
+GPU path in a child before its own in-process load, saying which on its startup
+trace — and a desktop attached to it renders that refusal rather than watching
+a port die. Settled by: an svt-3 follow-up order against
+`sovereign-cli-daemon`. The `model-notice` Tauri listener
+(`src/lib/components/ModelNoticeBanner.svelte`) is left in place and inert —
+the banner text is the user-facing half and is worth keeping for whatever emits
+it next; a daemon-side guard reaches it through `/status` or a turn error, not
+through a Tauri event.
+
+**Review by 2026-10-11.** If the daemon-side guards have not landed by then,
+the question for the operator is whether a CPU-only machine with a
+recurrent-arch model, or a Metal machine with a Gemma-4-class model, is a shape
+this build still ships to — not whether to re-add an in-memory substitution
+that cannot reach the loader, or a fork in a client that probes somebody else's
+weights (ARCH principle 12).
+
+
 ### `sovereign-turn-client/bundled-backend` — a surface now ships a backend → **GRADUATED 2026-09-11** (declared by `sovereign-desktop`; the crate default stays OFF)
 
 **What ships NOW.** `sovereign-desktop` declares

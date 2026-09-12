@@ -1044,41 +1044,6 @@ max = 3
 kind = "sanctioned"
 reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>/com.svrnmesh.daemon` or `systemctl --user restart svrnmesh`. The bar keeps this one explicitly: it is the `attach_restart_daemon` BUTTON, a user action, and it asks the OS service manager to do the restarting rather than doing it here. No handle is created (`.output()` runs to completion), no policy, no timer. Read it as the shape the rule permits, not as debt."
 
-[[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/smoketest.rs"
-rule = "starts"
-max = 2
-kind = "burning-down"
-reason = "the crash-isolation smoketest forks `current_exe()` to try loading a GGUF in a throwaway process. 302 lines, and it belongs in the daemon — the daemon is what loads models, so the app is running a subprocess to answer a question about somebody else's data (ARCH principle 12). svt-3 moves it."
-
-[[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/smoketest.rs"
-rule = "reaps"
-max = 3
-kind = "burning-down"
-reason = "the same subprocess: `try_wait` polling for a deadline, then `kill` + `wait`. This is a full lifecycle tracked in a client, and it is the clearest single reason the census exists as a separate half — no dependency edge moves when this is written."
-
-[[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
-rule = "starts"
-max = 2
-kind = "burning-down"
-reason = "the Mobile Access toggle spawns a `sovereign-server` child (`start()`, :73 + :92). The bar's own survey counted it — `mobile-host supervision 90` lines — and it is the second daemon this app manages, not the first. It is also where the survey found a live defect: `stop_daemon_child` takes only `state.supervisor`, so this child is never stopped on quit and is orphaned by `_exit`."
-
-[[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
-rule = "reaps"
-max = 2
-kind = "burning-down"
-reason = "`kill_on_drop(true)` (:88) and `child.wait().await` (:96) — the two halves of a lifetime the client decided for a process it does not own: it ends when the toggle's JoinHandle is aborted, and the client sits waiting to learn that it did. This pair is what taught the census its `kill_on_drop` needle; a `Child` is never named in the file, so a type-shaped rule would have missed it."
-
-[[thin_surfaces.lifecycle_allow]]
-file = "sovereign/crates/sovereign-desktop/src-tauri/src/setup_flow.rs"
-rule = "starts"
-max = 1
-kind = "burning-down"
-reason = "`relaunch_after_setup` spawns `current_exe()` and exits — THIS app, not a daemon, so read it as the mildest row here: no handle, no wait, no policy. It survives only because the one look for a serving host happens at startup, before the wizard has written config.toml, so the wizard session cannot acquire one and a fresh instance can. The bar already predicts its deletion: `under an OS service that whole relaunch DELETES`."
-
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 

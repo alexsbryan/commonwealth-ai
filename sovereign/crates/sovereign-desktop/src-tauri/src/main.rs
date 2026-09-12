@@ -30,7 +30,6 @@ mod recipe_commands;
 mod routing_events;
 mod serving_host;
 mod setup_flow;
-mod smoketest;
 mod state;
 mod tray;
 mod turn_report;
@@ -113,25 +112,21 @@ fn main() -> ExitCode {
     // this match saw rather than re-deriving one.
     launch_mode::publish(launch.clone());
     match launch {
-        // Skip Tauri entirely: load one model, decode one token, exit. The
-        // parent spawns this to detect ggml backend crashes (e.g. the Gemma 4
-        // Metal SIGSEGV) before loading into the user-facing slot.
-        // `detect_and_run` re-reads the FULL argv for `--model` / `--gpu-layers`
-        // / `--ctx`; `None` means it declined, and falling through to the GUI
-        // is what this path did before.
-        Launch::Smoketest { .. } => {
-            if let Some(code) = smoketest::detect_and_run(&argv) {
-                return code;
-            }
-        }
-
-        // The daemon roles this binary can no longer fill. Nothing in the tree
+        // The roles this binary can no longer fill. Nothing in the tree
         // spawns them at the desktop any more, so reaching here means a stale
         // service definition, a stale script, or a habit — and the answer is
         // to SAY SO, not to open a window (ARCH principle 6: never silently
         // substitute; a GUI is not a daemon). Named individually rather than
         // wildcarded so a new `Launch` variant still has to be decided.
-        Launch::Daemon { .. }
+        //
+        // `Smoketest` joined them at svt-3. It re-entered this binary to load
+        // one GGUF and decode one token in a child, so a ggml backend crash
+        // (the Gemma-4-on-Metal SIGSEGV) killed the probe instead of the
+        // window — a guard over an in-process model load, and this process no
+        // longer performs one. The daemon is what loads models, and the
+        // crash-isolation question is its to answer.
+        Launch::Smoketest { .. }
+        | Launch::Daemon { .. }
         | Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
         | Launch::Worker { .. } => {
