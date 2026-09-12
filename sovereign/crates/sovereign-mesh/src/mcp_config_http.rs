@@ -42,59 +42,15 @@ use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── Wire types ────────────────────────────────────────────────
 
-/// One configured MCP server, joined with what the daemon's tool registry
-/// actually holds for it.
+/// The three shapes `GET /v1/mcp/servers` answers with. Defined in
+/// `sovereign-contracts` so a client can parse them without linking this
+/// crate, re-exported here so the routes below and their tests keep naming
+/// them at this path (sv-surface svt-3).
 ///
-/// The first seven fields are the desktop's `McpServerView` field-for-
-/// field. `connected` / `tool_count` / `error` are deliberately absent —
-/// see this module's header — and [`Self::live_tool_count`] replaces them
-/// with the fact the daemon can actually observe.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpServerView {
-    pub name: String,
-    pub url: String,
-    pub description: Option<String>,
-    pub enabled: bool,
-    pub bearer: bool,
-    /// Env var the bearer token is read from — the headless / CI
-    /// override. `None` for no-auth servers.
-    pub token_env: Option<String>,
-    /// Whether a token is currently stored in the secret file for this
-    /// server (the primary path).
-    pub has_token: bool,
-    /// Tools in the daemon's live registry whose id carries this server's
-    /// `mcp_<name>_` prefix. `0` on a daemon with no `/mcp` mount at all —
-    /// which [`McpMountStatus`] distinguishes from "mounted, zero tools".
-    pub live_tool_count: usize,
-}
-
-/// Whether the daemon has a tool mount to count against, and — when it
-/// does not — why.
-///
-/// Mirrors [`crate::daemon_services::McpSurface`], which exists for
-/// exactly this reason: "this host serves no tools" and "`notes.db` would
-/// not open" are different operational facts with different fixes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpMountStatus {
-    /// `true` when a tool registry was available to fold the counts over.
-    /// When `false` every `live_tool_count` above is `0` because there was
-    /// nothing to count, NOT because the servers registered nothing.
-    pub mounted: bool,
-    /// Total tools in the daemon's registry, MCP and native alike — the
-    /// denominator for the per-server counts.
-    pub total_tools: usize,
-    /// Why connect status and connect errors are not in this payload, in
-    /// words, on every response. Always present: an absence a caller has
-    /// to infer from a missing key is indistinguishable from an old host
-    /// (ARCH §18.3).
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpServersResponse {
-    pub servers: Vec<McpServerView>,
-    pub mount: McpMountStatus,
-}
+/// What is deliberately NOT on them — `connected` / `tool_count` / `error` —
+/// and why is in this module's header; `McpServerView::live_tool_count` is
+/// the observation served in their place.
+pub use sovereign_contracts::daemon_wire::{McpMountStatus, McpServerView, McpServersResponse};
 
 /// `POST /v1/mcp/servers/test` — probe a server without persisting it.
 ///

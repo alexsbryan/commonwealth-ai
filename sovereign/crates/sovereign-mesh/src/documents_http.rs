@@ -63,20 +63,10 @@ pub struct DocumentResponse {
 }
 
 /// A document in the legacy `documents` table with no `DocumentAsset`
-/// record — an upload from the old paperclip path.
-///
-/// The desktop's `LegacyDocumentEntry`, moved: it is `Serialize`-only
-/// up there (a Tauri return), and a wire type has to parse back, which
-/// is why this carries `Deserialize` too.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LegacyDocumentEntry {
-    /// The chunk store's `source` key — the promotion handle.
-    pub source: String,
-    /// Last path segment of `source`.
-    pub filename: String,
-    pub chunk_count: usize,
-    pub word_count: usize,
-}
+/// record. Defined in `sovereign-contracts` so a client can parse it
+/// without linking this crate; re-exported here so the routes below and
+/// their tests keep naming it at this path (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::LegacyDocumentEntry;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LegacyDocumentListResponse {

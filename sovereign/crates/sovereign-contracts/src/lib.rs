@@ -18,6 +18,13 @@
 /// `crate::oicp::*` exactly as they did inside `sovereign-core`.
 pub use oicp_types as oicp;
 
+// Wire shapes the daemon's HTTP routes answer with. Here rather than beside
+// the routes because a client that only parses an answer should not have to
+// link the serving host to name it — `sovereign-desktop` named eight of
+// these through `sovereign_mesh::*_http` and paid a layer edge for a `bool`
+// (sv-surface svt-3). `sovereign-mesh` re-exports each at its historical
+// path, so the routes are unchanged.
+pub mod daemon_wire;
 pub mod data_roots;
 pub mod engine_config;
 // The egress boundary — the ONE choke point for remote-model calls and

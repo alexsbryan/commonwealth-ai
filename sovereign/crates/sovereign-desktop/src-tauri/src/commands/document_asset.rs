@@ -587,8 +587,10 @@ pub async fn delete_document_asset(
 
 /// A document from the legacy chunks table (uploaded via the old paperclip
 /// path before DocumentAssetManager existed) — the route's own type, which
-/// `list_legacy_documents` parses with and returns verbatim.
-pub use sovereign_mesh::documents_http::LegacyDocumentEntry;
+/// `list_legacy_documents` parses with and returns verbatim. Named from
+/// `sovereign-contracts`, which is where `documents_http`'s route names it
+/// too (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::LegacyDocumentEntry;
 
 /// List documents from the legacy `documents` table that don't have
 /// a corresponding DocumentAsset record. These are shown in the picker

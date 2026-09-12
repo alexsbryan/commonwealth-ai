@@ -166,7 +166,7 @@ async fn require_manager(
 #[tauri::command]
 pub async fn lc_ocr_available(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
     let avail = lc_client(&state)
-        .lc_ocr_available::<sovereign_mesh::lc_http::OcrAvailability>()
+        .lc_ocr_available::<sovereign_contracts::daemon_wire::OcrAvailability>()
         .await
         .map_err(|e| format!("lc_ocr_available: {e}"))?;
     Ok(avail.available)
@@ -754,7 +754,7 @@ pub async fn lc_ingest(
     // daemon's, so minting a second id here for the same job would be two
     // names for one thing.
     let ack = lc_client(&state)
-        .lc_ingest::<sovereign_mesh::lc_http::IngestJobAck>(&corpus_id, with_ocr)
+        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)
         .await
         .map_err(|e| format!("lc_ingest: {e}"))?;
     tracing::info!(
@@ -1369,7 +1369,7 @@ pub async fn lc_incomplete_jobs(
 #[tauri::command]
 pub async fn lc_cancel(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<bool, String> {
     let ack = lc_client(&state)
-        .lc_cancel::<sovereign_mesh::lc_http::CancelAck>(&corpus_id)
+        .lc_cancel::<sovereign_contracts::daemon_wire::CancelAck>(&corpus_id)
         .await
         .map_err(|e| format!("lc_cancel: {e}"))?;
     // `cancelled` is "there WAS a job and it is now cancelled", which the
@@ -1452,8 +1452,11 @@ pub async fn lc_clean(
 /// The hit shape the frontend already matches — the ROUTE's own type, not
 /// a twin of it. `lc_search` below both parses the route's answer with this
 /// and returns it to the webview, so one definition owns both ends and the
-/// serialized bytes cannot drift (ARCH §10.6).
-pub use sovereign_mesh::lc_http::LocalSearchHit;
+/// serialized bytes cannot drift (ARCH principle 8). It is the SAME
+/// definition `lc_http`'s route emits: both sides name
+/// `sovereign_contracts::daemon_wire`, so this client no longer links the
+/// serving host to parse four primitives (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::LocalSearchHit;
 
 // ─── Command: lc_cluster ─────────────────────────────────────────────
 

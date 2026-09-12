@@ -18,9 +18,9 @@ use std::sync::Arc;
 
 use corpus_engine_notes::{NoteScope, NoteSource};
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::daemon_wire::NoteEntry;
 use sovereign_contracts::types::LessonProposedPayload;
 use sovereign_core::lessons::{LessonPayload, TaughtFrom, LESSON_KIND};
-use sovereign_mesh::notes_http::NoteEntry;
 use tauri::State;
 
 use crate::state::AppState;

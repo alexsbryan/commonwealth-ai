@@ -37,76 +37,43 @@ const LIST_LIMIT_DEFAULT: usize = 50;
 
 // ─── The wire projection ───────────────────────────────────────
 
-/// One note on the wire — every field of `corpus_engine_notes::Note`,
-/// which is `#[derive(Debug, Clone)]` and carries no serde impls of its
-/// own.
+/// One note on the wire. Defined in `sovereign-contracts` so a client can
+/// parse a note without linking this crate; re-exported here so the routes
+/// below and their tests keep naming it at this path (sv-surface svt-3).
 ///
-/// Projected rather than derived-on: `Note` is a store type with three
-/// enum-shaped `String` fields (`scope`, `source`) and a `Vec<NoteScope>`
-/// nowhere in sight, and putting `Serialize` on it would make the store
-/// crate own a wire contract it has no reason to. This is the ONE
-/// projection for the family — `Deserialize` too, so a caller parses
-/// back into the same struct the daemon emitted rather than a hand-rolled
-/// twin that can drift (the `atlas_view` property that makes a repoint a
-/// repoint).
-///
-/// Nothing is dropped. `payload_json` in particular crosses verbatim as
-/// a STRING, not as parsed JSON: it is the caller's schema
-/// (`LessonPayload`, the recipe-author kinds), the store never parsed it,
-/// and re-encoding it here would make this router a second decider about
-/// a shape it does not own.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NoteEntry {
-    pub id: String,
-    pub kind: String,
-    pub content: String,
-    pub symbols: Vec<String>,
-    pub files: Vec<String>,
-    pub session_id: String,
-    /// RFC 3339.
-    pub created_at: String,
-    pub tool_name: Option<String>,
-    /// Unix seconds; `None` means active.
-    pub retired_at: Option<i64>,
-    pub retired_by: Option<String>,
-    /// `"global"` | `"feature"` | `"session"`.
-    pub scope: String,
-    pub feature_id: Option<String>,
-    pub promoted_from: Option<String>,
-    pub related_entity: Option<String>,
-    /// `"agent"` | `"committed"` | `"extracted"` | `"inferred"` | `"observed"`.
-    pub source: String,
-    pub supersedes: Option<String>,
-    pub payload_json: Option<String>,
-    pub origin_node_id: Option<String>,
-    pub sent_at: Option<i64>,
-    pub received_at: Option<i64>,
-}
+/// The PROJECTION stays here — see [`note_entry`]. `corpus_engine_notes::Note`
+/// is a store type three layers above `sovereign-contracts`, so the `From`
+/// impl cannot travel with the struct.
+pub use sovereign_contracts::daemon_wire::NoteEntry;
 
-impl From<Note> for NoteEntry {
-    fn from(n: Note) -> Self {
-        Self {
-            id: n.id,
-            kind: n.kind,
-            content: n.content,
-            symbols: n.symbols,
-            files: n.files,
-            session_id: n.session_id,
-            created_at: n.created_at,
-            tool_name: n.tool_name,
-            retired_at: n.retired_at,
-            retired_by: n.retired_by,
-            scope: n.scope,
-            feature_id: n.feature_id,
-            promoted_from: n.promoted_from,
-            related_entity: n.related_entity,
-            source: n.source,
-            supersedes: n.supersedes,
-            payload_json: n.payload_json,
-            origin_node_id: n.origin_node_id,
-            sent_at: n.sent_at,
-            received_at: n.received_at,
-        }
+/// Project a stored note onto the wire shape.
+///
+/// A free function rather than `impl From<Note> for NoteEntry`: both types
+/// are foreign to this crate now that [`NoteEntry`] lives in
+/// `sovereign-contracts`, and the orphan rule forbids the impl. Still the ONE
+/// projection for the family — the two routes below are its only callers.
+pub fn note_entry(n: Note) -> NoteEntry {
+    NoteEntry {
+        id: n.id,
+        kind: n.kind,
+        content: n.content,
+        symbols: n.symbols,
+        files: n.files,
+        session_id: n.session_id,
+        created_at: n.created_at,
+        tool_name: n.tool_name,
+        retired_at: n.retired_at,
+        retired_by: n.retired_by,
+        scope: n.scope,
+        feature_id: n.feature_id,
+        promoted_from: n.promoted_from,
+        related_entity: n.related_entity,
+        source: n.source,
+        supersedes: n.supersedes,
+        payload_json: n.payload_json,
+        origin_node_id: n.origin_node_id,
+        sent_at: n.sent_at,
+        received_at: n.received_at,
     }
 }
 
@@ -262,7 +229,7 @@ async fn list_notes(
                     "notes_http: notes listed",
                 );
                 Json(NoteListResponse {
-                    notes: rows.into_iter().map(NoteEntry::from).collect(),
+                    notes: rows.into_iter().map(note_entry).collect(),
                 })
                 .into_response()
             }
@@ -283,7 +250,7 @@ async fn get_note(
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
     Ok(match store.read_note_by_id(&id).await {
-        Ok(Some(note)) => Json(NoteEntry::from(note)).into_response(),
+        Ok(Some(note)) => Json(note_entry(note)).into_response(),
         Ok(None) => not_found(&format!("no note `{id}`")),
         Err(e) => internal_error(&e.to_string()),
     })

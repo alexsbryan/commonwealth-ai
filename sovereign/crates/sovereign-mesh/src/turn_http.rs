@@ -156,19 +156,6 @@ pub struct CreateConversationRequest {
     pub enabled_corpora: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct CreateConversationResponse {
-    pub id: String,
-    pub created_at: i64,
-    /// The allow-list that was seeded, echoed back VERBATIM when one was
-    /// sent and omitted otherwise. The echo is what lets a client tell a
-    /// daemon that scoped the conversation from one that predates the field
-    /// and ignored it — serde drops unknown keys, so without this a stale
-    /// daemon would mint an unscoped conversation and say nothing (§18.3).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enabled_corpora: Option<Vec<String>>,
-}
-
 /// `POST /v1/conversations`
 ///
 /// Seeds the row before the first message, which is what makes the skill tag
@@ -264,18 +251,15 @@ pub struct ListQuery {
     pub corpus_id: Option<String>,
 }
 
+/// The two conversation shapes that are pure serde over primitives.
+/// Defined in `sovereign-contracts` so a client can name them without
+/// linking this crate, re-exported here so the routes below and their tests
+/// keep naming them at this path (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::{ConversationListEntry, CreateConversationResponse};
+
 #[derive(Debug, Serialize)]
 pub struct ConversationListResponse {
     pub conversations: Vec<ConversationListEntry>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ConversationListEntry {
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 #[derive(Debug, Serialize)]

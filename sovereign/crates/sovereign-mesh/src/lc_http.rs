@@ -40,37 +40,13 @@ use crate::watched_folder_runtime;
 
 // ─── Wire shapes ───────────────────────────────────────────────
 
-/// Answer of `GET /internal/corpus/local/ocr-available`. A named
-/// field, not a bare `true`: "OCR is unavailable" and "this daemon did
-/// not understand the question" must not both read as `false`.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct OcrAvailability {
-    pub available: bool,
-}
-
-/// Answer of `POST …/{corpus}/cancel`. `cancelled` is "there WAS an
-/// in-flight job and it is now cancelled" — deliberately not the
-/// `AckResponse.ok` field, which means "the call succeeded". Both are
-/// true for a cancel that found nothing to cancel, and collapsing them
-/// would tell the pane a job was stopped when none was running.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CancelAck {
-    pub corpus_id: String,
-    pub cancelled: bool,
-}
-
-/// Answer of `POST …/{corpus}/ingest` — the job id, and where to read
-/// its progress. `corpus_watch_http::EnrichJobAck`'s shape plus the
-/// route that reports it, because a job id with no named reporter is
-/// how a caller ends up inventing a poll loop of its own.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IngestJobAck {
-    pub corpus_id: String,
-    pub job_id: String,
-    pub ok: bool,
-    /// The route that reports this job. Always populated.
-    pub progress_route: String,
-}
+/// The four answers this router's routes give that are pure serde over
+/// primitives. Defined in `sovereign-contracts` so a client can parse them
+/// without linking this crate, re-exported here so every route below, its
+/// tests and the CLI keep naming them at this path (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::{
+    CancelAck, IngestJobAck, LocalSearchHit, OcrAvailability,
+};
 
 /// What `GET …/{corpus}/ingest/progress` answers.
 ///
@@ -146,22 +122,6 @@ pub struct SearchRequest {
     /// `None` is 10 — the command's `limit.unwrap_or(10)`.
     #[serde(default)]
     pub limit: Option<usize>,
-}
-
-/// One search hit. A wire twin of the desktop's `LocalSearchHit` by
-/// NECESSITY, not by choice: `manager.search` answers
-/// `Vec<ScoredChunk>`, and `ScoredChunk` is deliberately
-/// non-serialisable ("in-process ranking currency only",
-/// `sovereign-contracts/src/types/mod.rs`). The desktop already
-/// projects into exactly these four fields before handing them to the
-/// pane; the projection moves here and the name is kept so the repoint
-/// is a changed `use`, not a changed call site.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalSearchHit {
-    pub content: String,
-    pub title: Option<String>,
-    pub corpus_id: String,
-    pub score: f32,
 }
 
 // ─── Router ────────────────────────────────────────────────────

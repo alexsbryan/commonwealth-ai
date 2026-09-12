@@ -98,7 +98,7 @@ pub async fn mcp_list_servers(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<McpServerView>, String> {
     let resp = mcp_client(&state)
-        .mcp_servers::<sovereign_mesh::mcp_config_http::McpServersResponse>()
+        .mcp_servers::<sovereign_contracts::daemon_wire::McpServersResponse>()
         .await
         .map_err(|e| format!("mcp_list_servers: {e}"))?;
     // Glassbox: the host states the absence on every response, and the pane

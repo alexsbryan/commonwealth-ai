@@ -6112,6 +6112,31 @@ absent and the guards fail closed for *every* caller.
   refused with "set via `commonwealth peer-preference set` instead" and
   the list arm answered an empty list it could not distinguish from
   "none set".
+- **Ten wire DTOs moved below the daemon** (svt-3, 2026-09-11).
+  `sovereign_contracts::daemon_wire` holds the answers a client parses
+  that are pure serde over primitives: `OcrAvailability`, `CancelAck`,
+  `IngestJobAck` and `LocalSearchHit` (from `lc_http`), `NoteEntry`
+  (`notes_http`), `LegacyDocumentEntry` (`documents_http`),
+  `ConversationListEntry` and `CreateConversationResponse` (`turn_http`),
+  and `McpServerView` / `McpMountStatus` / `McpServersResponse`
+  (`mcp_config_http`). Each was defined inside the `*_http` module that
+  serves it, which is the right home for a ROUTE and the wrong one for a
+  TYPE: naming `OcrAvailability` — one `bool` — cost `sovereign-desktop`
+  a layer edge onto `sovereign-mesh`. `sovereign-mesh` re-exports every
+  one at its historical `*_http::Name` path, so the routes, their tests
+  and the CLI are unchanged; this is a relocation, not a rename. The one
+  consequence that is not: `impl From<Note> for NoteEntry` is illegal
+  once both types are foreign to `sovereign-mesh`, so the projection is
+  now the free function `notes_http::note_entry` — still one
+  implementation, still its two callers. The test for whether a DTO can
+  come down is that it closes over nothing but primitives.
+  `lc_http::IngestProgress` (over
+  `corpus_engine::enrichment::state::EnrichmentState`) and
+  `mesh_http::StatusResponse` (over
+  `commonwealth_core::capabilities::OriginKind` and
+  `commonwealth_media::PeerTransportPath`, reached through
+  `daemon::IrohPeerPath`) do not, and stay where they are until the
+  vocabulary they close over has a layer-0 home.
 - **The mesh MUTATIONS cross too, same rung** (svt-3, 2026-09-11).
   `mesh_create`, `mesh_join`, `mesh_rotate_invite`, `mesh_switch`,
   `mesh_leave`, `mesh_forget`, `mesh_list`, `mesh_get_state`,

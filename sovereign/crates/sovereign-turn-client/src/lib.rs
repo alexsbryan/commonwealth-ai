@@ -1275,7 +1275,7 @@ impl TurnClient {
 
     // ── Notes CRUD (sv-surface D6) ───────────────────────────────
     //
-    // The answers are `sovereign_mesh::notes_http::NoteEntry`, a
+    // The answers are `sovereign_contracts::daemon_wire::NoteEntry`, a
     // twenty-field projection of `corpus_engine_notes::Note`. Generic
     // over `T` for the same reason the two families below are: a twin
     // here would be twenty fields this crate would have to keep in step
@@ -1284,7 +1284,7 @@ impl TurnClient {
     // type from anywhere.
 
     /// `POST /v1/notes/query` — filtered notes, newest first when
-    /// `query` is absent. `T` is `sovereign_mesh::notes_http::NoteEntry`.
+    /// `query` is absent. `T` is `sovereign_contracts::daemon_wire::NoteEntry`.
     ///
     /// A POST because the filter carries three LISTS (`symbols`,
     /// `files`, `kinds`) and no flat query string expresses those
@@ -1316,7 +1316,7 @@ impl TurnClient {
     }
 
     /// `GET /v1/notes/{id}` — one note. `T` is
-    /// `sovereign_mesh::notes_http::NoteEntry`.
+    /// `sovereign_contracts::daemon_wire::NoteEntry`.
     ///
     /// `Ok(None)` for a 404, and that mapping is safe HERE where it is
     /// not on the meshapp routes: this path has exactly one 404 — "no
