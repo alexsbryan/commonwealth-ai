@@ -26,7 +26,6 @@ use sovereign_core::error::{Error, Result};
 // filesystem, or a process.
 pub use sovereign_contracts::daemon_wire::local_corpus::git::*;
 
-
 /// Returns `Some(status)` if `vault_path` sits inside a git repo,
 /// `None` otherwise. Missing `git` binary or non-git directory are
 /// both reported as `None` — the UI treats "no git" as the common

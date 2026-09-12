@@ -20,7 +20,6 @@ use super::pre_scanner::FileMeta;
 // filesystem, or a process.
 pub use sovereign_contracts::daemon_wire::local_corpus::progress::*;
 
-
 /// JSONL staging output path helper. Kept here so both the manager and
 /// test harnesses agree on the layout.
 pub fn staging_jsonl_path(staging_dir: &std::path::Path, corpus_id: &str) -> PathBuf {

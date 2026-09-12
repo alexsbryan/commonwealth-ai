@@ -62,7 +62,6 @@ pub struct SnapshotEntry {
     pub existed_before: bool,
 }
 
-
 // ─── WriteBack ───────────────────────────────────────────────────────
 
 pub struct WriteBack {

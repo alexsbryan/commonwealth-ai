@@ -33,7 +33,6 @@ pub use sovereign_contracts::daemon_wire::local_corpus::preview::*;
 
 // ─── Public output types ─────────────────────────────────────────────
 
-
 // ─── Builder ─────────────────────────────────────────────────────────
 
 const NAMESPACE: &str = "sovereign";
