@@ -326,14 +326,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 at svt-2 (1a35260e2): `stop()` posts `/v1/admin/shutdown` to the
+    // mobile host on loopback instead of killing a child it no longer holds;
+    // `fetch_iroh_dial` is the other. Both talk to 127.0.0.1.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
-    // state.rs: B4's identity probe (65b92cd15) — on a run-lock refusal the
-    // desktop asks the client port WHO holds it, reading /status.process.pid
-    // over loopback before attaching to the holder. Its own daemon's port;
-    // nothing leaves the machine.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/state.rs", Class::LocalDaemon, 1),
+    // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
+    // read /status.process.pid on a run-lock refusal; the app takes no run
+    // lock now — it never hosts a daemon — so the site is gone with it.
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
