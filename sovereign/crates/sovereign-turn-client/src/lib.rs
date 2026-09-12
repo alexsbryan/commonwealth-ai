@@ -2453,7 +2453,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
     /// along an ingest is, and what it INDEXED once it is done. `T` is
-    /// `sovereign_contracts::daemon_wire::IngestProgressView<Stats>` (the
+    /// `sovereign_contracts::daemon_wire::IngestProgressView` (the
     /// route's `sovereign_mesh::lc_http::IngestProgress` for a caller that
     /// links the daemon).
     ///
@@ -2501,7 +2501,7 @@ impl TurnClient {
     /// user-picked path on the daemon's manager and classify what an
     /// ingest would read. `body` serialises to
     /// `sovereign_mesh::lc_http::PreScanRequest` (`path`, `source_type`,
-    /// optional `display_name`); `T` is `sovereign_contracts::daemon_wire::PreScanAnswerView<_>`, whose
+    /// optional `display_name`); `T` is `sovereign_contracts::daemon_wire::PreScanAnswerView`, whose
     /// `corpus_id` is the id the registry KEPT — use that one.
     pub async fn lc_pre_scan<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
         &self,
@@ -2513,7 +2513,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/{corpus}/cluster/progress?after=N` —
     /// the frames a cluster job has appended from the caller's cursor
-    /// on. `T` is `sovereign_contracts::daemon_wire::ClusterProgressView<_>`; its `next`
+    /// on. `T` is `sovereign_contracts::daemon_wire::ClusterProgressView`; its `next`
     /// is the cursor to send on the following call.
     pub async fn lc_cluster_progress<T: serde::de::DeserializeOwned>(
         &self,

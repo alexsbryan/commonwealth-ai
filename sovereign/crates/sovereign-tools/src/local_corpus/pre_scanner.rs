@@ -23,47 +23,32 @@ use walkdir::WalkDir;
 use super::config::LocalCorpusConfig;
 use super::humanise::humanise_display_name;
 
-// ─── File metadata ───────────────────────────────────────────────────
+// The DATA moved to `sovereign_contracts::daemon_wire::local_corpus::pre_scanner`
+// at svt-6 (2026-09-12) and is re-exported here at its historical path, so
+// `sovereign_tools::local_corpus::pre_scanner::Name` keeps resolving. What stays
+// in this file is the behaviour — the part that names corpus-engine, the
+// filesystem, or a process.
+pub use sovereign_contracts::daemon_wire::local_corpus::pre_scanner::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileMeta {
-    pub path: PathBuf,
-    pub size_bytes: u64,
-    pub display_name: String,
-}
-
-impl FileMeta {
-    fn from_path(path: PathBuf, size_bytes: u64) -> Self {
-        let display_name = humanise_display_name(&path);
-        Self {
-            path,
-            size_bytes,
-            display_name,
-        }
+/// Build a [`FileMeta`], humanising the filename for display (spec §5.3).
+///
+/// A free function rather than `FileMeta::from_path` since svt-6: the struct
+/// moved to `sovereign_contracts::daemon_wire::local_corpus::pre_scanner`,
+/// and an inherent impl has to live in the crate that defines the type. The
+/// humanising rules are behaviour, so they stay here with the walker that is
+/// their only caller.
+fn file_meta_from_path(path: PathBuf, size_bytes: u64) -> FileMeta {
+    let display_name = humanise_display_name(&path);
+    FileMeta {
+        path,
+        size_bytes,
+        display_name,
     }
 }
 
-// ─── PDF classification ───────────────────────────────────────────────
+// ─── File metadata ───────────────────────────────────────────────────
 
-/// What kind of PDF a file is, for the purposes of pre-scan. The
-/// classifier is approximate — it runs a fast text-density heuristic
-/// on the first pages rather than a true OCR-readiness probe.
-///
-/// `ScannedNoText` is the OCR-eligible bucket. It covers two cases the
-/// UI treats identically: (a) PDFs with a text layer that's empty
-/// (true scanned-image PDFs), and (b) PDFs that pdf-extract panicked
-/// or errored on but PDFium can probably still rasterize. Lumping the
-/// two means a user with one "weird" PDF that pdf-extract chokes on
-/// (e.g. DeviceN colourspace, non-standard font tables) still gets the
-/// OCR offer instead of seeing a flat "couldn't be read" message with
-/// no recovery path.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PdfClass {
-    Readable,
-    ScannedNoText,
-    PasswordProtected,
-    Corrupt,
-}
+// ─── PDF classification ───────────────────────────────────────────────
 
 /// Classify a single PDF. Blocking — intended to run inside
 /// `tokio::task::spawn_blocking`.
@@ -104,44 +89,6 @@ pub fn classify_pdf_blocking(path: &Path) -> PdfClass {
 pub use crate::local_corpus::extract_stage::SafeExtractError;
 
 // ─── Pre-scan result ─────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PreScanResult {
-    /// Files that will be indexed.
-    pub readable: Vec<FileMeta>,
-    /// Scanned PDFs (no text layer). Named individually in the UI.
-    pub scanned_pdfs: Vec<FileMeta>,
-    /// Password-protected PDFs. Named individually.
-    pub protected_pdfs: Vec<FileMeta>,
-    /// Corrupt / unparseable files. Named individually.
-    pub corrupt_files: Vec<FileMeta>,
-    /// Files larger than `large_file_threshold_mb`. Still indexed, but
-    /// the UI surfaces them as slow.
-    pub large_files: Vec<FileMeta>,
-    /// Count of files whose extension was outside the allow-list.
-    /// NOT named — per §9, "unsupported types" is a count-only skip.
-    pub ignored_types: u32,
-    /// Per-extension breakdown of `ignored_types`. Lower-case
-    /// extension (without the leading dot) → count. The watched-folder
-    /// status surface uses this so a user who drops 200 `.docx` files
-    /// gets a visible answer to "why isn't this searchable?" rather
-    /// than seeing only the aggregate `ignored_types` number. Empty
-    /// for the existing DropFolder + ObsidianVault flows that don't
-    /// surface the breakdown — there's no compatibility risk because
-    /// `#[serde(default)]` lets older sidecars deserialize cleanly.
-    #[serde(default)]
-    pub skipped_by_extension: std::collections::HashMap<String, usize>,
-    /// Total files visited (informational).
-    pub total_visited: u32,
-}
-
-impl PreScanResult {
-    /// Count of files the user expected to see indexed but that will
-    /// be skipped for a reason they'd probably want to know about.
-    pub fn named_skip_count(&self) -> usize {
-        self.scanned_pdfs.len() + self.protected_pdfs.len() + self.corrupt_files.len()
-    }
-}
 
 // ─── Pre-scanner ─────────────────────────────────────────────────────
 
@@ -202,7 +149,7 @@ impl<'a> PreScanner<'a> {
         for (idx, (path, size_bytes)) in candidates.into_iter().enumerate() {
             on_progress(idx, total);
 
-            let meta = FileMeta::from_path(path.clone(), size_bytes);
+            let meta = file_meta_from_path(path.clone(), size_bytes);
             let ext = path
                 .extension()
                 .and_then(|e| e.to_str())

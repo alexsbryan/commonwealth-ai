@@ -3,11 +3,12 @@
 //! (`sovereign_mesh::lc_http::IngestProgress`).
 //!
 //! NOT a relocation. `IngestProgress` closes over
-//! `corpus_engine::enrichment::state::EnrichmentState` (the phase file) and
-//! `sovereign_tools::local_corpus::manager::IngestStats` (the receipt's
-//! counts), neither of which has a home at this layer. The route keeps the
-//! whole type; these are the fields a client reads, deserialised from the
-//! SAME bytes (serde ignores the rest). `sovereign-mesh`'s `wire_view_drift`
+//! `corpus_engine::enrichment::state::EnrichmentState` (the phase file),
+//! which has no home at this layer. The route keeps the whole type; these are
+//! the fields a client reads, deserialised from the
+//! SAME bytes (serde ignores the rest). The receipt's COUNTS were a second
+//! parameter until svt-6 (2026-09-12); `IngestStats` lives at this layer now
+//! (`local_corpus::manager`), so the view names it. `sovereign-mesh`'s `wire_view_drift`
 //! test serialises the real `IngestProgress` and parses this from it, so a
 //! rename on the route side is red there rather than a silent `None` here
 //! (ARCH principle 5: a check with a failing input you can name; principle
@@ -16,22 +17,22 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::local_corpus::manager::IngestStats;
+
 /// What `GET …/{corpus}/ingest/progress` answers, as a client reads it.
 ///
-/// `Stats` is the receipt's counts. The route writes `IngestStats`; a
-/// client that links `sovereign-tools` names it (the desktop, which hands
-/// the counts to its completion screen), a client that does not passes
-/// `serde_json::Value` through. The parameter is what keeps this crate
-/// from naming a capability-layer type while the desktop's read of the
-/// counts stays typed.
+/// The `Stats` parameter is GONE (svt-6): the receipt's counts are
+/// [`super::local_corpus::manager::IngestStats`], which lives at this layer
+/// now, so the view names it instead of asking every client to choose between
+/// linking `sovereign-tools` and passing `serde_json::Value` through.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct IngestProgressView<Stats = serde_json::Value> {
+pub struct IngestProgressView {
     /// The corpus being ingested.
     pub corpus_id: String,
     /// The live phase stamp, when one exists.
     pub state: Option<IngestPhaseView>,
     /// The terminal receipt, when the ingest half has ended.
-    pub outcome: Option<IngestOutcomeView<Stats>>,
+    pub outcome: Option<IngestOutcomeView>,
     /// `true` iff `outcome` is present. Spelled out by the route rather
     /// than left to the caller so two clients cannot disagree about what
     /// terminal means.
@@ -56,7 +57,7 @@ pub struct IngestPhaseView {
 /// recorder; a receipt with neither is a host contradiction, and the
 /// desktop says so rather than closing the panel on an invented success.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngestOutcomeView<Stats = serde_json::Value> {
+pub struct IngestOutcomeView {
     /// The corpus the receipt is for.
     pub corpus_id: String,
     /// The job that produced it.
@@ -65,7 +66,7 @@ pub struct IngestOutcomeView<Stats = serde_json::Value> {
     pub finished_at: i64,
     /// `Some` on success — the counts, verbatim from the manager.
     #[serde(default = "Option::default", skip_serializing_if = "Option::is_none")]
-    pub stats: Option<Stats>,
+    pub stats: Option<IngestStats>,
     /// `Some` on failure, naming it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,

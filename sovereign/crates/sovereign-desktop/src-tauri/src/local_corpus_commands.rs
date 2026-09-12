@@ -93,15 +93,22 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, WorkflowJobEvent};
-use sovereign_tools::local_corpus::{
+// The local-corpus vocabulary lives BELOW the daemon since svt-6
+// (2026-09-12): every one of these is pure serde — what this app writes when
+// a user drags a folder in, what the daemon persists, and what crosses
+// `/internal/corpus/local/*`. Spelling them used to mean linking
+// `sovereign-tools`, and through it corpus-engine, sovereign-store and
+// sovereign-atos. `sovereign_tools::local_corpus` re-exports every one at its
+// old path, so this is a changed `use`, not a changed call site.
+use sovereign_contracts::daemon_wire::local_corpus::{
     clusterer::ClusterConfig,
+    config::{LocalCorpusConfig, LocalCorpusSourceType},
     git::GitStatus,
     manager::{IncompleteJob, IngestStats, ProgressCallback},
     pre_scanner::PreScanResult,
     preview::VaultPreview,
     progress::{CompletionResult, LocalCorpusProgress},
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
-    LocalCorpusConfig,
 };
 
 use crate::state::AppState;
@@ -226,7 +233,7 @@ pub async fn lc_pre_scan(
     display_name: Option<String>,
 ) -> Result<PreScanResponse, String> {
     let answer = lc_client(&state)
-        .lc_pre_scan::<serde_json::Value, sovereign_contracts::daemon_wire::PreScanAnswerView<PreScanResult>>(
+        .lc_pre_scan::<serde_json::Value, sovereign_contracts::daemon_wire::PreScanAnswerView>(
             &serde_json::json!({
                 "path": path,
                 "source_type": source_type,
@@ -278,7 +285,6 @@ pub async fn lc_ingest(
     // WatchedFolder is excluded (its reconciliation worker owns enrichment).
     if with_ocr != Some(true) {
         if let Some(cfg) = registered.clone() {
-            use sovereign_tools::local_corpus::config::LocalCorpusSourceType;
             if matches!(
                 cfg.source_type,
                 LocalCorpusSourceType::DocumentFolder | LocalCorpusSourceType::ObsidianVault { .. }
@@ -443,9 +449,7 @@ async fn follow_ingest_job(
     loop {
         tokio::time::sleep(INGEST_POLL_INTERVAL).await;
         let p = match client
-            .lc_ingest_progress::<sovereign_contracts::daemon_wire::IngestProgressView<
-                sovereign_tools::local_corpus::manager::IngestStats,
-            >>(&corpus_id)
+            .lc_ingest_progress::<sovereign_contracts::daemon_wire::IngestProgressView>(&corpus_id)
             .await
         {
             Ok(p) => {
@@ -548,7 +552,6 @@ async fn hand_one_shot_to_enrichment(
     corpus_id: &str,
     registered: Option<&LocalCorpusConfig>,
 ) {
-    use sovereign_tools::local_corpus::config::LocalCorpusSourceType;
     let Some(cfg) = registered else { return };
     if !matches!(cfg.source_type, LocalCorpusSourceType::DocumentFolder) {
         return;
@@ -1150,7 +1153,9 @@ async fn follow_cluster_job(
     loop {
         tokio::time::sleep(INGEST_POLL_INTERVAL).await;
         let p = match client
-            .lc_cluster_progress::<sovereign_contracts::daemon_wire::ClusterProgressView<LocalCorpusProgress>>(&corpus_id, cursor)
+            .lc_cluster_progress::<sovereign_contracts::daemon_wire::ClusterProgressView>(
+                &corpus_id, cursor,
+            )
             .await
         {
             Ok(p) => {

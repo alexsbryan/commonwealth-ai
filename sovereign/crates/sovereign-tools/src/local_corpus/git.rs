@@ -19,11 +19,13 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GitStatus {
-    pub current_branch: String,
-    pub has_uncommitted_changes: bool,
-}
+// The DATA moved to `sovereign_contracts::daemon_wire::local_corpus::git`
+// at svt-6 (2026-09-12) and is re-exported here at its historical path, so
+// `sovereign_tools::local_corpus::git::Name` keeps resolving. What stays
+// in this file is the behaviour — the part that names corpus-engine, the
+// filesystem, or a process.
+pub use sovereign_contracts::daemon_wire::local_corpus::git::*;
+
 
 /// Returns `Some(status)` if `vault_path` sits inside a git repo,
 /// `None` otherwise. Missing `git` binary or non-git directory are

@@ -31,6 +31,45 @@ use super::ocr::{OcrCtx, PageProgress, PageProgressCallback};
 use super::pre_scanner::{PreScanResult, PreScanner};
 use super::progress::{ExcerptChunk, LocalCorpusProgress, RuntimeFailure};
 
+// The DATA moved to `sovereign_contracts::daemon_wire::local_corpus::manager`
+// at svt-6 (2026-09-12) and is re-exported here at its historical path, so
+// `sovereign_tools::local_corpus::manager::Name` keeps resolving. What stays
+// in this file is the behaviour — the part that names corpus-engine, the
+// filesystem, or a process.
+pub use sovereign_contracts::daemon_wire::local_corpus::manager::*;
+
+// `WatchedIncompleteJob` and `CorpusSummary` did NOT go down with the rest
+// (svt-6). The first closes over `watched::status::WatchedFolderStatus`, a
+// type with behaviour that stays in this crate; the second rides with it. No
+// client outside this crate names either, so neither is holding a dependency
+// edge open.
+/// A watched-folder corpus the user should know about — not in
+/// `Idle` status. Surfaced by `LocalCorpusManager::watched_incomplete_jobs`
+/// to the desktop's ResumePrompt and the CLI's `corpus watch-list`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchedIncompleteJob {
+    pub corpus_id: String,
+    pub display_name: String,
+    pub root_path: PathBuf,
+    pub status: super::watched::status::WatchedFolderStatus,
+    pub tombstones: usize,
+    pub failed_files: usize,
+}
+
+/// One registered corpus plus its current disk-level summary, shown
+/// in the settings list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusSummary {
+    pub config: LocalCorpusConfig,
+    /// Number of source files listed as `Complete` in the manifest.
+    pub files_done: usize,
+    /// Total files in the manifest (0 if the ingest never started).
+    pub files_total: usize,
+    /// True if an ingest is currently running for this corpus (best
+    /// effort — based on the engine's canonical meta flag).
+    pub in_progress: bool,
+}
+
 /// Predicate gating the auto-rebuild watchdog (Move 8 — folder-ingest
 /// v1 §3.6). Returns `true` only when the corpus has a finished
 /// tiered build sitting on disk: a fresh rebuild then makes sense
@@ -62,60 +101,6 @@ pub(crate) fn should_fire_auto_rebuild(
 }
 
 // ─── Public result types ─────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngestStats {
-    pub corpus_id: String,
-    pub files_indexed: usize,
-    pub chunks_written: u64,
-    /// Files the pre-scan approved but that failed during the
-    /// staging/extraction step. Named individually on the completion
-    /// screen per spec §9.
-    pub runtime_failures: Vec<RuntimeFailure>,
-    /// Top 3 excerpts for the completion screen. Populated by M2
-    /// (the excerpt scorer) — empty in M1.
-    pub excerpt_chunks: Vec<ExcerptChunk>,
-    pub duration_secs: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IncompleteJob {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub files_done: usize,
-    pub files_total: usize,
-}
-
-/// A watched-folder corpus the user should know about — not in
-/// `Idle` status. Surfaced by `LocalCorpusManager::watched_incomplete_jobs`
-/// to the desktop's ResumePrompt and the CLI's `corpus watch-list`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WatchedIncompleteJob {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub root_path: PathBuf,
-    pub status: super::watched::status::WatchedFolderStatus,
-    pub tombstones: usize,
-    pub failed_files: usize,
-}
-
-/// One registered corpus plus its current disk-level summary, shown
-/// in the settings list.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CorpusSummary {
-    pub config: LocalCorpusConfig,
-    /// Number of source files listed as `Complete` in the manifest.
-    pub files_done: usize,
-    /// Total files in the manifest (0 if the ingest never started).
-    pub files_total: usize,
-    /// True if an ingest is currently running for this corpus (best
-    /// effort — based on the engine's canonical meta flag).
-    pub in_progress: bool,
-}
-
-/// Thread-safe progress callback — matches the shape the UI layer
-/// already uses for public corpora.
-pub type ProgressCallback = Arc<dyn Fn(LocalCorpusProgress) + Send + Sync>;
 
 // ─── Manager ─────────────────────────────────────────────────────────
 
@@ -330,7 +315,7 @@ impl LocalCorpusManager {
                      retrieval may drop this corpus"
                 ),
             }
-            if let Some(display) = cfg.source_type.display_meta() {
+            if let Some(display) = super::config::display_meta(&cfg.source_type) {
                 let category = display.category.clone();
                 match corpus_engine::index::backfill_display(&dir, display) {
                     Ok(true) => tracing::info!(
@@ -600,7 +585,7 @@ impl LocalCorpusManager {
             let corpora = self.corpora.read().await;
             corpora
                 .get(corpus_id)
-                .and_then(|c| c.source_type.display_meta())
+                .and_then(|c| super::config::display_meta(&c.source_type))
         };
         if let Some(display) = source_display {
             match self.engine.open_index_for_corpus(corpus_id).await {

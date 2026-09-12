@@ -28,73 +28,16 @@ use sovereign_core::error::{Error, Result};
 
 use super::progress::{ClusterStage, LocalCorpusProgress};
 
+// The DATA moved to `sovereign_contracts::daemon_wire::local_corpus::clusterer`
+// at svt-6 (2026-09-12) and is re-exported here at its historical path, so
+// `sovereign_tools::local_corpus::clusterer::Name` keeps resolving. What stays
+// in this file is the behaviour — the part that names corpus-engine, the
+// filesystem, or a process.
+pub use sovereign_contracts::daemon_wire::local_corpus::clusterer::*;
+
 // ─── Config ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClusterConfig {
-    /// HDBSCAN minimum cluster size. Smaller = more, tighter clusters.
-    pub min_cluster_size: usize,
-    /// Minimum cluster-assignment confidence a note must clear to be
-    /// tagged. Notes below this threshold land in the outlier panel
-    /// rather than being force-assigned to the nearest cluster.
-    pub min_confidence: f32,
-    /// Notes matching multiple clusters above this confidence are
-    /// candidates for multi-tagging. v1 implements the `Dominant`
-    /// strategy regardless; this field is wired for v2.
-    pub multi_tag_threshold: f32,
-    pub multi_cluster_strategy: MultiClusterStrategy,
-    /// Minimum **distinct notes** per cluster after the chunk-to-note
-    /// rollup. Clusters with fewer notes than this threshold are
-    /// collapsed: their notes land in the outlier panel with reason
-    /// `SingletonCluster`, and the cluster itself disappears from the
-    /// preview. `#[serde(default)]` so callers written before this
-    /// field existed still deserialise cleanly.
-    #[serde(default = "default_min_notes_per_cluster")]
-    pub min_notes_per_cluster: usize,
-}
-
-fn default_min_notes_per_cluster() -> usize {
-    2
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum MultiClusterStrategy {
-    /// Tag only the highest-confidence cluster. v1 default.
-    Dominant,
-    /// Tag every cluster whose confidence exceeds `multi_tag_threshold`.
-    All,
-    /// Flag for manual review, no auto-tag.
-    Flag,
-}
-
-impl Default for ClusterConfig {
-    fn default() -> Self {
-        Self {
-            min_cluster_size: 5,
-            min_confidence: 0.4,
-            multi_tag_threshold: 0.6,
-            multi_cluster_strategy: MultiClusterStrategy::Dominant,
-            min_notes_per_cluster: default_min_notes_per_cluster(),
-        }
-    }
-}
-
 // ─── Output ──────────────────────────────────────────────────────────
-
-/// Per-cluster label produced by the LLM. Structure mirrors spec §6.3
-/// exactly: tag path (`domain/subtopic`), a display name for the UI,
-/// and a 2–3 sentence description.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LabeledCluster {
-    pub id: i32,
-    pub tag_path: String,
-    pub display_name: String,
-    pub description: String,
-    pub note_count: usize,
-    /// Chunk IDs closest to the cluster centroid. Used to render the
-    /// "representative notes" list in the review UI.
-    pub centroid_chunk_ids: Vec<u64>,
-}
 
 /// Aggregated output of the clustering + labelling pass. Plus enough
 /// per-chunk data for the preview builder to classify outliers.
@@ -119,12 +62,6 @@ pub struct LabeledClusterResult {
     pub noise_chunks: Vec<u64>,
     /// Open-question detection is deferred to M4b. Empty vec for now.
     pub open_questions: Vec<OpenQuestion>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenQuestion {
-    pub gap_description: String,
-    pub relevant_cluster_ids: Vec<i32>,
 }
 
 // ─── The Clusterer ───────────────────────────────────────────────────

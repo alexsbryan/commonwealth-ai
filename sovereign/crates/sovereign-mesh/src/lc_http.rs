@@ -165,7 +165,7 @@ pub struct PreScanRequest {
 /// What `POST /internal/corpus/local/pre-scan` answers — the contracts
 /// view at this route's concrete type (sv-surface svt-3: defined where a
 /// client can parse it without linking this crate, serialised here).
-pub type PreScanAnswer = PreScanAnswerView<PreScanResult>;
+pub type PreScanAnswer = PreScanAnswerView;
 
 /// Body of `POST …/{corpus}/cluster`.
 #[derive(Debug, Default, Deserialize)]
@@ -189,7 +189,7 @@ pub struct ClusterProgressQuery {
 /// this route's concrete frame type. The job appends the terminal frame
 /// itself: `Complete { result: Ingest(zero stats) }` on success, `Error`
 /// naming what refused.
-pub type ClusterProgress = ClusterProgressView<LocalCorpusProgress>;
+pub type ClusterProgress = ClusterProgressView;
 
 // ─── Router ────────────────────────────────────────────────────
 

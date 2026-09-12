@@ -198,8 +198,7 @@ fn ingest_progress_view_reads_the_route_answer_field_for_field() {
         ..route
     };
     let bytes = serde_json::to_string(&route).unwrap();
-    let typed: IngestProgressView<sovereign_tools::local_corpus::manager::IngestStats> =
-        serde_json::from_str(&bytes).unwrap();
+    let typed: IngestProgressView = serde_json::from_str(&bytes).unwrap();
     let stats = typed.outcome.unwrap().stats.unwrap();
     assert_eq!((stats.files_indexed, stats.chunks_written), (4, 40));
 }
