@@ -447,8 +447,6 @@ pub async fn submit_information_search(
     query: String,
     conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
-    use sovereign_tools::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
-
     let query = query.trim();
     if query.is_empty() {
         return Err("query must not be empty".to_string());
@@ -504,83 +502,12 @@ pub async fn submit_information_search(
 
     let config_snapshot = state.config.read().await.clone();
 
-    // The ONE registry construction (§10.6) — the same one `state.rs`
-    // and the deep-research loop use, over the operator's `[search]`.
-    let orchestrator = SearchOrchestrator::new(Arc::new(crate::state::effective_search_registry()));
-
-    // The ONE egress boundary (order deep-research-t2a): the client is
-    // built by the egress module, and the F26 census enforces that this
-    // file constructs no reqwest client of its own. The module lives in
-    // `sovereign-contracts` (`sovereign-contracts/src/egress.rs`);
-    // `sovereign_core::egress` is only a re-export of it
-    // (`sovereign-core/src/lib.rs:36`), so naming the owner here is the
-    // same boundary under its own name. The query egress passes the
-    // boundary's release gate BEFORE it leaves.
-    let client = sovereign_contracts::egress::search_client()
-        .map_err(|e| format!("egress boundary search client build: {e}"))?;
-    let provider_static: &'static str = match config_snapshot.search_backend.provider.as_str() {
-        "tavily" => "tavily",
-        "brave" => "brave",
-        _ => "duckduckgo",
-    };
-    // The click IS the user's action and the query IS the user's own
-    // words — the release rule's user-formed-query clause (what=="query"
-    // && user_formed) covers this egress without a grant.
-    sovereign_contracts::egress::verify(
-        &sovereign_contracts::egress::EgressPayload {
-            privacy: SearchPrivacy::External {
-                provider: provider_static,
-            },
-            custody: sovereign_contracts::types::Custody::Personal,
-            what: "query",
-            target: provider_static,
-            detail: query,
-            user_formed: true,
-        },
-        None,
-    )
-    .map_err(|r| format!("web search refused: {r}"))?;
-    let prefer = match config_snapshot.search_backend.provider.as_str() {
-        "tavily" => &["tavily", "duckduckgo"][..],
-        "brave" => &["brave", "duckduckgo"][..],
-        _ => &["duckduckgo"][..],
-    };
-    // Glassbox (§9): record the backend decision + query *length* (never
-    // the query text, §9.3) so a stuck search is diagnosable from logs.
-    tracing::info!(
-        provider = %config_snapshot.search_backend.provider,
-        query_len = query.len(),
-        "submit_information_search: dispatching web search"
-    );
-    let out = orchestrator
-        .search(
-            &client,
-            SelectInputs {
-                query,
-                max_results: 5,
-                max_privacy: SearchPrivacy::External {
-                    provider: "duckduckgo",
-                },
-                prefer,
-            },
-        )
-        .await;
-
-    if out.results.is_empty() {
-        tracing::warn!(
-            backend_id = %out.backend_id,
-            query_len = query.len(),
-            "submit_information_search: backend returned 0 results"
-        );
-        // Treat as a soft failure surfaced to the UI. The pending
-        // request stays open so the user can paste / skip / retry
-        // with a tighter query without rebuilding the card.
-        return Err(format!(
-            "web search returned 0 results via {} (DDG may be bot-blocking; \
-             try a tighter query or paste a source instead)",
-            out.backend_id,
-        ));
-    }
+    // ONE dispatch (ARCH principle 8): `state::web_search_once` is the
+    // registry construction, the egress-boundary client, the release-gate
+    // verify and the empty-result refusal, shared with `search_web`. This
+    // command spelled its own copy of all four until 2026-09-11 — the
+    // DEFAULTS_LEDGER row for web search named it as owed.
+    let out = crate::state::web_search_once(query, &config_snapshot).await?;
 
     tracing::info!(
         backend_id = %out.backend_id,

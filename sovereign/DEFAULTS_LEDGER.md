@@ -58,12 +58,20 @@ owning a turn.
 **Flip condition (falsifiable).** The egress boundary gains a way for a client
 to prove a query was user-formed that a daemon can verify rather than trust —
 or the operator rules that a loopback-only daemon on the same machine inherits
-the surface's custody, at which point this becomes a route like any other. Two
-smaller things settle first: `commands/conversation.rs:509` still spells its
-own copy of the dispatch and should call `web_search_once`
-(ARCH principle 8), and `search_web` has NO caller in the Svelte app — it is
-exported from `api.ts:629` and invoked nowhere — so the prior question is
-whether the command should exist at all.
+the surface's custody, at which point this becomes a route like any other.
+`commands/conversation.rs` spelled its own copy of the dispatch until
+2026-09-11; it calls `web_search_once` now (ARCH principle 8). Still open:
+`search_web` has NO caller in the Svelte app — it is exported from
+`api.ts:629` and invoked nowhere — so the prior question is whether the
+command should exist at all.
+
+**How the exception coexists with the dependency gate (2026-09-11).** The
+search stack the app uses was never in `sovereign-tools` proper: `web::search`
+is `sovereign-tools-base`'s, a studio contract crate the thin-surface rule
+does not forbid. The one resolver, `effective_search_registry`, moved down to
+sit beside `configured_search` in that crate, and `sovereign_tools::bundles`
+re-exports it — so the desktop and every host resolve the operator's `[search]`
+through the same function without the app linking `sovereign-tools`.
 
 **Review by 2026-10-11.**
 
