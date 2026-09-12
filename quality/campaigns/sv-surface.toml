@@ -2009,4 +2009,4 @@ one_line = "corpus-engine, sovereign-authoring-harness and sovereign-tools leave
 [[rung]]
 id = "svt-7-assets"
 moves = ["sv-no-daemon-management", "sv-capability-twins", "sv-attach-pure-client"]
-one_line = "sovereign-gliner, sovereign-inference and sovereign-core leave: one daemon asset-download job (gguf + gliner), GET /internal/ner/model, GET /v1/admin/hardware + setup catalog/slot; the 24 rows deleted as STALE, predicate check exit 0, app run by hand and by soak"
+one_line = "sovereign-gliner, sovereign-inference and sovereign-core leave: first run SPAWNS the sidecar's `setup --json` verb (the daemon cannot serve HTTP unconfigured, measured 2026-09-12); after setup one daemon asset-download job (gguf + gliner), GET /internal/ner/model, GET /v1/admin/hardware + setup catalog/slot; the 24 rows deleted as STALE, predicate check exit 0, app run by hand and by soak"
