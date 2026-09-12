@@ -2251,6 +2251,20 @@ impl TurnClient {
             .await
     }
 
+    /// `POST /internal/corpus/local/pre-scan` — register the corpus for a
+    /// user-picked path on the daemon's manager and classify what an
+    /// ingest would read. `body` serialises to
+    /// `sovereign_mesh::lc_http::PreScanRequest` (`path`, `source_type`,
+    /// optional `display_name`); `T` is `lc_http::PreScanAnswer`, whose
+    /// `corpus_id` is the id the registry KEPT — use that one.
+    pub async fn lc_pre_scan<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/local/pre-scan".to_string(), body)
+            .await
+    }
+
     /// `GET /internal/corpus/local/{corpus}/cluster/progress?after=N` —
     /// the frames a cluster job has appended from the caller's cursor
     /// on. `T` is `sovereign_mesh::lc_http::ClusterProgress`; its `next`

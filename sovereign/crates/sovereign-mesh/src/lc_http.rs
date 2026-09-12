@@ -24,9 +24,18 @@
 //! desktop's Tauri emitter"; the ingest job showed that a poll loop
 //! re-emitting the host's frames IS that channel.
 //!
+//! `lc_pre_scan` crosses WHOLE (2026-09-11): `POST /internal/corpus/local/
+//! pre-scan` takes the user-picked path, builds the config (the Obsidian
+//! arm with THIS daemon's `snapshot_root()`, which was the desktop's last
+//! manager read), registers it, and scans the config as REGISTERED. The
+//! header used to keep the scan half out because it "probes a path the
+//! USER just picked" — but the daemon on the same machine is about to
+//! ingest that very path, and `POST /internal/corpus/local` already takes
+//! it. A path is not app-local when the engine that reads it is not.
+//!
 //! NOT served, named rather than dropped (ARCH §18.3):
-//! - `lc_validate_path` + the SCAN half of `lc_pre_scan` — both probe a path
-//!   the USER just picked. (The REGISTRATION half does cross.)
+//! - `lc_validate_path` — a pre-corpus path probe the pane runs on every
+//!   keystroke; nothing about a corpus is decided by it.
 //! - `lc_enrich_now`/`_reset`/`lc_reenrich_note` — `corpus_watch_http` serves
 //!   all three already.
 
@@ -44,6 +53,7 @@ use serde::{Deserialize, Serialize};
 use sovereign_tools::local_corpus::clusterer::ClusterConfig;
 use sovereign_tools::local_corpus::config::LocalCorpusConfig;
 use sovereign_tools::local_corpus::manager::IngestStats;
+use sovereign_tools::local_corpus::pre_scanner::PreScanResult;
 use sovereign_tools::local_corpus::progress::{CompletionResult, LocalCorpusProgress};
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
@@ -137,6 +147,32 @@ pub struct SearchRequest {
     pub limit: Option<usize>,
 }
 
+/// Body of `POST /internal/corpus/local/pre-scan`.
+#[derive(Debug, Deserialize)]
+pub struct PreScanRequest {
+    /// The directory the user picked. Must exist and be a directory;
+    /// anything else is a 400 naming it.
+    pub path: String,
+    /// `"folder"` or `"obsidian"` — the two source kinds the pane offers.
+    pub source_type: String,
+    /// Folder arm only: the display name, defaulting to the directory's
+    /// own name. The Obsidian arm names the vault itself.
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
+/// What `POST /internal/corpus/local/pre-scan` answers.
+///
+/// `corpus_id` and `display_name` come from the config AS REGISTERED,
+/// for `register`'s reason: the manager keeps an existing id when the
+/// path is already registered under one.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PreScanAnswer {
+    pub corpus_id: String,
+    pub display_name: String,
+    pub result: PreScanResult,
+}
+
 /// Body of `POST …/{corpus}/cluster`.
 #[derive(Debug, Default, Deserialize)]
 pub struct ClusterRequest {
@@ -184,6 +220,7 @@ pub struct ClusterProgress {
 pub fn lc_router() -> Router {
     Router::new()
         .route("/internal/corpus/local", get(list).post(register))
+        .route("/internal/corpus/local/pre-scan", post(pre_scan))
         .route("/internal/corpus/local/ocr-available", get(ocr_available))
         .route(
             "/internal/corpus/local/incomplete-jobs",
@@ -582,6 +619,85 @@ async fn ingest_progress(_: LocalOnly, Path(corpus_id): Path<String>) -> Result<
         finished,
     })
     .into_response())
+}
+
+/// POST /internal/corpus/local/pre-scan — register the corpus for a
+/// user-picked path and classify what an ingest of it would read. Wire
+/// form of the whole of `lc_pre_scan`; answers `PreScanAnswer`.
+///
+/// Register-then-scan, in that order and on this manager, because the
+/// scan reads `extensions` and `pre_scan` thresholds off the config the
+/// registry KEPT — the same one the ingest that follows will read — and
+/// a scan over the config that was merely sent could classify against
+/// thresholds the ingest never sees.
+async fn pre_scan(_: LocalOnly, Json(req): Json<PreScanRequest>) -> Result<Response, Absence> {
+    let manager = manager_or_503()?;
+    let path = std::path::PathBuf::from(&req.path);
+    if !path.exists() || !path.is_dir() {
+        return Err(Absence::invalid(format!(
+            "pre_scan: path does not exist or is not a directory: {}",
+            req.path
+        )));
+    }
+    let config = match req.source_type.as_str() {
+        "obsidian" => {
+            // The snapshot root is THIS daemon's storage layout —
+            // `{data_dir}/vault-snapshots` — stamped into the config as
+            // `write_back.snapshot_dir`, so the vault's pre-write-back
+            // snapshots land beside the engine that writes them.
+            LocalCorpusConfig::obsidian_vault(path, manager.snapshot_root().to_path_buf())
+        }
+        "folder" => {
+            let name = req.display_name.clone().unwrap_or_else(|| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Documents")
+                    .to_string()
+            });
+            LocalCorpusConfig::document_folder(path, name)
+        }
+        other => {
+            return Err(Absence::invalid(format!(
+                "pre_scan: unknown source_type '{other}' (expected 'folder' or 'obsidian')"
+            )))
+        }
+    };
+    tracing::debug!(
+        source_type = %req.source_type,
+        root = %config.root_path.display(),
+        "lc_http: pre-scan config built"
+    );
+    let id = match manager.register(config).await {
+        Ok(id) => id,
+        Err(e) => return Ok(log_and_500(&format!("pre_scan: register: {e}"))),
+    };
+    let Some(stored) = manager.get(&id).await else {
+        return Ok(log_and_500(&format!(
+            "pre_scan: '{id}' is not in the registry immediately after being written"
+        )));
+    };
+    let display_name = stored.display_name.clone();
+    let result = match sovereign_tools::local_corpus::pre_scan_config(stored, None).await {
+        Ok(r) => r,
+        Err(e) => return Ok(log_and_500(&format!("pre_scan: {e}"))),
+    };
+    tracing::info!(
+        corpus_id = %id,
+        readable = result.readable.len(),
+        scanned_pdfs = result.scanned_pdfs.len(),
+        ignored_types = result.ignored_types,
+        total_visited = result.total_visited,
+        "lc_http: pre-scan complete"
+    );
+    Ok((
+        StatusCode::OK,
+        Json(PreScanAnswer {
+            corpus_id: id,
+            display_name,
+            result,
+        }),
+    )
+        .into_response())
 }
 
 // ─── The cluster job ───────────────────────────────────────────

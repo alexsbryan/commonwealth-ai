@@ -853,3 +853,85 @@ async fn cluster_is_a_job_whose_progress_route_serves_its_frames() {
         "the 404 must NAME the corpus: {body:#?}"
     );
 }
+
+/// `POST /internal/corpus/local/pre-scan` (2026-09-11): the user-picked
+/// path is registered on the DAEMON's manager and classified there. The
+/// answer's `corpus_id` is the one the registry kept, and the registry
+/// holds it afterwards — which is the fact the desktop's D9c 404 turned
+/// on. A path that is not a directory and an unknown source kind are
+/// 400s naming the input, before anything is registered.
+#[tokio::test]
+async fn pre_scan_registers_on_the_daemons_manager_and_classifies_the_folder() {
+    let (manager, addr) = harness().await;
+    let root = manager.index_dir_root();
+    let folder = root.parent().unwrap_or(&root).join("lc-fixture-pre-scan");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("a.md"), "alpha").unwrap();
+    std::fs::write(folder.join("b.md"), "beta").unwrap();
+    std::fs::write(folder.join("c.xyz"), "not a supported type").unwrap();
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({
+            "path": folder.to_string_lossy(),
+            "source_type": "folder",
+            "display_name": "Pre-scan fixture",
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "pre-scan: {body:#?}");
+    let id = body["corpus_id"].as_str().unwrap_or_default().to_string();
+    assert!(!id.is_empty(), "the answer names the corpus: {body:#?}");
+    assert_eq!(body["display_name"], serde_json::json!("Pre-scan fixture"));
+    assert_eq!(
+        body["result"]["readable"].as_array().map(Vec::len),
+        Some(2),
+        "two markdown files are readable: {body:#?}"
+    );
+    assert_eq!(body["result"]["total_visited"], serde_json::json!(3));
+    assert!(
+        manager.get(&id).await.is_some(),
+        "the daemon's manager holds '{id}' after the pre-scan — the ingest \
+         that follows reads THIS registry"
+    );
+
+    // Re-registering the same folder keeps the id (the manager's
+    // path-identity guard), which is why the answer carries the id back.
+    let (status, again) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.to_string_lossy(), "source_type": "folder" }),
+    )
+    .await;
+    assert_eq!(status, 200, "{again:#?}");
+    assert_eq!(
+        again["corpus_id"],
+        serde_json::json!(id),
+        "same path, same id: {again:#?}"
+    );
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.join("a.md").to_string_lossy(), "source_type": "folder" }),
+    )
+    .await;
+    assert_eq!(status, 400, "a file is not a directory: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("a.md"),
+        "the 400 names the path: {body:#?}"
+    );
+
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/pre-scan",
+        serde_json::json!({ "path": folder.to_string_lossy(), "source_type": "zip" }),
+    )
+    .await;
+    assert_eq!(status, 400, "unknown source kind: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("zip"),
+        "the 400 names the kind: {body:#?}"
+    );
+}

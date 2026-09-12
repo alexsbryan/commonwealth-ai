@@ -44,9 +44,11 @@
 //! /internal/corpus/local/{c}/cluster` (a job, followed over
 //! `…/cluster/progress` and re-emitted frame for frame), so
 //! `lc_get_preview` and `lc_write_tags` — which read the
-//! `cluster_results` cache that job fills — cross with it. What stays:
-//! `lc_validate_path` and the SCAN half of `lc_pre_scan`: a user-picked
-//! path, pre-corpus.
+//! `cluster_results` cache that job fills — cross with it. The same day
+//! `lc_pre_scan` crossed WHOLE over `POST /internal/corpus/local/pre-scan`
+//! (register + scan on the daemon's manager, with the daemon's snapshot
+//! root). No command in this file holds a manager any more; what stays
+//! local is `lc_validate_path`, a pre-corpus path probe.
 //!
 //! # D9c: `lc_pre_scan`'s REGISTRATION crosses (2026-09-10)
 //!
@@ -133,25 +135,6 @@ fn new_job_id() -> String {
 /// handed to `WatchedSubsystem::install`.
 fn lc_client(state: &AppState) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
-}
-
-/// The desktop's OWN manager. Since 2026-09-11 required by ONE read:
-/// `lc_pre_scan`'s Obsidian arm, which takes this process's
-/// `snapshot_root()`. The cluster pair (`lc_cluster`, `lc_get_preview`,
-/// `lc_write_tags`) crossed together. See the module header.
-async fn require_manager(
-    state: &State<'_, Arc<AppState>>,
-) -> Result<Arc<LocalCorpusManager>, String> {
-    state
-        .local_corpus
-        .read()
-        .await
-        .as_ref()
-        .cloned()
-        .ok_or_else(|| {
-            "Local corpus manager not ready. Finish setup (model + embedding model) first."
-                .to_string()
-        })
 }
 
 // ─── Command: lc_ocr_available ───────────────────────────────────────
@@ -523,91 +506,44 @@ pub struct PreScanResponse {
 }
 
 /// Register (or re-register) a corpus for the supplied path + source
-/// type, then run a pre-scan. Returns the classification and the new
-/// corpus_id. Progress events are emitted on
-/// `local-corpus://progress/{job_id}` but the command is synchronous
-/// end-to-end — callers await the return value.
+/// type, then run a pre-scan. Returns the classification and the
+/// corpus id + display name AS REGISTERED.
 ///
-/// `source_type` is `"obsidian"` or `"folder"`. `display_name` defaults
-/// to the folder's basename.
+/// ONE call since 2026-09-11: `POST /internal/corpus/local/pre-scan`
+/// builds the config (the Obsidian arm with the DAEMON's snapshot root —
+/// this command's last local manager read), registers it on the manager
+/// that will run the ingest, and scans the config the registry kept.
+/// D9c had crossed the registration alone; the scan stayed because the
+/// path was "user-picked", which stopped being a reason once the engine
+/// reading that path was the daemon's.
 ///
-/// # The REGISTRATION crosses; the path probe and the scan stay
-///
-/// The two halves answer different questions, and D8 shipped them as
-/// one. The probe and the scan read the FOLDER the user just picked —
-/// no manager state — so they belong here. `register` writes the
-/// REGISTRY ON DISK, which is the state this file's rule says both
-/// managers must share, and it is the producer for every route that can
-/// answer `not registered locally`: the ingest job, cancel, search,
-/// preview, the config read below. D8 crossed those consumers and left
-/// this producer behind, so on an ATTACHED boot the corpus went into
-/// this process's manager and the daemon 404'd the ingest that followed
-/// (real-mode journeys, run 5). It now goes over
-/// `POST /internal/corpus/local`, into the manager that will run the
-/// ingest.
-///
-/// The corpus id and the display name come BACK from the route rather
-/// than off the config that was sent: `register`'s path-identity guard
-/// keeps an existing id when this folder is already registered under
-/// one, and using the id we sent is the same 404 under a new name.
+/// `job_id` is kept on the response for the TS shape (`LcPreScanResponse`)
+/// only. No listener subscribes to it — `FolderDropFlow.svelte` reads
+/// `corpus_id`, `display_name` and `result` and nothing else (checked
+/// 2026-09-11) — and the scan no longer narrates `Scanning` frames from
+/// this process, so the id names no channel anything emits on.
 #[tauri::command]
 pub async fn lc_pre_scan(
-    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     path: String,
     source_type: String,
     display_name: Option<String>,
 ) -> Result<PreScanResponse, String> {
-    let p = PathBuf::from(&path);
-    if !p.exists() || !p.is_dir() {
-        return Err(format!("Path does not exist or is not a directory: {path}"));
-    }
-
-    let config = match source_type.as_str() {
-        "obsidian" => {
-            // The one manager read left in this command, and it is a
-            // read of THIS process's storage layout, not of corpus
-            // state: `snapshot_root()` is `{data_dir}/vault-snapshots`.
-            // It lands in the config as `write_back.snapshot_dir` and is
-            // then the daemon's to honour. Named rather than hidden —
-            // see the census header's remaining-pair note.
-            let manager = require_manager(&state).await?;
-            let snap = manager.snapshot_root().to_path_buf();
-            LocalCorpusConfig::obsidian_vault(p, snap)
-        }
-        "folder" => {
-            let name = display_name.unwrap_or_else(|| {
-                std::path::Path::new(&path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Documents")
-                    .to_string()
-            });
-            LocalCorpusConfig::document_folder(PathBuf::from(&path), name)
-        }
-        other => return Err(format!("Unknown source_type: {other}")),
-    };
-
-    let job_id = new_job_id();
-    let progress = Some(make_emitter(app.clone(), job_id.clone()));
-    let registered: LocalCorpusConfig = lc_client(&state)
-        .lc_register::<LocalCorpusConfig, LocalCorpusConfig>(&config)
-        .await
-        .map_err(|e| format!("register: {e}"))?;
-    let corpus_id = registered.id.clone();
-    let display_name = registered.display_name.clone();
-
-    // Scanned from the config the DAEMON kept, so the panel classifies
-    // the same extensions and thresholds the ingest will read.
-    let result = sovereign_tools::local_corpus::pre_scan_config(registered, progress)
+    let answer = lc_client(&state)
+        .lc_pre_scan::<serde_json::Value, sovereign_mesh::lc_http::PreScanAnswer>(
+            &serde_json::json!({
+                "path": path,
+                "source_type": source_type,
+                "display_name": display_name,
+            }),
+        )
         .await
         .map_err(|e| format!("pre_scan: {e}"))?;
-
     Ok(PreScanResponse {
-        job_id,
-        result,
-        corpus_id,
-        display_name,
+        job_id: new_job_id(),
+        result: answer.result,
+        corpus_id: answer.corpus_id,
+        display_name: answer.display_name,
     })
 }
 
@@ -631,9 +567,7 @@ pub async fn lc_ingest(
     let progress = make_emitter(app.clone(), job_id.clone());
     let daemon_url = state.client_base_url();
     // The corpus's config is a REGISTRY read and crosses (sv-surface D5).
-    // Both dispatch arms below branch on it, and neither needs a local
-    // manager to do so — which is why `require_manager` is now taken
-    // inside the bespoke arm only.
+    // Both dispatch arms below branch on it; no arm holds a manager.
     let registered = lc_client(&state)
         .lc_get::<LocalCorpusConfig>(&corpus_id)
         .await
