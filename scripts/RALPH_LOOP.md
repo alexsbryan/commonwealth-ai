@@ -51,6 +51,33 @@ progress is visible as it happens — not summarised after. Stop it with
 [--notify] [--plan]
 ```
 
+## Parallel lanes
+
+`ralph-loop.sh` is serial — one unit at a time. When a ring's frontier has
+independent units (ring 1 opened with five; ring 2 has `transform-rung` beside
+the registry chain), `ralph-pool.sh` runs them concurrently:
+
+```sh
+nohup scripts/ralph-pool.sh --workdir . --prompt ralph/PROMPT.md --lanes 2 \
+  --review-model <model> >> ralph/log.txt 2>&1 &
+```
+
+It is wave-based: each wave takes up to `--lanes` ready units, runs each in its
+own **git worktree** on its own branch, waits, then merges the finished ones
+**serially** into the main tree. Safety:
+
+- lanes never share a working tree, so no two sessions edit the same files;
+- a merge conflict **aborts and halts** (`ralph/NEEDS_HUMAN.md` + `ralph/STOP`) —
+  never auto-resolved;
+- `REVIEW` units run serially in the main tree (a review must see its units);
+- lanes do not edit `STATE.md`; the pool marks a unit `[x]` after merging, so the
+  merge never fights over the queue file;
+- a lane session runs in its own process group and is killed (group) past
+  `--session-timeout`.
+
+A lane session writes `ralph/done/<unit>` (committed) when the unit passes its
+own tests; the pool merges a lane whose marker is present.
+
 A repo supplies three files and points the loop at them: `ralph/PROMPT.md` (the
 iteration work order), `ralph/STATE.md` (the queue), and — if it uses review
 units — the principles it holds (`ARCH_PRINCIPLES.md`).
