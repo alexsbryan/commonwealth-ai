@@ -345,6 +345,73 @@ load_bearing = [
   { flag = "--accept <key>", why = "raises ONE ceiling. `--update-baseline` on a working tree absorbs every other crate's growth along with yours, which is the trap AGENTS.md names for this ratchet" },
 ]
 
+# ── the judge register's own price tag ───────────────────────────────────
+# Rung vl-3 of quality/campaigns/verifier-loop.toml. `svrn bench judge-replay`
+# and its report have existed since 2026-08-13 and appeared in NONE of this
+# file's rows, so the instrument that prices a judge change was itself
+# unregistered — nothing ran it, nothing knew its cost, and no control had been
+# watched making it go red.
+
+[[instrument]]
+id = "judge-replay"
+kind = "bench"
+claim = "judged"
+command = "svrn bench judge-replay"
+# Model calls against the local daemon, one per case per repeat. The pinned v1
+# set is 40 cases; the wall cost is the daemon's, not this verb's.
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F3"
+verdict = "judgement-line"
+could_not_judge_exits = [4]
+preconditions = ["port-listening:9741", "slot-decodes:primary"]
+baseline = { kind = "none" }
+# It RENDERS, CALLS and WRITES; it decides nothing, so there is nothing here to
+# watch fail. The decider is `judge-replay-report` below, and that row carries
+# the control.
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header)"
+load_bearing = [
+  { flag = "--render-only", why = "the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register" },
+  { flag = "--repeat N", why = "one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise" },
+]
+
+[[instrument]]
+id = "judge-replay-report"
+kind = "check"
+claim = "judged"
+command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py"
+# Pure scoring over jsonl; the two frozen 2026-08-14 arms score in well under a
+# second. A larger case set moves this linearly.
+cost_secs = 0.03
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "judge-replay-control"
+runs_in = ["by-hand"]
+doc = "sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce)"
+load_bearing = [
+  { flag = "a second --verdicts arm", why = "ONE arm is a reading, not a trade — with no base to price against, the run reports never-ran rather than a pass" },
+  { flag = "--tau", why = "the operating point the comparison is read at; a catch lost at 0.9 may not be lost at 0.6, and the trade is about the point production runs" },
+]
+
+[[instrument]]
+id = "judge-replay-control"
+kind = "control"
+claim = "invariant"
+command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test"
+# 0.03s, n=3 (0.03 / 0.03 / 0.03 wall), 2026-09-12.
+cost_secs = 0.03
+enforcement = "hard"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush", "ci:gates"]
+doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
+
 # ── back-of-house instruments that SAY their verdict ─────────────────────
 # Rung vl-2 of quality/campaigns/verifier-loop.toml. Each of these decides a
 # four-verdict outcome and, until 2026-09-12, could only say it in prose — so a

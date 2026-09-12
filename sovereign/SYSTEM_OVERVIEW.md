@@ -3218,6 +3218,24 @@ exception, `bench_cmd/mechanism_fidelity.rs`, is declared by a
 list in the gate: an instrument that measures the sentinel must build the wire
 shape or it measures its own caller (ARCH §7).
 
+**A register change is priced in both directions, or it is not judged
+(`svrn bench judge-replay` + `bench/chaos_monkey/judge_replay_report.py`,
+registered 2026-09-12, rung `vl-3`).** The harness has existed since 2026-08-13
+and was in NONE of `quality/instruments.toml`'s rows — the instrument that
+prices a judge change was itself unregistered, unrun and uncontrolled. Two
+things changed. The report now COMPARES arms instead of printing two blocks for
+a reader to diff: per register, at the operating tau, catches lost · catches
+gained · false positives cured · false positives added, never netted, and a
+candidate that surrenders a catch is `failed` whatever it cures (the 2026-08-14
+calibration's own kill rule). And the control is the archive: commit
+`17ac931b8` is a specifics-scan candidate refused at the 3/3 `should_flag` bar,
+its verdicts frozen beside main's, and it is the right control precisely
+because its AGGREGATE IMPROVED — 6/10 against main's 3/10 — while it lost the
+Kane-bridge catch. The old one-number line passed it; `judge_replay_report.py
+--self-test` (0.03 s, in the pre-push selection) fails if the report ever
+passes it again, and a second arm requires an arm compared against ITSELF to
+pass, so a report that answered `failed` unconditionally would not satisfy it.
+
 Rows accumulate in a task-local opened by
 `gate_answer_with_progress` — the same funnel that owns the gate's wall clock —
 and ride out as `GroundingDecisionLine::calls` (counts only: `ms`,

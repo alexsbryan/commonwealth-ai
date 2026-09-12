@@ -453,9 +453,47 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
     );
     // A run where every scoring call failed verified nothing (ARCH §18.2):
     // report never-ran rather than a green exit.
+    //
+    // The verdict is about whether VERDICTS WERE PRODUCED — this verb renders,
+    // calls and writes; it does not price a register. `judge_replay_report.py`
+    // is the decider, and it says so on its own line.
+    use kernel_types::{Judgement, Reason};
+    use sovereign_cli_shared::lane_verdict;
     if !render_only && n_done > 0 && n_judge_failures >= n_done * repeat {
         eprintln!("[judge-replay] EVERY call failed — daemon down or model absent. Exit 4.");
+        lane_verdict::print(
+            &Judgement::could_not_judge(
+                "judge-replay",
+                Reason::new(format!(
+                    "every one of the {} scoring call(s) across {n_done} case(s) failed — the \
+                     daemon is down or the model is absent, so no verdict was recorded",
+                    n_done * repeat
+                ))
+                // `expect`, not a fallback: `Reason::new` refuses only the
+                // placeholder vocabulary, and a sentence carrying two counts
+                // is never in it. A default here would be a substitution for a
+                // case that cannot arise (ARCH principle 6).
+                .expect("a reason carrying call and case counts is not a placeholder"),
+            )
+            .as_of(lane_verdict::now()),
+        );
         return 4;
     }
+    let j = if n_done == 0 {
+        Judgement::never_ran(
+            "judge-replay",
+            Reason::literal("no case matched the selection — nothing was replayed"),
+        )
+    } else {
+        Judgement::passed(
+            "judge-replay",
+            Reason::new(format!(
+                "{n_done} case(s) replayed through this build's registers with \
+                 {n_judge_failures} judge failure(s); verdicts in {out:?}"
+            ))
+            .expect("a reason carrying the case and failure counts is not a placeholder"),
+        )
+    };
+    lane_verdict::print(&j.as_of(lane_verdict::now()));
     0
 }
