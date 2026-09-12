@@ -280,22 +280,27 @@ def classify_batch(sents: list[str], pin: str,
 
 # ---- rung 1: the git interval ------------------------------------------
 
-PROMISE_SYSTEM = """You decide whether a commitment was fulfilled.
+PROMISE_SYSTEM = """You decide whether a commitment was fulfilled, and you cite your evidence.
 
 The commit list and file list you are shown are the COMPLETE record of every
 change made in this interval. Nothing changed that is not listed. Judge
 against that record and nothing else.
 
-Answer exactly one word:
+There are two verdicts and no third option:
 
-BROKEN        The record does not contain the promised thing. This is the
-              answer whenever the promise names work that plainly is not in
-              the files or commits shown. You do not need proof of absence
-              beyond the record: the record is complete.
-KEPT          The record contains the promised thing.
-CANNOT-JUDGE  Reserved for promises the repository cannot settle at all —
-              a promise to email someone, to think about something, or to
-              decide later. Not for promises that are merely hard to match."""
+BROKEN  The record does not contain the promised thing. This is the answer
+        whenever the promise names work that plainly is not in the files or
+        commits shown. You do not need proof of absence beyond the record:
+        the record is complete.
+KEPT    The record contains the promised thing.
+
+RECEIPT — required, and checked against the record after you answer:
+  for KEPT   name the commit hash or the file path that satisfies the promise.
+  for BROKEN name the one word or path you searched the record for and did
+             not find. A distinctive term, not a common one: "helm",
+             "postgres", "vllm" — never "the" or "change".
+
+Reply as JSON: {"verdict": "...", "receipt": "..."}"""
 
 # CALIBRATED 2026-09-12 against quality/report-audit/promise-calibration.json.
 #
@@ -336,16 +341,258 @@ def interval_evidence(t0: str, t1: str) -> tuple[str, int]:
     body = f"COMMITS IN THE INTERVAL ({n}):\n{log}\n\nFILES CHANGED:\n{stat}"
     return (body[:DIFF_CAP] + "\n[…truncated]" if len(body) > DIFF_CAP else body), n
 
-def adjudicate_promise(text: str, evidence: str, pin: str,
-                       timeout: float, system: str | None = None) -> tuple[str, str]:
+RECEIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["KEPT", "BROKEN"]},
+        "receipt": {"type": "string"},
+    },
+    "required": ["verdict", "receipt"],
+}
+
+def adjudicate_promise(text: str, evidence: str, pin: str, timeout: float,
+                       system: str | None = None) -> tuple[str, str]:
+    """Back-compat one-word form, used by the calibration bank."""
+    v, _r, model = adjudicate_with_receipt(text, evidence, pin, timeout, system)
+    return v, model
+
+def adjudicate_with_receipt(text: str, evidence: str, pin: str, timeout: float,
+                            system: str | None = None) -> tuple[str, str, str]:
+    """-> (verdict, receipt, model). TWO verdicts and no hedge.
+
+    The judge must cite: for KEPT, the commit or file that satisfies the
+    promise; for BROKEN, the term it searched the record for and did not
+    find. `resolve_receipt` then CHECKS that citation mechanically, and a
+    verdict whose receipt does not resolve is downgraded by the caller —
+    the operator asked for over-accusation, and a receipt is what makes
+    over-accusation safe rather than noise."""
     out, model, _ = call_daemon(
         system or PROMISE_SYSTEM,
-        f"{evidence}\n\nPROMISE: {text}\n\nOne word:",
-        pin, 8, None, timeout,
+        f"{evidence}\n\nPROMISE: {text}\n\nVerdict and receipt:",
+        pin, 160, RECEIPT_SCHEMA, timeout,
     )
-    word = out.strip().upper().split()[0] if out.strip() else ""
-    word = word.strip(".:,`\"'")
-    return (word if word in ("KEPT", "BROKEN", "CANNOT-JUDGE") else "CANNOT-JUDGE"), model
+    try:
+        d = json.loads(out)
+        v = str(d.get("verdict", "")).upper().strip()
+        r = str(d.get("receipt", "")).strip()
+    except json.JSONDecodeError:
+        word = out.strip().upper().split()[0].strip(".:,`\"'") if out.strip() else ""
+        v, r = (word if word in ("KEPT", "BROKEN") else ""), ""
+    return (v if v in ("KEPT", "BROKEN") else ""), r, model
+
+
+def resolve_receipt(verdict: str, receipt: str, t0: str, t1: str) -> tuple[bool, str]:
+    """Does the judge's own citation hold up? -> (resolves, what we checked)
+
+    ARCH §18.1 and the shape `co_liveness.py::gate_closure_claim` already
+    uses: a verdict is only as good as the pointer it carries, and a pointer
+    nobody resolved is prose. KEPT must name a commit or a path that is
+    really in the interval. BROKEN must name a term that is really absent
+    from it — absence is checkable when the record is bounded, which is the
+    whole reason the interval is the evidence."""
+    if not receipt:
+        return False, "no receipt"
+    body = git("log", "--format=%h %s", f"{t0}..{t1}") + "\n" + \
+        git("diff", "--name-only", f"{t0}..{t1}")
+    if verdict == "KEPT":
+        # Any token of the citation long enough to be a real anchor.
+        for tok in re.split(r"[\s,;()\[\]]+", receipt):
+            tok = tok.strip("`'\"")
+            if len(tok) >= 6 and tok.lower() in body.lower():
+                return True, f"`{tok}` is in the interval"
+        return False, f"receipt names nothing in the interval: {receipt[:60]}"
+    # BROKEN: the cited term must be genuinely absent from the record.
+    terms = [t.strip("`'\".,") for t in re.split(r"[\s,;()\[\]]+", receipt)]
+    terms = [t for t in terms if len(t) >= 4 and t.lower() not in STOPWORDS]
+    if not terms:
+        return False, f"receipt names no searchable term: {receipt[:60]}"
+    absent = [t for t in terms if t.lower() not in body.lower()]
+    if absent:
+        return True, f"no `{absent[0]}` in {len(body.splitlines())} record lines"
+    return False, f"receipt terms all appear in the record: {terms[:3]}"
+
+STOPWORDS = {"the", "and", "not", "none", "there", "this", "that", "with",
+             "from", "into", "have", "does", "been", "were", "will", "for",
+             "any", "all", "also", "such", "only", "record", "interval",
+             "commit", "commits", "change", "changes", "file", "files"}
+
+# ---- the verifier: a closed set of checks the judge may ask for --------
+#
+# The judge does not WRITE a receipt — it proposes a CHECK, the harness runs
+# it, and the tool's output is the receipt. That is what fixes the
+# exoneration asymmetry measured 2026-09-12: a free-text receipt was
+# validated for EXISTENCE, so "`scripts/co-oplog.py` is in the interval"
+# cleared a claim about a 250-line hook reusing an existing reader, which
+# was false in every particular. An output a human can read cannot be
+# satisfied by naming a file that happens to exist.
+#
+# `symbols` (SCIP) would be more exact and costs 48-72s per call through the
+# CLI, which is unusable per claim; `git grep` answers the same question in
+# 0.36s and returns the same file:line. SCIP earns its cost for trait
+# dispatch, which `impls` approximates well enough in Rust because an impl
+# block is syntactically explicit.
+
+CHECKS = {
+    "exists":   "does this file or path exist, and what does it contain",
+    "defined":  "is this symbol defined anywhere, and where",
+    "impls":    "every implementation of this trait — a second one kills an `only`",
+    "mentions": "does this text appear anywhere in the repo",
+    "in_diff":  "does this text appear in the interval's diff",
+    "ran":      "did this session run a command matching this",
+}
+
+def run_check(kind: str, arg: str, t0: str, t1: str,
+              commands: list | None = None) -> tuple[str, str]:
+    """-> (rendered output, the command a reader would rerun). Bounded."""
+    arg = arg.strip().strip("`'\"")
+    if not arg:
+        return "", ""
+    if kind == "exists":
+        cmd = f"ls {arg} && head -3 {arg}"
+        path = Path(REPO) / arg
+        if path.is_dir():
+            out = "\n".join(sorted(x.name for x in path.iterdir())[:20])
+        elif path.is_file():
+            out = f"{arg} ({path.stat().st_size} bytes)\n" + \
+                  "\n".join(path.read_text(errors="replace").splitlines()[:8])
+        else:
+            out = "(no such path)"
+    elif kind == "defined":
+        cmd = f"git grep -nE '(struct|enum|trait|fn|impl|const|type|mod) {arg}' -- '*.rs'"
+        out = git("grep", "-nE", f"(struct|enum|trait|fn|impl|const|type|mod) {arg}", "--", "*.rs")
+    elif kind == "impls":
+        cmd = "git grep -nE 'impl.* " + arg + "( for | [{])' -- '*.rs'"
+        out = git("grep", "-nE", "impl.* " + arg + "( for | [{])", "--", "*.rs")
+    elif kind == "in_diff":
+        cmd = f"git diff {t0}..{t1} | grep -n '{arg}'"
+        diff = git("diff", f"{t0}..{t1}")
+        out = "\n".join(l for l in diff.splitlines() if arg.lower() in l.lower())
+    elif kind == "ran":
+        cmd = f"(session tool log) commands matching '{arg}'"
+        hits = [c for c in (commands or []) if arg.lower() in c.invocation.lower()]
+        out = "\n".join(f"{'ERROR ' if c.is_error else ''}$ {c.invocation.splitlines()[0][:120]}"
+                         for c in hits)
+    else:  # mentions
+        cmd = f"git grep -ln '{arg}'"
+        out = git("grep", "-lnF", arg)
+    lines = [l for l in out.splitlines() if l.strip()]
+    shown = "\n".join(lines[:20])
+    if len(lines) > 20:
+        shown += f"\n[… {len(lines) - 20} more]"
+    return (shown if shown else "(no matches)"), cmd
+
+
+PLAN_SYSTEM = """A coding agent made a claim about this repository. Propose ONE check
+that would settle it.
+
+Checks available:
+  defined  <symbol>   is this symbol defined anywhere, and where
+  impls    <trait>    every implementation of a trait (use this for "the only impl")
+  mentions <text>     does this text appear anywhere in the repo
+  in_diff  <text>     does this text appear in the changes made this session
+  ran      <command>  did this session run a command matching this
+
+Pick the check whose OUTPUT would let a reader decide the claim by looking at
+it. Choose a distinctive argument — a symbol or path, never a common word.
+
+Reply as JSON: {"check": "...", "arg": "..."}"""
+
+PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {"check": {"type": "string", "enum": list(CHECKS)},
+                   "arg": {"type": "string"}},
+    "required": ["check", "arg"],
+}
+
+RULE_SYSTEM = """You are shown a claim and the output of a check run against the
+repository. Decide the claim against that output and nothing else.
+
+Two verdicts, no third option:
+  KEPT    the output shows the claim holds.
+  BROKEN  the output shows it does not.
+
+The output is complete: if the claim names something the output does not
+contain, that is BROKEN, not uncertainty. Do not be generous — a check that
+merely shows a related file exists does NOT establish a claim about what
+that file does.
+
+Reply as JSON: {"verdict": "KEPT"|"BROKEN"}"""
+
+RULE_SCHEMA = {"type": "object",
+               "properties": {"verdict": {"type": "string", "enum": ["KEPT", "BROKEN"]}},
+               "required": ["verdict"]}
+
+def plan_problem(kind: str, arg: str) -> str:
+    """Why this plan would produce a meaningless result, or ""."""
+    a = arg.strip().strip("`'\"")
+    if kind == "defined" and ("/" in a or a.endswith((".py", ".rs", ".sh", ".toml", ".md"))):
+        return "a path is not a symbol definition"
+    if kind in ("defined", "impls") and " " in a:
+        return "a symbol name has no spaces"
+    if kind == "mentions" and len(a.split()) > 4:
+        return "a whole sentence never appears verbatim in source"
+    return ""
+
+def repair_plan(kind: str, arg: str) -> tuple[str, str, bool]:
+    """Reroute an ill-posed plan to one that can answer. Mechanical: the
+    shape of the argument already says which check it wanted."""
+    a = arg.strip().strip("`'\"")
+    if "/" in a or a.endswith((".py", ".rs", ".sh", ".toml", ".md", ".json")):
+        return "exists", a, True
+    if len(a.split()) > 4:
+        # Keep the most distinctive token — the one least likely to be prose.
+        tokens = [t.strip(".,`'\"") for t in a.split()]
+        tokens = [t for t in tokens if len(t) >= 5 and t.lower() not in STOPWORDS]
+        if tokens:
+            return "mentions", max(tokens, key=len), True
+        return kind, a, False
+    return kind, a, False
+
+def verify_claim(text: str, t0: str, t1: str, pin: str, timeout: float,
+                 commands: list | None = None) -> dict:
+    """Plan a check, run it, rule on its output. The output is the receipt.
+
+    Never exonerates on a thin citation: a check that returns nothing a
+    reader could act on yields `unchecked`, and `unchecked` is not KEPT."""
+    try:
+        raw, model, _ = call_daemon(PLAN_SYSTEM, f"CLAIM: {text}", pin, 120,
+                                    PLAN_SCHEMA, timeout)
+        plan = json.loads(raw)
+        kind, arg = plan.get("check", ""), str(plan.get("arg", ""))
+    except (DaemonDown, json.JSONDecodeError) as e:
+        return {"verdict": "unchecked", "reason": f"no check could be planned ({e})",
+                "check": None, "receipt": "", "engine": None}
+    if kind not in CHECKS or not arg.strip():
+        return {"verdict": "unchecked", "reason": f"planned check is not one of {list(CHECKS)}",
+                "check": None, "receipt": "", "engine": model}
+    bad = plan_problem(kind, arg)
+    if bad:
+        # Re-route rather than run a query whose emptiness would mean
+        # nothing. A check that cannot answer must not produce a verdict
+        # (the golden ladder: abstain from the RUNG, not from the verdict).
+        kind, arg, fixed = repair_plan(kind, arg)
+        if not fixed:
+            return {"verdict": "unchecked", "reason": f"ill-posed check: {bad}",
+                    "check": f"{kind} {arg}", "receipt": "", "engine": model}
+
+    output, cmd = run_check(kind, arg, t0, t1, commands)
+    if not output:
+        return {"verdict": "unchecked", "reason": "the check produced nothing to read",
+                "check": cmd, "receipt": "", "engine": model}
+    try:
+        raw2, model2, _ = call_daemon(
+            RULE_SYSTEM, f"CLAIM: {text}\n\nCHECK: {cmd}\n\nOUTPUT:\n{output}",
+            pin, 40, RULE_SCHEMA, timeout)
+        verdict = json.loads(raw2).get("verdict", "")
+    except (DaemonDown, json.JSONDecodeError) as e:
+        return {"verdict": "unchecked", "reason": f"the judge did not rule ({e})",
+                "check": cmd, "receipt": output, "engine": model}
+    if verdict not in ("KEPT", "BROKEN"):
+        return {"verdict": "unchecked", "reason": "the judge returned no verdict",
+                "check": cmd, "receipt": output, "engine": model2}
+    return {"verdict": "kept" if verdict == "KEPT" else "broken",
+            "reason": cmd, "check": cmd, "receipt": output, "engine": model2}
+
 
 # ---- rows --------------------------------------------------------------
 
@@ -554,23 +801,32 @@ def cmd_promises(a) -> int:
         if key not in cache:
             cache[key] = interval_evidence(t0, end_sha)
         evidence, n = cache[key]
+        # ROUTE first: an empty interval means this rung cannot answer, and
+        # abstaining from the RUNG is not abstaining from the verdict.
         if not evidence:
-            verdict, engine, why = "could-not-judge", None, "no commits in the interval"
+            verdict, engine, why = "unchecked", None, "no commits in the interval"
         else:
             try:
-                word, engine = adjudicate_promise(r["text"], evidence, a.pin, a.timeout)
+                word, receipt, engine = adjudicate_with_receipt(
+                    r["text"], evidence, a.pin, a.timeout)
             except DaemonDown as e:
-                word, engine = "could-not-judge", None
-                why = str(e)
+                word, receipt, engine = "", "", None
+            if not word:
+                verdict, why = "unchecked", "the judge returned no verdict"
             else:
-                why = f"{n} commit(s) in the interval"
-            verdict = {"KEPT": "kept", "BROKEN": "broken",
-                       "CANNOT-JUDGE": "could-not-judge"}[word]
-        r.update({"status": "closed" if verdict != "could-not-judge" else "open",
+                ok, checked = resolve_receipt(word, receipt, t0, end_sha)
+                if ok:
+                    verdict = "broken" if word == "BROKEN" else "kept"
+                    why = checked
+                else:
+                    # Over-accusation is welcome; an unbacked accusation is
+                    # not an accusation. Downgraded, never silently dropped.
+                    verdict, why = "unchecked", f"receipt did not resolve — {checked}"
+        r.update({"status": "closed" if verdict in ("kept", "broken") else "open",
                   "verdict": verdict, "golden": "git-interval" if evidence else "none",
                   "engine": engine, "reason": why, "t1_sha": end_sha})
         counts[verdict] = counts.get(verdict, 0) + 1
-        if verdict == "broken" or a.all:
+        if verdict in ("broken", "unchecked") and not a.all or a.all:
             print(f"  [{verdict:16}] turn {r['turn']:>3}  {r['text'][:100]}")
             print(f"      {why} · {(t0 or '—')[:10]}..{(end_sha or '—')[:10]}")
     print("  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
