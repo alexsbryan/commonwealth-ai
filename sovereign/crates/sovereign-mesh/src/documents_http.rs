@@ -328,18 +328,15 @@ impl DocumentJob {
         }
     }
 
-    /// Whether the manager already narrated the failure. A poisoned log
-    /// answers `false` so the caller appends its own `Failed` frame — the
-    /// arm that ends the job either way, never the one that leaves a
-    /// poller spinning.
     fn last_is_failed(&self) -> bool {
-        match self.frames.lock() {
-            Ok(f) => f
-                .last()
-                .map(|v| v.get("type").and_then(|t| t.as_str()) == Some("Failed"))
-                .unwrap_or(false),
-            Err(_) => false,
-        }
+        self.frames
+            .lock()
+            .ok()
+            .and_then(|f| {
+                f.last()
+                    .map(|v| v.get("type").and_then(|t| t.as_str()) == Some("Failed"))
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -439,17 +436,10 @@ async fn ingest_progress(
     Path(id): Path<String>,
     Query(query): Query<DocumentProgressQuery>,
 ) -> Result<Response, Absence> {
-    // A poisoned table and an absent job are different facts: the first
-    // is a 500 naming it, the second the 404 below (§18.3).
-    let job = match document_jobs().lock() {
-        Ok(jobs) => jobs.get(&id).cloned(),
-        Err(_) => {
-            return Ok(internal_error(
-                "ingest_progress",
-                "the job table is poisoned",
-            ))
-        }
-    };
+    let job = document_jobs()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(&id).cloned());
     let Some(job) = job else {
         return Ok(json_error(
             StatusCode::NOT_FOUND,

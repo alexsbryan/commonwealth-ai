@@ -411,7 +411,8 @@ pub async fn lc_ingest(
 /// phase writes to ~50 across a whole embed pass, so a tighter interval
 /// would re-read the same numbers; a looser one would visibly lag the
 /// progress bar.
-pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
+pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(750);
 
 /// How many CONSECUTIVE poll failures end the follow with an error frame.
 /// One failure is a hiccup; ten in a row (~7.5s) is a daemon that is not

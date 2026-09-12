@@ -132,8 +132,8 @@ pub fn run(args: &[String]) -> i32 {
     let default_absent = edges.iter().filter(|e| e.optional).count();
     eprintln!(
         "layer-gate: {} members, {} internal edges ({} dev, exempt; {} absent from the \
-         default build) vs {} layers; {} back-of-house patterns; {} thin surface(s) × {} \
-         crates they may not reach; fan-in ratchet over {} crates",
+         default build) vs {} layers; {} back-of-house patterns; {} thin surface(s) × \
+         {} crates they may reach / {} they may not; fan-in ratchet over {} crates",
         names.len(),
         edges.len(),
         dev_edges_up,
@@ -141,6 +141,7 @@ pub fn run(args: &[String]) -> i32 {
         map.layers.len(),
         map.backstage.len(),
         map.thin_surfaces.crates.len(),
+        map.thin_surfaces.may_reach.len(),
         map.thin_surfaces.may_not_reach.len(),
         baseline.len()
     );

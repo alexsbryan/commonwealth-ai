@@ -47,9 +47,22 @@ pub struct ThinSurfaces {
     /// silently enrol the next crate someone names that way.
     #[serde(default)]
     pub crates: Vec<String>,
-    /// Crates a surface may not REACH, transitively. Exact names.
+    /// Crates a surface may not REACH, transitively. Exact names. The
+    /// DENYLIST form — the rule's first shape (2026-09-11 morning), kept so
+    /// a map may still name a specific backend it is worried about.
     #[serde(default)]
     pub may_not_reach: Vec<String>,
+    /// The ONLY workspace crates a surface may reach, transitively. Exact
+    /// names. The ALLOWLIST form, added the same evening after the denylist
+    /// let the desktop keep the knowledge engine, the runtime and the
+    /// inference stack linked because nobody had written them down as
+    /// "daemon-assembling": a thin client links the CONTRACT layer and
+    /// nothing else, and a rule that names what is permitted fails the day
+    /// a new leak lands rather than when someone re-reads the manifest.
+    /// When non-empty, every reached crate outside it is a violation; the
+    /// denylist still applies on top.
+    #[serde(default)]
+    pub may_reach: Vec<String>,
     /// The ONE file allowed to start a process on a surface's behalf, and the
     /// crate that owns it. Read by `xtask lifecycle-gate`, declared here so
     /// the dependency rule and the census cannot disagree about who the
@@ -128,11 +141,14 @@ pub(crate) fn validate(map: &LayerMap) -> Result<(), String> {
              rule is genuinely not wanted here."
             .to_string());
     }
-    if map.schema_version >= 4 && map.thin_surfaces.may_not_reach.is_empty() {
-        return Err("ARCH_LAYERS.toml declares [thin_surfaces] with no \
-             `may_not_reach` crates — the surfaces are named and nothing is \
-             forbidden to them, which is the same vacuous green one rung \
-             further in."
+    if map.schema_version >= 4
+        && map.thin_surfaces.may_not_reach.is_empty()
+        && map.thin_surfaces.may_reach.is_empty()
+    {
+        return Err("ARCH_LAYERS.toml declares [thin_surfaces] with neither \
+             `may_reach` nor `may_not_reach` crates — the surfaces are named \
+             and nothing is forbidden to them, which is the same vacuous green \
+             one rung further in."
             .to_string());
     }
     for a in &map.thin_surfaces.lifecycle_allow {
@@ -194,9 +210,12 @@ pub(crate) fn evaluate(
     used: &mut BTreeSet<(String, String)>,
 ) -> Vec<Violation> {
     let surfaces = &map.thin_surfaces;
-    if surfaces.crates.is_empty() || surfaces.may_not_reach.is_empty() {
+    if surfaces.crates.is_empty()
+        || (surfaces.may_not_reach.is_empty() && surfaces.may_reach.is_empty())
+    {
         return Vec::new();
     }
+    let allow: BTreeSet<&str> = surfaces.may_reach.iter().map(String::as_str).collect();
 
     let mut adj: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     for e in edges {
@@ -209,7 +228,20 @@ pub(crate) fn evaluate(
     let mut violations = Vec::new();
     for surface in &surfaces.crates {
         let paths = reachable(surface, &adj);
-        for forbidden in &surfaces.may_not_reach {
+        // Forbidden = named in the denylist, OR (allowlist form) reached and
+        // not named in it. One pass over the union, so a crate caught by both
+        // forms is one row, not two.
+        let forbidden_set: BTreeSet<&String> = surfaces
+            .may_not_reach
+            .iter()
+            .filter(|f| paths.contains_key(*f))
+            .chain(
+                paths
+                    .keys()
+                    .filter(|reached| !allow.is_empty() && !allow.contains(reached.as_str())),
+            )
+            .collect();
+        for forbidden in forbidden_set {
             let Some(path) = paths.get(forbidden) else {
                 continue;
             };
@@ -389,6 +421,55 @@ bring_up_decider = { krate = "sovereign-turn-client", file = "x/reach.rs", reaso
             v.iter()
                 .any(|x| matches!(x, Violation::StaleException { to, .. } if to == "sovereign-cli-daemon")),
             "a won reach must retire its own exception: {v:?}"
+        );
+    }
+
+    /// The allowlist form: the contract crates are named, everything else a
+    /// surface reaches is a violation — including a crate nobody thought to
+    /// forbid, which is the case the denylist let through.
+    #[test]
+    fn the_allowlist_form_catches_a_reach_nobody_named() {
+        let map_src = r#"
+schema_version = 4
+backstage = ["xtask"]
+
+[[layer]]
+name = "everything"
+crates = ["*"]
+
+[[package]]
+name = "p"
+crates = ["some-package-crate"]
+doc = "docs/p.md"
+
+[thin_surfaces]
+crates = ["sovereign-desktop"]
+may_reach = ["sovereign-contracts", "sovereign-turn-client"]
+doc = "d"
+bring_up_decider = { krate = "sovereign-turn-client", file = "x/reach.rs", reason = "one decider" }
+"#;
+        let map = parse(map_src).expect("parses");
+        let edges = vec![
+            edge("sovereign-desktop", "sovereign-turn-client"),
+            edge("sovereign-turn-client", "sovereign-contracts"),
+            edge("sovereign-desktop", "corpus-engine"),
+            edge("corpus-engine", "corpus-engine-vocab"),
+        ];
+        let mut all = names();
+        all.insert("corpus-engine".into());
+        all.insert("corpus-engine-vocab".into());
+        let v = evaluate_map(&map, &all, &edges);
+        let reached: Vec<&String> = v
+            .iter()
+            .filter_map(|x| match x {
+                Violation::SurfaceReach { reached, .. } => Some(reached),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            reached,
+            ["corpus-engine", "corpus-engine-vocab"],
+            "the two unnamed crates, and only those (contract crates pass): {v:?}"
         );
     }
 

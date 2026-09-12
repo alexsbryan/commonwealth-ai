@@ -6145,37 +6145,6 @@ absent and the guards fail closed for *every* caller.
   `commonwealth_media::PeerTransportPath`, reached through
   `daemon::IrohPeerPath`) do not, and stay where they are until the
   vocabulary they close over has a layer-0 home.
-- **The mesh MUTATIONS cross too, same rung** (svt-3, 2026-09-11).
-  `mesh_create`, `mesh_join`, `mesh_rotate_invite`, `mesh_switch`,
-  `mesh_leave`, `mesh_forget`, `mesh_list`, `mesh_get_state`,
-  `mesh_is_running`, `mesh_diagnostics` and `mesh_relay_candidates` in
-  `sovereign-desktop/src-tauri/src/mesh_commands.rs` each held TWO
-  implementations — an Attach arm hand-rolling `reqwest` against
-  `http://localhost:{port}/v1/mesh/…` and a Local arm reaching into an
-  in-process `EmbeddedDaemon` — and the pairs had already drifted:
-  rotate exposed the client API on the wire path and not in-process,
-  join accepted three invite forms over the wire and only a
-  `sovereign://` deep link in-process, `mesh_list` re-derived its five
-  fields from `known_meshes()` plus a direct `persist::active_mesh_id`
-  read of a file the daemon owns, and `mesh_forget` worked in NEITHER
-  mode (Attach refused naming the CLI; the arm behind that refusal
-  asked a daemon this app no longer commissions). One path now,
-  through `TurnClient` on `client_base_url()` — and not a choice
-  between two live arms: `05586220f` left `AppState::mesh` initialised
-  to `None` (`state.rs:318`) and written nowhere, so every Local arm
-  deleted here was already answering "Members empty" on every boot.
-  `POST /v1/mesh/forget` was WRITTEN for this rung and shares
-  `SwitchRequest` with Switch, because both take one reference and
-  resolve it through the same `persist::resolve_known` — which is the
-  bug `forget_mesh` shipped once already, refusing the id prefix
-  `switch_mesh` accepted. Two reads become `Err` where they were
-  silence (`mesh_relay_candidates`, `mesh_get_state`), the same
-  correction chunk 3 made for the preference list. ONE gap stays and is
-  named rather than papered over: `mesh_diagnostics` returns no
-  discovered peers — the mDNS table is the daemon's and no route
-  carries it (task #37).
-- See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
-  for peer-admission, contribution ceiling, and foreground-yield.
 - **The mesh view came down, and the two that cannot got a READ** (svt-3,
   2026-09-11, same day, second landing). `OriginKind` moved to
   `oicp_types::origin` (commonwealth-core re-exports it), which unpinned
@@ -6231,6 +6200,37 @@ absent and the guards fail closed for *every* caller.
   `From<WorkflowProgress> for WorkflowJobEvent` is the free function
   `workflow_http::job_event_from_progress` and `JobStatus::from_event` is
   `status_from_event`, each with its one caller.
+- **The mesh MUTATIONS cross too, same rung** (svt-3, 2026-09-11).
+  `mesh_create`, `mesh_join`, `mesh_rotate_invite`, `mesh_switch`,
+  `mesh_leave`, `mesh_forget`, `mesh_list`, `mesh_get_state`,
+  `mesh_is_running`, `mesh_diagnostics` and `mesh_relay_candidates` in
+  `sovereign-desktop/src-tauri/src/mesh_commands.rs` each held TWO
+  implementations — an Attach arm hand-rolling `reqwest` against
+  `http://localhost:{port}/v1/mesh/…` and a Local arm reaching into an
+  in-process `EmbeddedDaemon` — and the pairs had already drifted:
+  rotate exposed the client API on the wire path and not in-process,
+  join accepted three invite forms over the wire and only a
+  `sovereign://` deep link in-process, `mesh_list` re-derived its five
+  fields from `known_meshes()` plus a direct `persist::active_mesh_id`
+  read of a file the daemon owns, and `mesh_forget` worked in NEITHER
+  mode (Attach refused naming the CLI; the arm behind that refusal
+  asked a daemon this app no longer commissions). One path now,
+  through `TurnClient` on `client_base_url()` — and not a choice
+  between two live arms: `05586220f` left `AppState::mesh` initialised
+  to `None` (`state.rs:318`) and written nowhere, so every Local arm
+  deleted here was already answering "Members empty" on every boot.
+  `POST /v1/mesh/forget` was WRITTEN for this rung and shares
+  `SwitchRequest` with Switch, because both take one reference and
+  resolve it through the same `persist::resolve_known` — which is the
+  bug `forget_mesh` shipped once already, refusing the id prefix
+  `switch_mesh` accepted. Two reads become `Err` where they were
+  silence (`mesh_relay_candidates`, `mesh_get_state`), the same
+  correction chunk 3 made for the preference list. ONE gap stays and is
+  named rather than papered over: `mesh_diagnostics` returns no
+  discovered peers — the mDNS table is the daemon's and no route
+  carries it (task #37).
+- See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
+  for peer-admission, contribution ceiling, and foreground-yield.
 
 ### Foreground yield is bounded (2026-08-18)
 

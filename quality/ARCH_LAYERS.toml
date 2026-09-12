@@ -1008,12 +1008,36 @@ crates = [
     "sovereign-desktop",
     "sovereign-mobile",
 ]
-may_not_reach = [
-    "sovereign-cli-daemon",
-    "sovereign-mesh",
-    "sovereign-compute",
-    "sovereign-tools",
-    "sovereign-workflow-host",
+# THE ALLOWLIST FORM (2026-09-11, evening). The rule started the same morning
+# as `may_not_reach = [cli-daemon, mesh, compute, tools, workflow-host]` —
+# "the crates that assemble a daemon" — and by evening the desktop had cut
+# three of them while still linking the knowledge engine, the runtime and
+# the inference stack, because nobody had written THOSE down as forbidden.
+# The operator's words were "a thin, dumb client"; a dumb client links the
+# contract layer and nothing else, and a rule that names what is PERMITTED
+# fails the day a new leak lands rather than when someone re-reads the
+# manifest. Every workspace crate a surface reaches outside this list is a
+# violation, however it reaches it, and every one it reaches today is an
+# `[[exception]]` row at the end of this file naming what holds it — the
+# burn-down list is the ledger, not a memory.
+#
+# What is on the list and why:
+#   the `contract` layer whole (oicp-types, kernel-types, sovereign-contracts,
+#   oicp-client, sovereign-turn-client, sovereign-time) — wire types and the
+#   clients that speak them; a surface that could not name these could not
+#   be a client at all.
+#   `sovereign-tools-base` — `web::search` lives there, and web search stays
+#   IN the app on egress custody (DEFAULTS_LEDGER "`search_web` stays in the
+#   app"). The declared exception, expressed as the one runtime-layer crate a
+#   surface may reach, rather than as a hole in the rule.
+may_reach = [
+    "oicp-types",
+    "kernel-types",
+    "sovereign-contracts",
+    "oicp-client",
+    "sovereign-turn-client",
+    "sovereign-time",
+    "sovereign-tools-base",
 ]
 doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
 
@@ -1135,3 +1159,239 @@ from = "sovereign-desktop"
 to = "sovereign-workflow-host"
 reason = "the workflow-author tool bundle the desktop runtime registers so a Workflow project's chat can compose a workflow. Same agent loop as recipe authoring; it moves to the daemon with the rest of the runtime in svt-3."
 tracking = "sv-surface svt-3"
+
+# ── Thin-surface reaches under the ALLOWLIST form (2026-09-11, evening) ──────
+# One row per crate a surface can still reach outside `may_reach`, generated
+# from the gate's own violation list the evening the rule inverted. Each names
+# the direct edge that holds it and what that edge carries; each fails as
+# STALE the moment its last path disappears, which is how the teardown banks
+# its removals. Delete a stale row; never re-point it. This is the burn-down
+# ledger for `[thin_surfaces]`, not a grant.
+
+[[exception]]
+from = "sovereign-desktop"
+to = "arch-layers"
+reason = "REACHED via sovereign-desktop → sovereign-tools → arch-layers. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-api"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-api. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-app"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-app. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-core"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-core. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-discovery"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-discovery. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-inference"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-inference. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-knowledge"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-api → commonwealth-knowledge. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-media"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-media. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-rail"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-rail. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-rail-core"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-rail → commonwealth-rail-core. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-state"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-state. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-test-harness"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-test-harness. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-transport"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-transport. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "commonwealth-work"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → commonwealth-work. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine"
+reason = "REACHED via sovereign-desktop → corpus-engine. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-archaeology"
+reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-archaeology. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-atos"
+reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-atos. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-notes"
+reason = "REACHED via sovereign-desktop → corpus-engine-notes. Holder: one use site; goes with the engine. Falls when `corpus-engine-notes` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-scip"
+reason = "REACHED via sovereign-desktop → corpus-engine-scip. Holder: freed, not yet removed from Cargo.toml — same in-flight order. Falls when `corpus-engine-scip` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-sections"
+reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-sections. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-vocab"
+reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-vocab. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-watchers"
+reason = "REACHED via sovereign-desktop → sovereign-tools → corpus-engine-watchers. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "corpus-engine-yield"
+reason = "REACHED via sovereign-desktop → corpus-engine → corpus-engine-yield. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "oplog"
+reason = "REACHED via sovereign-desktop → corpus-engine → oplog. Holder: the boot-time CorpusEngine in src-tauri/src/state.rs, the in-process recipe test/harness (commands/recipe_testing.rs, recipe_commands.rs), snapshot restore + bulk download (enrich_commands.rs), mesh-app flag analysis (commands/meshapp.rs), and engine-typed wire DTOs (CoverageCard, IngestProgress, AtomEnvelope, EntityType, EnrichmentState) that belong in sovereign-contracts. Falls when `corpus-engine` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "serving-policy"
+reason = "REACHED via sovereign-desktop → sovereign-inference → serving-policy. Holder: 38 use sites: the remote SplitInferenceProvider the app talks to the daemon through, hardware profile + setup_planner for the wizard, validate_gguf/GgufExpectation for model downloads, SlotWindows, fast_exit_skip_destructors. Each is a daemon route or a contracts type; none needs the inference stack linked. Falls when `sovereign-inference` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-atos"
+reason = "REACHED via sovereign-desktop → sovereign-tools → sovereign-atos. Holder: the boot-time engine assembly in src-tauri/src/state.rs (inference_to_embed_fn, enrichment_bootstrap, sec_edgar::register, LocalCorpusManager, index_validator), the document/local-corpus commands still mid-migration, and three wire DTO families spelled as tools types (atlas_view, recipe_author, local_corpus::config). Falls when `sovereign-tools` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-core"
+reason = "REACHED via sovereign-desktop → sovereign-core. Holder: mostly contracts re-exports worn under the core name (setup_config, error, time, types, traits — import flips); the real runtime residue is runtime::{message_metadata, TurnProvenance}, title::try_auto_title, models_manifest, model_family, conv_tiered rows, deep_research::icd and the dead HealthMonitor. Falls when `sovereign-core` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-enrichment-catalog"
+reason = "REACHED via sovereign-desktop → sovereign-enrichment-catalog. Holder: catalog/paths/EnrichedCorpusSummary in enrich_commands.rs — the store layout the daemon owns; two use sites. Falls when `sovereign-enrichment-catalog` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-gliner"
+reason = "REACHED via sovereign-desktop → sovereign-gliner. Holder: LazyGlinerExtractor handed to the in-process document-asset ingest; goes with that route. Falls when `sovereign-gliner` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-inference"
+reason = "REACHED via sovereign-desktop → sovereign-inference. Holder: 38 use sites: the remote SplitInferenceProvider the app talks to the daemon through, hardware profile + setup_planner for the wizard, validate_gguf/GgufExpectation for model downloads, SlotWindows, fast_exit_skip_destructors. Each is a daemon route or a contracts type; none needs the inference stack linked. Falls when `sovereign-inference` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-meshapp"
+reason = "REACHED via sovereign-desktop → sovereign-meshapp. Holder: DocumentFeedDto/WrappedArtifact wire DTOs (belong in contracts) plus the in-process flag analysis in commands/meshapp.rs. Falls when `sovereign-meshapp` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-recipe-author"
+reason = "REACHED via sovereign-desktop → sovereign-store → sovereign-recipe-author. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-runtime-recipe"
+reason = "REACHED via sovereign-desktop → sovereign-runtime-recipe. Holder: freed at svt-3b, not yet removed from Cargo.toml — same in-flight order. Falls when `sovereign-runtime-recipe` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-store"
+reason = "REACHED via sovereign-desktop → sovereign-store. Holder: the app's own SqliteStateStore + SqliteInsightStore (state/builders/store.rs); readers are lc_reenrich_note, get_chat_activity and the ingest paths — each a daemon route once the store goes. Falls when `sovereign-store` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-work-atlas"
+reason = "REACHED via sovereign-desktop → sovereign-mesh → sovereign-work-atlas. Holder: wire DTOs + deep-link parse + persist::load_node_id — the worker order cutting this edge is in flight; when it lands every row held here goes STALE and is deleted with it. Falls when `sovereign-mesh` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-desktop"
+to = "sovereign-workflow"
+reason = "REACHED via sovereign-desktop → sovereign-workflow. Holder: ZERO use sites in src-tauri/src (measured 2026-09-11) — a dead dependency; delete it. Falls when `sovereign-workflow` leaves src-tauri/Cargo.toml."
+tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
+
+[[exception]]
+from = "sovereign-mobile"
+to = "commonwealth-core"
+reason = "REACHED via sovereign-mobile → commonwealth-transport → commonwealth-core. The phone dials the mesh over iroh directly and commonwealth-transport is the client of that wire — but it drags commonwealth-core (the mesh's own model), which is the leak. The client half of the transport belongs beside sovereign-turn-client in the contract layer; until that split lands this row stands."
+tracking = "sv-surface mobile-transport seam (2026-09-11)"
+
+[[exception]]
+from = "sovereign-mobile"
+to = "commonwealth-transport"
+reason = "REACHED via sovereign-mobile → commonwealth-transport. The phone dials the mesh over iroh directly and commonwealth-transport is the client of that wire — but it drags commonwealth-core (the mesh's own model), which is the leak. The client half of the transport belongs beside sovereign-turn-client in the contract layer; until that split lands this row stands."
+tracking = "sv-surface mobile-transport seam (2026-09-11)"
