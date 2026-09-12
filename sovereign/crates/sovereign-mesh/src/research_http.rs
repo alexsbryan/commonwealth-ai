@@ -50,10 +50,9 @@
 //! (`launch::prepare` resolves the daemon endpoint and models from
 //! `SetupConfig` itself), so it is sealed with `localhost_only()`.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::{Extension, Path as AxPath, Query};
@@ -74,6 +73,7 @@ use sovereign_core::deep_research::launch::{self, LaunchOptions};
 use sovereign_core::deep_research::{resume, run, SearchSource};
 
 use crate::http_response::{json_error, Absence};
+use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::research_run_dir::{build_report, list_runs, DrLiveSnapshot, RunDirPoller};
 
@@ -283,26 +283,18 @@ struct ResearchJob {
 /// `corpus_catalog_http`'s index builds: the run it narrates is this
 /// daemon's task, and a log that outlived the daemon would describe a run
 /// that did not finish.
-static RESEARCH_JOBS: OnceLock<Mutex<HashMap<String, Arc<ResearchJob>>>> = OnceLock::new();
-
-fn research_jobs() -> &'static Mutex<HashMap<String, Arc<ResearchJob>>> {
-    RESEARCH_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
-}
+static RESEARCH_JOBS: JobRegistry<ResearchJob> = JobRegistry::new("research");
 
 fn job_for(job_id: &str) -> Option<Arc<ResearchJob>> {
-    research_jobs()
-        .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(job_id).cloned())
+    RESEARCH_JOBS.get(job_id).ok().flatten()
 }
 
 /// The one unfinished job, if any — the "one run at a time" decider.
 fn live_job() -> Option<Arc<ResearchJob>> {
-    research_jobs().lock().ok().and_then(|jobs| {
-        jobs.values()
-            .find(|j| !j.finished.load(Ordering::SeqCst))
-            .cloned()
-    })
+    RESEARCH_JOBS
+        .find(|j| !j.finished.load(Ordering::SeqCst))
+        .ok()
+        .flatten()
 }
 
 pub(crate) fn is_live(run_id: &str) -> bool {
@@ -421,9 +413,7 @@ async fn start(
         run_id: job_id.clone(),
         run_dir: run_dir.display().to_string(),
     });
-    if let Ok(mut jobs) = research_jobs().lock() {
-        jobs.insert(job_id.clone(), Arc::clone(&job));
-    }
+    RESEARCH_JOBS.insert(job_id.clone(), Arc::clone(&job));
     tracing::info!(
         job_id = %job_id,
         run_dir = %run_dir.display(),
@@ -594,10 +584,10 @@ async fn runs(_: LocalOnly, Extension(launcher): Launcher) -> Response {
 
 /// GET `/v1/research/active` — the runs this daemon is driving.
 async fn active(_: LocalOnly) -> Response {
-    let mut out: Vec<ResearchActiveRun> = research_jobs()
-        .lock()
+    let mut out: Vec<ResearchActiveRun> = RESEARCH_JOBS
+        .snapshot()
         .map(|jobs| {
-            jobs.values()
+            jobs.iter()
                 .filter(|j| !j.finished.load(Ordering::SeqCst))
                 .map(|j| ResearchActiveRun {
                     run_id: j.job_id.clone(),

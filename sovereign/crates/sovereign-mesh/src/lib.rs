@@ -12,6 +12,7 @@
 //! - Expose mesh operations for both GUI and CLI
 
 pub mod admin_http;
+pub mod assets_http;
 pub mod atlas_http;
 pub mod auto_ingest;
 pub mod auto_resume;
@@ -60,6 +61,9 @@ pub mod insight_http;
 /// internal + client listeners. Runtime-gated by `[iroh] enabled`.
 pub mod iroh_access;
 pub mod iroh_watchdog;
+/// The table every long-running route keeps its jobs in — one form,
+/// six routes (ARCH principle 8).
+pub mod job_registry;
 pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
@@ -72,9 +76,7 @@ pub mod lsp_tier;
 pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod measurements_rail;
-pub mod origin_fanout;
 pub mod media_reach;
-pub mod publish_http;
 pub mod mesh_discovery;
 pub mod mesh_http;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
@@ -89,6 +91,7 @@ pub mod newsworthy_host;
 pub mod notes_http;
 pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
+pub mod origin_fanout;
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
@@ -103,6 +106,7 @@ pub mod predicted_time;
 pub mod project_http;
 pub mod projects;
 pub mod prompt_compactor;
+pub mod publish_http;
 pub mod rail_bind;
 pub mod rail_kv_pump;
 pub mod reading_formatters;

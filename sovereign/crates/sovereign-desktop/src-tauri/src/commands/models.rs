@@ -8,10 +8,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
-use tokio::io::AsyncWriteExt;
 
 use crate::error::DesktopError;
 use crate::state::AppState;
@@ -514,178 +512,103 @@ fn delete_model_blocking(
     Ok(())
 }
 
+/// Fetch a GGUF into the DAEMON's models root, as a job, and return the path
+/// the daemon put it at.
+///
+/// # What this stopped being (sv-surface svt-7)
+///
+/// It was a THIRD GGUF downloader — its own `reqwest::Client`, its own
+/// `HF_TOKEN` read, its own content-type sniff, its own `.part` handling and
+/// its own `validate_gguf` call — writing into `svrnmesh_root()/models`, a
+/// root this process does not own (ARCH principle 12). Every one of those
+/// decisions already existed in `setup_planner::download_gguf`, which the CLI
+/// wizard and the daemon both use; the duplication is what let the two drift
+/// on resume behaviour.
+///
+/// The Tauri event contract is unchanged: `download-progress` frames with the
+/// same `DownloadProgress` shape, so `ModelSelector.svelte` is untouched. The
+/// RETURN is now the daemon's path rather than one derived here — that string
+/// becomes a model-slot path in `config.toml`, and it has to be the file the
+/// daemon opens.
+///
+/// No reload is issued here, and that is not an omission: a downloaded file
+/// is not yet a configured slot. `set_setup_model_slots` and `save_config`
+/// already `POST /v1/admin/reload` (`config_setup.rs`, `request_daemon_reload`)
+/// and already relaunch on `restart_required`, and that is the moment the
+/// daemon's slots actually change.
 #[tauri::command]
 pub async fn download_model(
     app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
     request: DownloadRequest,
 ) -> Result<String, String> {
-    let models_dir = sovereign_contracts::rebrand::svrnmesh_root().join("models");
-    std::fs::create_dir_all(&models_dir)
-        .map_err(|e| format!("Failed to create models directory: {e}"))?;
-
-    let dest = models_dir.join(&request.file_name);
-    let expected = match request.size_gb {
-        Some(gb) => sovereign_contracts::gguf_validator::GgufExpectation::from_size_gb(gb),
-        None => sovereign_contracts::gguf_validator::GgufExpectation::unknown(),
+    let file_name = request.file_name.clone();
+    let app_for_cb = app_handle.clone();
+    let emit_name = file_name.clone();
+    let job = sovereign_contracts::daemon_wire::AssetDownloadRequest {
+        kind: sovereign_contracts::daemon_wire::AssetKind::Gguf,
+        url: Some(request.url.clone()),
+        file: Some(file_name.clone()),
+        model_id: None,
+        expected_gb: request.size_gb,
     };
-
-    // Validate any pre-existing file at the destination. A stub
-    // from a previous bad download (HTML error page, truncated
-    // stream) must be deleted — the old early-return-on-exists
-    // behaviour locked users into re-running setup from a clean
-    // slate. Now we just re-download whatever's invalid.
-    if dest.exists() {
-        match sovereign_contracts::gguf_validator::validate_gguf(&dest, &expected) {
-            Ok(()) => {
-                let size = dest.metadata().map(|m| m.len()).unwrap_or(0);
-                let _ = app_handle.emit(
-                    "download-progress",
-                    DownloadProgress {
-                        file_name: request.file_name,
-                        downloaded_bytes: size,
-                        total_bytes: Some(size),
-                        percent: Some(100.0),
-                        status: "complete".to_string(),
-                        error: None,
-                    },
-                );
-                return Ok(dest.display().to_string());
-            }
-            Err(e) => {
-                tracing::warn!(
-                    path = %dest.display(),
-                    reason = %e,
-                    "download_model: existing file failed validation, redownloading"
-                );
-                let _ = std::fs::remove_file(&dest);
-            }
-        }
-    }
-
-    let part_path = models_dir.join(format!("{}.part", &request.file_name));
-
-    // Build the request with optional HF_TOKEN bearer auth.
-    // Authenticated HF requests bypass anonymous rate-limits and
-    // the CDN's bot-detection paths that return HTML.
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60 * 60))
-        .build()
-        .map_err(|e| format!("Build http client: {e}"))?;
-    let mut req = client.get(&request.url);
-    if let Ok(tok) = std::env::var("HF_TOKEN") {
-        if !tok.is_empty() {
-            req = req.bearer_auth(tok);
-        }
-    }
-    let response = req
-        .send()
-        .await
-        .map_err(|e| format!("Download request failed: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", response.status()));
-    }
-
-    // Pre-stream content-type sniff. When HuggingFace returns an
-    // error page (rate limit, bot detection, gated repo), the
-    // body is HTML or JSON — catch it before streaming MB of
-    // garbage to disk. The post-stream `validate_gguf` check
-    // backstops this for cases where the server lies about
-    // content-type.
-    if let Some(ct) = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-    {
-        let lower = ct.to_ascii_lowercase();
-        if lower.starts_with("text/") || lower.starts_with("application/json") {
-            return Err(format!(
-                "HuggingFace returned content-type={ct} for {} — likely \
-                 bot-detection, rate limiting, or a gated-repo login page. \
-                 Set HF_TOKEN and retry, or try a different model.",
-                request.url
-            ));
-        }
-    }
-
-    let total_bytes = response.content_length();
-    let mut downloaded: u64 = 0;
-    let mut file = tokio::fs::File::create(&part_path)
-        .await
-        .map_err(|e| format!("Failed to create file: {e}"))?;
-
-    let mut stream = response.bytes_stream();
-
-    let mut last_emit: u64 = 0;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Download error: {e}"))?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| format!("Write error: {e}"))?;
-        downloaded += chunk.len() as u64;
-
-        // Emit progress every ~200KB.
-        if downloaded - last_emit >= 200_000 {
-            last_emit = downloaded;
-            let _ = app_handle.emit(
+    let terminal = crate::commands::asset_download::run_asset_download(
+        state.client_base_url(),
+        &job,
+        move |frame| {
+            let _ = app_for_cb.emit(
                 "download-progress",
                 DownloadProgress {
-                    file_name: request.file_name.clone(),
-                    downloaded_bytes: downloaded,
-                    total_bytes,
-                    percent: total_bytes.map(|t| (downloaded as f64 / t as f64) * 100.0),
+                    file_name: emit_name.clone(),
+                    downloaded_bytes: frame.downloaded,
+                    total_bytes: frame.total,
+                    percent: frame
+                        .total
+                        .filter(|t| *t > 0)
+                        .map(|t| (frame.downloaded as f64 / t as f64) * 100.0),
                     status: "downloading".to_string(),
                     error: None,
                 },
             );
+        },
+    )
+    .await;
+
+    let terminal = match terminal {
+        Ok(t) => t,
+        Err(msg) => {
+            let _ = app_handle.emit(
+                "download-progress",
+                DownloadProgress {
+                    file_name,
+                    downloaded_bytes: 0,
+                    total_bytes: None,
+                    percent: None,
+                    status: "error".to_string(),
+                    error: Some(msg.clone()),
+                },
+            );
+            return Err(msg);
         }
-    }
+    };
 
-    file.flush()
-        .await
-        .map_err(|e| format!("Flush error: {e}"))?;
-    drop(file);
-
-    // Post-stream validation. Covers CDN responses that advertised
-    // `application/octet-stream` but delivered HTML, silent TCP
-    // resets mid-body, and any other way a response can look
-    // successful but not actually be a GGUF. On failure we delete
-    // the `.part` so a retry starts clean rather than resuming a
-    // partial bogus file.
-    if let Err(e) = sovereign_contracts::gguf_validator::validate_gguf(&part_path, &expected) {
-        let _ = tokio::fs::remove_file(&part_path).await;
-        let msg = format!("download validation failed: {e}");
-        let _ = app_handle.emit(
-            "download-progress",
-            DownloadProgress {
-                file_name: request.file_name.clone(),
-                downloaded_bytes: downloaded,
-                total_bytes,
-                percent: None,
-                status: "error".to_string(),
-                error: Some(msg.clone()),
-            },
-        );
-        return Err(msg);
-    }
-
-    // Rename .part to final.
-    tokio::fs::rename(&part_path, &dest)
-        .await
-        .map_err(|e| format!("Failed to finalize download: {e}"))?;
+    // The daemon's path, not one re-derived from this process's data root.
+    // Absent is an error rather than a fallback: the caller writes this into
+    // a model slot, and a guessed path is a slot the daemon cannot open.
+    let path = terminal.path.ok_or_else(|| {
+        "the daemon reported the download complete without saying where it landed".to_string()
+    })?;
 
     let _ = app_handle.emit(
         "download-progress",
         DownloadProgress {
-            file_name: request.file_name,
-            downloaded_bytes: downloaded,
-            total_bytes: Some(downloaded),
+            file_name,
+            downloaded_bytes: terminal.downloaded,
+            total_bytes: Some(terminal.downloaded),
             percent: Some(100.0),
             status: "complete".to_string(),
             error: None,
         },
     );
-
-    Ok(dest.display().to_string())
+    Ok(path)
 }

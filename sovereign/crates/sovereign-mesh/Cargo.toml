@@ -113,6 +113,15 @@ sovereign-core = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
+# `gliner_ner::{models_root, probe_model_available, download_model}` +
+# `labeled::configured_model_id` — the four things `GET /internal/ner/model`
+# and the `kind: gliner` arm of the asset-download job call (sv-surface
+# svt-7). The extractor loads in THIS process and `models_root()` is under
+# the data root this daemon owns, so the probe and the fetch belong on the
+# side that owns the files; the desktop was doing both with its own
+# filesystem calls. Downward edge on `quality/ARCH_LAYERS.toml`
+# (runtime < mesh-api), same direction as `sovereign-inference` above.
+sovereign-gliner = { workspace = true }
 # `mcp_surface` — the shared MCP allowlist + alias map. The
 # embedded daemon's mcp_router and the standalone MCP server in
 # sovereign-server share this so they advertise the same surface

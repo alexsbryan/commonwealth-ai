@@ -24,7 +24,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
@@ -39,6 +39,7 @@ use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSource
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
+use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 pub use sovereign_contracts::daemon_wire::{IndexBuildProgress, IndexBuildState, IngestJobAck};
@@ -193,17 +194,16 @@ struct IndexBuild {
     outcome: Mutex<Option<Result<(), String>>>,
 }
 
-static INDEX_BUILDS: OnceLock<Mutex<HashMap<String, Arc<IndexBuild>>>> = OnceLock::new();
+/// The live builds, keyed by corpus id. One form, shared with the other five
+/// job routes — see `crate::job_registry` for what the shared `get` fixes
+/// that five hand-rolled copies of this table did not.
+static INDEX_BUILDS: JobRegistry<IndexBuild> = JobRegistry::new("index_build");
 
-fn index_builds() -> &'static Mutex<HashMap<String, Arc<IndexBuild>>> {
-    INDEX_BUILDS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
+/// The build on record for `corpus_id`. A poisoned table answers `None` HERE
+/// deliberately and says why on the trace: the caller is the "is one already
+/// running" guard, and an unreadable table must not block a build forever.
 fn index_build_for(corpus_id: &str) -> Option<Arc<IndexBuild>> {
-    index_builds()
-        .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(corpus_id).cloned())
+    INDEX_BUILDS.get(corpus_id).ok().flatten()
 }
 
 impl IndexBuild {
@@ -269,9 +269,7 @@ async fn index_build(
         pct: AtomicU64::new(0),
         outcome: Mutex::new(None),
     });
-    if let Ok(mut jobs) = index_builds().lock() {
-        jobs.insert(corpus_id.clone(), Arc::clone(&job));
-    }
+    INDEX_BUILDS.insert(corpus_id.clone(), Arc::clone(&job));
     tracing::info!(
         corpus_id = %corpus_id,
         job_id = %job_id,

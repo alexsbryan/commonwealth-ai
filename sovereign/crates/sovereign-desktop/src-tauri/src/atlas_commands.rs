@@ -266,61 +266,74 @@ pub async fn atlas_get_conv_detail(
         .map_err(|e| format!("atlas_get_conv_detail: {e}"))
 }
 
-/// GliNER model availability + path for the Settings → Imports
-/// surface. Returns whether the configured model is installed +
-/// the expected on-disk path so the UI can show "Install model"
-/// vs "Re-download" affordances. Spec: Phase 1 model UX.
-#[derive(serde::Serialize, Clone)]
-pub struct GlinerModelStatus {
-    pub installed: bool,
-    pub model_id: String,
-    pub expected_path: String,
-    pub size_estimate_mb: u64,
-}
-
+/// GliNER model availability + path for the Settings → Imports surface —
+/// `GET /internal/ner/model` on the daemon (sv-surface svt-7).
+///
+/// It used to probe THIS process's filesystem for
+/// `models_root()/<DEFAULT_MODEL_ID>`, which is the same answer only while
+/// the app and the daemon resolve the same root, and asks about a constant
+/// rather than the id the daemon is configured to load
+/// (`SOVEREIGN_GLINER_MODEL_ID`). The extractor runs in the daemon; the
+/// daemon says whether it can load.
+///
+/// The DTO is `sovereign_contracts::daemon_wire::NerModelStatus`, whose
+/// fields are the four this command already returned — so `ImportsTab.svelte`
+/// is untouched.
 #[tauri::command]
-pub async fn atlas_check_gliner_model() -> Result<GlinerModelStatus, String> {
-    let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID.to_string();
-    let installed = sovereign_gliner::gliner_ner::probe_model_available(&model_id);
-    let expected_path = sovereign_gliner::gliner_ner::models_root()
-        .join(&model_id)
-        .display()
-        .to_string();
-    Ok(GlinerModelStatus {
-        installed,
-        model_id,
-        expected_path,
-        // Empirical: gliner_small-v2.1 = ~600MB (ONNX f32 + tokenizer).
-        size_estimate_mb: 600,
-    })
+pub async fn atlas_check_gliner_model(
+    state: State<'_, Arc<AppState>>,
+) -> Result<sovereign_contracts::daemon_wire::NerModelStatus, String> {
+    atlas_client(&state)
+        .ner_model()
+        .await
+        .map_err(|e| format!("atlas_check_gliner_model: {e}"))
 }
 
-/// Kicks off a model download. Streams progress via Tauri events
-/// on the channel `gliner-download-progress` (payload: `{ file,
-/// downloaded, total }`). Returns when the download completes or
-/// errors. Idempotent: skips files already present.
+/// Kicks off a model download ON THE DAEMON and streams its progress to the
+/// same Tauri channel as before — `gliner-download-progress` with
+/// `{file, downloaded, total}`, then the `__complete__` sentinel. The
+/// frontend contract is unchanged (`ImportsTab.svelte`); what changed is
+/// which process writes under the models root.
+///
+/// Returns when the job reaches a terminal state. Idempotent, because the
+/// daemon's downloader skips files already present.
 #[tauri::command]
 pub async fn atlas_download_gliner_model(
     app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
     model_id: Option<String>,
 ) -> Result<(), String> {
     use tauri::Emitter;
-    let model_id =
-        model_id.unwrap_or_else(|| sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID.to_string());
     let app_for_cb = app.clone();
-    let on_progress = move |file: &str, downloaded: u64, total: u64| {
-        let _ = app_for_cb.emit(
-            "gliner-download-progress",
-            serde_json::json!({
-                "file": file,
-                "downloaded": downloaded,
-                "total": total,
-            }),
-        );
+    let request = sovereign_contracts::daemon_wire::AssetDownloadRequest {
+        kind: sovereign_contracts::daemon_wire::AssetKind::Gliner,
+        url: None,
+        file: None,
+        // `None` means "the id this daemon is configured for" — decided
+        // there, not repeated here.
+        model_id,
+        expected_gb: None,
     };
-    sovereign_gliner::gliner_ner::download_model(&model_id, on_progress)
-        .await
-        .map_err(|e| format!("atlas_download_gliner_model: {e}"))?;
+    crate::commands::asset_download::run_asset_download(
+        state.client_base_url(),
+        &request,
+        move |frame| {
+            let _ = app_for_cb.emit(
+                "gliner-download-progress",
+                serde_json::json!({
+                    "file": frame.file.clone().unwrap_or_default(),
+                    "downloaded": frame.downloaded,
+                    // The pane reads `total > 0` as "determinate". An absent
+                    // Content-Length stays 0 HERE rather than in the wire
+                    // shape, because that is what this pane's existing
+                    // indeterminate branch already means.
+                    "total": frame.total.unwrap_or(0),
+                }),
+            );
+        },
+    )
+    .await
+    .map_err(|e| format!("atlas_download_gliner_model: {e}"))?;
     let _ = app.emit(
         "gliner-download-progress",
         serde_json::json!({ "file": "__complete__", "downloaded": 0u64, "total": 0u64 }),

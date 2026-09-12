@@ -39,9 +39,8 @@
 //! - `lc_enrich_now`/`_reset`/`lc_reenrich_note` — `corpus_watch_http` serves
 //!   all three already.
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use axum::extract::{Json, Path, Query};
 use axum::http::StatusCode;
@@ -58,6 +57,7 @@ use sovereign_tools::local_corpus::progress::{CompletionResult, LocalCorpusProgr
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::http_response::{internal_error, not_found, Absence};
+use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 use crate::watched_folder_runtime;
 
@@ -694,19 +694,16 @@ struct ClusterJob {
 /// the `cluster_results` cache these frames narrate the filling of is
 /// itself in-process on the manager, so a job log that outlived the
 /// daemon would describe a result that had not.
-static CLUSTER_JOBS: OnceLock<Mutex<HashMap<String, Arc<ClusterJob>>>> = OnceLock::new();
-
-fn cluster_jobs() -> &'static Mutex<HashMap<String, Arc<ClusterJob>>> {
-    CLUSTER_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
-}
+static CLUSTER_JOBS: JobRegistry<ClusterJob> = JobRegistry::new("cluster");
 
 /// The job on record for `corpus_id`. `Err` is a poisoned table — a
-/// different fact from "no job", which is the `Ok(None)` (§18.3).
-fn cluster_job_for(corpus_id: &str) -> Result<Option<Arc<ClusterJob>>, ()> {
-    cluster_jobs()
-        .lock()
-        .map(|jobs| jobs.get(corpus_id).cloned())
-        .map_err(|_| ())
+/// different fact from "no job", which is the `Ok(None)`. This distinction
+/// was written here first and is now the shared table's only answer
+/// (`crate::job_registry`).
+fn cluster_job_for(
+    corpus_id: &str,
+) -> Result<Option<Arc<ClusterJob>>, crate::job_registry::TablePoisoned> {
+    CLUSTER_JOBS.get(corpus_id)
 }
 
 impl ClusterJob {
@@ -754,30 +751,30 @@ async fn cluster(
         frames: Mutex::new(Vec::new()),
         finished: AtomicBool::new(false),
     });
-    {
-        let Ok(mut jobs) = cluster_jobs().lock() else {
-            return Ok(log_and_500("cluster: the job table is poisoned"));
-        };
-        if let Some(live) = jobs.get(&corpus_id) {
-            if !live.finished.load(Ordering::SeqCst) {
-                tracing::debug!(
-                    corpus_id = %corpus_id,
-                    running_job = %live.job_id,
-                    "lc_http: cluster refused — a job is still running for this corpus"
-                );
-                return Ok((
-                    StatusCode::CONFLICT,
-                    Json(serde_json::json!({
-                        "error": format!(
-                            "cluster job '{}' is still running for corpus '{corpus_id}'",
-                            live.job_id
-                        )
-                    })),
-                )
-                    .into_response());
-            }
+    // Check-and-insert under ONE lock, as before: two requests that both
+    // found the slot empty would both start clustering the same corpus.
+    match CLUSTER_JOBS.insert_unless_live(corpus_id.clone(), Arc::clone(&job), |live| {
+        !live.finished.load(Ordering::SeqCst)
+    }) {
+        Err(_) => return Ok(log_and_500("cluster: the job table is poisoned")),
+        Ok(Some(live)) => {
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                running_job = %live.job_id,
+                "lc_http: cluster refused — a job is still running for this corpus"
+            );
+            return Ok((
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": format!(
+                        "cluster job '{}' is still running for corpus '{corpus_id}'",
+                        live.job_id
+                    )
+                })),
+            )
+                .into_response());
         }
-        jobs.insert(corpus_id.clone(), Arc::clone(&job));
+        Ok(None) => {}
     }
 
     let on_progress: sovereign_tools::local_corpus::manager::ProgressCallback = {
@@ -859,7 +856,7 @@ async fn cluster_progress(
                 "no cluster job on record for corpus '{corpus_id}'"
             )))
         }
-        Err(()) => return Ok(log_and_500("cluster_progress: the job table is poisoned")),
+        Err(_) => return Ok(log_and_500("cluster_progress: the job table is poisoned")),
     };
     let after = query.after;
     let (frames, next) = match job.frames.lock() {

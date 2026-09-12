@@ -53,9 +53,8 @@
 //! to this surface — so `build_skeleton` took its LLM fallback on a host
 //! that had the NER model resident. See [`manager_for`].
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
@@ -73,6 +72,7 @@ use sovereign_tools::document_asset::DocumentAssetManager;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
+use crate::job_registry::JobRegistry;
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── The wire projections ──────────────────────────────────────
@@ -309,11 +309,7 @@ struct DocumentJob {
 /// The live (and recently finished) upload jobs, keyed by asset id.
 /// In-process: the record the frames narrate is in the store, so a
 /// reader that missed the job reads the asset's `state` instead.
-static DOCUMENT_JOBS: OnceLock<Mutex<HashMap<String, Arc<DocumentJob>>>> = OnceLock::new();
-
-fn document_jobs() -> &'static Mutex<HashMap<String, Arc<DocumentJob>>> {
-    DOCUMENT_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
-}
+static DOCUMENT_JOBS: JobRegistry<DocumentJob> = JobRegistry::new("document_upload");
 
 impl DocumentJob {
     /// Append one frame with `asset_id` stamped on. The milestone
@@ -383,16 +379,11 @@ async fn upload_document(
         frames: Mutex::new(Vec::new()),
         finished: AtomicBool::new(false),
     });
-    match document_jobs().lock() {
-        Ok(mut jobs) => {
-            jobs.insert(asset_id.clone(), Arc::clone(&job));
-        }
-        Err(_) => {
-            return Ok(internal_error(
-                "upload_document",
-                "the job table is poisoned",
-            ))
-        }
+    if !DOCUMENT_JOBS.insert(asset_id.clone(), Arc::clone(&job)) {
+        return Ok(internal_error(
+            "upload_document",
+            "the job table is poisoned",
+        ));
     }
     tracing::debug!(
         asset = %asset_id,
@@ -450,8 +441,8 @@ async fn ingest_progress(
 ) -> Result<Response, Absence> {
     // A poisoned table and an absent job are different facts: the first
     // is a 500 naming it, the second the 404 below (§18.3).
-    let job = match document_jobs().lock() {
-        Ok(jobs) => jobs.get(&id).cloned(),
+    let job = match DOCUMENT_JOBS.get(&id) {
+        Ok(j) => j,
         Err(_) => {
             return Ok(internal_error(
                 "ingest_progress",
@@ -551,11 +542,7 @@ struct AskJob {
 }
 
 /// The live (and recently finished) ask jobs, keyed by job id.
-static ASK_JOBS: OnceLock<Mutex<HashMap<String, Arc<AskJob>>>> = OnceLock::new();
-
-fn ask_jobs() -> &'static Mutex<HashMap<String, Arc<AskJob>>> {
-    ASK_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
-}
+static ASK_JOBS: JobRegistry<AskJob> = JobRegistry::new("document_ask");
 
 impl AskJob {
     fn push(&self, frame: serde_json::Value) {
@@ -633,11 +620,8 @@ async fn ask_document(
         outcome: Mutex::new(None),
         finished: AtomicBool::new(false),
     });
-    match ask_jobs().lock() {
-        Ok(mut jobs) => {
-            jobs.insert(job_id.clone(), Arc::clone(&job));
-        }
-        Err(_) => return Ok(internal_error("ask_document", "the job table is poisoned")),
+    if !ASK_JOBS.insert(job_id.clone(), Arc::clone(&job)) {
+        return Ok(internal_error("ask_document", "the job table is poisoned"));
     }
     tracing::debug!(
         asset = %id,
@@ -850,8 +834,8 @@ async fn ask_progress(
     Path((id, job_id)): Path<(String, String)>,
     Query(query): Query<DocumentProgressQuery>,
 ) -> Result<Response, Absence> {
-    let job = match ask_jobs().lock() {
-        Ok(jobs) => jobs.get(&job_id).cloned(),
+    let job = match ASK_JOBS.get(&job_id) {
+        Ok(j) => j,
         Err(_) => return Ok(internal_error("ask_progress", "the job table is poisoned")),
     };
     let job = match job {

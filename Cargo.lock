@@ -12695,6 +12695,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-enrichment-catalog",
+ "sovereign-gliner",
  "sovereign-inference",
  "sovereign-meshapp",
  "sovereign-store",

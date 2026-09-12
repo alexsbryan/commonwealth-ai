@@ -3366,6 +3366,13 @@ impl EmbeddedDaemon {
             mount_names.push("mesh_http");
             mounted.push(crate::admin_http::admin_router(Arc::clone(&self_arc)));
             mount_names.push("admin_http");
+            // The daemon's weights: what this machine can run, what the
+            // catalog offers, what is installed, and the one job that fetches
+            // any of it. Beside `admin_http` because it is the same audience
+            // — a local Settings-style surface reading the serving process's
+            // own state — and loopback-guarded for the same reason.
+            mounted.push(crate::assets_http::assets_router(Arc::clone(&self_arc)));
+            mount_names.push("assets_http");
             mounted.push(crate::reading_http::reading_router(Arc::clone(&self_arc)));
             mount_names.push("reading_http");
             // Phase 5c — the daemon answers. Built here from `Arc<Self>` like

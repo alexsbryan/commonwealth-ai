@@ -345,6 +345,7 @@ pub(crate) async fn require_backend_ready(state: &Arc<AppState>) -> Result<(), S
 // (`enabled_corpora`) is what had kept it alive.
 
 // ─── Concern submodules (PR5 split of the former 6557-line commands.rs) ───
+pub(crate) mod asset_download;
 mod budget;
 mod chat;
 mod config_setup;

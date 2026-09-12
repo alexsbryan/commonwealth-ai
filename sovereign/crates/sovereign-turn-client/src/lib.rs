@@ -2973,6 +2973,83 @@ impl TurnClient {
             .await
     }
 
+    // ── The daemon's weights — `/v1/admin/assets`, `/v1/admin/setup`,
+    //    `/internal/ner` (`assets_http`, sv-surface svt-7) ──────────
+    //
+    // `<data.dir>/models` belongs to the daemon serving from it. These are
+    // the four reads and the one job a client uses instead of probing that
+    // directory itself; `T` is the matching
+    // `sovereign_contracts::daemon_wire` shape throughout.
+
+    /// `GET /v1/admin/hardware` — `T` is `assets_http::HardwareView`
+    /// (`{hardware: HardwareProfile, profile: ProfileName}`). What the
+    /// SERVING machine can run, which is not necessarily this one.
+    pub async fn admin_hardware<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/admin/hardware".to_string(), &[])
+            .await
+    }
+
+    /// `GET /v1/admin/setup/catalog?profile=` — `T` is `Vec<PrimaryOption>`.
+    /// `profile` absent means "the tier this machine detects". An
+    /// unrecognised profile is a 400 naming the ones that exist.
+    pub async fn setup_catalog<T: serde::de::DeserializeOwned>(
+        &self,
+        profile: Option<&str>,
+    ) -> Result<T> {
+        let query: Vec<(&str, String)> = profile
+            .map(|p| vec![("profile", p.to_string())])
+            .unwrap_or_default();
+        self.internal_get("/v1/admin/setup/catalog".to_string(), &query)
+            .await
+    }
+
+    /// `GET /v1/admin/setup/slot?kind=fast|embed&profile=` — `T` is
+    /// `Option<SlotConfig>`. `None` means the bundled manifest defines no
+    /// such slot for the tier: absent, not a substituted default.
+    pub async fn setup_slot<T: serde::de::DeserializeOwned>(
+        &self,
+        kind: &str,
+        profile: Option<&str>,
+    ) -> Result<T> {
+        let mut query: Vec<(&str, String)> = vec![("kind", kind.to_string())];
+        if let Some(p) = profile {
+            query.push(("profile", p.to_string()));
+        }
+        self.internal_get("/v1/admin/setup/slot".to_string(), &query)
+            .await
+    }
+
+    /// `GET /internal/ner/model` — `T` is `NerModelStatus`. Whether the
+    /// entity extractor's model is installed where the DAEMON would load it,
+    /// under the id the daemon is configured for.
+    pub async fn ner_model<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/internal/ner/model".to_string(), &[])
+            .await
+    }
+
+    /// `POST /v1/admin/assets/download` — fetch a model into the daemon's
+    /// roots as a JOB. `B` is `AssetDownloadRequest`, `T` is `IngestJobAck`
+    /// (202). A malformed request (a `gguf` with no url, a destination that
+    /// leaves the models root) answers 400 with the daemon's sentence.
+    pub async fn asset_download<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        request: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/v1/admin/assets/download".to_string(), request)
+            .await
+    }
+
+    /// `GET /v1/admin/assets/download/{job}` — `T` is
+    /// `AssetDownloadProgress`. A job id this daemon never saw answers
+    /// `Unknown`, which is a state a client renders, not an error.
+    pub async fn asset_download_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        job_id: &str,
+    ) -> Result<T> {
+        self.internal_get(format!("/v1/admin/assets/download/{job_id}"), &[])
+            .await
+    }
+
     // ── Deep research — `/v1/research` (`research_http`) ─────────
     //
     // Deep research is a daemon JOB since 2026-09-11. `T` is the matching
