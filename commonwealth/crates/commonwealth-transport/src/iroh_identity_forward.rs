@@ -111,12 +111,35 @@ fn wire_value(v: &str) -> String {
         .to_string()
 }
 
+/// The name a header is compared under: sanitized the same way it will be
+/// written, then lowercased. Comparing raw text would let a declared
+/// `X-Emby-Token` miss a client's `X-Emby-Token\u{7f}` — two names that reach
+/// the origin identically once [`wire_value`] has run.
+fn compare_name(name: &str) -> String {
+    wire_value(name).to_ascii_lowercase()
+}
+
 /// Rewrite one request head (which ends with the blank line): drop every
-/// client-supplied `x-mesh-*` header, append `headers`. Returns the new head
-/// and how many lines were stripped, so the acceptor can say when a client
-/// tried. Everything else — the request line, `Range`, `Host`, cookies — is
-/// copied byte for byte.
+/// client-supplied `x-mesh-*` header AND every client-supplied header whose
+/// name a caller is about to declare, then append `headers`. Returns the new
+/// head and how many lines were stripped, so the acceptor can say when a
+/// client tried. Everything else — the request line, `Range`, `Host`, cookies
+/// — is copied byte for byte.
+///
+/// # Why the collision strip is not optional
+///
+/// Appending alone is NOT enough to make a declared header authoritative.
+/// `headers` carries two different things now: the verified identity, which
+/// lives in the `x-mesh-*` namespace the prefix rule already clears, and a
+/// publisher's own credential for its own origin (`X-Emby-Token`, an
+/// `Authorization`), which does not. Append-only would leave the client's
+/// copy AHEAD of ours in the head, and which one an origin honours on a
+/// duplicate name is its business, not ours — Jellyfin, nginx and axum do not
+/// agree. A viewer could then choose the credential its request runs under.
+/// So a declared name displaces the client's: stripped first, appended last,
+/// exactly one on the wire.
 pub fn rewrite_head(head: &[u8], headers: &[(String, String)]) -> (Vec<u8>, usize) {
+    let declared: Vec<String> = headers.iter().map(|(n, _)| compare_name(n)).collect();
     let mut out = Vec::with_capacity(head.len() + 128);
     let mut stripped = 0usize;
     let mut lines = head.split(|&b| b == b'\n');
@@ -130,10 +153,8 @@ pub fn rewrite_head(head: &[u8], headers: &[(String, String)]) -> (Vec<u8>, usiz
             continue;
         }
         let name_end = line.iter().position(|&b| b == b':').unwrap_or(line.len());
-        let name = String::from_utf8_lossy(&line[..name_end])
-            .trim()
-            .to_ascii_lowercase();
-        if name.starts_with(MESH_HEADER_PREFIX) {
+        let name = compare_name(&String::from_utf8_lossy(&line[..name_end]));
+        if name.starts_with(MESH_HEADER_PREFIX) || declared.iter().any(|d| *d == name) {
             stripped += 1;
             continue;
         }
@@ -315,6 +336,57 @@ mod tests {
             vec!["MacX-Admin: yes"]
         );
         assert!(header_values(&out, "x-admin").is_empty());
+    }
+
+    /// The failing input hm-1 exists for. A publisher declares its own
+    /// credential for its own origin; a viewer sends the same header name
+    /// with a value of its choosing. Append-only would put the viewer's copy
+    /// first and let the origin pick — so the declared one must DISPLACE it,
+    /// not merely follow it.
+    #[test]
+    fn a_declared_header_displaces_the_clients_copy_of_that_name() {
+        let declared = vec![("X-Emby-Token".to_string(), "the-holders-key".to_string())];
+        let (out, stripped) = rewrite_head(
+            b"GET /Items HTTP/1.1\r\nHost: h\r\nX-Emby-Token: the-viewers-key\r\n\r\n",
+            &declared,
+        );
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(
+            header_values(&out, "x-emby-token"),
+            vec!["the-holders-key"],
+            "exactly one token on the wire, and it is the holder's"
+        );
+        assert_eq!(stripped, 1, "the client's attempt is counted, not silent");
+        assert!(out.contains("Host: h"), "unrelated headers still pass");
+    }
+
+    /// Case and padding are the obvious ways around a naive comparison, and
+    /// `wire_value` erases a third: a name carrying bytes the wire drops.
+    #[test]
+    fn the_displacement_survives_case_padding_and_unwriteable_bytes() {
+        let declared = vec![("Authorization".to_string(), "holder".to_string())];
+        let (out, stripped) = rewrite_head(
+            "GET / HTTP/1.1\r\nAUTHORIZATION: viewer-upper\r\n  authorization  : viewer-pad\r\nAuthoriz\u{7f}ation: viewer-ctl\r\n\r\n".as_bytes(),
+            &declared,
+        );
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(header_values(&out, "authorization"), vec!["holder"]);
+        assert_eq!(stripped, 3, "all three client spellings are displaced");
+    }
+
+    /// The strip must not become a general-purpose header eater: a name the
+    /// publisher did NOT declare is the client's business and passes through.
+    #[test]
+    fn an_undeclared_client_header_is_untouched() {
+        let declared = vec![("X-Emby-Token".to_string(), "k".to_string())];
+        let (out, stripped) = rewrite_head(
+            b"GET / HTTP/1.1\r\nRange: bytes=0-9\r\nCookie: c\r\n\r\n",
+            &declared,
+        );
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(header_values(&out, "range"), vec!["bytes=0-9"]);
+        assert_eq!(header_values(&out, "cookie"), vec!["c"]);
+        assert_eq!(stripped, 0);
     }
 
     #[test]

@@ -193,3 +193,165 @@ async fn one_round_converges_two_daemons_and_carries_the_media_offer() {
         "a redacted secret on disk is a node that boots unable to prove membership"
     );
 }
+
+// ─── hm-1: the holder's own credential reaches its own origin ────────────────
+
+/// An origin that authenticates its OWN clients, like Jellyfin does. Answers
+/// 200 only when `X-Emby-Token` carries exactly `token`, 401 otherwise —
+/// including when the header is absent, and including when it appears twice
+/// with the wrong value first.
+///
+/// It is the JUDGE of this test. A permissive origin would return 200 whether
+/// or not the header arrived, which is exactly the blunt predicate the first
+/// draft of this campaign shipped with.
+async fn picky_origin(token: &'static str) -> std::net::SocketAddr {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(e) => panic!("the picky origin could not bind: {e}"),
+    };
+    let addr = match listener.local_addr() {
+        Ok(a) => a,
+        Err(e) => panic!("the picky origin has no local addr: {e}"),
+    };
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                return;
+            };
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 8192];
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                let want = format!("x-emby-token: {token}\r\n");
+                // EXACTLY ONE token line, and it is the holder's. Two lines
+                // would mean the viewer's copy survived beside ours.
+                let ok = head.matches("x-emby-token:").count() == 1 && head.contains(&want);
+                let body = if ok { "OK" } else { "NO" };
+                let status = if ok { "200 OK" } else { "401 Unauthorized" };
+                let _ = sock
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .await;
+                let _ = sock.flush().await;
+            });
+        }
+    });
+    addr
+}
+
+/// One leg of the predicate: stand up alpha (holding `origin`) and beta, put
+/// them on one roster, and have beta reach alpha's origin over `cwth/media/0`.
+/// Returns the HTTP status beta saw.
+///
+/// `declare` is the ONLY variable between the two legs — same origin, same
+/// viewer, same code path.
+async fn viewer_sees_status(declare: Option<(&str, &str)>) -> u16 {
+    use commonwealth_transport::iroh::{EndpointAddr, HttpBridge, MEDIA_ALPN};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (dir_a, dir_b) = match (tempfile::tempdir(), tempfile::tempdir()) {
+        (Ok(a), Ok(b)) => (a, b),
+        _ => panic!("could not make the two data dirs this test needs"),
+    };
+    let origin = picky_origin("the-holders-key").await;
+
+    // The declaration is written BEFORE the daemon starts, because the
+    // acceptor reads it once at construction — the same moment production
+    // does, so this test cannot pass through a path production does not take.
+    if let Some((name, value)) = declare {
+        commonwealth_media::write_declared_in(
+            &commonwealth_media::dir_under(dir_a.path()),
+            name,
+            value,
+        )
+        .unwrap_or_else(|e| panic!("declaration could not be written: {e}"));
+    }
+
+    let a = RailsNode::bind(dir_a.path().to_path_buf(), hermetic("alpha", Some(origin)))
+        .await
+        .unwrap_or_else(|e| panic!("alpha could not bind: {e:?}"));
+    let b = RailsNode::bind(dir_b.path().to_path_buf(), hermetic("beta", None))
+        .await
+        .unwrap_or_else(|e| panic!("beta could not bind: {e:?}"));
+
+    let addrs_a = wait_for_addrs(&a).await;
+    let addrs_b = wait_for_addrs(&b).await;
+    let (mut mesh, _invite) =
+        commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+    mesh.members.clear();
+    mesh.members
+        .insert(a.self_id, record(&a, addrs_a.clone(), true));
+    mesh.members.insert(b.self_id, record(&b, addrs_b, false));
+
+    let a_pubkey = a.pubkey();
+    let ep_b = b.endpoint.clone();
+    let _daemon_a = RailsDaemon::start(a, mesh.clone())
+        .await
+        .unwrap_or_else(|e| panic!("alpha did not start: {e:?}"));
+    let _daemon_b = RailsDaemon::start(b, mesh)
+        .await
+        .unwrap_or_else(|e| panic!("beta did not start: {e:?}"));
+
+    // Beta dials alpha's media protocol by KEY. No port forwarded, no VPN —
+    // the bridge is the localhost URL `svrn mesh media <peer>` prints.
+    let mut target = EndpointAddr::new(
+        commonwealth_transport::iroh::PublicKey::from_bytes(&a_pubkey.0)
+            .unwrap_or_else(|e| panic!("alpha's key is not a valid iroh key: {e}")),
+    );
+    for s in addrs_a {
+        target = target.with_ip_addr(s);
+    }
+    let bridge = HttpBridge::spawn(ep_b, target, MEDIA_ALPN)
+        .await
+        .unwrap_or_else(|e| panic!("beta could not bridge to alpha's media origin: {e}"));
+
+    // The viewer sends its OWN token. It must not win: the holder declared
+    // that name, so the holder's value is what the origin sees.
+    let mut sock = tokio::net::TcpStream::connect(bridge.local_addr())
+        .await
+        .unwrap_or_else(|e| panic!("the bridge refused a local connection: {e}"));
+    sock.write_all(
+        b"GET /Items HTTP/1.1\r\nHost: local\r\nX-Emby-Token: the-viewers-key\r\nConnection: close\r\n\r\n",
+    )
+    .await
+    .unwrap_or_else(|e| panic!("the request did not reach the bridge: {e}"));
+    let mut reply = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(20), sock.read_to_end(&mut reply)).await;
+    let reply = String::from_utf8_lossy(&reply).to_string();
+    reply
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or_else(|| panic!("no status line in origin reply: {reply:?}"))
+}
+
+/// THE PREDICATE (`quality/campaigns/house-mesh.toml`). A pair, because only
+/// the pair can tell "the header arrived" from "the origin did not care":
+/// the same viewer, against the same picky origin, is refused before the
+/// holder declares its credential and served after.
+///
+/// The viewer holds no key at either point. That is the whole campaign: the
+/// house federates twenty-five media servers without anybody mailing anybody
+/// an API key.
+#[tokio::test(flavor = "multi_thread")]
+async fn house_mesh_publish_roundtrip() {
+    let before = viewer_sees_status(None).await;
+    assert_eq!(
+        before, 401,
+        "NEGATIVE LEG: with nothing declared the origin must refuse — if this is 200 the \
+         origin is not judging anything and the positive leg below proves nothing"
+    );
+
+    let after = viewer_sees_status(Some(("X-Emby-Token", "the-holders-key"))).await;
+    assert_eq!(
+        after, 200,
+        "POSITIVE LEG: the holder's declared credential must reach its own origin, and \
+         must have DISPLACED the viewer's copy of that header name"
+    );
+}

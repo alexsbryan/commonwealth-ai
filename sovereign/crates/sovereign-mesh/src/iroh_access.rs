@@ -310,6 +310,12 @@ pub struct AcceptorRoutes {
     /// (`[iroh] media_origin`). `None` means the protocol is not advertised at
     /// all, so a dial is closed rather than left hanging on a route to nowhere.
     pub media: Option<SocketAddr>,
+    /// Headers this node adds to requests reaching its OWN media origin,
+    /// read once at construction from `<data_dir>/secrets/media/` (0600 files,
+    /// `commonwealth_media::declared`). This is how a holder authenticates to
+    /// its own Jellyfin without any viewer holding its key — see that module
+    /// for why the value is not in config.
+    pub media_declared: std::sync::Arc<Vec<(String, String)>>,
     /// `[iroh] media_allow`: which members may reach `media`, by name or id
     /// prefix. Empty admits every member. A non-member is refused either way.
     pub media_allow: std::sync::Arc<Vec<String>>,
@@ -402,6 +408,7 @@ impl AcceptorRoutes {
                 dialer,
                 self.media,
                 &self.media_allow,
+                &self.media_declared,
             );
         }
         if alpn == RPC_ALPN {
@@ -539,6 +546,9 @@ impl MeshIrohAccess {
             rpc: rpc_forward,
             media: media_origin,
             media_allow: std::sync::Arc::new(media_allow),
+            media_declared: std::sync::Arc::new(commonwealth_media::read_declared_in(
+                &commonwealth_media::dir_under(data_dir),
+            )),
         };
         let acceptor =
             IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
@@ -867,6 +877,9 @@ mod tests {
             rpc: Some(addr(50052)),
             media: Some(addr(8096)),
             media_allow: std::sync::Arc::new(Vec::new()),
+            // Nothing declared: these cases are about WHO is admitted,
+            // not what the holder adds on the way to its own origin.
+            media_declared: std::sync::Arc::new(Vec::new()),
         }
     }
 
@@ -1012,6 +1025,9 @@ mod tests {
     async fn the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest() {
         let allow = |entries: &[&str]| AcceptorRoutes {
             media_allow: std::sync::Arc::new(entries.iter().map(|s| s.to_string()).collect()),
+            // Nothing declared: these cases are about WHO is admitted,
+            // not what the holder adds on the way to its own origin.
+            media_declared: std::sync::Arc::new(Vec::new()),
             ..routes()
         };
         assert!(

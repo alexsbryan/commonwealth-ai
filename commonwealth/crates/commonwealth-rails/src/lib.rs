@@ -211,6 +211,11 @@ impl RailsDaemon {
             mesh.clone(),
             node.config.media.origin,
             node.config.media.allow.clone(),
+            // Read once, here, from the same data dir that holds the node key.
+            // Not from `rails.toml`: `MediaSection` is `deny_unknown_fields`,
+            // so a new key there would make an UN-upgraded daemon refuse to
+            // boot rather than ignore it -- see `commonwealth_media::declared`.
+            commonwealth_media::read_declared_in(&commonwealth_media::dir_under(&node.data_dir)),
         );
 
         Ok(Self {

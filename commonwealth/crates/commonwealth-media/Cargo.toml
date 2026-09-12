@@ -19,6 +19,7 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 axum = { workspace = true }
 serde_json = { workspace = true }
 

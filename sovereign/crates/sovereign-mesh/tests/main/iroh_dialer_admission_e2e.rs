@@ -123,6 +123,9 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         guest,
         media: None,
         media_allow: Arc::new(Vec::new()),
+        // Nothing declared: these cases are about WHO is admitted,
+        // not what the holder adds on the way to its own origin.
+        media_declared: std::sync::Arc::new(Vec::new()),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -333,6 +336,9 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
         media: None,
         media_allow: Arc::new(Vec::new()),
+        // Nothing declared: these cases are about WHO is admitted,
+        // not what the holder adds on the way to its own origin.
+        media_declared: std::sync::Arc::new(Vec::new()),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
     let check = only_the_member();
@@ -419,6 +425,9 @@ async fn lender_with_media_allowing(
         guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
         media: Some(origin),
         media_allow: Arc::new(media_allow),
+        // Nothing declared: these cases are about WHO is admitted,
+        // not what the holder adds on the way to its own origin.
+        media_declared: std::sync::Arc::new(Vec::new()),
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), MEDIA_ALPN.to_vec()]).await;
     let check = only_the_member();

@@ -19,10 +19,12 @@
 //! daemons compose it: `sovereign-mesh` behind `EmbeddedDaemon`, and
 //! `commonwealth-rails` with none of that underneath.
 
+pub mod declared;
 pub mod fanout;
 pub mod identity;
 pub mod reach;
 
+pub use declared::{dir_under, read_declared_in, valid_header_name, write_declared_in};
 pub use identity::{admit_media, admits_no_one, MemberCheck, MemberIdentity};
 pub use reach::{
     candidate_of, offering_members, offers, path_to, pick_member, player_url, reach, roster_of,

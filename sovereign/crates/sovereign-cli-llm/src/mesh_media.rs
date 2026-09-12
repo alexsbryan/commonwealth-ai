@@ -16,9 +16,15 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("fanout") {
         return cmd_media_fanout(&args[1..]).await;
     }
+    if args.first().map(String::as_str) == Some("declare") {
+        return cmd_media_declare(&args[1..]);
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
         eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
+        eprintln!(
+            "       svrn mesh media declare <header-name>   # value on stdin; --list / --clear"
+        );
         eprintln!();
         eprintln!("With no <peer>: list the members that offer a media origin, as gossip");
         eprintln!("knows them — nothing is dialed. `fanout <path>` asks every offering member");
@@ -32,6 +38,11 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
             "The peer must declare what it serves:  [iroh] media_origin = \"127.0.0.1:8096\""
         );
         eprintln!("(Jellyfin's default). A peer that declares nothing closes the dial.");
+        eprintln!();
+        eprintln!("If your origin authenticates its own clients (Jellyfin wants an");
+        eprintln!("X-Emby-Token), `declare` stores YOUR key on YOUR machine and your daemon");
+        eprintln!("adds it on the way in — so housemates reach your library holding no key");
+        eprintln!("of yours. See `svrn mesh media declare --help`.");
         eprintln!();
         eprintln!("Flags:");
         eprintln!("  --json       Raw JSON from the daemon (peer, node_id, url, via, path).");
@@ -377,4 +388,138 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
         println!("  {name:<16} {node}  {ms:>5} ms  {line}");
     }
     0
+}
+
+// ─── declare: this node's own credential for its own origin ─────────────────
+
+/// `svrn mesh media declare <header>` — store the credential THIS node adds to
+/// requests reaching ITS OWN media origin.
+///
+/// # Why the value comes from stdin and not from an argument
+///
+/// An argument is in `ps` while the process runs and in `~/.zsh_history`
+/// forever. Piping it is the difference between a secret the operator chose to
+/// store and a secret their shell also kept. The README this serves previously
+/// said `printf '%s' key > file`, which has the same defect — this verb exists
+/// partly to retire that instruction.
+///
+/// The value is never echoed, never logged, and never printed by `--list`;
+/// whether one is SET is operational and is printed. Same discipline as
+/// `PUT /v1/mcp/servers/{name}/token`.
+pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
+    use std::io::Read;
+
+    let dir = commonwealth_media::dir_under(&sovereign_contracts::rebrand::svrnmesh_root());
+
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh media declare <header-name>     # value on stdin");
+        eprintln!("       svrn mesh media declare <header-name> --clear");
+        eprintln!("       svrn mesh media declare --list");
+        eprintln!();
+        eprintln!("Store a credential this node adds to requests reaching ITS OWN media");
+        eprintln!("origin — so housemates reach your Jellyfin without holding your API key.");
+        eprintln!("The value is added on YOUR machine, after the caller is admitted as a");
+        eprintln!("member, and displaces any copy of that header the caller sent.");
+        eprintln!();
+        eprintln!("  printf '%%s' \"$KEY\" | svrn mesh media declare x-emby-token");
+        eprintln!();
+        eprintln!("The value is read from stdin so it never lands in your shell history,");
+        eprintln!("stored 0600 under the secrets dir, and never printed back. It is NOT in");
+        eprintln!("config.toml on purpose: a secret there rides along with anything that is");
+        eprintln!("shared, synced, backed up, or gossiped to a peer.");
+        eprintln!();
+        eprintln!("Run `svrn daemon reload` after changing a declaration.");
+        return 0;
+    }
+
+    if args.iter().any(|a| a == "--list") {
+        let declared = commonwealth_media::read_declared_in(&dir);
+        if declared.is_empty() {
+            println!("No declarations. This node adds no credential of its own to requests");
+            println!("reaching its media origin. ({})", dir.display());
+            return 0;
+        }
+        println!("Headers this node adds to requests reaching its own origin:");
+        for (name, _) in &declared {
+            // Names only. The value is the thing this store exists to keep.
+            println!("  {name}  <set>");
+        }
+        return 0;
+    }
+
+    let Some(name) = args.iter().find(|a| !a.starts_with("--")) else {
+        eprintln!("svrn mesh media declare: name a header, e.g. `x-emby-token`.");
+        eprintln!("Run with --help for the whole shape.");
+        return 2;
+    };
+
+    if !commonwealth_media::valid_header_name(&name.to_ascii_lowercase()) {
+        eprintln!(
+            "svrn mesh media declare: {name:?} is not a usable header name \
+             (letters, digits, - and _ only, 64 chars max)."
+        );
+        return 2;
+    }
+
+    if args.iter().any(|a| a == "--clear") {
+        return match commonwealth_media::write_declared_in(&dir, name, "") {
+            Ok(()) => {
+                println!(
+                    "Cleared {}. Run `svrn daemon reload` to apply.",
+                    name.to_ascii_lowercase()
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("Could not clear {name}: {e}");
+                1
+            }
+        };
+    }
+
+    if atty_stdin() {
+        eprintln!("svrn mesh media declare: the value is read from STDIN, so it stays out of");
+        eprintln!("your shell history. Pipe it:");
+        eprintln!();
+        eprintln!("  printf '%%s' \"$KEY\" | svrn mesh media declare {name}");
+        return 2;
+    }
+
+    let mut value = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut value) {
+        eprintln!("Could not read the value from stdin: {e}");
+        return 1;
+    }
+    if value.trim().is_empty() {
+        eprintln!("svrn mesh media declare: stdin was empty — nothing stored.");
+        eprintln!("To remove a declaration, use --clear.");
+        return 2;
+    }
+
+    match commonwealth_media::write_declared_in(&dir, name, &value) {
+        Ok(()) => {
+            // What is SET, never what it is.
+            println!(
+                "Stored {} (0600, {}). Run `svrn daemon reload` to apply.",
+                name.to_ascii_lowercase(),
+                dir.display()
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("Could not store {name}: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(unix)]
+fn atty_stdin() -> bool {
+    // SAFETY: `isatty` reads a descriptor's mode and has no side effects.
+    unsafe { libc::isatty(libc::STDIN_FILENO) == 1 }
+}
+
+#[cfg(not(unix))]
+fn atty_stdin() -> bool {
+    false
 }
