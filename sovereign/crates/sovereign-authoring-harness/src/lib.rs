@@ -12,10 +12,12 @@
 
 pub mod checks;
 pub mod declaration;
+pub mod drive;
 pub mod render;
 
 pub use checks::run_deterministic;
 pub use declaration::Declaration;
+pub use drive::{run_over_frozen_sample, FrozenRun};
 pub use render::render_report;
 
 use serde::{Deserialize, Serialize};

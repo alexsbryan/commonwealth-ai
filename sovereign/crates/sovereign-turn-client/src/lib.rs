@@ -2244,6 +2244,73 @@ impl TurnClient {
         .await
     }
 
+    /// `POST /internal/corpus/recipes/test` — run the recipe harness over
+    /// the DAEMON's engine. `B` is `RecipeDryRunRequest`.
+    ///
+    /// TWO answers on one route, and the caller must branch: a
+    /// `sample_size` of 0 is validation-only and answers
+    /// `RecipeDryRunReport` inline (200); a sample above 0 acquires, so it
+    /// is a job and answers `IngestJobAck` (202) naming
+    /// `GET /internal/corpus/recipes/test/{job}/progress`. `T` is whichever of the
+    /// two the caller asked for — sending `sample_size: 0` and parsing an
+    /// ack, or the reverse, is a parse error rather than a silent zero.
+    ///
+    /// A second sampled run of a recipe already being tested is a 409 by
+    /// name and arrives as an `Err`.
+    pub async fn recipe_dry_run<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/recipes/test".to_string(), body)
+            .await
+    }
+
+    /// `GET /internal/corpus/recipes/test/{job}/progress` — where one sampled dry
+    /// run stands. `T` is `RecipeDryRunProgress`. A job id this daemon
+    /// never minted is a 404 and arrives as an `Err`: there is no `Idle`
+    /// state to mistake it for.
+    pub async fn recipe_dry_run_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        job_id: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/recipes/test/{job_id}/progress"),
+            &[],
+        )
+        .await
+    }
+
+    /// `POST /internal/corpus/recipes/harness` — the deterministic
+    /// authoring harness over a frozen sample, as a daemon job. `B` is
+    /// `RecipeHarnessRequest`, `T` is `IngestJobAck` (202) naming
+    /// `GET /internal/corpus/recipes/harness/{job}/progress`.
+    ///
+    /// Always a job even when the sample is already frozen: the FIRST run
+    /// captures, and a capture is the one networked step. A recipe already
+    /// running the harness is a 409 by name and arrives as an `Err`.
+    pub async fn recipe_harness<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        body: &B,
+    ) -> Result<T> {
+        self.internal_post_json("/internal/corpus/recipes/harness".to_string(), body)
+            .await
+    }
+
+    /// `GET /internal/corpus/recipes/harness/{job}/progress` — `T` is
+    /// `RecipeHarnessProgress`, whose `card` is a `HarnessRunCardView` at
+    /// whichever `Run` the reader can name (`serde_json::Value` for a client
+    /// that does not link `sovereign-authoring-harness`).
+    pub async fn recipe_harness_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        job_id: &str,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/recipes/harness/{job_id}/progress"),
+            &[],
+        )
+        .await
+    }
+
     // ── Recipe-author projects (sv-surface D8) ───────────────────
     //
     // Generic for the family reason above: these payloads carry

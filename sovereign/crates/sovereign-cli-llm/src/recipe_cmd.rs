@@ -16,9 +16,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::harness::{capture, FrozenSample, HarnessRunner};
+use corpus_engine::harness::FrozenSample;
 use corpus_engine::{CorpusEngine, EmbedFn, Recipe, RecipeRegistry, TestOptions};
-use sovereign_authoring_harness::{render::render_report, run_deterministic, Declaration};
+use sovereign_authoring_harness::{render::render_report, Declaration};
 
 mod authoring;
 mod publish;
@@ -220,62 +220,50 @@ async fn cmd_test(args: &[String]) -> i32 {
         }
     }
 
-    // ── Frozen sample: capture once (the one networked step), then iterate ───
+    // ── Frozen sample + rungs 1-5: the SHARED drive ─────────────────────────
+    //
+    // `sovereign_authoring_harness::run_over_frozen_sample` is the one
+    // implementation of capture-if-needed -> load -> run; the daemon's
+    // `POST /internal/corpus/recipes/harness` calls the same function. This
+    // used to be ~40 lines here and the same ~40 in the desktop, which is N
+    // sites running one sequence (ARCH principle 8).
     let Some(harness_root) = harness_root_for(&recipe.corpus.id) else {
         eprintln!("error: cannot resolve home directory for the harness sample store");
         return 1;
     };
-    let need_capture = recapture || !harness_root.join("capture.json").exists();
-    if need_capture {
-        if recapture {
-            let _ = std::fs::remove_dir_all(&harness_root);
+    let frozen_run = match sovereign_authoring_harness::run_over_frozen_sample(
+        &engine,
+        &recipe,
+        &harness_root,
+        sample_size,
+        recapture,
+        &|m| eprintln!("\u{2744}  {m}"),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
         }
-        eprintln!("❄  Capturing a frozen sample (the one networked step)…");
-        match capture(&engine, &recipe, &harness_root, sample_size).await {
-            Ok(m) => eprintln!(
-                "❄  Froze {} docs from {} — sample {}. Future runs are offline; --recapture to refresh.",
-                m.docs.len(),
-                m.acquirer,
-                short_hash(&m.sample_id),
-            ),
-            Err(e) => {
-                eprintln!("error: capture failed: {e}");
-                return 1;
-            }
-        }
+    };
+    if frozen_run.captured_now {
+        eprintln!("\u{2744}  Future runs are offline; --recapture to refresh.");
     }
-
-    // ── Run the deterministic rungs over the frozen sample (model-free) ──────
-    let frozen = match FrozenSample::load(&harness_root) {
-        Ok(Some(f)) => f,
-        Ok(None) => {
-            eprintln!("error: no frozen sample found after capture");
-            return 1;
-        }
-        Err(e) => {
-            eprintln!("error: failed to load frozen sample: {e}");
-            return 1;
-        }
-    };
-    let work_dir = std::env::temp_dir().join(format!("harness-run-{}", recipe.corpus.id));
-    let runner = HarnessRunner::new(&engine, &recipe, &frozen);
-    let outputs = match runner.run(&work_dir, sample_size).await {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("error: harness run failed: {e}");
-            return 1;
-        }
-    };
 
     // ── Rung 6 (opt-in): ingest+enrich the frozen sample through the REAL
     //    pipeline (SSOT — `engine.ingest`, not a reimplementation) with a
     //    daemon-backed engine, then verify the integrity of the atoms it
     //    produced. Reads the frozen materialized source (I3 — no re-acquire).
+    //
+    //    This is the half that is NOT shared: the daemon route verifies the
+    //    atoms its own installed corpus already holds, which is a different
+    //    question over a different index. Neither is a mode of the other.
     let enrich = if enrich_flag {
-        match run_enrich_and_verify(&recipe, &frozen).await {
+        match run_enrich_and_verify(&recipe, &frozen_run.frozen).await {
             Ok(e) => e,
             Err(msg) => {
-                eprintln!("ℹ  --enrich skipped: {msg}");
+                eprintln!("\u{2139}  --enrich skipped: {msg}");
                 None
             }
         }
@@ -283,13 +271,7 @@ async fn cmd_test(args: &[String]) -> i32 {
         None
     };
 
-    let run = run_deterministic(
-        &frozen.manifest,
-        &recipe,
-        &outputs,
-        enrich.as_ref(),
-        &Declaration::default(),
-    );
+    let run = frozen_run.verdicts(&recipe, enrich.as_ref(), &Declaration::default());
 
     // ── Report ───────────────────────────────────────────────────────────────
     println!("{}", render_report(&run));

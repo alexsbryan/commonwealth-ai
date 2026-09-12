@@ -100,6 +100,13 @@ corpus-engine-notes = { workspace = true }
 # SCIP call graph + exporter dispatch. Carved out of corpus-engine
 # 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
 corpus-engine-scip = { workspace = true }
+# The authoring harness's POLICY layer — the Pass/Fail ladder over
+# `corpus_engine::harness` stage outputs, plus the shared DRIVE
+# (`run_over_frozen_sample`) that `POST /internal/corpus/recipes/harness` and
+# `svrn recipe test` both call. Added svt-6 (2026-09-12) when the harness
+# stopped being something the desktop ran in-process; same layer as this
+# crate, and `sovereign-cli-llm` already names it.
+sovereign-authoring-harness = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
