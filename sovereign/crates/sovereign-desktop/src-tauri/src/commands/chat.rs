@@ -9,8 +9,11 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
-use sovereign_contracts::types::{TurnFrame, TurnMode};
+use sovereign_contracts::types::{
+    NarrationEvent, NarrationPhase, TurnFrame, TurnMode, TurnNarration,
+};
 use sovereign_core::runtime::message_metadata;
+use sovereign_core::traits::RoutingEventSink;
 
 use crate::state::AppState;
 
@@ -503,12 +506,28 @@ async fn pump_wire_frames(
                             state.pending_prompts.resolve(id).await;
                         }
                     },
+                    // The three antifragile-routing frames. Until 2026-09-11
+                    // these two arms recorded the session pairing and
+                    // nothing more, and `Narration` fell through to the
+                    // renderer's no-op arm — so the interpretation banner,
+                    // the `ClarificationCard` and the mid-turn narration chip
+                    // were DARK on the shipped path from R5 (every turn on
+                    // the wire) to svt-3b (no in-process Runtime left to
+                    // feed the sink). The sink and the payload types were
+                    // always here; the wire was always delivering. Pair,
+                    // then emit: a redirect chip clicked before the pairing
+                    // is written would fail `redirect_interpretation`'s
+                    // lookup, so the order is load-bearing.
                     TurnNotice::InterpretationProposed(p) => {
                         state
                             .session_conversations
                             .write()
                             .await
                             .insert(p.session_id.clone(), p.conversation_id.clone());
+                        state
+                            .routing_events
+                            .emit_interpretation_proposed(p.clone())
+                            .await;
                     }
                     TurnNotice::ClarificationRequest(p) => {
                         state
@@ -516,6 +535,10 @@ async fn pump_wire_frames(
                             .write()
                             .await
                             .insert(p.session_id.clone(), p.conversation_id.clone());
+                        state
+                            .routing_events
+                            .emit_clarification_request(p.clone())
+                            .await;
                     }
                     // The socket's own closer (RB1). `Complete` is the
                     // terminal frame of the TURN, not of the host's
@@ -539,6 +562,27 @@ async fn pump_wire_frames(
                     TurnNotice::TurnStarted { .. } => {}
                 }
             }
+            TurnFrame::Narration {
+                phase,
+                text,
+                elapsed_ms,
+                ..
+            } => {
+                // The frame carries no session id (it is minted before any
+                // `QuerySession` may exist); the FSM's narration reducer
+                // reads only `payload.event` (`routing.machine.ts`,
+                // `applyNarration`). Recover the pairing when one is
+                // already written, else send it empty rather than invent one.
+                let session_id = session_for_conversation(&state, &conversation_id).await;
+                let payload = narration_payload(
+                    session_id,
+                    conversation_id.clone(),
+                    phase.clone(),
+                    text.clone(),
+                    *elapsed_ms,
+                );
+                state.routing_events.emit_turn_narration(payload).await;
+            }
             _ => {}
         }
         let _ = frames.send(frame);
@@ -553,6 +597,44 @@ async fn pump_wire_frames(
         released,
         "pump_wire_frames: turn unparked"
     );
+}
+
+/// The `turn-narration` payload for one `TurnFrame::Narration`, shaped
+/// exactly as `TurnNarrationPayload` in `src/lib/types.ts` expects — the
+/// same struct the in-process sink used to fill, so the frontend cannot
+/// tell which side of the wire produced it. Pure so the test below can pin
+/// the serialized keys against the TypeScript interface.
+fn narration_payload(
+    session_id: String,
+    conversation_id: String,
+    phase: NarrationPhase,
+    text: String,
+    elapsed_ms: u64,
+) -> TurnNarration {
+    TurnNarration {
+        session_id,
+        conversation_id,
+        event: NarrationEvent {
+            phase,
+            text,
+            elapsed_ms,
+        },
+    }
+}
+
+/// Reverse lookup on the session -> conversation pairing the two notice
+/// arms write. Empty when no routing notice has paired this conversation
+/// yet — which is the common case for early narration (`retrieval_start`
+/// lands before the router has proposed anything).
+async fn session_for_conversation(state: &AppState, conversation_id: &str) -> String {
+    state
+        .session_conversations
+        .read()
+        .await
+        .iter()
+        .find(|(_, c)| c.as_str() == conversation_id)
+        .map(|(s, _)| s.clone())
+        .unwrap_or_default()
 }
 
 /// One parked prompt becomes one card — the same events, payloads and
@@ -747,9 +829,10 @@ async fn render_turn_frames(
             }
             // Everything that is not a token, an error or the terminal
             // frame is already handled UPSTREAM, by `pump_wire_frames`:
-            // narration, queue position, the prompt cards and every
-            // notice are emitted there against the frontend vocabulary
-            // that expects them. They pass through here so this renderer
+            // narration (`turn-narration`, since 2026-09-11 — before that
+            // this arm was where it was dropped), the prompt cards and
+            // every notice are emitted there against the frontend
+            // vocabulary that expects them. They pass through here so this renderer
             // stays the single place a turn's `message-chunk` /
             // `message-complete` / `message-error` are decided — not
             // because they belong to some other path. (This comment said
@@ -1228,6 +1311,33 @@ mod tests {
             text: "reading the corpus".to_string(),
             elapsed_ms: 12,
         }
+    }
+
+    /// `TurnNarrationPayload` in `src/lib/types.ts` is `{ session_id,
+    /// conversation_id, event: { phase, text, elapsed_ms } }`, and the FSM's
+    /// `applyNarration` reads `payload.event`. This pins the Rust side to
+    /// those keys — the only contract between the wire frame and the chip.
+    #[test]
+    fn narration_payload_serializes_to_the_shape_the_fsm_reads() {
+        let TurnFrame::Narration {
+            phase,
+            text,
+            elapsed_ms,
+            ..
+        } = narration()
+        else {
+            unreachable!()
+        };
+        let payload = narration_payload(String::new(), "conv-1".into(), phase, text, elapsed_ms);
+        let v = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["session_id"], "");
+        assert_eq!(v["conversation_id"], "conv-1");
+        assert_eq!(v["event"]["phase"], "routing_committed");
+        assert_eq!(v["event"]["text"], "reading the corpus");
+        assert_eq!(v["event"]["elapsed_ms"], 12);
+        let mut keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        keys.sort();
+        assert_eq!(keys, ["conversation_id", "event", "session_id"]);
     }
 
     fn approval_prompt() -> TurnFrame {
