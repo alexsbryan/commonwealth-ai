@@ -83,9 +83,9 @@ mod quality_map_cmd;
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
 mod project_registry;
-mod report_audit;
 mod reflect_cmd;
 mod refresh_cmd;
+mod report_audit;
 #[cfg(feature = "dev-tools")]
 mod rough_edges_cmd;
 mod seat_cmd;

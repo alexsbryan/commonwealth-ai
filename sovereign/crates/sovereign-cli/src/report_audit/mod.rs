@@ -50,14 +50,23 @@ const HELP: Help = Help {
              symbol citations, and figures with no source in the session.",
         ),
         HelpSection::Flags(&[
-            ("--transcript <path>", "Audit this transcript file directly."),
+            (
+                "--transcript <path>",
+                "Audit this transcript file directly.",
+            ),
             (
                 "--message-file <path>",
                 "Audit this text instead of the transcript's last assistant message.",
             ),
-            ("--root <path>", "Repo root for resolving citations (default: cwd)."),
+            (
+                "--root <path>",
+                "Repo root for resolving citations (default: cwd).",
+            ),
             ("--format <human|json>", "Output shape (default: human)."),
-            ("--all", "Print the summary even when there are no findings."),
+            (
+                "--all",
+                "Print the summary even when there are no findings.",
+            ),
         ]),
         HelpSection::Notes(
             "Exit: 0 nothing withheld, 1 a blocking finding, 2 could not read. \
@@ -193,7 +202,11 @@ fn render_human(findings: &[Finding], j: &Judgement, checked: usize) -> String {
             f.reason,
         ));
     }
-    out.push_str(&format!("{}: {}\n", j.verdict().as_str(), j.reason().as_str()));
+    out.push_str(&format!(
+        "{}: {}\n",
+        j.verdict().as_str(),
+        j.reason().as_str()
+    ));
     out
 }
 
@@ -271,7 +284,11 @@ pub fn run(args: &[String]) -> i32 {
     if args.json {
         println!("{}", render_json(&findings, &j, checked));
     } else {
-        let shown: Vec<Finding> = if args.all { ruled.clone() } else { findings.clone() };
+        let shown: Vec<Finding> = if args.all {
+            ruled.clone()
+        } else {
+            findings.clone()
+        };
         if !shown.is_empty() || args.all {
             print!("{}", render_human(&shown, &j, checked));
         }

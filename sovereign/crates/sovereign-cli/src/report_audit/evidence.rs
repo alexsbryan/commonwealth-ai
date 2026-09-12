@@ -263,9 +263,9 @@ pub fn from_jsonl(text: &str, session_id: &str) -> Evidence {
             "user" => {
                 // A user record is either operator prose or tool results —
                 // never both.
-                let is_results = blocks.iter().any(|b| {
-                    b.get("type").and_then(|t| t.as_str()) == Some("tool_result")
-                });
+                let is_results = blocks
+                    .iter()
+                    .any(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result"));
                 if !is_results {
                     let joined = blocks
                         .iter()
@@ -304,7 +304,11 @@ pub fn from_jsonl(text: &str, session_id: &str) -> Evidence {
                         .remove(id)
                         .unwrap_or_else(|| ("?".to_string(), String::new()));
                     let body = result_text(b);
-                    let out = if stdout.is_empty() { body.clone() } else { stdout.clone() };
+                    let out = if stdout.is_empty() {
+                        body.clone()
+                    } else {
+                        stdout.clone()
+                    };
 
                     corpus.push_str(&out);
                     corpus.push('\n');
@@ -425,7 +429,10 @@ mod tests {
         let cmd = "cat > notes.rs <<'RS'\n// run ./scripts/sovereign-test.sh first\nRS\necho done";
         let stripped = strip_heredoc_bodies(cmd);
         assert!(!stripped.contains("sovereign-test.sh"), "body dropped");
-        assert!(stripped.contains("echo done"), "commands after the body kept");
+        assert!(
+            stripped.contains("echo done"),
+            "commands after the body kept"
+        );
     }
 
     #[test]
@@ -451,7 +458,10 @@ mod tests {
             ev.commands_matching(&["cargo test"]).is_empty(),
             "a heredoc that mentions a gate did not run it"
         );
-        assert!(ev.mentions("cargo test"), "but the text is still in the corpus");
+        assert!(
+            ev.mentions("cargo test"),
+            "but the text is still in the corpus"
+        );
     }
 
     #[test]

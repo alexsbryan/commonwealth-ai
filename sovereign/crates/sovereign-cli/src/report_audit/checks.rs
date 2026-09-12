@@ -493,7 +493,10 @@ fn check_numbers(report: &str, ev: &Evidence) -> Vec<Finding> {
     // Three digits or a decimal point. Smaller integers are ordinals,
     // counts of list items and versions — too common to rule on, and the
     // sabotage cases that matter are measurements.
-    let re = rx(&NUMBER_RX, r"\b\d{1,3}(?:,\d{3})+\b|\b\d{3,}\b|\b\d+\.\d+\b");
+    let re = rx(
+        &NUMBER_RX,
+        r"\b\d{1,3}(?:,\d{3})+\b|\b\d{3,}\b|\b\d+\.\d+\b",
+    );
     let mut seen = BTreeSet::new();
     let mut findings = Vec::new();
     for sentence in sentences(report) {
@@ -570,7 +573,9 @@ mod tests {
 
     /// The findings a caller would act on — what `mod.rs` keeps.
     fn issues(f: Vec<Finding>) -> Vec<Finding> {
-        f.into_iter().filter(|x| x.verdict != Verdict::Passed).collect()
+        f.into_iter()
+            .filter(|x| x.verdict != Verdict::Passed)
+            .collect()
     }
 
     #[test]
@@ -584,7 +589,11 @@ mod tests {
 
     #[test]
     fn tests_pass_with_a_clean_test_run_is_silent() {
-        let ev = ev_with("./scripts/sovereign-test.sh --human", "pass: 12 fail: 0", false);
+        let ev = ev_with(
+            "./scripts/sovereign-test.sh --human",
+            "pass: 12 fail: 0",
+            false,
+        );
         // The check KEEPS its passing ruling so `--all` can show the
         // decision (ARCH §1); `mod.rs` drops it before anything counts it
         // as a finding. "Silent" therefore means: nothing non-passing.
@@ -601,7 +610,11 @@ mod tests {
 
     #[test]
     fn a_clean_run_that_measured_nothing_is_never_ran() {
-        let ev = ev_with("./scripts/sovereign-test.sh --filter typo", "pass: 0 fail: 0", false);
+        let ev = ev_with(
+            "./scripts/sovereign-test.sh --filter typo",
+            "pass: 0 fail: 0",
+            false,
+        );
         let f = check_gates("All tests pass.", &ev);
         assert_eq!(f[0].verdict, Verdict::NeverRan);
         assert!(f[0].blocks());
@@ -661,7 +674,8 @@ mod tests {
 
     #[test]
     fn code_fences_are_not_claims() {
-        let report = "Here is the shape:\n```\nlet x = load(\"src/nowhere/at/all.rs\");\n```\nDone.";
+        let report =
+            "Here is the shape:\n```\nlet x = load(\"src/nowhere/at/all.rs\");\n```\nDone.";
         let root = std::path::PathBuf::from(".");
         assert!(check_paths(&strip_code_fences(report), &empty(), &root).is_empty());
     }
@@ -717,7 +731,10 @@ pub fn decidable_count(report: &str, ev: &Evidence, _root: &Path) -> usize {
     let prose = strip_code_fences(report);
     let mut n = 0;
     let mut fired: BTreeSet<&str> = BTreeSet::new();
-    let num = rx(&NUMBER_RX, r"\b\d{1,3}(?:,\d{3})+\b|\b\d{3,}\b|\b\d+\.\d+\b");
+    let num = rx(
+        &NUMBER_RX,
+        r"\b\d{1,3}(?:,\d{3})+\b|\b\d{3,}\b|\b\d+\.\d+\b",
+    );
     for sentence in sentences(&prose) {
         n += path_candidates(&sentence).len();
         n += symbol_candidates(&sentence).len();
@@ -750,7 +767,11 @@ mod denominator_tests {
         let ev = Evidence::default();
         let root = std::path::PathBuf::from(".");
         assert_eq!(
-            decidable_count("I reorganised the argument and it reads better now.", &ev, &root),
+            decidable_count(
+                "I reorganised the argument and it reads better now.",
+                &ev,
+                &root
+            ),
             0
         );
     }
