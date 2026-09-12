@@ -271,22 +271,19 @@ fn main() -> ExitCode {
                 tauri::async_runtime::spawn(async move {
                     use tauri::Manager;
                     if let Some(state) = app.try_state::<std::sync::Arc<state::AppState>>() {
-                        let provider = {
-                            let guard = state.inference.read().await;
-                            guard.as_ref().map(std::sync::Arc::clone)
-                        };
-                        if let Some(provider) = provider {
-                            let started = std::time::Instant::now();
-                            match provider.warmup_primary().await {
-                                Ok(()) => tracing::info!(
-                                    latency_ms = started.elapsed().as_millis() as u64,
-                                    "window-focus: primary slot warm"
-                                ),
-                                Err(e) => tracing::warn!(
-                                    error = %e,
-                                    "window-focus: warmup failed"
-                                ),
-                            }
+                        // The DAEMON's slot, not this process's — it is the
+                        // one that serves the turn the user is about to take.
+                        let client =
+                            sovereign_turn_client::TurnClient::new(state.client_base_url());
+                        match client.inference_warmup().await {
+                            Ok(latency_ms) => tracing::info!(
+                                latency_ms,
+                                "window-focus: the daemon's primary slot is warm"
+                            ),
+                            Err(e) => tracing::warn!(
+                                error = %e,
+                                "window-focus: the daemon refused the warmup"
+                            ),
                         }
                     }
                 });

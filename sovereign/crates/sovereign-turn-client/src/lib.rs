@@ -2735,6 +2735,34 @@ impl TurnClient {
         Ok(wire.report)
     }
 
+    /// `POST /internal/inference/warmup` — eagerly load the daemon's
+    /// primary chat slot so the next turn does not pay the lazy-load tax.
+    /// Returns the load's latency in ms; `0` from a daemon with no
+    /// in-process slot (the orchestrator-spawned path), which is a real
+    /// answer and not a failure.
+    ///
+    /// Idempotent, and deliberately NOT fire-and-forget here: the caller
+    /// decides whether to ignore the outcome. The desktop's focus handler
+    /// does; a caller that wants to know the slot is hot can wait.
+    ///
+    /// The answer shape is private to this method for
+    /// [`Self::corpus_diagnose`]'s reason — one `u64` behind a named
+    /// route does not earn a contract type, and `WarmupResponse` lives in
+    /// `commonwealth-api`, which a thin surface may not reach.
+    pub async fn inference_warmup(&self) -> Result<u64> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            latency_ms: u64,
+        }
+        let wire: Wire = self
+            .internal_post_json(
+                "/internal/inference/warmup".to_string(),
+                &serde_json::json!({}),
+            )
+            .await?;
+        Ok(wire.latency_ms)
+    }
+
     /// `POST /internal/corpus/{corpus}/index/build` — build an installed
     /// corpus's vector + FTS indexes as a daemon job. `T` is
     /// `sovereign_contracts::daemon_wire::IngestJobAck` (202). A corpus

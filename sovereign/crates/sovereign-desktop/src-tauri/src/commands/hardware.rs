@@ -360,32 +360,29 @@ pub async fn detect_bootstrap() -> Result<crate::bootstrap::BootstrapSnapshot, S
 /// on window-focus and ChatView mount so the slot is hot by the
 /// time the user finishes typing.
 ///
-/// Returns immediately as `Ok(())` when no inference provider has
-/// been configured yet (pre-setup wizard, model files missing) so
-/// the focus handler can stay a fire-and-forget without surfacing
-/// errors that aren't user-actionable.
+/// Always `Ok(())`: this is a fire-and-forget contract with the focus
+/// handler, so a daemon that cannot warm (no models configured yet, or
+/// no in-process slot at all) is not an error the UI can act on. The
+/// outcome goes to the log, with the DAEMON's own reason.
+///
+/// `POST /internal/inference/warmup` since 2026-09-12. The route has
+/// existed since before 2026-07-27 and its own doc comment claimed it
+/// was "wired into the desktop app's window-focus / chat-mount events"
+/// — it was not; this command warmed a provider IN THE APP, which is
+/// the wrong slot to warm when the turn is served by the daemon. A
+/// warm app-side slot bought nothing and cost a model load.
 #[tauri::command]
 pub async fn warmup_primary_slot(state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    let provider = {
-        let guard = state.inference.read().await;
-        guard.as_ref().map(Arc::clone)
-    };
-    let Some(provider) = provider else {
-        // Setup hasn't run / model files unconfigured. Fire-and-
-        // forget contract — this isn't an error from the UI's
-        // perspective, just nothing to warm.
-        return Ok(());
-    };
-    // Spawn so the Tauri command returns immediately. The load can
-    // take 10–90s; we don't want the focus handler to block on it.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
+    // Spawn so the command returns immediately: the load can take 10–90s
+    // (57–95s measured for an 18.5 GB primary) and the focus handler must
+    // not block on it.
     tokio::spawn(async move {
-        let started = std::time::Instant::now();
-        match provider.warmup_primary().await {
-            Ok(()) => tracing::info!(
-                latency_ms = started.elapsed().as_millis() as u64,
-                "warmup_primary_slot: complete"
-            ),
-            Err(e) => tracing::warn!(error = %e, "warmup_primary_slot: failed"),
+        match client.inference_warmup().await {
+            Ok(latency_ms) => {
+                tracing::info!(latency_ms, "warmup_primary_slot: the daemon's slot is warm")
+            }
+            Err(e) => tracing::warn!(error = %e, "warmup_primary_slot: the daemon refused"),
         }
     });
     Ok(())
