@@ -45,7 +45,7 @@ use commonwealth_media::PeerTransportPath;
 /// The decisions themselves live in `commonwealth-media` (moved 2026-09-11,
 /// cw-lift D1): the roster projection, the by-name pick with its refusals, and
 /// the loopback URL. Re-exported under their old paths so `mesh_http`,
-/// `daemon`, `media_fanout`, the CLI and the tests keep naming them here,
+/// `daemon`, `origin_fanout`, the CLI and the tests keep naming them here,
 /// while a package-only rails daemon composes exactly the same code
 /// (ARCH §10.6).
 pub use commonwealth_media::{

@@ -18,8 +18,19 @@ use std::time::Duration;
 use crate::mesh_cmd::daemon_client_port;
 
 pub(crate) async fn cmd_app(args: &[String]) -> i32 {
+    // `fanout` is the third shape, beside "who publishes" and "reach one":
+    // ask everybody publishing this app the same thing. It is the media
+    // fan-out's client with an app named, not a second one.
+    if args.first().map(String::as_str) == Some("fanout") {
+        let Some(app) = args.get(1).filter(|a| !a.starts_with("--")) else {
+            eprintln!("Which app? `svrn mesh app fanout chores /`");
+            return 1;
+        };
+        return crate::mesh_media::cmd_fanout(Some(app), &args[2..]).await;
+    }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh app [<peer>] [<app>] [--json] [--no-probe]");
+        eprintln!("       svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--json]");
         eprintln!();
         eprintln!("With no <peer>: list the members that publish apps, as gossip knows them —");
         eprintln!("nothing is dialed. With a <peer>: print the base URL that reaches that");
@@ -38,6 +49,9 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
         eprintln!("Flags:");
         eprintln!("  --json       Raw JSON from the daemon (peer, node_id, url, via, path).");
         eprintln!("  --no-probe   Skip the GET through the bridge; print the URL only.");
+        eprintln!();
+        eprintln!("`svrn mesh app fanout <app> <path>` is the third shape: ask EVERY member");
+        eprintln!("publishing that app the same request, one attributed row each.");
         return 0;
     }
     let json_out = args.iter().any(|a| a == "--json");

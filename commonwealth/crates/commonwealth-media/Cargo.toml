@@ -12,6 +12,9 @@ commonwealth-core = { workspace = true }
 # member the catalogue half returns.
 commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
 serde = { workspace = true }
+# The fan-out row hands back the origin's JSON already parsed beside the raw
+# body, so every shim does not re-parse it as its first line.
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 hex = "0.4"
@@ -21,7 +24,6 @@ tokio = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 axum = { workspace = true }
-serde_json = { workspace = true }
 
 [lints]
 workspace = true

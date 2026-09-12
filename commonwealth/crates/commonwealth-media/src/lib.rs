@@ -13,17 +13,22 @@
 //!   and the loopback URL a player is pointed at.
 //! - **The same request to every offering member.** [`fanout`]: one
 //!   attributed row per member, refusals as rows, bodies capped.
+//! - **What do I publish right now?** [`apps`]: the live registry behind the
+//!   named-app origins, whose claimed tier cannot outlive the process that
+//!   took it.
 //!
 //! Everything here takes a roster snapshot and a transport; nothing here
 //! holds daemon state, opens a listener, or knows what a title is. The
 //! daemons compose it: `sovereign-mesh` behind `EmbeddedDaemon`, and
 //! `commonwealth-rails` with none of that underneath.
 
+pub mod apps;
 pub mod declared;
 pub mod fanout;
 pub mod identity;
 pub mod reach;
 
+pub use apps::{valid_app_name, AppClaim, PublishRefusal, PublishedApp, PublishedApps, Tier};
 pub use declared::{dir_under, read_declared_in, valid_header_name, write_declared_in};
 pub use identity::{admit_app, admit_media, admits_no_one, MemberCheck, MemberIdentity};
 pub use reach::{

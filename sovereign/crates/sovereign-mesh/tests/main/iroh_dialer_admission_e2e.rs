@@ -395,12 +395,14 @@ async fn lender_with_apps(allow: Vec<String>) -> (Endpoint, IrohAcceptor) {
     let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
     let routes = AcceptorRoutes {
         apps: sovereign_mesh::iroh_access::AppRoutes {
-            apps: [
-                ("chores".to_string(), chores),
-                ("printer".to_string(), printer),
-            ]
-            .into_iter()
-            .collect(),
+            apps: commonwealth_media::PublishedApps::with_config(
+                [
+                    ("chores".to_string(), chores),
+                    ("printer".to_string(), printer),
+                ]
+                .into_iter()
+                .collect(),
+            ),
             allow,
         },
         internal: "127.0.0.1:1".parse().unwrap(),
@@ -430,9 +432,15 @@ async fn one_member_reaches_two_different_apps_on_one_node_by_name() {
 
     let body = |r: reqwest::Response| async move { r.text().await.unwrap() };
 
-    let a = get_as(&lender, MEMBER_SEED, APP_ALPN, "/chores/tasks?due=today", None)
-        .await
-        .expect("a member reaches the chores app");
+    let a = get_as(
+        &lender,
+        MEMBER_SEED,
+        APP_ALPN,
+        "/chores/tasks?due=today",
+        None,
+    )
+    .await
+    .expect("a member reaches the chores app");
     assert_eq!(a.status(), reqwest::StatusCode::OK);
     assert_eq!(body(a).await, "chores /tasks?due=today LittleMac");
 
@@ -472,7 +480,102 @@ async fn a_request_naming_no_app_is_refused_not_sent_to_an_arbitrary_origin() {
         .await
         .expect("the acceptor answers");
     assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
-    assert!(resp.text().await.unwrap().contains("no app named in the request path"));
+    assert!(resp
+        .text()
+        .await
+        .unwrap()
+        .contains("no app named in the request path"));
+}
+
+/// The ephemeral tier, end to end and on the byte plane: a node that
+/// publishes NOTHING at boot — no `[iroh.apps]`, and no `cwth/app/0` on its
+/// endpoint — is reachable for an app the moment a `svrn run` takes a claim,
+/// and stops being reachable the moment the claim is released.
+///
+/// This is the whole bet of the claim tier, and it rests on something that
+/// could easily not have been true: iroh's `Endpoint::set_alpns` applying to
+/// new incoming connections on a bound endpoint. The endpoint here is built
+/// WITHOUT `APP_ALPN` on purpose, so a regression that reverted to deciding
+/// the protocol set once at bind fails this rather than passing quietly with
+/// a test that had advertised it all along.
+///
+/// The failing inputs are the two ends: reachable before the claim (the
+/// registry is not consulted), and still reachable after the release (the
+/// registration outlived the process, which is the rot the tier exists to
+/// prevent).
+#[tokio::test]
+async fn an_app_claimed_at_runtime_becomes_reachable_and_stops_when_released() {
+    use axum::extract::Request;
+
+    let echo = spawn_router(
+        axum::Router::new().fallback(|req: Request| async move { format!("chores {}", req.uri()) }),
+    )
+    .await;
+    let apps = commonwealth_media::PublishedApps::default();
+
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        apps: sovereign_mesh::iroh_access::AppRoutes {
+            apps: apps.clone(),
+            allow: Vec::new(),
+        },
+        internal: "127.0.0.1:1".parse().unwrap(),
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: None,
+        media_allow: Arc::new(Vec::new()),
+        media_declared: std::sync::Arc::new(Vec::new()),
+    };
+    // No APP_ALPN at bind — exactly the state of a node whose config
+    // publishes nothing.
+    let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec()]).await;
+    // The wiring `MeshIrohAccess::start` does: the served protocol set
+    // follows the registry.
+    {
+        let endpoint = endpoint.clone();
+        apps.on_serving_change(Arc::new(move |serving| {
+            let mut set = vec![CLIENT_ALPN.to_vec()];
+            if serving {
+                set.push(APP_ALPN.to_vec());
+            }
+            endpoint.set_alpns(set);
+        }));
+    }
+    let check = only_the_member();
+    let _acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+
+    assert!(
+        get_as(&endpoint, MEMBER_SEED, APP_ALPN, "/chores/tasks", None)
+            .await
+            .is_err(),
+        "a node publishing nothing must not serve the app protocol at all"
+    );
+
+    let claim = apps
+        .claim("chores", echo, Duration::from_secs(60))
+        .expect("the runner takes the claim");
+    let resp = get_as(&endpoint, MEMBER_SEED, APP_ALPN, "/chores/tasks", None)
+        .await
+        .expect("the app is reachable the moment it is claimed");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        resp.text().await.unwrap(),
+        "chores /tasks",
+        "the name is stripped before the app sees the path, claim tier included"
+    );
+
+    apps.release(&claim.claim_id).expect("the runner releases");
+    assert!(
+        get_as(&endpoint, MEMBER_SEED, APP_ALPN, "/chores/tasks", None)
+            .await
+            .is_err(),
+        "a released claim must take reachability with it"
+    );
 }
 
 /// The dial string is public, so a stranger holding it must get no bytes from

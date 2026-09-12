@@ -81,6 +81,8 @@ Manage the local Commonwealth mesh.
 | `status` | Show mesh members, hosted knowledge, loaded models |
 | `media [<peer>] [--json] [--no-probe]` | With no peer: list the members whose gossiped capabilities advertise a media origin, with the live path to each (nothing dialed). With a peer: print a localhost URL that reaches its media server by mesh key — no VPN, no port forwarded — then GET / through it once |
 | `media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]` | Ask every member that offers a media origin the same request through its own mesh bridge, concurrently, and print one row per member — what its origin answered (status, bytes, type), or why it was not asked. Bodies capped, never merged; play a title through `media <peer>` |
+| `app [<peer>] [<app>] [--json] [--no-probe]` | With no peer: list the members publishing named apps. With a peer: the base URL that reaches its apps, each named by the first path segment under it. With both: that app's own URL, probed once so you see an HTTP status rather than a port |
+| `app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]` | Ask every member publishing `<app>` the same request, concurrently, one attributed row each. The app form of `media fanout`, on the same route and the same row shape |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
 | `leave` | Leave the current mesh |
 | `logs` | Show mesh daemon logs |
@@ -151,6 +153,64 @@ labelled and entirely meaningless.
 It is not instant. A cold load of a large model can take minutes before the first
 trial starts. Exit `0` valid · `1` a guard tripped · `2` bad arguments · `3` assertion
 failed · `4` nothing measurable · `5` no daemon.
+
+### `svrn publish`
+
+Put a localhost port in front of the house, by name. Housemates reach it by
+mesh key — no port forwarded, no VPN, no reverse proxy — and every request
+arrives carrying the caller's verified identity in `X-Mesh-Member`, so the app
+never writes a login page.
+
+```sh
+svrn publish                  # what am I publishing
+svrn publish chores 5000      # publish, durably
+svrn daemon restart           # the config tier is read at start
+```
+
+This is the **durable** tier: the entry is written into `[iroh.apps]` and
+survives restarts, which is what you want for something always up and owned.
+The config is edited as a TOML document, so comments survive and no unset
+default is materialised; the verb re-parses what it wrote and restores the
+original if the result will not load.
+
+For an app you are only running right now, use `svrn run` instead — a durable
+entry for a one-evening hack is how a house fan-out ends up full of
+`connection refused` rows from apps that stopped existing months ago.
+
+### `svrn unpublish`
+
+    svrn unpublish <name>
+
+Stop publishing a durably published app. Naming something that is not
+published is an error naming what is, rather than a silent success.
+
+### `svrn run`
+
+    svrn run --as <name> [--port <n>] [--ttl <duration>] -- <command> …
+
+Run a local app and publish it to the house for exactly as long as it runs.
+Nothing is written to config and no daemon is restarted, and when the command
+exits the app stops being published.
+
+```sh
+svrn run --as chores -- python app.py
+```
+
+The registration is a claim this process holds: renewed while the child lives,
+released when it exits, dropped by its TTL if the runner itself is killed. A
+published app cannot outlive the process serving it.
+
+With no `--port` the runner takes a free one and hands it to the child as
+`PORT`. An app that ignores `PORT` binds its own port instead, so nothing
+answers on the published one — which is why the runner waits for the port to
+accept a connection before publishing anything, and says so when it never
+does. Name `--port` for an app with a fixed port of its own.
+
+`--ttl` is how long a claim survives without a heartbeat (default 1h, max
+24h): `30s`, `10m`, `2h`, `1d`, or bare seconds. If the daemon is down the
+command still runs and the runner says plainly that nothing is published,
+retrying every tick — so starting your app before the daemon, or restarting
+the daemon under a running app, heals on its own.
 
 ### `svrn ring`
 

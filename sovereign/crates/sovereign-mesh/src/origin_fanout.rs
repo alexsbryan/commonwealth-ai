@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Federated media, the catalogue half: one request to every member that
-//! offers a library, answered as one attributed document.
+//! The catalogue half of every origin kind: one request to every member that
+//! publishes one, answered as one attributed document.
 //!
 //! `svrn mesh media` (bare) says WHO offers; `svrn mesh media <peer>` reaches
 //! ONE of them. A shim building a merged catalogue needs the third shape:
 //! ask them all the same thing — `GET /Items?…`, whatever the origin speaks —
 //! and get back a row per member saying what it answered, or why it was not
-//! asked, in one round trip. That is `POST /v1/mesh/media/fanout`, and it is
+//! asked, in one round trip. That is `POST /v1/mesh/fanout`, and it is
 //! `commonwealth_api::fanout` (the peer half of the knowledge fan-out,
 //! extracted 2026-09-11) with a media origin at the far end of each row.
 //!
@@ -28,6 +28,13 @@
 //! the per-origin ask are `commonwealth-media`'s and only the route and the
 //! daemon glue are here, so the inference daemon and the package-only rails
 //! daemon fan out with one implementation (ARCH §10.6).
+//!
+//! **Two routes, one handler.** `POST /v1/mesh/fanout` takes the origin
+//! `kind`; `POST /v1/mesh/media/fanout` is the same handler with the kind
+//! defaulted, kept because it is what every existing shim and `library.py`
+//! already POST to. They are not two implementations — the media path is the
+//! generic one with a field absent — so a fix to selection, capping or row
+//! shape cannot land on one and miss the other.
 use std::sync::Arc;
 
 use axum::extract::{ConnectInfo, Extension, Json};
@@ -38,20 +45,21 @@ use crate::daemon::EmbeddedDaemon;
 use crate::loopback_guard::enforce_localhost;
 use crate::media_reach::MediaReachRefusal;
 
-/// The catalogue fan-out's own vocabulary, re-exported under its old path so
-/// the CLI and the route keep naming it here.
+/// The fan-out's own vocabulary, re-exported under its old path so the CLI
+/// and the route keep naming it here.
 pub use commonwealth_media::fanout::{
-    ask_origin, select_targets, MediaAnswer, MediaFanoutRequest, MediaFanoutResponse,
-    OriginRequest, Selected, DEFAULT_MAX_BODY_BYTES, DEFAULT_TIMEOUT_MS,
+    ask_origin, select_targets, FanoutRequest, FanoutResponse, OriginAnswer, OriginRequest,
+    Selected, DEFAULT_MAX_BODY_BYTES, DEFAULT_TIMEOUT_MS,
 };
 
 impl EmbeddedDaemon {
-    /// Ask every selected member the same request through its own media
-    /// bridge, concurrently, and return one row per member.
-    pub async fn media_fanout(
+    /// Ask every selected member the same request through its own bridge for
+    /// the requested origin kind, concurrently, and return one row per
+    /// member.
+    pub async fn origin_fanout(
         &self,
-        req: MediaFanoutRequest,
-    ) -> Result<MediaFanoutResponse, MediaReachRefusal> {
+        req: FanoutRequest,
+    ) -> Result<FanoutResponse, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
         // Cloned out before any await: nothing here holds the mesh lock
@@ -71,17 +79,23 @@ impl EmbeddedDaemon {
     }
 }
 
-/// `POST /v1/mesh/media/fanout` — loopback-only like every `/v1/mesh/*`
-/// route. A malformed request is 400 with the reason; no mesh is 409.
-pub async fn mesh_media_fanout(
+/// `POST /v1/mesh/fanout` and `POST /v1/mesh/media/fanout` — loopback-only
+/// like every `/v1/mesh/*` route. A malformed request is 400 with the reason;
+/// no mesh is 409.
+///
+/// One handler for both paths. The media spelling is the generic body with
+/// `kind` absent, which `FanoutRequest` defaults to media — so the older
+/// route cannot drift from the newer one, and a shim written against it keeps
+/// working unchanged.
+pub async fn mesh_fanout(
     ConnectInfo(caller): ConnectInfo<std::net::SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-    Json(req): Json<MediaFanoutRequest>,
+    Json(req): Json<FanoutRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&caller) {
         return r;
     }
-    match daemon.media_fanout(req).await {
+    match daemon.origin_fanout(req).await {
         Ok(doc) => (StatusCode::OK, Json(serde_json::json!(doc))).into_response(),
         Err(e @ MediaReachRefusal::BadRequest(_)) => (
             StatusCode::BAD_REQUEST,

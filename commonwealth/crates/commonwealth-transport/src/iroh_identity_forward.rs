@@ -83,6 +83,26 @@ impl Forward {
     }
 }
 
+/// Whether `name` can be an app name: non-empty ASCII alphanumerics, `_` and
+/// `-`, and nothing else.
+///
+/// One rule, read from both ends of the same wire (ARCH principle 8): the
+/// registry refuses a name it could not later match, and [`split_app_name`]
+/// refuses a request that could not name a registered app. Splitting these
+/// into two character tables is how a name becomes publishable and
+/// unreachable at the same time, which reads to the publisher as the mesh
+/// being down.
+///
+/// The table is what keeps `..`, encoded slashes and stray bytes out of the
+/// lookup key structurally rather than by a sanitizer someone has to
+/// remember to call (ARCH principle 10).
+pub fn valid_app_name(name: &[u8]) -> bool {
+    !name.is_empty()
+        && name
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+}
+
 /// The leading path segment of a request head's target, and the head with
 /// that segment removed — `GET /chores/tasks?x=1 HTTP/1.1` becomes
 /// `("chores", "GET /tasks?x=1 HTTP/1.1")`.
@@ -125,11 +145,7 @@ pub fn split_app_name(head: &[u8]) -> Option<(String, Vec<u8>)> {
         .position(|&b| b == b'/' || b == b'?')
         .unwrap_or(rest.len());
     let (name, tail) = rest.split_at(cut);
-    if name.is_empty()
-        || !name
-            .iter()
-            .all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
-    {
+    if !valid_app_name(name) {
         return None;
     }
     let mut out = Vec::with_capacity(head.len());
@@ -423,7 +439,13 @@ pub async fn pump_by_name(
             "app: REFUSED a dial for an app this node does not publish"
         );
         say(
-            refuse(&mut send, 404, &format!("no app named {name:?} here"), &apps).await,
+            refuse(
+                &mut send,
+                404,
+                &format!("no app named {name:?} here"),
+                &apps,
+            )
+            .await,
             &name,
         );
         return;
@@ -571,7 +593,11 @@ async fn refuse(
             published.join(", ")
         }
     );
-    let reason = if status == 502 { "Bad Gateway" } else { "Not Found" };
+    let reason = if status == 502 {
+        "Bad Gateway"
+    } else {
+        "Not Found"
+    };
     let head = format!(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
@@ -591,15 +617,17 @@ mod tests {
     }
 
     fn split(target: &str) -> Option<(String, String)> {
-        split_app_name(&head_of(target))
-            .map(|(n, h)| (n, String::from_utf8(h).unwrap()))
+        split_app_name(&head_of(target)).map(|(n, h)| (n, String::from_utf8(h).unwrap()))
     }
 
     #[test]
     fn the_first_path_segment_names_the_app_and_leaves_the_rest_intact() {
         let (name, head) = split("/chores/tasks?due=today").unwrap();
         assert_eq!(name, "chores");
-        assert!(head.starts_with("GET /tasks?due=today HTTP/1.1\r\n"), "{head}");
+        assert!(
+            head.starts_with("GET /tasks?due=today HTTP/1.1\r\n"),
+            "{head}"
+        );
         // Everything after the request line is copied byte for byte.
         assert!(head.ends_with("Host: x\r\nAccept: */*\r\n\r\n"), "{head}");
     }

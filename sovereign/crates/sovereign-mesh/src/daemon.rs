@@ -262,6 +262,14 @@ pub struct EmbeddedDaemon {
     /// re-reads the live membership, so a mapping for a vanished worker is
     /// inert. `std::sync` lock — never held across an await.
     rpc_endpoint_nodes: std::sync::RwLock<std::collections::HashMap<String, NodeId>>,
+    /// What this node publishes to the house as named HTTP apps: `[iroh.apps]`
+    /// plus every live claim a running `svrn run` holds. On the daemon rather
+    /// than inside the acceptor because BOTH ends need the same one — the
+    /// acceptor resolves a member's dial against it, and the loopback publish
+    /// routes take and release claims in it while that acceptor runs. Two
+    /// registries would make a published app reachable or unreachable
+    /// depending on which half you asked.
+    published_apps: commonwealth_media::PublishedApps,
     /// Per-node sticky endpoint choice for RPC-worker discovery — the hysteresis
     /// state that stops a single transient direct-ip probe miss from flipping a
     /// worker's transport identity (direct-ip ↔ iroh-bridge loopback). Both the
@@ -585,6 +593,7 @@ impl EmbeddedDaemon {
             inference_provider: RwLock::new(provider),
             join_key_plaintext: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
+            published_apps: commonwealth_media::PublishedApps::default(),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
         })
@@ -614,6 +623,20 @@ impl EmbeddedDaemon {
         // root is attached through the one field written after construction.
         *daemon._scratch.lock().unwrap_or_else(|e| e.into_inner()) = Some(scratch);
         daemon
+    }
+
+    /// The live registry of what this node publishes as named HTTP apps —
+    /// `[iroh.apps]` plus every claim a running `svrn run` holds. The
+    /// acceptor resolves member dials against this one; the loopback publish
+    /// routes take and release claims in it.
+    pub fn published_apps(&self) -> &commonwealth_media::PublishedApps {
+        &self.published_apps
+    }
+
+    /// This node's `[iroh] media_origin` as configured, for the surface that
+    /// answers "what am I offering the house" in one call.
+    pub async fn configured_media_origin(&self) -> Option<String> {
+        self.setup_config.read().await.iroh.media_origin.clone()
     }
 
     /// What this daemon is and what its host gave it. Read by
@@ -4148,11 +4171,11 @@ impl EmbeddedDaemon {
         // apps down with it, and must not read as "not published" in silence.
         let apps: crate::iroh_access::AppRoutes = {
             let cfg = self.setup_config.read().await;
-            let mut apps = std::collections::BTreeMap::new();
+            let mut config_apps = std::collections::BTreeMap::new();
             for (name, target) in &cfg.iroh.apps {
                 match target.parse::<SocketAddr>() {
                     Ok(addr) => {
-                        apps.insert(name.clone(), addr);
+                        config_apps.insert(name.clone(), addr);
                     }
                     Err(e) => tracing::warn!(
                         target: "transport",
@@ -4164,8 +4187,12 @@ impl EmbeddedDaemon {
                     ),
                 }
             }
+            // Seed the DAEMON's registry rather than building a second one:
+            // the publish routes hand out claims in this same registry while
+            // the acceptor below resolves dials against it.
+            self.published_apps.set_config(config_apps);
             crate::iroh_access::AppRoutes {
-                apps,
+                apps: self.published_apps.clone(),
                 allow: cfg.iroh.app_allow.clone(),
             }
         };

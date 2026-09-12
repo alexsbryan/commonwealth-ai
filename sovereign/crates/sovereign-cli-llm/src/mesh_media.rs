@@ -14,7 +14,7 @@ use crate::mesh_cmd::daemon_client_port;
 
 pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("fanout") {
-        return cmd_media_fanout(&args[1..]).await;
+        return cmd_fanout(None, &args[1..]).await;
     }
     if args.first().map(String::as_str) == Some("declare") {
         return cmd_media_declare(&args[1..]);
@@ -251,16 +251,50 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
 /// `svrn mesh media fanout <path>` — the same request to every member that
 /// offers a media origin, one attributed row each. The catalogue half of
 /// federated media; a title is still played through the per-member URL.
-async fn cmd_media_fanout(args: &[String]) -> i32 {
+/// `svrn mesh media fanout <path>` and `svrn mesh app fanout <app> <path>` —
+/// one client for both, because they are one route with one row shape. The
+/// only difference the caller sees is whether an app is named, and the only
+/// difference on the wire is a `kind` field.
+pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
+    let verb = match app {
+        Some(_) => "mesh app fanout",
+        None => "mesh media fanout",
+    };
     if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
-        eprintln!("Usage: svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
+        match app {
+            Some(_) => eprintln!("Usage: svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]"),
+            None => eprintln!("Usage: svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]"),
+        }
         eprintln!();
-        eprintln!("Ask every member that offers a media origin the same request — <path> is");
-        eprintln!("origin-relative, e.g. /System/Info/Public or '/Items?Recursive=true' — through");
-        eprintln!("each member's own mesh bridge, concurrently, and print one row per member:");
-        eprintln!("what its origin answered, or why it was not asked. Bodies are capped (4 MiB)");
-        eprintln!("and never merged: item semantics are the origin's. Play a title through");
-        eprintln!("`svrn mesh media <peer>`.");
+        match app {
+            Some(_) => {
+                eprintln!(
+                    "Ask every member publishing <app> the same request — <path> is relative to"
+                );
+                eprintln!("the APP, e.g. /tasks — through each member's own mesh bridge,");
+                eprintln!(
+                    "concurrently, and print one row per member: what its app answered, or why"
+                );
+                eprintln!("it was not asked. Your verified identity rides on every one of those");
+                eprintln!("requests, so the app knows who is asking without a login.");
+            }
+            None => {
+                eprintln!(
+                    "Ask every member that offers a media origin the same request — <path> is"
+                );
+                eprintln!("origin-relative, e.g. /System/Info/Public or '/Items?Recursive=true' — through");
+                eprintln!(
+                    "each member's own mesh bridge, concurrently, and print one row per member:"
+                );
+                eprintln!(
+                    "what its origin answered, or why it was not asked. Bodies are capped (4 MiB)"
+                );
+                eprintln!(
+                    "and never merged: item semantics are the origin's. Play a title through"
+                );
+                eprintln!("`svrn mesh media <peer>`.");
+            }
+        }
         eprintln!();
         eprintln!("Flags:");
         eprintln!("  --peers a,b     Only these members (name or ≥4-char id prefix). A member the");
@@ -308,11 +342,16 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
         i += 1;
     }
     let Some(path) = path else {
-        eprintln!("Which path? `svrn mesh media fanout /System/Info/Public`");
+        match app {
+            Some(a) => eprintln!("Which path? `svrn mesh app fanout {a} /`"),
+            None => eprintln!("Which path? `svrn mesh media fanout /System/Info/Public`"),
+        }
         return 1;
     };
     let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/media/fanout");
+    // The generic route. `svrn mesh media fanout` reaches the same handler
+    // with `kind` left out, so the two verbs cannot drift.
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/fanout");
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
@@ -324,6 +363,10 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
         }
     };
     let mut body = serde_json::json!({ "path": path });
+    if let Some(a) = app {
+        body["kind"] = serde_json::json!("app");
+        body["app"] = serde_json::json!(a);
+    }
     if let Some(p) = &peers {
         body["peers"] = serde_json::json!(p);
     }
@@ -336,7 +379,7 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
     let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh media fanout: daemon at {url} not reachable: {e}");
+            eprintln!("{verb}: daemon at {url} not reachable: {e}");
             eprintln!("The bridges live in the running daemon — `svrn daemon start`.");
             return 1;
         }
@@ -346,14 +389,8 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
     if !status.is_success() {
         eprint!(
             "{}",
-            crate::mesh_skew::render_failure(
-                &client,
-                port,
-                "POST /v1/mesh/media/fanout",
-                status,
-                text
-            )
-            .await
+            crate::mesh_skew::render_failure(&client, port, "POST /v1/mesh/fanout", status, text)
+                .await
         );
         return 1;
     }
@@ -364,7 +401,7 @@ async fn cmd_media_fanout(args: &[String]) -> i32 {
     let doc: serde_json::Value = match serde_json::from_str(&text) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("mesh media fanout: response shape mismatch ({e}): {text}");
+            eprintln!("{verb}: response shape mismatch ({e}): {text}");
             return 1;
         }
     };

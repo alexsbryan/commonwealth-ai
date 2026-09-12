@@ -77,14 +77,14 @@ asserts = 10
 requirement = "GR-35"
 test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool"
 file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 380
+line = 325
 asserts = 2
 
 [[claim]]
 requirement = "GR-36"
 test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio"
 file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 308
+line = 253
 asserts = 5
 
 [[claim]]

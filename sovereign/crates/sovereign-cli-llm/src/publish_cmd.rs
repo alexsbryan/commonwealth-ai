@@ -44,7 +44,7 @@ pub async fn run(args: &[String]) -> i32 {
             help();
             0
         }
-        None => list(),
+        None => list().await,
         _ => publish(args),
     }
 }
@@ -210,6 +210,12 @@ fn help() {
     eprintln!("  svrn publish chores 5000     publish, durably");
     eprintln!("  svrn unpublish chores        stop");
     eprintln!();
+    eprintln!("This verb is the DURABLE tier: it writes the entry into config, which is");
+    eprintln!("right for something always up and owned. For an app you are only running");
+    eprintln!("now, `svrn run --as chores -- python app.py` publishes it while it runs and");
+    eprintln!("leaves nothing behind — no config line to forget, and no `connection");
+    eprintln!("refused` row in the house's fan-out six months from now.");
+    eprintln!();
     eprintln!("A name is letters, digits, `_` and `-`. Housemates reach it at");
     eprintln!("`svrn mesh app <you> <name>`; their requests arrive at your app with the");
     eprintln!("name stripped from the path, so your app serves `/tasks`, not");
@@ -220,7 +226,16 @@ fn help() {
     eprintln!("to the house does not open your film library.");
 }
 
-fn list() -> i32 {
+/// "What am I publishing" — asked of the DAEMON, which is the only thing that
+/// knows.
+///
+/// Config alone cannot answer it any more. A `svrn run` claim is published
+/// and is in no file, so a config-only listing would say "nothing" while
+/// housemates are reading your chore app — an absence reported as a fact
+/// (ARCH principle 6). When the daemon is not up there is nothing running to
+/// publish a claim either, so the config listing is then the whole truth, and
+/// the header says which of the two answers you are looking at.
+async fn list() -> i32 {
     let cfg = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
@@ -228,10 +243,33 @@ fn list() -> i32 {
             return 1;
         }
     };
-    if cfg.iroh.apps.is_empty() && cfg.iroh.media_origin.is_none() {
+    let live = live_listing().await;
+    let apps: Vec<(String, String, String)> = match &live {
+        Some(rows) => rows
+            .iter()
+            .map(|a| {
+                let tier = match a.tier {
+                    commonwealth_media::Tier::Config => "config".to_string(),
+                    commonwealth_media::Tier::Claimed => match a.expires_in_secs {
+                        Some(s) => format!("running, {}s left", s),
+                        None => "running".to_string(),
+                    },
+                };
+                (a.name.clone(), a.addr.to_string(), tier)
+            })
+            .collect(),
+        None => cfg
+            .iroh
+            .apps
+            .iter()
+            .map(|(n, t)| (n.clone(), t.clone(), "config".to_string()))
+            .collect(),
+    };
+    if apps.is_empty() && cfg.iroh.media_origin.is_none() {
         println!("This node publishes nothing.");
         println!();
-        println!("  svrn publish chores 5000     put a localhost port in front of the house");
+        println!("  svrn run --as chores -- python app.py   while it runs");
+        println!("  svrn publish chores 5000               durably");
         return 0;
     }
     if let Some(origin) = &cfg.iroh.media_origin {
@@ -239,10 +277,15 @@ fn list() -> i32 {
         println!("  {origin}");
         println!();
     }
-    if !cfg.iroh.apps.is_empty() {
+    if !apps.is_empty() {
         println!("Apps (reached with `svrn mesh app <you> <name>`):");
-        for (name, target) in &cfg.iroh.apps {
-            println!("  {name:<16} {target}");
+        for (name, target, tier) in &apps {
+            println!("  {name:<16} {target:<22} {tier}");
+        }
+        if live.is_none() {
+            println!();
+            println!("  (from config — the daemon is not up, so nothing is published yet");
+            println!("   and a `svrn run` claim would not appear here)");
         }
         println!();
     }
@@ -258,6 +301,24 @@ fn list() -> i32 {
     0
 }
 
+/// The daemon's own answer, or `None` when it is not reachable. Never an
+/// empty list on a failure: "the daemon did not answer" and "the daemon
+/// publishes nothing" are different facts.
+async fn live_listing() -> Option<Vec<commonwealth_media::PublishedApp>> {
+    let port = crate::mesh_cmd::daemon_client_port();
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/publish");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let doc: serde_json::Value = resp.json().await.ok()?;
+    serde_json::from_value(doc.get("apps")?.clone()).ok()
+}
+
 fn publish(args: &[String]) -> i32 {
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
     let (Some(name), Some(port)) = (positional.first(), positional.get(1)) else {
@@ -269,11 +330,9 @@ fn publish(args: &[String]) -> i32 {
     // refused when it is typed rather than silently never matching a request
     // later (`split_app_name` cannot produce a name outside this set, so an
     // entry outside it is unreachable config — the worst kind).
-    if name.is_empty()
-        || !name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
+    // The same rule, from the module that enforces it at the wire boundary —
+    // not a third transcription of the character table (ARCH principle 8).
+    if !commonwealth_media::valid_app_name(name.as_bytes()) {
         eprintln!(
             "publish: {name:?} is not a usable app name — letters, digits, `_` and `-` only."
         );

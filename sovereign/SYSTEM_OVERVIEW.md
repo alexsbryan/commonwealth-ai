@@ -5680,6 +5680,7 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 | `cwth/client/0` | the PEER listener (no bearer — peer federated inference carries none, and its key is the credential), which serves the client router **minus `/internal/*`**. Closed outright if that listener did not bind | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
 | `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
+| `cwth/app/0` | one of SEVERAL named HTTP apps this node publishes, chosen by the FIRST PATH SEGMENT per request (`GET /chores/tasks` → the `chores` origin, forwarded as `GET /tasks`); its own allow-list (`[iroh] app_allow`), separate from media's; advertised only while something is published, and added to and removed from the live endpoint as that changes | REFUSED — an app written in an afternoon authenticates nothing |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
 
@@ -5787,14 +5788,28 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 (verdict collapsed to failed); the extraction's guard is the unchanged
 `knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
 
-**Federated media, the catalogue half**
+**The catalogue half, over any origin kind**
 (`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
-`sovereign-mesh/src/media_fanout.rs`, `POST /v1/mesh/media/fanout`,
-`svrn mesh media fanout <path>`, 2026-09-11).
+`sovereign-mesh/src/origin_fanout.rs`, `POST /v1/mesh/fanout`,
+`svrn mesh media fanout <path>` and `svrn mesh app fanout <app> <path>`,
+2026-09-11; generalised 2026-09-12).
+It never was media-shaped — the selection already read `origins.contains(kind)`
+and the ask was already an arbitrary method/path/headers/body; what was
+media-specific were two hardcoded `OriginKind::Media`. Both are the request's
+`kind` now, `/v1/mesh/media/fanout` is the same handler with that field
+absent, and `class_of(kind)` is the one kind→`TrafficClass` map (it had
+already been copied once). For an app the wire path is composed in
+`OriginRequest::from_request` — `/{app}` prefixed, one place that knows the
+convention — and the two mismatched pairs (`kind: app` with no name, an `app`
+name under `kind: media`) are refused rather than resolved, since the second
+would quietly ask Jellyfin instead. A row also carries `json`, the origin's
+body already parsed when it said JSON and was not cut at the cap, because
+every consumer's first line was `json.loads(row["body"])`; `body` stays the
+authority and a truncated body is never parsed.
 The same origin-relative request to every member that offers a media origin,
 each through its own bridge (the URL `svrn mesh media <peer>` prints, so the
 holder's identity headers ride along), concurrently under a per-member cap,
-returned as one document: `asked` and one `PeerRow<MediaAnswer>` per target —
+returned as one document: `asked` and one `PeerRow<OriginAnswer>` per target —
 status, content type, body (lossy text, cut at 4 MiB with `truncated` set),
 bytes, elapsed — or `failed` / `never_asked` with the reason. `peers` names
 members exactly as the verb resolves them, and a name the roster refuses is
@@ -5809,6 +5824,48 @@ inference daemon and the rails daemon fan out with one implementation
 `commonwealth-media fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
 (refused names filtered out) and
 `an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
+
+**Named apps, and the claim that cannot outlive its process**
+(`commonwealth/crates/commonwealth-media/src/apps.rs`,
+`sovereign-mesh/src/publish_http.rs`, `sovereign-cli-llm/src/run_cmd.rs`,
+2026-09-12). `OriginKind::App` is one closed-set variant on one ALPN with one
+acceptor route; WHICH app is a registry lookup, because app names are open
+data a housemate adds at 1am without recompiling anything (ARCH §9). Two
+tiers, and the default is the one with a TTL:
+
+    svrn run --as chores -- python app.py   # a claim, held while it runs
+    svrn publish chores 5000                # `[iroh.apps]`, durable
+
+`PublishedApps` is the one registry both tiers land in, and the acceptor
+resolves every `cwth/app/0` dial against it live — a snapshot taken at boot
+would have made every ephemeral publish wait for a daemon restart. A claim is
+minted by `POST /v1/mesh/publish` (loopback only, `{name, port, ttl_secs}`),
+renewed at a third of its TTL capped at 30s by the runner that holds it, and
+released on exit; the TTL is the backstop for a runner killed outright, not
+the mechanism. A name any tier already holds is REFUSED rather than shadowed,
+because with two entries for one name which origin answers is a fact about map
+iteration order and the loser is a process that believes it is published. The
+claim id is not a credential and is not treated as one: every route that takes
+one is loopback-only, and a local process able to present one could have taken
+the claim itself.
+
+Two things follow the registry rather than being decided once at boot, and
+both had to: `Endpoint::set_alpns` adds and removes `APP_ALPN` on the live
+endpoint as the registry fills and empties (iroh applies it to new incoming
+connections, which is the right grain — a dial in flight keeps what it
+negotiated), and the gossip self-stamp reads `is_serving()` per stamp so
+`origins: [app]` is never a claim about an app that stopped an hour ago.
+A rails node publishes through the SAME loopback routes and deliberately grows
+no `[apps]` config table: `Config` and `MediaSection` are
+`deny_unknown_fields`, so one would make an un-upgraded rails daemon refuse to
+boot on a config a newer one wrote — the hazard is absent rather than handled,
+the same move `commonwealth_media::declared` makes with filename-as-key.
+Watched failing:
+`iroh_dialer_admission_e2e::an_app_claimed_at_runtime_becomes_reachable_and_stops_when_released`
+binds an endpoint WITHOUT `APP_ALPN` and asserts both ends — unreachable
+before the claim, unreachable again after the release — so a regression to
+boot-time protocol selection fails rather than passing on a test that had
+advertised it all along; and `apps::tests::a_claim_nobody_released_is_gone_when_its_ttl_passes`.
 
 **The minimal rails daemon** (`commonwealth/crates/commonwealth-rails`, the
 `cw-rails` binary, `scripts/cw-rails-lift.sh --sandbox`, 2026-09-11).

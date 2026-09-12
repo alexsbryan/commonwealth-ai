@@ -93,6 +93,7 @@ mod pipeline_cmd;
 mod portfolio_cmd;
 mod proxy_cmd;
 pub mod publish_cmd;
+pub mod run_cmd;
 mod quality_lane_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
@@ -151,6 +152,9 @@ async fn async_main() {
         ),
         // `publish` only reads and rewrites config; it dials nothing.
         "publish" | "unpublish" => init_tracing("sovereign_cli_llm=info"),
+        // `run` supervises a child and talks to the local daemon over
+        // loopback; its own reporting is on stderr, so info is the floor.
+        "run" => init_tracing("sovereign_cli_llm=info"),
         "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
         "voice" | "search-gym" | "knowledge-gym" => init_tracing("sovereign_cli_llm=info"),
@@ -224,6 +228,7 @@ async fn async_main() {
         "mesh" => mesh_cmd::run_mesh(rest).await,
         "publish" => publish_cmd::run(rest).await,
         "unpublish" => publish_cmd::run_unpublish(rest).await,
+        "run" => run_cmd::run(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
         // One lane of `svrn quality check`. The runner lives in

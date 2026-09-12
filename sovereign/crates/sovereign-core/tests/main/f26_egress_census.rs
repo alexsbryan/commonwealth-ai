@@ -246,7 +246,25 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // a spawned admin router on loopback, so the class is unchanged and no
     // new egress appears. Counted from a WORKING TREE another session had
     // not yet committed — if those tests do not land, this goes back to 8.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 10),
+    //
+    // 10 -> 13 (2026-09-12, recorded by svt-6 and NOT svt-6's change). The
+    // prediction above resolved the other way: the tests landed and three
+    // more came with them. NOT this order's work, and checked rather than
+    // assumed — `admin_http.rs` counts 13 at `c290f6772`, the parent of
+    // svt-6's first commit, and the file is untouched in svt-6's working
+    // tree. The registry row simply had not been re-run since.
+    //
+    // Classified on the sites themselves. `#[cfg(test)] mod tests` opens at
+    // admin_http.rs:351, and all thirteen constructions are below it
+    // (611..1204): three `GET /v1/admin/chat-activity` (:771, :810, :847 —
+    // the window-parameter cases), six `POST /v1/admin/reload` (:874, :912,
+    // :966, :1028, :1080, :1113, one of them dialing an explicit
+    // `http://{addr}` at :1172), and the two `/v1/admin/context-window`
+    // reads above. Every destination is a router this test spawned on
+    // loopback in the same process. `Class::Mesh` is unchanged and correct:
+    // no third-party host is dialed, and no estate content crosses a
+    // boundary — there is no boundary to cross.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 13),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
@@ -326,7 +344,23 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // job-submission clients of the daemon's /internal/workflows/* — this
     // file's site is the Local Knowledge panel's watch-route client, one
     // more construction for the same loopback surface. Class unchanged.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 8),
+    //
+    // 8 -> 7 (2026-09-12, landed at ed959fe29, recorded by svt-6). A
+    // REMOVAL, which is the direction this census almost never moves: the
+    // correction-ledger write that `lc_reenrich_note` performed against its
+    // own `sovereign.db` became a field on the daemon's
+    // `enrich/reenrich-note` body at sv-surface svt-3, and the client it
+    // built went with it. Verified rather than attributed — the count is 7
+    // at `ed959fe29` and 8 at its parent `5cc5c84c7`, and svt-6's own
+    // commits leave it at 7.
+    //
+    // The seven that remain are all this class and all loopback: the
+    // one-shot `enrich-once` handoff (:295/:298 and :564), the OCR
+    // extraction client (:610/:613), the watch-route client (:645) and the
+    // sweep client (:740). Every destination is `127.0.0.1:<internal_port>`
+    // on this machine's own daemon; nothing here reaches a third party, and
+    // the desktop no longer holds an engine that could.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs", Class::LocalDaemon, 7),
     // NEW (2026-09-09, sv-surface rung 5): workflow_commands.rs's http_client()
     // — the Run-a-workflow surface now POSTs the job to the daemon and polls
     // its events (the in-process runner is deleted; the daemon executes).
@@ -422,6 +456,20 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
+    // mesh_app.rs (2026-09-12): the viewer half of published apps — asks the
+    // local daemon who publishes, then probes ONE app through the loopback
+    // bridge the daemon minted. Same shape and same class as mesh_media's
+    // probe: the bytes ride the estate's own transport to a Commonwealth
+    // node, and the request carries no estate content.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_app.rs", Class::Mesh, 1),
+    // run_cmd.rs (2026-09-12): `svrn run` takes, renews and releases a
+    // publish claim against `127.0.0.1:<client_port>/v1/mesh/publish`. Never
+    // leaves the machine — the daemon is what reaches anybody.
+    ("sovereign/crates/sovereign-cli-llm/src/run_cmd.rs", Class::LocalDaemon, 1),
+    // publish_cmd.rs (2026-09-12): bare `svrn publish` asks the daemon what is
+    // published, because a claim taken by a running `svrn run` is in no file.
+    // Loopback only; the config half of the verb dials nothing at all.
+    ("sovereign/crates/sovereign-cli-llm/src/publish_cmd.rs", Class::LocalDaemon, 1),
     // mesh_skew.rs (2026-09-12, hm-3): explains a mesh route's 404 by asking
     // the daemon which build it is. It CONSTRUCTS no client in production —
     // the caller hands it the one it already built — so all three sites are
@@ -744,7 +792,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // differently. One client per fan-out, driven through each member's
     // loopback bridge to that member's media origin over the estate's own
     // transport; the second site is the unit test's local origin.
-    ("commonwealth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 2),
+    // 2 -> 4 (2026-09-12): the two new `#[cfg(test)]` origins that prove the
+    // row's `json` field — one JSON answer parsed, one truncated answer
+    // deliberately not. Test fixtures in an inline module, same as
+    // `mesh_skew.rs`'s three; the production sites are still the two above.
+    ("commonwealth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 4),
 
     // ---- commonwealth-rails: the package-only rails daemon (2026-09-11) ----
     // Every destination is a peer of the operator's own mesh, reached through

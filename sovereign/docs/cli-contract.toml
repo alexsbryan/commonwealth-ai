@@ -273,6 +273,34 @@ flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" },
 args = ["mesh", "media", "fanout", "--help"]
 expect_exit = 0
 [[command]]
+# `svrn mesh app` — the viewer half of published apps: who publishes, the base
+# URL that reaches one member's apps, and one app's own URL. `--help` only for
+# the reason `mesh media` is: the verb exists for a SECOND node, and its
+# refusals go to stderr where a journey `expect` block cannot read them.
+# Proven by `iroh_dialer_admission_e2e` (a member reaches an app by name, a
+# stranger's APP_ALPN dial dies) and `media_reach::tests`.
+path = "mesh app"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--json" }, { name = "--no-probe" }]
+[command.smoke]
+args = ["mesh", "app", "--help"]
+expect_exit = 0
+[[command]]
+# The catalogue half over APPS rather than media origins: the same request to
+# every member publishing an app of that name. One route underneath
+# (`POST /v1/mesh/fanout`, kind = app), so the media form and this one cannot
+# disagree about what a row means. Proven by `fanout::tests`.
+path = "mesh app fanout"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--peers" }, { name = "--method" }, { name = "--timeout-ms" }, { name = "--json" }]
+[command.smoke]
+args = ["mesh", "app", "fanout", "--help"]
+expect_exit = 0
+[[command]]
 path = "mesh balance"
 binary = "llm"
 visibility = "public"
@@ -327,6 +355,37 @@ binary = "llm"
 visibility = "public"
 
 # corpus — knowledge bases.
+[[command]]
+# `svrn publish` — the DURABLE tier: put a localhost port in front of the
+# house by name, written to `[iroh.apps]` as a TOML document (comments and
+# unset defaults survive; the verb re-parses what it wrote and restores the
+# original if it will not load). Bare `svrn publish` lists what this node
+# publishes. Offline: it edits config and dials nothing.
+path = "publish"
+binary = "llm"
+visibility = "public"
+[[command]]
+# The other half of `publish`, its own verb so it reads as an action rather
+# than a flag. NOT a dev verb: gating it would let a housemate publish and
+# not unpublish (it sat in DEV_VERBS from 2026-09-12 until this row).
+path = "unpublish"
+binary = "llm"
+visibility = "public"
+[[command]]
+# `svrn run --as chores -- python app.py` — the EPHEMERAL tier. Runs a local
+# command and holds a TTL'd claim on the name while it lives, so a published
+# app cannot outlive the process serving it. Offline probe: `--help`; the
+# claim path needs a daemon and a child process, and is proven by
+# `run_cmd::tests` plus the registry's own TTL tests in
+# `commonwealth_media::apps`.
+path = "run"
+binary = "llm"
+visibility = "public"
+flags = [
+  { name = "--as", takes_value = true },
+  { name = "--port", takes_value = true },
+  { name = "--ttl", takes_value = true },
+]
 [[command]]
 path = "corpus list"
 binary = "llm"
@@ -1500,6 +1559,12 @@ id = "mesh-federation"
 title = "Join two machines into one pool of models and corpora"
 doc = "docs/TWO_NODE_QUICKSTART.md"
 capabilities = ["mesh create", "mesh status", "mesh plan"]
+
+[[experience]]
+id = "house-apps"
+title = "Put a port on your machine in front of the house, and reach everyone else's"
+doc = "docs/PUBLISH_AN_APP.md"
+capabilities = ["run", "publish", "unpublish", "mesh app"]
 
 [[experience]]
 id = "tool-interop"
@@ -3389,6 +3454,69 @@ mutates = true
 run = "govern ask {question}"
 [journey.step.expect]
 stdout_non_empty = true
+
+[[journey]]
+id = "publish-an-app"
+title = "Publish a local port to the house under a name, and stop publishing it"
+persona = "operator"
+experience = "house-apps"
+tier = 2
+visibility = "public"
+doc = "docs/PUBLISH_AN_APP.md"
+[[journey.step]]
+run = "run --help"
+note = """`svrn run` itself cannot be a live step: it SUPERVISES a child until
+that child exits, so a step that drives it either blocks the lane or drives a
+command that exits immediately and therefore publishes nothing. The verb's
+behaviour is proven where it can be — `run_cmd::tests` (a dead port is never
+published, across the first attempt and every retry; the flags parse; the
+command after `--` is verbatim) and `commonwealth_media::apps` (the claim's TTL
+and the collision refusal). What this step proves is the half those cannot: the
+verb is DISPATCHED, by the shipped binary, and answers on stdout. It asserted
+nothing until stdout carried the help — `--help` printed to stderr, where a
+journey cannot read it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "publish it to the house for as long as it runs"
+[[journey.step]]
+run = "publish"
+note = """The read side, and the one that needs no daemon: bare `publish` asks
+the daemon what is published and falls back to config when it is not up. Both
+answers are non-empty and say which they are, so this cannot pass on silence."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "publish journeyapp 51999"
+mutates = true
+note = """Writes `[iroh.apps]` as a TOML document. Safe to run against a real
+config by construction — it re-parses what it wrote and restores the original
+if the result will not load — and the last step removes it again, so the lane
+leaves the host as it found it. The assertion is the confirmation line, not the
+exit code: the verb returns 0 on `already published` too, and that is a
+different fact."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Published journeyapp on 127.0.0.1:51999."
+[[journey.step]]
+run = "mesh app"
+note = """The viewer half, from gossip alone — nothing is dialed. On a one-node
+mesh this lists nobody, which is still an answer and still non-empty; the
+two-node case is `iroh_dialer_admission_e2e`, which drives a real dial by key
+because a journey on one host cannot."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "unpublish journeyapp"
+mutates = true
+note = """Closes the loop the previous step opened. Asserts the removal line
+rather than the exit code because `unpublish` on a name that is not published
+exits 1 — so a green here means the entry genuinely existed and is genuinely
+gone, which is what makes step [2] a result rather than a claim."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Unpublished journeyapp."
 
 [[journey]]
 id = "pipeline-pods"

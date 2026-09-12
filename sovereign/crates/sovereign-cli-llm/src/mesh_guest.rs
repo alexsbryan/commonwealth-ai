@@ -69,7 +69,11 @@ fn bind_is_loopback(bind: &str) -> bool {
 ///
 /// Bare digits mean SECONDS, matching the `ttl_secs` field on the wire — one
 /// unit, so a `--ttl 30` cannot mean minutes here and seconds there.
-fn parse_ttl(raw: &str) -> Result<u64, String> {
+///
+/// Shared with `svrn run`'s `--ttl` (`crate::run_cmd`) rather than copied:
+/// two spellings of one duration syntax is the smell principle 8 names, and
+/// the flag is spelled the same on both verbs.
+pub(crate) fn parse_ttl(raw: &str) -> Result<u64, String> {
     let s = raw.trim();
     let (digits, mult) = if let Some(d) = s.strip_suffix('s') {
         (d, 1)
@@ -94,7 +98,7 @@ fn parse_ttl(raw: &str) -> Result<u64, String> {
 }
 
 /// Render a seconds count the way an operator reads a window.
-fn human_duration(secs: u64) -> String {
+pub(crate) fn human_duration(secs: u64) -> String {
     if secs >= 86_400 {
         format!("{}d{}h", secs / 86_400, (secs % 86_400) / 3_600)
     } else if secs >= 3_600 {

@@ -51,6 +51,19 @@ svrn model context 16384             # set the context window, or `auto`
 
 A `<file>` is an absolute path or a bare filename resolved against `~/.svrnmesh/models`. The full slot surface (`unset`, named extras) is in the [command reference](docs/CLI_REFERENCE.md#svrn-model).
 
+## Apps on the mesh
+
+A port on your machine can be a service for the whole group, reached by mesh key with no port forwarded, no VPN and no reverse proxy. Requests arrive carrying the caller's verified identity in `X-Mesh-Member`, so the app never writes a login page:
+
+```sh
+svrn run --as chores -- python app.py   # published while it runs, gone when it stops
+svrn publish jellyfin 8096              # the durable form, for something always up
+svrn unpublish jellyfin                 # stop
+svrn mesh app                           # who else is publishing what
+```
+
+`run` is the default and the one to reach for: the registration is a claim held by the process, so nothing is left behind when it exits. Details in the [command reference](docs/CLI_REFERENCE.md#svrn-run).
+
 ## cmnwlth
 
 Setup leaves you on a private mesh of one. To bring in company, share its key — read it with `svrn mesh status` — and a friend runs `svrn mesh join <key>`. Your machines answer as one endpoint: enough to run a model neither of you could alone, or to share a knowledge base. No central server; nothing leaves the group. [Join a mesh](../docs/JOIN_A_MESH.md) is the mechanics; [run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md) is the payoff.

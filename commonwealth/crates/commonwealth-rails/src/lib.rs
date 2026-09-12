@@ -136,9 +136,12 @@ impl RailsNode {
             .map_err(|e| identity::StoreRefusal::DataDir(data_dir.clone(), e))?;
         let key = commonwealth_transport::identity::load_or_generate_node_key(&data_dir);
         let self_id = identity::load_or_generate_node_id(&data_dir)?;
-        // Both ALPNs on one endpoint: `cwth/http/0` carries join and gossip,
-        // `cwth/media/0` carries a member's player. The acceptor routes by
-        // ALPN *and* by who dialed — see `acceptor`.
+        // Two ALPNs at bind: `cwth/http/0` carries join and gossip,
+        // `cwth/media/0` carries a member's player. `cwth/app/0` is the third
+        // and is NOT here, because whether this node serves it changes while
+        // the daemon runs — the acceptor adds and removes it as the app
+        // registry fills and empties. The acceptor routes by ALPN *and* by
+        // who dialed — see `acceptor`.
         let endpoint = build_relayed_endpoint(
             SecretKey::from_bytes(&key.to_bytes()),
             vec![ALPN.to_vec(), MEDIA_ALPN.to_vec()],
@@ -182,6 +185,11 @@ pub struct RailsDaemon {
     pub contacts: Arc<Mutex<HashMap<NodeId, u64>>>,
     /// In-flight media fan-outs, reported by `/v1/mesh/status`.
     pub gauge: InflightGauge,
+    /// What this node publishes as named HTTP apps. Claims only — a rails
+    /// node has no `[iroh.apps]` equivalent and deliberately does not grow
+    /// one (see `acceptor`), so everything here arrived through the loopback
+    /// publish API and goes away with the process that took it.
+    pub published_apps: commonwealth_media::PublishedApps,
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
@@ -205,6 +213,7 @@ impl RailsDaemon {
         )
         .await?;
 
+        let published_apps = commonwealth_media::PublishedApps::default();
         let acceptor = acceptor::spawn(
             node.endpoint.clone(),
             internal_addr,
@@ -216,6 +225,7 @@ impl RailsDaemon {
             // so a new key there would make an UN-upgraded daemon refuse to
             // boot rather than ignore it -- see `commonwealth_media::declared`.
             commonwealth_media::read_declared_in(&commonwealth_media::dir_under(&node.data_dir)),
+            published_apps.clone(),
         );
 
         Ok(Self {
@@ -224,6 +234,7 @@ impl RailsDaemon {
             transport,
             contacts,
             gauge: Arc::new(AtomicUsize::new(0)),
+            published_apps,
             internal_addr,
             _internal: internal,
             _acceptor: acceptor,

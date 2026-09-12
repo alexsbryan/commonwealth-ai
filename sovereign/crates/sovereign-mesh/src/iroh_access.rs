@@ -80,12 +80,21 @@ pub fn iroh_routed_classes(
             }
         }
     }
-    // `Media` has no `[iroh.transport]` entry, on purpose: the other seven
-    // choose between two transports, and this one has only one. The holder's
-    // origin is loopback-bound and admitted by mesh key, so `= "ip"` would
-    // pin the class to a transport that returns no candidates for it — a
-    // config line that silently turns the feature off. Always routed.
+    // `Media` and `App` have no `[iroh.transport]` entry, on purpose: the
+    // other seven choose between two transports, and these two have only one.
+    // The holder's origin is loopback-bound and admitted by mesh key, so
+    // `= "ip"` would pin the class to a transport that returns no candidates
+    // for it — a config line that silently turns the feature off. Always
+    // routed.
+    //
+    // `App` was in `TrafficClass::ALL` from 2026-09-12 and missing HERE, so
+    // on any node that had not set `require_encryption` (which routes
+    // everything) an app dial fell through to the IP transport and
+    // `svrn mesh app <peer>` could only refuse. Four tests in this module
+    // asserted `== TrafficClass::ALL` and were red for the whole day in
+    // between; they were naming this, not a stale expectation.
     out.push(TrafficClass::Media);
+    out.push(TrafficClass::App);
     out
 }
 
@@ -280,12 +289,13 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
     /// the fact the gossip self-stamp advertises as `origins: [media]`.
     media_route_active: bool,
-    /// Whether this acceptor routes [`APP_ALPN`] to at least one published
-    /// app — advertised as `origins: [app]`. Read from the acceptor's own
-    /// registry rather than from config, for the reason the media flag is:
-    /// a declared app whose endpoint failed to bind is not an offer, and
-    /// `origins` is a fact about what answers.
-    app_route_active: bool,
+    /// The live app registry this acceptor routes [`APP_ALPN`] against —
+    /// held rather than sampled, because whether this node publishes an app
+    /// is advertised as `origins: [app]` in gossip and changes while the
+    /// daemon runs. A boolean captured at boot would have every peer's
+    /// roster claim an app tier the node dropped an hour ago, or miss the one
+    /// it took a minute ago.
+    apps: commonwealth_media::PublishedApps,
 }
 
 /// The four local listeners an accepted iroh connection can be forwarded to.
@@ -329,7 +339,7 @@ pub struct AcceptorRoutes {
     pub apps: AppRoutes,
 }
 
-/// `[iroh.apps]` and `[iroh] app_allow`, carried together.
+/// The live app registry and `[iroh] app_allow`, carried together.
 ///
 /// One struct rather than two more positional parameters on
 /// [`MeshIrohAccess::start`]: `media_allow` and `app_allow` are both
@@ -338,9 +348,13 @@ pub struct AcceptorRoutes {
 /// other's origin. Make it structural rather than remembered (ARCH §10).
 #[derive(Debug, Clone, Default)]
 pub struct AppRoutes {
-    /// Published apps by name, each on loopback. Empty means the protocol is
-    /// not advertised at all, so a dial is closed rather than left hanging.
-    pub apps: std::collections::BTreeMap<String, SocketAddr>,
+    /// What this node publishes RIGHT NOW — `[iroh.apps]` plus every live
+    /// claim taken by a running `svrn run`. A registry rather than the map it
+    /// used to be, because the claimed tier changes while the daemon runs and
+    /// a snapshot taken at boot would make every 1am hack wait for a restart.
+    /// Publishing nothing means the protocol is not advertised at all, so a
+    /// dial is closed rather than left hanging.
+    pub apps: commonwealth_media::PublishedApps,
     /// Which members may reach them, by name or id prefix. Empty admits every
     /// member; a non-member is refused either way. SEPARATE from
     /// `media_allow` on purpose — see `commonwealth_media::admit_app`.
@@ -445,7 +459,7 @@ impl AcceptorRoutes {
             return commonwealth_media::admit_app(
                 is_member(dialer).await.as_ref(),
                 dialer,
-                &self.apps.apps,
+                &self.apps.apps.snapshot(),
                 &self.apps.allow,
             );
         }
@@ -516,18 +530,22 @@ impl MeshIrohAccess {
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
         }
-        // Advertised only when there is something behind it, for the same
-        // reason RPC is: a node that negotiates a protocol it cannot forward
-        // turns a closed dial into a hang.
         // Same rule as media and RPC: advertised only when there is something
         // behind it, because a node that negotiates a protocol it cannot
         // forward turns a closed dial into a hang.
-        if !apps.apps.is_empty() {
+        //
+        // Unlike media and RPC, the answer CHANGES while the daemon runs — a
+        // housemate's `svrn run` publishes an app without touching config or
+        // restarting anything. So the ALPN is not decided once here: this is
+        // the boot value, and `on_serving_change` below keeps it true.
+        let base_alpns = alpns.clone();
+        let published = apps.apps.snapshot();
+        if !published.is_empty() {
             alpns.push(APP_ALPN.to_vec());
             tracing::info!(
                 target: "transport",
-                published = apps.apps.len(),
-                names = %apps.apps.keys().cloned().collect::<Vec<_>>().join(", "),
+                published = published.len(),
+                names = %published.keys().cloned().collect::<Vec<_>>().join(", "),
                 "iroh(mesh): serving APP_ALPN to members — each request names its app \
                  by the first path segment, with no port forwarded and no VPN"
             );
@@ -603,6 +621,29 @@ impl MeshIrohAccess {
                 &commonwealth_media::dir_under(data_dir),
             )),
         };
+        // The endpoint's accepted protocols now track the registry. iroh
+        // applies a new set to NEW incoming connections only, which is
+        // exactly the grain wanted: a dial already in flight keeps the
+        // protocol it negotiated.
+        {
+            let endpoint = endpoint.clone();
+            let base_alpns = base_alpns.clone();
+            apps.apps
+                .on_serving_change(std::sync::Arc::new(move |serving| {
+                    let mut set = base_alpns.clone();
+                    if serving {
+                        set.push(APP_ALPN.to_vec());
+                    }
+                    tracing::info!(
+                        target: "transport",
+                        serving_apps = serving,
+                        "iroh(mesh): app publishing changed — \
+                         {} APP_ALPN on the live endpoint",
+                        if serving { "advertising" } else { "withdrawing" }
+                    );
+                    endpoint.set_alpns(set);
+                }));
+        }
         let acceptor =
             IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
                 let is_member = member_check.clone();
@@ -623,7 +664,7 @@ impl MeshIrohAccess {
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
             media_route_active: media_origin.is_some(),
-            app_route_active: !apps.apps.is_empty(),
+            apps: apps.apps.clone(),
         })
     }
 
@@ -655,17 +696,22 @@ impl MeshIrohAccess {
         &self,
     ) -> std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync> {
         let endpoint = self.endpoint.clone();
-        // One kind per live route. Order is Media then App so the gossiped
-        // array is stable across restarts — a set that reorders makes every
-        // roster diff look like a change.
-        let mut origins = Vec::new();
-        if self.media_route_active {
-            origins.push(commonwealth_core::capabilities::OriginKind::Media);
-        }
-        if self.app_route_active {
-            origins.push(commonwealth_core::capabilities::OriginKind::App);
-        }
+        let media_route_active = self.media_route_active;
+        // The app registry itself, not a boolean read off it now: this
+        // closure is called once per gossip stamp, and the whole point of the
+        // claimed tier is that the answer changes between two of them.
+        let apps = self.apps.clone();
         std::sync::Arc::new(move || {
+            // One kind per live route. Order is Media then App so the
+            // gossiped array is stable across restarts — a set that reorders
+            // makes every roster diff look like a change.
+            let mut origins = Vec::new();
+            if media_route_active {
+                origins.push(commonwealth_core::capabilities::OriginKind::Media);
+            }
+            if apps.is_serving() {
+                origins.push(commonwealth_core::capabilities::OriginKind::App);
+            }
             let addr = endpoint.addr();
             // Bind to locals (statements) so the transient `relay_urls`
             // iterator borrow of `addr` drops at the `;`, not at the
@@ -675,7 +721,7 @@ impl MeshIrohAccess {
             commonwealth_core::mesh::IrohDialInfo {
                 relay_url,
                 direct_addrs,
-                origins: origins.clone(),
+                origins,
             }
         })
     }
@@ -794,11 +840,18 @@ mod tests {
         assert_eq!(out.len(), TrafficClass::ALL.len() - 1);
     }
 
-    /// Every configurable class opted out leaves exactly the one that has no
-    /// entry: `Media` has one transport, so there is nothing to opt it out
-    /// TO. (Until 2026-09-11 this asserted `is_empty()` over seven classes.)
+    /// Every configurable class opted out leaves exactly the two that have no
+    /// entry: `Media` and `App` have one transport each, so there is nothing
+    /// to opt them out TO. (Until 2026-09-11 this asserted `is_empty()` over
+    /// seven classes; `App` joined `Media` on 2026-09-12.)
+    ///
+    /// This is the failing input for the hole the four `== ALL` tests above
+    /// were red on: `App` in `TrafficClass::ALL` but not in the routed list
+    /// sends every app dial to the IP transport, which has no candidates for
+    /// it, so `svrn mesh app <peer>` refuses on a node that is serving apps
+    /// perfectly well.
     #[test]
-    fn opting_every_class_out_still_routes_media() {
+    fn opting_every_class_out_still_routes_the_two_origin_classes() {
         let out = iroh_routed_classes(&section(|t| {
             t.gossip = Some("ip".into());
             t.control_plane = Some("ip".into());
@@ -808,7 +861,7 @@ mod tests {
             t.status_probe = Some("ip".into());
             t.rpc_tensor = Some("ip".into());
         }));
-        assert_eq!(out, vec![TrafficClass::Media]);
+        assert_eq!(out, vec![TrafficClass::Media, TrafficClass::App]);
     }
 
     #[test]
@@ -961,9 +1014,9 @@ mod tests {
     async fn the_three_origin_alpns_admit_independently() {
         let nobody = || vec!["SomebodyElse".to_string()];
         let published = || {
-            [("chores".to_string(), addr(5000))]
-                .into_iter()
-                .collect::<std::collections::BTreeMap<_, _>>()
+            commonwealth_media::PublishedApps::with_config(
+                [("chores".to_string(), addr(5000))].into_iter().collect(),
+            )
         };
 
         // Allowed apps, refused media. The member is the SAME key in both.
@@ -1050,7 +1103,9 @@ mod tests {
     async fn a_stranger_is_refused_the_app_alpn_rather_than_downgraded() {
         let r = AcceptorRoutes {
             apps: AppRoutes {
-                apps: [("chores".to_string(), addr(5000))].into_iter().collect(),
+                apps: commonwealth_media::PublishedApps::with_config(
+                    [("chores".to_string(), addr(5000))].into_iter().collect(),
+                ),
                 allow: Vec::new(),
             },
             ..routes()

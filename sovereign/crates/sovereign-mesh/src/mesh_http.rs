@@ -53,9 +53,27 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/app", get(crate::media_reach::mesh_app))
         // The catalogue half: one request to every offering member, one
         // attributed row each (`commonwealth_api::fanout` underneath).
+        // One handler, two paths: `kind` defaults to media, so the older
+        // spelling is the generic body with a field absent rather than a
+        // second implementation that could drift from it.
+        .route("/v1/mesh/fanout", post(crate::origin_fanout::mesh_fanout))
         .route(
             "/v1/mesh/media/fanout",
-            post(crate::media_fanout::mesh_media_fanout),
+            post(crate::origin_fanout::mesh_fanout),
+        )
+        // The publishing half: what THIS node offers the house, and the
+        // claims that keep the ephemeral tier from outliving its process.
+        .route(
+            "/v1/mesh/publish",
+            get(crate::publish_http::publishing).post(crate::publish_http::publish_app),
+        )
+        .route(
+            "/v1/mesh/publish/{claim_id}",
+            axum::routing::delete(crate::publish_http::unpublish_app),
+        )
+        .route(
+            "/v1/mesh/publish/{claim_id}/renew",
+            post(crate::publish_http::renew_app),
         )
         .route(
             "/v1/mesh/measurements",

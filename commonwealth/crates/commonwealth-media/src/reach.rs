@@ -243,6 +243,20 @@ pub fn pick_member(
     Ok(picked)
 }
 
+/// The class chooses the ALPN, so the kind chooses the class.
+///
+/// One map, in one place, rather than an ALPN threaded through every viewer
+/// surface — and rather than the second copy that had already appeared in the
+/// fan-out by the time apps arrived. A kind routed to the wrong class reaches
+/// a real, admitted origin of the wrong sort, which is the failure that does
+/// not look like one (ARCH principle 8).
+pub fn class_of(kind: OriginKind) -> TrafficClass {
+    match kind {
+        OriginKind::Media => TrafficClass::Media,
+        OriginKind::App => TrafficClass::App,
+    }
+}
+
 /// The URL contract: the only transport that may answer the media class
 /// hands back bridges on `127.0.0.1`; anything else means the class was
 /// routed to the plaintext overlay, and is refused rather than handed to a
@@ -284,13 +298,7 @@ pub async fn reach(
         .find(|(c, _)| c.node_id == picked.node_id)
         .map(|(_, contact)| contact.clone())
         .expect("picked from this roster");
-    // The class chooses the ALPN, so the kind chooses the class — one map,
-    // here, rather than an ALPN threaded through the viewer surface.
-    let class = match kind {
-        OriginKind::Media => TrafficClass::Media,
-        OriginKind::App => TrafficClass::App,
-    };
-    let endpoints = transport.endpoints(&contact, class).await;
+    let endpoints = transport.endpoints(&contact, class_of(kind)).await;
     let Some(ep) = endpoints.into_iter().next() else {
         let why = if contact.relay_url.is_none() && contact.iroh_direct_addrs.is_empty() {
             "the peer gossips no relay and no direct address (its iroh endpoint is off or not yet homed)"

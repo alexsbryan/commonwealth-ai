@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The three loopback routes a shim author touches, and nothing else.
+//! The loopback routes a shim author touches, and nothing else.
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
-//! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/media/fanout`. Every answer is
+//! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
+//! spelling) · the four `/v1/mesh/publish` routes. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
-//! same against the other (ARCH §10.6). This module is the HTTP shape and the
-//! status mapping, and that is all it is.
+//! same against the other (ARCH §10.6), and `svrn run` publishes into either
+//! one without knowing which it is talking to. This module is the HTTP shape
+//! and the status mapping, and that is all it is.
 //!
 //! **Loopback IS the auth.** There is no bearer here, and the bind refuses
 //! any address that is not loopback rather than serving an unauthenticated
@@ -23,7 +25,8 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::capabilities::OriginKind;
-use commonwealth_media::fanout::MediaFanoutRequest;
+use commonwealth_media::apps::PublishRefusal;
+use commonwealth_media::fanout::FanoutRequest;
 use commonwealth_media::MediaReachRefusal;
 use serde::Deserialize;
 
@@ -40,7 +43,18 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .route("/v1/mesh/status", get(status))
         .route("/v1/mesh/media", get(media))
         .route("/v1/mesh/app", get(app))
-        .route("/v1/mesh/media/fanout", post(media_fanout))
+        // One handler, two paths: the media spelling is the generic body with
+        // `kind` absent, not a second implementation.
+        .route("/v1/mesh/fanout", post(origin_fanout))
+        .route("/v1/mesh/media/fanout", post(origin_fanout))
+        // The publishing half, byte-identical to the inference daemon's, so
+        // `svrn run` does not have to know which daemon it reached.
+        .route("/v1/mesh/publish", get(publishing).post(publish_app))
+        .route(
+            "/v1/mesh/publish/{claim_id}",
+            axum::routing::delete(unpublish_app),
+        )
+        .route("/v1/mesh/publish/{claim_id}/renew", post(renew_app))
         .with_state(daemon)
 }
 
@@ -133,13 +147,17 @@ pub async fn media(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl
 ///
 /// A rails node can VIEW the house's apps here whether or not it publishes
 /// any; the catalogue is the roster's gossip and the reach is a bridge over
-/// `cwth/app/0`. What it cannot yet do is publish its OWN: that needs an
-/// `[apps]` table in `rails.toml`, and both `Config` and `MediaSection` are
-/// `#[serde(deny_unknown_fields)]`, so adding one makes an un-upgraded rails
-/// daemon REFUSE TO BOOT on a config a new one wrote. That is a deployment
-/// decision for the package daemon, not a side effect of this change, so it
-/// is named here rather than taken quietly — the acceptor's `APP_ALPN` arm
-/// lands with it.
+/// `cwth/app/0`.
+///
+/// It can publish its own too, as of the claim tier — through
+/// `POST /v1/mesh/publish` below, never through `rails.toml`. The config
+/// route was the blocked one and stays blocked on purpose: an `[apps]` table
+/// would make an un-upgraded rails daemon REFUSE TO BOOT on a config a newer
+/// one wrote, because `Config` and `MediaSection` are
+/// `#[serde(deny_unknown_fields)]`. A claim needs no config key, so that
+/// hazard is absent rather than handled — and the thing a rails node loses by
+/// it, a durable entry that survives restart, is the thing the closure-loop
+/// rule says nobody should have wanted for an app anyway.
 pub async fn app(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
     origin(state, q, OriginKind::App).await
 }
@@ -169,10 +187,12 @@ async fn origin(
     }
 }
 
-/// `POST /v1/mesh/media/fanout` — the same request to every offering member.
-pub async fn media_fanout(
+/// `POST /v1/mesh/fanout` — the same request to every member publishing the
+/// requested kind of origin. `kind` absent means media, which is what the
+/// `/v1/mesh/media/fanout` spelling relies on.
+pub async fn origin_fanout(
     State(daemon): State<Arc<RailsDaemon>>,
-    Json(req): Json<MediaFanoutRequest>,
+    Json(req): Json<FanoutRequest>,
 ) -> impl IntoResponse {
     let roster = daemon.roster().await;
     match commonwealth_media::fanout::fanout(
@@ -188,6 +208,91 @@ pub async fn media_fanout(
         Err(e @ MediaReachRefusal::BadRequest(_)) => refusal(StatusCode::BAD_REQUEST, e),
         Err(e) => refusal(StatusCode::CONFLICT, e),
     }
+}
+
+/// `GET /v1/mesh/publish` — what this node offers the house.
+pub async fn publishing(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "apps": daemon.published_apps.listing(),
+            "media_origin": daemon.node.config.media.origin,
+        })),
+    )
+}
+
+/// `POST /v1/mesh/publish` — take a claim on a name for a loopback port.
+pub async fn publish_app(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Json(req): Json<ClaimRequest>,
+) -> impl IntoResponse {
+    let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();
+    match daemon.published_apps.claim(&req.name, addr, ttl_of(req.ttl_secs)) {
+        Ok(claim) => (StatusCode::OK, Json(serde_json::json!(claim))).into_response(),
+        Err(e) => publish_refusal(e),
+    }
+}
+
+/// `POST /v1/mesh/publish/{claim_id}/renew`
+pub async fn renew_app(
+    State(daemon): State<Arc<RailsDaemon>>,
+    axum::extract::Path(claim_id): axum::extract::Path<String>,
+    body: Option<Json<RenewRequest>>,
+) -> impl IntoResponse {
+    let ttl = ttl_of(body.and_then(|Json(b)| b.ttl_secs));
+    match daemon.published_apps.renew(&claim_id, ttl) {
+        Ok(claim) => (StatusCode::OK, Json(serde_json::json!(claim))).into_response(),
+        Err(e) => publish_refusal(e),
+    }
+}
+
+/// `DELETE /v1/mesh/publish/{claim_id}`
+pub async fn unpublish_app(
+    State(daemon): State<Arc<RailsDaemon>>,
+    axum::extract::Path(claim_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    match daemon.published_apps.release(&claim_id) {
+        Ok(name) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "released": name })),
+        )
+            .into_response(),
+        Err(e) => publish_refusal(e),
+    }
+}
+
+/// `POST /v1/mesh/publish` body — the same shape the inference daemon takes,
+/// because `svrn run` posts one body to whichever daemon answered.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClaimRequest {
+    pub name: String,
+    pub port: u16,
+    #[serde(default)]
+    pub ttl_secs: Option<u64>,
+}
+
+/// `POST /v1/mesh/publish/{claim_id}/renew` body. An empty body is valid.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RenewRequest {
+    #[serde(default)]
+    pub ttl_secs: Option<u64>,
+}
+
+fn ttl_of(secs: Option<u64>) -> std::time::Duration {
+    secs.map(std::time::Duration::from_secs)
+        .unwrap_or(commonwealth_media::apps::DEFAULT_CLAIM_TTL)
+}
+
+/// A name collision is a 409, an unusable name a 400, an unknown claim a 404.
+/// Same mapping as the inference daemon's, so a runner reads one contract.
+fn publish_refusal(e: PublishRefusal) -> axum::response::Response {
+    let code = match e {
+        PublishRefusal::BadName(_) => StatusCode::BAD_REQUEST,
+        PublishRefusal::NameTaken { .. } => StatusCode::CONFLICT,
+        PublishRefusal::NoSuchClaim(_) => StatusCode::NOT_FOUND,
+    };
+    tracing::info!(target: "rails", status = code.as_u16(), error = %e, "api: publish refused");
+    (code, Json(serde_json::json!({ "error": e.to_string() }))).into_response()
 }
 
 /// One refusal shape for all three routes, so a shim parses `error` once.
