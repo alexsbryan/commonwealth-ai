@@ -136,7 +136,13 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
             let visible = s
                 .members
                 .iter()
-                .filter(|m| !m.is_self && matches!(m.status, sovereign_mesh::MemberStatus::Online))
+                .filter(|m| {
+                    !m.is_self
+                        && matches!(
+                            m.status,
+                            sovereign_contracts::daemon_wire::MemberStatus::Online
+                        )
+                })
                 .count();
             let known = s.members.iter().filter(|m| !m.is_self).count();
             MeshFacts {

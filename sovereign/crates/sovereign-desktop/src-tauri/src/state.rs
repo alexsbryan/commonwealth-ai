@@ -138,23 +138,9 @@ pub struct AppState {
     /// Sink for the `interpretation-proposed`, `clarification-request` and
     /// `turn-narration` Tauri events.
     ///
-    /// **NOTHING READS IT, and that is a FEATURE GAP recorded here rather than
-    /// deleted.** It was handed to `RuntimeParts::routing_events` when this
-    /// process commissioned a Runtime; it no longer does (svt-3b), so no
-    /// in-process turn can reach it — and since sv-surface R5 put every turn
-    /// on the wire, none did in attach mode either. The three UI affordances
-    /// these drive (the interpretation banner, the `ClarificationCard`, the
-    /// mid-turn narration chip) are therefore dark on the shipped path, and
-    /// were before this commit.
-    ///
-    /// The wire ALREADY DELIVERS all three —
-    /// `TurnNotice::{InterpretationProposed, ClarificationRequest}` and
-    /// `TurnFrame::Narration` all arrive in `commands/chat.rs`'s
-    /// `render_turn_frames`. It uses the first two only to record the
-    /// session -> conversation pairing (`chat.rs:506-519`) and drops
-    /// `Narration` on the floor (`chat.rs:759-762`). Re-emitting them there is
-    /// the whole fix; this field and `crate::routing_events` are kept, inert,
-    /// so the payload shapes the UI expects stay next to the gap.
+    /// Since 10b26809d `pump_wire_frames` (`commands/chat.rs`) re-emits all
+    /// three from the wire frames it reads, so the sink is the ONE emitter
+    /// of these events and nothing else in this process raises them.
     pub routing_events: Arc<crate::routing_events::TauriRoutingEventSink>,
     pub config: RwLock<DesktopConfig>,
     /// Reusable across Runtime rebuilds (model stays loaded).
@@ -630,29 +616,37 @@ pub async fn bootstrap_with_progress(
         .filter(|s| !s.is_empty())
         .unwrap_or("unknown-embed-model")
         .to_string();
-    // Resolve the persistent node_id so partition_path() returns a
-    // directory name the Desktop-side daemon and the CLI daemon both
-    // agree on (`<corpus>-partition-node-<hex>`). Without this the
-    // engine defaults to `self_node_id = "local"` and
-    // `in_progress_ingestions` silently misses partition-of-self
-    // directories, leaving the UI stuck on "Install" for corpora
-    // that are actively being ingested on disk.
+    // Resolve the daemon's node_id so partition_path() returns a
+    // directory name this app's engine and the daemon both agree on
+    // (`<corpus>-partition-node-<hex>`). Without this the engine defaults
+    // to `self_node_id = "local"` and `in_progress_ingestions` silently
+    // misses partition-of-self directories, leaving the UI stuck on
+    // "Install" for corpora that are actively being ingested on disk.
     //
-    // Resolution order matches `EmbeddedDaemon::start_daemon`: the
-    // `node_id` sidecar file first (rare — only appears after
-    // `load_or_generate` has written one), then mesh.json's
-    // `self_node_id` (the common path when a mesh already exists),
-    // falling back to generate-and-persist for fresh installs.
-    // `rebrand::data_dir()` is the SSOT for the per-user data root and resolves
-    // the legacy fallback itself; a read site must not re-derive it.
-    let mesh_data_dir_resolved = sovereign_core::rebrand::data_dir();
-    let self_node_id = match sovereign_mesh::persist::load_node_id(&mesh_data_dir_resolved) {
-        Ok(Some(id)) => id,
-        _ => match sovereign_mesh::persist::load(&mesh_data_dir_resolved) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&mesh_data_dir_resolved),
-        },
-    };
+    // ASKED OF THE DAEMON, not read off its disk. Until svt-3 this read
+    // `<data_dir>/node_id`, then `mesh.json`, then GENERATED an id and
+    // wrote the file — a client minting the daemon's identity (ARCH
+    // principle 12), and a second minter of it beside the daemon's own
+    // `persist::load_or_generate_self_node_id`. `GET /status` carries the
+    // id in the same `NodeId` Display form `partition_path` keys on.
+    //
+    // The host answered `ensure_reachable` above, so a failure HERE is a
+    // host that is up and will not say who it is. That is a refusal of the
+    // boot, in the host's words — never a locally generated id: an engine
+    // partitioned under an invented id would report every in-flight ingest
+    // as absent and every partition as someone else's (ARCH principle 6).
+    let self_node_id = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .daemon_status::<sovereign_contracts::daemon_wire::DaemonIdentity>()
+        .await
+        .map_err(|e| {
+            format!(
+                "the serving host on :{port} answered the reachability probe but not \
+                 `GET /status` ({e}); this app partitions its corpus engine by the \
+                 host's node id and will not invent one",
+                port = state.client_port(),
+            )
+        })?
+        .node_id;
 
     // In-process tiered-enrichment stack — parity with the standalone
     // daemon (`sovereign-cli-daemon` bootstrap). The embedded daemon used
@@ -675,7 +669,7 @@ pub async fn bootstrap_with_progress(
             .with_embedding_model(&embed_model_name)
             .with_batch_embed_fn(batch_embed_fn)
             .with_inference_fn(inference_fn.clone())
-            .with_self_node_id(self_node_id.to_string());
+            .with_self_node_id(self_node_id);
     if let Some(tiered_provider) = folder_tiered_provider {
         engine_builder = engine_builder.with_tiered_provider(tiered_provider);
     }

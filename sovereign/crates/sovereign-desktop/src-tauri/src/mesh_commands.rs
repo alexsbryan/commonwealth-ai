@@ -10,8 +10,10 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use sovereign_mesh::mesh_discovery::RelayCandidate;
-use sovereign_mesh::{parse_deep_link, JoinConfirmation};
+use sovereign_contracts::daemon_wire::{
+    JoinConfirmation, KnownMeshDto, MemberStatus, MeshMember, MeshStatus, MeshStatusSummary,
+    RelayCandidate,
+};
 
 use crate::bootstrap::BootstrapMode;
 use crate::state::{resolve_node_name, AppState};
@@ -102,14 +104,26 @@ pub async fn mesh_create(
         .map_err(|e| format!("mesh_create: {e}"))
 }
 
-/// Parse a deep link and return the join confirmation info.
+/// Preview an invite and return the join confirmation info.
 /// Called when the user taps a `sovereign://join/...` link but before they
 /// confirm — gives the UI info to render the confirmation dialog.
+///
+/// ONE parser, and it is the host's: `POST /v1/mesh/join/preview` runs the
+/// same `parse_join_argument` that `POST /v1/mesh/join` runs, so this
+/// preview accepts exactly what the join will (bare key, https URL, deep
+/// link). Until svt-3 this ran `parse_deep_link` in-process — the
+/// narrowest of the three forms — so a bare key previewed as "Invalid
+/// join link" and then joined fine (ARCH principle 8). The host's refusal
+/// arrives as its own words.
 #[tauri::command]
-pub async fn mesh_preview_join_link(link: String) -> Result<JoinConfirmation, String> {
-    let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
-    sovereign_mesh::deep_link::join_confirmation_from_link(&parsed)
-        .ok_or_else(|| "Could not build confirmation from link".to_string())
+pub async fn mesh_preview_join_link(
+    state: State<'_, Arc<AppState>>,
+    link: String,
+) -> Result<JoinConfirmation, String> {
+    mesh_client(&state)
+        .mesh_join_preview(&link)
+        .await
+        .map_err(|e| format!("mesh_preview_join_link: {e}"))
 }
 
 /// Join a mesh from a deep link or key.
@@ -211,7 +225,7 @@ pub async fn mesh_get_state(
     // `knowledge_corpora` — were therefore ALREADY empty on that path;
     // `from_remote_status` records the gap for whoever grows the route.
     let base = state.client_base_url();
-    let remote: sovereign_mesh::mesh_http::StatusResponse = mesh_client(&state)
+    let remote: MeshStatusSummary = mesh_client(&state)
         .mesh_status()
         .await
         .map_err(|e| format!("mesh_get_state: {e}"))?;
@@ -274,11 +288,6 @@ pub async fn mesh_rotate_invite(
         .map_err(|e| format!("mesh_rotate_invite: {e}"))
 }
 
-/// One membership in the mesh switcher's list — the route's own type.
-/// `mesh_list` parses `/v1/mesh/status`'s rows into it in Attach mode and
-/// builds it in Local mode; both ends deserve one definition (ARCH §10.6).
-pub use sovereign_mesh::mesh_http::KnownMeshDto;
-
 /// Every mesh this node has joined — active and parked.
 ///
 /// ONE path in both modes: the `meshes[]` the daemon already carries on
@@ -289,7 +298,7 @@ pub use sovereign_mesh::mesh_http::KnownMeshDto;
 /// principle 12).
 #[tauri::command]
 pub async fn mesh_list(state: State<'_, Arc<AppState>>) -> Result<Vec<KnownMeshDto>, String> {
-    let status: sovereign_mesh::mesh_http::StatusResponse = mesh_client(&state)
+    let status: MeshStatusSummary = mesh_client(&state)
         .mesh_status()
         .await
         .map_err(|e| format!("mesh_list: {e}"))?;
@@ -437,10 +446,10 @@ pub async fn mesh_diagnostics(state: State<'_, Arc<AppState>>) -> Result<MeshDia
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshStateResponse {
-    pub status: sovereign_mesh::MeshStatus,
-    pub members: Vec<sovereign_mesh::MeshMember>,
-    pub corpora: Vec<sovereign_mesh::MeshCorpus>,
-    pub contribution: Option<sovereign_mesh::ContributionSummary>,
+    pub status: MeshStatus,
+    pub members: Vec<MeshMember>,
+    pub corpora: Vec<sovereign_contracts::daemon_wire::MeshCorpus>,
+    pub contribution: Option<sovereign_contracts::daemon_wire::ContributionSummary>,
     /// Client-API bearer token for remote peers/clients, rendered on
     /// the invite screen beside `status.join_key`. `None` for a
     /// loopback-only (unshared) daemon. Populated from the running
@@ -450,25 +459,24 @@ pub struct MeshStateResponse {
 }
 
 impl MeshStateResponse {
-    /// Build a `MeshStateResponse` from the flat HTTP `StatusResponse`
-    /// the CLI daemon returns over `/v1/mesh/status`. The UI surface
+    /// Build a `MeshStateResponse` from the client's read of the flat
+    /// `/v1/mesh/status` answer (`MeshStatusSummary` — the fields this
+    /// app reads, pinned to the route's `StatusResponse` by
+    /// `sovereign-mesh`'s `wire_view_drift` test). The UI surface
     /// (members list, online counts) is covered; rich fields that
     /// weren't surfaced over HTTP (contribution ledger, corpora shard
     /// plan) come back empty — they're populated on the daemon side
     /// and a future iteration can extend the HTTP shape to include them.
     ///
     /// Member status strings are parsed by the enum's OWN serde repr
-    /// (`MemberStatus` is `rename_all = "lowercase"` in sovereign-mesh
-    /// types) — one decider for the string set. Until 2026-09-09 this
+    /// (`MemberStatus` is `rename_all = "lowercase"` in
+    /// `sovereign_contracts::daemon_wire`) — one decider for the string set. Until 2026-09-09 this
     /// was a hand match with `_ => Offline`, so a daemon newer than the
     /// desktop (a new status variant) silently rendered its members as
     /// offline instead of surfacing the unknown string — the §18.3
     /// substitution. The parse now refuses (sv-surface rung 4).
-    pub fn from_remote_status(
-        remote: sovereign_mesh::mesh_http::StatusResponse,
-    ) -> Result<Self, String> {
+    pub fn from_remote_status(remote: MeshStatusSummary) -> Result<Self, String> {
         use serde::de::IntoDeserializer;
-        use sovereign_mesh::{MemberStatus, MeshMember, MeshStatus};
         let members: Vec<MeshMember> = remote
             .members
             .into_iter()

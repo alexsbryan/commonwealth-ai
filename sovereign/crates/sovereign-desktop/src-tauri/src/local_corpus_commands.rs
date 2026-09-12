@@ -445,7 +445,9 @@ async fn follow_ingest_job(
     loop {
         tokio::time::sleep(INGEST_POLL_INTERVAL).await;
         let p = match client
-            .lc_ingest_progress::<sovereign_mesh::lc_http::IngestProgress>(&corpus_id)
+            .lc_ingest_progress::<sovereign_contracts::daemon_wire::IngestProgressView<
+                sovereign_tools::local_corpus::manager::IngestStats,
+            >>(&corpus_id)
             .await
         {
             Ok(p) => {

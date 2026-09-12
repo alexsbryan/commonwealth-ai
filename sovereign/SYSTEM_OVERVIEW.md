@@ -6176,6 +6176,49 @@ absent and the guards fail closed for *every* caller.
   carries it (task #37).
 - See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
   for peer-admission, contribution ceiling, and foreground-yield.
+- **The mesh view came down, and the two that cannot got a READ** (svt-3,
+  2026-09-11, same day, second landing). `OriginKind` moved to
+  `oicp_types::origin` (commonwealth-core re-exports it), which unpinned
+  the whole mesh view: `daemon_wire::mesh` now holds `MeshStatus`,
+  `MeshMember`, `MemberStatus`, `ContributionSummary`, `MeshCorpus`,
+  `CorpusStatus`, `JoinConfirmation` (from `types`), `MemberDto`,
+  `KnownMeshDto` (`mesh_http`), `SelfReachability`, `ReachabilityStatus`,
+  `RecoveryEvent` (`daemon` / `iroh_watchdog`), `RelayCandidate`
+  (`mesh_discovery`); `daemon_wire::recipe_projects` holds the five
+  `/v1/recipe-projects` answers plus `ArtifactKind` and `CheckpointMeta`
+  (from `sovereign-recipe-author`, which re-exports them — the
+  dashboard tags every project with the enum, and `snapshot_basename` /
+  `label` travelled with it because an inherent impl cannot stay behind
+  on a foreign type). Three private ctors became free functions in
+  `recipe_project_http` (`list_entry_from_row_and_summary`,
+  `validation_nothing_drafted`, `validation_failed`), the same orphan-rule
+  consequence as `note_entry`. The two DTOs that still close over runtime
+  types — `mesh_http::StatusResponse` (worker-eligibility view,
+  cross-family transport path) and `lc_http::IngestProgress` (enrichment
+  phase file) — stay, and the client is owed a READ of each, not the
+  type: `MeshStatusSummary` and `IngestProgressView<Stats>` are the fields
+  the desktop reads, parsed from the same bytes, pinned to the route's
+  type field by field in `sovereign-mesh/tests/main/wire_view_drift.rs`
+  (rename either side and it is red). `IngestProgressView` is generic over
+  the receipt's counts so the desktop reads `IngestStats` typed while the
+  contract crate names no capability-layer type. Two pass-throughs the
+  desktop never field-read (`governance_http::GovernanceViewPayload`, the
+  `corpus_watch_http` answers and `WatchedFolderConfig`) cross as
+  `serde_json::Value` — the route's bytes forwarded, no mirror to drift;
+  on register an absent `config` OMITS the key so the daemon's
+  `#[serde(default)]` supplies its own default (a `null` would 422).
+  Two reads the desktop used to do itself moved to the daemon: invite
+  preview is `POST /v1/mesh/join/preview` (`JoinPreviewRequest` →
+  `JoinConfirmation`, parsed by the SAME `parse_join_argument` the join
+  uses, so a preview can no longer refuse a bare key the join accepts —
+  `parse_deep_link` lives in `commonwealth-discovery`, which the contract
+  layer cannot see, so it is a route and not a relocation), and the node
+  id the desktop's corpus engine partitions by comes from `GET /status`
+  (`DaemonIdentity.node_id`, `TurnClient::daemon_status`) instead of the
+  daemon's `<data_dir>/node_id` file — the old read GENERATED an id when
+  the file was absent, a second minter of the daemon's identity; now a
+  host that answered the reachability probe but not `/status` refuses the
+  boot in its own words, never an invented id.
 
 ### Foreground yield is bounded (2026-08-18)
 

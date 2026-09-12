@@ -16,16 +16,32 @@
 //! principle 8) while the client stops linking the server. Every type here is
 //! pure serde over primitives — no handle, no store, no engine — which is the
 //! test for whether a wire shape belongs at this layer at all. A DTO that
-//! closes over a runtime type (`lc_http::IngestProgress` over
-//! `corpus_engine::enrichment::state::EnrichmentState`, `mesh_http::
-//! StatusResponse` over `commonwealth_core::capabilities::OriginKind`) stays
-//! where it is until the type it closes over has a home down here too.
+//! closes over a runtime type stays where it is until the type it closes
+//! over has a home down here too: `OriginKind` got one in `oicp_types::
+//! origin` (2026-09-11), which is what let the whole mesh view come down
+//! (`mesh.rs`). Two still do not — `mesh_http::StatusResponse` (over the
+//! worker-eligibility view and a cross-family transport path) and
+//! `lc_http::IngestProgress` (over the enrichment phase file) — and for
+//! those the client is owed a READ, not the type: `MeshStatusSummary` and
+//! `IngestProgressView` are the fields a client reads, parsed from the same
+//! bytes and pinned to the route's type by a test in `sovereign-mesh`.
 //!
 //! `sovereign-mesh` re-exports every item below at its historical
 //! `*_http::Name` path, so the routes, their tests and the CLI are unchanged
 //! — this is a relocation, not a rename.
 
 use serde::{Deserialize, Serialize};
+
+// Per-family files, re-exported flat so every wire shape keeps the one
+// path `sovereign_contracts::daemon_wire::Name` (the size ratchet is per
+// crate, not per file; the split is for the reader).
+pub mod ingest;
+pub mod mesh;
+pub mod recipe_projects;
+
+pub use ingest::*;
+pub use mesh::*;
+pub use recipe_projects::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 
@@ -278,4 +294,34 @@ pub struct McpServersResponse {
     pub servers: Vec<McpServerView>,
     /// Whether there was a registry to count against at all.
     pub mount: McpMountStatus,
+}
+
+/// Where one corpus's index build stands. Answer of
+/// `GET /internal/corpus/{corpus}/index/progress`; the build itself is
+/// accepted by `POST /internal/corpus/{corpus}/index/build` with an
+/// [`IngestJobAck`]. Added 2026-09-11 (sv-surface svt-3) so the desktop's
+/// `build_corpus_index` stops opening the index with an engine of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexBuildProgress {
+    pub corpus_id: String,
+    /// The daemon's job id from the ack; empty when no build has been asked
+    /// for this corpus in this daemon's lifetime.
+    pub job_id: String,
+    pub state: IndexBuildState,
+    /// Whole-percent progress of the current sub-phase, 0..=100.
+    pub pct: u64,
+    /// Set only in [`IndexBuildState::Error`]; the failure text verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// The three states a build can report. `Idle` is "never asked", reported
+/// rather than defaulted to a finished shape (ARCH principle 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexBuildState {
+    Idle,
+    Building,
+    Complete,
+    Error,
 }

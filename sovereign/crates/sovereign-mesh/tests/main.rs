@@ -151,5 +151,7 @@ mod throughput_ledger_emission;
 mod try_resume_first_gossip;
 #[path = "main/turn_surface.rs"]
 mod turn_surface;
+#[path = "main/wire_view_drift.rs"]
+mod wire_view_drift;
 #[path = "main/worker_e2e.rs"]
 mod worker_e2e;

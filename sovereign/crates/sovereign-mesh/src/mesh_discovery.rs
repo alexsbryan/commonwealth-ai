@@ -29,24 +29,10 @@ use tracing::{info, warn};
 /// ip -4)` before exec-ing the daemon, which makes the founder see the
 /// tailnet IP and gossip succeeds. See `HANDOFF_WS2_MESH_FANOUT.md`
 /// for the full incident trail.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct RelayCandidate {
-    /// Bare IP literal (no brackets for IPv6 — frontend formats it).
-    pub ip: String,
-    /// What kind of network this address is on. Drives the
-    /// recommendation ordering and the human-readable label.
-    /// One of: "tailscale", "lan", "ipv6", "other".
-    pub kind: String,
-    /// Pre-formatted `host:port` (or `[host]:port` for IPv6) ready
-    /// to drop into `?relay=<value>`. Saves the UI from having to
-    /// re-implement IPv6 bracket rules.
-    pub url_fragment: String,
-    /// True for the single best candidate the daemon would pick if
-    /// asked to autoselect. Today: Tailscale > LAN > IPv6, first
-    /// of its tier wins. The frontend pre-selects this in the
-    /// invite-card relay picker.
-    pub recommended: bool,
-}
+///
+/// A wire row (`GET /v1/mesh/relay-candidates`), so defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+pub use sovereign_contracts::daemon_wire::RelayCandidate;
 
 /// Classify an IP into a coarse "kind" the UI can render. Tailscale
 /// uses the CGNAT range 100.64.0.0/10 (RFC 6598) plus an

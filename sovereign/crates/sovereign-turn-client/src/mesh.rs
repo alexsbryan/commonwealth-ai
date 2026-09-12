@@ -18,13 +18,16 @@
 //!
 //! # Why every read is generic
 //!
-//! `StatusResponse`, `KnownMeshDto`, `RelayCandidate`,
 //! `NodeContributionsView` and `PeerPreferenceView` are defined in
-//! `sovereign-mesh` and `commonwealth-api`. This crate's only in-repo
-//! dependency is `sovereign-contracts` (`quality/ARCH_LAYERS.toml`, the
-//! `contract` layer) — a client that could name those types would be a
-//! client that links a daemon, which is the whole thing this crate exists
-//! not to do.
+//! `commonwealth-api`, and `mesh_http::StatusResponse` in `sovereign-mesh`.
+//! This crate's only in-repo dependency is `sovereign-contracts`
+//! (`quality/ARCH_LAYERS.toml`, the `contract` layer) — a client that could
+//! name those types would be a client that links a daemon, which is the
+//! whole thing this crate exists not to do. The shapes a client is OWED
+//! live in `sovereign_contracts::daemon_wire::mesh` since svt-3
+//! (`MeshStatusSummary`, `KnownMeshDto`, `RelayCandidate`,
+//! `JoinConfirmation`, `DaemonIdentity`); each method names the one it
+//! expects, and stays generic so a caller with a wider type can still ask.
 
 use super::{Result, TurnClient};
 
@@ -136,8 +139,9 @@ impl TurnClient {
     /// membership, online counts, the invite, every joined mesh, and
     /// this node's own reachability.
     ///
-    /// `T` is `sovereign_mesh::mesh_http::StatusResponse`. It is a READ
-    /// and it always answers: a node in no mesh reports `running: false`
+    /// `T` is `sovereign_contracts::daemon_wire::MeshStatusSummary` (the
+    /// route's `sovereign_mesh::mesh_http::StatusResponse` for a caller
+    /// that links the daemon). It is a READ and it always answers: a node in no mesh reports `running: false`
     /// with `mesh_name: None`, which is a fact and not an absence. An
     /// unreachable host is an `Err` (ARCH principle 6).
     pub async fn mesh_status<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
@@ -192,6 +196,36 @@ impl TurnClient {
             }),
         )
         .await
+    }
+
+    /// `POST /v1/mesh/join/preview` — what `mesh_join` WOULD join, as a
+    /// confirmation-dialog payload, without joining.
+    ///
+    /// `T` is `sovereign_contracts::daemon_wire::JoinConfirmation`. The
+    /// HOST parses the invite, with the same three-form parser the join
+    /// uses, so a preview cannot refuse what the join would accept. An
+    /// invite the host cannot read — or a guest link, which is not a
+    /// join — is an `Err` carrying the host's words (400), never an
+    /// empty confirmation (ARCH principle 6).
+    pub async fn mesh_join_preview<T: serde::de::DeserializeOwned>(&self, link: &str) -> Result<T> {
+        self.internal_post_json(
+            "/v1/mesh/join/preview".to_string(),
+            &serde_json::json!({ "link": link }),
+        )
+        .await
+    }
+
+    /// `GET /status` — the serving host's own identity and health, on the
+    /// CLIENT port (`commonwealth_api::routes_status`; auth-exempt).
+    ///
+    /// `T` is `sovereign_contracts::daemon_wire::DaemonIdentity` for a
+    /// caller that wants the host's `node_id` — the desktop's corpus engine
+    /// partitions by it, and until svt-3 the app read the daemon's
+    /// `<data_dir>/node_id` FILE to learn it, generating one when the file
+    /// was absent (a second minter of the daemon's identity). A client asks
+    /// the daemon; an unreachable host is an `Err`, never a fresh id.
+    pub async fn daemon_status<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/status".to_string(), &[]).await
     }
 
     /// `POST /v1/mesh/rotate` — mint a fresh join key for the active
@@ -262,7 +296,7 @@ impl TurnClient {
     /// (Tailscale / LAN / IPv6) a user can append to an invite as
     /// `?relay=<host:port>` for a friend mDNS will not reach.
     ///
-    /// `T` is `sovereign_mesh::mesh_discovery::RelayCandidate`. The
+    /// `T` is `sovereign_contracts::daemon_wire::RelayCandidate`. The
     /// HOST answers this because the addresses are its own: it may be
     /// in a container or bound differently from whatever asked. An
     /// empty list means no detected interface, which is a fact — the

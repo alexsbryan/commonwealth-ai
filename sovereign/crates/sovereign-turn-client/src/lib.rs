@@ -2094,7 +2094,7 @@ impl TurnClient {
 
     /// `GET /v1/recipe-projects` — every project with its sidecar
     /// summary, newest-updated first. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeProjectListEntry`.
+    /// `sovereign_contracts::daemon_wire::RecipeProjectListEntry`.
     ///
     /// An empty vec is a real answer: a fresh install has no projects and
     /// a Welcome pane branches on exactly that.
@@ -2123,7 +2123,7 @@ impl TurnClient {
     }
 
     /// `GET /v1/recipe-projects/{id}/dashboard` — the one big read. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeAuthorDashboardState`.
+    /// `sovereign_contracts::daemon_wire::RecipeAuthorDashboardState`.
     ///
     /// Its `validation` is an OPTION and `validation_unavailable` says
     /// why when it is `None`. A host that cannot judge an artifact
@@ -2138,7 +2138,7 @@ impl TurnClient {
 
     /// `PUT /v1/recipe-projects/{id}/toml` — validate, then write only if
     /// valid. `T` is
-    /// `sovereign_mesh::recipe_project_http::RecipeValidationReport`.
+    /// `sovereign_contracts::daemon_wire::RecipeValidationReport`.
     ///
     /// A recipe that does not parse comes back `Ok` with `ok: false` and
     /// the errors, and NOTHING was written — that is a successful
@@ -2180,7 +2180,7 @@ impl TurnClient {
 
     /// `POST /v1/recipe-projects/{id}/checkpoints/{checkpoint}/restore` —
     /// restore a snapshot and lay down the restore anchor. `T` is
-    /// `sovereign_mesh::recipe_project_http::RestoreCheckpointOutcome`.
+    /// `sovereign_contracts::daemon_wire::RestoreCheckpointOutcome`.
     pub async fn recipe_project_restore_checkpoint<T: serde::de::DeserializeOwned>(
         &self,
         feature_id: &str,
@@ -2226,7 +2226,9 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/{corpus}/ingest/progress` — how far
     /// along an ingest is, and what it INDEXED once it is done. `T` is
-    /// `sovereign_mesh::lc_http::IngestProgress`.
+    /// `sovereign_contracts::daemon_wire::IngestProgressView<Stats>` (the
+    /// route's `sovereign_mesh::lc_http::IngestProgress` for a caller that
+    /// links the daemon).
     ///
     /// This is the route [`Self::lc_ingest`]'s ack names, and the one to
     /// poll. Read `finished`, not the phase: the phase file describes the

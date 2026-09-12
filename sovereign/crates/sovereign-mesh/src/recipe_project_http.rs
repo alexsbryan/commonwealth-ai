@@ -57,173 +57,67 @@ const WORKFLOW_UNJUDGED: &str =
 /// One row in a project sidebar: the store row plus the sidecar summary,
 /// plus the charter excerpt the sidebar renders as a tooltip.
 ///
-/// `Deserialize` as well as `Serialize` for [`crate::features_http`]'s
-/// `ProjectEntry` reason: a caller parses back into the struct the daemon
-/// emitted, never into a twin that can drift.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecipeProjectListEntry {
-    pub feature_id: String,
-    pub title: String,
-    pub charter_excerpt: String,
-    /// `"recipe"` or `"workflow"` — `ArtifactKind` is the recipe-author
-    /// crate's own enum, reused rather than re-spelled.
-    pub artifact_kind: ArtifactKind,
-    pub recipe_id: Option<String>,
-    pub current_sample_size: Option<u64>,
-    pub last_test_status: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
+/// The wire shapes — defined in `sovereign_contracts::daemon_wire` (svt-3)
+/// so the desktop parses them without linking this crate, re-exported
+/// here so the routes, their tests and the CLI keep naming this path.
+/// `ArtifactKind` and `CheckpointMeta` came down with them.
+pub use sovereign_contracts::daemon_wire::{
+    DashboardNoteEntry, RecipeAuthorDashboardState, RecipeProjectListEntry, RecipeValidationReport,
+    RestoreCheckpointOutcome,
+};
 
-impl RecipeProjectListEntry {
-    /// The 200-char excerpt is the SIDEBAR's, and it stays a host
-    /// decision on purpose — unlike `ProjectEntry.charter_md`, which
-    /// crosses whole because that route serves the row. Two routes, two
-    /// questions: this one answers "what does the sidebar draw".
-    fn from_row_and_summary(row: &RecipeProjectRow, summary: ProjectSummary) -> Self {
-        let mut excerpt = row.charter_md.chars().take(200).collect::<String>();
-        if row.charter_md.chars().count() > 200 {
-            excerpt.push('…');
-        }
-        Self {
-            feature_id: row.id.clone(),
-            title: row.title.clone(),
-            charter_excerpt: excerpt,
-            artifact_kind: summary.artifact_kind,
-            recipe_id: summary.recipe_id,
-            current_sample_size: summary.current_sample_size,
-            last_test_status: summary.last_test_status,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        }
-    }
-}
-
-/// One decision-log entry the dashboard renders. `payload` is the parsed
-/// `payload_json` so the caller does not reparse — `null` for legacy
-/// rows; `decision_kind` / `attribution` are lifted out of it for direct
-/// rendering when present.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DashboardNoteEntry {
-    pub id: String,
-    pub kind: String,
-    pub content: String,
-    pub created_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decision_kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attribution: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub payload: Option<serde_json::Value>,
-}
-
-impl From<Note> for DashboardNoteEntry {
-    fn from(row: Note) -> Self {
-        let payload = row
-            .payload_json
-            .as_deref()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
-        let field = |k: &str| {
-            payload
-                .as_ref()
-                .and_then(|v| v.get(k))
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-        };
-        Self {
-            id: row.id,
-            kind: row.kind,
-            content: row.content,
-            created_at: row.created_at,
-            decision_kind: field("decision_kind"),
-            attribution: field("attribution"),
-            payload,
-        }
-    }
-}
-
-/// The verdict on an artifact's on-disk TOML.
+/// The sidebar row for a project. The 200-char excerpt is the SIDEBAR's,
+/// and it stays a host decision on purpose — unlike `ProjectEntry.charter_md`,
+/// which crosses whole because that route serves the row. Two routes, two
+/// questions: this one answers "what does the sidebar draw".
 ///
-/// Recipe-shaped, because the recipe arm is the one this host can judge:
-/// `errors` blocks, `warnings` does not, and `notes` is neither — it is
-/// what the recipe WILL do (derived ontology facets), kept as its own
-/// field rather than as tagged strings inside `warnings` so no renderer
-/// has to strip a prefix to tell a facet from a defect.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecipeValidationReport {
-    /// `true` when the recipe parsed and the offline pass accepted it.
-    pub ok: bool,
-    /// One message per blocking error, already translated by
-    /// `corpus_engine::recipe::translate_parse_error`. Render verbatim.
-    pub errors: Vec<String>,
-    /// `true` when there is no artifact to validate yet — "nothing
-    /// drafted" as distinct from "we tried and it failed".
-    pub no_recipe: bool,
-    /// `true` when the recipe parsed AND its enrichment will produce
-    /// atoms. Meaningless when `ok == false`.
-    pub enrichment_ready: bool,
-    /// Findings that do not block.
-    pub warnings: Vec<String>,
-    /// Derived facets of a declared ontology.
-    pub notes: Vec<String>,
-}
-
-impl RecipeValidationReport {
-    fn nothing_drafted() -> Self {
-        Self {
-            ok: false,
-            errors: Vec::new(),
-            no_recipe: true,
-            enrichment_ready: false,
-            warnings: Vec::new(),
-            notes: Vec::new(),
-        }
+/// A free function rather than `RecipeProjectListEntry::from_row_and_summary`
+/// because the type is foreign now (orphan rule) — same one implementation,
+/// same two callers.
+fn list_entry_from_row_and_summary(
+    row: &RecipeProjectRow,
+    summary: ProjectSummary,
+) -> RecipeProjectListEntry {
+    let mut excerpt = row.charter_md.chars().take(200).collect::<String>();
+    if row.charter_md.chars().count() > 200 {
+        excerpt.push('…');
     }
-
-    fn failed(errors: Vec<String>) -> Self {
-        Self {
-            ok: false,
-            errors,
-            no_recipe: false,
-            enrichment_ready: false,
-            warnings: Vec::new(),
-            notes: Vec::new(),
-        }
+    RecipeProjectListEntry {
+        feature_id: row.id.clone(),
+        title: row.title.clone(),
+        charter_excerpt: excerpt,
+        artifact_kind: summary.artifact_kind,
+        recipe_id: summary.recipe_id,
+        current_sample_size: summary.current_sample_size,
+        last_test_status: summary.last_test_status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }
 }
 
-/// The single payload a dashboard reads on every poll.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecipeAuthorDashboardState {
-    pub feature_id: String,
-    pub title: String,
-    pub charter_md: String,
-    pub artifact_kind: ArtifactKind,
-    /// The artifact id. Named `recipe_*` for both kinds — the field names
-    /// are the desktop's and `artifact_kind` is what a caller branches on.
-    pub recipe_id: Option<String>,
-    pub recipe_path: Option<String>,
-    pub recipe_toml: Option<String>,
-    pub current_sample_size: Option<u64>,
-    pub last_test_status: Option<String>,
-    pub last_test_at: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub decisions: Vec<DashboardNoteEntry>,
-    pub research_findings: Vec<DashboardNoteEntry>,
-    pub capability_requests: Vec<DashboardNoteEntry>,
-    pub recipe_issues: Vec<DashboardNoteEntry>,
-    pub deferred_questions: Vec<DashboardNoteEntry>,
-    pub checkpoints: Vec<CheckpointMeta>,
-    /// The verdict, or `None` when this host reached none.
-    ///
-    /// `None` is never "it failed" and never "it passed": exactly one of
-    /// this field and `validation_unavailable` is set, and the pair is the
-    /// four-verdict discipline in two fields (ARCH §18.1).
-    pub validation: Option<RecipeValidationReport>,
-    /// Why no verdict. `Some` iff `validation` is `None`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub validation_unavailable: Option<String>,
+/// "Nothing drafted" — no artifact to validate yet, as distinct from "we
+/// tried and it failed".
+fn validation_nothing_drafted() -> RecipeValidationReport {
+    RecipeValidationReport {
+        ok: false,
+        errors: Vec::new(),
+        no_recipe: true,
+        enrichment_ready: false,
+        warnings: Vec::new(),
+        notes: Vec::new(),
+    }
+}
+
+/// A blocking verdict: the artifact was judged and refused.
+fn validation_failed(errors: Vec<String>) -> RecipeValidationReport {
+    RecipeValidationReport {
+        ok: false,
+        errors,
+        no_recipe: false,
+        enrichment_ready: false,
+        warnings: Vec::new(),
+        notes: Vec::new(),
+    }
 }
 
 /// `POST /v1/recipe-projects` — provision a project and lay down its
@@ -258,12 +152,6 @@ pub struct LinkRecentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkRecentResponse {
     pub artifact_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoreCheckpointOutcome {
-    pub new_checkpoint_id: String,
-    pub source_checkpoint_id: String,
 }
 
 /// The per-turn situated-context preamble.
@@ -328,7 +216,7 @@ async fn list_projects(
                 Ok(p) => p.read_summary().unwrap_or_else(|_| default_summary(&row)),
                 Err(_) => default_summary(&row),
             };
-        out.push(RecipeProjectListEntry::from_row_and_summary(&row, summary));
+        out.push(list_entry_from_row_and_summary(&row, summary));
     }
     out.sort_by_key(|e| std::cmp::Reverse(e.updated_at));
     tracing::debug!(returned = out.len(), "recipe_project_http: projects listed");
@@ -380,7 +268,7 @@ async fn new_project(
         kind = body.artifact_kind.label(), "recipe_project_http: project provisioned");
     Ok((
         StatusCode::CREATED,
-        Json(RecipeProjectListEntry::from_row_and_summary(&row, summary)),
+        Json(list_entry_from_row_and_summary(&row, summary)),
     )
         .into_response())
 }
@@ -722,7 +610,7 @@ fn validate_artifact_toml(
     let Some(toml_str) = artifact_toml else {
         // "Nothing drafted" is judgeable for either kind — no parser
         // needed to see that there is no text.
-        return (Some(RecipeValidationReport::nothing_drafted()), None);
+        return (Some(validation_nothing_drafted()), None);
     };
     match kind {
         ArtifactKind::Recipe => match Recipe::from_toml(toml_str) {
@@ -741,9 +629,7 @@ fn validate_artifact_toml(
                 )
             }
             Err(e) => (
-                Some(RecipeValidationReport::failed(split_parse_errors(
-                    &e.to_string(),
-                ))),
+                Some(validation_failed(split_parse_errors(&e.to_string()))),
                 None,
             ),
         },

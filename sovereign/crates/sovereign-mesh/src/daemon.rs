@@ -481,20 +481,9 @@ pub struct IrohPeerPath {
 
 /// The founder's OWN iroh reachability (Track W hardening), for
 /// `/v1/mesh/status.self_reachability` and the desktop "Reachable /
-/// Reconnecting" indicator. Flattens the reachability watchdog's live health
-/// snapshot so the wire object is one flat record.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SelfReachability {
-    /// This node's current dial-by-key string (all relays + direct addrs), or
-    /// `None` before any reachable address is known.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub dial: Option<String>,
-    /// iroh endpoint id (hex).
-    pub endpoint_id: String,
-    /// Live watchdog health: relay-homed, discovery probe, recovery history.
-    #[serde(flatten)]
-    pub health: crate::iroh_watchdog::ReachabilityStatus,
-}
+/// Reconnecting" indicator. A wire record, so it is defined in
+/// `sovereign_contracts::daemon_wire` (svt-3) and re-exported here.
+pub use sovereign_contracts::daemon_wire::SelfReachability;
 
 /// Result of joining an existing mesh.
 pub struct JoinMeshResult {

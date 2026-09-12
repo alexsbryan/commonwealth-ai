@@ -56,13 +56,15 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use sovereign_tools::recipe_author::{ArtifactKind, CheckpointMeta};
+use sovereign_contracts::daemon_wire::{ArtifactKind, CheckpointMeta};
 
 use crate::state::AppState;
 
 /// The wire types, re-exported rather than mirrored: field-for-field what
-/// this module used to declare, so the webview sees the same bytes.
-pub use sovereign_mesh::recipe_project_http::{
+/// this module used to declare, so the webview sees the same bytes. They
+/// are the route's (`sovereign_mesh::recipe_project_http` re-exports the
+/// same items), named from the contract crate so this app links no daemon.
+pub use sovereign_contracts::daemon_wire::{
     DashboardNoteEntry, RecipeProjectListEntry, RecipeValidationReport, RestoreCheckpointOutcome,
 };
 
@@ -188,7 +190,7 @@ pub async fn recipe_author_dashboard_state(
     feature_id: String,
 ) -> Result<RecipeAuthorDashboardState, String> {
     let d = ra_client(&state)
-        .recipe_project_dashboard::<sovereign_mesh::recipe_project_http::RecipeAuthorDashboardState>(
+        .recipe_project_dashboard::<sovereign_contracts::daemon_wire::RecipeAuthorDashboardState>(
             &feature_id,
         )
         .await

@@ -61,48 +61,11 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 
 /// Live reachability snapshot the watchdog writes each cycle and the status API
-/// reads (`/v1/mesh/status.self_reachability`). Survives endpoint rebuilds —
-/// the watchdog owns the shared `Arc`, so counts/last-recovery persist across a
-/// rebuilt endpoint.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct ReachabilityStatus {
-    /// At least one home relay is connected (dialable via relay).
-    pub relay_homed: bool,
-    /// Currently-connected home relay URL(s), for display.
-    pub relay_urls: Vec<String>,
-    /// Last self-discovery probe: `Some(true)` = own record resolved,
-    /// `Some(false)` = missing/stale, `None` = not run / discovery off.
-    pub discovery_ok: Option<bool>,
-    /// Most recent relay error (`RelayStatus::last_error`), if disconnected.
-    pub last_error: Option<String>,
-    /// Last self-heal action taken.
-    pub last_recovery: Option<RecoveryEvent>,
-    /// Total endpoint rebuilds this watchdog has performed.
-    pub rebuilds: u32,
-    /// Peers the peer-path term looked at on its last poll.
-    #[serde(default)]
-    pub peer_paths_total: usize,
-    /// How many of those carry an ACTIVE path (direct / relayed / mixed).
-    /// `0 of N` is not by itself a fault — see `peer_paths_wedged`.
-    #[serde(default)]
-    pub peer_paths_active: usize,
-    /// The third health term: this endpoint HELD a live path and now holds
-    /// none, sustained past `peer_path_bad_streak` polls. The signal both
-    /// inbound terms are blind to.
-    #[serde(default)]
-    pub peer_paths_wedged: bool,
-    /// True while unhealthy / mid-recovery (drives the UI "Reconnecting" state).
-    pub degraded: bool,
-}
-
-/// One self-heal action, for the status surface / operator timeline.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct RecoveryEvent {
-    /// `"relay_nudge"` | `"relay_bounce"` | `"endpoint_rebuild"`.
-    pub action: String,
-    pub at_unix: u64,
-    pub ok: bool,
-}
+/// reads (`/v1/mesh/status.self_reachability`), plus the self-heal event it
+/// records. Wire records, so defined in `sovereign_contracts::daemon_wire`
+/// (svt-3) and re-exported here; the watchdog still owns the shared `Arc`,
+/// so counts/last-recovery persist across a rebuilt endpoint.
+pub use sovereign_contracts::daemon_wire::{ReachabilityStatus, RecoveryEvent};
 
 /// Rebuild the iroh endpoint from scratch (last-resort self-heal). Returns the
 /// NEW endpoint handle on success so the watchdog keeps polling the live one.
