@@ -46,6 +46,11 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# The four-verdict line this run ends with, so a runner reads the verdict
+# instead of grepping the row summary (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
 VERDICTS_LOG = Path.home() / ".sovereign" / "comaintainer" / "verdicts.jsonl"
 JOURNEY_LATEST = Path.home() / ".sovereign" / "journey-nightly" / "latest.json"
 
@@ -372,6 +377,7 @@ def run(sha: str) -> int:
         append_rows([drift_row(
             sha, "recency", _git(["show", "--no-patch", "--format=%s", sha]).strip(),
             "skipped-not-recent", skip, "", "", "", "recency", "")])
+        emit_judgement("co-drift", "never-ran", f"{sha[:7]} was not audited: {skip}")
         return 0
     call_daemon, why_engine = _import_call_daemon()
     lineage, why_lineage = _import_lineage()
@@ -379,6 +385,8 @@ def run(sha: str) -> int:
     if not subject:
         append_rows([drift_row(sha, "claim-evidence", "", "could-not-judge",
                                f"git could not show {sha}", "", "", "", "", "")])
+        emit_judgement("co-drift", "could-not-judge",
+                       f"git could not show {sha} — there was no commit to read claims from")
         return 0
     hay_lower = bundle.lower()
     claims, overflow = split_claims(subject, body)
@@ -485,7 +493,25 @@ def run(sha: str) -> int:
 
     append_rows(rows)
     flagged = sum(1 for r in rows if r["verdict"] in ("unsupported", "out-of-scope"))
+    cnj = sum(1 for r in rows if r["verdict"] == "could-not-judge")
     print(f"co-drift: {sha[:7]} — {len(rows)} row(s), {flagged} flagged (shadow)")
+    # One decision off the rows just appended, worst first. FLAGGED is the
+    # failed arm: a claim the diff contradicts, or work outside the order's
+    # scope. A row the engine could not settle is about the instrument.
+    if not rows:
+        emit_judgement("co-drift", "never-ran",
+                       f"{sha[:7]} produced no claim or scope row — nothing was judged")
+    elif flagged:
+        emit_judgement("co-drift", "failed",
+                       f"{sha[:7]}: {flagged} of {len(rows)} rows flagged "
+                       "(unsupported claim or out-of-scope work)")
+    elif cnj:
+        emit_judgement("co-drift", "could-not-judge",
+                       f"{sha[:7]}: {cnj} of {len(rows)} rows could not be settled; "
+                       "nothing was flagged, and nothing was cleared either")
+    else:
+        emit_judgement("co-drift", "passed",
+                       f"{sha[:7]}: all {len(rows)} rows supported and in scope")
     return 0
 
 

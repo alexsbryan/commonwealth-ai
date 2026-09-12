@@ -43,6 +43,11 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
+
+# The four-verdict line this probe ends with (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
 import threading
 import time
 import urllib.error
@@ -437,6 +442,8 @@ def main():
     if ctx is None:
         print("\nCOULD-NOT-JUDGE — preconditions absent. Nothing was verified.")
         write(args.json)
+        emit_judgement("mesh-live-probe", "could-not-judge",
+                       "preflight found no usable fleet — no invariant was exercised")
         return 4
 
     probe_admission(ctx["me"], args.model)
@@ -477,11 +484,28 @@ def main():
     fails = [f for f in findings if f["verdict"] == "fail"]
     unobserved = [f for f in findings if f["verdict"] == "not_observed"]
     print()
+    passes = [f for f in findings if f["verdict"] == "pass"]
     if fails:
         print(f"FAIL — {len(fails)} invariant(s) violated")
+        emit_judgement("mesh-live-probe", "failed",
+                       f"{len(fails)} routing invariant(s) violated against the live fleet: "
+                       + ", ".join(f["probe"] for f in fails[:4]))
         return 1
-    print(f"PASS — {len([f for f in findings if f['verdict'] == 'pass'])} checks"
+    print(f"PASS — {len(passes)} checks"
           + (f", {len(unobserved)} not observed this run" if unobserved else ""))
+    # A run that observed nothing verified nothing, even with zero failures —
+    # the same rule as the zero-test exit 4 in sovereign-test.sh.
+    if not passes:
+        emit_judgement("mesh-live-probe", "never-ran",
+                       f"no invariant was observed this run ({len(unobserved)} not observed) — "
+                       "nothing was verified")
+    elif unobserved:
+        emit_judgement("mesh-live-probe", "could-not-judge",
+                       f"{len(passes)} invariant(s) held and {len(unobserved)} were not observed "
+                       "this run, so the fleet was not fully exercised")
+    else:
+        emit_judgement("mesh-live-probe", "passed",
+                       f"all {len(passes)} routing invariants held against the live fleet")
     return 0
 
 

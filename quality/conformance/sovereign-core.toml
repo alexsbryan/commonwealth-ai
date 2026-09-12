@@ -126,7 +126,7 @@ asserts = 3
 requirement = "GR-50"
 test = "sovereign-core::runtime::grounding::call_census::tests::no_gate_module_calls_inference_complete_behind_the_censuss_back"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/call_census.rs"
-line = 394
+line = 459
 asserts = 1
 
 [[claim]]

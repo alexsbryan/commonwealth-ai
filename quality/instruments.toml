@@ -345,6 +345,141 @@ load_bearing = [
   { flag = "--accept <key>", why = "raises ONE ceiling. `--update-baseline` on a working tree absorbs every other crate's growth along with yours, which is the trap AGENTS.md names for this ratchet" },
 ]
 
+# ── back-of-house instruments that SAY their verdict ─────────────────────
+# Rung vl-2 of quality/campaigns/verifier-loop.toml. Each of these decides a
+# four-verdict outcome and, until 2026-09-12, could only say it in prose — so a
+# reader (and any runner) had to grep a table. They now end with the same
+# trailing Judgement line `svrn quality check`'s eight lanes speak
+# (`sovereign-cli-shared/src/lane_verdict.rs`; the Python half is
+# `scripts/lib/judgement.py`, tied to the Rust parser by
+# `the_python_emitter_speaks_the_same_protocol`).
+#
+# `runs_in = ["by-hand"]` on most of them is the honest answer and is the
+# finding this registry exists to surface, not a defect in the row.
+
+[[instrument]]
+id = "evidence-verdict"
+kind = "check"
+claim = "invariant"
+command = "python3 scripts/evidence-verdict.py"
+# Minutes per commit by construction: it runs the cited test at the commit in
+# its own worktree, then again with the source hunks reverted.
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "AGENTS.md §Code Intelligence (the tool table row: \"Does the test my commit body cites actually SEE the change?\")"
+
+[[instrument]]
+id = "sabotage"
+kind = "control"
+claim = "invariant"
+command = "python3 scripts/sabotage.py"
+# Hours: a mutant per batch, each a real suite run. The bank decides the span.
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "quality/sabotage/all.toml (the mutant bank this adjudicates)"
+
+[[instrument]]
+id = "twin-census"
+kind = "control"
+claim = "invariant"
+command = "python3 scripts/twin-census.py"
+# Two census runs per family, each a scoped cargo build.
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "quality/twin-plants.toml (the families and their plants)"
+
+[[instrument]]
+id = "co-drift"
+kind = "probe"
+claim = "judged"
+command = "python3 scripts/co-drift.py"
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = ["port-listening:9741"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "scripts/co-drift.py (module header — the per-commit claim/scope audit)"
+
+[[instrument]]
+id = "co-liveness"
+kind = "probe"
+claim = "judged"
+command = "python3 scripts/co_liveness.py verify"
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = ["port-listening:9741"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "scripts/co_liveness.py (module header — does a backlog item still reproduce at HEAD?)"
+
+[[instrument]]
+id = "co-lineage"
+kind = "check"
+claim = "invariant"
+command = "python3 scripts/co-lineage.py"
+# 0.05s, n=3 (0.05 / 0.06 / 0.05 wall), 2026-09-12 — for `list`, which is the
+# path that loads every campaign file. `measure` costs whatever its bars' own
+# instruments cost.
+cost_secs = 0.05
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "quality/campaigns/ (the campaign files this loads and measures)"
+
+[[instrument]]
+id = "nc-thesis"
+kind = "check"
+claim = "invariant"
+command = "python3 scripts/nc-thesis.py"
+# 0.04s, n=3 (0.04 / 0.04 / 0.04 wall), 2026-09-12 — a glob over tests/ui.
+cost_secs = 0.04
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "scripts/nc-thesis.py (module header — is the product claim a TYPE?)"
+
+[[instrument]]
+id = "mesh-live-probe"
+kind = "probe"
+claim = "invariant"
+command = "python3 scripts/mesh-live-probe.py"
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = ["port-listening:9741"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "scripts/mesh-live-probe.py (module header — routing behaviour against the real fleet)"
+
 [[instrument]]
 id = "judge-funnel-gate"
 kind = "gate"
