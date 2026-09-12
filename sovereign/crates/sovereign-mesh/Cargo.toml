@@ -111,6 +111,10 @@ sovereign-inference = { workspace = true }
 # sovereign-server share this so they advertise the same surface
 # to clients without drifting.
 sovereign-tools = { workspace = true }
+# The enrichment store's inventory, served at `GET /internal/corpus/enriched`
+# (`enrich_http`, 2026-09-11) so the desktop stops reading its OWN data root's
+# `enrichment/` tree. Same layer as `sovereign-tools` above.
+sovereign-enrichment-catalog = { workspace = true }
 # The MeshApp explorer projections (`meshapp_http`, sv-surface D3). A
 # `capabilities`-layer lib the desktop already reads through; serving it
 # here is what stops the desktop opening the daemon's own index dir in a

@@ -106,6 +106,12 @@ pub enum RecipeId {
     /// catalog names the capability and `fetch_recipe()` can resolve
     /// the template; see `docs/specs/FINANCIAL_CORPORA.md`.
     SecFilingsCompany,
+    /// The Federalist Papers — the onboarding STARTER corpus
+    /// (`catalog_status = "hidden"`). Installed by the desktop's first-run
+    /// flow through `/internal/corpus/install` + `try_restore_prebuilt`,
+    /// so the HF snapshot coordinates live in ONE recipe rather than as
+    /// constants in the desktop (thin-desktop order, 2026-09-11).
+    FederalistStarter,
 }
 
 impl RecipeId {
@@ -145,6 +151,7 @@ impl RecipeId {
             Self::EmailArchive => "email-archive",
             Self::BrothersKaramazov => "brothers-karamazov-book-1",
             Self::SecFilingsCompany => "sec-filings-company",
+            Self::FederalistStarter => "federalist-starter",
         }
     }
 
@@ -181,6 +188,7 @@ impl RecipeId {
             "email-archive" => Some(Self::EmailArchive),
             "brothers-karamazov-book-1" => Some(Self::BrothersKaramazov),
             "sec-filings-company" => Some(Self::SecFilingsCompany),
+            "federalist-starter" => Some(Self::FederalistStarter),
             _ => None,
         }
     }
@@ -345,6 +353,12 @@ impl RecipeId {
                     "/recipes/brothers-karamazov-book-1/recipe.toml"
                 ))
             }
+            Self::FederalistStarter => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/federalist-starter/recipe.toml"
+                ))
+            }
         }
     }
 
@@ -381,6 +395,7 @@ impl RecipeId {
         Self::EmailArchive,
         Self::BrothersKaramazov,
         Self::SecFilingsCompany,
+        Self::FederalistStarter,
     ];
 }
 

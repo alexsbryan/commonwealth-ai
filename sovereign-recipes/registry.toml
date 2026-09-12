@@ -470,3 +470,30 @@ hf_repo = "svrnmesh/brothers-karamazov-book-1"
 hf_filename = "brothers-karamazov-book-1-qwen-embedding-0.6b-2026-08-07.tar.zst"
 sha256 = "924bb44768072bef80aca917420838d8c5132a49647a6bf3282f271f62be1c2a"
 compatible_embedding_model = "qwen-embedding-0.6b"
+
+# The onboarding STARTER corpus. `hidden`: it is installed by the desktop's
+# first-run flow (`install_starter_corpus`) and by `svrn corpus install
+# federalist-starter`, not picked from the Knowledge rail. Registered
+# 2026-09-11 so the install rides `/internal/corpus/install` +
+# `CorpusEngine::try_restore_prebuilt` like every other prebuilt corpus —
+# the desktop carried the same HF repo / filename / sha256 as constants and
+# restored the archive itself until then.
+[[recipes]]
+id = "federalist-starter"
+name = "The Federalist Papers (starter)"
+description = "Hamilton, Madison and Jay's 85 essays with a pre-built epistemic atlas — the small, grounded corpus a first-time user chats with before installing their own."
+license = "Public Domain"
+size_compressed_gb = 0.0002
+size_indexed_gb = 0.002
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/federalist-starter/recipe.toml"
+sha256 = ""
+catalog_status = "hidden"
+
+[recipes.prebuilt]
+# MUST match `sovereign-recipes/federalist-starter/recipe.toml` `[prebuilt]`.
+hf_repo = "svrnmesh/federalist-starter"
+hf_filename = "federalist-starter.tar.zst"
+sha256 = "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f"
+compatible_embedding_model = "qwen-embedding-0.6b"

@@ -87,6 +87,13 @@ fn main() {
     vendor_data_assets(&recipes_root, &out_dir);
 
     println!("cargo:rerun-if-changed=build.rs");
+    // The recipes ROOT too, not only each recipe.toml found under it: a
+    // directory's mtime changes when a subdirectory is added, and without
+    // this a NEW `<id>/recipe.toml` was not vendored until something else
+    // forced a rebuild — the registry snapshot picked the entry up while
+    // `bundled_recipe_covers_every_snapshot_entry` found no recipe for it
+    // (2026-09-11, federalist-starter).
+    println!("cargo:rerun-if-changed={}", recipes_root.display());
     println!("cargo:rerun-if-env-changed=CORPUS_ENGINE_RECIPES_DIR");
     println!("cargo:rerun-if-env-changed=CORPUS_ENGINE_DATA_DIR");
 }

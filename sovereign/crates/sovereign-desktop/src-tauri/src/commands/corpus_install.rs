@@ -330,6 +330,42 @@ pub async fn lc_start_layered_setup(
 /// the snapshot after a grace window, so the Svelte `installing`
 /// state flips back to `installed` without waiting for the next
 /// `list_corpora` refresh.
+/// The daemon's recorded FAILURE for one corpus, if it has one: the
+/// `Failed { message }` entry `/internal/corpus/status` carries after an
+/// ingest ended in error (the entry a successful ingest does not leave
+/// behind — it is cleared). `Ok(None)` is "no failure recorded", which is
+/// not "succeeded": a caller waiting on an install pairs this with the
+/// catalog's `installed` status. Added 2026-09-11 for the starter-corpus
+/// install, which rides `/internal/corpus/install` like every other corpus.
+pub(crate) async fn install_failure(
+    state: &AppState,
+    corpus_id: &str,
+) -> Result<Option<String>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{}/internal/corpus/status", state.internal_base_url());
+    let snapshot: CorpusStatusResponse = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/corpus/status: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse /internal/corpus/status: {e}"))?;
+    Ok(snapshot
+        .entries
+        .iter()
+        .find(|e| e.corpus_id == corpus_id)
+        .and_then(|e| match &e.progress {
+            Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { message }) => {
+                Some(message.clone())
+            }
+            _ => None,
+        }))
+}
+
 pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppState>) {
     tokio::spawn(async move {
         let client = match reqwest::Client::builder()

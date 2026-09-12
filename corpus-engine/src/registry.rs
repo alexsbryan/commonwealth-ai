@@ -674,7 +674,9 @@ mod tests {
         // + the 2026-08 sec-filings-company template (financial corpora,
         // FINANCIAL_CORPORA.md F3 — per-company installs materialize as
         // sec-cik<10-digit>; the template itself is never installed).
-        assert_eq!(entries.len(), 29, "snapshot should have 29 entries");
+        // + the 2026-09 federalist-starter onboarding corpus (hidden; the
+        // desktop's first-run install rides the daemon's prebuilt rail).
+        assert_eq!(entries.len(), 30, "snapshot should have 30 entries");
     }
 
     #[test]
@@ -790,7 +792,8 @@ sha256 = ""
         //   ingest). (`alignment` removed 2026-06-19.)
         //   + brothers-karamazov-book-1 (2026-08 literary-atlas bench corpus)
         //   + sec-filings-company (2026-08 financial-corpora template).
-        assert_eq!(catalog.len(), 29);
+        //   + federalist-starter (2026-09 hidden onboarding starter corpus).
+        assert_eq!(catalog.len(), 30);
         assert!(catalog.iter().any(|c| c.id == "brothers-karamazov-book-1"));
         assert!(catalog.iter().any(|c| c.id == "sec-filings-company"));
         assert!(catalog.iter().any(|c| c.id == "email-archive"));

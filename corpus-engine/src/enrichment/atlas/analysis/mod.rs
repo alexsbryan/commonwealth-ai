@@ -28,6 +28,7 @@ pub mod holistic_classifier;
 pub mod parcel_analytics;
 pub mod patterns_adapter;
 pub mod sec_facts;
+pub mod starter_questions;
 pub mod tension_classifier;
 pub mod tension_fields;
 pub mod tension_policy;
