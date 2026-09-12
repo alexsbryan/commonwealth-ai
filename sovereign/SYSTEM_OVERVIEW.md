@@ -3785,15 +3785,19 @@ disabling the fused chunked kernel does not help, and there is no toggle that
 avoids it). They run fine on GPU. Two layers keep a user's first message from
 hard-crashing the app:
 
-- **Proactive substitution** — `sovereign-inference::gguf_meta::read_architecture`
-  reads `general.architecture` straight from the GGUF header (zero weight load),
-  and `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
-  `NoSafeModel`. At desktop boot (`state/builders/model_compat.rs`, run before
-  `inference::load_inference`) a CPU machine whose configured chat model is an
-  unsafe arch gets a **dense** substitute discovered alongside it (largest
-  non-embedder GGUF) and a non-fatal `model-notice` banner; with no substitute,
-  boot fails with a clear in-app `backend-error` rather than a silent SIGSEGV.
-  GPU machines are a no-op.
+- **Proactive substitution — DECIDER SHIPPED, CALLER OWED (2026-09-11).**
+  `sovereign-inference::gguf_meta::read_architecture` reads
+  `general.architecture` straight from the GGUF header (zero weight load), and
+  `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
+  `NoSafeModel`. Its one caller was the desktop's boot-time model-compat
+  builder, deleted in 10b549b05 (sv-surface svt-3): the app loads no models, so
+  a swap made there reached nothing but the banner (see the svt-3a entry in
+  §10). The daemon's slot build — the process that now loads the weights — has
+  no call to the decider yet (`grep choose_cpu_safe_chat_model
+  sovereign/crates/sovereign-cli-daemon` → zero hits), so a CPU-only machine
+  whose configured chat model is a recurrent arch is back to the SIGSEGV this
+  bullet was written to prevent. `sovereign/DEFAULTS_LEDGER.md` carries the
+  row (model-load guards, no owner, review-by 2026-10-11).
 - **Backstop + capture** — the pre-load subprocess smoketest (`smoketest.rs`)
   guarded the desktop's GPU path until **2026-09-11 (sv-surface svt-3a), when
   it was deleted along with the in-process model load it existed for**. The
@@ -5918,7 +5922,7 @@ or guest bind.
 | `/internal/atlas/{corpus}/…` | `sovereign_tools::atlas_view` types off a `FileAtlasReader` over the daemon's `index_dir`: corpora, report, members, atoms (a POST — the filter carries a `Vec`), subgraph, atom detail. The section→chunk cache policy moved here with them | `atlas_http.rs` |
 | `/internal/atlas/conv/…` | the conversation-tiered browse over `runtime.lane_sources.conv_tiered` (`ConvBrowseReader`, `sovereign-core/src/conv_tiered.rs`): corpora, conversations, detail, entities, aggregate, chunk-entity progress. Absence has three answers — 503 no reader, 501 `NotImplemented`, 404 unknown conversation — never an empty list | `atlas_http.rs` |
 | `/internal/meshapp/{corpus}/…` | the thirteen `sovereign-meshapp` explorer projections (graph, node detail, findings, entities, claims, questions, reconciliation, subgraph, stats, timeline, chunk, documents, wrapped), with the page clamps that used to live in the desktop. 404-vs-500 reads a closed `MeshAppError`, not a phrase table | `meshapp_http.rs` |
-| `/internal/corpus/local/…` | the daemon's OWN local-corpus registry (`watched_folder_runtime::manager()`): list, remove, incomplete jobs, cancel, git check, tags, snapshots + rollback, clean, preview, search, ocr-available, and an ingest job answering 202 + `{job_id, progress_route}` | `lc_http.rs` |
+| `/internal/corpus/local/…` | the daemon's OWN local-corpus registry (`watched_folder_runtime::manager()`): list, remove, incomplete jobs, cancel, git check, tags, snapshots + rollback, clean, preview, search, ocr-available, and an ingest job answering 202 + `{job_id, progress_route}`. Since 2026-09-11 also a CLUSTER job: `POST …/{c}/cluster` (202, same ack shape) + `GET …/{c}/cluster/progress?after=N` serving the manager's `LocalCorpusProgress` frames verbatim from an in-process log (`ClusterProgress`); the desktop's `lc_cluster` re-emits them, and `preview`/`write-tags` now read the cache that job filled | `lc_http.rs` |
 | `GET /internal/corpus/local/{corpus}/ingest/progress` | `IngestProgress` over an `IngestOutcome` file written by ONE writer (`record_ingest_outcome`, from both ingest sites) carrying `IngestStats` verbatim, kept apart from the phase file so an ingest never stamps Complete on the map. `finished` with neither stats nor error is an error, never a zero-count success | `lc_http.rs` |
 | `/internal/governance/{corpus}/…` | `GovernanceView` plus the tension verbs (resolve / accept / dismiss / undo), seed, post-build seed and recipe render, over `index_dir/{corpus}/atlas`. A missing atlas is a 404 naming the path — the in-process read answered `Ok` + empty, so an unenriched corpus rendered "no conflicts" | `governance_http.rs` |
 | `/v1/insights…` | clip / list / search / delete, `POST /v1/insights/by-id` (`{insights, missing}` — dead ids are named, not silently dropped) and `GET /v1/insights/sinks`, which is the REAL sink registry where the desktop hard-coded an empty vec | `insight_http.rs` |
@@ -6616,7 +6620,8 @@ work pins the GPU while the user is chatting. Components:
   are owed.
 
   **The desktop's CPU/arch substitution went too, and that is a fix with a
-  gap.** `builders/model_compat.rs` swapped a dense chat model in-memory on a
+  gap.** The desktop's boot-time model-compat builder (deleted in 10b549b05)
+  swapped a dense chat model in-memory on a
   CPU-only machine whose configured model is a recurrent arch that SIGSEGVs in
   ggml's CPU prefill. The swap never touched `config.toml`, so once the daemon
   became the loader it could not reach the weights at all — all it did was make
@@ -6683,9 +6688,10 @@ work pins the GPU while the user is chatting. Components:
   Gone with them: `AppState.{runtime, notes, features, mcp_servers}` (none had
   a reader outside `state.rs`; `lessons`, `recipe_author_commands` and
   `mcp_list_servers` already reach `/v1/notes`, `/v1/features/*` and the
-  daemon's MCP config), `state/builders/knowledge_view.rs` (its own attach
-  guard already returned `None`, and attach is the only mode),
-  `state/builtin_skills.rs`, and the `SplashProgress` recipe adapter.
+  daemon's MCP config), the knowledge-view state builder (its own attach
+  guard already returned `None`, and attach is the only mode), the desktop's
+  builtin-skills pass, and the `SplashProgress` recipe adapter — all three
+  files deleted in 504c6b6d3.
   `AppState.entity_extractor` keeps its feature and drops a duplicate load: it
   used to arrive as `common.parts.lane.gliner` while this file loaded GLiNER
   separately for the corpus engine, and is now one `LazyGlinerExtractor` beside
