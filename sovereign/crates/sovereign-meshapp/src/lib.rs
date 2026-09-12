@@ -10,6 +10,7 @@
 //! `investigation/` graph (UAP) or an `atlas/` enrichment (Enron) through the
 //! same DTOs ([`GraphNodeDto`] / [`EdgeDto`] / [`NodeDetailDto`]).
 
+pub mod parcels;
 pub mod wrapped;
 
 use std::collections::{HashMap, HashSet};
@@ -103,8 +104,8 @@ impl std::error::Error for MeshAppError {}
 
 pub use sovereign_contracts::daemon_wire::{
     ChunkDto, ClaimDto, CorpusStatsDto, DocumentFeedDto, EdgeDto, FeedChunkDto, FeedDocDto,
-    FindingDto, FindingEntityDto, GraphNodeDto, NodeDetailDto, QuestionDto, ReconciliationMergeDto,
-    SubEdgeDto, SubgraphDto, TimelineBucketDto, TimelineDto,
+    FindingDto, FindingEntityDto, GraphNodeDto, NodeDetailDto, ParcelAnalyticsDto, ParcelDto,
+    QuestionDto, ReconciliationMergeDto, SubEdgeDto, SubgraphDto, TimelineBucketDto, TimelineDto,
 };
 
 // ─── The dispatched graph ────────────────────────────────────────────

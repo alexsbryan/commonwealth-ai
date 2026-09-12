@@ -10,19 +10,21 @@
 //! The explorer graph ops are THIN wrappers: the projection logic lives in
 //! the `sovereign-meshapp` library so the desktop host and the
 //! `sovereign meshapp dev` CLI server share one source of truth. Each command
-//! here adds only the permission gate + resolving the corpus's on-disk index
-//! from host state. The numeric LVT ops (`read_corpus`, `parcel_analytics`)
-//! stay here — they fold corpus-engine's `compute_aggregates`, so the SF-LVT
-//! "no confabulated numbers" guarantee carries onto the desktop surface.
+//! here adds only the permission gate. The numeric LVT ops (`read_corpus`,
+//! `parcel_analytics`) are no exception since 2026-09-11: their folds are
+//! `sovereign_meshapp::parcels`, so the SF-LVT "no confabulated numbers"
+//! guarantee is the daemon's and this surface only relays it.
 //!
-//! # Where the atoms come from (sv-surface D3)
+//! # Where the atoms come from (thin-desktop order, 2026-09-11)
 //!
-//! The three atom readers — `meshapp_read_corpus`, `meshapp_search_parcels`,
-//! `meshapp_parcel_analytics` — no longer open `atlas/atoms.json`. They read
-//! `GET /internal/corpus/{corpus}/atoms` through [`wire_atoms`], which is ONE
-//! path in both boot modes. The FOLDS stay here: they are the projection, and
-//! the authorization gate above them cannot cross a socket (the webview label
-//! is host-assigned to THIS process's window).
+//! The three parcel readers — `meshapp_read_corpus`, `meshapp_search_parcels`,
+//! `meshapp_parcel_analytics` — used to pull EVERY atom of the corpus over
+//! `GET /internal/corpus/{corpus}/atoms` and fold them here (sv-surface D3
+//! moved the read, not the fold). The folds are the daemon's now,
+//! `sovereign_meshapp::parcels` behind `/internal/meshapp/{corpus}/parcels…`;
+//! each command is the authorization gate (which cannot cross a socket —
+//! the webview label is host-assigned to THIS process's window) plus one
+//! `TurnClient::meshapp_*` call, like the thirteen below.
 //!
 //! The other thirteen graph ops read the same way as of sv-surface D3's
 //! delete half: each is one `TurnClient::meshapp_*` call against
@@ -39,7 +41,6 @@
 //! are the page defaults and clamps each command re-applied: those live
 //! in the route, once (ARCH §10.6).
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -48,82 +49,10 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, Webvi
 use crate::meshapp::{app_id_from_label, authorize, resolve_grant, MeshAppPermissions, Permission};
 use crate::state::AppState;
 
-use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
-use corpus_engine::enrichment::atlas::AtomEnvelope;
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
-
 use sovereign_contracts::daemon_wire::{
     ChunkDto, ClaimDto, CorpusStatsDto, DocumentFeedDto, FindingDto, GraphNodeDto, NodeDetailDto,
-    QuestionDto, ReconciliationMergeDto, SubgraphDto, TimelineDto,
+    ParcelAnalyticsDto, ParcelDto, QuestionDto, ReconciliationMergeDto, SubgraphDto, TimelineDto,
 };
-
-/// Default SF business-tax take (~$1.4B) the flat land levy must replace.
-const DEFAULT_BUSINESS_TAX_TARGET: f64 = 1_400_000_000.0;
-const DEFAULT_ENTITY_TYPE: &str = "parcel";
-/// SF's effective secured property-tax rate (the 1% Prop-13 base + voter-
-/// approved add-ons). A labeled estimate — used to derive the revenue-neutral
-/// land-only ("swap") rate, which is the only coherent per-parcel comparison:
-/// today's tax falls on land + improvements; a land-value tax shifts the same
-/// revenue onto land alone, producing real winners (improvement-heavy parcels)
-/// and losers (land-rich / underused parcels).
-const DEFAULT_PROPERTY_TAX_RATE: f64 = 0.0118;
-
-/// One parcel atom for the webview, carrying its provenance handle so the
-/// per-parcel calculator can chip every number back to its source.
-#[derive(Debug, Clone, Serialize)]
-pub struct ParcelDto {
-    pub atom_id: String,
-    pub parcel_number: String,
-    pub source_chunk: Option<String>,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-/// The deterministic city-wide aggregate + its derivation. Scalars only
-/// (NOT the ~208k `atom_ids`): the macro model multiplies
-/// `land_value_total` by the slider rate in JS, and provenance is
-/// "computed over `parcel_count` parcel atoms in `corpus_id`", surfaced
-/// via `derivation`.
-#[derive(Debug, Clone, Serialize)]
-pub struct ParcelAnalyticsDto {
-    pub corpus_id: String,
-    pub parcel_count: usize,
-    pub land_value_total: f64,
-    pub improvement_value_total: f64,
-    pub business_tax_target: f64,
-    pub neutral_rate: f64,
-    /// Revenue-neutral property-tax → land-only "swap" scenario — the coherent
-    /// per-parcel basis. `property_tax_revenue_est` = (land + improvements) ×
-    /// `property_tax_rate`; `property_tax_swap_rate` = that ÷ land base.
-    pub property_tax_rate: f64,
-    pub property_tax_revenue_est: f64,
-    pub property_tax_swap_rate: f64,
-    pub high_land_share_count: usize,
-    pub underused_count: usize,
-    pub derivation: Vec<String>,
-}
-
-/// Every atom in a corpus's atlas, read over the daemon's
-/// `GET /internal/corpus/{corpus}/atoms` — ONE path in both boot modes,
-/// because Local means the daemon is in-process over this process's own
-/// `corpus_engine` (sv-surface D3).
-///
-/// Replaces the in-process `load_atoms`, which opened `atlas/atoms.json`
-/// itself and therefore answered nothing at all on an attached boot. The
-/// route serialises `corpus_engine_vocab::AtomsFile`'s vec verbatim, so
-/// `AtomEnvelope` is the same type the three folds below already matched
-/// on and none of them changes. Errors still propagate a reason rather
-/// than silently returning empty — `corpus_atoms_all` pages until the
-/// host says the read is finished and reports a host that would not
-/// advance rather than clipping (ARCH §18.3).
-async fn wire_atoms(
-    state: &State<'_, Arc<AppState>>,
-    corpus_id: &str,
-) -> Result<Vec<AtomEnvelope>, String> {
-    wire(state)
-        .corpus_atoms_all::<AtomEnvelope>(corpus_id)
-        .await
-        .map_err(|e| format!("read atoms for `{corpus_id}`: {e}"))
-}
 
 /// The daemon this process talks to — in-process on a Local boot, over
 /// the socket on an attached one. ONE construction for the whole file, so
@@ -152,7 +81,9 @@ pub async fn meshapp_capabilities(
 /// Returns the requested parcel atoms with provenance. Each id matches by
 /// EITHER the atom id (content-hash) OR the parcel number (canonical
 /// name) — so a UI that knows only a human parcel number (e.g. a blklot)
-/// can look it up without deriving the host-side hash.
+/// can look it up without deriving the host-side hash. The fold is the
+/// daemon's (`sovereign_meshapp::parcels::parcels_by_id`, over
+/// `GET /internal/meshapp/{corpus}/parcels`).
 #[tauri::command]
 pub async fn meshapp_read_corpus(
     webview: WebviewWindow,
@@ -162,33 +93,18 @@ pub async fn meshapp_read_corpus(
 ) -> Result<Vec<ParcelDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let want: HashSet<&str> = atom_ids.iter().map(String::as_str).collect();
-    let atoms = wire_atoms(&state, &corpus_id).await?;
-    let out = atoms
-        .into_iter()
-        .filter_map(|env| match env {
-            AtomEnvelope::Entity(e)
-                if want.contains(e.id.as_str()) || want.contains(e.canonical_name.as_str()) =>
-            {
-                Some(ParcelDto {
-                    atom_id: e.id.as_str().to_string(),
-                    parcel_number: e.canonical_name.clone(),
-                    source_chunk: e.provenance.source_chunk_id.clone(),
-                    attributes: e.attributes.clone(),
-                })
-            }
-            _ => None,
-        })
-        .collect();
-    Ok(out)
+    wire(&state)
+        .meshapp_parcels::<Vec<ParcelDto>>(&corpus_id, &atom_ids)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.searchParcels(corpusId, query, limit?)` — gated on
 /// `mesh_store_read`. Substring/number search over parcel atoms so a UI
 /// (a homeowner) can find their parcel by street name or number without
 /// knowing the atom-id. Matches the parcel number (exact, case-folded) OR
-/// `property_location` (substring, case-folded); capped at `limit` (≤100).
+/// `property_location` (substring, case-folded); the cap (≤100) is the
+/// route's clamp now, not a `.min()` here.
 #[tauri::command]
 pub async fn meshapp_search_parcels(
     webview: WebviewWindow,
@@ -199,47 +115,20 @@ pub async fn meshapp_search_parcels(
 ) -> Result<Vec<ParcelDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let q = query.trim().to_uppercase();
-    if q.is_empty() {
-        return Ok(Vec::new());
-    }
-    let cap = limit.unwrap_or(25).min(100);
-    let atoms = wire_atoms(&state, &corpus_id).await?;
-    let mut out: Vec<ParcelDto> = atoms
-        .into_iter()
-        .filter_map(|env| match env {
-            AtomEnvelope::Entity(e) => {
-                let num_match = e.canonical_name.to_uppercase() == q;
-                let addr_match = e
-                    .attributes
-                    .get("property_location")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_uppercase().contains(&q))
-                    .unwrap_or(false);
-                if num_match || addr_match {
-                    Some(ParcelDto {
-                        atom_id: e.id.as_str().to_string(),
-                        parcel_number: e.canonical_name.clone(),
-                        source_chunk: e.provenance.source_chunk_id.clone(),
-                        attributes: e.attributes.clone(),
-                    })
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
-        .collect();
-    out.truncate(cap);
-    Ok(out)
+    wire(&state)
+        .meshapp_search_parcels::<Vec<ParcelDto>>(&corpus_id, &query, limit)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 /// `window.meshApp.parcelAnalytics(corpusId, businessTaxTarget?)` — gated
-/// on `mesh_store_read` (it reads corpus atoms). Deterministic: folds the
-/// parcel atoms into the revenue-neutral land-levy aggregate via
-/// corpus-engine's pure lib. No inference; the macro model's headline
-/// figures are computed here, never originated by a model.
+/// on `mesh_store_read` (it reads corpus atoms). Deterministic: the daemon
+/// folds the parcel atoms into the revenue-neutral land-levy aggregate via
+/// corpus-engine's pure lib (`sovereign_meshapp::parcels::parcel_analytics`).
+/// No inference; the macro model's headline figures are computed there,
+/// never originated by a model, and the SF defaults (business-tax target,
+/// property-tax rate) are the fold's, so the chat tool and this surface
+/// cannot disagree.
 #[tauri::command]
 pub async fn meshapp_parcel_analytics(
     webview: WebviewWindow,
@@ -249,81 +138,10 @@ pub async fn meshapp_parcel_analytics(
 ) -> Result<ParcelAnalyticsDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let target = business_tax_target.unwrap_or(DEFAULT_BUSINESS_TAX_TARGET);
-    let atoms = wire_atoms(&state, &corpus_id).await?;
-    let parcels: Vec<_> = atoms
-        .into_iter()
-        .filter_map(|env| match env {
-            AtomEnvelope::Entity(e) => match &e.entity_type {
-                EntityType::Other(t) if t.as_str() == DEFAULT_ENTITY_TYPE => Some(e),
-                _ => None,
-            },
-            _ => None,
-        })
-        .collect();
-    if parcels.is_empty() {
-        return Err(format!(
-            "corpus `{corpus_id}` has no `{DEFAULT_ENTITY_TYPE}` atoms"
-        ));
-    }
-
-    let agg = compute_aggregates(&parcels, &corpus_id, target, DEFAULT_PROPERTY_TAX_RATE);
-    let fs = flags(&parcels);
-    let high = fs
-        .iter()
-        .filter(|f| f.kind == FlagKind::HighLandShare)
-        .count();
-    let under = fs.iter().filter(|f| f.kind == FlagKind::Underused).count();
-
-    // The revenue-neutral property-tax → land-only swap is computed by the lib
-    // (single source — the chat `parcel_analytics` tool reads the same fields).
-    // Bind locals so the derivation/DTO below render the lib's values.
-    let roll = agg.land_value_total + agg.improvement_value_total;
-    let property_tax_rate = agg.property_tax_rate;
-    let property_tax_revenue_est = agg.property_tax_revenue_est;
-    let property_tax_swap_rate = agg.property_tax_swap_rate;
-
-    let n = fmt_int(agg.parcel_count as f64);
-    let derivation = vec![
-        format!(
-            "land_value_total = Σ assessed_land_value over {n} parcel atoms ({corpus_id}) = {}",
-            fmt_usd(agg.land_value_total)
-        ),
-        format!(
-            "neutral_rate = business_tax_target ÷ land_value_total = {} ÷ {} = {}",
-            fmt_usd(agg.business_tax_target),
-            fmt_usd(agg.land_value_total),
-            fmt_pct(agg.neutral_rate)
-        ),
-        format!(
-            "property_tax_revenue_est = (Σland + Σimprovement) × property_tax_rate = {} × {} = {}",
-            fmt_usd(roll),
-            fmt_pct(property_tax_rate),
-            fmt_usd(property_tax_revenue_est)
-        ),
-        format!(
-            "property_tax_swap_rate = property_tax_revenue_est ÷ land_value_total = {} ÷ {} = {}",
-            fmt_usd(property_tax_revenue_est),
-            fmt_usd(agg.land_value_total),
-            fmt_pct(property_tax_swap_rate)
-        ),
-    ];
-
-    Ok(ParcelAnalyticsDto {
-        corpus_id: agg.corpus_id,
-        parcel_count: agg.parcel_count,
-        land_value_total: agg.land_value_total,
-        improvement_value_total: agg.improvement_value_total,
-        business_tax_target: agg.business_tax_target,
-        neutral_rate: agg.neutral_rate,
-        property_tax_rate,
-        property_tax_revenue_est,
-        property_tax_swap_rate,
-        high_land_share_count: high,
-        underused_count: under,
-        derivation,
-    })
+    wire(&state)
+        .meshapp_parcel_analytics::<ParcelAnalyticsDto>(&corpus_id, business_tax_target)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 // ─── Explorer graph ops — thin wrappers over the meshapp routes ──────
@@ -877,36 +695,6 @@ pub async fn open_corpus_explorer(
         Some(format!("index.html?corpus={corpus_id}")),
     )
     .await
-}
-
-/// `$174,097,946,887.00` — full-precision, comma-grouped USD for the
-/// derivation trace (matches the chat/tool surface so the two agree).
-fn fmt_usd(v: f64) -> String {
-    let cents = (v * 100.0).round() as i64;
-    let dollars = (cents / 100) as f64;
-    format!("${}.{:02}", fmt_int(dollars), (cents % 100).abs())
-}
-
-fn fmt_pct(v: f64) -> String {
-    format!("{:.2}%", v * 100.0)
-}
-
-fn fmt_int(v: f64) -> String {
-    let n = v.round() as i64;
-    let digits = n.abs().to_string();
-    let mut out = String::new();
-    let len = digits.len();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    if n < 0 {
-        format!("-{out}")
-    } else {
-        out
-    }
 }
 
 #[cfg(test)]

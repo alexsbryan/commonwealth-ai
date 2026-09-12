@@ -194,3 +194,43 @@ pub struct QuestionDto {
     pub addressed_by: usize,
     pub source_chunk: String,
 }
+
+// ─── SF-LVT parcel reads — `…/parcels`, `…/parcels/search`, `…/parcel-analytics` ──
+
+/// One parcel atom for the webview, carrying its provenance handle so the
+/// per-parcel calculator can chip every number back to its source.
+///
+/// The desktop's `ParcelDto`, moved (thin-desktop order, 2026-09-11): it
+/// was `Serialize`-only up there (a Tauri return), and a wire type has to
+/// parse back, which is why this carries `Deserialize` too.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParcelDto {
+    pub atom_id: String,
+    pub parcel_number: String,
+    pub source_chunk: Option<String>,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The deterministic city-wide aggregate + its derivation. Scalars only
+/// (NOT the ~208k `atom_ids`): the macro model multiplies
+/// `land_value_total` by the slider rate in JS, and provenance is
+/// "computed over `parcel_count` parcel atoms in `corpus_id`", surfaced
+/// via `derivation`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParcelAnalyticsDto {
+    pub corpus_id: String,
+    pub parcel_count: usize,
+    pub land_value_total: f64,
+    pub improvement_value_total: f64,
+    pub business_tax_target: f64,
+    pub neutral_rate: f64,
+    /// Revenue-neutral property-tax → land-only "swap" scenario — the coherent
+    /// per-parcel basis. `property_tax_revenue_est` = (land + improvements) ×
+    /// `property_tax_rate`; `property_tax_swap_rate` = that ÷ land base.
+    pub property_tax_rate: f64,
+    pub property_tax_revenue_est: f64,
+    pub property_tax_swap_rate: f64,
+    pub high_land_share_count: usize,
+    pub underused_count: usize,
+    pub derivation: Vec<String>,
+}

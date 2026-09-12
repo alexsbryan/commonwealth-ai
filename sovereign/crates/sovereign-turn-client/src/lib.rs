@@ -1644,6 +1644,60 @@ impl TurnClient {
             .await
     }
 
+    /// `GET /internal/meshapp/{corpus}/parcels?ids=` — the requested
+    /// parcel atoms with provenance; each id matches by atom id OR parcel
+    /// number. The wire form of `meshapp_read_corpus`. `T` is
+    /// `Vec<sovereign_contracts::daemon_wire::ParcelDto>`.
+    pub async fn meshapp_parcels<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        ids: &[String],
+    ) -> Result<T> {
+        let ids = ids.join(",");
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/parcels"),
+            &[("ids", ids)],
+        )
+        .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/parcels/search?q=&limit=` — parcel
+    /// number (exact) or address (substring) search. The wire form of
+    /// `meshapp_search_parcels`. `T` is `Vec<ParcelDto>`.
+    pub async fn meshapp_search_parcels<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<T> {
+        let mut q: Vec<(&str, String)> = vec![("q", query.to_string())];
+        if let Some(n) = limit {
+            q.push(("limit", n.to_string()));
+        }
+        self.internal_get(format!("/internal/meshapp/{corpus_id}/parcels/search"), &q)
+            .await
+    }
+
+    /// `GET /internal/meshapp/{corpus}/parcel-analytics?business_tax_target=`
+    /// — the revenue-neutral land-levy aggregate with its derivation. The
+    /// wire form of `meshapp_parcel_analytics`. `T` is
+    /// `sovereign_contracts::daemon_wire::ParcelAnalyticsDto`.
+    pub async fn meshapp_parcel_analytics<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        business_tax_target: Option<f64>,
+    ) -> Result<T> {
+        let q: Vec<(&str, String)> = business_tax_target
+            .into_iter()
+            .map(|v| ("business_tax_target", v.to_string()))
+            .collect();
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/parcel-analytics"),
+            &q,
+        )
+        .await
+    }
+
     /// One GET against a loopback `/internal/...` read surface, parsed
     /// as `T`. Every plain atlas and meshapp read goes through here, so
     /// the URL join, the non-success rendering and the parse-error

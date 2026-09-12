@@ -96,6 +96,31 @@ pub struct FeedQuery {
     pub limit_docs: Option<usize>,
 }
 
+/// `?ids=a,b,c` — `meshapp_read_corpus`'s argument. Comma-separated: an
+/// id is an atom id or a parcel number, neither of which carries a comma.
+#[derive(Debug, Default, Deserialize)]
+pub struct ParcelIdsQuery {
+    #[serde(default)]
+    pub ids: String,
+}
+
+/// `?q=&limit=` — `meshapp_search_parcels`' two arguments.
+#[derive(Debug, Default, Deserialize)]
+pub struct ParcelSearchQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// `?business_tax_target=` — `meshapp_parcel_analytics`' argument. `None`
+/// means the SF default, applied by the fold.
+#[derive(Debug, Default, Deserialize)]
+pub struct ParcelAnalyticsQuery {
+    #[serde(default)]
+    pub business_tax_target: Option<f64>,
+}
+
 // ─── Router ────────────────────────────────────────────────────
 
 /// The MeshApp explorer router. Mounted unconditionally on every
@@ -121,6 +146,15 @@ pub fn meshapp_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/internal/meshapp/{corpus}/chunks/{chunk_id}", get(chunk))
         .route("/internal/meshapp/{corpus}/documents", get(document_feed))
         .route("/internal/meshapp/{corpus}/wrapped", get(wrapped))
+        .route("/internal/meshapp/{corpus}/parcels", get(parcels))
+        .route(
+            "/internal/meshapp/{corpus}/parcels/search",
+            get(parcel_search),
+        )
+        .route(
+            "/internal/meshapp/{corpus}/parcel-analytics",
+            get(parcel_analytics),
+        )
         .localhost_only_with(daemon)
 }
 
@@ -413,6 +447,86 @@ async fn wrapped(
             }
         },
     )
+}
+
+// ─── SF-LVT parcel reads (thin-desktop order, 2026-09-11) ───────
+//
+// The three atom folds `commands/meshapp.rs` ran in-process over
+// `GET /internal/corpus/{corpus}/atoms` — every atom of a 208k-parcel
+// atlas shipped to the desktop so it could filter three of them. The
+// folds are `sovereign_meshapp::parcels` now; the desktop gates and
+// calls.
+
+/// GET `/internal/meshapp/{corpus}/parcels?ids=a,b` — the wire form of
+/// `meshapp_read_corpus`. Answers `Vec<ParcelDto>`; each id matches by
+/// atom id OR parcel number.
+async fn parcels(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(q): Query<ParcelIdsQuery>,
+) -> Result<Response, Absence> {
+    let path = index_path(&daemon, &corpus).await?;
+    let ids: Vec<String> = q
+        .ids
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let rows = sovereign_meshapp::parcels::parcels_by_id(&path, &corpus, &ids)
+        .map_err(|e| absent_or_internal(&corpus, &e))?;
+    tracing::debug!(
+        corpus = %corpus,
+        asked = ids.len(),
+        found = rows.len(),
+        "meshapp_http: parcels served"
+    );
+    Ok((StatusCode::OK, Json(rows)).into_response())
+}
+
+/// GET `/internal/meshapp/{corpus}/parcels/search?q=&limit=` — the wire
+/// form of `meshapp_search_parcels`. A blank `q` is `[]` without reading
+/// the atlas; `limit` is clamped, never refused.
+async fn parcel_search(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(q): Query<ParcelSearchQuery>,
+) -> Result<Response, Absence> {
+    use sovereign_meshapp::parcels::{SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX};
+    let path = index_path(&daemon, &corpus).await?;
+    let limit = clamp(q.limit, SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX);
+    let rows = sovereign_meshapp::parcels::search_parcels(&path, &corpus, &q.q, limit)
+        .map_err(|e| absent_or_internal(&corpus, &e))?;
+    tracing::debug!(
+        corpus = %corpus,
+        limit,
+        found = rows.len(),
+        "meshapp_http: parcel search served"
+    );
+    Ok((StatusCode::OK, Json(rows)).into_response())
+}
+
+/// GET `/internal/meshapp/{corpus}/parcel-analytics?business_tax_target=`
+/// — the wire form of `meshapp_parcel_analytics`. Answers
+/// `ParcelAnalyticsDto`; a corpus with no `parcel` atoms is a 404 naming
+/// it, never an empty aggregate.
+async fn parcel_analytics(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(corpus): Path<String>,
+    Query(q): Query<ParcelAnalyticsQuery>,
+) -> Result<Response, Absence> {
+    let path = index_path(&daemon, &corpus).await?;
+    let dto = sovereign_meshapp::parcels::parcel_analytics(&path, &corpus, q.business_tax_target)
+        .map_err(|e| absent_or_internal(&corpus, &e))?;
+    tracing::debug!(
+        corpus = %corpus,
+        parcels = dto.parcel_count,
+        "meshapp_http: parcel analytics served"
+    );
+    Ok((StatusCode::OK, Json(dto)).into_response())
 }
 
 // ─── Helpers ───────────────────────────────────────────────────

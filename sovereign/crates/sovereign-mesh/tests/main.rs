@@ -112,6 +112,7 @@ mod mesh_sim_scoreboard;
 #[path = "main/mesh_switch.rs"]
 mod mesh_switch;
 #[path = "main/meshapp_surface_e2e.rs"]
+mod meshapp_parcels_e2e;
 mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
