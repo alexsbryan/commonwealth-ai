@@ -75,6 +75,7 @@ mod job_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;
+mod mesh_app;
 mod mesh_bench;
 mod mesh_cmd;
 mod mesh_guest;
@@ -91,6 +92,7 @@ mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;
 mod proxy_cmd;
+pub mod publish_cmd;
 mod quality_lane_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
@@ -147,6 +149,8 @@ async fn async_main() {
             "sovereign_cli=info,sovereign_cli_llm=info,sovereign_mesh=info,\
              commonwealth_discovery=info,commonwealth_api=info",
         ),
+        // `publish` only reads and rewrites config; it dials nothing.
+        "publish" | "unpublish" => init_tracing("sovereign_cli_llm=info"),
         "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
         "voice" | "search-gym" | "knowledge-gym" => init_tracing("sovereign_cli_llm=info"),
@@ -218,6 +222,8 @@ async fn async_main() {
         "mcp" => mcp_cmd::run_mcp(rest).await,
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mesh" => mesh_cmd::run_mesh(rest).await,
+        "publish" => publish_cmd::run(rest).await,
+        "unpublish" => publish_cmd::run_unpublish(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
         // One lane of `svrn quality check`. The runner lives in

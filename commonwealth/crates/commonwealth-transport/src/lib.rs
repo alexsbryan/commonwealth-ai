@@ -140,13 +140,19 @@ pub enum TrafficClass {
     /// IP transport returns NO candidates — there is no port to guess,
     /// and a plaintext guess would be a hole rather than a fallback.
     Media,
+    /// A member reaching one of a peer's PUBLISHED APPS (`[iroh.apps]`) —
+    /// HTTP spliced whole, the app chosen per request by the first path
+    /// segment. iroh-ONLY for the same reason `Media` is: the apps are bound
+    /// to loopback on the publisher and reachable by mesh key alone, so a
+    /// plaintext guess would be a hole rather than a fallback.
+    App,
 }
 
 impl TrafficClass {
     /// Every traffic class, in flip order. Callers that must apply a
     /// policy to all peer traffic — e.g. routing every class over iroh
     /// when the mesh-wide encryption policy is on — enumerate this.
-    pub const ALL: [TrafficClass; 8] = [
+    pub const ALL: [TrafficClass; 9] = [
         TrafficClass::Gossip,
         TrafficClass::ControlPlane,
         TrafficClass::KnowledgeSearch,
@@ -155,6 +161,7 @@ impl TrafficClass {
         TrafficClass::StatusProbe,
         TrafficClass::RpcTensor,
         TrafficClass::Media,
+        TrafficClass::App,
     ];
 
     /// Stable lowercase name for tracing fields.
@@ -168,6 +175,7 @@ impl TrafficClass {
             TrafficClass::StatusProbe => "status_probe",
             TrafficClass::RpcTensor => "rpc_tensor",
             TrafficClass::Media => "media",
+            TrafficClass::App => "app",
         }
     }
 }

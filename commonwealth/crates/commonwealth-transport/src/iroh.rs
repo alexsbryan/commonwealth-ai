@@ -762,6 +762,7 @@ impl IrohTransport {
             TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
             TrafficClass::RpcTensor => RPC_ALPN,
             TrafficClass::Media => MEDIA_ALPN,
+            TrafficClass::App => APP_ALPN,
             _ => ALPN,
         }
     }

@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::member_matches;
 use commonwealth_transport::fanout::{
@@ -95,15 +96,16 @@ pub fn select_targets(
     candidates: &[MediaCandidate],
     self_id: NodeId,
     peers: Option<&[String]>,
+    kind: OriginKind,
 ) -> Vec<Selected> {
     match peers {
-        None => offering_members(candidates, self_id)
+        None => offering_members(candidates, self_id, kind)
             .into_iter()
             .map(Selected::Ask)
             .collect(),
         Some(names) => names
             .iter()
-            .map(|name| match pick_member(candidates, self_id, name) {
+            .map(|name| match pick_member(candidates, self_id, name, kind) {
                 Ok(c) => Selected::Ask(c),
                 Err(refusal) => {
                     let matched: Vec<&MediaCandidate> = candidates
@@ -232,7 +234,12 @@ pub async fn fanout(
                 iroh_direct_addrs: Vec::new(),
             })
     };
-    let selected = select_targets(&candidates, self_id, req.peers.as_deref());
+    let selected = select_targets(
+        &candidates,
+        self_id,
+        req.peers.as_deref(),
+        OriginKind::Media,
+    );
     let targets: Vec<(FanoutTarget, Option<String>)> = selected
         .into_iter()
         .map(|s| match s {
@@ -327,7 +334,11 @@ mod tests {
             status,
             has_identity: true,
             active: true,
-            offers_media: offers,
+            origins: if offers {
+                vec![OriginKind::Media]
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -349,7 +360,12 @@ mod tests {
     #[test]
     fn every_named_member_is_a_target_and_a_refused_one_says_why() {
         let names = vec!["LittleMac".to_string(), "Quiet".into(), "Nobody".into()];
-        let sel = select_targets(&roster(), NodeId::from_u128(ME), Some(&names));
+        let sel = select_targets(
+            &roster(),
+            NodeId::from_u128(ME),
+            Some(&names),
+            OriginKind::Media,
+        );
         assert_eq!(sel.len(), 3);
         assert!(matches!(&sel[0], Selected::Ask(c) if c.name == "LittleMac"));
         assert_eq!(
@@ -375,7 +391,7 @@ mod tests {
     /// failed rows when asked, which is the truthful outcome).
     #[test]
     fn with_no_names_the_targets_are_the_offering_members_other_than_self() {
-        let sel = select_targets(&roster(), NodeId::from_u128(ME), None);
+        let sel = select_targets(&roster(), NodeId::from_u128(ME), None, OriginKind::Media);
         let names: Vec<&str> = sel
             .iter()
             .map(|s| match s {

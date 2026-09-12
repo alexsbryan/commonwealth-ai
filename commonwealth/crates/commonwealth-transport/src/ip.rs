@@ -73,7 +73,8 @@ impl IpTransport {
             | TrafficClass::KnowledgeSearch
             | TrafficClass::ModelTransfer
             | TrafficClass::RpcTensor
-            | TrafficClass::Media => None,
+            | TrafficClass::Media
+            | TrafficClass::App => None,
         }
     }
 }
@@ -101,7 +102,11 @@ impl PeerTransport for IpTransport {
         // plaintext to anyone on the overlay. No candidates is the only
         // honest answer, and the routed composition then reports "no
         // path" instead of degrading.
-        if class == TrafficClass::Media {
+        // `App` is the same argument with the same force: a published app is
+        // loopback-bound on the publisher and admitted by mesh key, so a
+        // plaintext candidate would be somebody's chore app served to anyone
+        // on the overlay.
+        if class == TrafficClass::Media || class == TrafficClass::App {
             return Vec::new();
         }
         let mut addrs = commonwealth_core::peer_addr::sorted_addresses(&peer.addresses);

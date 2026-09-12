@@ -34,6 +34,7 @@ use axum::extract::{ConnectInfo, Extension, Query};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
+use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::NodeId;
 use serde::Deserialize;
 
@@ -53,9 +54,13 @@ pub use commonwealth_media::{
 };
 
 impl EmbeddedDaemon {
-    /// The members offering a media origin, with the live path to each. The
-    /// read behind `svrn mesh media` with no peer; nothing is dialed.
-    pub async fn media_offers(&self) -> Result<Vec<MediaOffer>, MediaReachRefusal> {
+    /// The members offering an origin of `kind`, with the live path to each.
+    /// The read behind `svrn mesh media` / `svrn mesh app` with no peer;
+    /// nothing is dialed.
+    pub async fn origin_offers(
+        &self,
+        kind: OriginKind,
+    ) -> Result<Vec<MediaOffer>, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
         let roster = {
@@ -66,6 +71,7 @@ impl EmbeddedDaemon {
             self_id,
             &roster,
             &self.peer_paths().await,
+            kind,
         ))
     }
 
@@ -78,7 +84,11 @@ impl EmbeddedDaemon {
     /// peer's gossip status is the liveness evidence, and the CLI does one
     /// real `GET /` through the bridge so the person sees an HTTP status
     /// rather than a port.
-    pub async fn media_reach(&self, query: &str) -> Result<MediaReach, MediaReachRefusal> {
+    pub async fn origin_reach(
+        &self,
+        query: &str,
+        kind: OriginKind,
+    ) -> Result<MediaReach, MediaReachRefusal> {
         let app_state = self.app_state().await.ok_or(MediaReachRefusal::NoMesh)?;
         let self_id = app_state.self_node_id();
         // Cloned out before any await: nothing here holds the mesh lock
@@ -88,8 +98,15 @@ impl EmbeddedDaemon {
             commonwealth_media::roster_of(&mesh)
         };
         let paths = self.peer_paths().await;
-        commonwealth_media::reach(self_id, &roster, query, &app_state.peer_transport(), &paths)
-            .await
+        commonwealth_media::reach(
+            self_id,
+            &roster,
+            query,
+            &app_state.peer_transport(),
+            &paths,
+            kind,
+        )
+        .await
     }
 
     /// The live iroh path per peer, as the media reads want it: the daemon's
@@ -117,15 +134,40 @@ pub struct MediaQuery {
 /// that member's `[iroh] media_origin`. Loopback-only like every `/v1/mesh/*`
 /// route: the URL it returns is only usable from this machine anyway.
 pub async fn mesh_media(
+    caller: ConnectInfo<SocketAddr>,
+    daemon: Extension<Arc<EmbeddedDaemon>>,
+    q: Query<MediaQuery>,
+) -> impl IntoResponse {
+    origin_route(caller, daemon, q, OriginKind::Media).await
+}
+
+/// `GET /v1/mesh/app?peer=<name-or-id>` — the loopback BASE url that reaches
+/// that member's published apps. The app itself is named by the first path
+/// segment under it, so `<base>/chores/tasks` is the chore app's `/tasks`.
+///
+/// One route beside media rather than one route with a `kind=` parameter: the
+/// two are different trust classes on different ALPNs, and a caller that can
+/// flip between them with a query string reads as one capability when it is
+/// two (the same reason `APP_ALPN` is not a path convention on media's).
+pub async fn mesh_app(
+    caller: ConnectInfo<SocketAddr>,
+    daemon: Extension<Arc<EmbeddedDaemon>>,
+    q: Query<MediaQuery>,
+) -> impl IntoResponse {
+    origin_route(caller, daemon, q, OriginKind::App).await
+}
+
+async fn origin_route(
     ConnectInfo(caller): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(q): Query<MediaQuery>,
-) -> impl IntoResponse {
+    kind: OriginKind,
+) -> axum::response::Response {
     if let Err(r) = enforce_localhost(&caller) {
         return r;
     }
     let Some(peer) = q.peer.as_deref().map(str::trim).filter(|p| !p.is_empty()) else {
-        return match daemon.media_offers().await {
+        return match daemon.origin_offers(kind).await {
             Ok(offers) => (
                 StatusCode::OK,
                 Json(serde_json::json!({ "offering": offers })),
@@ -138,7 +180,7 @@ pub async fn mesh_media(
                 .into_response(),
         };
     };
-    match daemon.media_reach(peer).await {
+    match daemon.origin_reach(peer, kind).await {
         Ok(reach) => (StatusCode::OK, Json(serde_json::json!(reach))).into_response(),
         Err(e @ MediaReachRefusal::UnknownMember(_)) => (
             StatusCode::NOT_FOUND,

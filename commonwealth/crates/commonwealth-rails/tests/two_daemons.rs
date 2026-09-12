@@ -168,14 +168,14 @@ async fn one_round_converges_two_daemons_and_carries_the_media_offer() {
     // And the catalogue reads it. Beta, which offers nothing itself, sees
     // exactly one offering member.
     let roster = daemon_b.roster().await;
-    let offers = commonwealth_media::offers(id_b, &roster, &[]);
+    let offers = commonwealth_media::offers(id_b, &roster, &[], OriginKind::Media);
     assert_eq!(offers.len(), 1, "beta sees one library");
     assert_eq!(offers[0].peer, "alpha");
 
     // Alpha, which offers one, sees none: its own origin is already local.
     let roster_a = daemon_a.roster().await;
     assert!(
-        commonwealth_media::offers(id_a, &roster_a, &[]).is_empty(),
+        commonwealth_media::offers(id_a, &roster_a, &[], OriginKind::Media).is_empty(),
         "a node never lists itself as a library to reach over the mesh"
     );
 

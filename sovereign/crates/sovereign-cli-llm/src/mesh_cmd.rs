@@ -83,6 +83,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "forget" => cmd_forget(&args[1..]).await,
         "forget-member" => crate::mesh_member_cmd::cmd_forget_member(&args[1..]).await,
         "media" => crate::mesh_media::cmd_media(&args[1..]).await,
+        "app" => crate::mesh_app::cmd_app(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
         "use" => crate::mesh_guest::cmd_use(&args[1..]).await,

@@ -2,7 +2,7 @@
 //! The three loopback routes a shim author touches, and nothing else.
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
-//! `POST /v1/mesh/media/fanout`. Every answer is
+//! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/media/fanout`. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
 //! same against the other (ARCH §10.6). This module is the HTTP shape and the
@@ -22,6 +22,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use commonwealth_core::capabilities::OriginKind;
 use commonwealth_media::fanout::MediaFanoutRequest;
 use commonwealth_media::MediaReachRefusal;
 use serde::Deserialize;
@@ -38,6 +39,7 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
     Router::new()
         .route("/v1/mesh/status", get(status))
         .route("/v1/mesh/media", get(media))
+        .route("/v1/mesh/app", get(app))
         .route("/v1/mesh/media/fanout", post(media_fanout))
         .with_state(daemon)
 }
@@ -87,8 +89,12 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                     "node_id": m.node_id.to_string(),
                     "status": m.status,
                     // The catalogue's fact, read from the gossiped record
-                    // rather than derived a second way here.
-                    "offers_media": commonwealth_media::candidate_of(m).offers_media,
+                    // rather than derived a second way here. `offers_media`
+                    // keeps its name and meaning for the shims already
+                    // parsing it; `offers` carries the whole set now that a
+                    // node can publish more than one kind.
+                    "offers_media": commonwealth_media::candidate_of(m).offers(OriginKind::Media),
+                    "offers": commonwealth_media::candidate_of(m).origins,
                     "last_seen": m.last_seen,
                     "is_self": m.node_id == daemon.node.self_id,
                 })
@@ -119,22 +125,42 @@ pub struct MediaQuery {
 }
 
 /// `GET /v1/mesh/media` — the catalogue, or one member's loopback URL.
-pub async fn media(
+pub async fn media(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
+    origin(state, q, OriginKind::Media).await
+}
+
+/// `GET /v1/mesh/app` — the same two questions for PUBLISHED APPS.
+///
+/// A rails node can VIEW the house's apps here whether or not it publishes
+/// any; the catalogue is the roster's gossip and the reach is a bridge over
+/// `cwth/app/0`. What it cannot yet do is publish its OWN: that needs an
+/// `[apps]` table in `rails.toml`, and both `Config` and `MediaSection` are
+/// `#[serde(deny_unknown_fields)]`, so adding one makes an un-upgraded rails
+/// daemon REFUSE TO BOOT on a config a new one wrote. That is a deployment
+/// decision for the package daemon, not a side effect of this change, so it
+/// is named here rather than taken quietly — the acceptor's `APP_ALPN` arm
+/// lands with it.
+pub async fn app(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
+    origin(state, q, OriginKind::App).await
+}
+
+async fn origin(
     State(daemon): State<Arc<RailsDaemon>>,
     Query(q): Query<MediaQuery>,
-) -> impl IntoResponse {
+    kind: OriginKind,
+) -> axum::response::Response {
     let roster = daemon.roster().await;
     let paths = daemon.paths().await;
     let self_id = daemon.node.self_id;
     let Some(peer) = q.peer.as_deref().map(str::trim).filter(|p| !p.is_empty()) else {
-        let offering = commonwealth_media::offers(self_id, &roster, &paths);
+        let offering = commonwealth_media::offers(self_id, &roster, &paths, kind);
         return (
             StatusCode::OK,
             Json(serde_json::json!({ "offering": offering })),
         )
             .into_response();
     };
-    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport, &paths).await {
+    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport, &paths, kind).await {
         Ok(reach) => (StatusCode::OK, Json(serde_json::json!(reach))).into_response(),
         // A name nobody has is the one refusal that is about the REQUEST.
         Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),

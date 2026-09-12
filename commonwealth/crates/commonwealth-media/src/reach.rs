@@ -109,8 +109,18 @@ pub struct MediaCandidate {
     pub status: NodeStatus,
     pub has_identity: bool,
     pub active: bool,
-    /// Whether the member's gossiped capabilities carry a `media` origin.
-    pub offers_media: bool,
+    /// The origin kinds the member's gossiped capabilities carry. Was a
+    /// single `offers_media: bool` until 2026-09-12; a node can publish more
+    /// than one kind now, and a bool per kind would have to grow a field per
+    /// variant while the enum already IS the list.
+    pub origins: Vec<OriginKind>,
+}
+
+impl MediaCandidate {
+    /// Whether this member gossips `kind`.
+    pub fn offers(&self, kind: OriginKind) -> bool {
+        self.origins.contains(&kind)
+    }
 }
 
 pub fn candidate_of(m: &MemberRecord) -> MediaCandidate {
@@ -120,7 +130,7 @@ pub fn candidate_of(m: &MemberRecord) -> MediaCandidate {
         status: m.status,
         has_identity: m.node_pubkey.is_some(),
         active: m.is_active(),
-        offers_media: m.capabilities.origins.contains(&OriginKind::Media),
+        origins: m.capabilities.origins.clone(),
     }
 }
 
@@ -147,10 +157,14 @@ pub struct MediaOffer {
 /// The members offering a media origin, other than this node, by name.
 /// Offline members that offer ARE rows (with their status) so a person
 /// learns the library exists; members offering nothing are not.
-pub fn offering_members(candidates: &[MediaCandidate], self_id: NodeId) -> Vec<MediaCandidate> {
+pub fn offering_members(
+    candidates: &[MediaCandidate],
+    self_id: NodeId,
+    kind: OriginKind,
+) -> Vec<MediaCandidate> {
     let mut rows: Vec<MediaCandidate> = candidates
         .iter()
-        .filter(|c| c.active && c.offers_media && c.node_id != self_id)
+        .filter(|c| c.active && c.offers(kind) && c.node_id != self_id)
         .cloned()
         .collect();
     rows.sort_by(|a, b| a.name.cmp(&b.name));
@@ -163,9 +177,10 @@ pub fn offers(
     self_id: NodeId,
     roster: &[(MediaCandidate, PeerContact)],
     paths: &[(NodeId, PeerTransportPath)],
+    kind: OriginKind,
 ) -> Vec<MediaOffer> {
     let candidates: Vec<MediaCandidate> = roster.iter().map(|(c, _)| c.clone()).collect();
-    let offers: Vec<MediaOffer> = offering_members(&candidates, self_id)
+    let offers: Vec<MediaOffer> = offering_members(&candidates, self_id, kind)
         .into_iter()
         .map(|c| MediaOffer {
             path: paths
@@ -179,9 +194,10 @@ pub fn offers(
         .collect();
     tracing::info!(
         target: "transport",
+        kind = ?kind,
         offering = offers.len(),
         roster = candidates.len(),
-        "media offers: listed from gossiped origins, nothing dialed"
+        "offers: listed from gossiped origins, nothing dialed"
     );
     offers
 }
@@ -192,6 +208,7 @@ pub fn pick_member(
     candidates: &[MediaCandidate],
     self_id: NodeId,
     query: &str,
+    kind: OriginKind,
 ) -> Result<MediaCandidate, MediaReachRefusal> {
     let matched: Vec<&MediaCandidate> = candidates
         .iter()
@@ -220,7 +237,7 @@ pub fn pick_member(
     if !picked.has_identity {
         return Err(MediaReachRefusal::NoIdentity(picked.name));
     }
-    if !picked.offers_media {
+    if !picked.offers(kind) {
         return Err(MediaReachRefusal::NoOrigin(picked.name));
     }
     Ok(picked)
@@ -258,15 +275,22 @@ pub async fn reach(
     query: &str,
     transport: &Arc<dyn PeerTransport>,
     paths: &[(NodeId, PeerTransportPath)],
+    kind: OriginKind,
 ) -> Result<MediaReach, MediaReachRefusal> {
     let candidates: Vec<MediaCandidate> = roster.iter().map(|(c, _)| c.clone()).collect();
-    let picked = pick_member(&candidates, self_id, query)?;
+    let picked = pick_member(&candidates, self_id, query, kind)?;
     let contact = roster
         .iter()
         .find(|(c, _)| c.node_id == picked.node_id)
         .map(|(_, contact)| contact.clone())
         .expect("picked from this roster");
-    let endpoints = transport.endpoints(&contact, TrafficClass::Media).await;
+    // The class chooses the ALPN, so the kind chooses the class — one map,
+    // here, rather than an ALPN threaded through the viewer surface.
+    let class = match kind {
+        OriginKind::Media => TrafficClass::Media,
+        OriginKind::App => TrafficClass::App,
+    };
+    let endpoints = transport.endpoints(&contact, class).await;
     let Some(ep) = endpoints.into_iter().next() else {
         let why = if contact.relay_url.is_none() && contact.iroh_direct_addrs.is_empty() {
             "the peer gossips no relay and no direct address (its iroh endpoint is off or not yet homed)"
@@ -316,7 +340,7 @@ mod tests {
             status,
             has_identity: true,
             active: true,
-            offers_media: true,
+            origins: vec![OriginKind::Media],
         }
     }
 
@@ -337,8 +361,14 @@ mod tests {
     #[test]
     fn a_member_that_advertises_no_media_origin_is_refused_by_name() {
         let mut roster = roster();
-        roster[1].offers_media = false;
-        let err = pick_member(&roster, NodeId::from_u128(ME), "LittleMac").unwrap_err();
+        roster[1].origins.clear();
+        let err = pick_member(
+            &roster,
+            NodeId::from_u128(ME),
+            "LittleMac",
+            OriginKind::Media,
+        )
+        .unwrap_err();
         assert_eq!(err, MediaReachRefusal::NoOrigin("LittleMac".into()));
         assert!(
             err.to_string().contains("advertises no media origin"),
@@ -353,8 +383,8 @@ mod tests {
     fn the_offer_list_is_offering_members_other_than_self_with_their_status() {
         let mut roster = roster();
         roster.push(cand(0xC0DE, "Quiet", NodeStatus::Online));
-        roster[3].offers_media = false;
-        let rows = offering_members(&roster, NodeId::from_u128(ME));
+        roster[3].origins.clear();
+        let rows = offering_members(&roster, NodeId::from_u128(ME), OriginKind::Media);
         let names: Vec<(&str, NodeStatus)> =
             rows.iter().map(|c| (c.name.as_str(), c.status)).collect();
         assert_eq!(
@@ -370,7 +400,13 @@ mod tests {
     /// something: an online member with a key resolves by name.
     #[test]
     fn an_online_member_resolves_by_name() {
-        let picked = pick_member(&roster(), NodeId::from_u128(ME), "LittleMac").unwrap();
+        let picked = pick_member(
+            &roster(),
+            NodeId::from_u128(ME),
+            "LittleMac",
+            OriginKind::Media,
+        )
+        .unwrap();
         assert_eq!(picked.node_id, NodeId::from_u128(0xB0B));
     }
 
@@ -381,7 +417,13 @@ mod tests {
     /// already holds; say it.
     #[test]
     fn an_offline_member_is_refused_by_name_not_handed_a_dead_port() {
-        let err = pick_member(&roster(), NodeId::from_u128(ME), "BeefyMac").unwrap_err();
+        let err = pick_member(
+            &roster(),
+            NodeId::from_u128(ME),
+            "BeefyMac",
+            OriginKind::Media,
+        )
+        .unwrap_err();
         assert_eq!(
             err,
             MediaReachRefusal::Offline("BeefyMac".into(), "offline")
@@ -394,7 +436,8 @@ mod tests {
     fn a_retired_member_is_unknown() {
         let mut r = roster();
         r[1].active = false;
-        let err = pick_member(&r, NodeId::from_u128(ME), "LittleMac").unwrap_err();
+        let err =
+            pick_member(&r, NodeId::from_u128(ME), "LittleMac", OriginKind::Media).unwrap_err();
         assert_eq!(err, MediaReachRefusal::UnknownMember("LittleMac".into()));
     }
 
@@ -414,7 +457,8 @@ mod tests {
             common.len() >= 4,
             "fixture ids must share ≥4 chars: {common}"
         );
-        let err = pick_member(&roster(), NodeId::from_u128(ME), &common).unwrap_err();
+        let err =
+            pick_member(&roster(), NodeId::from_u128(ME), &common, OriginKind::Media).unwrap_err();
         match err {
             MediaReachRefusal::Ambiguous(q, names) => {
                 assert_eq!(q, common);
@@ -431,7 +475,13 @@ mod tests {
     /// a loop, not a feature.
     #[test]
     fn this_node_is_refused_as_self() {
-        let err = pick_member(&roster(), NodeId::from_u128(ME), "RuggedFox").unwrap_err();
+        let err = pick_member(
+            &roster(),
+            NodeId::from_u128(ME),
+            "RuggedFox",
+            OriginKind::Media,
+        )
+        .unwrap_err();
         assert_eq!(err, MediaReachRefusal::IsSelf("RuggedFox".into()));
     }
 
@@ -442,7 +492,8 @@ mod tests {
     fn a_member_without_an_identity_key_is_refused() {
         let mut r = roster();
         r[1].has_identity = false;
-        let err = pick_member(&r, NodeId::from_u128(ME), "LittleMac").unwrap_err();
+        let err =
+            pick_member(&r, NodeId::from_u128(ME), "LittleMac", OriginKind::Media).unwrap_err();
         assert_eq!(err, MediaReachRefusal::NoIdentity("LittleMac".into()));
     }
 
