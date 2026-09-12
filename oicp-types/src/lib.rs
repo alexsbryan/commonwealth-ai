@@ -38,6 +38,7 @@ pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod model_aliases;
+pub mod origin;
 pub mod registry;
 pub mod requirements;
 pub mod response;
@@ -58,6 +59,7 @@ pub use job::{
     OfferedRepo, WorkOffer,
 };
 pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
+pub use origin::OriginKind;
 pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
 pub use tenant::{InvalidTenantId, TenantId};
 pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};

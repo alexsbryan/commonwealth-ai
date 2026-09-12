@@ -5718,7 +5718,11 @@ These decisions live in the package crate so the inference daemon and the
 package-only rails daemon compose ONE implementation of them (ARCH §10.6).
 
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
-`OriginKind`, 2026-09-11). The acceptor knows whether it routes `cwth/media/0`
+`OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
+day (sv-surface svt-3) and re-exported at `commonwealth_core::capabilities::OriginKind`:
+defined in commonwealth-core it pinned every wire shape carrying it — `MemberDto`,
+`MeshMember` — above the contract layer, and `oicp-types` is the serde-only leaf both
+families already depend on (the `TenantId` precedent). The acceptor knows whether it routes `cwth/media/0`
 to a local origin (`MeshIrohAccess::media_route_active`); the dial-info provider
 carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
 into this node's own capabilities each round, after the hardware/corpora
