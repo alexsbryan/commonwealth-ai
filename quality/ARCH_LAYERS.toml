@@ -1301,12 +1301,6 @@ reason = "REACHED via sovereign-desktop → sovereign-mesh → sovereign-work-at
 tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
 
 [[exception]]
-from = "sovereign-desktop"
-to = "sovereign-workflow"
-reason = "REACHED via sovereign-desktop → sovereign-workflow. Holder: ZERO use sites in src-tauri/src (measured 2026-09-11) — a dead dependency; delete it. Falls when `sovereign-workflow` leaves src-tauri/Cargo.toml."
-tracking = "sv-surface svt-3 teardown (allowlist form, 2026-09-11)"
-
-[[exception]]
 from = "sovereign-mobile"
 to = "commonwealth-core"
 reason = "REACHED via sovereign-mobile → commonwealth-transport → commonwealth-core. The phone dials the mesh over iroh directly and commonwealth-transport is the client of that wire — but it drags commonwealth-core (the mesh's own model), which is the leak. The client half of the transport belongs beside sovereign-turn-client in the contract layer; until that split lands this row stands."

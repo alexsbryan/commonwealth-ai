@@ -9084,6 +9084,37 @@ this gate for a reason, and the two admitted here are package crates whose
 entire purpose is to be liftable — if a third arrives without that property,
 the answer is the split, not another row.
 
+### 10.1s Fan-in ACCEPTED — `sovereign-contracts` 27 → 28 (thin-desktop landing, 2026-09-11)
+
+One crate was added to the dependents of `sovereign-contracts`, and it is the
+campaign's whole point rather than a side effect of it:
+
+| Dependent | Landed | Why it names `sovereign-contracts` |
+|---|---|---|
+| `sovereign-meshapp` | `10c140b3b` (thin-desktop slice 1) | the thirteen explorer projections answer in `daemon_wire::meshapp` DTOs. The desktop used to hold those shapes; moving them below the daemon means the crate that COMPUTES a projection names the type it is served as |
+
+The ratchet's advice — "depend on a narrower crate instead" — points the wrong
+way here. `sovereign-contracts` is the contract layer: it is the one crate a
+thin surface is ALLOWED to reach (`[thin_surfaces].may_reach`), so every DTO
+this campaign pushes below the daemon necessarily adds an edge INTO it. The
+god-crate reading the ratchet defends against is a crate accumulating
+behaviour; this one accumulates wire shapes on purpose, and the alternative —
+a second home for `MeshAppGraph` — is the §10.6 failure the move was made to
+end.
+
+Worth saying plainly: this gate had been RED since `10c140b3b` and nobody ran
+it. Four commits went past it. That is the same unrun-gate failure the repair
+commit at the head of this landing documents five times over, and the fix is
+the same one: `scripts/pre-push.sh` runs layer-gate, and the landing does not
+finish until it is green.
+
+`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
+reason. The other seven rows moved too, but only DOWNWARD and only via
+`layer-gate --tighten`, which never raises: `commonwealth-core` 16 → 15,
+`commonwealth-state` 9 → 8, `corpus-engine-notes` 14 → 13,
+`corpus-engine-scip` 11 → 10 — four real cuts this campaign made, banked in
+the same commit that spends one.
+
 ### 10.1r Size ACCEPTED at the cw-lift landing — 2026-09-11 (re-pinned at `origin/main` 4ea0201e2)
 
 Sixty-four non-merge commits since the last pin (`2a3a78766`, §10.1i): the
