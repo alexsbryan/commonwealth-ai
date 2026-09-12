@@ -24,9 +24,24 @@
 //! `ingest_document` → `rag::ingest::ingest_file` into the `documents`
 //! table, crossed the same day as `POST /v1/documents/legacy`.
 //!
-//! Does NOT cross, named rather than half-served:
-//! - **`ask_document`'s document-operation half** — a route plus a generation
-//!   is a TURN; serving it here mints a second driver beside `serve_turn`.
+//! `ask_document`'s document-operation half crossed the same day as a JOB:
+//! `POST /v1/documents/{id}/ask` persists the question, then routes and
+//! executes on this daemon's manager, narrating `OperationProgress` frames
+//! into a log read from `GET /v1/documents/{id}/ask/{job_id}?after=N`,
+//! whose terminal `outcome` is the persisted assistant message (answered),
+//! a fall-through the client runs as an ordinary turn (off-topic, or RAG
+//! found nothing — the command's two fallbacks, kept), or a failure naming
+//! itself. The header used to keep this out because "a route plus a
+//! generation is a TURN; serving it here mints a second driver beside
+//! `serve_turn`". It does not: the document operation never WAS a turn
+//! through the Runtime — it is the manager's own route/execute pair, and
+//! the one arm that is a turn (the fall-through) still goes to the turn
+//! driver, over the wire, from the client. What this module refuses is
+//! inventing a turn wire that carries an attachment; the one-decider
+//! answer that would retire this route is `TurnRequest` carrying the
+//! asset id and the Runtime owning the branch — out of this change's scope.
+//!
+//! Does NOT cross, named rather than half-served: nothing in this family.
 //!
 //! The T2 entity pass runs on the daemon's OWN NER model. This module said
 //! the opposite until 2026-09-11 — *"builds its manager with no
@@ -49,6 +64,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
+use sovereign_contracts::types::{
+    DocumentAssetOperation, Message, ResponseProvenance, Role, SourceSummary,
+};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::DocumentAsset;
 use sovereign_tools::document_asset::DocumentAssetManager;
@@ -101,7 +119,7 @@ pub struct UploadDocumentRequest {
     pub path: String,
 }
 
-/// Query of `GET /v1/documents/{id}/progress`.
+/// Query of `GET /v1/documents/{id}/progress` and `…/ask/{job_id}`.
 #[derive(Debug, Default, Deserialize)]
 pub struct DocumentProgressQuery {
     /// The caller's cursor: frames at index `>= after` are returned.
@@ -109,21 +127,12 @@ pub struct DocumentProgressQuery {
     pub after: usize,
 }
 
-/// What `GET /v1/documents/{id}/progress` answers.
-///
-/// `frames` are `sovereign_tools::document_asset::IngestProgress` values
-/// serialised by the manager (`{"type": …}`), each with `asset_id`
-/// stamped on, from the caller's cursor onward. `finished` flips when
-/// the job appended its terminal frame — `Ready`, or `Failed` naming
-/// the reason.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DocumentIngestProgress {
-    pub asset_id: String,
-    pub frames: Vec<serde_json::Value>,
-    /// The cursor to send next: one past the last frame here.
-    pub next: usize,
-    pub finished: bool,
-}
+/// The answers of the job routes, defined in `sovereign-contracts` so a
+/// client parses them without linking this crate, serialised here
+/// (sv-surface svt-3).
+pub use sovereign_contracts::daemon_wire::{
+    AskJobAck, AskOutcome, AskProgress, DocumentIngestProgress, IngestLegacyResponse,
+};
 
 /// `POST /v1/documents/legacy`'s body — a file for the legacy
 /// `documents` table (the old paperclip path).
@@ -132,14 +141,12 @@ pub struct IngestLegacyRequest {
     pub path: String,
 }
 
-/// `POST /v1/documents/legacy`'s answer. `source` is the file NAME — the
-/// shape the desktop command always returned and the attachment chip
-/// renders. (The legacy listing's `source` key is the full path the
-/// chunks were stored under; its `filename` is this value.)
+/// `POST /v1/documents/{id}/ask`'s body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngestLegacyResponse {
-    pub source: String,
-    pub chunks_created: usize,
+pub struct AskDocumentRequest {
+    pub question: String,
+    /// The conversation the question and its answer are persisted into.
+    pub conversation_id: String,
 }
 
 /// `DELETE /v1/documents/{id}`'s body.
@@ -176,6 +183,8 @@ pub fn documents_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         )
         .route("/v1/documents/{id}/skeleton", post(rebuild_skeleton))
         .route("/v1/documents/{id}/progress", get(ingest_progress))
+        .route("/v1/documents/{id}/ask", post(ask_document))
+        .route("/v1/documents/{id}/ask/{job_id}", get(ask_progress))
         .localhost_only_with(daemon)
 }
 
@@ -328,15 +337,18 @@ impl DocumentJob {
         }
     }
 
+    /// Whether the manager already narrated the failure. A poisoned log
+    /// answers `false` so the caller appends its own `Failed` frame — the
+    /// arm that ends the job either way, never the one that leaves a
+    /// poller spinning.
     fn last_is_failed(&self) -> bool {
-        self.frames
-            .lock()
-            .ok()
-            .and_then(|f| {
-                f.last()
-                    .map(|v| v.get("type").and_then(|t| t.as_str()) == Some("Failed"))
-            })
-            .unwrap_or(false)
+        match self.frames.lock() {
+            Ok(f) => f
+                .last()
+                .map(|v| v.get("type").and_then(|t| t.as_str()) == Some("Failed"))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
     }
 }
 
@@ -436,10 +448,17 @@ async fn ingest_progress(
     Path(id): Path<String>,
     Query(query): Query<DocumentProgressQuery>,
 ) -> Result<Response, Absence> {
-    let job = document_jobs()
-        .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(&id).cloned());
+    // A poisoned table and an absent job are different facts: the first
+    // is a 500 naming it, the second the 404 below (§18.3).
+    let job = match document_jobs().lock() {
+        Ok(jobs) => jobs.get(&id).cloned(),
+        Err(_) => {
+            return Ok(internal_error(
+                "ingest_progress",
+                "the job table is poisoned",
+            ))
+        }
+    };
     let Some(job) = job else {
         return Ok(json_error(
             StatusCode::NOT_FOUND,
@@ -518,6 +537,368 @@ async fn ingest_legacy(
     Ok(Json(IngestLegacyResponse {
         source,
         chunks_created,
+    })
+    .into_response())
+}
+
+// ─── The ask job ───────────────────────────────────────────────
+
+struct AskJob {
+    asset_id: String,
+    frames: Mutex<Vec<serde_json::Value>>,
+    outcome: Mutex<Option<AskOutcome>>,
+    finished: AtomicBool,
+}
+
+/// The live (and recently finished) ask jobs, keyed by job id.
+static ASK_JOBS: OnceLock<Mutex<HashMap<String, Arc<AskJob>>>> = OnceLock::new();
+
+fn ask_jobs() -> &'static Mutex<HashMap<String, Arc<AskJob>>> {
+    ASK_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+impl AskJob {
+    fn push(&self, frame: serde_json::Value) {
+        if let Ok(mut frames) = self.frames.lock() {
+            frames.push(frame);
+        }
+    }
+
+    /// The one way a job ends: the outcome is set, THEN `finished` flips,
+    /// so a poller that sees `finished` always finds the outcome.
+    fn end(&self, outcome: AskOutcome) {
+        if let Ok(mut slot) = self.outcome.lock() {
+            *slot = Some(outcome);
+        }
+        self.finished.store(true, Ordering::SeqCst);
+    }
+}
+
+/// POST `/v1/documents/{id}/ask` — ask a question of a document asset,
+/// as a JOB. The user message is persisted BEFORE the 202 (tagged with
+/// the asset id, so the conversation records that this turn had a
+/// document attached, and so the fall-through turn sees it); the
+/// route/execute pair runs on the daemon's manager after.
+///
+/// 404 for an asset the store does not hold; 409 naming the state for
+/// one that is not yet queryable — the command's `Err` for the same
+/// case, kept apart from "no such asset".
+async fn ask_document(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(id): Path<String>,
+    Json(req): Json<AskDocumentRequest>,
+) -> Result<Response, Absence> {
+    let store = store_for(&daemon)?;
+    let manager = manager_for(&daemon)?;
+    let runtime = daemon.runtime().map(Arc::clone).ok_or_else(|| {
+        Absence::unavailable(
+            "this daemon serves no turns (it was commissioned without a Runtime), so it \
+             holds no inference provider to answer a document question with",
+        )
+    })?;
+    let asset = match store.get_document_asset(&id).await {
+        Ok(Some(a)) => a,
+        Ok(None) => return Ok(not_found(&id)),
+        Err(e) => return Ok(internal_error("get_document_asset", &e.to_string())),
+    };
+    if !asset.state.is_queryable() {
+        return Ok(json_error(
+            StatusCode::CONFLICT,
+            &format!(
+                "document asset '{id}' is not ready for queries (state: {})",
+                asset.state.label()
+            ),
+        ));
+    }
+
+    let now = sovereign_core::time::unix_now();
+    let user_msg = Message {
+        id: uuid::Uuid::new_v4().to_string(),
+        conversation_id: req.conversation_id.clone(),
+        role: Role::User,
+        content: req.question.clone(),
+        created_at: now,
+        metadata: Some(serde_json::json!({ "attached_asset_id": id })),
+        version: now,
+    };
+    if let Err(e) = store.save_message(&user_msg).await {
+        return Ok(internal_error("save_message", &e.to_string()));
+    }
+
+    let job_id = format!("doc-ask-{}", uuid::Uuid::new_v4());
+    let job = Arc::new(AskJob {
+        asset_id: id.clone(),
+        frames: Mutex::new(Vec::new()),
+        outcome: Mutex::new(None),
+        finished: AtomicBool::new(false),
+    });
+    match ask_jobs().lock() {
+        Ok(mut jobs) => {
+            jobs.insert(job_id.clone(), Arc::clone(&job));
+        }
+        Err(_) => return Ok(internal_error("ask_document", "the job table is poisoned")),
+    }
+    tracing::debug!(
+        asset = %id,
+        job_id = %job_id,
+        conversation = %req.conversation_id,
+        "documents_http: question persisted — ask job spawned"
+    );
+
+    let question = req.question;
+    let conversation_id = req.conversation_id;
+    let asset_id = id.clone();
+    let spawn_job = job_id.clone();
+    tokio::spawn(async move {
+        let outcome = run_ask(
+            &manager,
+            Arc::clone(&store),
+            &runtime,
+            &asset,
+            &question,
+            &conversation_id,
+            &job,
+        )
+        .await;
+        tracing::info!(
+            asset = %asset_id,
+            job_id = %spawn_job,
+            outcome = match &outcome {
+                AskOutcome::Answered { operation, .. } => format!("answered:{}", operation.label()),
+                AskOutcome::FellThrough { reason, .. } => format!("fell_through:{reason}"),
+                AskOutcome::Failed { error } => format!("failed:{error}"),
+            },
+            "documents_http: ask job ended"
+        );
+        job.end(outcome);
+    });
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(AskJobAck {
+            progress_route: format!("/v1/documents/{id}/ask/{job_id}"),
+            asset_id: id,
+            job_id,
+        }),
+    )
+        .into_response())
+}
+
+/// The body of the ask job — the desktop command's document-operation
+/// half, line for line: route, branch on `OffTopic`, execute with
+/// progress, branch on empty RAG, persist the assistant message with the
+/// `provenance` / `retrieved_chunks` shape the routing-meta bar reads,
+/// record the operation, spawn auto-title. Every decision logs.
+async fn run_ask(
+    manager: &DocumentAssetManager,
+    store: Arc<dyn StateStore>,
+    runtime: &Arc<sovereign_core::runtime::Runtime>,
+    asset: &DocumentAsset,
+    question: &str,
+    conversation_id: &str,
+    job: &Arc<AskJob>,
+) -> AskOutcome {
+    let operation = match manager.route(asset, question).await {
+        Ok(op) => op,
+        Err(e) => {
+            return AskOutcome::Failed {
+                error: format!("Routing failed: {e}"),
+            }
+        }
+    };
+    tracing::info!(asset_id = %asset.id, operation = %operation.label(), "documents_http: ask routed");
+    if matches!(operation, DocumentAssetOperation::OffTopic { .. }) {
+        return AskOutcome::FellThrough {
+            operation,
+            reason: "the router judged the question off-topic for the document".to_string(),
+        };
+    }
+
+    let start = std::time::Instant::now();
+    let progress_job = Arc::clone(job);
+    let output = match manager
+        .execute_operation(asset, question, &operation, &move |progress| {
+            let frame = serde_json::to_value(&progress).unwrap_or_else(|_| serde_json::json!({}));
+            progress_job.push(frame);
+        })
+        .await
+    {
+        Ok(o) => o,
+        Err(e) => {
+            return AskOutcome::Failed {
+                error: format!("Query failed: {e}"),
+            }
+        }
+    };
+    if matches!(operation, DocumentAssetOperation::Rag { .. })
+        && output.citations.is_empty()
+        && output.text.is_empty()
+    {
+        tracing::info!(asset_id = %asset.id, "documents_http: RAG found no relevant passages");
+        return AskOutcome::FellThrough {
+            operation,
+            reason: "RAG found no relevant passages in the document".to_string(),
+        };
+    }
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let assistant_message_id = uuid::Uuid::new_v4().to_string();
+    let retrieved_chunks: Vec<serde_json::Value> = output
+        .citations
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "title": c.label,
+                "corpus_id": asset.title,
+                "url": serde_json::Value::Null,
+                "snippet": c.snippet,
+                "provenance_tier": "document",
+            })
+        })
+        .collect();
+    let provenance = ResponseProvenance {
+        // A document-asset op is not a routed turn — no router decided it.
+        router: None,
+        intent: format!("DocumentAsk:{}", operation.label()),
+        search_method: Some("document".to_string()),
+        sources: vec![SourceSummary {
+            origin: asset.title.clone(),
+            count: output.citations.len(),
+            from_peer: None,
+            display_name: None,
+        }],
+        inference_backend: if output.model_id.is_empty() {
+            "local".to_string()
+        } else {
+            output.model_id.clone()
+        },
+        oicp_match: None,
+        total_latency_ms: duration_ms,
+        tokens_used: output.tokens_used,
+        coarse_intent: None,
+        self_assessment: None,
+        routing_trigger: None,
+        coverage: None,
+        finish_reason: output.finish_reason.clone(),
+        // The budget the operation actually ran under — the serving
+        // Runtime's, not a client's copy of a config.
+        max_tokens_budget: Some(runtime.inference_config.max_tokens),
+        completion_tokens: output.completion_tokens,
+        context_window: None,
+    };
+    let sources: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
+    let now = sovereign_core::time::unix_now();
+    let assistant_msg = Message {
+        id: assistant_message_id.clone(),
+        conversation_id: conversation_id.to_string(),
+        role: Role::Assistant,
+        content: output.text.clone(),
+        created_at: now,
+        metadata: Some(serde_json::json!({
+            "attached_asset_id": asset.id,
+            "operation": operation,
+            "sources": sources,
+            "duration_ms": duration_ms,
+            "provenance": provenance,
+            "retrieved_chunks": retrieved_chunks,
+        })),
+        version: now,
+    };
+    if let Err(e) = store.save_message(&assistant_msg).await {
+        return AskOutcome::Failed {
+            error: format!("Failed to save assistant message: {e}"),
+        };
+    }
+    // Analytics row; its absence changes no answer, and it says so.
+    if let Err(e) = store
+        .save_document_operation(&assistant_message_id, &asset.id, &operation, duration_ms)
+        .await
+    {
+        tracing::warn!(asset_id = %asset.id, "documents_http: save_document_operation failed: {e}");
+    }
+    // Auto-title after the first exchange, in the background — the
+    // command's spawn, on the daemon's provider and store.
+    {
+        let inference = Arc::clone(&runtime.inference);
+        let store = Arc::clone(&store);
+        let cid = conversation_id.to_string();
+        tokio::spawn(async move {
+            if let Err(e) =
+                sovereign_core::title::try_auto_title(inference.as_ref(), store.as_ref(), &cid)
+                    .await
+            {
+                tracing::warn!(
+                    conversation_id = %cid,
+                    "documents_http: auto-title failed (ask): {e}"
+                );
+            }
+        });
+    }
+    AskOutcome::Answered {
+        operation,
+        message: assistant_msg,
+        sources,
+    }
+}
+
+/// GET `/v1/documents/{id}/ask/{job_id}?after=N` — the frames an ask job
+/// appended from the caller's cursor on, and its outcome once finished.
+/// 404 naming the job when none is on record for this asset.
+async fn ask_progress(
+    _: LocalOnly,
+    Path((id, job_id)): Path<(String, String)>,
+    Query(query): Query<DocumentProgressQuery>,
+) -> Result<Response, Absence> {
+    let job = match ask_jobs().lock() {
+        Ok(jobs) => jobs.get(&job_id).cloned(),
+        Err(_) => return Ok(internal_error("ask_progress", "the job table is poisoned")),
+    };
+    let job = match job {
+        Some(j) if j.asset_id == id => j,
+        _ => {
+            return Ok(json_error(
+                StatusCode::NOT_FOUND,
+                &format!("no ask job '{job_id}' on record for document asset '{id}'"),
+            ))
+        }
+    };
+    let (frames, next) = match job.frames.lock() {
+        Ok(all) => (
+            all.get(query.after..).unwrap_or(&[]).to_vec(),
+            all.len().max(query.after),
+        ),
+        Err(_) => return Ok(internal_error("ask_progress", "the frame log is poisoned")),
+    };
+    let finished = job.finished.load(Ordering::SeqCst);
+    let outcome = if finished {
+        match job.outcome.lock() {
+            Ok(o) => o.clone(),
+            Err(_) => {
+                return Ok(internal_error(
+                    "ask_progress",
+                    "the outcome slot is poisoned",
+                ))
+            }
+        }
+    } else {
+        None
+    };
+    tracing::debug!(
+        asset = %id,
+        job_id = %job_id,
+        after = query.after,
+        served = frames.len(),
+        finished,
+        "documents_http: ask progress served"
+    );
+    Ok(Json(AskProgress {
+        asset_id: id,
+        job_id,
+        frames,
+        next,
+        finished,
+        outcome,
     })
     .into_response())
 }

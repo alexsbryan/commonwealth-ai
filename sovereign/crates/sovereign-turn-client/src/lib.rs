@@ -2274,7 +2274,7 @@ impl TurnClient {
     /// user-picked path on the daemon's manager and classify what an
     /// ingest would read. `body` serialises to
     /// `sovereign_mesh::lc_http::PreScanRequest` (`path`, `source_type`,
-    /// optional `display_name`); `T` is `lc_http::PreScanAnswer`, whose
+    /// optional `display_name`); `T` is `sovereign_contracts::daemon_wire::PreScanAnswerView<_>`, whose
     /// `corpus_id` is the id the registry KEPT — use that one.
     pub async fn lc_pre_scan<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
         &self,
@@ -2286,7 +2286,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/{corpus}/cluster/progress?after=N` —
     /// the frames a cluster job has appended from the caller's cursor
-    /// on. `T` is `sovereign_mesh::lc_http::ClusterProgress`; its `next`
+    /// on. `T` is `sovereign_contracts::daemon_wire::ClusterProgressView<_>`; its `next`
     /// is the cursor to send on the following call.
     pub async fn lc_cluster_progress<T: serde::de::DeserializeOwned>(
         &self,
@@ -2478,7 +2478,7 @@ impl TurnClient {
 
     /// `GET /v1/documents/{id}/progress?after=N` — the frames an upload
     /// job appended from the caller's cursor on. `T` is
-    /// `sovereign_mesh::documents_http::DocumentIngestProgress`; its
+    /// `sovereign_contracts::daemon_wire::DocumentIngestProgress`; its
     /// `next` is the cursor to send on the following call.
     pub async fn document_ingest_progress<T: serde::de::DeserializeOwned>(
         &self,
@@ -2494,7 +2494,7 @@ impl TurnClient {
 
     /// `POST /v1/documents/legacy` — chunk a local file into the legacy
     /// `documents` table (the old paperclip path). `T` is
-    /// `sovereign_mesh::documents_http::IngestLegacyResponse`.
+    /// `sovereign_contracts::daemon_wire::IngestLegacyResponse`.
     pub async fn ingest_legacy_document<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -2502,6 +2502,40 @@ impl TurnClient {
         self.internal_post_json(
             "/v1/documents/legacy".to_string(),
             &serde_json::json!({ "path": path }),
+        )
+        .await
+    }
+
+    /// `POST /v1/documents/{id}/ask` — ask a question of a document asset,
+    /// as a JOB. The daemon persists the question into `conversation_id`
+    /// before answering 202; poll [`Self::ask_document_progress`] for the
+    /// operation frames and the outcome. `T` is
+    /// `sovereign_contracts::daemon_wire::AskJobAck`.
+    pub async fn ask_document<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        question: &str,
+        conversation_id: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            format!("/v1/documents/{asset_id}/ask"),
+            &serde_json::json!({ "question": question, "conversation_id": conversation_id }),
+        )
+        .await
+    }
+
+    /// `GET /v1/documents/{id}/ask/{job_id}?after=N` — the frames an ask
+    /// job appended from the caller's cursor on, and its `outcome` once
+    /// `finished`. `T` is `sovereign_contracts::daemon_wire::AskProgress`.
+    pub async fn ask_document_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        job_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/documents/{asset_id}/ask/{job_id}"),
+            &[("after", after.to_string())],
         )
         .await
     }

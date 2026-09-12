@@ -226,7 +226,7 @@ pub async fn lc_pre_scan(
     display_name: Option<String>,
 ) -> Result<PreScanResponse, String> {
     let answer = lc_client(&state)
-        .lc_pre_scan::<serde_json::Value, sovereign_mesh::lc_http::PreScanAnswer>(
+        .lc_pre_scan::<serde_json::Value, sovereign_contracts::daemon_wire::PreScanAnswerView<PreScanResult>>(
             &serde_json::json!({
                 "path": path,
                 "source_type": source_type,
@@ -411,8 +411,7 @@ pub async fn lc_ingest(
 /// phase writes to ~50 across a whole embed pass, so a tighter interval
 /// would re-read the same numbers; a looser one would visibly lag the
 /// progress bar.
-pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration =
-    std::time::Duration::from_millis(750);
+pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
 
 /// How many CONSECUTIVE poll failures end the follow with an error frame.
 /// One failure is a hiccup; ten in a row (~7.5s) is a daemon that is not
@@ -1162,7 +1161,7 @@ async fn follow_cluster_job(
     loop {
         tokio::time::sleep(INGEST_POLL_INTERVAL).await;
         let p = match client
-            .lc_cluster_progress::<sovereign_mesh::lc_http::ClusterProgress>(&corpus_id, cursor)
+            .lc_cluster_progress::<sovereign_contracts::daemon_wire::ClusterProgressView<LocalCorpusProgress>>(&corpus_id, cursor)
             .await
         {
             Ok(p) => {

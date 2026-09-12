@@ -462,3 +462,138 @@ async fn legacy_ingest_lands_in_the_table_the_legacy_listing_reads() {
         "the legacy listing reports the ingested file: {listing:#?}"
     );
 }
+
+/// `POST /v1/documents/{id}/ask` (2026-09-11): the question is persisted
+/// into the conversation (tagged with the asset) BEFORE the 202, the job
+/// ends with exactly one outcome, and an answered outcome's message is
+/// the one in the store. The provider answers a canned completion, so
+/// "summarize this document" — the router's deterministic pre-check
+/// sends it to Synthesis without an LLM call — either answers or fails
+/// naming why; both are outcomes, and a poller never spins.
+#[tokio::test]
+async fn ask_is_a_job_that_persists_the_question_and_reports_one_outcome() {
+    let engine_tmp = tempfile::tempdir().unwrap();
+    let engine = engine_at(&engine_tmp);
+    let db_tmp = tempfile::tempdir().unwrap();
+    let store: Arc<dyn StateStore> = Arc::new(
+        sovereign_store::sqlite::SqliteStateStore::open(&db_tmp.path().join("sovereign.db"))
+            .unwrap(),
+    );
+    let root = tempfile::tempdir().unwrap();
+    let provider = Arc::new(TestProvider::new().with_complete_text("Quiet hours begin at 11 PM."));
+    let daemon = EmbeddedDaemon::new(
+        root.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        desktop_services_with_store(engine, Arc::clone(&store), provider),
+    );
+    let mut a = asset("a-ask", "Lease Agreement", "lease.pdf");
+    a.chunk_count = 1;
+    store.save_document_asset(&a).await.unwrap();
+    store
+        .store_chunks(&[chunk(
+            &a.source_key(),
+            0,
+            "Quiet hours begin at 11 PM and end at 7 AM.",
+        )])
+        .await
+        .unwrap();
+    let addr = spawn_router(documents_router(daemon)).await;
+    let http = reqwest::Client::new();
+
+    let resp = http
+        .post(format!("http://{addr}/v1/documents/a-ask/ask"))
+        .json(&serde_json::json!({ "question": "summarize this document", "conversation_id": "conv-ask" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 202);
+    let ack: serde_json::Value = resp.json().await.unwrap();
+    let job_id = ack["job_id"].as_str().unwrap_or_default().to_string();
+    assert!(job_id.starts_with("doc-ask-"), "{ack:#?}");
+    assert_eq!(
+        ack["progress_route"],
+        serde_json::json!(format!("/v1/documents/a-ask/ask/{job_id}"))
+    );
+
+    // The question is in the store already, tagged with the asset.
+    let messages = store.get_conversation("conv-ask").await.unwrap().messages;
+    let user = messages
+        .iter()
+        .find(|m| m.content == "summarize this document")
+        .expect("the user message is persisted before the 202");
+    assert_eq!(
+        user.metadata
+            .as_ref()
+            .and_then(|m| m.get("attached_asset_id")),
+        Some(&serde_json::json!("a-ask"))
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let outcome = loop {
+        let p: serde_json::Value = http
+            .get(format!(
+                "http://{addr}/v1/documents/a-ask/ask/{job_id}?after=0"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if p["finished"] == serde_json::json!(true) {
+            break p["outcome"].clone();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "ask job never finished: {p:#?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
+    let kind = outcome["kind"].as_str().unwrap_or_default().to_string();
+    assert!(
+        matches!(kind.as_str(), "answered" | "fell_through" | "failed"),
+        "a finished job carries exactly one outcome: {outcome:#?}"
+    );
+    if kind == "answered" {
+        let message_id = outcome["message"]["id"].as_str().unwrap_or_default();
+        let messages = store.get_conversation("conv-ask").await.unwrap().messages;
+        assert!(
+            messages.iter().any(|m| m.id == message_id),
+            "the answered outcome's message is the persisted one: {outcome:#?}"
+        );
+        assert_eq!(
+            outcome["message"]["metadata"]["attached_asset_id"],
+            serde_json::json!("a-ask")
+        );
+    } else if kind == "failed" {
+        assert!(
+            !outcome["error"].as_str().unwrap_or_default().is_empty(),
+            "{outcome:#?}"
+        );
+    }
+
+    // Unknown asset → 404 naming it; unknown job → 404 naming it.
+    let resp = http
+        .post(format!("http://{addr}/v1/documents/nope/ask"))
+        .json(&serde_json::json!({ "question": "q", "conversation_id": "c" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 404);
+    let resp = http
+        .get(format!(
+            "http://{addr}/v1/documents/a-ask/ask/doc-ask-missing"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("doc-ask-missing"),
+        "{body:#?}"
+    );
+}

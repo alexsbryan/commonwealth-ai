@@ -68,7 +68,8 @@ use crate::watched_folder_runtime;
 /// without linking this crate, re-exported here so every route below, its
 /// tests and the CLI keep naming them at this path (sv-surface svt-3).
 pub use sovereign_contracts::daemon_wire::{
-    CancelAck, IngestJobAck, LocalSearchHit, OcrAvailability,
+    CancelAck, ClusterProgressView, IngestJobAck, LocalSearchHit, OcrAvailability,
+    PreScanAnswerView,
 };
 
 /// What `GET …/{corpus}/ingest/progress` answers.
@@ -161,17 +162,10 @@ pub struct PreScanRequest {
     pub display_name: Option<String>,
 }
 
-/// What `POST /internal/corpus/local/pre-scan` answers.
-///
-/// `corpus_id` and `display_name` come from the config AS REGISTERED,
-/// for `register`'s reason: the manager keeps an existing id when the
-/// path is already registered under one.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PreScanAnswer {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub result: PreScanResult,
-}
+/// What `POST /internal/corpus/local/pre-scan` answers — the contracts
+/// view at this route's concrete type (sv-surface svt-3: defined where a
+/// client can parse it without linking this crate, serialised here).
+pub type PreScanAnswer = PreScanAnswerView<PreScanResult>;
 
 /// Body of `POST …/{corpus}/cluster`.
 #[derive(Debug, Default, Deserialize)]
@@ -191,25 +185,11 @@ pub struct ClusterProgressQuery {
     pub after: usize,
 }
 
-/// What `GET …/{corpus}/cluster/progress` answers.
-///
-/// The frames are the manager's own `LocalCorpusProgress` values,
-/// verbatim, from the caller's cursor onward — so a client re-emitting
-/// them on its own channel puts the same bytes there that the in-process
-/// callback used to. The terminal frame is appended by the job itself:
-/// `Complete { result: Ingest(zero stats) }` on success (the shape the
-/// desktop's `lc_cluster` always emitted — the preview is fetched
-/// separately because it is large), or `Error` naming what refused.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClusterProgress {
-    pub corpus_id: String,
-    pub job_id: String,
-    pub frames: Vec<LocalCorpusProgress>,
-    /// The cursor to send next: the index one past the last frame here.
-    pub next: usize,
-    /// `true` iff the job has appended its terminal frame.
-    pub finished: bool,
-}
+/// What `GET …/{corpus}/cluster/progress` answers — the contracts view at
+/// this route's concrete frame type. The job appends the terminal frame
+/// itself: `Complete { result: Ingest(zero stats) }` on success, `Error`
+/// naming what refused.
+pub type ClusterProgress = ClusterProgressView<LocalCorpusProgress>;
 
 // ─── Router ────────────────────────────────────────────────────
 
@@ -720,11 +700,13 @@ fn cluster_jobs() -> &'static Mutex<HashMap<String, Arc<ClusterJob>>> {
     CLUSTER_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn cluster_job_for(corpus_id: &str) -> Option<Arc<ClusterJob>> {
+/// The job on record for `corpus_id`. `Err` is a poisoned table — a
+/// different fact from "no job", which is the `Ok(None)` (§18.3).
+fn cluster_job_for(corpus_id: &str) -> Result<Option<Arc<ClusterJob>>, ()> {
     cluster_jobs()
         .lock()
-        .ok()
-        .and_then(|jobs| jobs.get(corpus_id).cloned())
+        .map(|jobs| jobs.get(corpus_id).cloned())
+        .map_err(|_| ())
 }
 
 impl ClusterJob {
@@ -870,10 +852,14 @@ async fn cluster_progress(
     if manager.get(&corpus_id).await.is_none() {
         return Ok(not_registered(&corpus_id));
     }
-    let Some(job) = cluster_job_for(&corpus_id) else {
-        return Ok(not_found(format!(
-            "no cluster job on record for corpus '{corpus_id}'"
-        )));
+    let job = match cluster_job_for(&corpus_id) {
+        Ok(Some(job)) => job,
+        Ok(None) => {
+            return Ok(not_found(format!(
+                "no cluster job on record for corpus '{corpus_id}'"
+            )))
+        }
+        Err(()) => return Ok(log_and_500("cluster_progress: the job table is poisoned")),
     };
     let after = query.after;
     let (frames, next) = match job.frames.lock() {

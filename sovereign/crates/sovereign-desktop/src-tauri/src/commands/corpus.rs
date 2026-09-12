@@ -255,13 +255,10 @@ pub async fn build_corpus_index(
     Ok(())
 }
 
-/// The route's own answer shape (`documents_http::IngestLegacyResponse`),
-/// parsed and returned verbatim so the webview sees the same bytes.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct IngestDocumentResult {
-    pub source: String,
-    pub chunks_created: usize,
-}
+/// The route's own answer shape, parsed and returned verbatim so the
+/// webview sees the same bytes — ONE definition, the contracts one
+/// (ARCH principle 8); the command's historical name kept for `main.rs`.
+pub use sovereign_contracts::daemon_wire::IngestLegacyResponse as IngestDocumentResult;
 
 /// The legacy paperclip path (ChatView's `handleLegacyAttach`): chunk a
 /// file into the `documents` table. `POST /v1/documents/legacy` since
