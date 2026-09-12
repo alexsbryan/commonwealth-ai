@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! HTTP admin surface — `POST /v1/admin/reload`.
+//! HTTP admin surface — `POST /v1/admin/reload` and
+//! `GET /v1/admin/context-window`.
 //!
 //! When the desktop writes a new model path into `SetupConfig` and
 //! wants the running daemon to pick it up, it has two options:
@@ -31,10 +32,11 @@ use std::sync::Arc;
 use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
+use sovereign_contracts::daemon_wire::ContextWindow;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
@@ -64,7 +66,49 @@ pub trait ProviderFactory: Send + Sync {
 pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/admin/reload", post(admin_reload))
+        .route("/v1/admin/context-window", get(context_window))
         .localhost_only_with(daemon)
+}
+
+/// `GET /v1/admin/context-window` — the chat slot's context window, from
+/// the daemon that owns the slot.
+///
+/// It lives beside `admin_reload` because the two are the same subject
+/// read and written: `models.context_size` is in that reload's diff
+/// precisely because the provider factory rebuilds every slot from
+/// `effective_context_size()`, and this route reports what the rebuild
+/// landed on.
+///
+/// The desktop's `get_setup_context_size` read its OWN provider for
+/// `effective` and `n_ctx_train` until 2026-09-12 — a Settings panel
+/// describing the window a slot in the app was budgeting against, while
+/// every turn was budgeted by the daemon's. `configured` was already
+/// right there (both processes read the same `config.toml`), which is
+/// what made the wrong two easy to miss.
+///
+/// A daemon with no provider installed answers `None` for both, not a
+/// copy of `configured`: "there is no slot to ask" is not the same fact
+/// as "the slot agrees with the config" (ARCH principle 6).
+async fn context_window(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> Json<ContextWindow> {
+    let configured = daemon.configured_context_size().await;
+    let (effective, n_ctx_train) = match daemon.inference_provider().await {
+        Some(inf) => (inf.effective_context_size(), inf.n_ctx_train_for_primary()),
+        None => (None, None),
+    };
+    tracing::debug!(
+        configured,
+        effective = ?effective,
+        n_ctx_train = ?n_ctx_train,
+        "admin_http: context window served",
+    );
+    Json(ContextWindow {
+        configured,
+        effective,
+        n_ctx_train,
+    })
 }
 
 /// Request body for `POST /v1/admin/reload`. Empty body (`{}` or no
@@ -438,6 +482,128 @@ mod tests {
             };
             assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
         }
+    }
+
+    /// A provider that OWNS a local slot, so the two `Option` fields can
+    /// be something other than the trait's `None` default. Without this
+    /// the no-slot case and the has-slot case are indistinguishable and
+    /// the test below would pass against a handler that always answered
+    /// `None`.
+    struct SlotProvider;
+
+    #[async_trait]
+    impl InferenceProvider for SlotProvider {
+        async fn complete(
+            &self,
+            _request: &sovereign_core::types::CompletionRequest,
+        ) -> sovereign_core::error::Result<sovereign_core::types::CompletionResponse> {
+            unimplemented!("stub")
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &sovereign_core::types::CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            std::pin::Pin<
+                Box<dyn futures::Stream<Item = sovereign_core::error::Result<String>> + Send>,
+            >,
+        > {
+            unimplemented!("stub")
+        }
+
+        async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unimplemented!("stub")
+        }
+
+        fn capabilities(&self) -> sovereign_core::types::ProviderCapabilities {
+            sovereign_core::types::ProviderCapabilities {
+                max_context_tokens: 32_768,
+                supports_structured_output: false,
+                relative_speed: sovereign_core::types::Speed::Fast,
+                relative_reasoning: sovereign_core::types::Depth::Shallow,
+            }
+        }
+
+        fn effective_context_size(&self) -> Option<u32> {
+            Some(32_768)
+        }
+
+        fn n_ctx_train_for_primary(&self) -> Option<u32> {
+            Some(131_072)
+        }
+    }
+
+    /// The window comes from the slot the DAEMON is serving on, and
+    /// `configured` from its config — three numbers that are allowed to
+    /// disagree, which is why the route reports all three.
+    #[tokio::test]
+    async fn context_window_reports_the_daemons_slot() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless_with_provider(Arc::new(SlotProvider)),
+        );
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .get(format!("{base}/v1/admin/context-window"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: ContextWindow = resp.json().await.unwrap();
+        assert_eq!(body.effective, Some(32_768));
+        assert_eq!(body.n_ctx_train, Some(131_072));
+    }
+
+    /// A provider with NO local slot — the remote-only case — answers
+    /// `None` for both, and neither is quietly filled in from
+    /// `configured`. "There is no slot to ask" and "the slot agrees with
+    /// the config" are different answers, and a Settings panel renders
+    /// them differently (ARCH principle 6).
+    ///
+    /// The fixture is deliberately `NullProvider`, which does not
+    /// override either method and so answers the trait's `None`. That
+    /// makes this test's pass condition weak ON ITS OWN — a handler
+    /// hard-coding `None` would satisfy it — which is exactly why it is
+    /// paired with the test above, where a provider that DOES own a slot
+    /// must come back with that slot's numbers. Neither test is a gate
+    /// without the other.
+    #[tokio::test]
+    async fn context_window_reports_absence_rather_than_echoing_configured() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        let initial_ctx = initial.effective_context_size();
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless(),
+        );
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let body: ContextWindow = reqwest::Client::new()
+            .get(format!("{base}/v1/admin/context-window"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body.effective, None, "no slot is not a number");
+        assert_eq!(body.n_ctx_train, None, "no model is not a ceiling");
+        assert_ne!(
+            body.effective,
+            Some(body.configured),
+            "absence must not be reported as agreement with the config"
+        );
+        // And `configured` is the DAEMON's own, from the config it was
+        // commissioned with — not a re-read of the serving process's
+        // `~/.svrnmesh/config.toml`.
+        assert_eq!(body.configured, initial_ctx);
     }
 
     #[tokio::test]

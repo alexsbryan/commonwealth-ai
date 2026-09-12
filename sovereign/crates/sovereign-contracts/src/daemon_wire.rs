@@ -63,6 +63,32 @@ pub use research::*;
 
 /// Answer of `GET /internal/corpus/local/ocr-available`. A named
 /// field, not a bare `true`: "OCR is unavailable" and "this daemon did
+/// Answer of `GET /v1/admin/context-window` — the chat slot's context
+/// window as the DAEMON sees it.
+///
+/// Three numbers rather than one because they answer different
+/// questions and disagreeing is meaningful: `configured` is what the
+/// next slot load will ask for, `effective` is what the running slot is
+/// budgeting against (they differ between a config write and the
+/// reload), and `n_ctx_train` is the GGUF's own ceiling, which
+/// llama.cpp silently caps `configured` at without a RoPE rebuild.
+///
+/// `effective` and `n_ctx_train` are `Option` and their `None` is
+/// REPORTED, never folded into `configured`: a remote-only provider has
+/// no local slot, and a daemon that has not installed a provider yet has
+/// no answer at all. Both are facts a Settings panel should render
+/// differently from a number (ARCH principle 6).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextWindow {
+    /// `[models].context_size` from the daemon's own `SetupConfig`, or
+    /// the 16384 default when unset.
+    pub configured: u32,
+    /// The running primary slot's `effective_context_size()`.
+    pub effective: Option<u32>,
+    /// The primary GGUF's trained ceiling (`n_ctx_train`).
+    pub n_ctx_train: Option<u32>,
+}
+
 /// not understand the question" must not both read as `false`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OcrAvailability {

@@ -723,10 +723,20 @@ pub(crate) mod fixtures {
     }
 
     pub(crate) fn serving() -> ServingProfile {
+        serving_with_provider(Arc::new(NullProvider))
+    }
+
+    /// `serving()` with a caller-supplied provider, for the tests that
+    /// need one whose answers differ from `NullProvider`'s trait
+    /// defaults — otherwise "the slot said nothing" and "there is no
+    /// slot" are the same observation and a test cannot tell them apart.
+    pub(crate) fn serving_with_provider(
+        inference_provider: Arc<dyn InferenceProvider>,
+    ) -> ServingProfile {
         ServingProfile {
             core: ServingCore {
                 corpus_engine: engine(),
-                inference_provider: Arc::new(NullProvider),
+                inference_provider,
                 state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
                 runtime: runtime(),
                 insights: None,
@@ -754,11 +764,32 @@ pub(crate) mod fixtures {
         headless_with_factory(Arc::new(NullFactory))
     }
 
+    /// Headless, serving on a caller-supplied provider.
+    pub(crate) fn headless_with_provider(
+        inference_provider: Arc<dyn InferenceProvider>,
+    ) -> DaemonServices {
+        headless_from(
+            serving_with_provider(inference_provider),
+            Arc::new(NullFactory),
+        )
+    }
+
     pub(crate) fn headless_with_factory(
         provider_factory: Arc<dyn ProviderFactory>,
     ) -> DaemonServices {
+        headless_from(serving(), provider_factory)
+    }
+
+    /// The one `HeadlessServices` literal. Both helpers above vary one
+    /// half of it and share the rest; a second copy of this is how one of
+    /// them quietly stops setting a field the struct grows (which is
+    /// exactly what happened to `solve_http` when a copy was made).
+    fn headless_from(
+        serving: ServingProfile,
+        provider_factory: Arc<dyn ProviderFactory>,
+    ) -> DaemonServices {
         DaemonServices::headless(HeadlessServices {
-            serving: serving(),
+            serving,
             rails: HeadlessRails {
                 provider_factory,
                 mesh_store: Arc::new(

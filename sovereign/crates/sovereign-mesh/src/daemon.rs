@@ -693,6 +693,37 @@ impl EmbeddedDaemon {
         self.services.serving().map(|s| &s.core.state_store)
     }
 
+    /// `[models].context_size` from THIS daemon's own `SetupConfig` — the
+    /// window its next slot load will ask for.
+    ///
+    /// From the config the daemon was commissioned with (and that
+    /// `reload_from_setup_config` updates), NOT from
+    /// `SetupConfig::load()`. A route that re-loaded the file would be
+    /// reporting the config of whatever `~/.svrnmesh` the SERVING process
+    /// can see, which is the same wrong-source mistake as a client
+    /// reading its own data dir for the daemon's.
+    pub async fn configured_context_size(&self) -> u32 {
+        self.setup_config.read().await.effective_context_size()
+    }
+
+    /// The `InferenceProvider` this daemon is serving turns on RIGHT NOW,
+    /// cloned out from behind the swap lock.
+    ///
+    /// A clone rather than a borrow, and `async` rather than not, because
+    /// `admin_reload` SWAPS this field while requests are in flight — the
+    /// atomicity that makes a hot reload gapless is exactly what makes a
+    /// borrow across an await point wrong. `None` on `MeshAdmin`, and also
+    /// on a serving daemon whose provider has not been installed yet,
+    /// which is a different fact from "no local slot" and is why the
+    /// caller reports absence rather than defaulting it.
+    pub async fn inference_provider(&self) -> Option<Arc<dyn InferenceProvider>> {
+        self.inference_provider
+            .read()
+            .await
+            .as_ref()
+            .map(Arc::clone)
+    }
+
     /// Borrow the `Runtime` this daemon serves turns with. `None` only on
     /// [`DaemonServices::MeshAdmin`] — the same real fork the two accessors
     /// above answer to, and the reason all three keep an `Option` where the

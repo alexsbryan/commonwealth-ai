@@ -2735,6 +2735,19 @@ impl TurnClient {
         Ok(wire.report)
     }
 
+    /// `GET /v1/admin/context-window` — the chat slot's context window as
+    /// the DAEMON sees it. `T` is
+    /// `sovereign_contracts::daemon_wire::ContextWindow`.
+    ///
+    /// `effective` and `n_ctx_train` come back `None` from a daemon with
+    /// no local slot or no provider installed yet; that absence is the
+    /// answer and a client must render it as one, not as agreement with
+    /// `configured`.
+    pub async fn context_window<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        self.internal_get("/v1/admin/context-window".to_string(), &[])
+            .await
+    }
+
     /// `POST /internal/inference/warmup` — eagerly load the daemon's
     /// primary chat slot so the next turn does not pay the lazy-load tax.
     /// Returns the load's latency in ms; `0` from a daemon with no

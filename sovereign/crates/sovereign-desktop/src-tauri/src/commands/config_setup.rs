@@ -6,6 +6,7 @@
 use super::*;
 use std::sync::Arc;
 
+use sovereign_contracts::daemon_wire::ContextWindow;
 use tauri::{Emitter, State};
 
 use crate::state::{self, AppState, DesktopConfig};
@@ -530,26 +531,29 @@ pub struct SetupContextWindow {
     pub n_ctx_train: Option<u32>,
 }
 
-/// Read the canonical chat-slot context window state, sourced from
-/// `~/.svrnmesh/config.toml` (configured value) and the currently-
-/// loaded inference provider (effective + gguf ceiling). Settings
-/// panel consumes this to render the read-only "current state" block
-/// next to the editor.
+/// Read the canonical chat-slot context window state — `GET
+/// /v1/admin/context-window` since 2026-09-12. The Settings panel
+/// renders it as the read-only "current state" block beside the editor.
+///
+/// All three numbers now come from the daemon that owns the slot. Two of
+/// them used to come from an inference provider in THIS process:
+/// `effective` is "what `clamp_max_tokens` is budgeting against right
+/// now", and what it was budgeting against right now was a slot in the
+/// app that served no turns. `configured` was always right, because both
+/// processes read the same `config.toml` — which is what made the other
+/// two easy to miss.
 #[tauri::command]
 pub async fn get_setup_context_size(
     state: State<'_, Arc<AppState>>,
 ) -> Result<SetupContextWindow, String> {
-    let configured = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.effective_context_size())
-        .unwrap_or(16384);
-    let (effective, n_ctx_train) = match state.inference.read().await.as_ref() {
-        Some(inf) => (inf.effective_context_size(), inf.n_ctx_train_for_primary()),
-        None => (None, None),
-    };
+    let w: ContextWindow = sovereign_turn_client::TurnClient::new(state.client_base_url())
+        .context_window()
+        .await
+        .map_err(|e| format!("get_setup_context_size: {e}"))?;
     Ok(SetupContextWindow {
-        configured,
-        effective,
-        n_ctx_train,
+        configured: w.configured,
+        effective: w.effective,
+        n_ctx_train: w.n_ctx_train,
     })
 }
 
