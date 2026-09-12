@@ -193,27 +193,41 @@ pub async fn ask_document(
     // rebuild in the background. The current turn still proceeds with the
     // skeleton-less asset (routing will be slightly less accurate); every
     // subsequent turn benefits from the rebuilt skeleton.
+    //
+    // The rebuild is `POST /v1/documents/{id}/skeleton` — the same route
+    // the user-initiated `rebuild_document_skeleton` command below takes,
+    // for the reason its comment gives: the manager that matters is the
+    // one on the store the chunks are in, with the daemon's own NER lane.
+    // Until 2026-09-11 this arm built a second `DocumentAssetManager` over
+    // this process's `inference` + `entity_extractor`, so an auto-heal and
+    // a manual rebuild of the same asset could disagree about which
+    // extractor ran (ARCH principle 8).
     if asset.skeleton.is_none() {
         tracing::info!(
             asset_id = %asset_id,
-            "ask_document: skeleton missing — spawning background rebuild"
+            "ask_document: skeleton missing — spawning background rebuild over the wire"
         );
-        let inf = Arc::clone(&inference);
-        let s = store.clone();
+        let base_url = state.client_base_url();
         let aid = asset_id.clone();
         let app = app_handle.clone();
-        let extractor = state.entity_extractor.read().await.as_ref().map(Arc::clone);
         tokio::spawn(async move {
-            let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(inf, s);
-            if let Some(g) = extractor {
-                manager = manager.with_entity_extractor(g);
-            }
-            match manager.rebuild_skeleton(&aid).await {
-                Ok(skeleton) => {
+            match sovereign_turn_client::TurnClient::new(base_url)
+                .rebuild_document_skeleton::<sovereign_contracts::types::DocumentAsset>(&aid)
+                .await
+            {
+                Ok(refreshed) => {
                     tracing::info!(
                         asset_id = %aid,
-                        entities = skeleton.main_entities.len(),
-                        sections = skeleton.sections.len(),
+                        entities = refreshed
+                            .skeleton
+                            .as_ref()
+                            .map(|s| s.main_entities.len())
+                            .unwrap_or(0),
+                        sections = refreshed
+                            .skeleton
+                            .as_ref()
+                            .map(|s| s.sections.len())
+                            .unwrap_or(0),
                         "auto-heal: skeleton rebuilt"
                     );
                     let _ = app.emit("document:skeleton_rebuilt", &aid);
