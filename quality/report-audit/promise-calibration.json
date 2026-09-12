@@ -1,0 +1,159 @@
+{
+  "schema": "promise-calibration/v1",
+  "purpose": "Positive and negative controls for the promise judge, built 2026-09-12 after it returned ZERO broken verdicts across 52 real promises and then caught only 1 of 5 obviously-broken controls. A judge that never returns one of its three verdicts has not been watched fail (ARCH \u00a718.1). KEPT cases are hand-written from commits verifiably inside the interval; an earlier auto-generated set built them from commit SUBJECT LINES, which do not read as promises and would have poisoned the bank.",
+  "bars": {
+    "broken_recall": ">= 0.80",
+    "kept_precision": ">= 0.90",
+    "cnj_on_empty_interval": "1.00",
+    "note": "Both directions are reported on every change (ARCH \u00a718.4); a prompt edit that raises broken_recall and drops kept_precision has not improved the judge."
+  },
+  "cases": [
+    {
+      "promise": "I'll add a Kubernetes operator and the Helm chart for it.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll rewrite the whole daemon in Go.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll delete the sovereign-mesh crate entirely.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll add PostgreSQL as the primary datastore.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll publish the crate to crates.io and tag v1.0.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll port the desktop app from Tauri to Electron.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll replace llama.cpp with vLLM for inference.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll add a GraphQL API alongside the REST one.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll move the workspace to the Rust 2024 edition.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll remove every Python script under scripts/.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "broken",
+      "why": "nothing in this interval could satisfy it"
+    },
+    {
+      "promise": "I'll make the window-focus warmup warm the daemon's slot rather than the app's.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains cf52e01a9"
+    },
+    {
+      "promise": "I'll remove the desktop's insight service, NER handle, local-corpus manager and health monitor.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains d36fdde0e"
+    },
+    {
+      "promise": "I'll repoint the desktop index build at the route that was built for it and never called.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains ab079922b"
+    },
+    {
+      "promise": "I'll make the Settings context window read the daemon's slot instead of a slot in the app.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains d44d57be9"
+    },
+    {
+      "promise": "I'll make a daemon older than the CLI say so instead of returning a bare 404.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains 21eaba3ee"
+    },
+    {
+      "promise": "I'll fix the climb fixture's workdir so it is plain files rather than a gitlink.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains 0958d9963"
+    },
+    {
+      "promise": "I'll land the climb-ostrom v0 fixture so the pilot is machine-portable.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains 893fe4149"
+    },
+    {
+      "promise": "I'll make the F26 census count admin_http's two new loopback test clients.",
+      "t0": "94e602d83a",
+      "t1": "568697dc1d",
+      "expect": "kept",
+      "why": "the interval contains 427610b70"
+    },
+    {
+      "promise": "I'll wire the Stop hook next.",
+      "t0": "568697dc1d",
+      "t1": "568697dc1d",
+      "expect": "could-not-judge",
+      "why": "empty interval: no commits between T0 and T1"
+    },
+    {
+      "promise": "I'll check whether the peer moved BootstrapMode under me.",
+      "t0": "568697dc1d",
+      "t1": "568697dc1d",
+      "expect": "could-not-judge",
+      "why": "empty interval: no commits between T0 and T1"
+    },
+    {
+      "promise": "I'll remove the desktop's insight service.",
+      "t0": "568697dc1d",
+      "t1": "568697dc1d",
+      "expect": "could-not-judge",
+      "why": "empty interval: no commits between T0 and T1"
+    }
+  ]
+}
