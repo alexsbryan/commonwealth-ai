@@ -16,7 +16,7 @@
 //! NOT `kernel-types`: its header splits identity/provenance from federation
 //! and it already defines a different `Origin`. This is federation vocabulary.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// A kind of local origin a node can serve to members over the mesh. A
 /// closed set (ARCH §2): every kind has one ALPN and one acceptor route, so a
@@ -26,6 +26,68 @@ use serde::{Deserialize, Serialize};
 pub enum OriginKind {
     /// An HTTP media origin (`[iroh] media_origin`), served on `MEDIA_ALPN`.
     Media,
+    /// One or more HTTP apps this node publishes by NAME (`[iroh.apps]`),
+    /// served on `APP_ALPN` and demultiplexed by a leading path segment.
+    ///
+    /// The set stays closed while the open set — *which* apps — moves into
+    /// config data, which is the rule exactly (ARCH §9: closed sets are
+    /// enums, open sets are registries). A housemate writing a chore app at
+    /// 1am cannot add an enum variant, an ALPN and an acceptor route and
+    /// recompile; they can add a line of config. One variant, one ALPN, one
+    /// acceptor route, an unbounded number of apps behind it.
+    ///
+    /// Its own kind rather than a second `Media`, because it is its own TRUST
+    /// class: admitting a housemate to your chore app is not the same
+    /// decision as admitting them to your media library, and neither is the
+    /// same as admitting them to your tensor RPC.
+    App,
+}
+
+/// Deserialize a gossiped `origins` array, DROPPING kinds this build does not
+/// know instead of failing the whole field.
+///
+/// The failing input, and the reason this exists rather than an
+/// `#[serde(other)] Unknown` variant:
+///
+/// `origins` is `#[serde(default)]`, and serde's `default` applies when a
+/// field is ABSENT — not when its value fails to parse. So a peer running an
+/// older build that meets `["media","app"]` does not read "one kind I know
+/// plus one I don't"; its whole `NodeCapabilities` deserialization errors and
+/// the member's entire gossip row is dropped. A house on mixed builds would
+/// watch peers vanish from the roster with nothing in the log naming a new
+/// origin kind as the cause.
+///
+/// The tolerance belongs HERE, at the wire boundary where a stranger's bytes
+/// arrive, and not in the enum: `OriginKind` is a closed set on purpose and an
+/// `Unknown` variant would make every match arm downstream carry a case that
+/// means nothing locally. The set stays closed; the boundary absorbs what it
+/// cannot name.
+///
+/// Adding `App` is itself the one break this cannot retroactively prevent —
+/// peers already running a build without this function still drop the row. It
+/// is the last time the set can do that.
+pub fn deserialize_known_origins<'de, D>(d: D) -> Result<Vec<OriginKind>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum MaybeKnown {
+        Known(OriginKind),
+        /// Anything else the wire carried, of ANY shape. `IgnoredAny` rather
+        /// than `String` because a future kind need not be a bare string —
+        /// gossiped as `{"kind":"future","port":1}` a `String` arm has no
+        /// match and the array fails again, which is the whole failure this
+        /// function exists to prevent (pinned below).
+        Unknown(serde::de::IgnoredAny),
+    }
+    Ok(Vec::<MaybeKnown>::deserialize(d)?
+        .into_iter()
+        .filter_map(|m| match m {
+            MaybeKnown::Known(k) => Some(k),
+            MaybeKnown::Unknown(_) => None,
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -46,5 +108,48 @@ mod tests {
             OriginKind::Media
         );
         assert!(serde_json::from_str::<OriginKind>("\"Media\"").is_err());
+        assert_eq!(serde_json::to_string(&OriginKind::App).unwrap(), "\"app\"");
+        assert_eq!(
+            serde_json::from_str::<OriginKind>("\"app\"").unwrap(),
+            OriginKind::App
+        );
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Row {
+        #[serde(default, deserialize_with = "deserialize_known_origins")]
+        origins: Vec<OriginKind>,
+    }
+
+    /// The failing input the tolerant path exists for: strict parsing errors
+    /// on the whole array, which upstream turns into a dropped roster row.
+    #[test]
+    fn a_strict_parse_of_an_unknown_kind_fails_the_whole_array() {
+        assert!(serde_json::from_str::<Vec<OriginKind>>(r#"["media","quantum"]"#).is_err());
+    }
+
+    #[test]
+    fn an_unknown_kind_is_dropped_and_the_known_ones_survive() {
+        let r: Row = serde_json::from_str(r#"{"origins":["media","quantum","app"]}"#).unwrap();
+        assert_eq!(r.origins, vec![OriginKind::Media, OriginKind::App]);
+    }
+
+    /// Absence still reads as "advertises none", and an all-unknown array
+    /// reads the same way — never as an offer this build cannot serve.
+    #[test]
+    fn absence_and_all_unknown_both_read_as_no_offer() {
+        let absent: Row = serde_json::from_str("{}").unwrap();
+        assert!(absent.origins.is_empty());
+        let unknown: Row = serde_json::from_str(r#"{"origins":["quantum"]}"#).unwrap();
+        assert!(unknown.origins.is_empty());
+    }
+
+    /// A shape that is not a string at all (a future kind gossiped as an
+    /// object) must also be skipped rather than fail the row.
+    #[test]
+    fn a_non_string_kind_is_skipped_too() {
+        let r: Row =
+            serde_json::from_str(r#"{"origins":["media",{"kind":"future","port":1}]}"#).unwrap();
+        assert_eq!(r.origins, vec![OriginKind::Media]);
     }
 }

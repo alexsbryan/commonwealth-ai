@@ -115,6 +115,33 @@ pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 /// rule as [`RPC_ALPN`], for the same reason.
 pub const MEDIA_ALPN: &[u8] = b"cwth/media/0";
 
+/// A MEMBER reaching one of the HTTP apps this node publishes BY NAME
+/// (`[iroh.apps]`) — a chore rotation, a print queue, a thing somebody wrote
+/// at 1am and wants to show a housemate now.
+///
+/// One ALPN for an unbounded number of apps, demultiplexed by a leading path
+/// segment (`GET /chores/tasks` → the `chores` origin, rewritten to
+/// `GET /tasks`). The closed set stays closed — one variant
+/// ([`oicp_types::origin::OriginKind::App`]), one ALPN, one acceptor route —
+/// while the open set, which apps, is config data that changes without a code
+/// change (ARCH §9). A per-app ALPN (`cwth/app/0/<name>`) was the alternative
+/// and was rejected: ALPNs are pre-registered when the endpoint is built, so
+/// publishing an app would mean rebuilding the endpoint, and the whole point
+/// of the ephemeral tier is that registering an app is cheaper than a restart.
+///
+/// **Its own trust class, and that is the reason it is not `MEDIA_ALPN` with a
+/// path convention.** Admitting a housemate to your chore app is a different
+/// decision from admitting them to your media library, which is different
+/// again from admitting them to your tensor RPC. A dialer admitted here must
+/// still be refused [`MEDIA_ALPN`] and [`RPC_ALPN`] unless separately allowed,
+/// and that is only real if a failing input proves it — see
+/// `iroh_access.rs::the_three_origin_alpns_admit_independently`.
+///
+/// Members only, refused rather than downgraded for a stranger: an app written
+/// in an afternoon authenticates nothing, so there is no safe listener to fall
+/// back to. Same rule as [`MEDIA_ALPN`] and [`RPC_ALPN`], for the same reason.
+pub const APP_ALPN: &[u8] = b"cwth/app/0";
+
 // Re-exported so feature consumers (sovereign-server, the mobile
 // core, the sovereign-mesh spike test) build endpoints without
 // declaring their own iroh dependency — keeps the version pin in
@@ -1075,15 +1102,45 @@ impl IrohAcceptor {
                         );
                         return;
                     };
-                    let (forward_to, identity) = match forward {
-                        Forward::Splice(addr) => (addr, None),
-                        Forward::Http { origin, headers } => (origin, Some(Arc::new(headers))),
+                    // `HttpByName` has no single target: it resolves per
+                    // bi-stream from the request path, so it connects inside
+                    // the pump rather than here.
+                    enum Streams {
+                        To(SocketAddr, Option<Arc<Vec<(String, String)>>>),
+                        ByName(
+                            Arc<std::collections::BTreeMap<String, SocketAddr>>,
+                            Arc<Vec<(String, String)>>,
+                        ),
+                    }
+                    let streams = match forward {
+                        Forward::Splice(addr) => Streams::To(addr, None),
+                        Forward::Http { origin, headers } => {
+                            Streams::To(origin, Some(Arc::new(headers)))
+                        }
+                        Forward::HttpByName { apps, headers } => {
+                            Streams::ByName(apps, Arc::new(headers))
+                        }
                     };
                     loop {
                         match conn.accept_bi().await {
                             Ok((send, recv)) => {
-                                let identity = identity.clone();
+                                let streams = match &streams {
+                                    Streams::To(a, h) => Streams::To(*a, h.clone()),
+                                    Streams::ByName(m, h) => {
+                                        Streams::ByName(Arc::clone(m), Arc::clone(h))
+                                    }
+                                };
                                 tokio::spawn(async move {
+                                    let (forward_to, identity) = match streams {
+                                        Streams::ByName(apps, headers) => {
+                                            crate::iroh_identity_forward::pump_by_name(
+                                                send, recv, apps, headers,
+                                            )
+                                            .await;
+                                            return;
+                                        }
+                                        Streams::To(a, h) => (a, h),
+                                    };
                                     match tokio::net::TcpStream::connect(forward_to).await {
                                         Ok(tcp) => {
                                             // Same Nagle × delayed-ACK stall as the

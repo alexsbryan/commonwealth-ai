@@ -16,7 +16,7 @@
 1217	commonwealth/crates/commonwealth-knowledge
 1070	commonwealth/crates/commonwealth-knowledge::tests
 575	commonwealth/crates/commonwealth-media
-304	commonwealth/crates/commonwealth-media::tests
+466	commonwealth/crates/commonwealth-media::tests
 954	commonwealth/crates/commonwealth-rail
 1282	commonwealth/crates/commonwealth-rail-core
 326	commonwealth/crates/commonwealth-rail-core::tests
@@ -27,8 +27,8 @@
 1519	commonwealth/crates/commonwealth-state::tests
 1086	commonwealth/crates/commonwealth-test-harness
 585	commonwealth/crates/commonwealth-test-harness::tests
-1566	commonwealth/crates/commonwealth-transport
-2097	commonwealth/crates/commonwealth-transport::tests
+1797	commonwealth/crates/commonwealth-transport
+2184	commonwealth/crates/commonwealth-transport::tests
 3207	commonwealth/crates/commonwealth-work
 1851	commonwealth/crates/commonwealth-work::tests
 942	commonwealth/crates/oicp-conformance
@@ -59,8 +59,8 @@
 1712	kernel-types::tests
 780	oicp-client
 983	oicp-client::tests
-2011	oicp-types
-1702	oicp-types::tests
+2038	oicp-types
+1750	oicp-types::tests
 236	oplog
 195	oplog::tests
 500	quality/arch-layers

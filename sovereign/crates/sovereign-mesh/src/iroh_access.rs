@@ -29,7 +29,7 @@ use std::path::Path;
 
 use commonwealth_transport::iroh::{
     build_relayed_endpoint, format_dial_string, Endpoint, Forward, IrohAcceptor, IrohTransport,
-    RelayConfig, ALPN, CLIENT_ALPN, GUEST_ALPN, MEDIA_ALPN, RPC_ALPN,
+    RelayConfig, ALPN, APP_ALPN, CLIENT_ALPN, GUEST_ALPN, MEDIA_ALPN, RPC_ALPN,
 };
 use commonwealth_transport::TrafficClass;
 
@@ -280,6 +280,12 @@ pub struct MeshIrohAccess {
     /// Whether this acceptor routes [`MEDIA_ALPN`] to a local media origin —
     /// the fact the gossip self-stamp advertises as `origins: [media]`.
     media_route_active: bool,
+    /// Whether this acceptor routes [`APP_ALPN`] to at least one published
+    /// app — advertised as `origins: [app]`. Read from the acceptor's own
+    /// registry rather than from config, for the reason the media flag is:
+    /// a declared app whose endpoint failed to bind is not an offer, and
+    /// `origins` is a fact about what answers.
+    app_route_active: bool,
 }
 
 /// The four local listeners an accepted iroh connection can be forwarded to.
@@ -319,6 +325,26 @@ pub struct AcceptorRoutes {
     /// `[iroh] media_allow`: which members may reach `media`, by name or id
     /// prefix. Empty admits every member. A non-member is refused either way.
     pub media_allow: std::sync::Arc<Vec<String>>,
+    /// The named HTTP apps this node publishes, and who may reach them.
+    pub apps: AppRoutes,
+}
+
+/// `[iroh.apps]` and `[iroh] app_allow`, carried together.
+///
+/// One struct rather than two more positional parameters on
+/// [`MeshIrohAccess::start`]: `media_allow` and `app_allow` are both
+/// `Vec<String>` and would sit adjacent in an eleven-argument call, where
+/// swapping them compiles cleanly and silently grants each list's members the
+/// other's origin. Make it structural rather than remembered (ARCH §10).
+#[derive(Debug, Clone, Default)]
+pub struct AppRoutes {
+    /// Published apps by name, each on loopback. Empty means the protocol is
+    /// not advertised at all, so a dial is closed rather than left hanging.
+    pub apps: std::collections::BTreeMap<String, SocketAddr>,
+    /// Which members may reach them, by name or id prefix. Empty admits every
+    /// member; a non-member is refused either way. SEPARATE from
+    /// `media_allow` on purpose — see `commonwealth_media::admit_app`.
+    pub allow: Vec<String>,
 }
 
 impl AcceptorRoutes {
@@ -411,6 +437,18 @@ impl AcceptorRoutes {
                 &self.media_declared,
             );
         }
+        if alpn == APP_ALPN {
+            // One decider for the app dial, beside media's: the registry
+            // declared here, the roster's word on the dialer, and the app
+            // allow-list. WHICH app is not decided here — that is per request,
+            // inside the pump, among these origins only.
+            return commonwealth_media::admit_app(
+                is_member(dialer).await.as_ref(),
+                dialer,
+                &self.apps.apps,
+                &self.apps.allow,
+            );
+        }
         if alpn == RPC_ALPN {
             if is_member(dialer).await.is_some() {
                 return self.rpc.map(Forward::Splice);
@@ -446,6 +484,7 @@ impl MeshIrohAccess {
         guest_addr: Option<SocketAddr>,
         media_origin: Option<SocketAddr>,
         media_allow: Vec<String>,
+        apps: AppRoutes,
         member_check: MemberCheck,
         enabled: bool,
         relay_cfg: &RelayConfig,
@@ -480,6 +519,19 @@ impl MeshIrohAccess {
         // Advertised only when there is something behind it, for the same
         // reason RPC is: a node that negotiates a protocol it cannot forward
         // turns a closed dial into a hang.
+        // Same rule as media and RPC: advertised only when there is something
+        // behind it, because a node that negotiates a protocol it cannot
+        // forward turns a closed dial into a hang.
+        if !apps.apps.is_empty() {
+            alpns.push(APP_ALPN.to_vec());
+            tracing::info!(
+                target: "transport",
+                published = apps.apps.len(),
+                names = %apps.apps.keys().cloned().collect::<Vec<_>>().join(", "),
+                "iroh(mesh): serving APP_ALPN to members — each request names its app \
+                 by the first path segment, with no port forwarded and no VPN"
+            );
+        }
         if let Some(origin) = media_origin {
             alpns.push(MEDIA_ALPN.to_vec());
             tracing::info!(
@@ -546,6 +598,7 @@ impl MeshIrohAccess {
             rpc: rpc_forward,
             media: media_origin,
             media_allow: std::sync::Arc::new(media_allow),
+            apps: apps.clone(),
             media_declared: std::sync::Arc::new(commonwealth_media::read_declared_in(
                 &commonwealth_media::dir_under(data_dir),
             )),
@@ -570,6 +623,7 @@ impl MeshIrohAccess {
             _acceptor: acceptor,
             rpc_route_active: rpc_forward.is_some(),
             media_route_active: media_origin.is_some(),
+            app_route_active: !apps.apps.is_empty(),
         })
     }
 
@@ -601,11 +655,16 @@ impl MeshIrohAccess {
         &self,
     ) -> std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync> {
         let endpoint = self.endpoint.clone();
-        let origins = if self.media_route_active {
-            vec![commonwealth_core::capabilities::OriginKind::Media]
-        } else {
-            Vec::new()
-        };
+        // One kind per live route. Order is Media then App so the gossiped
+        // array is stable across restarts — a set that reorders makes every
+        // roster diff look like a change.
+        let mut origins = Vec::new();
+        if self.media_route_active {
+            origins.push(commonwealth_core::capabilities::OriginKind::Media);
+        }
+        if self.app_route_active {
+            origins.push(commonwealth_core::capabilities::OriginKind::App);
+        }
         std::sync::Arc::new(move || {
             let addr = endpoint.addr();
             // Bind to locals (statements) so the transient `relay_urls`
@@ -862,7 +921,12 @@ mod tests {
         who: NodePubkey,
         check: &MemberCheck,
     ) -> Option<SocketAddr> {
-        r.forward_for(alpn, who, check).await.map(Forward::target)
+        // `Forward::target` is `Option` because `HttpByName` has no single
+        // target; these tests only ever build single-target forwards, so a
+        // `None` inside a `Some` is a bug in the test, not a valid answer.
+        r.forward_for(alpn, who, check)
+            .await
+            .map(|f| f.target().expect("this test builds single-target forwards"))
     }
 
     fn addr(port: u16) -> SocketAddr {
@@ -871,6 +935,7 @@ mod tests {
 
     fn routes() -> AcceptorRoutes {
         AcceptorRoutes {
+            apps: AppRoutes::default(),
             internal: addr(9742),
             peer: Some(addr(41001)),
             guest: Some(addr(41000)),
@@ -881,6 +946,129 @@ mod tests {
             // not what the holder adds on the way to its own origin.
             media_declared: std::sync::Arc::new(Vec::new()),
         }
+    }
+
+    /// The three origin ALPNs are three TRUST CLASSES, and separate classes
+    /// are only real if a failing input proves it (ARCH §5). This is the test
+    /// `LIGHTNING_MESH_SUBSTRATE.md` §Caution 1 says the suite could not
+    /// express: a member allowed ONE origin must be refused the other two.
+    ///
+    /// Named per allow-list rather than per member, because that is the
+    /// distinction a house actually draws — everyone may see the print queue,
+    /// two people may see my films — and it is the distinction a shared list
+    /// would make inexpressible.
+    #[tokio::test]
+    async fn the_three_origin_alpns_admit_independently() {
+        let nobody = || vec!["SomebodyElse".to_string()];
+        let published = || {
+            [("chores".to_string(), addr(5000))]
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+
+        // Allowed apps, refused media. The member is the SAME key in both.
+        let app_only = AcceptorRoutes {
+            apps: AppRoutes {
+                apps: published(),
+                allow: Vec::new(),
+            },
+            media_allow: std::sync::Arc::new(nobody()),
+            ..routes()
+        };
+        assert!(
+            app_only
+                .forward_for(APP_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_some(),
+            "a member inside app_allow reaches the apps"
+        );
+        assert!(
+            app_only
+                .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_none(),
+            "the SAME member, outside media_allow, must not reach the media origin"
+        );
+
+        // And the other way: allowed media, refused apps.
+        let media_only = AcceptorRoutes {
+            apps: AppRoutes {
+                apps: published(),
+                allow: nobody(),
+            },
+            media_allow: std::sync::Arc::new(Vec::new()),
+            ..routes()
+        };
+        assert!(
+            media_only
+                .forward_for(MEDIA_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_some(),
+            "a member inside media_allow reaches the media origin"
+        );
+        assert!(
+            media_only
+                .forward_for(APP_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_none(),
+            "the SAME member, outside app_allow, must not reach the apps"
+        );
+
+        // RPC is the third class and neither list speaks for it. It admits on
+        // membership alone today, so the pin is that an app grant did not
+        // invent an RPC route where none is served.
+        let no_rpc = AcceptorRoutes {
+            apps: AppRoutes {
+                apps: published(),
+                allow: Vec::new(),
+            },
+            rpc: None,
+            ..routes()
+        };
+        assert!(
+            no_rpc
+                .forward_for(APP_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_some(),
+            "apps are served"
+        );
+        assert!(
+            no_rpc
+                .forward_for(RPC_ALPN, MEMBER, &only_the_member())
+                .await
+                .is_none(),
+            "being admitted to the App class must not open the tensor RPC"
+        );
+    }
+
+    /// A stranger is refused the App class outright — an app written in an
+    /// afternoon authenticates nothing, so there is no safe downgrade. Same
+    /// rule as media, and the rule is worth its own failing input because the
+    /// tempting alternative (fall through to the guest listener) is exactly
+    /// what would hand a dial-string holder somebody's chore app.
+    #[tokio::test]
+    async fn a_stranger_is_refused_the_app_alpn_rather_than_downgraded() {
+        let r = AcceptorRoutes {
+            apps: AppRoutes {
+                apps: [("chores".to_string(), addr(5000))].into_iter().collect(),
+                allow: Vec::new(),
+            },
+            ..routes()
+        };
+        assert!(r
+            .forward_for(APP_ALPN, STRANGER, &only_the_member())
+            .await
+            .is_none());
+    }
+
+    /// Publishing nothing closes the dial rather than leaving it hanging on a
+    /// route to nowhere — the rule `media_origin: None` follows.
+    #[tokio::test]
+    async fn publishing_no_apps_closes_the_app_alpn() {
+        assert!(routes()
+            .forward_for(APP_ALPN, MEMBER, &only_the_member())
+            .await
+            .is_none());
     }
 
     /// THE fix. A stranger holding the dial string must not land on the

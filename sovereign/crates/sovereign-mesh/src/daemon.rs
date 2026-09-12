@@ -4142,6 +4142,33 @@ impl EmbeddedDaemon {
         };
         // Who may reach it, by the names the roster shows. Empty = every member.
         let media_allow: Vec<String> = self.setup_config.read().await.iroh.media_allow.clone();
+        // `[iroh.apps]` — the named HTTP apps this node publishes. A value that
+        // does not parse as an address is DROPPED with a warning naming it,
+        // never silently: a typo'd port in one entry must not take the other
+        // apps down with it, and must not read as "not published" in silence.
+        let apps: crate::iroh_access::AppRoutes = {
+            let cfg = self.setup_config.read().await;
+            let mut apps = std::collections::BTreeMap::new();
+            for (name, target) in &cfg.iroh.apps {
+                match target.parse::<SocketAddr>() {
+                    Ok(addr) => {
+                        apps.insert(name.clone(), addr);
+                    }
+                    Err(e) => tracing::warn!(
+                        target: "transport",
+                        app = %name,
+                        value = %target,
+                        error = %e,
+                        "iroh(mesh): [iroh.apps] entry is not a host:port — this app is NOT \
+                         published; the others are"
+                    ),
+                }
+            }
+            crate::iroh_access::AppRoutes {
+                apps,
+                allow: cfg.iroh.app_allow.clone(),
+            }
+        };
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
@@ -4149,6 +4176,7 @@ impl EmbeddedDaemon {
             guest_addr,
             media_origin,
             media_allow.clone(),
+            apps.clone(),
             member_check.clone(),
             iroh_enabled,
             &iroh_relay_cfg,
@@ -4238,6 +4266,7 @@ impl EmbeddedDaemon {
                 let required = required.clone();
                 let member_check = member_check.clone();
                 let media_allow = media_allow.clone();
+                let apps = apps.clone();
                 Box::pin(async move {
                     let new = crate::iroh_access::MeshIrohAccess::start(
                         &data_dir,
@@ -4246,6 +4275,7 @@ impl EmbeddedDaemon {
                         guest_addr,
                         media_origin,
                         media_allow.clone(),
+                        apps.clone(),
                         member_check.clone(),
                         iroh_enabled,
                         &relay_cfg,

@@ -26,8 +26,8 @@ use std::time::Duration;
 use commonwealth_api::server::{client_router, client_router_for, ClientSurface};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
-    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, CLIENT_ALPN,
-    MEDIA_ALPN, RPC_ALPN,
+    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, APP_ALPN,
+    CLIENT_ALPN, MEDIA_ALPN, RPC_ALPN,
 };
 use sovereign_mesh::iroh_access::{AcceptorRoutes, MemberCheck, MemberIdentity};
 
@@ -114,6 +114,7 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
     };
 
     let routes = AcceptorRoutes {
+        apps: Default::default(),
         // Nothing listens on these two in this test; no case below routes to
         // them, and a regression that did would surface as a dead connection
         // rather than as a pass.
@@ -328,6 +329,7 @@ async fn a_member_cannot_reach_the_operator_only_routes() {
 async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
     let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
     let routes = AcceptorRoutes {
+        apps: Default::default(),
         internal: "127.0.0.1:1".parse().unwrap(),
         rpc: Some("127.0.0.1:2".parse().unwrap()),
         // The pre-fix wiring: CLIENT_ALPN from a member landed on the full
@@ -361,6 +363,146 @@ async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
         resp.status(),
         reqwest::StatusCode::OK,
         "this is what the fix removes: a peer minting guest credentials on your node"
+    );
+}
+
+// ── published apps: two origins behind ONE ALPN ──────────────────────
+//
+// The unit tests pin the admission decision and the path split separately.
+// This is the byte plane: a member dials `cwth/app/0` once and reaches two
+// DIFFERENT loopback servers by name, which is the thing `media_origin`
+// could not do and the reason this campaign called itself a media feature.
+
+/// A lender publishing two apps, each an HTTP server that echoes the path it
+/// was actually asked for plus the identity it was handed — so a test can see
+/// both which origin answered and what the prefix strip did.
+async fn lender_with_apps(allow: Vec<String>) -> (Endpoint, IrohAcceptor) {
+    use axum::extract::Request;
+    use axum::http::HeaderMap;
+    let echo = |which: &'static str| {
+        move |headers: HeaderMap, req: Request| async move {
+            let member = headers
+                .get("x-mesh-member")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<absent>")
+                .to_string();
+            format!("{which} {} {member}", req.uri())
+        }
+    };
+    let chores = spawn_router(axum::Router::new().fallback(echo("chores"))).await;
+    let printer = spawn_router(axum::Router::new().fallback(echo("printer"))).await;
+
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        apps: sovereign_mesh::iroh_access::AppRoutes {
+            apps: [
+                ("chores".to_string(), chores),
+                ("printer".to_string(), printer),
+            ]
+            .into_iter()
+            .collect(),
+            allow,
+        },
+        internal: "127.0.0.1:1".parse().unwrap(),
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: None,
+        media_allow: Arc::new(Vec::new()),
+        media_declared: std::sync::Arc::new(Vec::new()),
+    };
+    let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), APP_ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// THE thing multi-origin buys: one node, one ALPN, two apps, told apart by
+/// the first path segment — and the prefix is stripped before the origin sees
+/// it, so each app serves its own routes unaware it is behind a name.
+#[tokio::test]
+async fn one_member_reaches_two_different_apps_on_one_node_by_name() {
+    let (lender, _acceptor) = lender_with_apps(Vec::new()).await;
+
+    let body = |r: reqwest::Response| async move { r.text().await.unwrap() };
+
+    let a = get_as(&lender, MEMBER_SEED, APP_ALPN, "/chores/tasks?due=today", None)
+        .await
+        .expect("a member reaches the chores app");
+    assert_eq!(a.status(), reqwest::StatusCode::OK);
+    assert_eq!(body(a).await, "chores /tasks?due=today LittleMac");
+
+    let b = get_as(&lender, MEMBER_SEED, APP_ALPN, "/printer/queue", None)
+        .await
+        .expect("a member reaches the printer app");
+    assert_eq!(body(b).await, "printer /queue LittleMac");
+
+    // A bare app root reaches the origin as `/`, not as an empty target.
+    let c = get_as(&lender, MEMBER_SEED, APP_ALPN, "/chores", None)
+        .await
+        .expect("the app root is served");
+    assert_eq!(body(c).await, "chores / LittleMac");
+}
+
+/// A name this node does not publish is refused BY NAME, and the refusal says
+/// what is published. The failing input is a 404 that reads identically to the
+/// app being down — the reader cannot tell a typo from an outage.
+#[tokio::test]
+async fn an_unpublished_name_is_refused_with_the_list_of_what_is_published() {
+    let (lender, _acceptor) = lender_with_apps(Vec::new()).await;
+    let resp = get_as(&lender, MEMBER_SEED, APP_ALPN, "/chore/tasks", None)
+        .await
+        .expect("the acceptor answers rather than hanging");
+    assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+    let text = resp.text().await.unwrap();
+    assert!(text.contains("no app named \"chore\""), "{text}");
+    assert!(text.contains("chores, printer"), "{text}");
+}
+
+/// A request naming no app at all is refused the same way, rather than being
+/// served by whichever origin happened to be first in the map.
+#[tokio::test]
+async fn a_request_naming_no_app_is_refused_not_sent_to_an_arbitrary_origin() {
+    let (lender, _acceptor) = lender_with_apps(Vec::new()).await;
+    let resp = get_as(&lender, MEMBER_SEED, APP_ALPN, "/", None)
+        .await
+        .expect("the acceptor answers");
+    assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+    assert!(resp.text().await.unwrap().contains("no app named in the request path"));
+}
+
+/// The dial string is public, so a stranger holding it must get no bytes from
+/// anybody's chore app — the dial dies in the handshake, as it does for media.
+#[tokio::test]
+async fn a_stranger_holding_the_dial_string_cannot_reach_a_published_app() {
+    let (lender, _acceptor) = lender_with_apps(Vec::new()).await;
+    assert!(
+        get_as(&lender, STRANGER_SEED, APP_ALPN, "/chores/tasks", None)
+            .await
+            .is_err(),
+        "a stranger's APP_ALPN dial must not be forwarded"
+    );
+}
+
+/// `app_allow` is its own list. A member outside it is closed even though the
+/// same member would be admitted with the list empty.
+#[tokio::test]
+async fn a_member_outside_app_allow_is_closed_and_one_inside_is_served() {
+    let (open, _a) = lender_with_apps(Vec::new()).await;
+    assert!(get_as(&open, MEMBER_SEED, APP_ALPN, "/chores/x", None)
+        .await
+        .is_ok());
+
+    let (closed, _b) = lender_with_apps(vec!["SomebodyElse".to_string()]).await;
+    assert!(
+        get_as(&closed, MEMBER_SEED, APP_ALPN, "/chores/x", None)
+            .await
+            .is_err(),
+        "a member outside app_allow must not reach the apps"
     );
 }
 
@@ -419,6 +561,7 @@ async fn lender_with_media_allowing(
 
     let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
     let routes = AcceptorRoutes {
+        apps: Default::default(),
         internal: "127.0.0.1:1".parse().unwrap(),
         rpc: None,
         peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),

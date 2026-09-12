@@ -25,7 +25,7 @@ pub mod identity;
 pub mod reach;
 
 pub use declared::{dir_under, read_declared_in, valid_header_name, write_declared_in};
-pub use identity::{admit_media, admits_no_one, MemberCheck, MemberIdentity};
+pub use identity::{admit_app, admit_media, admits_no_one, MemberCheck, MemberIdentity};
 pub use reach::{
     candidate_of, offering_members, offers, path_to, pick_member, player_url, reach, roster_of,
     MediaCandidate, MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath,

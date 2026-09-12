@@ -116,9 +116,128 @@ pub fn admit_media(
     Some(Forward::Http { origin, headers })
 }
 
+/// The holder's decision for a `cwth/app/0` dial — the same three refusals as
+/// [`admit_media`], against a DIFFERENT allow-list.
+///
+/// The separate list is the whole reason `App` is its own kind rather than a
+/// path convention on `cwth/media/0`. Admitting a housemate to your chore app
+/// is not the same decision as admitting them to your media library; sharing
+/// one list would make the narrower grant impossible to express, and a house
+/// that cannot say "everyone may see the print queue, two people may see my
+/// films" ends up saying yes to everything.
+///
+/// - No apps published: closed, for the reason media's missing origin is —
+///   the protocol is not advertised, so the dial is closed rather than left
+///   hanging on a route to nowhere.
+/// - A non-member: closed. An app written in an afternoon authenticates
+///   nothing, so there is no safe downgrade.
+/// - A member outside a non-empty `allow`: closed, logged with the list.
+///
+/// WHICH app is not decided here. This answers "may this dialer reach the App
+/// class at all", once per connection on the verified key; the name lookup
+/// happens per request inside
+/// [`commonwealth_transport::iroh_identity_forward::pump_by_name`], among
+/// origins this node published. Two questions, two places, and the second
+/// cannot widen the first.
+pub fn admit_app(
+    who: Option<&MemberIdentity>,
+    dialer: NodePubkey,
+    apps: &std::collections::BTreeMap<String, SocketAddr>,
+    allow: &[String],
+) -> Option<Forward> {
+    if apps.is_empty() {
+        return None;
+    }
+    let Some(who) = who else {
+        tracing::warn!(
+            target: "transport",
+            dialer = %hex::encode(dialer.0),
+            "app: REFUSED an APP_ALPN dial from a non-member — a published app \
+             authenticates nothing, so there is no safe downgrade"
+        );
+        return None;
+    };
+    if !allow.is_empty() && !allow.iter().any(|entry| who.named_by(entry)) {
+        tracing::warn!(
+            target: "transport",
+            member = %who.name,
+            node_id = %who.node_id,
+            allow = ?allow,
+            "app: REFUSED an APP_ALPN dial from a member outside app_allow"
+        );
+        return None;
+    }
+    tracing::info!(
+        target: "transport",
+        member = %who.name,
+        node_id = %who.node_id,
+        published = apps.len(),
+        "app: dial admitted — each request names its app by path"
+    );
+    Some(Forward::HttpByName {
+        apps: std::sync::Arc::new(apps.clone()),
+        headers: who.headers(dialer),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn apps() -> std::collections::BTreeMap<String, SocketAddr> {
+        [("chores".to_string(), "127.0.0.1:5000".parse().unwrap())]
+            .into_iter()
+            .collect()
+    }
+
+    #[test]
+    fn an_app_dial_from_a_non_member_is_closed() {
+        assert!(admit_app(None, NodePubkey([7u8; 32]), &apps(), &[]).is_none());
+    }
+
+    #[test]
+    fn publishing_nothing_closes_the_app_dial_even_for_a_member() {
+        let empty = std::collections::BTreeMap::new();
+        assert!(admit_app(Some(&who()), NodePubkey([7u8; 32]), &empty, &[]).is_none());
+    }
+
+    #[test]
+    fn a_member_outside_a_non_empty_app_allow_is_closed() {
+        let allow = vec!["SomebodyElse".to_string()];
+        assert!(admit_app(Some(&who()), NodePubkey([7u8; 32]), &apps(), &allow).is_none());
+    }
+
+    /// The admitted shape carries the verified identity and the whole
+    /// registry — the per-request lookup can only choose among these.
+    #[test]
+    fn an_admitted_member_gets_the_registry_and_its_own_identity() {
+        let f = admit_app(Some(&who()), NodePubkey([7u8; 32]), &apps(), &[]).unwrap();
+        let Forward::HttpByName { apps, headers } = f else {
+            panic!("app admission must forward by name");
+        };
+        assert_eq!(apps.len(), 1);
+        assert!(apps.contains_key("chores"));
+        assert!(headers
+            .iter()
+            .any(|(n, v)| n == "X-Mesh-Member" && v == "LittleMac"));
+    }
+
+    /// The two lists are independent, which is the point of the separate
+    /// trust class: a member allowed the apps is not thereby allowed media.
+    #[test]
+    fn the_app_allow_list_does_not_admit_media() {
+        let dialer = NodePubkey([7u8; 32]);
+        let media_allow = vec!["SomebodyElse".to_string()];
+        assert!(admit_app(Some(&who()), dialer, &apps(), &[]).is_some());
+        assert!(admit_media(
+            Some(&who()),
+            dialer,
+            Some("127.0.0.1:8096".parse().unwrap()),
+            &media_allow,
+            &[],
+        )
+        .is_none());
+    }
 
     fn who() -> MemberIdentity {
         MemberIdentity {

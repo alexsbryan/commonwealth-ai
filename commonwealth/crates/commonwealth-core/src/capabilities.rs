@@ -59,7 +59,17 @@ pub struct NodeCapabilities {
     /// an offer), so it is a fact about what answers, not about config.
     /// Empty from a peer whose build predates the field, which reads as
     /// "advertises none" — absence reported, never defaulted to an offer.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    ///
+    /// Parsed with [`oicp_types::origin::deserialize_known_origins`], which
+    /// DROPS a kind this build cannot name rather than failing the array:
+    /// `#[serde(default)]` covers an absent field, not an unparseable one, so
+    /// strict parsing here would lose the whole `NodeCapabilities` row — the
+    /// member disappears from the roster because one origin kind was new.
+    #[serde(
+        default,
+        deserialize_with = "oicp_types::origin::deserialize_known_origins",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub origins: Vec<OriginKind>,
 
     /// Advertised embedding model for this node. Populated when the

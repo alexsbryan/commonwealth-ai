@@ -48,16 +48,102 @@ pub enum Forward {
         origin: SocketAddr,
         headers: Vec<(String, String)>,
     },
+    /// One of SEVERAL named HTTP origins, chosen by the first path segment of
+    /// the request (`GET /chores/tasks` → the `chores` origin, forwarded as
+    /// `GET /tasks`). Otherwise identical to [`Forward::Http`]: the same
+    /// headers, the same strip rule, the same untouched responses.
+    ///
+    /// The resolver still decides ONCE per connection, on the verified key,
+    /// whether this dialer may reach the App class at all. Only the *which
+    /// app* lookup happens per request, and it can only choose among origins
+    /// this node published. Do not read the per-request half as a loosening
+    /// of the admission gate; they are different questions.
+    HttpByName {
+        /// Published apps by name. Ordered so the "no such app" refusal can
+        /// list what this node does publish in a stable order.
+        apps: std::sync::Arc<std::collections::BTreeMap<String, SocketAddr>>,
+        headers: Vec<(String, String)>,
+    },
 }
 
 impl Forward {
-    /// The local address the bytes reach, whichever kind this is.
-    pub fn target(self) -> SocketAddr {
+    /// The one local address the bytes reach, or `None` for a kind that has
+    /// no single target.
+    ///
+    /// `Option` rather than a representative address: [`Forward::HttpByName`]
+    /// resolves per request, and answering with (say) the first app's port
+    /// would be a plausible, wrong answer to "where does this go" — the shape
+    /// of silent substitution this workspace keeps paying for (ARCH §6).
+    pub fn target(self) -> Option<SocketAddr> {
         match self {
-            Forward::Splice(a) => a,
-            Forward::Http { origin, .. } => origin,
+            Forward::Splice(a) => Some(a),
+            Forward::Http { origin, .. } => Some(origin),
+            Forward::HttpByName { .. } => None,
         }
     }
+}
+
+/// The leading path segment of a request head's target, and the head with
+/// that segment removed — `GET /chores/tasks?x=1 HTTP/1.1` becomes
+/// `("chores", "GET /tasks?x=1 HTTP/1.1")`.
+///
+/// `None` when the head has no usable name: a malformed request line, an
+/// absolute-form target (`GET http://host/p`, which a bridge client does not
+/// send), a bare `/`, or a segment outside `[A-Za-z0-9_-]`. The character
+/// rule is what keeps `..`, encoded slashes and stray bytes out of the
+/// lookup key structurally, rather than by a sanitizer someone has to
+/// remember to call (ARCH §10) — the registry is a map, so an unmatched key
+/// is refused anyway, but a name that cannot express traversal never gets
+/// the chance to be interesting.
+///
+/// The name travels in the PATH rather than in a header on purpose. A header
+/// would have to be exempted from the `x-mesh-*` strip to survive, which
+/// means one forgeable header becomes load-bearing; and a path prefix is
+/// something a browser or `curl` can express with no custom client at all.
+/// The cost is the usual sub-path reverse-proxy cost: an app that emits
+/// absolute links (`/static/app.css`) emits them without the prefix. Apps
+/// published here should use relative URLs, which is what a one-file Flask
+/// app does anyway.
+pub fn split_app_name(head: &[u8]) -> Option<(String, Vec<u8>)> {
+    let end = head.iter().position(|&b| b == b'\n').unwrap_or(head.len());
+    let line = head[..end].strip_suffix(b"\r").unwrap_or(&head[..end]);
+    // Exactly three space-separated fields, and the third must be a version.
+    // `splitn(3, ' ')` would accept `GET /cho res/x HTTP/1.1` by sweeping the
+    // extra spaces into the version field and hand back `cho` as the app — a
+    // malformed request line silently resolving to a REAL app name is the
+    // wrong kind of tolerant.
+    let mut parts = line.split(|&b| b == b' ');
+    let method = parts.next()?;
+    let target = parts.next()?;
+    let version = parts.next()?;
+    if parts.next().is_some() || !version.starts_with(b"HTTP/") || !target.starts_with(b"/") {
+        return None;
+    }
+    let rest = &target[1..];
+    let cut = rest
+        .iter()
+        .position(|&b| b == b'/' || b == b'?')
+        .unwrap_or(rest.len());
+    let (name, tail) = rest.split_at(cut);
+    if name.is_empty()
+        || !name
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+    {
+        return None;
+    }
+    let mut out = Vec::with_capacity(head.len());
+    out.extend_from_slice(method);
+    out.push(b' ');
+    if tail.is_empty() || tail.starts_with(b"?") {
+        out.push(b'/');
+    }
+    out.extend_from_slice(tail);
+    out.push(b' ');
+    out.extend_from_slice(version);
+    out.extend_from_slice(b"\r\n");
+    out.extend_from_slice(&head[end.saturating_add(1).min(head.len())..]);
+    Some((String::from_utf8_lossy(name).into_owned(), out))
 }
 
 /// How the bytes after a request head are framed.
@@ -275,9 +361,297 @@ pub async fn pump_with_identity(
     tokio::join!(up, down);
 }
 
+/// Pump one accepted bi-stream to whichever published app its FIRST request
+/// names, rewriting heads exactly as [`pump_with_identity`] does.
+///
+/// # Why the name binds per STREAM and not per request
+///
+/// Retargeting between requests on one stream would mean switching TCP
+/// connections mid-flight, and doing that safely requires knowing that the
+/// previous response has finished — which requires PARSING responses. This
+/// module deliberately never parses the origin→client direction: that byte
+/// copy is what makes a `Range` response byte-exact and lets a player seek as
+/// if the library were local. Buying per-request retargeting with response
+/// parsing would trade the one guarantee the media path is built on for a
+/// case no real client produces — an HTTP client keeping a connection alive
+/// does not switch origins on it, and a browser opens a fresh connection per
+/// origin regardless.
+///
+/// So the first head binds the name, and a later head naming a DIFFERENT app
+/// closes the stream with a logged reason rather than being silently served
+/// by the wrong origin. The client reconnects and gets its app.
+pub async fn pump_by_name(
+    mut send: iroh::endpoint::SendStream,
+    recv: iroh::endpoint::RecvStream,
+    apps: std::sync::Arc<std::collections::BTreeMap<String, SocketAddr>>,
+    headers: std::sync::Arc<Vec<(String, String)>>,
+) {
+    let mut reader = tokio::io::BufReader::new(recv);
+    let mut buf = Vec::with_capacity(4096);
+    // The first head decides where this stream goes, so it is read before any
+    // TCP connection exists — which is also why the refusals below answer on
+    // `send` directly instead of relaying an origin's answer.
+    match read_head(&mut reader, &mut buf).await {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(e) => {
+            tracing::info!(
+                target: "transport",
+                error = %e,
+                "iroh acceptor: app forward closed a request it could not frame"
+            );
+            return;
+        }
+    }
+    let Some((name, first_head)) = split_app_name(&buf) else {
+        tracing::info!(
+            target: "transport",
+            "app: REFUSED a request whose target names no app — the path's first \
+             segment selects the app (GET /<app>/…)"
+        );
+        say(
+            refuse(&mut send, 404, "no app named in the request path", &apps).await,
+            "<none>",
+        );
+        return;
+    };
+    let Some(origin) = apps.get(&name).copied() else {
+        tracing::info!(
+            target: "transport",
+            app = %name,
+            published = apps.len(),
+            "app: REFUSED a dial for an app this node does not publish"
+        );
+        say(
+            refuse(&mut send, 404, &format!("no app named {name:?} here"), &apps).await,
+            &name,
+        );
+        return;
+    };
+    let tcp = match tokio::net::TcpStream::connect(origin).await {
+        Ok(t) => {
+            t.set_nodelay(true).ok();
+            t
+        }
+        Err(e) => {
+            // The registry says this app is published and the process behind
+            // it is gone. That is a 502 and it is NAMED: a stale registration
+            // reading as "no such app" would send the operator looking for a
+            // config bug that is not there.
+            tracing::warn!(
+                target: "transport",
+                app = %name,
+                origin = %origin,
+                error = %e,
+                "app: published app did not accept — the registration outlived its process"
+            );
+            say(
+                refuse(
+                    &mut send,
+                    502,
+                    &format!("app {name:?} is published on {origin} but did not accept"),
+                    &apps,
+                )
+                .await,
+                &name,
+            );
+            return;
+        }
+    };
+    tracing::info!(
+        target: "transport",
+        app = %name,
+        origin = %origin,
+        "app: dial admitted — the app is told who is asking"
+    );
+    let (mut tcp_r, mut tcp_w) = tcp.into_split();
+    let down = async {
+        let _ = tokio::io::copy(&mut tcp_r, &mut send).await;
+        let _ = send.finish();
+    };
+    let up = async {
+        let mut head = first_head;
+        loop {
+            let framing = body_framing(&head);
+            let (out, stripped) = rewrite_head(&head, &headers);
+            if stripped > 0 {
+                tracing::info!(
+                    target: "transport",
+                    stripped,
+                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
+                );
+            }
+            if tcp_w.write_all(&out).await.is_err() {
+                break;
+            }
+            match framing {
+                BodyFraming::None => {}
+                BodyFraming::Length(n) => {
+                    let mut body = (&mut reader).take(n);
+                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
+                        break;
+                    }
+                }
+                BodyFraming::Chunked => {
+                    tracing::info!(
+                        target: "transport",
+                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
+                    );
+                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
+                    break;
+                }
+            }
+            match read_head(&mut reader, &mut buf).await {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(e) => {
+                    tracing::info!(
+                        target: "transport",
+                        error = %e,
+                        "iroh acceptor: app forward closed a request it could not frame"
+                    );
+                    break;
+                }
+            }
+            match split_app_name(&buf) {
+                Some((next, rest)) if next == name => head = rest,
+                other => {
+                    tracing::info!(
+                        target: "transport",
+                        bound = %name,
+                        requested = other.as_ref().map(|(n, _)| n.as_str()).unwrap_or("<none>"),
+                        "app: closing a kept-alive stream that changed app mid-connection — \
+                         the name binds per stream (see pump_by_name)"
+                    );
+                    break;
+                }
+            }
+        }
+        let _ = tcp_w.shutdown().await;
+    };
+    tokio::join!(up, down);
+}
+
+/// Report a refusal that could not be DELIVERED.
+///
+/// The dialer then sees a connection that closed with no answer, which looks
+/// exactly like the app hanging — so the reason has to survive on this side
+/// even though it never reached the other. Discarding it was the shape ARCH §6
+/// names: a failure collapsed into a path that reads as handled.
+fn say(sent: std::io::Result<()>, app: &str) {
+    if let Err(e) = sent {
+        tracing::info!(
+            target: "transport",
+            app = %app,
+            error = %e,
+            "app: the refusal could not be written back — the dialer sees a silent close"
+        );
+    }
+}
+
+/// Answer the dialer directly, before any origin is involved.
+///
+/// Lists what this node DOES publish, which is safe here and not elsewhere:
+/// the caller is already an admitted member of the App class, so the names
+/// are not a disclosure — and "no app named chore" beside "chores, printer"
+/// is the difference between a typo found in one second and one found by
+/// reading someone else's config.
+async fn refuse(
+    send: &mut iroh::endpoint::SendStream,
+    status: u16,
+    why: &str,
+    apps: &std::collections::BTreeMap<String, SocketAddr>,
+) -> std::io::Result<()> {
+    let published: Vec<&str> = apps.keys().map(String::as_str).collect();
+    let body = format!(
+        "{why}\nthis node publishes: {}\n",
+        if published.is_empty() {
+            "(nothing)".to_string()
+        } else {
+            published.join(", ")
+        }
+    );
+    let reason = if status == 502 { "Bad Gateway" } else { "Not Found" };
+    let head = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    send.write_all(head.as_bytes()).await?;
+    send.write_all(body.as_bytes()).await?;
+    let _ = send.finish();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn head_of(target: &str) -> Vec<u8> {
+        format!("GET {target} HTTP/1.1\r\nHost: x\r\nAccept: */*\r\n\r\n").into_bytes()
+    }
+
+    fn split(target: &str) -> Option<(String, String)> {
+        split_app_name(&head_of(target))
+            .map(|(n, h)| (n, String::from_utf8(h).unwrap()))
+    }
+
+    #[test]
+    fn the_first_path_segment_names_the_app_and_leaves_the_rest_intact() {
+        let (name, head) = split("/chores/tasks?due=today").unwrap();
+        assert_eq!(name, "chores");
+        assert!(head.starts_with("GET /tasks?due=today HTTP/1.1\r\n"), "{head}");
+        // Everything after the request line is copied byte for byte.
+        assert!(head.ends_with("Host: x\r\nAccept: */*\r\n\r\n"), "{head}");
+    }
+
+    /// A bare app root must reach the origin as `/`, not as an empty target —
+    /// an empty request target is not a valid HTTP/1.1 request line, and the
+    /// origin would answer 400 to what a person typed as a working URL.
+    #[test]
+    fn an_app_root_becomes_a_slash() {
+        assert_eq!(split("/chores").unwrap().1.split(' ').nth(1), Some("/"));
+        assert_eq!(split("/chores/").unwrap().1.split(' ').nth(1), Some("/"));
+        assert_eq!(
+            split("/chores?x=1").unwrap().1.split(' ').nth(1),
+            Some("/?x=1")
+        );
+    }
+
+    /// The failing inputs the character rule exists for. A name that could
+    /// express traversal, an encoded slash, or a stray byte never becomes a
+    /// lookup key at all — refused before the map is consulted (ARCH §10).
+    #[test]
+    fn a_name_that_could_express_traversal_is_refused_not_sanitized() {
+        assert!(split("/../secrets").is_none());
+        assert!(split("/..%2fsecrets").is_none());
+        assert!(split("/cho res/x").is_none());
+        assert!(split("/chores\u{7f}/x").is_none());
+    }
+
+    /// No name to bind: a bare root, an absolute-form target (which a bridge
+    /// client does not send), and a request line that is not three parts.
+    #[test]
+    fn a_head_with_no_usable_name_is_none() {
+        assert!(split("/").is_none());
+        assert!(split("http://elsewhere/chores/x").is_none());
+        assert!(split_app_name(b"GET\r\n\r\n").is_none());
+        assert!(split_app_name(b"").is_none());
+    }
+
+    /// The split runs BEFORE `rewrite_head`, so a client that names an app
+    /// and also forges an identity gets both handled: the app resolves, and
+    /// the forged header is still stripped.
+    #[test]
+    fn naming_an_app_does_not_let_a_forged_identity_through() {
+        let raw = b"GET /chores/x HTTP/1.1\r\nX-Mesh-Member: Mallory\r\n\r\n";
+        let (name, head) = split_app_name(raw).unwrap();
+        assert_eq!(name, "chores");
+        let (out, stripped) = rewrite_head(&head, &identity());
+        assert_eq!(stripped, 1);
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("Mallory"), "{text}");
+        assert!(text.contains("X-Mesh-Member: LittleMac"), "{text}");
+    }
 
     fn identity() -> Vec<(String, String)> {
         vec![
