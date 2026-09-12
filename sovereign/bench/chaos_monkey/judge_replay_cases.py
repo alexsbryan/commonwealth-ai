@@ -48,14 +48,29 @@ Deterministic: same inputs -> byte-identical output (sorted, no timestamps).
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
+REPO = HERE.parents[2]
 
-LEDGERS = {
+# The four-verdict line `--bank-age` ends with (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
+
+# The bar `vl-bank-live` declares, in days, with its noise band. Stated here
+# because this script is what MEASURES it; the campaign file is where it was
+# ratified (quality/campaigns/verifier-loop.toml).
+BANK_AGE_TARGET_DAYS = 7.0
+BANK_AGE_BAND_DAYS = 1.0
+
+# The four ledgers HAND LABELS are keyed to. These short names appear in
+# `FORENSIC_LABELS` below and in committed artifacts, so they are aliases, not
+# a list of what exists — see `discover_ledgers`.
+NAMED_LEDGERS = {
     "landed14": RESULTS / "gate_audit_forensics_20260814_landed.jsonl",
     "arm2": RESULTS / "gate_audit_forensics_20260813_arm2.jsonl",
     "d0pre": RESULTS / "gate_audit_forensics_20260813_d0pre.jsonl",
@@ -63,6 +78,73 @@ LEDGERS = {
     # yet; feeds the --full delta sweep and the byte-faithfulness audit.
     "pbase14": RESULTS / "gate_audit_forensics_20260814_portfolio_baseline.jsonl",
 }
+
+LEDGER_GLOB = "gate_audit_forensics_*.jsonl"
+
+
+def discover_ledgers() -> dict:
+    """Every forensics ledger on disk, not a list somebody maintains.
+
+    WHY THIS IS DISCOVERY AND NOT A DICT (rung vl-4 of
+    quality/campaigns/verifier-loop.toml, ARCH principle 9 — what can change
+    without a code change is data). The dict above named four files and
+    `gate_audit_forensics_20260814_portfolio_afterarm.jsonl` was already
+    sitting beside them, unread, because nobody edited the dict. A bank that
+    only grows when someone remembers to add a line is a bank that ages, and
+    the age is what `vl-bank-live` measures: the newest episode the replay
+    could read was 29 days old at declaration.
+
+    Named ledgers keep their short keys — hand labels are keyed to them.
+    Anything else is keyed by the stem after the prefix and carries no labels,
+    which is the state every unlabeled forensics row is already in.
+    """
+    out = dict(NAMED_LEDGERS)
+    known = {p.resolve() for p in NAMED_LEDGERS.values()}
+    for path in sorted(RESULTS.glob(LEDGER_GLOB)):
+        if path.resolve() in known:
+            continue
+        out[path.stem.replace("gate_audit_forensics_", "")] = path
+    return out
+
+
+LEDGERS = discover_ledgers()
+
+
+#: The record kind a case is resolved FROM. Every case builder above keys on
+#: `kind == "audit"` (the evidence window) and reads its `claim` rows against
+#: it; a ledger of any other kind is recorded, not replayable.
+EPISODE_KIND = "audit"
+
+
+def newest_episode(ledgers: dict) -> tuple:
+    """-> (iso_ts, ledger_key) of the newest REPLAYABLE episode, or (None, None).
+
+    TWO NARROWINGS, both of which a looser read would get wrong in the
+    flattering direction.
+
+    THE EPISODE'S OWN RECORDED TIME, never the file's mtime: a fresh checkout
+    stamps every file with today, and a month-old bank would report as minutes
+    old.
+
+    AND ONLY `audit` RECORDS. The same knob also writes `citation` /
+    `citation_part` rows (since 2026-09-04), and those carry a `ts` while
+    carrying no evidence window the joint register can be replayed against —
+    `forensics_cases` resolves nothing from them. Measured 2026-09-12: the
+    first nine questions of the chaos bank wrote six citation rows and no
+    audit record, which under a kind-blind reading would have reported the
+    bank as fed when the replay had gained exactly nothing.
+    """
+    best, where = None, None
+    for key, path in ledgers.items():
+        if not path.is_file():
+            continue
+        for row in read_jsonl(path):
+            if row.get("kind") != EPISODE_KIND:
+                continue
+            ts = row.get("ts")
+            if isinstance(ts, str) and (best is None or ts > best):
+                best, where = ts, key
+    return best, where
 
 # ---------------------------------------------------------------------------
 # Hand labels for forensics-ledger claims, keyed by (ledger, claim substring).
@@ -584,11 +666,59 @@ def harvest_cases(salt_c: str | None, comp_c: str | None) -> list[dict]:
     return cases
 
 
+def bank_age() -> int:
+    """Report the age of the newest episode the replay can read, and judge it.
+
+    THE CLOCK IS THE DENOMINATOR and nobody authors it: this number rises on
+    its own every day the bank is not fed. That is the point — a registered
+    replay over a month-old bank prices a change against a world that has
+    moved, and reports it with full confidence.
+    """
+    ledgers = discover_ledgers()
+    present = {k: p for k, p in ledgers.items() if p.is_file()}
+    missing = sorted(set(ledgers) - set(present))
+    print(f"judge-replay bank: {len(present)} forensics ledger(s) resolved"
+          + (f"; {len(missing)} named ledger(s) absent: {', '.join(missing)}" if missing else ""))
+    for key, path in sorted(present.items()):
+        print(f"  {key:<28} {path.name}")
+    ts, where = newest_episode(present)
+    if ts is None:
+        # NEVER-RAN, not a large number: with no episode there is no age, and
+        # reporting one would be a measurement nobody took (ARCH principle 6).
+        emit_judgement("judge-replay-bank", "never-ran",
+                       f"no forensics ledger on disk carries a dated `{EPISODE_KIND}` record — "
+                       "the replay resolves cases from those alone, so its bank has no age")
+        return 4
+    when = _dt.datetime.fromisoformat(ts)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    age = (now - when).total_seconds() / 86400.0
+    print(f"\nnewest episode: {ts}  ({where})")
+    print(f"bank age: {age:.1f} days   target <= {BANK_AGE_TARGET_DAYS:.0f} "
+          f"(band {BANK_AGE_BAND_DAYS:.0f})")
+    if age <= BANK_AGE_TARGET_DAYS + BANK_AGE_BAND_DAYS:
+        emit_judgement("judge-replay-bank", "passed",
+                       f"the newest episode the replay can read is {age:.1f} days old "
+                       f"({where}), within the {BANK_AGE_TARGET_DAYS:.0f}-day target")
+        return 0
+    emit_judgement("judge-replay-bank", "failed",
+                   f"the newest episode the replay can read is {age:.1f} days old ({where}); a "
+                   f"replay over a bank this old prices a change against a world that has moved. "
+                   "Feed it: a bench run with SOVEREIGN_GATE_AUDIT_FORENSICS=1 writes a new "
+                   "ledger into sovereign/bench/chaos_monkey/results/, and this script now "
+                   "discovers it without an edit")
+    return 1
+
+
 def main() -> int:
+    if "--bank-age" in sys.argv[1:]:
+        return bank_age()
     ap = argparse.ArgumentParser()
     ap.add_argument("--c-arm-salt", help="land-C saltgrass transcripts (extract from branch)")
     ap.add_argument("--c-arm-comp", help="land-C compound transcripts (extract from branch)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--bank-age", action="store_true",
+                    help="report the age of the newest episode the replay can read, and judge it "
+                         "against the vl-bank-live target (no --out needed)")
     ap.add_argument(
         "--full",
         action="store_true",

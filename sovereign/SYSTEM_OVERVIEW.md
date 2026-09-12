@@ -3236,6 +3236,25 @@ Kane-bridge catch. The old one-number line passed it; `judge_replay_report.py
 passes it again, and a second arm requires an arm compared against ITSELF to
 pass, so a report that answered `failed` unconditionally would not satisfy it.
 
+**The bank the replay reads is measured against the clock
+(`judge_replay_cases.py --bank-age`, rung `vl-4`).** Every recorded episode was
+written on 2026-08-13/14 — 29.6 days old on 2026-09-12 — so a registered replay
+was pricing candidates against a world that had moved. Three changes, none of
+them to a privacy default. The ledger set is DISCOVERED (`gate_audit_forensics_
+*.jsonl`) rather than a dict of four names, which had already missed
+`..._20260814_portfolio_afterarm.jsonl` sitting beside them unread. The age is
+read from the EPISODE's own `ts` and only from `audit` records — the same knob
+also writes `citation` rows carrying a `ts` and no evidence window, and the
+first nine questions of the chaos bank wrote six of those and no audit record,
+which a kind-blind reading would have reported as a fed bank. And
+`feed_replay_bank.sh` is the feed: a bench run with
+`SOVEREIGN_GATE_AUDIT_FORENSICS` pointed at a dated ledger, in the process that
+RUNS the gate (`svrn chat ask` cannot serve — its turn runs on the daemon), in
+the `run-if-stale` venue so a machine used every day feeds it and a machine
+left off for a week feeds it once on return. The audit pass runs on LONG-FORM
+turns only, so `--limit` is load-bearing: a limit that stops before the bank's
+maximal questions produces citation rows and no replayable episode.
+
 Rows accumulate in a task-local opened by
 `gate_answer_with_progress` — the same funnel that owns the gate's wall clock —
 and ride out as `GroundingDecisionLine::calls` (counts only: `ms`,

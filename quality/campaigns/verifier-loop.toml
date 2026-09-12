@@ -159,26 +159,29 @@ kill         = "K3 - fabrication > 0 with instrument validation green means a SE
 [[rung]]
 id     = "vl-1"
 title  = "One forced-choice primitive, and the census finally sees every judge call"
-status = "open"
+status = "done"
+sha    = ["7c19802d1"]
 demo   = "D1"
 moves  = ["vl-one-primitive"]
-note   = "NET-NEGATIVE lines. Two of three construction sites become callers of the canonical register; the two that call gate_call zero times start paying into the census. ~1 day. Nothing else in the campaign is cheaper per unit of visibility gained."
+note   = "NET-NEGATIVE lines. Two of three construction sites become callers of the canonical register; the two that call gate_call zero times start paying into the census. ~1 day. Nothing else in the campaign is cheaper per unit of visibility gained. LANDED 2026-09-12: 3 construction sites -> 1, 2 -> 0 bypassing the census; `cargo xtask judge-funnel-gate` holds it, watched red twice first."
 
 [[rung]]
 id     = "vl-2"
 title  = "The back-of-house reports in the product's vocabulary"
-status = "open"
+status = "done"
+sha    = ["a6dd46ec0"]
 demo   = "D2"
 moves  = ["vl-judgement-line"]
-note   = "Ten tools, one print(json.dumps(...)) each, against a protocol that is language-agnostic by design. The operator's 'bubble up' made literal, and the smallest change in the plan. Each conversion lands WITH its instruments.toml row or it is decoration."
+note   = "Ten tools, one print(json.dumps(...)) each, against a protocol that is language-agnostic by design. The operator's 'bubble up' made literal, and the smallest change in the plan. Each conversion lands WITH its instruments.toml row or it is decoration. LANDED 2026-09-12: 8 tools converted + ci-bench per-lane, each with its instruments.toml row; instrument-gate rule A (hard) + rule B (ratchet, 12 in arrears). TWO FINDINGS: the bar's lexical denominator is not reproducible (131 files carry the vocabulary, 45 write it to stdout, neither is the ten) so the denominator is the REGISTRY - 8 of 20; and gym/comaintainer/markers.py is a pure library with no stdout and cannot be converted."
 
 [[rung]]
 id     = "vl-3"
 title  = "A register change cannot land unpriced"
-status = "open"
+status = "done"
+sha    = ["b69ebb1ea"]
 demo   = "D3"
 moves  = ["vl-register-priced"]
-note   = "The 13th of 100 instruments to carry a negative control, and the first guarding the product's judgement. The control already exists in history (17ac931b8, a candidate refused at the 3/3 bar). ~1 day."
+note   = "The 13th of 100 instruments to carry a negative control, and the first guarding the product's judgement. The control already exists in history (17ac931b8, a candidate refused at the 3/3 bar). ~1 day. LANDED 2026-09-12: the report now COMPARES arms in both directions (catches lost/gained, false positives cured/added, never netted) and a candidate that surrenders a catch is failed whatever it cures. The control is the archive - 17ac931b8's frozen verdicts, whose AGGREGATE improved 6/10 vs 3/10 while losing the Kane-bridge catch - and it is watched red. Negative controls in the registry: 12/100 -> 13/112."
 
 [[rung]]
 id     = "vl-4"

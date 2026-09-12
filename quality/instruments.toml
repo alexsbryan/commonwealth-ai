@@ -412,6 +412,63 @@ negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
 
+# ── is the replay's bank this week's? ────────────────────────────────────
+# Rung vl-4 of quality/campaigns/verifier-loop.toml. `judge-replay` above is
+# only as good as what it replays, and every recorded episode was written on
+# 2026-08-13/14 — 29.6 days old when this pair landed. The age is the bar and
+# the CLOCK is its denominator: it rises on its own every day nobody feeds the
+# bank, which is why this is a scheduling problem and not a retention one.
+
+[[instrument]]
+id = "judge-replay-bank"
+kind = "check"
+claim = "invariant"
+command = "python3 sovereign/bench/chaos_monkey/judge_replay_cases.py --bank-age"
+# 0.13s, n=3 (0.13 / 0.13 / 0.13 wall), 2026-09-12 — it reads every forensics
+# ledger once.
+cost_secs = 0.13
+# ADVISORY, and deliberately: it reports `failed` at 29.6 days on the day it
+# landed. A hard gate in arrears is how people learn to reach for --no-verify
+# (AGENTS.md, on the two advisory size ratchets). Promote it when the feed
+# below has held the age under target for a week.
+enforcement = "advisory"
+fidelity = "F0"
+verdict = "judgement-line"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["run-if-stale", "by-hand"]
+doc = "quality/campaigns/verifier-loop.toml §vl-bank-live"
+
+[[instrument]]
+id = "judge-replay-bank-feed"
+kind = "probe"
+claim = "invariant"
+command = "sovereign/bench/chaos_monkey/feed_replay_bank.sh"
+# One real gated turn per bank question against the local daemon. Measured
+# 2026-09-12: 2 short-path questions in 47s; the longform questions the audit
+# pass actually runs on are minutes each, so the default --limit 6 is the knob.
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F3"
+verdict = "judgement-line"
+preconditions = [
+  "port-listening:9741",
+  "slot-decodes:primary",
+  "corpus-installed:chaos-secret-agent",
+]
+baseline = { kind = "none" }
+negative_control = "none"
+# The venue that fits the hardware: run-if-stale fires at LOGIN when the marker
+# is old, so a machine used every day feeds the bank every day and a machine
+# left off for a week feeds it once when it comes back. A cron cadence would
+# claim something these boxes cannot keep (scripts/run-if-stale.sh header).
+runs_in = ["run-if-stale"]
+doc = "sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header)"
+load_bearing = [
+  { flag = "SOVEREIGN_GATE_AUDIT_FORENSICS", why = "set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves" },
+  { flag = "--limit", why = "the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode" },
+]
+
 # ── back-of-house instruments that SAY their verdict ─────────────────────
 # Rung vl-2 of quality/campaigns/verifier-loop.toml. Each of these decides a
 # four-verdict outcome and, until 2026-09-12, could only say it in prose — so a
