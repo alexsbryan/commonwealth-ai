@@ -862,10 +862,16 @@ async fn build_context_augmented_message(
     user_message: &str,
     refs: &[FocusedChunkRef],
 ) -> String {
-    let engine_opt = state.corpus_engine.read().await.clone();
-    let Some(engine) = engine_opt else {
+    if refs.is_empty() {
         return user_message.to_string();
-    };
+    }
+    // Chunks come from the daemon's index over `GET
+    // /internal/meshapp/{corpus}/chunks/{id}` (2026-09-11). Until then this
+    // opened the corpus index with the desktop's own `CorpusEngine` — the
+    // last reader of that engine on the chat path. A chunk the daemon
+    // cannot serve is skipped with a warning, exactly as an unopenable
+    // index was before; the message still goes, without that passage.
+    let client = sovereign_turn_client::TurnClient::new(state.client_base_url());
 
     // Dedupe by (corpus_id, chunk_id) — preserves first-seen order.
     let mut seen = std::collections::HashSet::new();
@@ -876,31 +882,21 @@ async fn build_context_augmented_message(
 
     let mut blocks: Vec<String> = Vec::new();
     for r in unique {
-        let index = match engine.open_index_for_corpus(&r.corpus_id).await {
-            Ok(i) => i,
+        let row = match client
+            .meshapp_chunk::<sovereign_meshapp::ChunkDto>(&r.corpus_id, r.chunk_id)
+            .await
+        {
+            Ok(row) => row,
             Err(e) => {
                 tracing::warn!(
                     corpus = %r.corpus_id,
                     chunk_id = r.chunk_id,
                     error = %e,
-                    "context preamble: open_index failed; skipping chunk",
+                    "context preamble: daemon could not serve chunk; skipping",
                 );
                 continue;
             }
         };
-        let mut rows = match index.chunks_by_ids(&[r.chunk_id]).await {
-            Ok(rs) => rs,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %r.corpus_id,
-                    chunk_id = r.chunk_id,
-                    error = %e,
-                    "context preamble: chunks_by_ids failed; skipping chunk",
-                );
-                continue;
-            }
-        };
-        let Some(row) = rows.pop() else { continue };
         let title = row.title.as_deref().unwrap_or("untitled passage");
         let content = if row.content.chars().count() > CONTEXT_PASSAGE_CHAR_BUDGET {
             let truncated: String = row

@@ -1441,6 +1441,23 @@ impl TurnClient {
             .await
     }
 
+    /// `GET /internal/meshapp/{corpus}/chunks/{chunk_id}` — one chunk's
+    /// title and content by numeric id. `T` is
+    /// `sovereign_meshapp::ChunkDto`. Added 2026-09-11 so the desktop's
+    /// focused-passage preamble (`commands/chat.rs`) reads the chunk from
+    /// the daemon instead of opening the index with its own engine.
+    pub async fn meshapp_chunk<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/meshapp/{corpus_id}/chunks/{chunk_id}"),
+            &[],
+        )
+        .await
+    }
+
     /// `GET /internal/meshapp/{corpus}/findings?pattern=` — the wire
     /// form of `meshapp_findings`. `T` is
     /// `Vec<sovereign_meshapp::FindingDto>`.
