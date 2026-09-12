@@ -11,9 +11,20 @@
 //!
 //! Loopback posture is `reading_http`'s, unchanged.
 //!
+//! `upload_document_asset` crossed on 2026-09-11 as a JOB: `POST
+//! /v1/documents` runs `prepare` inline (no inference; answers the Pending
+//! record, 202) and spawns `run_ingest`, whose frames are appended to an
+//! in-process log keyed by asset id and read back from `GET
+//! /v1/documents/{id}/progress?after=N`. The header used to say this could
+//! not cross because "`run_ingest` narrates one frame per embed batch and a
+//! request/response route delivers exactly one" — `lc_http`'s ingest and
+//! cluster jobs showed a poll loop re-emitting the host's frames IS the
+//! channel. `asset_id` is stamped on every frame HERE, which the desktop
+//! used to do per event (§10.6: one decider). The legacy paperclip path,
+//! `ingest_document` → `rag::ingest::ingest_file` into the `documents`
+//! table, crossed the same day as `POST /v1/documents/legacy`.
+//!
 //! Does NOT cross, named rather than half-served:
-//! - **`upload_document_asset`** — `run_ingest` narrates one frame per embed
-//!   batch and a request/response route delivers exactly one.
 //! - **`ask_document`'s document-operation half** — a route plus a generation
 //!   is a TURN; serving it here mints a second driver beside `serve_turn`.
 //!
@@ -27,9 +38,11 @@
 //! to this surface — so `build_skeleton` took its LLM fallback on a host
 //! that had the NER model resident. See [`manager_for`].
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use axum::extract::{Extension, Path};
+use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -80,6 +93,55 @@ pub struct PromoteLegacyRequest {
     pub source: String,
 }
 
+/// `POST /v1/documents`'s body — the file to ingest as a document asset.
+/// A local PATH, the way `POST /internal/corpus/local` takes one: every
+/// route here is `LocalOnly`, and the daemon reads the same disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadDocumentRequest {
+    pub path: String,
+}
+
+/// Query of `GET /v1/documents/{id}/progress`.
+#[derive(Debug, Default, Deserialize)]
+pub struct DocumentProgressQuery {
+    /// The caller's cursor: frames at index `>= after` are returned.
+    #[serde(default)]
+    pub after: usize,
+}
+
+/// What `GET /v1/documents/{id}/progress` answers.
+///
+/// `frames` are `sovereign_tools::document_asset::IngestProgress` values
+/// serialised by the manager (`{"type": …}`), each with `asset_id`
+/// stamped on, from the caller's cursor onward. `finished` flips when
+/// the job appended its terminal frame — `Ready`, or `Failed` naming
+/// the reason.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DocumentIngestProgress {
+    pub asset_id: String,
+    pub frames: Vec<serde_json::Value>,
+    /// The cursor to send next: one past the last frame here.
+    pub next: usize,
+    pub finished: bool,
+}
+
+/// `POST /v1/documents/legacy`'s body — a file for the legacy
+/// `documents` table (the old paperclip path).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestLegacyRequest {
+    pub path: String,
+}
+
+/// `POST /v1/documents/legacy`'s answer. `source` is the file NAME — the
+/// shape the desktop command always returned and the attachment chip
+/// renders. (The legacy listing's `source` key is the full path the
+/// chunks were stored under; its `filename` is this value.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestLegacyResponse {
+    pub source: String,
+    pub chunks_created: usize,
+}
+
 /// `DELETE /v1/documents/{id}`'s body.
 ///
 /// A body rather than a 204, so a caller that only reads bodies still
@@ -102,14 +164,18 @@ pub struct DeletedResponse {
 /// says so to the reader rather than relying on it silently.
 pub fn documents_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
-        .route("/v1/documents", get(list_documents))
-        .route("/v1/documents/legacy", get(list_legacy_documents))
+        .route("/v1/documents", get(list_documents).post(upload_document))
+        .route(
+            "/v1/documents/legacy",
+            get(list_legacy_documents).post(ingest_legacy),
+        )
         .route("/v1/documents/legacy/promote", post(promote_legacy))
         .route(
             "/v1/documents/{id}",
             get(get_document).delete(delete_document),
         )
         .route("/v1/documents/{id}/skeleton", post(rebuild_skeleton))
+        .route("/v1/documents/{id}/progress", get(ingest_progress))
         .localhost_only_with(daemon)
 }
 
@@ -220,6 +286,250 @@ async fn rebuild_skeleton(
         ),
         Err(e) => internal_error("get_document_asset", &e.to_string()),
     })
+}
+
+// ─── The upload job ────────────────────────────────────────────
+
+/// One upload's frame log. Held per asset in [`DOCUMENT_JOBS`]; the
+/// progress route reads it, the spawned ingest appends to it.
+struct DocumentJob {
+    frames: Mutex<Vec<serde_json::Value>>,
+    finished: AtomicBool,
+}
+
+/// The live (and recently finished) upload jobs, keyed by asset id.
+/// In-process: the record the frames narrate is in the store, so a
+/// reader that missed the job reads the asset's `state` instead.
+static DOCUMENT_JOBS: OnceLock<Mutex<HashMap<String, Arc<DocumentJob>>>> = OnceLock::new();
+
+fn document_jobs() -> &'static Mutex<HashMap<String, Arc<DocumentJob>>> {
+    DOCUMENT_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+impl DocumentJob {
+    /// Append one frame with `asset_id` stamped on. The milestone
+    /// variants carry it already; `Indexing` / `BuildingSkeleton` do
+    /// not, and a client keys live state by it (`or_insert` keeps the
+    /// id the milestones carry).
+    fn push(&self, asset_id: &str, mut frame: serde_json::Value) {
+        if let serde_json::Value::Object(map) = &mut frame {
+            map.entry("asset_id".to_string())
+                .or_insert_with(|| serde_json::Value::String(asset_id.to_string()));
+        }
+        let terminal = matches!(
+            frame.get("type").and_then(|t| t.as_str()),
+            Some("Ready") | Some("Failed")
+        );
+        if let Ok(mut frames) = self.frames.lock() {
+            frames.push(frame);
+        }
+        if terminal {
+            self.finished.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// Whether the manager already narrated the failure. A poisoned log
+    /// answers `false` so the caller appends its own `Failed` frame — the
+    /// arm that ends the job either way, never the one that leaves a
+    /// poller spinning.
+    fn last_is_failed(&self) -> bool {
+        match self.frames.lock() {
+            Ok(f) => f
+                .last()
+                .map(|v| v.get("type").and_then(|t| t.as_str()) == Some("Failed"))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+}
+
+/// POST `/v1/documents` — ingest a file as a document asset, as a JOB.
+///
+/// `prepare` runs inline (parse + chunk + persist the Pending record; no
+/// inference) and its asset is the 202 body, because the id it mints is
+/// the id every frame is stamped with — the banner a client shows and
+/// the frames it polls agree on one id, which is the contract the
+/// desktop command documented. `run_ingest` is spawned; its frames land
+/// in the job log the progress route serves.
+async fn upload_document(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<UploadDocumentRequest>,
+) -> Result<Response, Absence> {
+    let manager = manager_for(&daemon)?;
+    let path = std::path::PathBuf::from(&req.path);
+    if !path.is_file() {
+        return Err(Absence::invalid(format!(
+            "upload_document: no such file: {}",
+            req.path
+        )));
+    }
+    let prepared = match manager.prepare(&path).await {
+        Ok(p) => p,
+        Err(e) => return Ok(internal_error("prepare", &e.to_string())),
+    };
+    let document = prepared.asset.clone();
+    let asset_id = document.id.clone();
+    let job = Arc::new(DocumentJob {
+        frames: Mutex::new(Vec::new()),
+        finished: AtomicBool::new(false),
+    });
+    match document_jobs().lock() {
+        Ok(mut jobs) => {
+            jobs.insert(asset_id.clone(), Arc::clone(&job));
+        }
+        Err(_) => {
+            return Ok(internal_error(
+                "upload_document",
+                "the job table is poisoned",
+            ))
+        }
+    }
+    tracing::debug!(
+        asset = %asset_id,
+        filename = %document.filename,
+        chunks = document.chunk_count,
+        "documents_http: upload prepared — ingest job spawned"
+    );
+
+    let progress_job = Arc::clone(&job);
+    let progress_id = asset_id.clone();
+    let spawn_id = asset_id.clone();
+    tokio::spawn(async move {
+        let outcome = manager
+            .run_ingest(prepared, move |progress| {
+                let frame =
+                    serde_json::to_value(&progress).unwrap_or_else(|_| serde_json::json!({}));
+                progress_job.push(&progress_id, frame);
+            })
+            .await;
+        match outcome {
+            Ok(completed) => tracing::info!(
+                asset = %spawn_id,
+                filename = %completed.filename,
+                chunks = completed.chunk_count,
+                "documents_http: upload ingest complete"
+            ),
+            Err(e) => {
+                tracing::warn!(asset = %spawn_id, "documents_http: upload ingest failed: {e}");
+                // The manager emits `Failed` on its own error paths; a
+                // failure it did not narrate still has to end the job,
+                // or a poller spins forever on an asset that is not
+                // coming (§18.3).
+                if !job.last_is_failed() {
+                    job.push(
+                        &spawn_id,
+                        serde_json::json!({ "type": "Failed", "reason": e.to_string() }),
+                    );
+                }
+                job.finished.store(true, Ordering::SeqCst);
+            }
+        }
+    });
+
+    Ok((StatusCode::ACCEPTED, Json(DocumentResponse { document })).into_response())
+}
+
+/// GET `/v1/documents/{id}/progress?after=N` — the frames an upload job
+/// appended from the caller's cursor on. 404 naming the asset when no
+/// job is on record for it (a daemon restart, or an id this daemon never
+/// prepared) — the record itself is still readable at `/v1/documents/{id}`.
+async fn ingest_progress(
+    _: LocalOnly,
+    Path(id): Path<String>,
+    Query(query): Query<DocumentProgressQuery>,
+) -> Result<Response, Absence> {
+    // A poisoned table and an absent job are different facts: the first
+    // is a 500 naming it, the second the 404 below (§18.3).
+    let job = match document_jobs().lock() {
+        Ok(jobs) => jobs.get(&id).cloned(),
+        Err(_) => {
+            return Ok(internal_error(
+                "ingest_progress",
+                "the job table is poisoned",
+            ))
+        }
+    };
+    let Some(job) = job else {
+        return Ok(json_error(
+            StatusCode::NOT_FOUND,
+            &format!("no ingest job on record for document asset '{id}'"),
+        ));
+    };
+    let (frames, next) = match job.frames.lock() {
+        Ok(all) => (
+            all.get(query.after..).unwrap_or(&[]).to_vec(),
+            all.len().max(query.after),
+        ),
+        Err(_) => {
+            return Ok(internal_error(
+                "ingest_progress",
+                "the frame log is poisoned",
+            ))
+        }
+    };
+    let finished = job.finished.load(Ordering::SeqCst);
+    tracing::debug!(
+        asset = %id,
+        after = query.after,
+        served = frames.len(),
+        finished,
+        "documents_http: ingest progress served"
+    );
+    Ok(Json(DocumentIngestProgress {
+        asset_id: id,
+        frames,
+        next,
+        finished,
+    })
+    .into_response())
+}
+
+/// POST `/v1/documents/legacy` — the old paperclip path: chunk a file
+/// into the legacy `documents` table, embedding each chunk when this
+/// daemon serves a Runtime (the command passed its inference as an
+/// `Option` for the same reason). Answers the `source` the legacy listing
+/// will report it under.
+async fn ingest_legacy(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<IngestLegacyRequest>,
+) -> Result<Response, Absence> {
+    let store = store_for(&daemon)?;
+    let path = std::path::PathBuf::from(&req.path);
+    if !path.is_file() {
+        return Err(Absence::invalid(format!(
+            "ingest_legacy: no such file: {}",
+            req.path
+        )));
+    }
+    let inference = daemon.runtime().map(|r| Arc::clone(&r.inference));
+    tracing::debug!(
+        path = %path.display(),
+        embeds = inference.is_some(),
+        "documents_http: legacy ingest"
+    );
+    let chunks_created = match sovereign_tools::rag::ingest::ingest_file(
+        &path,
+        store.as_ref(),
+        inference.as_deref(),
+    )
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => return Ok(internal_error("ingest_file", &e.to_string())),
+    };
+    let source = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&req.path)
+        .to_string();
+    tracing::info!(source = %source, chunks = chunks_created, "documents_http: legacy document ingested");
+    Ok(Json(IngestLegacyResponse {
+        source,
+        chunks_created,
+    })
+    .into_response())
 }
 
 /// GET `/v1/documents/legacy` — documents in the old `documents` table

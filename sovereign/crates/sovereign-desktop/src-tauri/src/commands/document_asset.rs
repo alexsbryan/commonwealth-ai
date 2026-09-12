@@ -51,108 +51,97 @@ pub struct DocumentAskResponse {
 }
 
 /// Upload and ingest a document. The command returns immediately with
-/// a Pending asset. The full ingest pipeline (embed + skeleton) runs
-/// in a background task and emits `document:progress` events. The
-/// frontend shows these via the IngestBanner / DocOpProgress indicator.
+/// a Pending asset. The full ingest pipeline (embed + skeleton) runs on
+/// the DAEMON as a job — `POST /v1/documents` (2026-09-11) — and this
+/// command follows it over `GET /v1/documents/{id}/progress`, re-emitting
+/// every frame as `document:progress`. The frontend shows these via the
+/// IngestBanner / DocOpProgress indicator, unchanged: the frames are the
+/// manager's own `IngestProgress` values with `asset_id` stamped on
+/// (the route stamps it now; this command used to, per event), so the
+/// bytes on the event are the ones the banner already keys on.
+///
+/// The asset returned is the one `prepare` minted on the daemon, and it
+/// is the id every frame carries — the banner the UI shows and the
+/// events it receives agree on one id, which is the contract the old
+/// in-process split existed to keep.
 #[tauri::command]
 pub async fn upload_document_asset(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     file_path: String,
 ) -> Result<DocumentAssetResponse, String> {
-    let store = {
-        let guard = state.store.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Store not ready")?
-    };
-    let inference = {
-        let guard = state.inference.read().await;
-        guard
-            .as_ref()
-            .map(Arc::clone)
-            .ok_or("Inference not ready")?
-    };
-
-    let path = std::path::Path::new(&file_path);
-    if !path.exists() {
-        return Err(format!("File not found: {file_path}"));
-    }
-
-    // `prepare` parses + chunks + persists the Pending asset (no
-    // inference — fast). Crucially, the asset id it mints is the SAME
-    // id `run_ingest` emits every `document:progress` event under, so
-    // the banner we return here and the events the UI later receives
-    // agree. (The old path created the asset here AND let `ingest`
-    // mint a second id internally — the UI subscribed to the first,
-    // events fired under the second, and the banner sat on "Queued…"
-    // for the entire ingest while a duplicate record progressed to
-    // Ready unseen.)
-    // Swap the T2 skeleton entity pass from a 4B LLM call to the local
-    // NER model when it's installed (−70% of ingest prompt tokens; gated
-    // 2026-07-24, PROBE-6 held with both canaries and stevie 57→71%).
-    // `build_skeleton` falls back to the LLM per-window if the extractor
-    // is absent or not-yet-warm, so this is safe to attach unconditionally.
-    let mut manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, Arc::clone(&store));
-    if let Some(extractor) = state.entity_extractor.read().await.as_ref() {
-        manager = manager.with_entity_extractor(Arc::clone(extractor));
-    }
-    let prepared = manager
-        .prepare(path)
+    let base_url = state.client_base_url();
+    let asset = sovereign_turn_client::TurnClient::new(base_url.clone())
+        .upload_document::<sovereign_contracts::types::DocumentAsset>(&file_path)
         .await
-        .map_err(|e| format!("Prepare failed: {e}"))?;
-    let response_asset = prepared.asset.clone();
+        .map_err(|e| format!("Upload failed: {e}"))?;
+    tracing::info!(
+        asset_id = %asset.id,
+        filename = %asset.filename,
+        "upload_document_asset: daemon accepted the ingest job"
+    );
+    tokio::spawn(follow_document_ingest(
+        base_url,
+        asset.id.clone(),
+        app_handle.clone(),
+    ));
+    Ok(DocumentAssetResponse { asset })
+}
 
-    // Spawn the embed + enrichment pipeline in the background. Progress
-    // events update the UI in real time; the asset state transitions
-    // Pending → Indexing → PartiallyReady → BuildingSkeleton →
-    // MultiHopReady → Ready, all under `response_asset.id`.
-    let handle = app_handle.clone();
-    let event_asset_id = response_asset.id.clone();
-    tauri::async_runtime::spawn(async move {
-        match manager
-            .run_ingest(prepared, move |progress| {
-                // Every event MUST carry asset_id. The frontend listener
-                // drops events without one (it keys live state by id),
-                // but the high-frequency `Indexing` / `BuildingSkeleton`
-                // variants don't embed it — only the milestone events
-                // (Started / RagAvailable / MultiHopReady / Ready) do. So
-                // inject it here, where the id is known. Without this the
-                // per-batch progress that advances the % bar and feeds the
-                // ETA never reached the UI: the banner sat on "estimating…"
-                // for the entire embed phase, then jumped straight between
-                // milestones. `or_insert` preserves the id the milestone
-                // variants already carry.
-                let mut payload =
-                    serde_json::to_value(&progress).unwrap_or_else(|_| serde_json::json!({}));
-                if let serde_json::Value::Object(map) = &mut payload {
-                    map.entry("asset_id".to_string())
-                        .or_insert_with(|| serde_json::Value::String(event_asset_id.clone()));
-                }
-                let _ = handle.emit("document:progress", &payload);
-            })
+/// Follow a daemon-side document ingest, emitting each of the host's
+/// frames as `document:progress`. Same cadence and give-up rule as the
+/// local-corpus jobs (`INGEST_POLL_INTERVAL` / `INGEST_POLL_MAX_FAILURES`
+/// — one decider). Losing the daemon mid-ingest emits a `Failed` frame
+/// naming it, so the banner does not sit on "estimating…" forever.
+async fn follow_document_ingest(base_url: String, asset_id: String, app: tauri::AppHandle) {
+    use crate::local_corpus_commands::{INGEST_POLL_INTERVAL, INGEST_POLL_MAX_FAILURES};
+    let client = sovereign_turn_client::TurnClient::new(base_url);
+    let mut failures = 0u32;
+    let mut cursor = 0usize;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .document_ingest_progress::<sovereign_mesh::documents_http::DocumentIngestProgress>(
+                &asset_id, cursor,
+            )
             .await
         {
-            Ok(completed) => {
-                tracing::info!(
-                    filename = %completed.filename,
-                    chunks = completed.chunk_count,
-                    entities = completed
-                        .skeleton
-                        .as_ref()
-                        .map(|s| s.main_entities.len())
-                        .unwrap_or(0),
-                    "document asset ingest complete",
-                );
+            Ok(p) => {
+                failures = 0;
+                p
             }
             Err(e) => {
-                tracing::warn!("document asset ingest failed: {e}");
+                failures += 1;
+                tracing::warn!(
+                    %asset_id, failures,
+                    "upload_document_asset: progress poll failed: {e}"
+                );
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    let _ = app.emit(
+                        "document:progress",
+                        &serde_json::json!({
+                            "type": "Failed",
+                            "asset_id": asset_id,
+                            "reason": format!(
+                                "lost contact with the daemon while ingesting \
+                                 ({failures} consecutive failures): {e}"
+                            ),
+                        }),
+                    );
+                    return;
+                }
+                continue;
             }
+        };
+        cursor = p.next;
+        for frame in p.frames {
+            let _ = app.emit("document:progress", &frame);
         }
-    });
-
-    Ok(DocumentAssetResponse {
-        asset: response_asset,
-    })
+        if p.finished {
+            tracing::info!(%asset_id, "upload_document_asset: ingest job finished");
+            return;
+        }
+    }
 }
 
 #[tauri::command]

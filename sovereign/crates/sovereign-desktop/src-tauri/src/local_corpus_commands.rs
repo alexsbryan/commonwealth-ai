@@ -413,13 +413,13 @@ pub async fn lc_ingest(
 /// phase writes to ~50 across a whole embed pass, so a tighter interval
 /// would re-read the same numbers; a looser one would visibly lag the
 /// progress bar.
-const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
+pub(crate) const INGEST_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
 
 /// How many CONSECUTIVE poll failures end the follow with an error frame.
 /// One failure is a hiccup; ten in a row (~7.5s) is a daemon that is not
 /// coming back, and a progress panel that spins forever is worse than one
 /// that says so.
-const INGEST_POLL_MAX_FAILURES: u32 = 10;
+pub(crate) const INGEST_POLL_MAX_FAILURES: u32 = 10;
 
 /// Follow a daemon-side ingest job to its terminal receipt, emitting the
 /// desktop's own progress frames as it goes.

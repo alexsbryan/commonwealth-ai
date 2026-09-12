@@ -296,3 +296,169 @@ async fn documents_without_a_store_is_the_named_503() {
         );
     }
 }
+
+/// `POST /v1/documents` (2026-09-11): the upload is a JOB. The 202 body
+/// is the Pending record `prepare` minted, its id is stamped on every
+/// frame `GET /v1/documents/{id}/progress` serves, and the job ends with
+/// a terminal frame. The harness provider has no embedder, so the
+/// terminal frame is `Failed` naming that — which is the frame a client
+/// re-emits, and which an unmounted route cannot produce. The record is
+/// in the store either way.
+#[tokio::test]
+async fn upload_is_a_job_whose_progress_route_serves_its_frames() {
+    let (_db, _r, store, daemon) = daemon_with_store().await;
+    let addr = spawn_router(documents_router(daemon)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("lease.txt");
+    std::fs::write(
+        &file,
+        "The tenant shall keep quiet hours after 11 PM. ".repeat(40),
+    )
+    .unwrap();
+    let http = reqwest::Client::new();
+
+    let resp = http
+        .post(format!("http://{addr}/v1/documents"))
+        .json(&serde_json::json!({ "path": file.to_string_lossy() }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 202);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let id = body["document"]["id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(!id.is_empty(), "the 202 names the asset: {body:#?}");
+    assert_eq!(body["document"]["filename"], serde_json::json!("lease.txt"));
+    assert!(
+        store.get_document_asset(&id).await.unwrap().is_some(),
+        "prepare persisted the Pending record on the daemon's store"
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut cursor = 0u64;
+    let mut frames: Vec<serde_json::Value> = Vec::new();
+    loop {
+        let p: serde_json::Value = http
+            .get(format!(
+                "http://{addr}/v1/documents/{id}/progress?after={cursor}"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(p["asset_id"], serde_json::json!(id));
+        cursor = p["next"].as_u64().unwrap_or(cursor);
+        frames.extend(p["frames"].as_array().cloned().unwrap_or_default());
+        if p["finished"] == serde_json::json!(true) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the upload job never reported finished; last poll: {p:#?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        frames[0]["type"],
+        serde_json::json!("Started"),
+        "{frames:#?}"
+    );
+    for f in &frames {
+        assert_eq!(
+            f["asset_id"],
+            serde_json::json!(id),
+            "every frame is stamped with the asset id — the desktop used to do \
+             this per event; the route is the one decider now: {f:#?}"
+        );
+    }
+    let terminal = frames.last().unwrap();
+    assert!(
+        matches!(terminal["type"].as_str(), Some("Ready") | Some("Failed")),
+        "the terminal frame is a milestone: {terminal:#?}"
+    );
+    if terminal["type"] == serde_json::json!("Failed") {
+        assert!(
+            !terminal["reason"].as_str().unwrap_or_default().is_empty(),
+            "a Failed frame names its reason: {terminal:#?}"
+        );
+    }
+
+    // Unknown asset: the progress route 404s naming it.
+    let resp = http
+        .get(format!("http://{addr}/v1/documents/nope/progress"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains("nope"),
+        "{body:#?}"
+    );
+
+    // No such file: a 400 naming the path, and no record minted.
+    let resp = http
+        .post(format!("http://{addr}/v1/documents"))
+        .json(&serde_json::json!({ "path": dir.path().join("missing.txt").to_string_lossy() }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 400);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("missing.txt"),
+        "{body:#?}"
+    );
+}
+
+/// `POST /v1/documents/legacy` (2026-09-11): the old paperclip path
+/// chunks a file into the legacy table on the DAEMON's store, and the
+/// legacy listing then reports it under the `source` the answer named.
+#[tokio::test]
+async fn legacy_ingest_lands_in_the_table_the_legacy_listing_reads() {
+    let (_db, _r, _store, daemon) = daemon_with_store().await;
+    let addr = spawn_router(documents_router(daemon)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("memo.md");
+    std::fs::write(&file, "# Memo\n\nQuiet hours begin at 11 PM.\n").unwrap();
+    let http = reqwest::Client::new();
+
+    let resp = http
+        .post(format!("http://{addr}/v1/documents/legacy"))
+        .json(&serde_json::json!({ "path": file.to_string_lossy() }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["source"], serde_json::json!("memo.md"), "{body:#?}");
+    assert!(
+        body["chunks_created"].as_u64().unwrap_or(0) >= 1,
+        "{body:#?}"
+    );
+
+    let listing: serde_json::Value = reqwest::get(format!("http://{addr}/v1/documents/legacy"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    // The listing's `source` key is the full path the chunks were stored
+    // under; its `filename` is what the route answered as `source` — the
+    // command's historical shape, which the attachment chip renders.
+    let filenames: Vec<&str> = listing["documents"]
+        .as_array()
+        .map(|d| d.iter().filter_map(|e| e["filename"].as_str()).collect())
+        .unwrap_or_default();
+    assert!(
+        filenames.contains(&"memo.md"),
+        "the legacy listing reports the ingested file: {listing:#?}"
+    );
+}

@@ -2458,6 +2458,54 @@ impl TurnClient {
         Ok(wire.documents)
     }
 
+    /// `POST /v1/documents` — ingest a local file as a document asset,
+    /// as a JOB. Answers the PENDING record (202) whose id every progress
+    /// frame is stamped with; poll [`Self::document_ingest_progress`]
+    /// for the frames. `T` is `sovereign_core::types::DocumentAsset`.
+    pub async fn upload_document<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
+        #[derive(Deserialize)]
+        struct Wire<T> {
+            document: T,
+        }
+        let wire: Wire<T> = self
+            .internal_post_json(
+                "/v1/documents".to_string(),
+                &serde_json::json!({ "path": path }),
+            )
+            .await?;
+        Ok(wire.document)
+    }
+
+    /// `GET /v1/documents/{id}/progress?after=N` — the frames an upload
+    /// job appended from the caller's cursor on. `T` is
+    /// `sovereign_mesh::documents_http::DocumentIngestProgress`; its
+    /// `next` is the cursor to send on the following call.
+    pub async fn document_ingest_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        asset_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/v1/documents/{asset_id}/progress"),
+            &[("after", after.to_string())],
+        )
+        .await
+    }
+
+    /// `POST /v1/documents/legacy` — chunk a local file into the legacy
+    /// `documents` table (the old paperclip path). `T` is
+    /// `sovereign_mesh::documents_http::IngestLegacyResponse`.
+    pub async fn ingest_legacy_document<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T> {
+        self.internal_post_json(
+            "/v1/documents/legacy".to_string(),
+            &serde_json::json!({ "path": path }),
+        )
+        .await
+    }
+
     /// `POST /v1/documents/legacy/promote` — mint an asset over chunks
     /// already in the store. `T` is
     /// `sovereign_core::types::DocumentAsset`.
