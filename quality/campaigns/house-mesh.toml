@@ -33,12 +33,19 @@ check     = "cargo test -p commonwealth-rails --test two_daemons house_mesh_publ
 # ── BARS ─────────────────────────────────────────────────────────────────────
 
 [[bar]]
-id       = "hm-no-shared-credentials"
-demo     = "Someone else's library, and I hold none of their keys"
-rung     = "hm-1"
-statement = "library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
-target   = "catalogue non-empty; tokens.json absent"
-status   = "passed (mechanism); never-ran (against a live Jellyfin)"
+id           = "hm-no-shared-credentials"
+demo         = "Someone else's library, and I hold none of their keys"
+rung         = "hm-1"
+one_line     = "CLAIM: library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
+derives_from = "the practice this deletes — 25 people mailing each other API keys — observed while building ~/dev/house-mesh, against the surface that already carries the header vec: `Forward::Http` at commonwealth-media/src/identity.rs:106-109"
+floor        = 0.0
+floor_basis  = "structural: PERCENT of catalogue fetches the caller serves while holding a credential file. Zero is the claim, not an aspiration — tokens.json is gone from ~/dev/house-mesh (664abcc) and library.py is one fanout call again."
+target       = 0.0
+direction    = "near_zero"
+instrument   = "`cargo test -p commonwealth-rails --test two_daemons house_mesh_publish_roundtrip` for the mechanism, plus the two conditions this bar was declared with and which the prose `target` used to carry: catalogue NON-EMPTY and tokens.json ABSENT on the caller. Both, or the run says nothing — an empty catalogue with no token file passes vacuously."
+goodhart     = "this can hit target while the predicate is still false if the caller holds the credential somewhere that is not a file — an env var, a shell history, a pasted header — because the absence of tokens.json is not the absence of a shared credential, only of one storage shape for it"
+status       = "open"
+kill         = "the live-Jellyfin half is NEVER-RAN and stays that way until someone runs it: the /Items query string and the stream path come from Jellyfin API docs, not from a run. A verdict that reports this bar met on the mechanism alone is reporting half a claim."
 # LANDED 2026-09-11, commit c866c91cb. The mechanism is proven on the wire by
 # the predicate test; tokens.json is gone from ~/dev/house-mesh (664abcc) and
 # library.py is one fanout call again. What has NOT run is the same flow
@@ -79,12 +86,18 @@ status   = "passed (mechanism); never-ran (against a live Jellyfin)"
 # read once at acceptor construction. commonwealth-media/src/declared.rs.
 
 [[bar]]
-id       = "hm-publish-no-config-edit"
-demo     = "I published my Jellyfin and never opened a config file"
-rung     = "hm-2"
-statement = "A node declares and clears an origin credential with no hand edit to config.toml, and the list prints the header name with the value never shown"
-target   = "round-trip clean; no secret in stdout"
-status   = "passed"
+id           = "hm-publish-no-config-edit"
+demo         = "I published my Jellyfin and never opened a config file"
+rung         = "hm-2"
+one_line     = "CLAIM: a node declares and clears an origin credential with no hand edit to config.toml, and the list prints the header name with the value never shown"
+derives_from = "the verb's own precedent, found in review: `PUT /v1/mcp/servers/{name}/token` at sovereign-mesh/src/mcp_config_http.rs:230-252 — set a secret over the loopback socket instead of hand-editing TOML. The hazard it avoids is on this dev host: an existing [iroh] section makes the obvious `>>` append produce invalid TOML."
+floor        = 0.0
+floor_basis  = "structural: PERCENT of declare/clear round-trips that complete with zero hand edits to config.toml and zero secret bytes on stdout. Zero at declaration — the verb did not exist."
+target       = 100.0
+direction    = "higher_is_better"
+instrument   = "the round-trip exercised against a temp SVRNMESH_DATA_DIR, which is what the comment below records: help renders; empty list is informative; a piped value is stored -rw------- and read back byte-exact; --list prints the header name and `<set>`, never the value; `../escape` is refused by name; --clear removes the file; empty and whitespace-only stdin store nothing and exit 2."
+goodhart     = "this can hit target while the predicate is still false if the declared value never reaches the origin — a round-trip that stores and prints correctly proves the STORE, and the predicate is about the wire, which only the two-daemon test can speak to"
+status       = "open"
 # LANDED 2026-09-11 as `svrn mesh media declare`, exercised against a temp
 # SVRNMESH_DATA_DIR: help renders; empty list is informative; a piped value is
 # stored -rw------- and read back byte-exact; --list prints "x-emby-token
@@ -115,12 +128,18 @@ status   = "passed"
 # masked" helper to reach for.
 
 [[bar]]
-id       = "hm-version-skew-legible"
-demo     = "It told me what was wrong"
-rung     = "hm-3"
-statement = "A mesh verb against a daemon older than the CLI names the skew rather than surfacing a bare 404"
-target   = "message names the skew and the fix"
-status   = "never-ran"
+id           = "hm-version-skew-legible"
+demo         = "It told me what was wrong"
+rung         = "hm-3"
+one_line     = "CLAIM: a mesh verb against a daemon older than the CLI names the skew rather than surfacing a bare 404"
+derives_from = "the incident reproduced by hand 2026-09-11 and recorded below: a running, healthy daemon 404ing a route that had landed nine hours earlier, with nothing explaining why, and library.py mapping that 404 by hand as a workaround for a missing primitive"
+floor        = 0.0
+floor_basis  = "structural: PERCENT of version-skew failures whose message names the skew. Zero — the failure is a bare 404 and the daemon already computes the tuple that would explain it (daemon_cmd/mod.rs:1358-1369 logs run_id, pid, exe, exe_mtime, version to daemon.err only)."
+target       = 100.0
+direction    = "higher_is_better"
+instrument   = "reproduce the recorded incident — a CLI verb against a daemon whose exe_mtime predates the route — and read the message. It names the skew and the fix, or it does not. `exe_mtime` is the field that catches THIS case, where both sides read 0.6.0."
+goodhart     = "this can hit target while the predicate is still false if the message is produced by a check that flaps on dirty trees — the rejected SHA-stamping design (sibling.rs:22-27) reads `-dirty` on both sides while the code differs, so a skew message that is right in CI and wrong in the loop that matters has named nothing"
+status       = "open"
 # Reproduced by hand 2026-09-11: daemon process started 09-10 23:06, the
 # /v1/mesh/media/fanout route landed 09-11 12:54, binary rebuilt 15:22. The
 # route 404s on a running, healthy daemon with nothing explaining why.
@@ -161,21 +180,32 @@ status   = "never-ran"
 # break is hard and illegible.
 
 [[bar]]
-id       = "hm-week-1-publishers"
-demo     = "The house evening"
-rung     = "none — this is the adoption bar, not a code rung"
-statement = "Members of the house with a media origin published and visible in `svrn mesh media`, one week after the install evening"
-target   = ">= 8 of 25"
-floor    = "4 of 25 — below this the install story is the problem, not the pitch"
-status   = "never-ran"
+id           = "hm-week-1-publishers"
+demo         = "The house evening"
+rung         = "none — this is the adoption bar, not a code rung"
+one_line     = "CLAIM: members of the house with a media origin published and visible in `svrn mesh media`, one week after the install evening"
+derives_from = "the campaign objective's denominator — a 25-person coliving house — and the install evening it is built around"
+floor        = 4.0
+floor_basis  = "4 of 25 — below this the install story is the problem, not the pitch"
+target       = 8.0
+direction    = "higher_is_better"
+instrument   = "count the origins visible in `svrn mesh media` one week after the install evening. The denominator is 25."
+goodhart     = "this can hit target while the predicate is still false if the eight were published FOR their owners by whoever ran the evening — a count of origins is not a count of people who can do it again unaided, and the second app bar is what separates them"
+status       = "open"
 
 [[bar]]
-id       = "hm-month-1-second-app"
-demo     = "The house evening"
-rung     = "none — the real conversion"
-statement = "Apps published to the house that are NOT about media, written by someone outside this project"
-target   = ">= 1 within a month of the install evening"
-status   = "never-ran"
+id           = "hm-month-1-second-app"
+demo         = "The house evening"
+rung         = "none — the real conversion"
+one_line     = "CLAIM: apps published to the house that are NOT about media, written by someone outside this project"
+derives_from = "the campaign objective's own test of itself — whether this is a substrate or a Jellyfin feature — stated in the comment below before any of it shipped"
+floor        = 0.0
+floor_basis  = "structural: zero at declaration. No app outside this project exists on the house mesh."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "count apps published to the house within a month of the install evening that are not about media and whose author is outside this project. Both qualifiers, or the count is of something else."
+goodhart     = "this can hit target while the predicate is still false if the one app was written by someone this project walked through it — authorship outside the project is not the same as reaching it without us, and one assisted app says the same thing zero apps do"
+status       = "open"
 # THE bar that separates a substrate from a feature. If it never moves, we
 # shipped a Jellyfin feature and should say so rather than keep calling it a
 # platform. Kill condition for the campaign: the house still routes media
