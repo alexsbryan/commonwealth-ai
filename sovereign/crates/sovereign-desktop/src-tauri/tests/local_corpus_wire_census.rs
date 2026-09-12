@@ -136,6 +136,12 @@ const CROSSED_MANAGER_CALLS: &[&str] = &[
     ".ingest(&corpus_id",
     ".cancel(&corpus_id)",
     ".ocr_available()",
+    // 2026-09-11: the cluster job and the two surfaces it pinned. The
+    // `cluster_results` cache is filled on the manager that RAN the job,
+    // so the consumers moved with the producer, as the ingest pair did.
+    ".cluster(&corpus_id",
+    ".get_preview(",
+    ".write_tags(",
 ];
 
 /// The routes that REFUSE an unregistered corpus — every one answers
@@ -242,36 +248,35 @@ fn the_library_listing_reads_the_registry_over_the_wire() {
     );
 }
 
-/// Every command that STAYS local is paired with the producer that pins
-/// it. While the producer is local, the consumer must be too — see the
-/// module header. Each assertion goes quiet on its own the moment its
-/// producer crosses, so this does not stand in the way of the next rung.
+/// The cluster PRODUCER crossed with the consumers that need it
+/// (2026-09-11) — the rule of the former `the_paired_stays_are_still_paired`,
+/// which guarded `lc_get_preview` / `lc_write_tags` crossing ahead of
+/// `lc_cluster` behind an `if code.contains(".cluster(&corpus_id")`. That
+/// guard can no longer be true, and a conditional whose premise is false
+/// proves nothing (ARCH §18.1), so the three manager calls moved into
+/// `CROSSED_MANAGER_CALLS` and this is the POSITIVE half: while either
+/// consumer reads the wire, the producer must too, and vice versa.
+///
+/// Watched to fail 2026-09-11 (run, red, restored): `.lc_cluster::<` in
+/// `lc_cluster` respelled `.lc_cluster ::<` — compiles, the needle
+/// misses — while `.lc_preview::<` and `.lc_write_tags::<` stayed:
+/// `producer crossed: false, consumers crossed: 2/2`.
 #[test]
-fn the_paired_stays_are_still_paired() {
+fn the_cluster_producer_crossed_with_its_consumers() {
     let code = production_source(LC_COMMANDS);
-
-    if code.contains(".cluster(&corpus_id") {
-        assert!(
-            code.contains(".get_preview("),
-            "sv-surface D5: lc_get_preview reads the wire while lc_cluster \
-             still runs here. `get_preview` reads the `cluster_results` \
-             cache that `cluster` filled ON THIS INSTANCE — repointing the \
-             consumer alone makes the Organizer answer `no clustering run \
-             on record` on an attached boot. Move lc_cluster across first."
-        );
-        assert!(
-            code.contains(".write_tags("),
-            "sv-surface D5: lc_write_tags reads the wire while lc_cluster \
-             still runs here. `write_tags` reaches the same \
-             `cluster_results` cache through `get_preview`. Move lc_cluster \
-             across first."
-        );
-    }
-
-    // The ingest pair (lc_cancel, lc_ocr_available) is GONE from this test,
-    // not silently satisfied: D8 crossed the producer, so both consumers
-    // crossed with it and are pinned by `CROSSED_MANAGER_CALLS` above. A
-    // conditional whose guard can no longer be true proves nothing.
+    let producer = code.contains(".lc_cluster::<");
+    let consumers = [".lc_preview::<", ".lc_write_tags::<"]
+        .iter()
+        .filter(|n| code.contains(**n))
+        .count();
+    assert!(
+        producer && consumers == 2,
+        "sv-surface: the cluster pair is split across the wire — producer \
+         crossed: {producer}, consumers crossed: {consumers}/2. `…/preview` \
+         and `…/write-tags` read the `cluster_results` cache on the manager \
+         that ran `…/cluster`; on an attached boot a split pair makes the \
+         Organizer answer `no clustering run on record`."
+    );
 }
 
 /// The registration PRODUCER crosses with the consumers that need it.

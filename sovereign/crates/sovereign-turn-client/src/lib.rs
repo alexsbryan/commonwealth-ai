@@ -2230,6 +2230,43 @@ impl TurnClient {
         .await
     }
 
+    /// `POST /internal/corpus/local/{corpus}/cluster` — run clustering +
+    /// LLM labelling on an ingested vault as a JOB. Answers the ingest
+    /// job's ack shape (`T` is
+    /// `sovereign_contracts::daemon_wire::IngestJobAck`): the host's job
+    /// id and the progress route that reports it. `config` serialises to
+    /// a `ClusterConfig`; `None` leaves the thresholds to the host's
+    /// `ClusterConfig::default()` — the same one decider `lc_preview`
+    /// defers to.
+    pub async fn lc_cluster<B: serde::Serialize + ?Sized, T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        config: Option<&B>,
+    ) -> Result<T> {
+        let body = match config {
+            Some(c) => serde_json::json!({ "config": c }),
+            None => serde_json::json!({}),
+        };
+        self.internal_post_json(format!("/internal/corpus/local/{corpus_id}/cluster"), &body)
+            .await
+    }
+
+    /// `GET /internal/corpus/local/{corpus}/cluster/progress?after=N` —
+    /// the frames a cluster job has appended from the caller's cursor
+    /// on. `T` is `sovereign_mesh::lc_http::ClusterProgress`; its `next`
+    /// is the cursor to send on the following call.
+    pub async fn lc_cluster_progress<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        after: usize,
+    ) -> Result<T> {
+        self.internal_get(
+            format!("/internal/corpus/local/{corpus_id}/cluster/progress"),
+            &[("after", after.to_string())],
+        )
+        .await
+    }
+
     // ─── sv-surface: the reading family (reading_http) ───────
     //
     // Three of `reading_http`'s six routes, added for the CLI rung:

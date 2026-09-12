@@ -734,3 +734,122 @@ async fn register_then_ingest_a_folder_no_manager_has_seen() {
         serde_json::json!(corpus_id)
     );
 }
+
+/// The cluster job (2026-09-11): `POST …/{c}/cluster` answers 202 with the
+/// host's job id and the progress route; `GET …/{c}/cluster/progress`
+/// serves the frames the job appended, from a cursor, and says when the
+/// job ended. This harness has no inference and its folder carries no
+/// enrichment config, so the job's terminal frame is an `Error` NAMING
+/// the manager's refusal — which is the frame a desktop re-emits on its
+/// channel, and which an unmounted route cannot produce.
+///
+/// The cursor contract is asserted too: a second poll from `next` returns
+/// no frames already served.
+#[tokio::test]
+async fn cluster_is_a_job_whose_progress_route_serves_its_frames() {
+    let (manager, addr) = harness().await;
+    let (id, _folder) = register_folder(&manager, "cluster").await;
+
+    // Progress before any job: a 404 naming the corpus, not an empty 200.
+    let (status, body) = get(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster/progress"),
+    )
+    .await;
+    assert_eq!(status, 404, "no job yet: {body:#?}");
+    assert!(
+        body["error"].as_str().unwrap_or_default().contains(&id),
+        "the 404 must NAME the corpus: {body:#?}"
+    );
+
+    let (status, ack) = post(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 202, "cluster: {ack:#?}");
+    assert_eq!(ack["corpus_id"], serde_json::json!(id));
+    let job_id = ack["job_id"].as_str().unwrap_or_default().to_string();
+    assert!(
+        job_id.starts_with("lc-cluster-"),
+        "the ack carries a job id: {ack:#?}"
+    );
+    assert_eq!(
+        ack["progress_route"],
+        serde_json::json!(format!("/internal/corpus/local/{id}/cluster/progress")),
+        "the ack NAMES the route that reports THIS job: {ack:#?}"
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut cursor = 0u64;
+    let mut frames: Vec<serde_json::Value> = Vec::new();
+    let mut last = serde_json::Value::Null;
+    loop {
+        let (status, p) = get(
+            addr,
+            &format!("/internal/corpus/local/{id}/cluster/progress?after={cursor}"),
+        )
+        .await;
+        assert_eq!(status, 200, "progress: {p:#?}");
+        assert_eq!(p["job_id"], serde_json::json!(job_id));
+        cursor = p["next"].as_u64().unwrap_or(cursor);
+        frames.extend(p["frames"].as_array().cloned().unwrap_or_default());
+        last = p.clone();
+        if p["finished"] == serde_json::json!(true) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the cluster job never reported finished; last poll: {p:#?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let terminal = frames.last().expect("a finished job has a terminal frame");
+    assert_eq!(
+        terminal["phase"],
+        serde_json::json!("error"),
+        "frames: {frames:#?}"
+    );
+    let message = terminal["data"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("does not support clustering")
+            || message.contains("requires an inference provider"),
+        "the terminal frame names the manager's refusal verbatim, not a \
+         generic failure: {message:?}"
+    );
+
+    // Cursor: nothing already served comes back, and `finished` holds.
+    let (status, again) = get(
+        addr,
+        &format!("/internal/corpus/local/{id}/cluster/progress?after={cursor}"),
+    )
+    .await;
+    assert_eq!(status, 200, "re-poll: {again:#?}");
+    assert_eq!(
+        again["frames"],
+        serde_json::json!([]),
+        "already-served frames: {again:#?}"
+    );
+    assert_eq!(
+        again["finished"],
+        serde_json::json!(true),
+        "{again:#?} (last: {last:#?})"
+    );
+
+    // Unregistered corpus: the job route 404s naming it, BEFORE any spawn.
+    let (status, body) = post(
+        addr,
+        "/internal/corpus/local/no-such-corpus/cluster",
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 404, "{body:#?}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no-such-corpus"),
+        "the 404 must NAME the corpus: {body:#?}"
+    );
+}

@@ -40,10 +40,13 @@
 //! | `lc_cancel` | the engine's cancellation registry | the ingest job |
 //! | `lc_ocr_available` | an instance's `OcrCtx` | the ingest job's OCR arm |
 //!
-//! Two stay, still paired, and the census still fires on them:
-//! `lc_get_preview` and `lc_write_tags` read the `cluster_results` cache
-//! that `lc_cluster` — app-local — fills. Plus `lc_validate_path` and
-//! the SCAN half of `lc_pre_scan`: a user-picked path, pre-corpus.
+//! The cluster pair crossed on 2026-09-11: `lc_cluster` is now `POST
+//! /internal/corpus/local/{c}/cluster` (a job, followed over
+//! `…/cluster/progress` and re-emitted frame for frame), so
+//! `lc_get_preview` and `lc_write_tags` — which read the
+//! `cluster_results` cache that job fills — cross with it. What stays:
+//! `lc_validate_path` and the SCAN half of `lc_pre_scan`: a user-picked
+//! path, pre-corpus.
 //!
 //! # D9c: `lc_pre_scan`'s REGISTRATION crosses (2026-09-10)
 //!
@@ -132,11 +135,10 @@ fn lc_client(state: &AppState) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
-/// The desktop's OWN manager. Still required by the surfaces whose
-/// answer is a function of ONE manager instance's in-memory state rather
-/// than of the registry on disk — `lc_cluster`, `lc_get_preview`,
-/// `lc_write_tags` — plus `lc_pre_scan`'s Obsidian arm, which reads this
-/// process's `snapshot_root()`. See the module header.
+/// The desktop's OWN manager. Since 2026-09-11 required by ONE read:
+/// `lc_pre_scan`'s Obsidian arm, which takes this process's
+/// `snapshot_root()`. The cluster pair (`lc_cluster`, `lc_get_preview`,
+/// `lc_write_tags`) crossed together. See the module header.
 async fn require_manager(
     state: &State<'_, Arc<AppState>>,
 ) -> Result<Arc<LocalCorpusManager>, String> {
@@ -1394,15 +1396,18 @@ pub async fn lc_check_git(
 
 // ─── Command: lc_write_tags ──────────────────────────────────────────
 
+/// Crossed with `lc_cluster`, the producer that pinned it: `write_tags`
+/// reaches the `cluster_results` cache through `get_preview`, and that
+/// cache is filled on the manager that RAN the cluster job — the
+/// daemon's, since 2026-09-11.
 #[tauri::command]
 pub async fn lc_write_tags(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     git_commit: Option<bool>,
 ) -> Result<WriteBackResult, String> {
-    let manager = require_manager(&state).await?;
-    manager
-        .write_tags(&corpus_id, git_commit.unwrap_or(false))
+    lc_client(&state)
+        .lc_write_tags::<WriteBackResult>(&corpus_id, git_commit.unwrap_or(false))
         .await
         .map_err(|e| format!("write_tags: {e}"))
 }
@@ -1463,6 +1468,18 @@ pub use sovereign_contracts::daemon_wire::LocalSearchHit;
 /// Begin clustering + LLM labelling for an already-ingested Obsidian
 /// vault. Returns a `job_id` immediately; caller subscribes to the
 /// progress channel as with ingestion.
+///
+/// THE PRODUCER THAT CROSSED (2026-09-11). `POST
+/// /internal/corpus/local/{c}/cluster` runs exactly the `manager.cluster`
+/// call this command used to make, on the DAEMON's manager — the one
+/// whose `cluster_results` cache `…/preview` and `…/write-tags` read, so
+/// `lc_get_preview` and `lc_write_tags` cross with it. The contract is
+/// unchanged and is not the returned id: it is the Tauri channel
+/// `local-corpus://progress/{job_id}`, and every frame on it is the
+/// host's own `LocalCorpusProgress`, re-emitted verbatim from the poll
+/// — including the terminal `Complete { result: Ingest(zero stats) }`
+/// this command used to mint itself. The id returned IS the host's job
+/// id, as for `lc_ingest`.
 #[tauri::command]
 pub async fn lc_cluster(
     app: AppHandle,
@@ -1470,57 +1487,100 @@ pub async fn lc_cluster(
     corpus_id: String,
     config: Option<ClusterConfig>,
 ) -> Result<String, String> {
-    let manager = require_manager(&state).await?;
-    let cfg = config.unwrap_or_default();
-    let job_id = new_job_id();
+    let daemon_url = state.client_base_url();
+    let ack = lc_client(&state)
+        .lc_cluster::<ClusterConfig, sovereign_contracts::daemon_wire::IngestJobAck>(
+            &corpus_id,
+            config.as_ref(),
+        )
+        .await
+        .map_err(|e| format!("cluster: {e}"))?;
+    tracing::info!(
+        %corpus_id,
+        job_id = %ack.job_id,
+        progress_route = %ack.progress_route,
+        "lc_cluster: daemon accepted the cluster job"
+    );
+    let job_id = ack.job_id;
     let progress = make_emitter(app.clone(), job_id.clone());
+    tokio::spawn(follow_cluster_job(
+        daemon_url,
+        corpus_id,
+        job_id.clone(),
+        progress,
+    ));
+    Ok(job_id)
+}
 
-    tokio::spawn(async move {
-        match manager.cluster(&corpus_id, &cfg, progress.clone()).await {
-            Ok(_) => {
-                // Emit a terminal Complete event. The UI calls
-                // `lc_get_preview` next to fetch the renderable
-                // shape; we don't inline it here because the preview
-                // blob can be large (per-note assignments) and
-                // progress events are meant to be cheap.
-                progress(LocalCorpusProgress::Complete {
-                    result: sovereign_tools::local_corpus::progress::CompletionResult::Ingest(
-                        sovereign_tools::local_corpus::manager::IngestStats {
-                            corpus_id: corpus_id.clone(),
-                            files_indexed: 0,
-                            chunks_written: 0,
-                            runtime_failures: Vec::new(),
-                            excerpt_chunks: Vec::new(),
-                            duration_secs: 0,
-                        },
-                    ),
-                });
+/// Follow a daemon-side cluster job, re-emitting every frame the host
+/// appended on the desktop's channel. Same cadence and give-up rule as
+/// [`follow_ingest_job`]; the frames need no translation because the
+/// route serves the manager's `LocalCorpusProgress` verbatim, and the
+/// terminal frame is the host's too.
+async fn follow_cluster_job(
+    daemon_url: String,
+    corpus_id: String,
+    job_id: String,
+    progress: ProgressCallback,
+) {
+    let client = sovereign_turn_client::TurnClient::new(daemon_url);
+    let mut failures = 0u32;
+    let mut cursor = 0usize;
+    loop {
+        tokio::time::sleep(INGEST_POLL_INTERVAL).await;
+        let p = match client
+            .lc_cluster_progress::<sovereign_mesh::lc_http::ClusterProgress>(&corpus_id, cursor)
+            .await
+        {
+            Ok(p) => {
+                failures = 0;
+                p
             }
             Err(e) => {
-                progress(LocalCorpusProgress::Error {
-                    message: e.to_string(),
-                    recoverable: false,
-                });
+                failures += 1;
+                tracing::warn!(
+                    %corpus_id, %job_id, failures,
+                    "lc_cluster: progress poll failed: {e}"
+                );
+                if failures >= INGEST_POLL_MAX_FAILURES {
+                    progress(LocalCorpusProgress::Error {
+                        message: format!(
+                            "lost contact with the daemon while clustering \
+                             '{corpus_id}' ({failures} consecutive failures): {e}"
+                        ),
+                        recoverable: false,
+                    });
+                    return;
+                }
+                continue;
             }
+        };
+        cursor = p.next;
+        for frame in p.frames {
+            progress(frame);
         }
-    });
-    Ok(job_id)
+        if p.finished {
+            tracing::info!(%corpus_id, %job_id, "lc_cluster: job finished");
+            return;
+        }
+    }
 }
 
 // ─── Command: lc_get_preview ─────────────────────────────────────────
 
 /// Fetch the computed preview for a corpus that has had `lc_cluster`
-/// run recently. Returns `NotFound` if no cluster result is cached.
+/// run recently. The route answers a named 500 ("no clustering run on
+/// record") when nothing is cached — on the DAEMON's manager, which is
+/// the one `lc_cluster` now fills. `None` config is the host's
+/// `ClusterConfig::default()`, one decider.
 #[tauri::command]
 pub async fn lc_get_preview(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     config: Option<ClusterConfig>,
 ) -> Result<VaultPreview, String> {
-    let manager = require_manager(&state).await?;
-    let cfg = config.unwrap_or_default();
-    manager
-        .get_preview(&corpus_id, &cfg)
+    lc_client(&state)
+        .lc_preview::<ClusterConfig, VaultPreview>(&corpus_id, config.as_ref())
         .await
         .map_err(|e| format!("get_preview: {e}"))
 }

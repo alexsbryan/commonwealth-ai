@@ -14,16 +14,27 @@
 //!
 //! Loopback posture is `corpus_watch_http`'s, unchanged.
 //!
+//! `lc_cluster` is the second JOB (2026-09-11). It has no state file to
+//! read back from, so its frames live in an in-process log keyed by corpus
+//! id ([`CLUSTER_JOBS`]) — the same lifetime as the `cluster_results` cache
+//! the manager fills, which `preview` and `write-tags` read. That is the
+//! pairing the desktop's census pinned: the consumer could not cross while
+//! the producer stayed, and now both are here. The header used to say the
+//! cluster job could not cross because "its only output channel is the
+//! desktop's Tauri emitter"; the ingest job showed that a poll loop
+//! re-emitting the host's frames IS that channel.
+//!
 //! NOT served, named rather than dropped (ARCH §18.3):
 //! - `lc_validate_path` + the SCAN half of `lc_pre_scan` — both probe a path
 //!   the USER just picked. (The REGISTRATION half does cross.)
-//! - `lc_cluster` — its only output channel is the desktop's Tauri emitter.
 //! - `lc_enrich_now`/`_reset`/`lc_reenrich_note` — `corpus_watch_http` serves
 //!   all three already.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use axum::extract::{Json, Path};
+use axum::extract::{Json, Path, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -32,6 +43,8 @@ use serde::{Deserialize, Serialize};
 
 use sovereign_tools::local_corpus::clusterer::ClusterConfig;
 use sovereign_tools::local_corpus::config::LocalCorpusConfig;
+use sovereign_tools::local_corpus::manager::IngestStats;
+use sovereign_tools::local_corpus::progress::{CompletionResult, LocalCorpusProgress};
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::http_response::{internal_error, not_found, Absence};
@@ -124,6 +137,44 @@ pub struct SearchRequest {
     pub limit: Option<usize>,
 }
 
+/// Body of `POST …/{corpus}/cluster`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ClusterRequest {
+    /// `None` is `ClusterConfig::default()` — the command's
+    /// `config.unwrap_or_default()`, kept.
+    #[serde(default)]
+    pub config: Option<ClusterConfig>,
+}
+
+/// Query of `GET …/{corpus}/cluster/progress`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ClusterProgressQuery {
+    /// The caller's cursor: frames at index `>= after` are returned.
+    /// Omitted means "from the first frame".
+    #[serde(default)]
+    pub after: usize,
+}
+
+/// What `GET …/{corpus}/cluster/progress` answers.
+///
+/// The frames are the manager's own `LocalCorpusProgress` values,
+/// verbatim, from the caller's cursor onward — so a client re-emitting
+/// them on its own channel puts the same bytes there that the in-process
+/// callback used to. The terminal frame is appended by the job itself:
+/// `Complete { result: Ingest(zero stats) }` on success (the shape the
+/// desktop's `lc_cluster` always emitted — the preview is fetched
+/// separately because it is large), or `Error` naming what refused.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClusterProgress {
+    pub corpus_id: String,
+    pub job_id: String,
+    pub frames: Vec<LocalCorpusProgress>,
+    /// The cursor to send next: the index one past the last frame here.
+    pub next: usize,
+    /// `true` iff the job has appended its terminal frame.
+    pub finished: bool,
+}
+
 // ─── Router ────────────────────────────────────────────────────
 
 /// The local-corpus router. Mounted beside `corpus_watch_http` on the
@@ -163,6 +214,11 @@ pub fn lc_router() -> Router {
         .route(
             "/internal/corpus/local/{corpus_id}/ingest/progress",
             get(ingest_progress),
+        )
+        .route("/internal/corpus/local/{corpus_id}/cluster", post(cluster))
+        .route(
+            "/internal/corpus/local/{corpus_id}/cluster/progress",
+            get(cluster_progress),
         )
         .localhost_only()
 }
@@ -523,6 +579,208 @@ async fn ingest_progress(_: LocalOnly, Path(corpus_id): Path<String>) -> Result<
         corpus_id,
         state,
         outcome,
+        finished,
+    })
+    .into_response())
+}
+
+// ─── The cluster job ───────────────────────────────────────────
+
+/// One cluster job's frame log. Held per corpus in [`CLUSTER_JOBS`];
+/// the progress route reads it, the spawned job appends to it.
+struct ClusterJob {
+    job_id: String,
+    frames: Mutex<Vec<LocalCorpusProgress>>,
+    finished: AtomicBool,
+}
+
+/// The live cluster jobs, keyed by corpus id. In-process on purpose:
+/// the `cluster_results` cache these frames narrate the filling of is
+/// itself in-process on the manager, so a job log that outlived the
+/// daemon would describe a result that had not.
+static CLUSTER_JOBS: OnceLock<Mutex<HashMap<String, Arc<ClusterJob>>>> = OnceLock::new();
+
+fn cluster_jobs() -> &'static Mutex<HashMap<String, Arc<ClusterJob>>> {
+    CLUSTER_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cluster_job_for(corpus_id: &str) -> Option<Arc<ClusterJob>> {
+    cluster_jobs()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(corpus_id).cloned())
+}
+
+impl ClusterJob {
+    fn push(&self, frame: LocalCorpusProgress) {
+        let terminal = matches!(
+            frame,
+            LocalCorpusProgress::Complete { .. } | LocalCorpusProgress::Error { .. }
+        );
+        if let Ok(mut frames) = self.frames.lock() {
+            frames.push(frame);
+        }
+        if terminal {
+            self.finished.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+/// POST /internal/corpus/local/{corpus}/cluster — run clustering + LLM
+/// labelling on an ingested vault as a job. Wire form of `lc_cluster`;
+/// answers `IngestJobAck` with `202 Accepted` (the ack shape is the
+/// ingest job's: corpus, the host's job id, and the route that reports
+/// it — nothing cluster-specific belongs in an acceptance).
+///
+/// A corpus with a cluster job still running answers `409`: the job
+/// writes the manager's `cluster_results` entry for this corpus, and two
+/// of them racing for it would leave the preview describing whichever
+/// finished last. A FINISHED job is replaced — re-organising is an
+/// ordinary thing for a user to do.
+async fn cluster(
+    _: LocalOnly,
+    Path(corpus_id): Path<String>,
+    body: Option<Json<ClusterRequest>>,
+) -> Result<Response, Absence> {
+    let manager = manager_or_503()?;
+    if manager.get(&corpus_id).await.is_none() {
+        return Ok(not_registered(&corpus_id));
+    }
+    let cfg = body
+        .and_then(|Json(b)| b.config)
+        .unwrap_or_else(ClusterConfig::default);
+
+    let job_id = format!("lc-cluster-{}", uuid::Uuid::new_v4());
+    let job = Arc::new(ClusterJob {
+        job_id: job_id.clone(),
+        frames: Mutex::new(Vec::new()),
+        finished: AtomicBool::new(false),
+    });
+    {
+        let Ok(mut jobs) = cluster_jobs().lock() else {
+            return Ok(log_and_500("cluster: the job table is poisoned"));
+        };
+        if let Some(live) = jobs.get(&corpus_id) {
+            if !live.finished.load(Ordering::SeqCst) {
+                tracing::debug!(
+                    corpus_id = %corpus_id,
+                    running_job = %live.job_id,
+                    "lc_http: cluster refused — a job is still running for this corpus"
+                );
+                return Ok((
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": format!(
+                            "cluster job '{}' is still running for corpus '{corpus_id}'",
+                            live.job_id
+                        )
+                    })),
+                )
+                    .into_response());
+            }
+        }
+        jobs.insert(corpus_id.clone(), Arc::clone(&job));
+    }
+
+    let on_progress: sovereign_tools::local_corpus::manager::ProgressCallback = {
+        let job = Arc::clone(&job);
+        Arc::new(move |frame: LocalCorpusProgress| job.push(frame))
+    };
+    let spawn_corpus = corpus_id.clone();
+    let spawn_job = job_id.clone();
+    tokio::spawn(async move {
+        match manager.cluster(&spawn_corpus, &cfg, on_progress).await {
+            Ok(result) => {
+                tracing::info!(
+                    corpus_id = %spawn_corpus,
+                    job_id = %spawn_job,
+                    clusters = result.clusters.len(),
+                    "lc_http: cluster job finished"
+                );
+                // The terminal frame the desktop's in-process arm always
+                // emitted: a zero-count `Ingest` completion. The preview
+                // is NOT inlined — it is large, and the caller fetches it
+                // from `…/preview` next, exactly as before.
+                job.push(LocalCorpusProgress::Complete {
+                    result: CompletionResult::Ingest(IngestStats {
+                        corpus_id: spawn_corpus.clone(),
+                        files_indexed: 0,
+                        chunks_written: 0,
+                        runtime_failures: Vec::new(),
+                        excerpt_chunks: Vec::new(),
+                        duration_secs: 0,
+                    }),
+                });
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id = %spawn_corpus,
+                    job_id = %spawn_job,
+                    "lc_http: cluster job failed: {e}"
+                );
+                job.push(LocalCorpusProgress::Error {
+                    message: e.to_string(),
+                    recoverable: false,
+                });
+            }
+        }
+    });
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(IngestJobAck {
+            progress_route: format!("/internal/corpus/local/{corpus_id}/cluster/progress"),
+            corpus_id,
+            job_id,
+            ok: true,
+        }),
+    )
+        .into_response())
+}
+
+/// GET /internal/corpus/local/{corpus}/cluster/progress?after=N — the
+/// frames a cluster job has appended from the caller's cursor on.
+///
+/// A registered corpus with no cluster job on record is a `404` naming
+/// it — which is a different fact from an unregistered corpus (also a
+/// 404, naming that instead) and from a job that has started and
+/// appended nothing yet (`200`, no frames, `finished: false`).
+async fn cluster_progress(
+    _: LocalOnly,
+    Path(corpus_id): Path<String>,
+    Query(query): Query<ClusterProgressQuery>,
+) -> Result<Response, Absence> {
+    let manager = manager_or_503()?;
+    if manager.get(&corpus_id).await.is_none() {
+        return Ok(not_registered(&corpus_id));
+    }
+    let Some(job) = cluster_job_for(&corpus_id) else {
+        return Ok(not_found(format!(
+            "no cluster job on record for corpus '{corpus_id}'"
+        )));
+    };
+    let after = query.after;
+    let (frames, next) = match job.frames.lock() {
+        Ok(all) => (
+            all.get(after..).unwrap_or(&[]).to_vec(),
+            all.len().max(after),
+        ),
+        Err(_) => return Ok(log_and_500("cluster_progress: the frame log is poisoned")),
+    };
+    let finished = job.finished.load(Ordering::SeqCst);
+    tracing::debug!(
+        corpus_id = %corpus_id,
+        job_id = %job.job_id,
+        after,
+        served = frames.len(),
+        finished,
+        "lc_http: cluster progress served",
+    );
+    Ok(Json(ClusterProgress {
+        corpus_id,
+        job_id: job.job_id.clone(),
+        frames,
+        next,
         finished,
     })
     .into_response())
