@@ -108,7 +108,7 @@ pub struct DesktopConfig {
     /// Epistemic humility mode. When true, the runtime audits each
     /// answer for thin evidence and surfaces an `InformationRequest`
     /// card asking the user to paste a source. Default **on**; see
-    /// `sovereign_core::types::InferenceConfig::auto_collaborate` for
+    /// `sovereign_contracts::types::InferenceConfig::auto_collaborate` for
     /// the full story. Named `#[serde(default = …)]` so existing
     /// saved configs without the field also upgrade to on.
     #[serde(default = "default_auto_collaborate")]
@@ -128,7 +128,7 @@ pub struct DesktopConfig {
     /// primary), `anchor` (lend memory to hold it), or `host` (own the loaded
     /// instance). Default `consumer`. Mirrored to `[shared_model] role`.
     #[serde(default)]
-    pub shared_model_role: sovereign_core::setup_config::SharedModelRole,
+    pub shared_model_role: sovereign_contracts::setup_config::SharedModelRole,
     /// The shared model id to use/host (as advertised in the mesh). `None` = not
     /// participating. Mirrored to `[shared_model] model_id`.
     #[serde(default)]
@@ -136,7 +136,7 @@ pub struct DesktopConfig {
 
     /// User-authored "custom instructions" / persona — global standing
     /// guidance appended as the outermost layer of every system prompt
-    /// (see `sovereign_core::types::InferenceConfig::custom_instructions`).
+    /// (see `sovereign_contracts::types::InferenceConfig::custom_instructions`).
     /// Append-only: it never replaces the situated prompt. Empty / `None`
     /// is a no-op (byte-identical prompt). Editable from Settings →
     /// Models; visible verbatim in the Inner Work ProvenancePanel.
@@ -145,7 +145,7 @@ pub struct DesktopConfig {
 
     /// Idle seconds before the lazy-loaded primary chat slot is
     /// unloaded to reclaim VRAM. Mirrors
-    /// `sovereign_core::setup_config::DaemonSection::primary_idle_secs`
+    /// `sovereign_contracts::setup_config::DaemonSection::primary_idle_secs`
     /// so a desktop user who tunes one expects the other to behave
     /// the same way. Default 300 (5 min) — long enough that
     /// mid-conversation pauses don't re-pay the 10–20s lazy-load
@@ -372,7 +372,7 @@ impl Default for DesktopConfig {
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
             naked_mode: default_naked_mode(),
-            shared_model_role: sovereign_core::setup_config::SharedModelRole::default(),
+            shared_model_role: sovereign_contracts::setup_config::SharedModelRole::default(),
             shared_model_id: None,
             custom_instructions: None,
             primary_idle_secs: default_primary_idle_secs(),
@@ -501,7 +501,7 @@ impl DesktopConfig {
     /// `desktop.toml`: surfacing a stale value is the better error mode
     /// than losing one, and every reader now consults `[search]` first.
     fn migrate_legacy_search_backend(config: &DesktopConfig) {
-        use sovereign_core::setup_config::SetupConfig;
+        use sovereign_contracts::setup_config::SetupConfig;
 
         let provider = config.search_backend.provider.trim();
         // `duckduckgo` is the zero-config default, not a choice worth
@@ -538,7 +538,7 @@ impl DesktopConfig {
     /// configured) user is never clobbered. Does NOT rewrite `desktop.toml`
     /// (serde drops the now-unknown keys on the next save).
     fn migrate_legacy_model_fields(raw: Option<&str>) {
-        use sovereign_core::setup_config::{DataSection, ModelsSection, SetupConfig};
+        use sovereign_contracts::setup_config::{DataSection, ModelsSection, SetupConfig};
 
         /// Deserialize-only view of the removed model fields, read straight
         /// from the raw `desktop.toml` so the migration can recover values
@@ -743,7 +743,7 @@ impl ResolvedModelSlots {
     /// absent or unparseable — callers that must tolerate a pre-setup
     /// machine use [`Self::load_or_default`].
     pub fn load() -> Result<Self, String> {
-        let setup = sovereign_core::setup_config::SetupConfig::load()?;
+        let setup = sovereign_contracts::setup_config::SetupConfig::load()?;
         Ok(Self::from_setup(setup.models()?))
     }
 
@@ -751,7 +751,7 @@ impl ResolvedModelSlots {
     /// `config.toml` doesn't exist yet (fresh install, pre-wizard). Never
     /// errors.
     pub fn load_or_default() -> Self {
-        match sovereign_core::setup_config::SetupConfig::load() {
+        match sovereign_contracts::setup_config::SetupConfig::load() {
             // A terminal reaches the placeholder arm too: it holds no slots,
             // and an all-empty `ResolvedModelSlots` is what "no local weights"
             // already means to every reader of this type.
@@ -774,7 +774,7 @@ impl ResolvedModelSlots {
         }
     }
 
-    fn from_setup(m: &sovereign_core::setup_config::ModelsSection) -> Self {
+    fn from_setup(m: &sovereign_contracts::setup_config::ModelsSection) -> Self {
         Self {
             fast: m.fast_path().to_path_buf(),
             primary: Some(m.primary.clone()),

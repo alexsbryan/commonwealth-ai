@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use sovereign_core::traits::StateStore;
+use sovereign_contracts::traits::StateStore;
 use sovereign_store::sqlite::SqliteStateStore;
 use tokio::sync::RwLock;
 

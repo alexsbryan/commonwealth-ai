@@ -27,7 +27,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_turn_client::{BundledBackend, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};
 
 /// Whole budget when this call has a backend to bring up: the probe, the

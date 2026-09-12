@@ -64,7 +64,7 @@ impl From<sovereign_turn_client::InsightEntry> for InsightNodeDto {
     }
 }
 
-use sovereign_core::time::unix_now as now;
+use sovereign_time::unix_now as now;
 
 // ─── Commands ────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `TauriRoutingEventSink` — desktop implementation of the
-//! [`RoutingEventSink`](sovereign_core::traits::RoutingEventSink)
+//! [`RoutingEventSink`](sovereign_contracts::traits::RoutingEventSink)
 //! trait defined in sovereign-core.
 //!
 //! The runtime emits three antifragile-routing events via this sink:
@@ -22,8 +22,8 @@
 use async_trait::async_trait;
 use tauri::Emitter;
 
-use sovereign_core::traits::RoutingEventSink;
-use sovereign_core::types::{ClarificationRequest, InterpretationProposed, TurnNarration};
+use sovereign_contracts::traits::RoutingEventSink;
+use sovereign_contracts::types::{ClarificationRequest, InterpretationProposed, TurnNarration};
 
 /// Emits the three routing events to the frontend via `AppHandle::emit`.
 /// Event names intentionally match the strings the Svelte listener

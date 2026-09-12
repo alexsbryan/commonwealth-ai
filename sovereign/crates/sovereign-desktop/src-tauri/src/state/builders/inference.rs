@@ -27,7 +27,7 @@
 
 use std::sync::Arc;
 
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use tokio::sync::RwLock;
 
 use crate::state::{BootstrapPhase, ResolvedModelSlots};
@@ -68,7 +68,7 @@ fn build_daemon_provider(slots: &ResolvedModelSlots) -> Result<Arc<dyn Inference
     // `SetupConfig` is still loaded here for the daemon client port; the
     // model ids come from `slots` (already SetupConfig-derived, same source
     // the daemon advertises on `/v1/models`).
-    let setup = sovereign_core::setup_config::SetupConfig::load()
+    let setup = sovereign_contracts::setup_config::SetupConfig::load()
         .map_err(|e| format!("load SetupConfig for daemon routing: {e}"))?;
     let v1 = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
     let ctx = slots.windows.primary;

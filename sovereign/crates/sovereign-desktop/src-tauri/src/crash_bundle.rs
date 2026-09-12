@@ -30,7 +30,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 /// Maximum bytes of a crash log we'll embed verbatim into the
 /// report. Daemon stderr ring buffers are capped at 500 lines today;
@@ -503,7 +503,7 @@ pub(crate) fn issues_url() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
+    use sovereign_contracts::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
     use std::collections::BTreeMap;
     use tempfile::TempDir;
 

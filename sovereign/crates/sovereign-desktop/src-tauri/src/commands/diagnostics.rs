@@ -167,7 +167,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
 
     let free_disk_gb = data_dir.as_deref().and_then(free_disk_gb);
 
-    let cutoff = sovereign_core::time::unix_now_u64().saturating_sub(CRASH_WINDOW_SECS);
+    let cutoff = sovereign_time::unix_now_u64().saturating_sub(CRASH_WINDOW_SECS);
     let recent_crashes = crate::crash_report::list_crash_records()
         .into_iter()
         .filter(|r| r.captured_at_unix >= cutoff)
@@ -178,7 +178,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
         .collect();
 
     HealthFacts {
-        captured_at_unix: sovereign_core::time::unix_now_u64(),
+        captured_at_unix: sovereign_time::unix_now_u64(),
         daemon_running: daemon.is_some(),
         daemon,
         mesh,

@@ -158,7 +158,7 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
 /// can't be synthesized without paths, and there are none to take from
 /// `DesktopConfig` any more — so we log and skip.
 pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
-    use sovereign_core::setup_config::SetupConfig;
+    use sovereign_contracts::setup_config::SetupConfig;
 
     let mut cli = match SetupConfig::load() {
         Ok(c) => c,
@@ -581,7 +581,7 @@ pub async fn set_setup_context_size(
     state: State<'_, Arc<AppState>>,
     new_ctx: u32,
 ) -> Result<(), String> {
-    use sovereign_core::setup_config::SetupConfig;
+    use sovereign_contracts::setup_config::SetupConfig;
 
     if !(512..=1_048_576).contains(&new_ctx) {
         return Err(format!(
@@ -616,7 +616,7 @@ pub async fn set_setup_context_size(
                 // section is what "the user has not chosen models yet" has
                 // always meant on this path, and it is NOT the terminal
                 // class (which is `None` plus an entry node).
-                models: Some(sovereign_core::setup_config::ModelsSection {
+                models: Some(sovereign_contracts::setup_config::ModelsSection {
                     primary: std::path::PathBuf::new(),
                     fast: None,
                     embed: std::path::PathBuf::new(),
@@ -630,7 +630,7 @@ pub async fn set_setup_context_size(
                 }),
                 node: Default::default(),
                 daemon: Default::default(),
-                data: sovereign_core::setup_config::DataSection { dir: data_dir },
+                data: sovereign_contracts::setup_config::DataSection { dir: data_dir },
                 watched_folders: Default::default(),
                 memory: Default::default(),
                 iroh: Default::default(),
@@ -702,7 +702,7 @@ pub(crate) fn write_model_slots_to_setup(
     code: Option<std::path::PathBuf>,
     data_dir: std::path::PathBuf,
 ) -> Result<std::path::PathBuf, String> {
-    use sovereign_core::setup_config::{DataSection, ModelsSection, SetupConfig};
+    use sovereign_contracts::setup_config::{DataSection, ModelsSection, SetupConfig};
 
     // Primary is the anchor; a missing/empty fast folds into it.
     let primary_path = primary
@@ -773,7 +773,7 @@ pub async fn get_setup_model_slots(
 ) -> Result<SetupModelSlots, String> {
     let code_family = state.config.read().await.code_family.clone();
     let show = |p: &std::path::Path| p.display().to_string();
-    match sovereign_core::setup_config::SetupConfig::load() {
+    match sovereign_contracts::setup_config::SetupConfig::load() {
         // A terminal falls through to the empty arm below: the panel's
         // "no slots" rendering is already the right answer for a node that
         // holds none, and it is the same shape as pre-wizard.
@@ -1000,7 +1000,7 @@ pub async fn complete_setup(
     // CLI (`sovereign setup`) already wrote to config.toml. Model PATHS go
     // straight to SetupConfig (the single source of truth) below — they are
     // no longer DesktopConfig fields.
-    let cli_cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let cli_cfg = sovereign_contracts::setup_config::SetupConfig::load().ok();
     let fast: Option<std::path::PathBuf> = if !setup.model_path.is_empty() {
         Some(setup.model_path.clone().into())
     } else {

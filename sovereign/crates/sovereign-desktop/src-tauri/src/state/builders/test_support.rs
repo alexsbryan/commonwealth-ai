@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
 use futures::Stream;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
 };
 use tempfile::TempDir;
@@ -26,18 +26,18 @@ impl InferenceProvider for StubInference {
     async fn complete(
         &self,
         _req: &CompletionRequest,
-    ) -> sovereign_core::error::Result<CompletionResponse> {
+    ) -> sovereign_contracts::error::Result<CompletionResponse> {
         unimplemented!("StubInference: not exercised by the builders under test")
     }
     async fn complete_stream(
         &self,
         _req: &CompletionRequest,
-    ) -> sovereign_core::error::Result<
-        Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+    ) -> sovereign_contracts::error::Result<
+        Pin<Box<dyn Stream<Item = sovereign_contracts::error::Result<String>> + Send>>,
     > {
         unimplemented!("StubInference: not exercised by the builders under test")
     }
-    async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+    async fn embed(&self, _text: &str) -> sovereign_contracts::error::Result<Vec<f32>> {
         Ok(vec![0.0; 8])
     }
     fn capabilities(&self) -> ProviderCapabilities {

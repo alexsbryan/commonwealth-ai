@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
 
-use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_contracts::traits::{InferenceProvider, StateStore};
 use sovereign_store::sqlite::SqliteStateStore;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a

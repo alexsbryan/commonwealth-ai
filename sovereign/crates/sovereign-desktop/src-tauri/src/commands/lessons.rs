@@ -67,7 +67,7 @@ fn notes(state: &Arc<AppState>) -> sovereign_turn_client::TurnClient {
     sovereign_turn_client::TurnClient::new(state.client_base_url())
 }
 
-use sovereign_core::time::unix_now;
+use sovereign_time::unix_now;
 
 fn row_from_note(row: NoteEntry) -> Option<LessonRow> {
     let raw = row.payload_json.as_deref()?;

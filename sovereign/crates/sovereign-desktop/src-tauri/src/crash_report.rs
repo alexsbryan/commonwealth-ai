@@ -64,7 +64,7 @@ pub struct CrashRecord {
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
 
-use sovereign_core::time::unix_millis as now_unix_millis;
+use sovereign_time::unix_millis as now_unix_millis;
 
 impl CrashRecord {
     /// Build a record with the common environment fields filled in.

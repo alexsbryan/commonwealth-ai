@@ -45,7 +45,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use sovereign_core::mobile_host::{self, MobileHostConfig};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_turn_client::{BundledBackend, ServingHost};
 use tauri::async_runtime::{self, JoinHandle};
 use tracing::{info, warn};
