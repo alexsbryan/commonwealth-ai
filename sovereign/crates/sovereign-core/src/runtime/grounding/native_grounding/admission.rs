@@ -227,6 +227,71 @@ pub(crate) enum AdmissionOutcome {
     },
 }
 
+impl AdmissionOutcome {
+    /// What rides the turn. The per-call telemetry (`margin`, `source`,
+    /// `pool`, `elapsed_ms`) stays here, where it is traced; the stages
+    /// downstream need two facts — whether this stage ran, and what it
+    /// decided if it did.
+    pub(crate) fn summary(&self) -> NativeAdmission {
+        match self {
+            AdmissionOutcome::Disabled => NativeAdmission::NotRun,
+            AdmissionOutcome::NoInstrument { reason } => NativeAdmission::NoInstrument { reason },
+            AdmissionOutcome::Decided { verdict, .. } => NativeAdmission::Decided(verdict.clone()),
+        }
+    }
+}
+
+/// The admission stage's outcome as the rest of the turn carries it.
+///
+/// **Three states, and not an `Option<GroundingVerdict>`.** "The stage did
+/// not run" and "the stage ran and had no instrument" are different facts,
+/// and the stages downstream act differently on them: a flag-off turn must
+/// carry no segment field at all (that is what makes the incumbent arm
+/// byte-identical), while a turn that ran without a margin source still has
+/// a released text and a sealed pool — which is everything display
+/// segmentation needs and all it has ever needed.
+///
+/// Collapsing both into `None` is what kept `answer_segments` null on 794 of
+/// 794 banked turns and on 17/17 live desktop turns (note `e1e9e7a3`): this
+/// host rejects the reranker slot, so [`AdmissionOutcome::NoInstrument`] is
+/// the common case (ECONOMY §7.7), and a DISPLAY feature was reading a
+/// MEASUREMENT slot's absence as its own (ARCH §6, §12).
+#[derive(Debug, Clone)]
+pub(crate) enum NativeAdmission {
+    /// The stage did not run on this turn: the flag is off, or this is a
+    /// surface with no admission stage (simple turns, the deep/research
+    /// path, the zero-chunk fork — there is no pool to score).
+    NotRun,
+    /// The stage ran and reported that it could not measure. Nothing is
+    /// substituted; the reason is the one [`AdmissionOutcome::NoInstrument`]
+    /// gave.
+    NoInstrument { reason: &'static str },
+    /// The stage ran and H1 decided.
+    Decided(GroundingVerdict),
+}
+
+impl NativeAdmission {
+    /// Did the admission stage run on this turn — including the run that
+    /// reported it had no instrument?
+    ///
+    /// This is the question the DISPLAY stages ask. It is not
+    /// [`Self::verdict`]`.is_some()`, and the difference is the whole of
+    /// this type: a `NoInstrument` turn ran, so its released text may be
+    /// segmented against its sealed pool.
+    pub(crate) fn ran(&self) -> bool {
+        !matches!(self, NativeAdmission::NotRun)
+    }
+
+    /// H1's verdict, when it reached one — the ONE accessor for that
+    /// question (ARCH §8).
+    pub(crate) fn verdict(&self) -> Option<&GroundingVerdict> {
+        match self {
+            NativeAdmission::Decided(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 /// Pull the raw rerank logits retrieval already computed, if it did.
 ///
 /// `search_with_rerank` stringifies the logit at `{:.6}`, so this loses
@@ -634,10 +699,10 @@ mod tests {
         // Vacuity guard first: if the verdict stopped riding the turn under
         // this name, every scan below would pass by describing nothing.
         assert!(
-            prod.contains("native_verdict"),
-            "`native_verdict` is gone from knowledge_query.rs — this guard is \
-             scanning for a name that no longer exists, so it proves nothing. \
-             Re-point it at whatever carries H1's verdict now."
+            prod.contains("grounding_admission"),
+            "`grounding_admission` is gone from knowledge_query.rs — this guard \
+             is scanning for a name that no longer exists, so it proves nothing. \
+             Re-point it at whatever carries H1's admission now."
         );
 
         // RULE 1. The admission's typed decision is not a name the turn
@@ -670,7 +735,7 @@ mod tests {
             if t.starts_with("//") || t.starts_with("///") {
                 continue;
             }
-            if !(line.contains("native_verdict") || line.contains(".answerability")) {
+            if !(line.contains("grounding_admission") || line.contains(".answerability")) {
                 continue;
             }
             let is_branch = t.starts_with("if ")
@@ -705,5 +770,72 @@ mod tests {
              exactly once — a variable, or a second site, is how a stage that \
              says it decides nothing starts reporting that it does"
         );
+    }
+
+    /// The defect vl-6 fixes, stated as the predicate that was false.
+    ///
+    /// A turn where H1 had no instrument is a turn that RAN. Before this,
+    /// the only fact carried forward was `Option<GroundingVerdict>`, so
+    /// `NoInstrument` and `Disabled` were the same `None` to every reader
+    /// — and the display segmentation, which needs neither a margin nor a
+    /// score, read that shared `None` as "do not segment". On a host that
+    /// rejects the reranker slot (ECONOMY §7.7) `NoInstrument` is the
+    /// common case, which is how `answer_segments` came to be null on 794
+    /// of 794 banked turns and 17/17 live desktop turns (note `e1e9e7a3`).
+    #[test]
+    fn a_turn_with_no_instrument_is_a_turn_that_ran() {
+        let no_instrument = AdmissionOutcome::NoInstrument {
+            reason: "no reranker wired and retrieval left no rerank_score",
+        }
+        .summary();
+        assert!(
+            no_instrument.ran(),
+            "a turn whose admission reported no instrument still ran — its \
+             released text and its sealed pool are both present, which is \
+             everything display segmentation reads"
+        );
+        assert!(
+            no_instrument.verdict().is_none(),
+            "nothing is substituted for the verdict H1 could not reach"
+        );
+
+        assert!(
+            !AdmissionOutcome::Disabled.summary().ran(),
+            "the opted-out arm must stay byte-identical to the incumbent: no \
+             admission, no segments, and the wire field absent rather than empty"
+        );
+    }
+
+    /// The verdict survives the projection intact, and `ran()` agrees.
+    ///
+    /// Fails if `summary()` drops the verdict, substitutes a default, or
+    /// reads a field off the per-call telemetry it deliberately leaves
+    /// behind. The values are the test's own and are asserted on the FAR
+    /// side of the projection — no threshold and no committed fit is
+    /// consulted, because neither is the subject here.
+    #[test]
+    fn a_decided_admission_carries_its_verdict_forward() {
+        let decided = AdmissionOutcome::Decided {
+            verdict: GroundingVerdict {
+                decision: GroundingDecision::Hedge,
+                answerability: 0.617,
+                semantic_entropy: None,
+                agreement: None,
+                decided_by: DeciderId::Router,
+                segments: Vec::new(),
+            },
+            margin: 6.25,
+            source: MarginSource::RetrievalRerankScore,
+            pool: 8,
+            elapsed_ms: 3,
+        }
+        .summary();
+        assert!(decided.ran());
+        let v = decided
+            .verdict()
+            .expect("a decided admission has a verdict");
+        assert_eq!(v.decision, GroundingDecision::Hedge);
+        assert!((v.answerability - 0.617).abs() < f32::EPSILON);
+        assert_eq!(v.decided_by, DeciderId::Router);
     }
 }

@@ -588,8 +588,9 @@ impl Runtime {
                 demands,
                 query_embedding: embedding,
                 // Zero retrieval never reaches the admission stage — there
-                // is no pool to score, so there is no verdict to report.
-                grounding_verdict: None,
+                // is no pool to score, so the stage did not run.
+                grounding_admission:
+                    crate::runtime::grounding::native_grounding::admission::NativeAdmission::NotRun,
             };
         }
 
@@ -727,22 +728,20 @@ impl Runtime {
         // substituted (ARCH §18.3).
         use crate::runtime::grounding::native_grounding::admission::{self, AdmissionOutcome};
         let admission = admission::admit(message, &chunks, lane.rerank.f()).await;
-        let native_verdict: Option<crate::types::GroundingVerdict> = match &admission {
-            // Flag off: `admit` returned before doing anything at all.
-            AdmissionOutcome::Disabled => None,
-            AdmissionOutcome::NoInstrument { reason } => {
-                tracing::debug!(
-                    reason,
-                    "native-grounding H1: no answerability instrument — this turn carries \
-                     no typed verdict and no segments"
-                );
-                None
-            }
-            // The verdict rides the turn for DISPLAY (segments are resolved
-            // against the released text in `streaming.rs`) and for the
-            // record. Its `decision` field routes nothing.
-            AdmissionOutcome::Decided { verdict, .. } => Some(verdict.clone()),
-        };
+        // Carried forward as THREE states. The verdict rides the turn for
+        // DISPLAY (segments are resolved against the released text in
+        // `streaming.rs`) and for the record; its `decision` field routes
+        // nothing. What the third state buys is the turn where H1 could not
+        // measure: the stage still RAN, so the released text is still
+        // segmented, and only the typed verdict is absent.
+        let grounding_admission = admission.summary();
+        if let AdmissionOutcome::NoInstrument { reason } = &admission {
+            tracing::debug!(
+                reason,
+                "native-grounding H1: no answerability instrument — this turn carries \
+                 no typed verdict; its released text is still segmented for display"
+            );
+        }
         // Who decided to withhold the evidence, if anyone: the incumbent
         // cosine floor + token-coverage floor, and only ever that. ONE
         // reader of this question, on both arms.
@@ -758,7 +757,7 @@ impl Runtime {
                 // What H1 would have said, had it been the decider. Recorded
                 // beside the decision that WAS taken so the A/B's A1 check
                 // can diff the two arms' decline lines directly.
-                native_answerability = native_verdict.as_ref().map(|v| v.answerability),
+                native_answerability = grounding_admission.verdict().map(|v| v.answerability),
                 "KnowledgeQuery: evidence-shape EARLY DECLINE — parametric turn, evidence withheld"
             );
             let corpora = context.installed_corpora_display();
@@ -852,10 +851,10 @@ impl Runtime {
                 general_knowledge: Some(crate::runtime::types::GkReason::WeakEvidence),
                 demands,
                 query_embedding: embedding,
-                // `Some` on every flag-on turn H1 could measure — the
+                // `Decided` on every flag-on turn H1 could measure — the
                 // incumbent floor decided this decline either way. Carried
                 // for display and for the record, never consulted.
-                grounding_verdict: native_verdict,
+                grounding_admission,
             };
         }
 
@@ -1610,10 +1609,11 @@ impl Runtime {
                 .then_some(crate::runtime::types::GkReason::AgenticInsufficient),
             demands,
             query_embedding: embedding,
-            // H1 admitted this turn (`Answer` or `Hedge`), or did not run.
-            // Carried typed so the abstention/segment stages read the
-            // decision instead of re-deriving it.
-            grounding_verdict: native_verdict,
+            // H1 admitted this turn (`Answer` or `Hedge`), could not
+            // measure it, or did not run. Carried typed so the
+            // abstention/segment stages read the decision instead of
+            // re-deriving it.
+            grounding_admission,
         }
     }
 
@@ -1774,9 +1774,8 @@ impl Runtime {
                 // gate's SOVEREIGN_KQ_RETRY_FLOOR guard, which was a silent
                 // no-op on this path while this field was hardcoded None.
                 top_similarity: plan.shape.top_cosine,
-                // H1's typed decision, when the native path ran. `None` on
-                // every incumbent turn.
-                native_verdict: plan.grounding_verdict.clone(),
+                // What the admission stage did on this turn.
+                native_admission: plan.grounding_admission.clone(),
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

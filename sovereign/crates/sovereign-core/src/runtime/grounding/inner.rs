@@ -23,7 +23,7 @@ pub(crate) async fn gate_answer_inner(
     // at the decline guard before 2026-08-12, i.e. after four of this
     // function's six exits — which is why those four journaled nothing.
     // Telemetry: nothing below reads this to decide anything.
-    let native = evidence.native_verdict.as_ref();
+    let native = evidence.native_admission.verdict();
     // T1 P1.4: the short path audits ONE central FACTUAL claim, and its
     // citation / value-presence / name checks are all factual-class — so
     // this whole ladder reads the Leaf view only. A quote or value that

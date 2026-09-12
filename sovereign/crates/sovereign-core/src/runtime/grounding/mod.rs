@@ -242,12 +242,15 @@ pub(crate) struct EvidenceContext {
     /// `source_url` the gate's custody ledger releases (custody.md §5).
     /// `None` per entry whenever the chunk carries no URL.
     pub chunk_urls: Vec<Option<String>>,
-    /// H1's typed admission verdict for this turn, when the native
-    /// grounding path ran — which since 2026-08-11 is every turn by
-    /// default. `None` whenever it did not (opted out with
-    /// `SOVEREIGN_NATIVE_GROUNDING=0`, or no instrument), and `None` is
-    /// what makes that path byte-identical to the incumbent: every read
-    /// of this field is `if let Some(..)`.
+    /// What H1's admission stage did on this turn — which since
+    /// 2026-08-11 runs by default.
+    ///
+    /// `NotRun` is what makes the opted-out path byte-identical to the
+    /// incumbent: the gate's read of this field is
+    /// [`NativeAdmission::verdict`], which is `None` on both the turns
+    /// that did not run and the turns that ran without an instrument.
+    /// The DISPLAY stages read [`NativeAdmission::ran`] instead, which is
+    /// the distinction this type exists to carry.
     ///
     /// **Why the gate needs it.** The decline guard below
     /// (`released_pure_decline`) exists to RECOVER a decision the system
@@ -262,7 +265,7 @@ pub(crate) struct EvidenceContext {
     ///
     /// Nothing is deleted for this: the zoo stays, every incumbent turn
     /// still uses it, and deletion is the graduation cutover.
-    pub native_verdict: Option<crate::types::GroundingVerdict>,
+    pub native_admission: native_grounding::admission::NativeAdmission,
 }
 
 impl EvidenceContext {
@@ -601,14 +604,15 @@ pub(crate) struct GateOutcome {
 /// sentinel for a decision.
 ///
 /// Named for exactly what the gate knows, and no more. WHY H1 produced
-/// nothing is decided upstream — `AdmissionOutcome::Disabled` (flag off)
-/// and `AdmissionOutcome::NoInstrument { reason }` (flag on, nothing to
-/// measure with) are distinct there — but `knowledge_query.rs` collapses
-/// both to `None` when it fills `EvidenceContext::native_verdict`, so by
-/// the time the gate sees the turn that distinction is gone. Carrying it
-/// this far is a change to `EvidenceContext` and its every construction
-/// site, not to this file; until then the sentinel says "not computed"
-/// rather than guessing which of the two it was.
+/// nothing — `NativeAdmission::NotRun` (the stage did not run) versus
+/// `NativeAdmission::NoInstrument { reason }` (it ran, nothing to measure
+/// with) — now DOES reach the gate on
+/// [`EvidenceContext::native_admission`], carried there for the display
+/// stages that act differently on the two. This sentinel still does not
+/// split, deliberately: the gate takes the same action on both, and a
+/// journal key that names a distinction no reader of it acts on is a wire
+/// change bought with nothing (ARCH §12). Split it the day a gate
+/// decision differs.
 pub(crate) const NATIVE_VERDICT_NOT_COMPUTED: &str = "not_computed";
 
 /// Attach H1's verdict to a gate outcome's metadata: the ONE place the

@@ -2996,11 +2996,18 @@ presentation preference at 5.4s + 50.9s per repaired turn. Both paths carry
 `sovereign/DEFAULTS_LEDGER.md` rows with a 2026-09-13 review-by; a tombstone
 that fires is visible in the product rather than inferred from the flag,
 because the stage strip records `Rewrite` / `ReAudit` rows from the branch
-actually taken. **Caveat on the marking's second channel:** span-level
-demotion (`SegmentKind::Unverified` in the provenance strip) does *not*
-render on this host — H1 admission has only reranker-derived margin sources
-and the reranker slot is rejected, so `answer_segments` is null on every
-turn (note `e1e9e7a3`); the claim-level ledger is the marking that ships. Judge prompts are byte-pinned to the
+actually taken. **The marking's second channel, reconciled 2026-09-12 (vl-6):** span-level
+demotion (`SegmentKind::Unverified` in the provenance strip) used not to
+render on this host — H1 admission has only reranker-derived margin sources,
+the reranker slot is rejected (ECONOMY §7.7), and display segmentation was
+gated on `native_verdict.is_some()`, so `answer_segments` was null on every
+turn (note `e1e9e7a3`, 794/794 banked turns, 17/17 live desktop turns). The
+gate now reads whether the admission stage RAN, not whether it decided:
+`EvidenceContext::native_admission` is a three-state `NativeAdmission`
+(`NotRun` / `NoInstrument` / `Decided`), the opted-out arm still carries no
+segment field at all, and a turn H1 could not measure still has a released
+text and a sealed pool — which is all `segments_for_display` ever reads. The
+claim-level ledger remains the marking that DECIDES; the strip is display. Judge prompts are byte-pinned to the
 bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 `grounding/config.rs` (`GateSurface` closed enum + per-surface
 `GroundingProfile` budgets + `grounding_gate_flags()` registry), `judge.rs`

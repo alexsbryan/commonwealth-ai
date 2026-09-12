@@ -420,7 +420,8 @@ fn refinement_evidence() -> EvidenceContext {
         // These tests exercise the INCUMBENT ladder; a verdict here
         // would route them down the typed path and stop them testing
         // what they are named for.
-        native_verdict: None,
+        native_admission:
+            crate::runtime::grounding::native_grounding::admission::NativeAdmission::NotRun,
         chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
         source_labels: Vec::new(),
         chunk_labels: Vec::new(),
@@ -1190,7 +1191,10 @@ fn native_verdict(
 /// action is the same one the verdict-free turn produces.
 fn evidence_with_native(verdict: crate::types::GroundingVerdict) -> EvidenceContext {
     EvidenceContext {
-        native_verdict: Some(verdict),
+        native_admission:
+            crate::runtime::grounding::native_grounding::admission::NativeAdmission::Decided(
+                verdict,
+            ),
         ..refinement_evidence()
     }
 }
