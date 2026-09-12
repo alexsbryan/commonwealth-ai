@@ -39,7 +39,7 @@ use crate::state::AppState;
 pub async fn corpus_coverage_card(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<Option<corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard>, String> {
+) -> Result<Option<sovereign_contracts::daemon_wire::CoverageCard>, String> {
     // sv-surface D9b — `GET /internal/corpus/{corpus}/coverage-card`. The
     // card is derived from the SAME `authoritative_store` accessor the
     // `sec_facts` tool resolves through, and the tool runs on the serving
@@ -51,9 +51,7 @@ pub async fn corpus_coverage_card(
     // route's own 200-with-null; a daemon that will not answer is an
     // `Err` (ARCH §18.3).
     sovereign_turn_client::TurnClient::new(state.client_base_url())
-        .corpus_coverage_card::<corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard>(
-            &corpus_id,
-        )
+        .corpus_coverage_card::<sovereign_contracts::daemon_wire::CoverageCard>(&corpus_id)
         .await
         .map_err(|e| e.to_string())
 }

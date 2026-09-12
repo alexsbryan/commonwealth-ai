@@ -60,11 +60,13 @@ pub mod provenance;
 pub use provenance::*;
 pub mod research;
 pub use research::*;
+pub mod conv_tiered;
+pub use conv_tiered::*;
+pub mod sec_coverage;
+pub use sec_coverage::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 
-/// Answer of `GET /internal/corpus/local/ocr-available`. A named
-/// field, not a bare `true`: "OCR is unavailable" and "this daemon did
 /// Answer of `GET /v1/admin/context-window` — the chat slot's context
 /// window as the DAEMON sees it.
 ///
@@ -91,6 +93,8 @@ pub struct ContextWindow {
     pub n_ctx_train: Option<u32>,
 }
 
+/// Answer of `GET /internal/corpus/local/ocr-available`. A named
+/// field, not a bare `true`: "OCR is unavailable" and "this daemon did
 /// not understand the question" must not both read as `false`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OcrAvailability {

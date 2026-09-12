@@ -38,11 +38,15 @@ pub mod egress;
 pub mod embed_quirks;
 pub mod error;
 pub mod frame;
+pub mod gguf_validator;
 pub mod health;
 pub mod intent_policy;
 pub mod launch;
+pub mod lessons;
 pub mod mcp_config;
 pub mod memory_config;
+pub mod mobile_host;
+pub mod model_family;
 pub mod observer;
 // The two ports a daemon speaks to its peers through — a replicated KV store
 // and the convergence stamps — plus the honest N=1 implementations of both.

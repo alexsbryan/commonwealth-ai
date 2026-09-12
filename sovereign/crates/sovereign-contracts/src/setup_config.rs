@@ -260,6 +260,44 @@ pub struct IrohSection {
     /// ```
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media_allow: Vec<String>,
+    /// `[iroh.apps]` — the HTTP apps this node publishes to members BY NAME,
+    /// each `name = "host:port"` on loopback. Served on one ALPN
+    /// (`cwth/app/0`) and demultiplexed by the request's first path segment,
+    /// so `GET /chores/tasks` reaches `chores` as `GET /tasks`.
+    ///
+    /// This is the OPEN half of the origin design: the kind is a closed enum
+    /// with one variant, and which apps exist is data that changes without a
+    /// code change (ARCH §9). A name is `[A-Za-z0-9_-]+`; anything else is
+    /// refused at the acceptor rather than sanitized, so the name can never
+    /// express traversal.
+    ///
+    /// ```toml
+    /// [iroh.apps]
+    /// chores = "127.0.0.1:5000"
+    /// printer = "127.0.0.1:8080"
+    /// ```
+    ///
+    /// Config is the DURABLE tier and is deliberately not the only one: a
+    /// declaration you have to maintain is worth it for something that is
+    /// always up, and is exactly wrong for a thing somebody ran at 1am. A
+    /// config entry nobody deletes becomes a `failed: connection refused`
+    /// row months later, which is the rot the closure-loop rule names — the
+    /// ephemeral registration tiers (`svrn run --as`, a TTL'd POST) are the
+    /// default and land beside this, not instead of it.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub apps: std::collections::BTreeMap<String, String>,
+    /// `[iroh] app_allow` — which MEMBERS may reach `[iroh.apps]`, by the same
+    /// name-or-id-prefix rule as `media_allow`. Empty (the default) admits
+    /// every member.
+    ///
+    /// A SEPARATE list from `media_allow`, which is the practical reason
+    /// `App` is its own origin kind: admitting a housemate to your chore app
+    /// is not the same decision as admitting them to your film library. One
+    /// shared list would make the narrower grant inexpressible, and a house
+    /// that cannot say "everyone sees the print queue, two people see my
+    /// films" says yes to everything instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub app_allow: Vec<String>,
     /// Which discovery/relay infrastructure to use (H1 sovereignty
     /// knob). `"n0"` or absent (the default) = n0's public relays AND
     /// n0's DNS/pkarr address-lookup. `"none"` / `"self"` / `"local"`
@@ -3530,5 +3568,64 @@ reasoning = "~/dev/big.gguf"
     fn client_daemon_base_for_ignores_the_env_knob() {
         let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
         assert_eq!(client_daemon_base_for(9741), "http://localhost:9741");
+    }
+}
+
+// ─── Slot context windows ───────────────────────────────────────────
+// Moved from sovereign-inference/src/embedded/engine.rs (2026-09-12) so a
+// client can spell the two windows without linking the inference stack;
+// `sovereign_inference::embedded::SlotWindows` re-exports it.
+
+/// The window each slot is built with — one value, named per slot.
+///
+/// # Why this is a struct and not a scalar
+///
+/// It WAS a scalar. `context_size: u32` was threaded from config into every
+/// `ModelSlot::load` in this file, so the fast slot, the primary, the primary
+/// sibling pool and the fast/primary alias all got the same number. KV cache
+/// is linear in `n_ctx`, so a 4B fast model carried a 27B primary's window and
+/// paid a 27B primary's cache for it.
+///
+/// The fix is not a second scalar parameter — that reintroduces the same
+/// question one slot later ("and what about embed?"). It is a value whose
+/// fields are the slots, so adding a slot means adding a field and the
+/// compiler asks every construction site what that slot's window should be.
+/// Same move as `LaneSources` and `RuntimeParts`: totality over a surface a
+/// caller could otherwise forget half of.
+///
+/// `FastShort` is deliberately absent. It already owns `FAST_SHORT_N_CTX` next
+/// to `FAST_SHORT_N_SEQ_MAX`, because its window is not a free choice — the
+/// two divide to give the per-sequence budget `pick_slot` gates on, so they
+/// have to move together and belong in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct SlotWindows {
+    /// The primary (deep-reasoning) slot, and the default for embed / code /
+    /// extras.
+    pub primary: u32,
+    /// The fast slot. Note this is the OVERFLOW path — `pick_slot` sends any
+    /// prompt too large for FastShort here — so it must cover the largest
+    /// prompt that lands on it, not the typical one.
+    pub fast: u32,
+}
+
+impl SlotWindows {
+    /// Every slot gets the same window. This is what the scalar did, kept as a
+    /// NAMED constructor so the call sites that genuinely mean it (a compute
+    /// child, where one slot is the only slot) say so, and the ones that were
+    /// merely inheriting a global stop being indistinguishable from them.
+    pub fn uniform(n_ctx: u32) -> Self {
+        Self {
+            primary: n_ctx,
+            fast: n_ctx,
+        }
+    }
+
+    /// Resolve from config: the primary's window, and the fast slot's own if
+    /// `[models].fast_context_size` is set.
+    pub fn from_models(models: &ModelsSection) -> Self {
+        Self {
+            primary: models.effective_context_size(),
+            fast: models.effective_fast_context_size(),
+        }
     }
 }

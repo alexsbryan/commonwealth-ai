@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 // table has to be reachable by `corpus-mcp`, which embeds against a bare
 // OpenAI-compatible endpoint and may not link `sovereign-core` at all. This
 // crate is now a CALLER of that one table, not a second copy of it (ARCH
-// §10.6) — see `sovereign_contracts::embed_quirks`.
+// §10.6) — see `crate::embed_quirks`.
+pub use crate::embed_quirks::EmbedQuirks;
 pub use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
-pub use sovereign_contracts::embed_quirks::EmbedQuirks;
 
 /// Identifies the behavioural family of a loaded model.
 ///

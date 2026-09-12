@@ -72,64 +72,9 @@ pub fn coverage_summary(store: &SecFactStore) -> String {
 //     off. There is nothing here that says "problem".
 // ---------------------------------------------------------------------
 
-/// What this corpus answers, over what period, as of which filing, and
-/// what it structurally cannot answer — read from the store (§7.4).
-///
-/// Capability leads and boundaries sit beside it at equal weight
-/// (§7.7(2)); the field order is the reading order.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CoverageCard {
-    pub entity: String,
-    pub ticker: String,
-    pub cik: String,
-    /// Capability, first (§7.7(2)). Concept id order is the store's
-    /// `BTreeMap` order, so the card is deterministic.
-    pub answers: Vec<AnsweredConcept>,
-    /// The span across every answerable concept, e.g. `FY2015-FY2025`.
-    /// Empty when the store carries no facts at all.
-    pub period_label: String,
-    /// Boundaries, as facts at equal weight (§7.7(2)) — never warnings.
-    pub limits: Vec<CoverageLimit>,
-    /// Always present (§7.7(5), F6): a corpus that cannot say how current
-    /// it is cannot be trusted about periods.
-    pub as_of: AsOf,
-}
-
-/// One concept the typed store answers authoritatively, with the periods
-/// it actually carries facts for.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnsweredConcept {
-    pub id: String,
-    pub label: String,
-    pub kind: ConceptKind,
-    /// `FY2025` for a single year, `FY2013-FY2025` for a span.
-    pub period_label: String,
-    pub fiscal_years: Vec<i32>,
-}
-
-/// A named boundary on what the store can answer. Closed set (ARCH §2):
-/// each variant corresponds to a refusal the tool actually emits, which
-/// is what makes the card "the refusal's voice at rest" (§7.7(4)) rather
-/// than a separately-maintained disclaimer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LimitKind {
-    /// Pairs with [`SecRefusal::UnmappedConcept`] `consolidated_only`.
-    Consolidated,
-    /// Pairs with [`SecRefusal::UnmappedConcept`]: tags the filer reports
-    /// that the concept map does not yet type.
-    UntypedTags,
-    /// Pairs with [`SecRefusal::BeyondAsOf`] (F6).
-    BeyondAsOf,
-}
-
-/// A boundary stated as a fact. Deliberately carries no severity or
-/// level field — see the module note above (§7.7(1)).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CoverageLimit {
-    pub kind: LimitKind,
-    pub statement: String,
-}
+pub use sovereign_contracts::daemon_wire::sec_coverage::{
+    AnsweredConcept, CoverageCard, CoverageLimit, LimitKind,
+};
 
 /// The boundaries this store has, derived. THE one decider for limit
 /// wording (§10.6) — [`coverage_summary`] and [`coverage_card`] both

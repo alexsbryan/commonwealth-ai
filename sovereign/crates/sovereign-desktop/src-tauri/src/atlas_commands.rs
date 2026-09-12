@@ -341,9 +341,11 @@ pub async fn atlas_get_entity_aggregate(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     text: String,
-) -> Result<sovereign_core::conv_tiered::EntityAggregateRow, String> {
+) -> Result<sovereign_contracts::daemon_wire::EntityAggregateRow, String> {
     atlas_client(&state)
-        .conv_entity_aggregate::<sovereign_core::conv_tiered::EntityAggregateRow>(&corpus_id, &text)
+        .conv_entity_aggregate::<sovereign_contracts::daemon_wire::EntityAggregateRow>(
+            &corpus_id, &text,
+        )
         .await
         .map_err(|e| format!("atlas_get_entity_aggregate: {e}"))
 }
@@ -359,9 +361,9 @@ pub async fn atlas_get_entity_aggregate(
 pub async fn atlas_get_chunk_entity_progress(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
-) -> Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>, String> {
+) -> Result<Option<sovereign_contracts::daemon_wire::ChunkEntityProgressRow>, String> {
     atlas_client(&state)
-        .conv_chunk_entity_progress::<sovereign_core::conv_tiered::ChunkEntityProgressRow>(
+        .conv_chunk_entity_progress::<sovereign_contracts::daemon_wire::ChunkEntityProgressRow>(
             &corpus_id,
         )
         .await

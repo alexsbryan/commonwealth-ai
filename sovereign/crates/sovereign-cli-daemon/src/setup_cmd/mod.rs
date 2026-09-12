@@ -1363,7 +1363,7 @@ mod tests {
 
     // `verify_gguf_non_empty` was replaced by
     // `sovereign_inference::validate_gguf`, which is tested in
-    // `sovereign-inference/src/gguf_validator.rs`. The old tests
+    // `sovereign-contracts/src/gguf_validator.rs` (moved from sovereign-inference 2026-09-12). The old tests
     // here duplicated a strict subset of that coverage; they
     // were removed to avoid drift between the two schemas.
 

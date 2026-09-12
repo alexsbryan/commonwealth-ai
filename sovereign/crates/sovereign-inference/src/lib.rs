@@ -9,7 +9,7 @@ pub mod engine_factory;
 pub mod evidence_id_constraint;
 pub mod fim;
 pub mod gguf_meta;
-pub mod gguf_validator;
+pub use sovereign_contracts::gguf_validator;
 pub mod hardware;
 pub mod health;
 pub mod hybrid;

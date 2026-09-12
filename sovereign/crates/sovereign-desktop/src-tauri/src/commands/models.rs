@@ -116,7 +116,7 @@ pub struct DownloadRequest {
     /// Advertised file size from the model catalogue (models.toml
     /// / ModelSelector.svelte's EMBED_MODELS). Optional for back-
     /// compat; when present, `download_model` applies a 50% floor
-    /// via `sovereign_inference::GgufExpectation::from_size_gb`
+    /// via `sovereign_contracts::gguf_validator::GgufExpectation::from_size_gb`
     /// so a CDN-served 200 KB HTML stub doesn't silently land at
     /// the final path as a "30 GB" model.
     #[serde(default)]
@@ -510,8 +510,8 @@ pub async fn download_model(
 
     let dest = models_dir.join(&request.file_name);
     let expected = match request.size_gb {
-        Some(gb) => sovereign_inference::GgufExpectation::from_size_gb(gb),
-        None => sovereign_inference::GgufExpectation::unknown(),
+        Some(gb) => sovereign_contracts::gguf_validator::GgufExpectation::from_size_gb(gb),
+        None => sovereign_contracts::gguf_validator::GgufExpectation::unknown(),
     };
 
     // Validate any pre-existing file at the destination. A stub
@@ -520,7 +520,7 @@ pub async fn download_model(
     // behaviour locked users into re-running setup from a clean
     // slate. Now we just re-download whatever's invalid.
     if dest.exists() {
-        match sovereign_inference::validate_gguf(&dest, &expected) {
+        match sovereign_contracts::gguf_validator::validate_gguf(&dest, &expected) {
             Ok(()) => {
                 let size = dest.metadata().map(|m| m.len()).unwrap_or(0);
                 let _ = app_handle.emit(
@@ -638,7 +638,7 @@ pub async fn download_model(
     // successful but not actually be a GGUF. On failure we delete
     // the `.part` so a retry starts clean rather than resuming a
     // partial bogus file.
-    if let Err(e) = sovereign_inference::validate_gguf(&part_path, &expected) {
+    if let Err(e) = sovereign_contracts::gguf_validator::validate_gguf(&part_path, &expected) {
         let _ = tokio::fs::remove_file(&part_path).await;
         let msg = format!("download validation failed: {e}");
         let _ = app_handle.emit(

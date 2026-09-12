@@ -31,7 +31,7 @@ pub use wire_turns::{PendingPrompts, TurnWires};
 /// desktop and nothing else (ARCH §10.6). `desktop.toml`'s `[search_backend]`
 /// is migrated into `[search]` once on load
 /// (`DesktopConfig::migrate_legacy_search_backend`).
-pub use sovereign_tools::bundles::effective_search_registry;
+pub use sovereign_tools_base::web::search::effective_search_registry;
 
 /// Run ONE web search through the desktop's configured backend, past the
 /// egress boundary, and hand back the formatted results block.
@@ -63,8 +63,8 @@ pub use sovereign_tools::bundles::effective_search_registry;
 pub async fn web_search_once(
     query: &str,
     config: &DesktopConfig,
-) -> Result<sovereign_tools::web::search::OrchestratedSearch, String> {
-    use sovereign_tools::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
+) -> Result<sovereign_tools_base::web::search::OrchestratedSearch, String> {
+    use sovereign_tools_base::web::search::{SearchOrchestrator, SearchPrivacy, SelectInputs};
 
     let orchestrator = SearchOrchestrator::new(Arc::new(effective_search_registry()));
     let client = sovereign_contracts::egress::search_client()

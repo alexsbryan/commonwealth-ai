@@ -685,7 +685,7 @@ pub struct SetupModelSlots {
     pub code: Option<String>,
     /// Code-slot model family (lives on `DesktopConfig`; surfaced here).
     #[serde(default)]
-    pub code_family: sovereign_core::model_family::ModelFamily,
+    pub code_family: sovereign_contracts::model_family::ModelFamily,
 }
 
 /// Write the model-slot paths into the canonical `SetupConfig`

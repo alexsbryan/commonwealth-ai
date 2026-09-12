@@ -6,7 +6,7 @@
 //! sv-surface D6's delete half; on an attached boot that store is not
 //! the one the daemon writes, so the pane answered from the wrong db.
 //! The payload schema is owned by
-//! `sovereign_core::lessons::LessonPayload`; this module never
+//! `sovereign_contracts::lessons::LessonPayload`; this module never
 //! duplicates it. Save implements the per-rung supersede (one ACTIVE
 //! lesson per enforcement rung — TEACHABLE §6's structural K=1), so
 //! the "What I've learned" pane can render superseded rows
@@ -18,9 +18,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sovereign_contracts::daemon_wire::NoteEntry;
+use sovereign_contracts::lessons::{LessonPayload, TaughtFrom, LESSON_KIND};
 use sovereign_contracts::recipe::notes::{NoteScope, NoteSource};
 use sovereign_contracts::types::LessonProposedPayload;
-use sovereign_core::lessons::{LessonPayload, TaughtFrom, LESSON_KIND};
 use tauri::State;
 
 use crate::state::AppState;

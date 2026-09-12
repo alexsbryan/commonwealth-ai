@@ -20,13 +20,13 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
+use sovereign_contracts::gguf_validator::GgufExpectation;
 use sovereign_core::models_manifest::SlotConfig;
 use sovereign_inference::hardware::{self, HardwareProfile};
 use sovereign_inference::setup_planner::{
     build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_slot,
     SlotKind,
 };
-use sovereign_inference::GgufExpectation;
 
 use crate::state::{self, AppState, BootstrapPhase};
 
@@ -875,7 +875,7 @@ fn is_valid_gguf_at(path: &Path) -> bool {
     if !path.exists() {
         return false;
     }
-    sovereign_inference::validate_gguf(path, &GgufExpectation::unknown()).is_ok()
+    sovereign_contracts::gguf_validator::validate_gguf(path, &GgufExpectation::unknown()).is_ok()
 }
 
 /// Turn a user-pasted "bring your own model" URL into `(download_url,

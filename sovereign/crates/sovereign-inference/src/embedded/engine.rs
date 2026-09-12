@@ -182,59 +182,7 @@ impl Default for InferenceConfig {
     }
 }
 
-/// The window each slot is built with — one value, named per slot.
-///
-/// # Why this is a struct and not a scalar
-///
-/// It WAS a scalar. `context_size: u32` was threaded from config into every
-/// `ModelSlot::load` in this file, so the fast slot, the primary, the primary
-/// sibling pool and the fast/primary alias all got the same number. KV cache
-/// is linear in `n_ctx`, so a 4B fast model carried a 27B primary's window and
-/// paid a 27B primary's cache for it.
-///
-/// The fix is not a second scalar parameter — that reintroduces the same
-/// question one slot later ("and what about embed?"). It is a value whose
-/// fields are the slots, so adding a slot means adding a field and the
-/// compiler asks every construction site what that slot's window should be.
-/// Same move as `LaneSources` and `RuntimeParts`: totality over a surface a
-/// caller could otherwise forget half of.
-///
-/// `FastShort` is deliberately absent. It already owns `FAST_SHORT_N_CTX` next
-/// to `FAST_SHORT_N_SEQ_MAX`, because its window is not a free choice — the
-/// two divide to give the per-sequence budget `pick_slot` gates on, so they
-/// have to move together and belong in one place.
-#[derive(Debug, Clone, Copy)]
-pub struct SlotWindows {
-    /// The primary (deep-reasoning) slot, and the default for embed / code /
-    /// extras.
-    pub primary: u32,
-    /// The fast slot. Note this is the OVERFLOW path — `pick_slot` sends any
-    /// prompt too large for FastShort here — so it must cover the largest
-    /// prompt that lands on it, not the typical one.
-    pub fast: u32,
-}
-
-impl SlotWindows {
-    /// Every slot gets the same window. This is what the scalar did, kept as a
-    /// NAMED constructor so the call sites that genuinely mean it (a compute
-    /// child, where one slot is the only slot) say so, and the ones that were
-    /// merely inheriting a global stop being indistinguishable from them.
-    pub fn uniform(n_ctx: u32) -> Self {
-        Self {
-            primary: n_ctx,
-            fast: n_ctx,
-        }
-    }
-
-    /// Resolve from config: the primary's window, and the fast slot's own if
-    /// `[models].fast_context_size` is set.
-    pub fn from_models(models: &sovereign_core::setup_config::ModelsSection) -> Self {
-        Self {
-            primary: models.effective_context_size(),
-            fast: models.effective_fast_context_size(),
-        }
-    }
-}
+pub use sovereign_contracts::setup_config::SlotWindows;
 
 /// Triple-slot inference provider wrapping llama.cpp via FFI.
 ///

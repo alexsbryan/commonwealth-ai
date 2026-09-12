@@ -44,16 +44,7 @@ pub struct SecFactStore {
     pub coverage: Coverage,
 }
 
-/// The corpus's freshness anchor (F6): the reporting filing it was built
-/// from. Periods ending after `latest_period_end` refuse by construction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AsOf {
-    pub form: String,
-    pub accession: String,
-    pub filed: String,
-    /// Latest period end date across every stored fact (ISO date).
-    pub latest_period_end: String,
-}
+pub use sovereign_contracts::daemon_wire::sec_coverage::{AsOf, ConceptKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConceptFacts {
@@ -66,15 +57,6 @@ pub struct ConceptFacts {
     #[serde(default)]
     pub ask_terms: Vec<String>,
     pub facts: Vec<SecFact>,
-}
-
-/// Closed set (ARCH §2): a concept is a flow over a period or a stock at
-/// an instant. The renderer's concept map declares which.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ConceptKind {
-    Duration,
-    Instant,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

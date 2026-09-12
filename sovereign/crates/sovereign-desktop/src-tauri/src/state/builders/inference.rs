@@ -130,7 +130,7 @@ mod tests {
             primary: None,
             embed: std::path::PathBuf::new(),
             code: None,
-            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
+            windows: sovereign_contracts::setup_config::SlotWindows::uniform(16_384),
         };
 
         let (raw, inference) = load_inference(&slot, &slots, |_| {})
@@ -158,7 +158,7 @@ mod tests {
             primary: None,
             embed: std::path::PathBuf::new(),
             code: None,
-            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
+            windows: sovereign_contracts::setup_config::SlotWindows::uniform(16_384),
         };
         match build_daemon_provider(&slots) {
             Err(e) => assert!(

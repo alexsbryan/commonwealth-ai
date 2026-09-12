@@ -4,7 +4,7 @@
 //! (no runtime/inference types), so it unit-tests without a model.
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::model_family::ModelFamily;
+use sovereign_contracts::model_family::ModelFamily;
 use std::path::PathBuf;
 
 // ─── Desktop Config ──────────────────────────────────────────
@@ -33,7 +33,7 @@ pub struct DesktopConfig {
     /// the daemon auto-detects from the GGUF, so they don't participate
     /// in the path single-source-of-truth. Do NOT "consolidate" them into
     /// `ModelsSection`: `sovereign-contracts` can't reference
-    /// `sovereign_core::model_family::ModelFamily`.
+    /// `sovereign_contracts::model_family::ModelFamily`.
     #[serde(default)]
     pub code_family: ModelFamily,
     #[serde(default = "default_data_dir")]
@@ -735,7 +735,7 @@ pub struct ResolvedModelSlots {
     /// until 2026-08-25, which is precisely how the fast slot came to carry
     /// the primary's 64k window: one resolved scalar, four contexts built
     /// from it, and KV linear in the window.
-    pub windows: sovereign_inference::embedded::SlotWindows,
+    pub windows: sovereign_contracts::setup_config::SlotWindows,
 }
 
 impl ResolvedModelSlots {
@@ -770,7 +770,7 @@ impl ResolvedModelSlots {
             primary: None,
             embed: PathBuf::new(),
             code: None,
-            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
+            windows: sovereign_contracts::setup_config::SlotWindows::uniform(16_384),
         }
     }
 
@@ -780,7 +780,7 @@ impl ResolvedModelSlots {
             primary: Some(m.primary.clone()),
             embed: m.embed.clone(),
             code: m.code.clone(),
-            windows: sovereign_inference::embedded::SlotWindows::from_models(m),
+            windows: sovereign_contracts::setup_config::SlotWindows::from_models(m),
         }
     }
 

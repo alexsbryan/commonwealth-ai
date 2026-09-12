@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Desktop wiring for the opt-in **Mobile access** host.
 //!
-//! Reuses the shared [`sovereign_core::mobile_host`] core (config generation +
+//! Reuses the shared [`sovereign_contracts::mobile_host`] core (config generation +
 //! token + binary resolution) to run `sovereign-server`, the phone-facing API.
 //! That host delegates ALL inference to the local daemon, so it loads no
 //! models of its own — see the core module for the "no second model load"
@@ -44,7 +44,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sovereign_core::mobile_host::{self, MobileHostConfig};
+use sovereign_contracts::mobile_host::{self, MobileHostConfig};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_turn_client::{BundledBackend, ServingHost};
 use tauri::async_runtime::{self, JoinHandle};

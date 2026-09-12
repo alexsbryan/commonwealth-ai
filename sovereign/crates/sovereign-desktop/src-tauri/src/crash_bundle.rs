@@ -503,7 +503,9 @@ pub(crate) fn issues_url() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_contracts::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
+    use sovereign_contracts::setup_config::{
+        DaemonSection, DataSection, ModelsSection, SetupConfig,
+    };
     use std::collections::BTreeMap;
     use tempfile::TempDir;
 
