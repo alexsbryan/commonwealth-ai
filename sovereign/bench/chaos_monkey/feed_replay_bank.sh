@@ -31,8 +31,25 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 RESULTS="$HERE/results"
-LIMIT=6
 CORPUS="${CHAOS_CORPUS:-chaos-secret-agent}"
+
+# THE DEFAULT LIMIT IS DERIVED FROM THE BANK, not remembered (ARCH principle
+# 10). `--limit N` takes the FIRST N questions, and the audit pass — the only
+# thing that writes a replayable episode — runs on LONG-FORM turns only. A
+# hand-set 6 was the first draft of this script and it could not have worked:
+# measured 2026-09-12, questions 1-7 of secret_agent.toml wrote seven citation
+# records and no audit record, and the first `present-maximal-*` essay at
+# position 8 wrote the one that counts. A number in this slot goes stale the
+# moment somebody reorders the bank, and it goes stale SILENTLY — the lane
+# would report could-not-judge forever and read as a flaky daemon.
+#
+# The bank is read as TEXT rather than parsed: its question ids are the
+# contract, and a TOML dependency here would be a build step for a grep.
+default_limit() {
+  awk '/^id[[:space:]]*=/ { n++; if ($0 ~ /"present-maximal/) { print n; found=1; exit } } END { if (!found) print 0 }' "$1"
+}
+LIMIT="$(default_limit "$HERE/secret_agent.toml")"
+LIMIT="${LIMIT:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -61,6 +78,14 @@ LEDGER="$RESULTS/gate_audit_forensics_${STAMP}_feed.jsonl"
 OUT="$(mktemp -t chaos-feed-XXXXXX.jsonl)"
 BEFORE=0
 [ -f "$LEDGER" ] && BEFORE="$(wc -l < "$LEDGER" | tr -d ' ')"
+
+if [ "$LIMIT" -le 0 ] 2>/dev/null; then
+  # NEVER-RAN, not a guessed number: with no long-form question in the bank
+  # there is no run that could produce a replayable episode, and picking a
+  # limit anyway would burn model minutes to report could-not-judge.
+  judge never-ran "secret_agent.toml declares no present-maximal question, so no run of it can reach the long-form audit pass that writes a replayable episode"
+  exit 4
+fi
 
 echo "feed_replay_bank: $LIMIT question(s) from secret_agent.toml against $CORPUS"
 echo "                  forensics -> ${LEDGER#$REPO/}"

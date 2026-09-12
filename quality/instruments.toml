@@ -444,10 +444,11 @@ id = "judge-replay-bank-feed"
 kind = "probe"
 claim = "invariant"
 command = "sovereign/bench/chaos_monkey/feed_replay_bank.sh"
-# One real gated turn per bank question against the local daemon. Measured
-# 2026-09-12: 2 short-path questions in 47s; the longform questions the audit
-# pass actually runs on are minutes each, so the default --limit 6 is the knob.
-cost_secs = "unmeasured"
+# 871s wall, n=1, 2026-09-12 — 8 questions of which one is a `present-maximal`
+# essay, which is the one that writes a replayable episode. ONE RUN IS NOT A
+# MEASUREMENT (ARCH §18.5): read this as a first actual. The short-path
+# questions are ~24s each (2 in 47s, n=1); the essay is the rest.
+cost_secs = 871.0
 enforcement = "advisory"
 fidelity = "F3"
 verdict = "judgement-line"
@@ -466,7 +467,7 @@ runs_in = ["run-if-stale"]
 doc = "sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header)"
 load_bearing = [
   { flag = "SOVEREIGN_GATE_AUDIT_FORENSICS", why = "set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves" },
-  { flag = "--limit", why = "the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode" },
+  { flag = "--limit", why = "the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode. The DEFAULT is derived from the bank (the position of the first `present-maximal-*` id) rather than hand-set, because a number here goes stale silently when the bank is reordered — the lane would report could-not-judge forever and read as a flaky daemon" },
 ]
 
 # ── back-of-house instruments that SAY their verdict ─────────────────────
