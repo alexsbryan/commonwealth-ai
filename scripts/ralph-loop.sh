@@ -94,7 +94,10 @@ commits_since_review() {
 # first pending (`[ ]`). Used only to route reviews to --review-model.
 current_unit() {
   [ -f "$STATE" ] || return 0
-  awk '/^- \[~\]/{print $3; exit} /^- \[ \]/{print $3; exit}' "$STATE"
+  local u
+  u=$(grep -oE '^- \[~\] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
+  [ -n "$u" ] || u=$(grep -oE '^- \[ \] [A-Za-z0-9-]+' "$STATE" | head -1 | awk '{print $NF}')
+  printf '%s' "$u"
 }
 MODEL_ARGS=""
 
