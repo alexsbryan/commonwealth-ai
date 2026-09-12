@@ -38,7 +38,13 @@ demo     = "Someone else's library, and I hold none of their keys"
 rung     = "hm-1"
 statement = "library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
 target   = "catalogue non-empty; tokens.json absent"
-status   = "never-ran"
+status   = "passed (mechanism); never-ran (against a live Jellyfin)"
+# LANDED 2026-09-11, commit c866c91cb. The mechanism is proven on the wire by
+# the predicate test; tokens.json is gone from ~/dev/house-mesh (664abcc) and
+# library.py is one fanout call again. What has NOT run is the same flow
+# against a real Jellyfin: the /Items query string and the stream path come
+# from Jellyfin's API docs, not from a run. That half stays never-ran and is
+# honest about it.
 # Why this is the first rung despite P1 being the more visible verb: it deletes
 # a PRACTICE (25 people mailing each other API keys), and `Forward::Http` at
 # commonwealth-media/src/identity.rs:106-109 already carries the header vec.
@@ -54,29 +60,41 @@ status   = "never-ran"
 # config.toml (ARCH §7)". Files 0600, dir 0700, pinned by
 # `token_file_is_owner_only` (secret_store.rs:130-142).
 #
-# So hm-1 copies that split exactly, and is CHEAPER than drafted because both
-# halves exist:
-#   - config declares the header NAME only, shaped like
-#     `McpAuthConfig::{None, Bearer, ApiKey{header}, Basic}` (auth.rs:37-59)
-#   - the VALUE lives at ~/.svrnmesh/secrets/media/<name>.token, 0600, read
-#     through one `read_secret`-shaped seam with an env fallback for headless
+# WHAT SHIPPED DIVERGED FROM THAT PLAN, and the divergence is the better half.
+# The plan kept the header NAME in config and the value in a file, mirroring
+# McpAuthConfig. Shipped keeps BOTH in the file -- the filename IS the header
+# name -- because `MediaSection` is `#[serde(deny_unknown_fields)]`
+# (commonwealth-rails/src/config.rs:62-78), so ANY new key there makes an
+# un-upgraded daemon REFUSE TO BOOT rather than ignore it. In a house where 8
+# upgrade on the install evening and 17 do not, a config field hands those 17 a
+# dead daemon. A directory nobody's parser reads cannot do that.
 #
-# ROLLOUT HAZARD, must be handled in this rung: `MediaSection` is
-# `#[serde(deny_unknown_fields)]` (commonwealth-rails/src/config.rs:62-78), so
-# a rails.toml carrying the new field makes an UN-UPGRADED daemon refuse to
-# boot (`ConfigRefusal::Malformed`). In a house where 8 upgrade on the install
-# evening and 17 do not, the 17 get a dead daemon. Sovereign's `SetupConfig`
-# fails the OPPOSITE way — unknown keys parse, then vanish on the next save().
-# Two configs, opposite failures, same change. Add a compatibility path or
-# sequence the upgrade explicitly in the quickstart.
+# So the rollout hazard is not "handled" -- it is STRUCTURALLY ABSENT. Zero
+# config change, zero new key, one fewer place to look. A node without the
+# feature simply has an empty directory. (Sovereign's `SetupConfig` fails the
+# opposite way on unknown keys -- they parse, then vanish on the next save() --
+# which is worth knowing for any future rung that does add a field.)
+#
+# Shipped shape: <data_dir>/secrets/media/<header-name>, file 0600, dir 0700,
+# read once at acceptor construction. commonwealth-media/src/declared.rs.
 
 [[bar]]
 id       = "hm-publish-no-config-edit"
 demo     = "I published my Jellyfin and never opened a config file"
 rung     = "hm-2"
-statement = "A node publishes and unpublishes an origin with no hand edit to config.toml, and `svrn publish` lists it with the header value redacted"
+statement = "A node declares and clears an origin credential with no hand edit to config.toml, and the list prints the header name with the value never shown"
 target   = "round-trip clean; no secret in stdout"
-status   = "never-ran"
+status   = "passed"
+# LANDED 2026-09-11 as `svrn mesh media declare`, exercised against a temp
+# SVRNMESH_DATA_DIR: help renders; empty list is informative; a piped value is
+# stored -rw------- and read back byte-exact; --list prints "x-emby-token
+# <set>" and never the value; "../escape" is refused by name; --clear removes
+# the file; empty and whitespace-only stdin store nothing and exit 2.
+#
+# NARROWER THAN DRAFTED, deliberately: this declares a CREDENTIAL, it does not
+# publish an ORIGIN. media_origin is still a config line. The full publish verb
+# waits on multi-origin rather than shipping a verb that can only ever hold one
+# thing -- which is the stop condition this campaign already names.
 # The hand-edit is not merely tedious: this dev host already carries an [iroh]
 # section, so the obvious `>>` append produces invalid TOML. Twenty-five
 # newcomers would hit that, and the failure reads as "the software is broken".
