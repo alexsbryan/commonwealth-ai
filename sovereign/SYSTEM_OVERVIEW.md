@@ -285,14 +285,15 @@ crates/
 ├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec (Submit/Offer/Lease/Renew/Complete/Fail/Revoke), the unit seal, the fold, one lease predicate, the executor seam. Zero I/O + zero clock in the core (`process` feature adds tokio); package closure 58, no sovereign-*
 ├── commonwealth-state        # MeshStore — SQLite KV w/ TTL GC; since cw-lift 4 a local PROJECTION of the ring rail (rail_kv vocabulary + fold, rail_outbox table), not a gossip replica
 ├── commonwealth-media        # Federated media — who offers a library, who may reach one, the viewer bridge, catalogue fan-out
-├── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs: join an invite, run, serve
-├── commonwealth-test-harness # SimulatedMesh, SimulatedNode, MockLlamaServer
-└── oicp-conformance          # OICP protocol conformance suite
+└── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs: join an invite, run, serve
 ```
 
-**Four crates left this directory on 2026-09-11** (the `domains-1` move,
-`quality/DOMAINS.md` §7 Phase A) because their names described a family they
-were not in. None of them is mesh substrate; all four now sit in
+Nine crates, and nine is the whole directory: `commonwealth/crates/` holds the
+package and nothing else since the `domains-2` move (2026-09-11).
+
+**Six crates left this directory on 2026-09-11**, in two moves, because their
+names described a family they were not in (`quality/DOMAINS.md` §7 Phase A).
+None of them is mesh substrate. The first four (`domains-1`) went to
 `sovereign/crates/`:
 
 | Was | Is | What it actually holds |
@@ -302,17 +303,36 @@ were not in. None of them is mesh substrate; all four now sit in
 | `commonwealth-knowledge` | `sovereign-grants` | No knowledge at all: `GuestGrant`, `GuestGrantStore`, `EphemeralGrantStore` and **`Scope`** — the per-turn authorization value `TOPOLOGY.md` §3.5 is built around, which lived in a crate named for knowledge. Imperfect: its shard manager and work queue do not belong under this name either and were left rather than split in a move |
 | `commonwealth-app` | `sovereign-meshapp-registry` | Mesh-app manifest, registry, port map, proxy. Open question flagged, not settled: `sovereign-meshapp` (5,656 lines of DTOs) is a second crate about mesh apps |
 
-The move changed no logic and the package's own boundary held —
+and the remaining two (`domains-2`) went to the two different places their
+consumers named:
+
+| Was | Is | Why there |
+|---|---|---|
+| `commonwealth-test-harness` | `sovereign-mesh-test-harness`, at [`sovereign/crates/sovereign-mesh-test-harness`](../sovereign/crates/sovereign-mesh-test-harness) | `SimulatedMesh`, `SimulatedNode`, `MockLlamaServer`, fault injection. Its only consumer in the repo is `sovereign-mesh`, behind that crate's `dst` feature, so it now sits beside it and is named for it |
+| `oicp-conformance` | same name, at [`oicp-conformance`](../oicp-conformance) — a repo-root sibling | `oicp-types` and `oicp-client`, the two crates it certifies against, are root siblings too. Its dependency budget (oicp-types + serde/reqwest/tokio) was always the point; sitting under `commonwealth/` only implied a mesh it does not need. `commonwealth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` asked for exactly this move |
+
+Neither move changed logic and the package's own boundary held —
 `boundary-gate` reads `commonwealth 9/9 crates present`, and
 `scripts/cw-work-lift.sh --sandbox` still reports **verdict 1** (7.9 s build
 outside the monorepo, three heterogeneous units, both escapes refused), which
 is the invariant every move in this campaign must preserve.
 
+The harness carried one thing across that a rename could have quietly
+retired. Its `sovereign-api` dependency is grandfathered in
+`quality/ARCH_LAYERS.toml` as R6 debt that `domains-1` exposed, and the
+grandfathering row's own removal condition read "domains-2 moves the crate, at
+which point `from` no longer matches and this row must be DELETED". That was
+the wrong condition: renaming the subject of a live exception retires the debt
+without paying it. The `[[forbid]]` and the `[[exception]]` were both renamed
+with the crate instead, and the tracking field now names the condition that
+actually discharges them — the harness simulating a node against `oicp-types`
+alone.
+
 `contrib/` ships `install.sh`, systemd unit, launchd plist.
 `docs/oicp-v0.4.md` is the canonical OICP spec (v0.4 extends v0.3
 additively; `oicp-v0.3.md` remains the documented fallback path).
-`commonwealth/crates/oicp-conformance` is the standalone OICP v0.4
-host conformance tester — minimal deps (oicp-types + HTTP), liftable
+`oicp-conformance` (a repo-root sibling of `oicp-types`) is the
+standalone OICP v0.4 host conformance tester — minimal deps (oicp-types + HTTP), liftable
 by any third party certifying their own implementation.
 
 ### studio
@@ -6174,7 +6194,8 @@ a chat every 30 seconds.
 
 ### Test harness
 
-`commonwealth-test-harness`:
+`sovereign-mesh-test-harness` (`commonwealth-test-harness` until the
+`domains-2` move, 2026-09-11):
 
 - `SimulatedMesh` — orchestrates many `SimulatedNode`s in-process,
   each with its own `AppState` and HTTP listeners on random ports.

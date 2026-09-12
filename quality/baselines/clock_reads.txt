@@ -7,7 +7,7 @@
 1	commonwealth/crates/commonwealth-state/src/activity.rs
 1	commonwealth/crates/commonwealth-state/src/contributions.rs
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
-1	commonwealth/crates/oicp-conformance/src/main.rs
+1	oicp-conformance/src/main.rs
 1	corpus-engine-archaeology/src/archaeology_eval.rs
 3	corpus-engine-notes/tests/main/propagation.rs
 1	corpus-engine-scip/src/scip_graph.rs

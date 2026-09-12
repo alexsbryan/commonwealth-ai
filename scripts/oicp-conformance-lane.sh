@@ -2,7 +2,9 @@
 # oicp-conformance-lane.sh — certify this host against the OICP v0.4 contract
 # and fail on any regression from the committed baseline.
 #
-# WHY THIS WRAPPER EXISTS. `commonwealth/crates/oicp-conformance` has been a
+# WHY THIS WRAPPER EXISTS. `oicp-conformance` (at `commonwealth/crates/` until
+# the domains-2 move, 2026-09-11; a repo-root sibling of `oicp-types` now) has
+# been a
 # complete, working certifier since it was written — manifest invariants, the
 # three constraint modes, embed bit-compat, knowledge search, the ingest state
 # machine, auth posture — with a baseline ratchet already built into it

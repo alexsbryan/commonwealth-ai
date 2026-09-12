@@ -44,7 +44,7 @@ and so does a falsifier left behind for a retired one. Until 2026-08-31 the
 bank held four tests, all for `UniqueEndpointKey`; five of six predicates had
 never been watched fail.
 
-- Harness: `commonwealth-test-harness/src/fault/` (FaultTransport, FaultProxy,
+- Harness: `sovereign-mesh-test-harness/src/fault/` (FaultTransport, FaultProxy,
   FaultPolicy, seeded FaultSchedule) + `MockLlamaServer` knobs.
 - Driver + invariant pack: `sovereign-mesh/src/dst.rs` (`DstMesh`). Wire-fault
   catalog: `slow_peer` / `truncate_stream` (throttle / cut a gossip edge) +

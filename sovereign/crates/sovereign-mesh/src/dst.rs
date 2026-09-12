@@ -36,15 +36,15 @@ use bytes::Bytes;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, NodeStatus};
 use commonwealth_core::{partition, TestClock};
-use commonwealth_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
-use commonwealth_test_harness::simulated_mesh::SimulatedMesh;
-use commonwealth_test_harness::simulated_node::SimulatedNodeBuilder;
+use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
+use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
+use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
 use crate::gossip;
 
 // Re-export the fault-authoring types so tests need only depend on
 // `sovereign_mesh` (with `--features dst`), not the harness crate directly.
-pub use commonwealth_test_harness::fault::{FaultEvent, FaultSchedule, WireFault};
+pub use sovereign_mesh_test_harness::fault::{FaultEvent, FaultSchedule, WireFault};
 
 /// Offline threshold used for DST rounds. Large relative to the [`TestClock`]
 /// base so the harness's epoch-0 member records don't decay spuriously; a
@@ -201,7 +201,7 @@ impl DstMesh {
             .set_wire(
                 ids[observer],
                 ids[target],
-                commonwealth_test_harness::fault::WireFault {
+                sovereign_mesh_test_harness::fault::WireFault {
                     throttle_bps: Some(bps),
                     ..Default::default()
                 },
@@ -220,7 +220,7 @@ impl DstMesh {
             .set_wire(
                 ids[observer],
                 ids[target],
-                commonwealth_test_harness::fault::WireFault {
+                sovereign_mesh_test_harness::fault::WireFault {
                     cut_after_bytes: Some(n),
                     ..Default::default()
                 },
@@ -244,7 +244,7 @@ impl DstMesh {
             .policy
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            commonwealth_test_harness::fault::FaultPolicy::default();
+            sovereign_mesh_test_harness::fault::FaultPolicy::default();
     }
 
     /// Write a mesh_store key on node `idx` (origin = that node).

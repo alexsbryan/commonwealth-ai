@@ -86,7 +86,7 @@ sovereign-meshapp-registry = { path = "../../../sovereign/crates/sovereign-mesha
 # deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.
 # Optional: only the `dst` feature (the CI fault-injection gate) pulls it in,
 # so default builds don't drag the test harness into the dependency graph.
-commonwealth-test-harness = { path = "../../../commonwealth/crates/commonwealth-test-harness", optional = true }
+sovereign-mesh-test-harness = { path = "../sovereign-mesh-test-harness", optional = true }
 # KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
 # re-exported via sovereign-serving::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
@@ -235,7 +235,7 @@ default = []
 # driver + invariant pack) and `tests/dst_scenarios.rs`. Pulls the test
 # harness. CI runs a fixed-seed set behind this flag; off by default so the
 # production build never links the harness.
-dst = ["dep:commonwealth-test-harness"]
+dst = ["dep:sovereign-mesh-test-harness"]
 # Tier-1 scheduler simulator (`SCHEDULER_QUALITY.md` §5): compiles
 # `mesh_sim.rs` + `tests/mesh_sim_scoreboard.rs`. Pure compute — no
 # extra dependencies, no network, no wall clock — but off by default

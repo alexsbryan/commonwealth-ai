@@ -134,7 +134,7 @@ fn instrument_coverage_row(repo: Option<&Path>) -> Judgement {
 ///
 /// The lane is `scripts/oicp-conformance-lane.sh`, scheduled through
 /// `scripts/run-if-stale.sh oicp-conformance`. It drives the certifier in
-/// `commonwealth/crates/oicp-conformance` against the committed baseline at
+/// `oicp-conformance` (repo root) against the committed baseline at
 /// `quality/baselines/oicp/`, so this row answers "does this host still speak
 /// the protocol it did last time", which no other row covers.
 ///

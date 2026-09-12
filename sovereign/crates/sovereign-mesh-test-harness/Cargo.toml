@@ -1,6 +1,6 @@
 [package]
-name = "commonwealth-test-harness"
-description = "Integration test harness for Commonwealth — simulated nodes, mock servers, failure injection"
+name = "sovereign-mesh-test-harness"
+description = "Integration test harness for the Commonwealth mesh — simulated nodes, mock servers, failure injection. Consumed only by sovereign-mesh (the `dst` feature), which is why it sits beside it."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

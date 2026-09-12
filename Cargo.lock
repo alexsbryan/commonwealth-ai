@@ -2003,28 +2003,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "commonwealth-test-harness"
-version = "0.6.0"
-dependencies = [
- "async-trait",
- "axum",
- "bytes",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-state",
- "commonwealth-transport",
- "http-body-util",
- "serde",
- "serde_json",
- "sovereign-api",
- "sovereign-meshapp-registry",
- "sovereign-serving",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
 name = "commonwealth-transport"
 version = "0.6.0"
 dependencies = [
@@ -12641,7 +12619,6 @@ dependencies = [
  "commonwealth-media",
  "commonwealth-rail",
  "commonwealth-state",
- "commonwealth-test-harness",
  "commonwealth-transport",
  "commonwealth-work",
  "corpus-engine",
@@ -12668,6 +12645,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-inference",
+ "sovereign-mesh-test-harness",
  "sovereign-meshapp",
  "sovereign-meshapp-registry",
  "sovereign-serving",
@@ -12687,6 +12665,28 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-mesh-test-harness"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "commonwealth-core",
+ "commonwealth-discovery",
+ "commonwealth-state",
+ "commonwealth-transport",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "sovereign-api",
+ "sovereign-meshapp-registry",
+ "sovereign-serving",
+ "tokio",
+ "tower",
+ "tracing",
 ]
 
 [[package]]

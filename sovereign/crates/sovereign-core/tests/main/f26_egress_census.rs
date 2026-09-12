@@ -710,7 +710,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
-    ("commonwealth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
+    ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/commonwealth-app/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
     // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions

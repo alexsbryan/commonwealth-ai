@@ -3,6 +3,10 @@ resolver = "2"
 members = [
     # Wire-protocol types — bottom of the dep graph.
     "oicp-client",
+    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
+    # liftable by any third party certifying their own host. A root sibling of
+    # the two crates it certifies against (domains-2, 2026-09-11).
+    "oicp-conformance",
     "oicp-types",
     # The NEUTRAL kernel — identity + provenance owned by no product domain.
     # Minted 2026-08-20 (noun-convergence rung nc-1-kernel) because the 23
@@ -180,12 +184,9 @@ members = [
     # is 743 crates and this one is 319; the whole point is the difference
     # (`cargo tree --edges normal`, measured 2026-09-11).
     "commonwealth/crates/commonwealth-rails",
-    "commonwealth/crates/commonwealth-test-harness",
+    "sovereign/crates/sovereign-mesh-test-harness",
     "sovereign/crates/sovereign-meshapp-registry",
     "commonwealth/crates/commonwealth-state",
-    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
-    # liftable by any third party certifying their own host.
-    "commonwealth/crates/oicp-conformance",
 
     # Quality program (2026-07-11) — schema + evaluator for the declared
     # layer map (quality/ARCH_LAYERS.toml). One parser shared by the xtask

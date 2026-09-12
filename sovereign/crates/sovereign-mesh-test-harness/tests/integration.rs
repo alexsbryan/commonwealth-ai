@@ -11,10 +11,10 @@ use commonwealth_discovery::membership;
 
 // OicpModelCache was removed in PR-C; v0.3 has no equivalent.
 
-use commonwealth_test_harness::fixtures::*;
-use commonwealth_test_harness::mock_llama::MockLlamaServer;
-use commonwealth_test_harness::simulated_mesh::SimulatedMesh;
-use commonwealth_test_harness::simulated_node::SimulatedNodeBuilder;
+use sovereign_mesh_test_harness::fixtures::*;
+use sovereign_mesh_test_harness::mock_llama::MockLlamaServer;
+use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
+use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
 // ============================================================================
 // Scenario: Mesh Formation (Phase 2)

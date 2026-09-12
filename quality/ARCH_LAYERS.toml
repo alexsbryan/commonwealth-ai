@@ -279,7 +279,7 @@ crates = [
 name = "mesh-api"
 crates = [
     "sovereign-api",
-    "commonwealth-test-harness",
+    "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]
 
@@ -652,9 +652,18 @@ except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sover
 reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
 
 [[forbid]]
-from = "commonwealth-test-harness"
+from = "sovereign-mesh-test-harness"
 to = "sovereign-*"
 except = ["sovereign-contracts", "sovereign-serving", "sovereign-grants", "sovereign-meshapp-registry"]
+# TRANSLATED at the domains-2 move (2026-09-11), not deleted. The crate was
+# `commonwealth-test-harness` in `commonwealth/crates/`; it is now
+# `sovereign-mesh-test-harness` beside its only consumer. Deleting the row
+# because `from` stopped matching would have re-hidden, by rename, exactly the
+# edge domains-1 exposed — the harness's `sovereign-api` dep, grandfathered
+# below. The PROPERTY is unchanged: a harness that simulates a mesh node
+# should meet the runtime at the OICP/contracts seam. Same treatment the three
+# `sovereign-{serving,grants,meshapp-registry}` rows above got for the same
+# reason.
 reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
@@ -1090,10 +1099,10 @@ reason = "`relaunch_after_setup` spawns `current_exe()` and exits — THIS app, 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
 [[exception]]
-from = "commonwealth-test-harness"
+from = "sovereign-mesh-test-harness"
 to = "sovereign-api"
 reason = "R6 debt the domains-1 move EXPOSED rather than created. The harness has always depended on the API it simulates against; while both were `commonwealth-*` the edge was intra-family and no rule looked at it. `commonwealth-api` became `sovereign-api` on 2026-09-11 and the same edge is now cross-family, which is what R6 has always said it is. Nothing about the code changed — only whether a gate could see it."
-tracking = "domains-2: the harness leaves commonwealth/crates/ with oicp-conformance, at which point `from` no longer matches and this row must be DELETED (a stale exception fails the gate, which is the reminder)"
+tracking = "domains-2 MOVED the harness (commonwealth/crates/commonwealth-test-harness -> sovereign/crates/sovereign-mesh-test-harness, 2026-09-11) and this row was RENAMED with it, not deleted. The removal condition written here before the move — `from` stops matching — was the wrong one: it would have retired a live grandfathering by renaming its subject, which is the debt disappearing from the burn-down without anyone paying it. The real condition is R6: this row goes when the harness stands up a simulated node against oicp-types alone and no longer names sovereign-api. `grep -rn sovereign_api sovereign/crates/sovereign-mesh-test-harness/src/` is the check."
 
 [[exception]]
 package = "corpus-mcp"
