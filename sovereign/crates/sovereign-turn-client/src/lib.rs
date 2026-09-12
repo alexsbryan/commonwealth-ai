@@ -1675,7 +1675,7 @@ impl TurnClient {
 
     /// `GET /internal/corpus/local/ocr-available` — whether this daemon
     /// can OCR a scanned PDF. `T` is
-    /// `sovereign_mesh::lc_http::OcrAvailability`.
+    /// `sovereign_contracts::daemon_wire::OcrAvailability`.
     ///
     /// The command it replaces degraded a missing manager to `false`;
     /// this does not, because "OCR unavailable" and "no runtime" want
@@ -1714,7 +1714,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/cancel` — ask an in-flight
-    /// ingest to stop. `T` is `sovereign_mesh::lc_http::CancelAck`.
+    /// ingest to stop. `T` is `sovereign_contracts::daemon_wire::CancelAck`.
     ///
     /// `cancelled: false` on a 200 means there was nothing running —
     /// a successful call, not a failure.
@@ -1811,7 +1811,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/search` — search one local
-    /// corpus. `T` is `sovereign_mesh::lc_http::LocalSearchHit`.
+    /// corpus. `T` is `sovereign_contracts::daemon_wire::LocalSearchHit`.
     ///
     /// `limit: None` is the host's 10.
     pub async fn lc_search<T: serde::de::DeserializeOwned>(
@@ -1829,7 +1829,7 @@ impl TurnClient {
     }
 
     /// `POST /internal/corpus/local/{corpus}/ingest` — submit the
-    /// ingest as a JOB. `T` is `sovereign_mesh::lc_http::IngestJobAck`.
+    /// ingest as a JOB. `T` is `sovereign_contracts::daemon_wire::IngestJobAck`.
     ///
     /// Answers `202` as soon as the job is spawned; the ack carries
     /// `progress_route`, the EXISTING watch-status route that reports
@@ -2005,7 +2005,7 @@ impl TurnClient {
 
     /// `GET /v1/mcp/servers` — the host's configured MCP servers and what
     /// its live tool registry holds for each. `T` is
-    /// `sovereign_mesh::mcp_config_http::McpServersResponse`.
+    /// `sovereign_contracts::daemon_wire::McpServersResponse`.
     ///
     /// Read `mount.reason` before rendering any connection affordance:
     /// the host reports `live_tool_count` and deliberately reports NO
@@ -2376,7 +2376,7 @@ impl TurnClient {
 
     /// `GET /v1/documents/legacy` — documents in the old `documents`
     /// table that no asset owns. `T` is
-    /// `sovereign_mesh::documents_http::LegacyDocumentEntry`.
+    /// `sovereign_contracts::daemon_wire::LegacyDocumentEntry`.
     pub async fn list_legacy_documents<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
         #[derive(Deserialize)]
         struct Wire<T> {
