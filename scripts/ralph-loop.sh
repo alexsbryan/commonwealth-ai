@@ -178,6 +178,19 @@ while [ "$iter" -lt "$MAX_ITER" ]; do
     continue
   fi
 
+  # A detached milestone run in flight: wait on its marker without spending a
+  # session or counting a stall. The agent writes ralph/waiting with the marker
+  # path when a unit's only remaining work is a long run.
+  if [ -f ralph/waiting ]; then
+    wait_marker=$(tr -d '[:space:]' < ralph/waiting)
+    if [ -n "$wait_marker" ] && [ ! -f "$wait_marker" ]; then
+      echo "[ralph] waiting on $wait_marker (no session this tick)"
+      sleep 120; iter=$((iter - 1)); continue
+    fi
+    echo "[ralph] $wait_marker present — resuming"
+    rm -f ralph/waiting
+  fi
+
   before=$(git rev-parse HEAD 2>/dev/null || echo none)
   echo "[ralph] === iteration $iter $(date -u +%FT%TZ) from $(git rev-parse --short HEAD 2>/dev/null || echo none) ==="
   unit=$(current_unit)
