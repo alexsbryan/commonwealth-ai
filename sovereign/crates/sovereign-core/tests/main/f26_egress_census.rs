@@ -304,7 +304,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the red — the re-home review at landing found it dispatched
     // External queries and its construction moved into the boundary;
     // the row is gone with the site.)
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 8),
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs", Class::LocalDaemon, 9),
+    // 8 -> 9 (2026-09-11, thin-desktop slice 4, registered 2026-09-12): the
+    // starter-corpus install stopped downloading `federalist-starter.tar.zst`
+    // in-process and became `POST /internal/corpus/install` + a poll; the new
+    // construction is `install_failure`, which reads
+    // `/internal/corpus/status` to recover the daemon's OWN failure sentence
+    // rather than inventing one. Same loopback surface, class unchanged. The
+    // census caught this a commit late because nothing ran it at slice 4 —
+    // the review moment is here rather than there, and the answer is the same.
     // 7 -> 8 (2026-09-09, sv-surface rung 5): the workflow surfaces became
     // job-submission clients of the daemon's /internal/workflows/* — this
     // file's site is the Local Knowledge panel's watch-route client, one
