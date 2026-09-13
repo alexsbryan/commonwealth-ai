@@ -734,16 +734,27 @@ impl CorpusEngine {
                 .and_then(|d| d.category.as_deref())
                 .unwrap_or("");
             let index_dir = self.canonical_path(&corpus_id);
-            let phase = match crate::enrichment::state::EnrichmentStateFile::read(&index_dir) {
-                Ok(Some(s)) => s.phase,
+            let state = match crate::enrichment::state::EnrichmentStateFile::read(&index_dir) {
+                Ok(Some(s)) => s,
                 _ => continue, // no prior enrichment attempt → nothing to resume
             };
-            if !conversation_enrichment_is_resumable(category, enrichment_type, phase) {
+            if !conversation_enrichment_is_resumable(category, enrichment_type, &state) {
+                if state.declared_dead() {
+                    tracing::info!(
+                        corpus = %corpus_id,
+                        phase = state.phase.label(),
+                        error = state.error.as_deref().unwrap_or(""),
+                        "conversation enrichment resume: refusing a build the stall-sweep \
+                         already declared dead — it would re-enter the pass that died on \
+                         every boot. Resume is an explicit operator action: clear the \
+                         state (POST /v1/corpus/enrichment/reset), then re-enrich."
+                    );
+                }
                 continue;
             }
             tracing::info!(
                 corpus = %corpus_id,
-                phase = phase.label(),
+                phase = state.phase.label(),
                 "conversation enrichment resume: prior tiered import was interrupted by a process restart; re-kicking"
             );
             match crate::enrichment::tiered::run_tiered_enrichment(
@@ -3062,13 +3073,22 @@ pub(crate) fn normalize_content(s: &str) -> String {
 fn conversation_enrichment_is_resumable(
     category: &str,
     enrichment_type: Option<&str>,
-    phase: crate::enrichment::state::EnrichmentPhase,
+    state: &crate::enrichment::state::EnrichmentState,
 ) -> bool {
     enrichment_type
         .and_then(|t| crate::enrichment::pass::EnrichmentPassRegistry::builtin().get(t))
         .is_some_and(|p| p.resumable_at_boot())
         && !matches!(category, "vault" | "watched_folder")
-        && phase.is_resumable_interruption()
+        && state.phase.is_resumable_interruption()
+        // ...and never a build the system already declared dead. This is
+        // the path the 2026-09-12 incident took: a `threaded_turns`
+        // corpus stalled at 12:09 and `is_resumable_interruption()` says
+        // Stalled IS resumable, so every boot re-entered
+        // `run_tiered_enrichment` → `TieredPass::run` →
+        // `GlinerChunkExtractor::extract_for_conversation` — the exact
+        // frames the 15 s `sample` on pid 47944 showed while the daemon
+        // grew 20.2 → 79.9 GB with zero requests.
+        && !state.declared_dead()
 }
 
 #[cfg(test)]
@@ -3082,70 +3102,51 @@ mod tests {
 
     #[test]
     fn conversation_enrichment_resume_selection() {
-        use crate::enrichment::state::EnrichmentPhase::*;
+        use crate::enrichment::state::{EnrichmentPhase::*, EnrichmentState};
+        let st = |phase| {
+            let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+            s.phase = phase;
+            s
+        };
+        let resumable = |cat, ty, phase| conversation_enrichment_is_resumable(cat, ty, &st(phase));
+
         // Re-kick: conversation-shaped tiered corpora left mid-run.
-        assert!(conversation_enrichment_is_resumable(
-            "conversation",
-            Some("tiered"),
-            Starting
-        ));
-        assert!(conversation_enrichment_is_resumable(
-            "conversation",
-            Some("tiered"),
-            RaptorLeaves
-        ));
-        // Stalled is terminal but IS a resumable interruption.
-        assert!(conversation_enrichment_is_resumable(
-            "conversation",
-            Some("tiered"),
-            Stalled
-        ));
+        assert!(resumable("conversation", Some("tiered"), Starting));
+        assert!(resumable("conversation", Some("tiered"), RaptorLeaves));
         // Empty / other non-folder categories still route through the
         // conversation runner, so they resume too.
-        assert!(conversation_enrichment_is_resumable(
-            "",
-            Some("tiered"),
-            Persisting
-        ));
-        assert!(conversation_enrichment_is_resumable(
-            "reference",
-            Some("tiered"),
-            Scanning
-        ));
+        assert!(resumable("", Some("tiered"), Persisting));
+        assert!(resumable("reference", Some("tiered"), Scanning));
 
         // Skip: folder-shaped corpora (LocalCorpusManager resumes those).
-        assert!(!conversation_enrichment_is_resumable(
-            "vault",
-            Some("tiered"),
-            RaptorLeaves
-        ));
-        assert!(!conversation_enrichment_is_resumable(
-            "watched_folder",
-            Some("tiered"),
-            RaptorLeaves
-        ));
+        assert!(!resumable("vault", Some("tiered"), RaptorLeaves));
+        assert!(!resumable("watched_folder", Some("tiered"), RaptorLeaves));
         // Skip: not a tiered corpus.
-        assert!(!conversation_enrichment_is_resumable(
-            "conversation",
-            Some("atlas"),
-            RaptorLeaves
-        ));
-        assert!(!conversation_enrichment_is_resumable(
-            "conversation",
-            None,
-            RaptorLeaves
-        ));
+        assert!(!resumable("conversation", Some("atlas"), RaptorLeaves));
+        assert!(!resumable("conversation", None, RaptorLeaves));
         // Skip: terminal states — a clean finish or a deliberate failure
         // must never be auto-retried on boot.
+        assert!(!resumable("conversation", Some("tiered"), Complete));
+        assert!(!resumable("conversation", Some("tiered"), Failed));
+
+        // Skip: the 2026-09-12 failing input. `Stalled` IS an
+        // `is_resumable_interruption`, and that alone re-entered
+        // `run_tiered_enrichment` on every daemon boot for a corpus whose
+        // GLiNER pass had just taken the process to 79.9 GB. A dead build
+        // is resumed by an operator, never by a boot scan.
+        assert!(
+            !resumable("conversation", Some("tiered"), Stalled),
+            "a stall-swept build must not be auto-resumed"
+        );
+        // ...and the same corpse wearing a live phase, which is what the
+        // sweep's fail()-then-stamp() pair leaves behind if it is
+        // interrupted between the two writes.
+        let mut errored = st(RaptorLeaves);
+        errored.error = Some("stalled — no progress for 3017s".into());
         assert!(!conversation_enrichment_is_resumable(
             "conversation",
             Some("tiered"),
-            Complete
-        ));
-        assert!(!conversation_enrichment_is_resumable(
-            "conversation",
-            Some("tiered"),
-            Failed
+            &errored
         ));
     }
 

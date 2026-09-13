@@ -1415,6 +1415,50 @@ pins the literal-switch count at zero. See
 canonical umbrella that reconciles all three — before assuming "enrichment"
 means one thing.
 
+**A DEAD enrichment is never resumed automatically (2026-09-12).**
+`EnrichmentState::declared_dead()`
+(`corpus-engine/src/enrichment/state.rs`) is the one decider for that:
+`phase == Stalled`, or any `error` stamped on the sidecar. `Failed` needs
+no arm — `EnrichmentStateFile::fail` always writes an error alongside it;
+`Complete` deliberately is NOT dead, because the same predicate also gates
+the INGEST auto-resume and a corpus whose enrichment finished cleanly must
+still be free to finish ingesting. `EnrichmentStateFile::declared_dead_at`
+is the reader-level form, and it FAILS OPEN — a missing or corrupt sidecar
+resumes, since one bad JSON file is not proof a corpus is doomed. Four
+boot-time scans consult it, and before this each answered the question for
+itself and all four said "resume":
+`auto_resume::resume_in_progress_ingests`
+(`sovereign/crates/sovereign-mesh/src/auto_resume.rs`, a fourth skip beside
+the PeerPulled, watched-folder-`Errored` and recently-active ones),
+`atlas_postinstall::resume_inflight_tier2`
+(`sovereign/crates/sovereign-tools/src/atlas_postinstall.rs`, on the SOURCE
+corpus's sidecar), `CorpusEngine::resume_interrupted_conversation_enrichment`
+via `conversation_enrichment_is_resumable`
+(`corpus-engine/src/engine/mod.rs`) and
+`LocalCorpusManager::resume_interrupted_enrichment`
+(`sovereign/crates/sovereign-tools/src/local_corpus/manager.rs`). The last
+two consult `EnrichmentPhase::is_resumable_interruption()`, which says
+`Stalled` IS resumable — true of a process killed mid-run, and exactly what
+re-armed a doomed pass on every boot. **Resume is now an explicit operator
+action**: `LocalCorpusManager::reset_enrichment_state`, reachable at `POST
+/v1/corpus/enrichment/reset`
+(`sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs`), clears the
+sidecar; the corpus then enriches again on the normal path. Every skip says
+so at `info` and names that path.
+
+The incident: corpus `agent-sessions` (this machine's Claude Code
+transcripts as `threaded_turns` chunks, `[enrichment] type = "tiered"`)
+stalled at 12:09 local on 2026-09-12 and was re-entered on every daemon
+boot for the rest of the day. Instrumented on pid 47944
+(`MallocStackLogging` + `malloc_history`, `vmmap --summary`, a 15 s
+`sample`): 20.2 GB after boot plus one primary load, 79.9 GB eight minutes
+later with ZERO requests, on stackless power-of-two onnxruntime arena
+blocks of 1, 2, 2, 8 and 32 GB. The only busy thread ran
+`run_tiered_enrichment` → `TieredPass::run` →
+`GlinerChunkExtractor::extract_for_conversation` → `extract_batch` →
+onnxruntime. Two jetsam SIGTERMs, every desktop soak aborting on its memory
+rule, and the "44 GB boot peak" were all this one corpus.
+
 - **`field_model` — System 1, `enrichment/field_engine.rs`** — five-phase
   *whole-corpus* pipeline (skeleton → cluster → align → fault lines → open
   questions). `Domain` trait + `DomainRegistry`. Domains include

@@ -205,6 +205,39 @@ impl EnrichmentState {
         now_secs.saturating_sub(self.last_progress_at) > STALL_THRESHOLD_SECS
     }
 
+    /// True when this build has already been DECLARED DEAD — the boot
+    /// stall-sweep stamped [`EnrichmentPhase::Stalled`], or some handler
+    /// stamped an `error`. **No automatic process may resume it.** Only an
+    /// explicit operator action clears it:
+    /// `LocalCorpusManager::reset_enrichment_state`
+    /// (`sovereign/crates/sovereign-tools/src/local_corpus/manager.rs`),
+    /// reachable over the wire at `POST /v1/corpus/enrichment/reset`
+    /// (`sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs`), after
+    /// which the corpus enriches again on the normal path.
+    ///
+    /// The ONE decider for that question (ARCH 8). Four boot-time resume
+    /// scans consult it: `auto_resume::resume_in_progress_ingests`,
+    /// `atlas_postinstall::resume_inflight_tier2`,
+    /// [`CorpusEngine::resume_interrupted_conversation_enrichment`], and
+    /// `LocalCorpusManager::resume_interrupted_enrichment`. Before
+    /// 2026-09-12 each answered it for itself and all four said "resume",
+    /// which is how one stalled `threaded_turns` corpus re-entered GLiNER
+    /// on every daemon boot and grew the process 20.2 → 79.9 GB in eight
+    /// minutes with zero requests.
+    ///
+    /// **`Failed` needs no arm of its own:** `EnrichmentStateFile::fail`
+    /// always writes `error = Some(..)` alongside `phase = Failed`, so the
+    /// error arm covers it. **`Complete` is deliberately NOT dead** — this
+    /// predicate also gates the INGEST auto-resume, where a corpus whose
+    /// last enrichment finished cleanly must still be allowed to finish
+    /// ingesting. That is the one place it differs from
+    /// [`EnrichmentStateFile::heartbeat`]'s `is_terminal() || error`
+    /// test, which asks a different question ("may I bump this
+    /// timestamp?") and for which `Complete` genuinely is off-limits.
+    pub fn declared_dead(&self) -> bool {
+        matches!(self.phase, EnrichmentPhase::Stalled) || self.error.is_some()
+    }
+
     pub fn new(corpus_id: impl Into<String>, pipeline_id: Option<String>) -> Self {
         let now = now_secs();
         Self {
@@ -295,6 +328,22 @@ impl EnrichmentStateFile {
         }
         Self::write(index_dir, &state)?;
         Ok(state)
+    }
+
+    /// True iff `index_dir` holds a state file for a build
+    /// [`EnrichmentState::declared_dead`] refuses. The reader-level form
+    /// of that predicate, and the ONE helper every boot-time resume scan
+    /// calls — `auto_resume::resume_in_progress_ingests`,
+    /// `atlas_postinstall::resume_inflight_tier2`,
+    /// [`crate::CorpusEngine::resume_interrupted_conversation_enrichment`]
+    /// and `LocalCorpusManager::resume_interrupted_enrichment`.
+    ///
+    /// **Fails OPEN**: a missing or unparseable sidecar returns `false`.
+    /// We cannot prove the corpus is doomed from a bad JSON file, and
+    /// refusing every resume behind one is a worse failure than the one
+    /// this gate prevents (the same rule `watched_folder_errored` follows).
+    pub fn declared_dead_at(index_dir: &Path) -> bool {
+        matches!(Self::read(index_dir), Ok(Some(s)) if s.declared_dead())
     }
 
     /// Mark the state file as failed, capturing the error message.
@@ -671,6 +720,112 @@ mod tests {
         // ...but never a clean finish or a genuine failure (would loop).
         assert!(!EnrichmentPhase::Complete.is_resumable_interruption());
         assert!(!EnrichmentPhase::Failed.is_resumable_interruption());
+    }
+
+    /// The failing input this predicate exists for, copied from the
+    /// `_enrichment_state.json` that re-entered GLiNER on every daemon
+    /// boot on 2026-09-12 (corpus `agent-sessions`, stalled 12:09 local,
+    /// resumed on every boot for the rest of the day).
+    #[test]
+    fn declared_dead_gates_a_stalled_build_and_an_errored_one() {
+        let mut s = EnrichmentState::new("agent-sessions", Some("folder_tiered".into()));
+        s.phase = EnrichmentPhase::Stalled;
+        s.error = Some("stalled — no progress for 3017s".into());
+        assert!(
+            s.declared_dead(),
+            "the boot stall-sweep already judged this build dead; no automatic \
+             process may re-enter it"
+        );
+
+        // The phase alone is enough — the sweep writes fail() then stamp(),
+        // and a crash between the two leaves Stalled with the error cleared.
+        s.error = None;
+        assert!(s.declared_dead(), "phase=Stalled alone is dead");
+
+        // And the error alone is enough — the stall sweep's fail() write can
+        // land while a concurrent doomed writer re-stamps a non-terminal
+        // phase, which is the shape `is_stale` already defends against.
+        let mut errored = EnrichmentState::new("c-1", None);
+        errored.phase = EnrichmentPhase::RaptorLeaves;
+        errored.error = Some("index for 'c-1' is missing _corpus_meta.json".into());
+        assert!(errored.declared_dead());
+
+        // `Failed` needs no arm of its own: fail() always stamps an error.
+        let failed = EnrichmentStateFile::fail(
+            tempfile::tempdir().unwrap().path(),
+            "c-1",
+            "provider is down",
+        )
+        .unwrap();
+        assert_eq!(failed.phase, EnrichmentPhase::Failed);
+        assert!(failed.declared_dead());
+    }
+
+    /// The gate must be narrow, and this is the regression that would cost
+    /// the most: `declared_dead` also gates the INGEST auto-resume, so a
+    /// corpus whose enrichment finished cleanly must still be free to
+    /// finish ingesting.
+    #[test]
+    fn declared_dead_is_false_for_a_live_or_completed_build() {
+        let mut s = EnrichmentState::new("c-1", Some("folder_tiered".into()));
+        assert!(!s.declared_dead(), "a fresh Starting build is alive");
+        s.phase = EnrichmentPhase::RaptorLeaves;
+        assert!(!s.declared_dead());
+        s.phase = EnrichmentPhase::Complete;
+        s.error = None;
+        assert!(
+            !s.declared_dead(),
+            "a clean Complete is not dead — it is done, and it must not block \
+             an in-progress ingest from resuming"
+        );
+    }
+
+    /// The on-disk half, driven through the reader every boot resume scan
+    /// actually calls. Written as raw JSON rather than via `write()` so
+    /// the fixture pins the SHAPE a real daemon left behind, not whatever
+    /// the current serializer happens to emit.
+    #[test]
+    fn declared_dead_at_reads_the_sidecar_and_fails_open() {
+        let write = |dir: &std::path::Path, body: &str| {
+            std::fs::write(dir.join(ENRICHMENT_STATE_FILENAME), body).unwrap();
+        };
+
+        // The failing input: the sidecar `agent-sessions` carried all day
+        // on 2026-09-12 while every boot re-entered its GLiNER pass.
+        let dead = tempfile::tempdir().unwrap();
+        write(
+            dead.path(),
+            r#"{"schema_version":1,"corpus_id":"agent-sessions",
+                "pipeline_id":"folder_tiered","phase":"stalled",
+                "step_current":0,"step_total":0,
+                "started_at":1789200000,"last_progress_at":1789203017,
+                "error":"stalled — no progress for 3017s (daemon likely restarted mid-pipeline)"}"#,
+        );
+        assert!(
+            EnrichmentStateFile::read(dead.path()).unwrap().is_some(),
+            "fixture must parse, else the assertion below is vacuous"
+        );
+        assert!(EnrichmentStateFile::declared_dead_at(dead.path()));
+
+        // Narrow #1 — a live build still resumes.
+        let live = tempfile::tempdir().unwrap();
+        write(
+            live.path(),
+            r#"{"schema_version":1,"corpus_id":"c","phase":"raptor_leaves",
+                "started_at":1789200000,"last_progress_at":1789203017}"#,
+        );
+        assert!(EnrichmentStateFile::read(live.path()).unwrap().is_some());
+        assert!(!EnrichmentStateFile::declared_dead_at(live.path()));
+
+        // Narrow #2 — no sidecar at all (a corpus never enriched) is the
+        // case auto-resume exists for.
+        let absent = tempfile::tempdir().unwrap();
+        assert!(!EnrichmentStateFile::declared_dead_at(absent.path()));
+
+        // Narrow #3 — fail OPEN on a corrupt sidecar.
+        let corrupt = tempfile::tempdir().unwrap();
+        write(corrupt.path(), "{not json");
+        assert!(!EnrichmentStateFile::declared_dead_at(corrupt.path()));
     }
 
     #[test]
