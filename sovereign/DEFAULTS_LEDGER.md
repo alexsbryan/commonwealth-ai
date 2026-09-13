@@ -30,6 +30,41 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### ONNX CPU memory arena — flipped OFF for both GLiNER backends (enrich-bounded-1, 2026-09-12)
+
+**What changed.** Neither backend registered a CPU execution provider, so
+both ran with ORT's default: the pooling CPU memory arena ENABLED. Both now
+register `CPUExecutionProvider::default()`, whose `register` calls
+`DisableCpuMemArena` (`ort-2.0.0-rc.9/src/execution_providers/cpu.rs:48-51`).
+`sovereign/crates/sovereign-gliner/src/session_bound.rs` is the one place
+that decides it; a census test stops a second session escaping.
+
+**Why.** The arena grows in power-of-two buckets and does not return them.
+`malloc_history` on pid 47944 (2026-09-12) showed exactly that shape:
+stackless blocks of 1, 2, 2, 8 and 32 GB with no frame pointers, C++ threads
+inside onnxruntime. With the arena off, transient inference buffers go to
+the system allocator and are freed on release.
+
+**What was NOT available.** rc.9 exposes no CPU arena SIZE limit at all —
+`OrtApi::CreateArenaCfg`'s `max_mem` is a raw `ort-sys` function pointer
+`ort` wraps nowhere, and `gpu_mem_limit` / `with_memory_limit` are
+device-side. The bound on this pass is therefore the INPUT bound above, and
+`session_bound.rs` states that rather than implying a cap it does not have.
+
+**The cost, unmeasured.** Disabling a pooling allocator trades allocator
+throughput for a bounded footprint. On a background CPU NER pass that is
+the right side of the trade, but the NER wall-clock delta arena-on vs
+arena-off has NOT been measured and this row exists so that is not read as
+a claim.
+
+**Flip condition.** A measured NER wall-clock comparison, arena on vs off,
+on the same corpus with peak RSS recorded per arm. If arena-off costs more
+than ~20% wall clock AND peak RSS stays inside budget with it on, revisit —
+but only together with the batch bound above, since the two interact (the
+arena's high-water mark is set by the largest batch it ever served).
+
+**Review by 2026-12-12.**
+
 ### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
 
 **What ships.** `sovereign-gliner/src/bounded_input.rs` bounds every input

@@ -1482,6 +1482,34 @@ reason to raise the ceiling — `threaded_turns`
 2,100 chars, which is why the incident was thousands of SHORT chunks in
 one call rather than a few long ones.
 
+**`ort 2.0.0-rc.9` cannot bound the CPU arena's SIZE — reported, not
+papered over (2026-09-12).** `OrtApi::CreateArenaCfg(..., max_mem, ...)`
+exists in `ort-sys` as a raw function pointer and `ort` wraps it nowhere;
+the only `OrtArenaCfg` reference in `ort`'s own source is
+`RocmExecutionProvider::with_default_memory_arena_cfg`, which takes a raw
+pointer and applies to ROCm devices. The memory-limit knobs that exist
+(`CANNExecutionProvider::with_memory_limit`, CUDA/ROCm `gpu_mem_limit`) are
+device-side; this workload is CPU-only, and no session config key takes a
+size. **So the bound on this pass is guard 2's input bound**, and
+`sovereign/crates/sovereign-gliner/src/session_bound.rs` says so in its
+module docs rather than implying the arena is capped.
+
+What rc.9 DOES expose is applied there, by one function per backend.
+`bounded_session_builder` (used by `gliner2.rs`) sets the CPU execution
+provider with **the arena off** — `CPUExecutionProvider::default()`'s
+`register` calls `DisableCpuMemArena`, and registering no provider at all,
+which both backends did before, leaves ORT's default of arena ENABLED —
+plus `with_memory_pattern(false)` and explicit intra/inter thread counts.
+The v1 (gline-rs) path does NOT own its builder: `orp::Model::new` calls
+`Session::builder()` itself and the only caller lever is
+`RuntimeParameters`, whose default carries an EMPTY provider list — so
+`v1_runtime_parameters` is that lever, and it matters most because
+`labeled::configured_model_id` resolves to a V1 model by default, i.e. the
+path the daemon was running. `with_memory_pattern` is unreachable from
+there. `sovereign/crates/sovereign-gliner/tests/session_bound_census.rs` is
+the ratchet: no other file in the crate may call `Session::builder()` or
+pass a bare `RuntimeParameters::default()`.
+
 The incident: corpus `agent-sessions` (this machine's Claude Code
 transcripts as `threaded_turns` chunks, `[enrichment] type = "tiered"`)
 stalled at 12:09 local on 2026-09-12 and was re-entered on every daemon
