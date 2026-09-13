@@ -13,8 +13,8 @@
 //! `OnceLock`s. Each test binary gets a fresh process so the
 //! singleton is clean at start, but **all tests in this file MUST
 //! share the same install** — re-installing across tests is a
-//! silent no-op. So this file groups every corpus_watch test under
-//! one `Lazy` harness that installs the singleton exactly once.
+//! silent no-op. So this file installs the singleton exactly once and
+//! spawns a fresh listener per test (see `install_singleton_and_spawn`).
 //!
 //! Five assertions (one per route, exercising the
 //! register → list → status → pause → resume → remove arc):
@@ -58,13 +58,20 @@ fn mock_embed_fn() -> EmbedFn {
 /// same handles. Returns the data_dir (so tests can compute folder
 /// paths under it) and the listener address.
 async fn install_singleton_and_spawn() -> (PathBuf, SocketAddr) {
-    static HARNESS: OnceLock<(PathBuf, SocketAddr)> = OnceLock::new();
-    if let Some(h) = HARNESS.get() {
-        return h.clone();
+    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    if let Some(data_dir) = DATA_DIR.get() {
+        // A FRESH listener per test, the lc_surface_e2e shape: `spawn_router`'s
+        // accept loop lives on the calling test's tokio runtime, and
+        // `#[tokio::test]` drops that runtime when the test returns — a
+        // cached address was connection-refused for every test after the
+        // first (13,233/4 on 4f736f4db, all four in this file). The router
+        // is stateless (it reads the singleton), so re-spawning costs a port.
+        let addr = spawn_router(corpus_watch_router()).await;
+        return (data_dir.clone(), addr);
     }
-    // Build the manager + registry once, install into the runtime
-    // singleton, spawn the router on a free port. Subsequent calls
-    // race the OnceLock initialisation harmlessly.
+    // Build the manager + registry once and install into the runtime
+    // singleton. Subsequent calls race the OnceLock initialisation
+    // harmlessly; only the data dir is cached, never the listener.
     let tmp = tempfile::tempdir().unwrap();
     let data_dir = tmp.path().to_path_buf();
     std::fs::create_dir_all(data_dir.join("indexes")).unwrap();
@@ -98,10 +105,9 @@ async fn install_singleton_and_spawn() -> (PathBuf, SocketAddr) {
 
     watched_folder_runtime::install(manager, registry);
 
+    let _ = DATA_DIR.set(data_dir.clone());
     let addr = spawn_router(corpus_watch_router()).await;
-    let entry = (data_dir, addr);
-    let _ = HARNESS.set(entry.clone());
-    entry
+    (data_dir, addr)
 }
 
 async fn post_json(addr: SocketAddr, path: &str, body: serde_json::Value) -> reqwest::Response {
