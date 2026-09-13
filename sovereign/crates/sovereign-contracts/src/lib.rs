@@ -59,6 +59,10 @@ pub mod recipe;
 pub mod registry;
 pub mod run_lock;
 pub mod setup_config;
+/// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
+/// past its ceiling and this block grows with every origin kind. Re-exported
+/// from `setup_config`, so no call site names this path.
+pub mod setup_config_iroh;
 pub mod skills;
 pub mod slot_policy;
 pub mod tool_bundle;

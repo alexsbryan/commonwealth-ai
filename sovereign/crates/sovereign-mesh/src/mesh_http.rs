@@ -51,6 +51,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         // MEDIA_ALPN slot in `iroh_access`.
         .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
         .route("/v1/mesh/app", get(crate::media_reach::mesh_app))
+        .route("/v1/mesh/offers", get(crate::media_reach::mesh_offers))
         // The catalogue half: one request to every offering member, one
         // attributed row each (`sovereign_api::fanout` underneath).
         // One handler, two paths: `kind` defaults to media, so the older

@@ -5936,6 +5936,7 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
 | `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
 | `cwth/app/0` | one of SEVERAL named HTTP apps this node publishes, chosen by the FIRST PATH SEGMENT per request (`GET /chores/tasks` → the `chores` origin, forwarded as `GET /tasks`); its own allow-list (`[iroh] app_allow`), separate from media's; advertised only while something is published, and added to and removed from the live endpoint as that changes | REFUSED — an app written in an afternoon authenticates nothing |
+| `cwth/offer/0` | the declared `[iroh] offer_origin` — any HTTP server listing what this operator has to sell or lend; its own allow-list (`[iroh] offer_allow`), a THIRD list separate from media's and apps'; not advertised at all when none is declared | REFUSED — the dial string is public and gossiped, so a downgrade here would publish an inventory of a household's possessions to anyone holding an invite |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
 
@@ -5972,6 +5973,56 @@ leaves the path kind to that field. Watched failing:
 and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
 These decisions live in the package crate so the inference daemon and the
 package-only rails daemon compose ONE implementation of them (ARCH §10.6).
+
+**The mesh's marketplace, and its incompleteness is reported**
+(`OriginKind::Offer`, `commonwealth-transport/src/origin_alpn.rs`,
+`[iroh] offer_origin` / `offer_allow`, `svrn mesh offers`, ra-4, 2026-09-13).
+The third origin kind is a variant, an ALPN, an acceptor route and a config
+key — `commonwealth_media::fanout` was already generic over the kind, so the
+catalogue half cost nothing. What it buys is the sentence no marketplace can
+say: **every neighbour is a ROW**. `svrn mesh offers` enumerates the roster
+itself and names every active member in `peers`, so a neighbour that publishes
+no offer origin appears carrying that refusal rather than being absent — with
+`peers` left out, the fanout targets only members that ADVERTISE the kind and
+the absence is exactly what would happen. Self is excluded: `origin_fanout`
+never asks this node. The verb **merges, dedups, ranks and schematises
+nothing** — a served row prints the origin's own bytes, and the only thing
+counted is how many elements a JSON ARRAY has, which is a fact about the
+document rather than a claim about what an item is. `svrn mesh offers --why`
+is the first surface that reads `Roster.vouches` for somebody other than the
+operator: it joins each seller **on the gossiped node key and never on the
+display name**, across every ring this node holds (`commonwealth_rail::
+namespaces_in`, and `sovereign_cli_shared::rail::roster_and_admission` — the
+same read `svrn ring roster show` makes), rendering `commonwealth_rail::trace`'s
+own sentence or `warrant unknown`. A name-based fallback would answer a
+question about a REMOTE party out of this node's local name table, which is
+the substitution ARCH §18.3 refuses. Watched failing:
+`mesh_offers::tests::a_sellers_name_matching_a_roster_row_is_not_a_warrant`
+(name fallback: a different key resolves to a warrant) and
+`commonwealth-media fanout::tests::a_member_publishing_no_offer_origin_is_a_row_carrying_why`
+(refused names filtered out of the catalogue).
+
+**A kind a build cannot NAME is refused by name, never answered empty**
+(`commonwealth_media::fanout::AskedKind`,
+`sovereign-cli-llm/src/mesh_skew.rs::render_kind_refusal`, 2026-09-13).
+`FanoutRequest.kind` was `Option<OriginKind>` over a closed set, and serde's
+`default` applies to an ABSENT field and not to an unparseable one — so
+`{"kind":"offer"}` against an older daemon failed the whole struct, axum
+answered 422, and the operator with a rebuilt CLI and an unrestarted daemon
+read a sentence about a struct field. `AskedKind` keeps the raw JSON of any
+shape (the `IgnoredAny` reasoning from `deserialize_known_origins`) and
+refuses by name, quoting what was asked and listing what this build serves.
+That cannot repair daemons that already shipped, so the CLI side DETERMINES
+the skew rather than guessing at serde's English: it re-asks the same route
+with `kind: "media"` and `peers: []` — zero targets, nothing dialed — and
+reports skew only when the control answers 200, `could-not-judge` otherwise
+(ARCH §18.3). Watched failing:
+`fanout::tests::a_kind_this_build_cannot_name_is_refused_by_name` with
+`resolve` defaulting Unknown to Media (`called unwrap_err() on an Ok value:
+Media`). Gossip needed no change: `deserialize_known_origins` already drops a
+kind the reader cannot name, and `Offer` is the first kind that tolerance
+actually covers — but it leaves no trace, so a build that knows `offer` still
+cannot tell an older peer from one publishing none by reading gossip alone.
 
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
 `OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
@@ -6046,8 +6097,8 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 **The catalogue half, over any origin kind**
 (`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
 `sovereign-mesh/src/origin_fanout.rs`, `POST /v1/mesh/fanout`,
-`svrn mesh media fanout <path>` and `svrn mesh app fanout <app> <path>`,
-2026-09-11; generalised 2026-09-12).
+`svrn mesh media fanout <path>`, `svrn mesh app fanout <app> <path>` and
+`svrn mesh offers`, 2026-09-11; generalised 2026-09-12; third kind 2026-09-13).
 It never was media-shaped — the selection already read `origins.contains(kind)`
 and the ask was already an arbitrary method/path/headers/body; what was
 media-specific were two hardcoded `OriginKind::Media`. Both are the request's
@@ -6057,7 +6108,9 @@ already been copied once). For an app the wire path is composed in
 `OriginRequest::from_request` — `/{app}` prefixed, one place that knows the
 convention — and the two mismatched pairs (`kind: app` with no name, an `app`
 name under `kind: media`) are refused rather than resolved, since the second
-would quietly ask Jellyfin instead. A row also carries `json`, the origin's
+would quietly ask Jellyfin instead. `Offer` takes media's arm, not the app
+one: both are ONE declared origin per node, so the path travels unprefixed and
+only `App` multiplexes. A row also carries `json`, the origin's
 body already parsed when it said JSON and was not cut at the cap, because
 every consumer's first line was `json.loads(row["body"])`; `body` stays the
 authority and a truncated body is never parsed.

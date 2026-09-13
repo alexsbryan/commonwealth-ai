@@ -101,6 +101,31 @@ pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
     resp.json().await.map_err(|e| format!("bad response: {e}"))
 }
 
+/// One namespace's roster and its admitted acts, together — the pair every
+/// warrant question needs.
+///
+/// Through the DAEMON, never the file, for [`rail_log`]'s reason: the roster
+/// the daemon loaded is what decides which acts are readable, and a fold
+/// against a different roster is confidently and silently wrong on exactly
+/// the ring where membership is the question.
+///
+/// One implementation, because there are two callers now — `svrn ring roster
+/// show` and `svrn mesh offers --why` — and two would let the roster page and
+/// the catalogue disagree about the same row (ARCH §10.6).
+pub async fn roster_and_admission(
+    namespace: &str,
+) -> Result<(commonwealth_rail::Roster, Admission), String> {
+    let v = rail_log(namespace).await?;
+    let roster: commonwealth_rail::Roster = serde_json::from_value(
+        v.get("roster").cloned().ok_or_else(|| {
+            format!("the daemon's log answer carried no `roster` — this build and that daemon do not agree on the shape of `{RAIL_LOG_PATH}`")
+        })?,
+    )
+    .map_err(|e| format!("the daemon's roster is a shape this build cannot read: {e}"))?;
+    let admission = admission_from_wire(&v)?;
+    Ok((roster, admission))
+}
+
 /// One operator-side WRITE to a namespace: hand the daemon one act, and get
 /// back what it assigned.
 ///

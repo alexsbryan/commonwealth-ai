@@ -81,6 +81,7 @@ mod mesh_cmd;
 mod mesh_guest;
 mod mesh_media;
 mod mesh_member_cmd;
+mod mesh_offers;
 mod mesh_skew;
 mod mesh_soak;
 mod mesh_travel;

@@ -39,6 +39,80 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 10_000;
 /// a stream.
 pub const DEFAULT_MAX_BODY_BYTES: usize = 4 * 1024 * 1024;
 
+/// The `kind` a request NAMED, which is not the same as a kind this build
+/// knows.
+///
+/// # The failure this exists for
+///
+/// `OriginKind` is a closed set and `#[serde(default)]` applies to an ABSENT
+/// field, never to an unparseable one — so `{"kind":"offer"}` against a build
+/// whose enum has two variants does not read as "a kind I do not know". The
+/// whole `FanoutRequest` fails to deserialize, axum answers 422, and the body
+/// is serde's sentence about a struct field. The person reading it has a new
+/// CLI and an old daemon and no line anywhere says so.
+///
+/// That is not hypothetical and it is not media's problem alone: the ra-1
+/// worker met the sibling shape live, where an older daemon silently DROPPED
+/// an unknown serde field and every roster row read "warrant unknown" with
+/// the reasons sitting on disk. Absence is reported, never defaulted, and a
+/// kind nobody can name is an absence of vocabulary (ARCH principle 6).
+///
+/// # Why the raw value is kept
+///
+/// So the refusal can quote it. `Unknown` carries the JSON as it arrived,
+/// of any shape, for the reason
+/// [`oicp_types::origin::deserialize_known_origins`] uses `IgnoredAny`: a
+/// future kind need not be a bare string, and a `String` arm would fail to
+/// match an object and put us back in serde's hands.
+///
+/// This cannot retroactively fix a daemon that shipped before it. What it
+/// does is make `Offer` the LAST kind whose arrival reads as a parse error —
+/// every kind after it meets a sentence naming this build's vocabulary.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum AskedKind {
+    /// A kind this build has a variant for.
+    Known(OriginKind),
+    /// Anything else the wire carried, kept verbatim so the refusal can
+    /// quote what was asked for.
+    Unknown(serde_json::Value),
+}
+
+impl From<OriginKind> for AskedKind {
+    fn from(k: OriginKind) -> Self {
+        AskedKind::Known(k)
+    }
+}
+
+impl AskedKind {
+    /// The kind, or the sentence a person reads when this build has no name
+    /// for what they asked for.
+    ///
+    /// The sentence names THIS BUILD'S vocabulary, because that is the fact
+    /// the reader cannot get any other way — "I do not know that" is half an
+    /// answer, and the other half is "here is what I do know", which tells
+    /// them immediately whether they are ahead of this daemon or typing a
+    /// word that was never a kind.
+    pub fn resolve(&self) -> Result<OriginKind, String> {
+        match self {
+            AskedKind::Known(k) => Ok(*k),
+            AskedKind::Unknown(raw) => Err(format!(
+                "this node does not know the origin kind {raw} — it serves {}. \
+                 A kind this build has no name for is usually version skew: the \
+                 caller is newer than this daemon, and `svrn daemon stop && \
+                 svrn daemon start` after a rebuild is the repair. An empty \
+                 catalogue is NOT the answer to a question this build cannot \
+                 understand.",
+                OriginKind::ALL
+                    .iter()
+                    .map(|k| k.wire())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        }
+    }
+}
+
 /// `POST /v1/mesh/fanout` body (and `/v1/mesh/media/fanout`, which is this
 /// with `kind` left at its default).
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -50,8 +124,13 @@ pub struct FanoutRequest {
     /// Which kind of origin to ask. Absent means [`OriginKind::Media`], so a
     /// body written against `/v1/mesh/media/fanout` keeps meaning what it
     /// meant.
+    ///
+    /// [`AskedKind`] and not `Option<OriginKind>`: a kind this build cannot
+    /// name must be REFUSED BY NAME, and a strict field cannot do that — it
+    /// fails the whole body and the caller reads serde's English about a
+    /// struct field instead of a sentence about version skew.
     #[serde(default)]
-    pub kind: Option<OriginKind>,
+    pub kind: Option<AskedKind>,
     /// Which published app to ask, for `kind = "app"`. Required there and
     /// refused otherwise: an app name with no app kind is a request that
     /// would quietly have gone somewhere else (ARCH principle 6).
@@ -172,6 +251,23 @@ pub struct OriginRequest {
     pub body: Option<String>,
 }
 
+impl FanoutRequest {
+    /// The kind this request asks for: the named one, media when the field is
+    /// absent, or the refusal naming this build's vocabulary.
+    ///
+    /// ONE resolution, called by [`OriginRequest::from_request`] and by
+    /// [`fanout`], because two would let the validated request and the
+    /// dialed one disagree about what was asked (ARCH principle 8). Absent
+    /// still means [`OriginKind::Media`], which is what keeps
+    /// `/v1/mesh/media/fanout` the generic body with a field missing.
+    pub fn resolve_kind(&self) -> Result<OriginKind, String> {
+        match &self.kind {
+            None => Ok(OriginKind::Media),
+            Some(asked) => asked.resolve(),
+        }
+    }
+}
+
 impl OriginRequest {
     pub fn from_request(req: &FanoutRequest) -> Result<Self, String> {
         if !req.path.starts_with('/') {
@@ -187,14 +283,19 @@ impl OriginRequest {
         // odd field out: `{kind: media, app: "chores"}` almost certainly
         // meant to ask the chore app, and silently asking Jellyfin instead is
         // the substitution shape this workspace keeps paying for.
-        let path = match (req.kind.unwrap_or(OriginKind::Media), req.app.as_deref()) {
-            (OriginKind::Media, None) => req.path.clone(),
-            (OriginKind::Media, Some(app)) => {
+        let path = match (req.resolve_kind()?, req.app.as_deref()) {
+            (kind @ (OriginKind::Media | OriginKind::Offer), Some(app)) => {
                 return Err(format!(
-                    "`app` names {app:?} but `kind` is media — say `\"kind\": \"app\"` to ask \
-                     an app, or drop `app` to ask media origins"
+                    "`app` names {app:?} but `kind` is {} — say `\"kind\": \"app\"` to ask \
+                     an app, or drop `app` to ask {}s",
+                    kind.wire(),
+                    kind.noun()
                 ))
             }
+            // Media and Offer are both ONE declared HTTP origin per node, so
+            // the path is origin-relative and travels unchanged. Only `App`
+            // multiplexes, and only it composes a prefix.
+            (OriginKind::Media | OriginKind::Offer, None) => req.path.clone(),
             (OriginKind::App, None) => {
                 return Err(
                     "`kind` is app but no `app` is named — which app should every \
@@ -298,7 +399,7 @@ pub async fn fanout(
     transport: Arc<dyn PeerTransport>,
     gauge: InflightGauge,
 ) -> Result<FanoutResponse, MediaReachRefusal> {
-    let kind = req.kind.unwrap_or(OriginKind::Media);
+    let kind = req.resolve_kind().map_err(MediaReachRefusal::BadRequest)?;
     let origin_req = OriginRequest::from_request(&req).map_err(MediaReachRefusal::BadRequest)?;
     let candidates: Vec<MediaCandidate> = roster.iter().map(|(c, _)| c.clone()).collect();
     let contact_of = |id: NodeId| -> PeerContact {
@@ -507,7 +608,7 @@ mod tests {
     fn an_app_request_carries_the_app_name_as_the_first_path_segment() {
         let req = FanoutRequest {
             path: "/tasks?due=today".into(),
-            kind: Some(OriginKind::App),
+            kind: Some(OriginKind::App.into()),
             app: Some("chores".into()),
             ..Default::default()
         };
@@ -533,7 +634,7 @@ mod tests {
             .contains("kind"));
         let kind_without_app = FanoutRequest {
             path: "/tasks".into(),
-            kind: Some(OriginKind::App),
+            kind: Some(OriginKind::App.into()),
             ..Default::default()
         };
         assert!(OriginRequest::from_request(&kind_without_app)
@@ -550,7 +651,113 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(OriginRequest::from_request(&req).unwrap().path, "/Items");
-        assert_eq!(req.kind.unwrap_or(OriginKind::Media), OriginKind::Media);
+        assert_eq!(req.resolve_kind().unwrap(), OriginKind::Media);
+    }
+
+    /// An offer request is origin-relative like media's: one declared origin
+    /// per node, so nothing is prefixed. The failing input is the app arm's
+    /// prefixing logic reached by a third kind, which would ask every seller
+    /// for `/offer/` and get a 404 row from a working origin.
+    #[test]
+    fn an_offer_request_asks_the_origin_root_unprefixed() {
+        let req = FanoutRequest {
+            path: "/".into(),
+            kind: Some(OriginKind::Offer.into()),
+            ..Default::default()
+        };
+        assert_eq!(OriginRequest::from_request(&req).unwrap().path, "/");
+        assert_eq!(req.resolve_kind().unwrap(), OriginKind::Offer);
+    }
+
+    /// `{kind: offer, app: …}` is refused in OFFER's words, not media's. The
+    /// 2026-09-12 defect was a refusal naming the wrong domain, and a shared
+    /// arm that spelled "media" for both kinds would reintroduce it.
+    #[test]
+    fn an_offer_request_naming_an_app_is_refused_in_its_own_words() {
+        let req = FanoutRequest {
+            path: "/".into(),
+            kind: Some(OriginKind::Offer.into()),
+            app: Some("chores".into()),
+            ..Default::default()
+        };
+        let err = OriginRequest::from_request(&req).unwrap_err();
+        assert!(err.contains("`kind` is offer"), "{err}");
+        assert!(err.contains("offer origin"), "{err}");
+        assert!(!err.contains("media"), "{err}");
+    }
+
+    /// THE VERSION-SKEW REFUSAL. A kind this build has no name for is
+    /// refused BY NAME, quoting what was asked and naming what is served —
+    /// never answered with an empty catalogue.
+    ///
+    /// The failing input is the shape this replaced: with `kind:
+    /// Option<OriginKind>`, this same body does not reach any code in this
+    /// file at all. Serde fails the whole struct, the route answers 422, and
+    /// the reader gets a sentence about a field.
+    #[test]
+    fn a_kind_this_build_cannot_name_is_refused_by_name() {
+        let req: FanoutRequest =
+            serde_json::from_str(r#"{"path":"/","kind":"barter"}"#).expect("the body still parses");
+        let err = req.resolve_kind().unwrap_err();
+        assert!(err.contains("does not know the origin kind"), "{err}");
+        assert!(err.contains("barter"), "{err}");
+        // What this build DOES serve, so the reader can tell "I am ahead of
+        // this daemon" from "that was never a kind".
+        for known in OriginKind::ALL {
+            assert!(err.contains(known.wire()), "{err} is missing {known:?}");
+        }
+        // And the same refusal reaches the request validator, so no caller
+        // can route around it by building an `OriginRequest` directly.
+        assert!(OriginRequest::from_request(&req)
+            .unwrap_err()
+            .contains("does not know the origin kind"));
+    }
+
+    /// A future kind gossiped as an OBJECT is refused the same way, not
+    /// crashed on. Same reasoning as `deserialize_known_origins`'
+    /// `IgnoredAny`: a kind need not be a bare string, and a `String`-shaped
+    /// `Unknown` arm would put this back in serde's hands.
+    #[test]
+    fn a_kind_that_is_not_a_string_is_still_refused_by_name() {
+        let req: FanoutRequest =
+            serde_json::from_str(r#"{"path":"/","kind":{"name":"barter","v":2}}"#)
+                .expect("the body still parses");
+        let err = req.resolve_kind().unwrap_err();
+        assert!(err.contains("does not know the origin kind"), "{err}");
+        assert!(err.contains("barter"), "{err}");
+    }
+
+    /// Every member the caller NAMES is a row for offers too, and the
+    /// refusal names the offer origin — the property `ra-offers-catalogue-
+    /// computed` is about. The failing input is a filter: a member that
+    /// publishes no offer origin vanishing from the catalogue instead of
+    /// appearing in it with its reason.
+    #[test]
+    fn a_member_publishing_no_offer_origin_is_a_row_carrying_why() {
+        let mut roster = roster();
+        roster.push(MediaCandidate {
+            origins: vec![OriginKind::Offer],
+            ..cand(0xDEA1, "Mira", NodeStatus::Online, false)
+        });
+        let names = vec!["Mira".to_string(), "LittleMac".into()];
+        let sel = select_targets(
+            &roster,
+            NodeId::from_u128(ME),
+            Some(&names),
+            OriginKind::Offer,
+        );
+        assert_eq!(sel.len(), 2);
+        assert!(matches!(&sel[0], Selected::Ask(c) if c.name == "Mira"));
+        // LittleMac publishes MEDIA and not offers. It is a row, and the row
+        // says "offer origin" — asking about offers must never be answered
+        // with a sentence about a media library.
+        let Selected::Refused { refusal, .. } = &sel[1] else {
+            panic!("LittleMac publishes no offer origin and must be a refused ROW: {sel:?}");
+        };
+        let said = refusal.to_string();
+        assert!(said.contains("offer origin"), "{said}");
+        assert!(said.contains("[iroh] offer_origin"), "{said}");
+        assert!(!said.contains("media"), "{said}");
     }
 
     /// A name the registry could never hold is refused at the request rather
@@ -559,7 +766,7 @@ mod tests {
     fn an_app_name_a_path_could_not_carry_is_refused() {
         let req = FanoutRequest {
             path: "/tasks".into(),
-            kind: Some(OriginKind::App),
+            kind: Some(OriginKind::App.into()),
             app: Some("../etc".into()),
             ..Default::default()
         };

@@ -506,7 +506,22 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the inline `#[cfg(test)]` module's own fixtures. The one request the
     // production path makes is `GET 127.0.0.1:<client_port>/status`, which is
     // the LocalDaemon class on somebody else's client.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_skew.rs", Class::TestOnly, 3),
+    // 3 -> 5 (2026-09-13, ra-4): `render_kind_refusal` added two more
+    // `#[cfg(test)]` fixtures for the version-skew leg. Production still
+    // constructs nothing — its one new REQUEST, `probe_known_kind`, POSTs
+    // `127.0.0.1:<client_port>/v1/mesh/fanout` with an empty `peers` list on
+    // the client the caller already built. Empty `peers` is load-bearing for
+    // this class: it selects zero targets, so the control request dials no
+    // peer at all and asks no origin anything.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_skew.rs", Class::TestOnly, 5),
+    // mesh_offers.rs (2026-09-13, ra-4): `svrn mesh offers` builds ONE client
+    // and points it only at `127.0.0.1:<client_port>` — the roster read, the
+    // fan-out POST and the single-peer reach all go to this node's own
+    // daemon, which is what reaches anybody. Mesh rather than LocalDaemon for
+    // `mesh_media`'s reason: the fan-out's bytes ride the estate's own
+    // transport to member nodes, and the request carries no estate content —
+    // the path asked is `/`, and what comes back is the seller's.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_offers.rs", Class::Mesh, 1),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),

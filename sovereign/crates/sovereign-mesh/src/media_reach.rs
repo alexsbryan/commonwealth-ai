@@ -157,6 +157,27 @@ pub async fn mesh_app(
     origin_route(caller, daemon, q, OriginKind::App).await
 }
 
+/// `GET /v1/mesh/offers?peer=<name-or-id>` — the loopback BASE url that
+/// reaches that member's `[iroh] offer_origin`; with no peer, the members
+/// that publish one.
+///
+/// A third route beside media's and apps' rather than one route with a
+/// `kind=` parameter, for the reason `mesh_app` gives: these are different
+/// trust classes on different ALPNs, and a caller that flips between them
+/// with a query string reads as one capability when it is three.
+///
+/// This is the "reach ONE" half. The CATALOGUE — every member asked at once,
+/// with the ones that publish nothing appearing as rows carrying why — is
+/// `POST /v1/mesh/fanout` with `kind: "offer"`, which is what bare
+/// `svrn mesh offers` drives.
+pub async fn mesh_offers(
+    caller: ConnectInfo<SocketAddr>,
+    daemon: Extension<Arc<EmbeddedDaemon>>,
+    q: Query<MediaQuery>,
+) -> impl IntoResponse {
+    origin_route(caller, daemon, q, OriginKind::Offer).await
+}
+
 async fn origin_route(
     ConnectInfo(caller): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,

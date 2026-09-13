@@ -339,7 +339,7 @@ impl ConfigDiff {
             // installed at startup.
             d.restart_required.push("iroh.transport");
         }
-        // The three below reach the acceptor the same way `iroh.enabled` does
+        // The FIVE below reach the acceptor the same way `iroh.enabled` does
         // — read once while it is constructed, never re-read — and until
         // 2026-09-12 none of them was compared here. A change to any one made
         // `is_noop()` true, so `svrn daemon reload` printed "no config changes
@@ -357,6 +357,18 @@ impl ConfigDiff {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
             // (`svrn run`) goes through `PublishedApps` and needs no restart.
             d.restart_required.push("iroh.apps");
+        }
+        // The offer origin is read at acceptor construction exactly as the
+        // media origin is, so it is compared here IN THE SAME COMMIT that
+        // adds it. Adding the key and not the comparison is how the media
+        // defect above happened: the operator writes one config line, reload
+        // says nothing changed, and `svrn mesh offers` reports the node
+        // publishes none — three affirmative messages and nothing applied.
+        if old.iroh.offer_origin != new.iroh.offer_origin {
+            d.restart_required.push("iroh.offer_origin");
+        }
+        if old.iroh.offer_allow != new.iroh.offer_allow {
+            d.restart_required.push("iroh.offer_allow");
         }
         d
     }
@@ -523,7 +535,7 @@ mod tests {
     /// Each is asserted ALONE. A single config differing in all three would
     /// pass even if only one comparison existed.
     #[test]
-    fn a_media_or_app_config_change_is_never_reported_as_no_change() {
+    fn an_origin_config_change_is_never_reported_as_no_change() {
         let base = SetupConfig {
             engine: Default::default(),
             compute: Default::default(),
@@ -559,6 +571,18 @@ mod tests {
             .insert("chores".into(), "127.0.0.1:5000".into());
         let d = ConfigDiff::diff(&base, &app_published);
         assert_eq!(d.restart_required, vec!["iroh.apps"]);
+        assert!(!d.is_noop());
+
+        let mut offer_set = base.clone();
+        offer_set.iroh.offer_origin = Some("127.0.0.1:8710".into());
+        let d = ConfigDiff::diff(&base, &offer_set);
+        assert_eq!(d.restart_required, vec!["iroh.offer_origin"]);
+        assert!(!d.is_noop());
+
+        let mut offer_allow_set = base.clone();
+        offer_allow_set.iroh.offer_allow = vec!["LittleMac".into()];
+        let d = ConfigDiff::diff(&base, &offer_allow_set);
+        assert_eq!(d.restart_required, vec!["iroh.offer_allow"]);
         assert!(!d.is_noop());
 
         // The other half of the claim: an unchanged config still reads as one.

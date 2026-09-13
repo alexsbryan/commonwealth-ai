@@ -390,28 +390,6 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
     0
 }
 
-/// The roster the DAEMON loaded, and the admission it computed over the same
-/// journal, in one read.
-///
-/// Typed rather than walked as JSON: the roster is a `Roster`, so a row's
-/// warrant reaches this command by being part of the type instead of by a
-/// second hand-written reader of the wire shape. And the two halves come from
-/// ONE answer — a roster read at one moment and an admission read at another
-/// could disagree about who was a member when.
-async fn roster_and_admission(
-    namespace: &str,
-) -> Result<(commonwealth_rail::Roster, commonwealth_rail::Admission), String> {
-    let v = rail_log(namespace).await?;
-    let roster: commonwealth_rail::Roster = serde_json::from_value(
-        v.get("roster").cloned().ok_or_else(|| {
-            format!("the daemon's log answer carried no `roster` — this build and that daemon do not agree on the shape of `{RAIL_LOG_PATH}`")
-        })?,
-    )
-    .map_err(|e| format!("the daemon's roster is a shape this build cannot read: {e}"))?;
-    let admission = sovereign_cli_shared::rail::admission_from_wire(&v)?;
-    Ok((roster, admission))
-}
-
 /// Resolve the op a `roster add --on` is acting on, or refuse in a sentence.
 ///
 /// Resolution goes through the DAEMON for the same reason the read-back below
@@ -429,12 +407,14 @@ async fn resolve_warrant(
     key: &str,
     op_id: &str,
 ) -> Result<commonwealth_rail::Vouch, String> {
-    let (roster, admission) = roster_and_admission(namespace).await.map_err(|e| {
-        format!(
-            "--on names an op that has to be resolved before a warrant can be written, \n\
+    let (roster, admission) = sovereign_cli_shared::rail::roster_and_admission(namespace)
+        .await
+        .map_err(|e| {
+            format!(
+                "--on names an op that has to be resolved before a warrant can be written, \n\
              and the daemon did not answer: {e}"
-        )
-    })?;
+            )
+        })?;
     let op = commonwealth_rail::OpId::from_raw(op_id);
     match commonwealth_rail::trace_op(&roster, &admission.ops, person, key, &op) {
         commonwealth_rail::VouchStatus::Traced { by_actor, at, .. } => {
@@ -456,13 +436,14 @@ async fn resolve_warrant(
 
 /// `svrn ring roster show|list <ns>` — who is in this ring, and why.
 async fn roster_list(namespace: &str) -> i32 {
-    let (roster, admission) = match roster_and_admission(namespace).await {
-        Ok(pair) => pair,
-        Err(e) => {
-            eprintln!("ring roster show: {e}");
-            return 1;
-        }
-    };
+    let (roster, admission) =
+        match sovereign_cli_shared::rail::roster_and_admission(namespace).await {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("ring roster show: {e}");
+                return 1;
+            }
+        };
     if roster.members.is_empty() {
         println!(
             "`{namespace}` has no roster yet — every op will fold to an unknown-signer gap.\n\

@@ -74,7 +74,8 @@ impl IpTransport {
             | TrafficClass::ModelTransfer
             | TrafficClass::RpcTensor
             | TrafficClass::Media
-            | TrafficClass::App => None,
+            | TrafficClass::App
+            | TrafficClass::Offer => None,
         }
     }
 }
@@ -105,8 +106,13 @@ impl PeerTransport for IpTransport {
         // `App` is the same argument with the same force: a published app is
         // loopback-bound on the publisher and admitted by mesh key, so a
         // plaintext candidate would be somebody's chore app served to anyone
-        // on the overlay.
-        if class == TrafficClass::Media || class == TrafficClass::App {
+        // on the overlay. `Offer` joined them 2026-09-13 — what a household
+        // has going spare is a list of its possessions, and serving that to
+        // the overlay is worse than not serving it at all.
+        if matches!(
+            class,
+            TrafficClass::Media | TrafficClass::App | TrafficClass::Offer
+        ) {
             return Vec::new();
         }
         let mut addrs = commonwealth_core::peer_addr::sorted_addresses(&peer.addresses);
