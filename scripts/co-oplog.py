@@ -3192,6 +3192,19 @@ def cmd_replay(a) -> int:
         print(f"  written {a.out}")
     return 0
 
+def cmd_referee(a) -> int:
+    """Act 2: the five cards the operator referees, chosen by a rule fixed
+    before the run -- the most adjudicable operator-facing claims -- and
+    printed whole, broken rows with receipts, for a fair/unfair call each."""
+    cards = json.loads(Path(a.summary).read_text())
+    cards.sort(key=lambda c: -c["adjudicable"])
+    pick = cards[:a.n]
+    print(f"referee — {len(pick)} of {len(cards)} cards, most adjudicable claims first; "
+          f"{sum(len(c['broken']) for c in pick)} broken verdict(s) to call fair or unfair\n")
+    for c in pick:
+        print(render_card(c))
+    return 0
+
 def cmd_self_test(_a) -> int:
     fails = []
     def eq(got, want, what):
@@ -3440,6 +3453,10 @@ def main() -> int:
     rp.add_argument("--no-daemon", action="store_true")
     rp.add_argument("--out", default="")
     rp.set_defaults(fn=cmd_replay)
+    rf = sub.add_parser("referee", help="Act 2: the N most-adjudicable cards from a replay summary, whole")
+    rf.add_argument("--summary", default="quality/report-audit/replay-2026-09-13.json")
+    rf.add_argument("--n", type=int, default=5)
+    rf.set_defaults(fn=cmd_referee)
     fc = sub.add_parser("frame-check", help="frame claims against the records the system already keeps")
     fc.add_argument("--session")
     fc.add_argument("--frames", type=int, default=40)
