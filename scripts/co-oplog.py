@@ -1889,7 +1889,12 @@ def cmd_counts(a) -> int:
             print(f"error: {name} has no parent commit")
             continue
         r, tok = route(s.get("why") or s["false_claim"], corpora)
-        if r == "record":
+        if a.form:
+            f = claim_form(s["false_claim"], a.pin, a.timeout)
+            v = (instrument_form(s["false_claim"], f, sha)
+                 if f.get("quantifier") else
+                 {"verdict": "not-mine", "why": f.get("why", "no form")})
+        elif r == "record":
             v = instrument_record(s["false_claim"], tok)
         elif r == "code":
             v = instrument_code(s["false_claim"], tok, sha)
@@ -2074,6 +2079,135 @@ def instrument_ran(claim: str, anchor: str, evidence: str) -> dict:
 
 RX_UNIQUE = re.compile(r"\b(the only|only one|sole|no other|nothing else|never|no \w+ (?:calls|reads|uses))\b", re.I)
 RX_ABSENCE = re.compile(r"\b(there is no|there are no|no \w+ (?:exists|remains)|nothing|never|zero|not present|does not exist|no longer)\b", re.I)
+
+# ---- the logical form: the model is asked for a MOVE, never a verdict ---
+#
+# `sovereign-tdd/src/recur/driver.rs` states the division: the oracle runs,
+# and the evaluator "is only asked when the oracle is red, and it is asked
+# for a MOVE, never a verdict." Four instruments failed tonight because a
+# regex tried to infer, from a sentence, both WHAT the claim is about and
+# HOW MANY of it the claim asserts -- independently, so neither governed the
+# other. That is the one defect behind all of them.
+#
+# A model cannot reliably say whether a claim is true. It can reliably copy
+# out the thing a sentence is about and say what quantity the sentence
+# asserts of it, because that is bounded, closed-shape extraction -- the same
+# register that answered correctly when asked to point at evidence and found
+# none on 31 of 40. The pair (anchor, quantifier) IS the governance relation
+# the regexes could not establish: the model returns them together or not at
+# all.
+#
+# Code then adjudicates the form against the tree. Nothing asks a model to be
+# right about the world.
+
+FORM_SYSTEM = """You are shown one sentence an agent wrote about a codebase.
+Extract its logical form. DO NOT judge whether it is true.
+
+anchor — the exact identifier, path, symbol or literal string the sentence
+makes a claim ABOUT. Copy it VERBATIM from the sentence. If the sentence
+makes no claim about a specific named thing, return an empty anchor.
+
+quantifier — what the sentence asserts about how many of that anchor exist:
+  exists      it is there
+  not_exists  it is not there, there is none, it was removed
+  only_one    it is the only one, the sole, no other
+  count       a specific number is asserted (put the number in n)
+  none        the sentence asserts no quantity about the anchor
+
+predicate — what is asserted about the anchor, five words or fewer, copied
+from the sentence."""
+
+FORM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "anchor": {"type": "string"},
+        "quantifier": {"type": "string",
+                       "enum": ["exists", "not_exists", "only_one", "count", "none"]},
+        "n": {"type": "integer"},
+        "predicate": {"type": "string"},
+    },
+    "required": ["anchor", "quantifier", "predicate"],
+}
+
+def claim_form(claim: str, pin: str, timeout: float) -> dict:
+    """(anchor, quantifier, predicate) or a refusal. Never a verdict."""
+    try:
+        raw, model, _ = call_daemon(FORM_SYSTEM, claim, pin, 120, FORM_SCHEMA, timeout)
+        f = json.loads(raw)
+    except (DaemonDown, json.JSONDecodeError) as e:
+        return {"quantifier": None, "why": f"not extracted ({e})"}
+    a = (f.get("anchor") or "").strip().strip("`'\"")
+    # The anchor must be VERBATIM from the claim, checked in code. A
+    # paraphrased anchor is one the model composed, and adjudicating a
+    # composed anchor against the tree measures the model's imagination.
+    if a and a.lower() not in claim.lower():
+        return {"quantifier": None, "why": f"anchor {a!r} is not verbatim in the claim"}
+    f["anchor"] = a
+    f["engine"] = model
+    return f
+
+def instrument_form(claim: str, form: dict, sha: str) -> dict:
+    """Adjudicate an EXTRACTED form against the tree at the sha.
+
+    `exists` may now refute on a zero count, which was a polarity error when
+    a regex guessed the shape and is sound when the model has asserted that
+    this sentence claims this anchor exists."""
+    a, q = form.get("anchor") or "", form.get("quantifier")
+    if not a or len(a) < 4 or q in (None, "none"):
+        return {"verdict": "not-mine", "why": f"no adjudicable form ({q})"}
+    # THE ANCHOR MUST BE A THING THE TREE CAN SPEAK TO.
+    #
+    # Six catches, all spurious, all this: the model returned a PROSE phrase
+    # as the anchor and the verbatim check passed because it IS verbatim.
+    # `this node` grepped 827 times as English, `spike tree` and `sovereign
+    # nor commonwealth types` are sentence fragments, and `Ollama does not
+    # work here` is `not_exists` over WORKING, not over the string `Ollama` —
+    # 174 source hits refute nothing about whether it works.
+    #
+    # A grep at a sha can settle presence, absence and count of an
+    # IDENTIFIER. It cannot settle a behaviour, and a claim whose anchor is a
+    # noun phrase is almost always about behaviour. So the anchor must look
+    # like code — a path, a dotted file, a snake/Camel/:: identifier — and
+    # anything else declines rather than being grepped as prose.
+    if not re.fullmatch(
+            r"(?:[\w.-]+/[\w./-]+|\w+\.(?:rs|py|sh|toml|md|json|ts|mjs|ya?ml)"
+            r"|[a-z0-9]+(?:_[a-z0-9]+)+(?:\(\))?|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+"
+            r"|\w+::[\w:]+|[A-Z][A-Z0-9_]{3,})", a):
+        return {"verdict": "not-mine",
+                "why": f"anchor {a!r} is not an identifier a tree can answer about"}
+    lines = [l for l in git("grep", "-cF", a, sha).splitlines() if l.strip()]
+    total = 0
+    for l in lines:
+        try:
+            total += int(l.rsplit(":", 1)[1])
+        except (ValueError, IndexError):
+            pass
+    cmd = f"git grep -cF {a!r} {sha[:9]}"
+    if q == "not_exists":
+        return ({"verdict": "holds", "why": f"{cmd} — nothing, which is the claim"}
+                if total == 0 else
+                {"verdict": "broken", "why": f"{cmd} — {total} in {len(lines)} file(s)",
+                 "receipt": cmd})
+    if q == "exists":
+        return ({"verdict": "broken", "why": f"{cmd} — nowhere at this sha", "receipt": cmd}
+                if total == 0 else
+                {"verdict": "holds", "why": f"{cmd} — {total} occurrence(s)"})
+    if q == "only_one":
+        if total == 0:
+            return {"verdict": "not-mine", "why": f"{cmd} — anchor does not resolve here"}
+        return ({"verdict": "broken",
+                 "why": f"{cmd} — {len(lines)} files carry it, an `only` needs one",
+                 "receipt": cmd} if len(lines) > 1 else
+                {"verdict": "holds", "why": f"{cmd} — one file"})
+    if q == "count":
+        n = form.get("n")
+        if not isinstance(n, int):
+            return {"verdict": "not-mine", "why": "count asserted with no number"}
+        return ({"verdict": "holds", "why": f"{cmd} — {total}, as claimed"}
+                if total == n else
+                {"verdict": "broken", "why": f"{cmd} — {total}, claim said {n}",
+                 "receipt": cmd})
+    return {"verdict": "not-mine", "why": f"unhandled quantifier {q}"}
 
 def instrument_code(claim: str, anchor: str, sha: str) -> dict:
     """A claim about the TREE, checked against the tree at the sha it was
@@ -2837,6 +2971,10 @@ def main() -> int:
     bp.set_defaults(fn=cmd_bs_preference)
     ct = sub.add_parser("counts", help="the checker as a `counts:` instrument over externally-labelled claims")
     ct.add_argument("--bank", default="quality/report-audit/bs-corrections-verified.json")
+    ct.add_argument("--form", action="store_true",
+                    help="extract the logical form with the model, then adjudicate it in code")
+    ct.add_argument("--pin", default=DEFAULT_PIN)
+    ct.add_argument("--timeout", type=float, default=90.0)
     ct.set_defaults(fn=cmd_counts)
     hv = sub.add_parser("harvest", help="known-false claims the repo already labelled in commit bodies")
     hv.add_argument("--since", default="2026-06-01")
