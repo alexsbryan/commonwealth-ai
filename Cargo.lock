@@ -12510,9 +12510,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-contracts",
- "sovereign-core",
- "sovereign-gliner",
- "sovereign-inference",
  "sovereign-time",
  "sovereign-tools-base",
  "sovereign-turn-client",
@@ -12932,6 +12929,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-sections",
  "corpus-engine-watchers",
  "csv",
  "dirs 5.0.1",
@@ -12989,7 +12987,6 @@ name = "sovereign-tools-base"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "corpus-engine-sections",
  "csv",
  "dirs 5.0.1",
  "futures",

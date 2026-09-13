@@ -661,7 +661,6 @@ pub async fn set_setup_context_size(
         }
     });
 
-    *state.inference.write().await = None;
     crate::state::rebuild_runtime(&state).await
 }
 
@@ -857,7 +856,6 @@ pub async fn set_setup_model_slots(
             );
         }
     });
-    *state.inference.write().await = None;
     crate::state::rebuild_runtime(&state).await
 }
 

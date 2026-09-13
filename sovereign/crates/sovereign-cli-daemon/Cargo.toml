@@ -120,6 +120,21 @@ atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
 # Bench/measurement-only: see sovereign-mesh's feature of the same name.
 iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
 
+# Windows GPU backend selectors, forwarded to sovereign-inference. No-op on
+# macOS/Linux, which hardcode their backend per-OS; see
+# sovereign-inference/Cargo.toml for the matrix.
+#
+# They MOVED here from `sovereign-desktop` at sv-surface svt-7 (2026-09-12).
+# The app forwarded them to a `sovereign-inference` it no longer has — and it
+# had been selecting a GPU backend for a process that loads no models. The
+# selection belongs to the build of the thing that does, which is this
+# binary: the Tauri SIDECAR. `scripts/stage-daemon-sidecar.sh` passes
+# `SOVEREIGN_SIDECAR_FEATURES` through to the build below, so the release
+# matrix's Windows GPU leg sets that env instead of
+# `cargo tauri build --features windows-vulkan`.
+windows-vulkan = ["sovereign-inference/windows-vulkan"]
+windows-cuda = ["sovereign-inference/windows-cuda"]
+
 # Headless OCR. OFF by default: it pulls `ort` + `ndarray` + `imageproc` +
 # `i_overlay` into every daemon build, and the engine additionally needs
 # ~20 MB of staged assets (det.onnx + rec.onnx + dict.txt, libpdfium) that

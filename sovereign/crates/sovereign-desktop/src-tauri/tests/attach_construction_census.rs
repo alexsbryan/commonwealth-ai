@@ -172,7 +172,7 @@ const FLOOR: &[Needle] = &[
     Needle {
         hay: "sovereign_gliner::load_gliner_extractor(",
         count: 0,
-        why: "GLiNER ONNX extractor, loaded host-side — DELETED svt-6 (2026-09-12). Its ONE consumer was the corpus engine's builder chain (`with_chunk_entity_extractor`); the daemon loads its own from the same `data_dir` in `daemon_cmd/bootstrap.rs`. NOTE the crate does NOT leave the manifest here: `sovereign-gliner` is svt-7's line, and its `[[exception]]` row stands until then",
+        why: "GLiNER ONNX extractor, loaded host-side — DELETED svt-6 (2026-09-12). Its ONE consumer was the corpus engine's builder chain (`with_chunk_entity_extractor`); the daemon loads its own from the same `data_dir` in `daemon_cmd/bootstrap.rs`. the crate left the manifest at svt-7 (2026-09-12) with its last two call sites, and its `[[exception]]` row went with it — `the_desktop_names_no_inference_stack` pins the absence now",
     },
     Needle {
         hay: "sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(",
@@ -229,45 +229,82 @@ fn state_rs() -> String {
 }
 
 /// The attach-mode inference provider's construction site lives one file
-/// down, in the builders module `state.rs` calls.
-fn builders_inference_rs() -> String {
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/state/builders/inference.rs");
+/// The manifest this build declares. Pin 2 of the dependency-line needles.
+fn cargo_toml() -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
-/// The twelfth needle, pinned in its own test because it lives in the
-/// builders file: the provider that makes the desktop's Runtime "local" —
-/// an OpenAI-compatible HTTP client pointed at the daemon. Deleting it is
-/// rung 6's centre.
+/// The desktop holds no inference provider, and cannot: the CRATE that
+/// defines one is not in its manifest.
 ///
-/// RENAMED at svt-3, `build_attach_provider` -> `build_daemon_provider`, when
-/// the OTHER arm of that file was deleted. There is no attach/local fork left
-/// to name it against: this is how the desktop gets inference, full stop.
+/// # What this replaced
+///
+/// `the_attach_provider_construction_is_pinned` stood here from svt-3 to
+/// svt-7. It pinned `build_daemon_provider(slots)?` to exactly ONE call site
+/// in `src/state/builders/inference.rs` — a `SplitInferenceProvider` over the
+/// daemon's `/v1`, the thing that let this process assemble a Runtime of its
+/// own. That file is DELETED, and with it the `AppState.inference` slot it
+/// filled, which had zero readers: its last two touches were `= None` resets
+/// in `commands/config_setup.rs`. A count that reaches zero while the ability
+/// stays is the shape ARCH principle 12 names, so the ability went too.
+///
+/// A floor of one construction became a floor of none, and this pins the
+/// stronger claim at the place the ability is GRANTED rather than at the
+/// sites that used it: `sovereign-inference` is not a dependency, so no
+/// provider can be constructed here however the code is rearranged.
+///
+/// Watched to fail at landing: re-add `sovereign-inference = { workspace =
+/// true }` to `[dependencies]` and this goes red naming it; re-add
+/// `sovereign-gliner` or `sovereign-core` and the same.
 #[test]
-fn the_attach_provider_construction_is_pinned() {
-    let src = builders_inference_rs();
-    assert_eq!(
-        src.match_indices("build_daemon_provider(slots)?").count(),
-        1,
-        "sv-attach-pure-client: the daemon-provider call site moved or \
-         multiplied. This is the construction that lets the desktop assemble \
-         its own Runtime over the daemon's models — the C2 divergence's root. \
-         The floor only moves through a campaign rung row."
-    );
-    assert!(
-        !src.contains("EmbeddedLlamaCpp"),
-        "svt-3: the builders file names the in-process llama loader again. \
-         A desktop that mmaps a GGUF is the daemon it is supposed to be a \
-         client of (ARCH principle 12), and the crash-isolation subprocess \
-         that guarded that load was deleted on the strength of this absence."
-    );
-    assert_eq!(
-        src.match_indices("fn build_daemon_provider(").count(),
-        1,
-        "the provider's definition moved or multiplied — one implementation, \
-         one site, pinned"
-    );
+fn the_desktop_names_no_inference_stack() {
+    let manifest = cargo_toml();
+    // Comments in this manifest quote every crate name that ever left it, on
+    // purpose — the epitaphs ARE the record. So the needle is the dependency
+    // FORM, not the bare name.
+    for krate in [
+        "sovereign-inference",
+        "sovereign-gliner",
+        "sovereign-core",
+        "corpus-engine",
+        "sovereign-tools",
+        "sovereign-store",
+    ] {
+        let line = format!("\n{krate} = ");
+        assert!(
+            !manifest.contains(&line),
+            "sv-attach-pure-client: `{krate}` is back in src-tauri/Cargo.toml. \
+             Every one of the six left across sv-surface svt-2..svt-7 and \
+             quality/ARCH_LAYERS.toml now carries ZERO rows for this crate; \
+             re-adding one re-opens a burn-down list that is closed. If a type \
+             is what you need, it belongs in `sovereign-contracts`; if an \
+             answer is, the daemon has a route."
+        );
+    }
+
+    // And the source performs no provider construction. Pin 1 alone passes the
+    // day someone writes the code before adding the dependency back.
+    //
+    // Each needle carries its CALL SYNTAX, the same convention `NEEDLES` uses
+    // above, and for the same reason: this file's comments cite the deleted
+    // types by name on purpose — the epitaphs are the record of what left and
+    // why — so a bare-name needle would go red on its own documentation. The
+    // parenthesised form is a thing only code can spell.
+    let state = state_rs();
+    for needle in [
+        "SplitInferenceProvider::new(",
+        "EmbeddedLlamaCpp::load_full_with_families(",
+        "load_inference(&",
+    ] {
+        assert!(
+            !state.contains(needle),
+            "svt-7: `state.rs` performs `{needle}` again. The desktop holds no \
+             inference provider at all — turns go over the wire through \
+             `TurnClient`, and a provider here is the daemon this app is \
+             supposed to be a client of (ARCH principle 12)."
+        );
+    }
 }
 
 #[test]

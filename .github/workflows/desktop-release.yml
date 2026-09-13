@@ -164,7 +164,7 @@ jobs:
           # DOES hit the llama OpenSSL link, the minimal fix is dropping `mtmd`
           # from the desktop (no common → no cpp-httplib → no OpenSSL), not a
           # vendored fork. Backend roadmap: CPU first, then windows-x64-vulkan
-          # (--features windows-vulkan + Vulkan SDK).
+          # (SOVEREIGN_SIDECAR_FEATURES=windows-vulkan + Vulkan SDK).
           - name: macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin
@@ -186,10 +186,16 @@ jobs:
           # old cross-link blockers are solved there (see that script + the
           # RELEASING.md "Full local release" symptom table); this CI leg
           # stays available as the native-MSVC alternative.
-          # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step + features: windows-vulkan
+          # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
-          #   features: windows-vulkan
+          #   # Since sv-surface svt-7 (2026-09-12) the GPU backend is chosen
+          #   # on the SIDECAR's build, not the app's: the desktop links no
+          #   # inference stack to forward a feature to. Set
+          #   # SOVEREIGN_SIDECAR_FEATURES=windows-vulkan for the
+          #   # stage-daemon-sidecar.sh step rather than passing
+          #   # `cargo tauri build --features`.
+          #   sidecar_features: windows-vulkan
 
     steps:
       - name: Checkout

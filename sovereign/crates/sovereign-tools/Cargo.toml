@@ -40,6 +40,12 @@ sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
+# The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
+# module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
+# its dependency with it; this crate already links corpus-engine itself, so the
+# edge costs nothing new here (it cost a thin surface's whole exception row
+# there — see `src/rag/mod.rs`).
+corpus-engine-sections = { workspace = true }
 corpus-engine-watchers = { workspace = true }
 # SCIP call graph types — carved out of corpus-engine 2026-05-23.
 # Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.

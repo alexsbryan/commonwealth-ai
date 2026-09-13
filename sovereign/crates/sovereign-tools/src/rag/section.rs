@@ -34,7 +34,7 @@ use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::*;
 
-use crate::rag::chunk::chunk_text;
+use sovereign_tools_base::rag::chunk::chunk_text;
 
 pub struct SectionTool;
 

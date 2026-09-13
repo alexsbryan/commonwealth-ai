@@ -155,19 +155,27 @@ pub use recipe_author::{
 pub use sovereign_core;
 pub use wikipedia_fetch::WikipediaFetchTool;
 
-/// The corpus/atlas-backed workflow tools that intentionally do NOT live in
-/// `sovereign-tools-base` — each drags corpus-engine/LanceDB, which is exactly
-/// what the base bundle exists to avoid. `sovereign-workflow-host`'s
-/// `standard_registry` therefore registers only the pure tools; every call site
-/// that runs workflows and wants the *full* surface (the CLI `workflow run` /
-/// `corpus ingest`, the desktop run/ingest commands, the daemon living-trigger)
-/// injects these through the runner's `extra_tools` slot.
+/// The workflow tools that intentionally do NOT live in
+/// `sovereign-tools-base`. `sovereign-workflow-host`'s `standard_registry`
+/// therefore registers only the ones that do; every call site that runs
+/// workflows and wants the *full* surface (the CLI `workflow run` /
+/// `corpus ingest`, the desktop run/ingest commands, the daemon
+/// living-trigger) injects these through the runner's `extra_tools` slot.
 ///
-/// Kept here — beside the tools themselves — so "which five" is stated once
+/// Five of the six are out for the original reason: each drags
+/// corpus-engine/LanceDB, which is exactly what the base bundle exists to
+/// avoid. `section` is out for a DIFFERENT reason and joined this list at
+/// sv-surface svt-7 (2026-09-12): its `corpus-engine-sections` dependency is a
+/// `regex` leaf and weighs nothing, but tools-base is the one runtime crate a
+/// THIN SURFACE may link, so what tools-base links a thin client links. That
+/// one edge was the last `from = "sovereign-desktop"` row in
+/// quality/ARCH_LAYERS.toml. See `rag/mod.rs`.
+///
+/// Kept here — beside the tools themselves — so "which six" is stated once
 /// rather than re-listed (and drifting) at each injection site. Registration
 /// order is irrelevant: the registry keys on tool id and these ids are distinct
 /// from the base set, so injecting them via `extra_tools` reproduces exactly the
-/// pre-extraction 16-tool registry.
+/// pre-extraction registry.
 pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
     vec![
         Box::new(extract::ExtractTool.declared()),
@@ -175,5 +183,6 @@ pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
         Box::new(corpus_search::CorpusSearchTool.declared()),
         Box::new(atlas_phase::gaps::AtlasGapsTool.declared()),
         Box::new(atlas_phase::tensions::AtlasTensionsTool.declared()),
+        Box::new(rag::section::SectionTool),
     ]
 }

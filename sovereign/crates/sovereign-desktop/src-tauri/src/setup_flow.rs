@@ -1,32 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-config first-launch orchestrator (the *lazy sunbeam* flow).
 //!
-//! Runs the entire setup chain — hardware probe → catalog resolve
-//! → data dir → 3 sequential GGUF downloads → DesktopConfig persist
-//! → bootstrap (DB open + model load + smoke test) → first-run
-//! marker — with no user input. Streams a single `setup-progress`
-//! Tauri event channel throughout so the desktop's `SetupFlow.svelte`
-//! can render one sentence + one progress rule at a time.
+//! Narrates the whole first run onto one `setup-progress` Tauri event channel
+//! so `SetupFlow.svelte` can render one sentence + one progress rule at a
+//! time, then relaunches into a session that has a daemon.
 //!
-//! The CLI's `sovereign setup` flow is a separate code path that
-//! still asks the user to pick a primary; this module is the
-//! desktop's no-decisions version. The download / catalog / GGUF
-//! validation logic is shared via `sovereign_inference::setup_planner`.
+//! # What it stopped doing (sv-surface svt-7, 2026-09-12)
+//!
+//! It used to BE the wizard: hardware probe, catalog resolve, three GGUF
+//! downloads through `setup_planner::download_gguf`, and a `config.toml`
+//! write — a second implementation of `svrn setup`, in a process that owns
+//! neither the weights nor the config. The two drifted where you would
+//! expect: the CLI asked the user to pick a primary and this did not, and
+//! only one of them knew about `--repair`.
+//!
+//! The sidecar's `setup` verb runs it now. This module resolves the user's
+//! pick into a `--primary` spec, spawns `setup --yes --json`
+//! (`crate::setup_plan`), maps each `SetupProgressLine` onto the SetupPhase
+//! frames the UI already renders, and owns the three things that are the
+//! APP's: the DesktopConfig it keeps beside `config.toml`, the first-run
+//! marker, and the relaunch.
 
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::daemon_wire::{SetupProgressLine, SetupProgressPhase, SlotConfig};
 use tauri::{AppHandle, Emitter};
-
-use sovereign_contracts::gguf_validator::GgufExpectation;
-use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile};
-use sovereign_inference::setup_planner::{
-    build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_byom_url,
-    resolve_slot, SlotKind,
-};
 
 use crate::state::{self, AppState, BootstrapPhase};
 
@@ -75,274 +75,57 @@ pub enum PrimarySource {
     Url { url: String },
 }
 
-/// A resolved download instruction for the primary slot (internal to `run`).
-/// Unifies the manifest-slot path and the BYOM-URL path so the download
-/// site below has one shape to consume.
-struct PrimaryDownload {
-    url: String,
-    size_gb: f64,
-    mb_total: Option<u64>,
-    sentence: &'static str,
-}
-
-/// Run the full auto-setup flow. Returns Ok when the backend is
-/// fully bootstrapped and ready to serve chat; returns Err with a
-/// short diagnosis on any unrecoverable failure (the UI also
-/// receives a `Failed` `setup-progress` event with the same
-/// message before the error returns).
+/// Run the full auto-setup flow. Returns Ok when the backend is fully
+/// bootstrapped (or the app is relaunching into one); returns Err with a short
+/// diagnosis on any unrecoverable failure — the UI also receives a `Failed`
+/// `setup-progress` event with the same message before the error returns.
+///
+/// The downloads and the `config.toml` write belong to the sidecar's `setup`
+/// verb. What stays here is what the APP owns: which model the user picked,
+/// the DesktopConfig, the first-run marker, and the relaunch.
 pub async fn run(
     app: AppHandle,
     state: Arc<AppState>,
     preferred_primary_file: Option<String>,
     primary_source: Option<PrimarySource>,
 ) -> Result<(), String> {
-    // ── 1. Hardware probe ────────────────────────────────────────
     emit_indet(
         &app,
         SetupPhase::DetectingHardware,
         "Reading what this machine can do.",
     );
-    let hw = tokio::task::spawn_blocking(detect_hardware)
-        .await
-        .map_err(|e| failed(&app, false, format!("hardware detect panicked: {e}")))?;
-    let profile = hardware::select_profile(&hw);
 
-    // ── 2. Resolve slots ─────────────────────────────────────────
-    // Fast + embed come straight from the hardware profile. The primary
-    // (thoughtful) model is resolved in step 4 (BYOM-aware): the catalog
-    // pick / hardware recommendation by default, or the onboarding
-    // "Advanced" override (a local GGUF path, or a pasted .gguf URL).
-    // Nothing is fetched until the download phase — nothing was pulled
-    // before the user consented.
-    let fast_slot = resolve_slot(&profile, SlotKind::Fast).ok_or_else(|| {
-        failed(
-            &app,
-            false,
-            "bundled manifest is missing a fast slot for this hardware".into(),
-        )
-    })?;
-    let embed_slot = resolve_slot(&profile, SlotKind::Embed).ok_or_else(|| {
-        failed(
-            &app,
-            false,
-            "bundled manifest is missing an embed slot for this hardware".into(),
-        )
-    })?;
-
-    // ── 3. Prepare data dir ──────────────────────────────────────
-    emit_indet(
-        &app,
-        SetupPhase::PreparingDataDir,
-        "Preparing your storage.",
-    );
-    let existing_config = state.config.read().await.clone();
-    // Prior model picks now live in SetupConfig (config.toml). Resolve them
-    // so `pick_path` can reuse a valid existing GGUF instead of re-fetching.
-    let existing_slots = crate::state::ResolvedModelSlots::load_or_default();
-    let data_dir = existing_config.data_dir.clone();
-    let models_dir = data_dir.join("models");
-    if let Err(e) = std::fs::create_dir_all(&models_dir) {
-        return Err(failed(
-            &app,
-            false,
-            format!("could not create {}: {e}", models_dir.display()),
-        ));
-    }
-    // The DB and indexes dirs get created by bootstrap when needed,
-    // but seeding them here keeps the first-run filesystem layout
-    // visible to anyone curling `~/.svrnmesh` mid-setup.
-    let _ = std::fs::create_dir_all(data_dir.join("indexes"));
-    let _ = std::fs::create_dir_all(data_dir.join("recipes"));
-
-    // ── 4. Sequential downloads ──────────────────────────────────
+    // ── The user's pick, as one `--primary` spec ──────────────────
     //
-    // Each slot resolves to (a) the user's existing DesktopConfig
-    // path if it already points at a valid GGUF for this slot, or
-    // (b) the canonical `~/.svrnmesh/models/<slot.file>` location.
-    // Reusing existing paths matters for two cases: BYOM users who
-    // manually placed a GGUF outside the canonical dir, and dev
-    // workflows (e.g. `SOVEREIGN_DEV_FORCE_SETUP=1`) where we want
-    // SetupFlow to play through visually without re-downloading.
-    //
-    // When a path resolves to a file that's already valid, we skip
-    // the download phase *entirely* — no UI frame, no "Downloading
-    // X" sentence flashing through to 100%. The user moves directly
-    // to the next phase (preparing data dir → opening database).
-    // Only slots that genuinely need bytes pulled get a frame.
-    // Resolve the primary (thoughtful) model. A BYOM override from the
-    // onboarding "Advanced" affordance wins: a local GGUF is used in place
-    // (never downloaded), a pasted URL is fetched to the canonical models
-    // dir. With no override we keep the catalog/recommendation pick + the
-    // pick_path reuse-existing-valid-GGUF behaviour exactly as before.
-    // Also yield a `SlotConfig` for the primary in every case — real from the
-    // manifest, or synthetic for a BYOM pick — so the setup report (step 7b)
-    // describes all three slots with one uniform shape.
-    let (primary_path, primary_download, primary_slot): (
-        PathBuf,
-        Option<PrimaryDownload>,
-        SlotConfig,
-    ) = match &primary_source {
-        Some(PrimarySource::LocalPath { path }) => {
-            let p = PathBuf::from(path.trim());
-            if !is_valid_gguf_at(&p) {
-                return Err(failed(
-                    &app,
-                    false,
-                    format!(
-                        "the model you chose isn't a readable GGUF file: {}",
-                        p.display()
-                    ),
-                ));
-            }
-            let name = p
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(str::to_string)
-                .unwrap_or_else(|| "your model".to_string());
-            let slot = SlotConfig {
-                file: name.clone(),
-                base_name: name,
-                quant: "custom (local)".to_string(),
-                ..Default::default()
-            };
-            (p, None, slot)
-        }
-        Some(PrimarySource::Url { url }) => {
-            let (dl_url, file) = resolve_byom_url(url).map_err(|e| failed(&app, false, e))?;
-            let slot = SlotConfig {
-                file: file.clone(),
-                base_name: file.clone(),
-                quant: "custom (url)".to_string(),
-                hf_url: dl_url.clone(),
-                ..Default::default()
-            };
-            (
-                models_dir.join(&file),
-                Some(PrimaryDownload {
-                    url: dl_url,
-                    // Unknown ahead of time for BYOM; the downloader still
-                    // enforces the GGUF magic + 1 MB sentinel floor.
-                    size_gb: 0.0,
-                    mb_total: None,
-                    sentence: "Downloading your model.",
-                }),
-                slot,
-            )
-        }
-        None => {
-            let primary_slot = preferred_primary_file
-                .as_deref()
-                .and_then(|file| {
-                    build_primary_catalog(&profile)
-                        .into_iter()
-                        .find(|opt| opt.slot.file == file)
-                        .map(|opt| opt.slot)
-                })
-                .or_else(|| recommended_primary(&profile))
-                .ok_or_else(|| {
-                    failed(
-                        &app,
-                        false,
-                        "bundled manifest has no primary candidate for this hardware".into(),
-                    )
-                })?;
-            let path = pick_path(
-                existing_slots.primary.as_deref(),
-                models_dir.join(&primary_slot.file),
-                primary_slot.size_gb,
-            );
-            let dl = PrimaryDownload {
-                url: hf_download_url(&primary_slot),
-                size_gb: primary_slot.size_gb,
-                mb_total: Some((primary_slot.size_gb * 1024.0).round() as u64),
-                sentence: "Downloading the main responder.",
-            };
-            (path, Some(dl), primary_slot)
-        }
+    // The three shapes the onboarding offers collapse to one flag the setup
+    // verb already understands (`setup_cmd::resolve_primary_flag`): a catalog
+    // file name, a pasted `.gguf` URL, or a `.gguf` already on disk. Resolving
+    // them HERE and validating them THERE is deliberate — the validation is
+    // the same in both entry points because there is only one of it now.
+    let primary: Option<String> = match &primary_source {
+        Some(PrimarySource::LocalPath { path }) => Some(path.trim().to_string()),
+        Some(PrimarySource::Url { url }) => Some(url.trim().to_string()),
+        None => preferred_primary_file.clone(),
     };
-    let fast_path = pick_path(
-        (!existing_slots.fast.as_os_str().is_empty()).then(|| existing_slots.fast.as_path()),
-        models_dir.join(&fast_slot.file),
-        fast_slot.size_gb,
+
+    let data_dir = state.config.read().await.data_dir.clone();
+
+    // ── Run it ───────────────────────────────────────────────────
+    let app_for_lines = app.clone();
+    let terminal = crate::setup_plan::spawn_setup_run(&data_dir, primary.as_deref(), move |line| {
+        let _ = app_for_lines.emit(EVENT, frame_for(line));
+    })
+    .await
+    .map_err(|e| failed(&app, true, e))?;
+    tracing::info!(
+        config_path = terminal.config_path.as_deref().unwrap_or("<unreported>"),
+        "setup_flow: the sidecar's setup verb finished"
     );
-    let embed_path = pick_path(
-        existing_slots
-            .has_embed()
-            .then(|| existing_slots.embed.as_path()),
-        models_dir.join(&embed_slot.file),
-        embed_slot.size_gb,
-    );
 
-    // A local BYOM pick has `primary_download == None` (already validated,
-    // nothing to fetch); every other case downloads only if the resolved
-    // path isn't already a valid GGUF on disk.
-    if let Some(dl) = &primary_download {
-        if !is_valid_gguf_at(&primary_path) {
-            download_with_progress_events(
-                &app,
-                &dl.url,
-                &primary_path,
-                dl.size_gb,
-                SetupPhase::DownloadingPrimary {
-                    mb_total: dl.mb_total,
-                },
-                dl.sentence,
-            )
-            .await?;
-        }
-    }
-
-    if !is_valid_gguf_at(&fast_path) {
-        download_with_progress_events(
-            &app,
-            &hf_download_url(&fast_slot),
-            &fast_path,
-            fast_slot.size_gb,
-            SetupPhase::DownloadingFast,
-            "Downloading the quick responder.",
-        )
-        .await?;
-    }
-
-    if !is_valid_gguf_at(&embed_path) {
-        download_with_progress_events(
-            &app,
-            &hf_download_url(&embed_slot),
-            &embed_path,
-            embed_slot.size_gb,
-            SetupPhase::DownloadingEmbed,
-            "Downloading the knowledge embedder.",
-        )
-        .await?;
-    }
-
-    // ── 5. Persist the model slots to SetupConfig (config.toml), then
-    //       the non-model DesktopConfig fields. ──
+    // ── The DesktopConfig beside it ──────────────────────────────
     //
-    // Model PATHS are the sole province of `~/.svrnmesh/config.toml` (the
-    // single source of truth the daemon reads). Write them FIRST — step 6's
-    // bootstrap resolves them via `ResolvedModelSlots::load()`, so a missing
-    // write here would leave the wizard "complete" but the daemon reading
-    // stale/absent paths (the original desktop.toml-vs-config.toml divergence).
-    // fast/primary are distinct GGUFs here, so the subsume rule keeps both.
-    crate::commands::write_model_slots_to_setup(
-        Some(fast_path.clone()),
-        Some(primary_path.clone()),
-        embed_path.clone(),
-        // The auto-setup flow configures no code slot of its own, but a
-        // wizard RE-run (e.g. after a stale fast model reset setup_complete)
-        // must not wipe one the user configured via Settings or the CLI.
-        existing_slots.code.clone(),
-        data_dir.clone(),
-    )
-    .map_err(|e| {
-        failed(
-            &app,
-            false,
-            format!("write model slots to config.toml: {e}"),
-        )
-    })?;
-
+    // `config.toml` is the sidecar's and is already written. This is the
+    // app's own file, and the two fields below have never been in it.
     {
         let mut config = state.config.write().await;
         config.setup_complete = true;
@@ -350,7 +133,7 @@ pub async fn run(
         // explicitly empty. This branch used to carry its own four-member
         // literal that omitted `knowledge_lookup`, so completing setup with an
         // empty list silently dropped a tool documented as default-on. Both
-        // sides derive from `ToolFamily::ALL` now (ARCH §10.6).
+        // sides derive from `ToolFamily::ALL` now (ARCH principle 8).
         if config.enabled_tools.is_empty() {
             config.enabled_tools = sovereign_contracts::tool_bundle::ToolFamily::ALL
                 .iter()
@@ -361,46 +144,30 @@ pub async fn run(
             .save()
             .map_err(|e| failed(&app, false, format!("save config: {e}")))?;
     }
-
-    // ── 5b. Relaunch into a session that has a daemon ──────────────
-    // Mirror the wizard's picks into the shared `SetupConfig` (this
-    // flow historically relied on a later `save_config` to do it — but
-    // the relaunched instance needs it NOW), write the first-run marker
-    // + setup report (they must survive the relaunch), then restart so
-    // the fresh instance boots with a complete config on disk.
-    //
-    // Why relaunch at all, now that nothing here supervises: the app
-    // reaches a serving host exactly once, in `serving_host::
-    // ensure_reachable`, which runs at startup — BEFORE this wizard
-    // wrote `config.toml`, so this session found no config and brought
-    // nothing up. The fresh instance finds the config, reaches (or
-    // brings up) the daemon, and attaches. Same user-visible outcome as
-    // the supervised relaunch it replaces; no process is held.
     {
         let desktop_cfg = state.config.read().await.clone();
         if let Err(e) = crate::commands::mirror_to_setup_config(&desktop_cfg).await {
             tracing::warn!("setup_flow: could not mirror to SetupConfig: {e}");
         }
     }
+
+    // ── Relaunch into a session that has a daemon ────────────────
+    //
+    // The app reaches a serving host exactly once, in
+    // `serving_host::ensure_reachable`, which runs at startup — BEFORE the
+    // wizard wrote `config.toml`, so this session found no config and brought
+    // nothing up. The fresh instance finds it, reaches (or brings up) the
+    // daemon, and attaches.
     if daemon_runs_elsewhere() {
         if let Err(e) = write_first_run_marker() {
             tracing::warn!(error = %e, "could not write first_run_complete marker");
         }
-        write_setup_report(
-            &hw,
-            &profile,
-            &[
-                ("primary", &primary_slot, &primary_path),
-                ("fast", &fast_slot, &fast_path),
-                ("embed", &embed_slot, &embed_path),
-            ],
-            preferred_primary_file.is_some(),
-        );
+        write_setup_report(&state).await;
         let _ = app.emit(
             EVENT,
             SetupProgress {
                 phase: SetupPhase::Ready,
-                message: "Restarting Sovereign to finish setup…".into(),
+                message: "Restarting Sovereign to finish setup\u{2026}".into(),
                 fraction: Some(1.0),
                 eta_seconds: None,
                 indeterminate: false,
@@ -410,7 +177,11 @@ pub async fn run(
         return Ok(());
     }
 
-    // ── 6. Bootstrap with progress narration ────────────────────
+    // ── Bootstrap in place ──────────────────────────────────────
+    //
+    // The launch-topology environment asked THIS process to hold the weights
+    // (`SOVEREIGN_FORCE_LOCAL=1`, the real-mode harnesses). There is no
+    // relaunch to do, so narrate the bootstrap instead.
     let app_for_cb = app.clone();
     let cb: state::BootstrapProgressCb = Box::new(move |phase: BootstrapPhase| {
         let (sp, msg) = match phase {
@@ -449,27 +220,14 @@ pub async fn run(
         .await
         .map_err(|e| failed(&app, true, format!("bootstrap: {e}")))?;
 
-    // ── 7. First-run marker ─────────────────────────────────────
     if let Err(e) = write_first_run_marker() {
         // Non-fatal: the user's onboarding succeeded; the marker
         // just records that fact for future relaunches. Log and
         // proceed.
         tracing::warn!(error = %e, "could not write first_run_complete marker");
     }
+    write_setup_report(&state).await;
 
-    // ── 7b. Setup report (glassbox: an auditable record of what we did) ──
-    write_setup_report(
-        &hw,
-        &profile,
-        &[
-            ("primary", &primary_slot, &primary_path),
-            ("fast", &fast_slot, &fast_path),
-            ("embed", &embed_slot, &embed_path),
-        ],
-        preferred_primary_file.is_some(),
-    );
-
-    // ── 8. Ready signals ────────────────────────────────────────
     let _ = app.emit(
         EVENT,
         SetupProgress {
@@ -492,94 +250,35 @@ pub async fn run(
     Ok(())
 }
 
-/// Wrapper around `setup_planner::download_gguf` that emits
-/// per-chunk progress events. ETA is computed from a 4-sample
-/// rolling rate.
-async fn download_with_progress_events(
-    app: &AppHandle,
-    url: &str,
-    dest: &Path,
-    size_gb: f64,
-    phase: SetupPhase,
-    message: &str,
-) -> Result<(), String> {
-    // Initial frame — render the sentence immediately so the
-    // UI doesn't show a stale previous-phase string while
-    // we wait for the first chunk.
-    let _ = app.emit(
-        EVENT,
-        SetupProgress {
-            phase: phase.clone(),
-            message: message.into(),
-            fraction: None,
-            eta_seconds: None,
-            indeterminate: true,
+/// Map one sidecar progress line onto the frame the UI already renders.
+///
+/// Every arm is a rename, not a decision: the `SetupProgressLine` phases were
+/// chosen to be the ones `SetupPhase` already narrated, so there is no case
+/// here that had to be invented and none that can go missing.
+fn frame_for(line: &SetupProgressLine) -> SetupProgress {
+    let phase = match line.phase {
+        SetupProgressPhase::DetectingHardware => SetupPhase::DetectingHardware,
+        SetupProgressPhase::PreparingDataDir => SetupPhase::PreparingDataDir,
+        SetupProgressPhase::DownloadingPrimary => SetupPhase::DownloadingPrimary {
+            // Megabytes, which is what the frontend's "of N MB" label reads.
+            mb_total: line.total.map(|t| t / (1024 * 1024)),
         },
-    );
-
-    let expected = GgufExpectation::from_size_gb(size_gb);
-    let app_for_cb = app.clone();
-    let phase_for_cb = phase.clone();
-    let msg_for_cb = message.to_string();
-    let samples: Mutex<Vec<(Instant, u64)>> = Mutex::new(Vec::with_capacity(8));
-
-    let cb = move |done: u64, total: Option<u64>| {
-        // Maintain a 4-sample rolling rate so the ETA doesn't
-        // jitter on the first few chunks.
-        let now = Instant::now();
-        let eta_seconds = {
-            let mut s = samples.lock().unwrap();
-            s.push((now, done));
-            if s.len() > 4 {
-                let drop = s.len() - 4;
-                s.drain(..drop);
-            }
-            if s.len() >= 2 {
-                let (t0, b0) = s[0];
-                let (t1, b1) = s[s.len() - 1];
-                let dt = t1.duration_since(t0).as_secs_f64();
-                let db = b1.saturating_sub(b0) as f64;
-                if dt > 0.0 && db > 0.0 {
-                    if let Some(t) = total {
-                        let remaining = t.saturating_sub(done) as f64;
-                        let rate = db / dt;
-                        if rate > 0.0 {
-                            Some((remaining / rate).round() as u64)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
-        let fraction = total.and_then(|t| {
-            if t > 0 {
-                Some((done as f64 / t as f64).clamp(0.0, 1.0))
-            } else {
-                None
-            }
-        });
-        let _ = app_for_cb.emit(
-            EVENT,
-            SetupProgress {
-                phase: phase_for_cb.clone(),
-                message: msg_for_cb.clone(),
-                fraction,
-                eta_seconds,
-                indeterminate: fraction.is_none(),
-            },
-        );
+        SetupProgressPhase::DownloadingFast => SetupPhase::DownloadingFast,
+        SetupProgressPhase::DownloadingEmbed => SetupPhase::DownloadingEmbed,
+        SetupProgressPhase::WritingConfig => SetupPhase::OpeningDatabase,
+        SetupProgressPhase::Done => SetupPhase::Ready,
+        // `recoverable` because every failure the verb reports leaves the
+        // machine re-runnable: it writes no config until the downloads
+        // succeed, and its downloader resumes from the `.part` it left.
+        SetupProgressPhase::Failed => SetupPhase::Failed { recoverable: true },
     };
-
-    download_gguf(url, dest, &expected, &cb)
-        .await
-        .map_err(|e| failed(app, true, e))
+    SetupProgress {
+        phase,
+        message: line.message.clone(),
+        fraction: line.fraction,
+        eta_seconds: line.eta_seconds,
+        indeterminate: line.fraction.is_none(),
+    }
 }
 
 fn emit_indet(app: &AppHandle, phase: SetupPhase, message: &str) {
@@ -726,17 +425,6 @@ struct SetupReport {
     smoke_passed: bool,
 }
 
-fn profile_str(p: &hardware::ProfileName) -> &'static str {
-    use hardware::ProfileName::*;
-    match p {
-        CpuOnly => "cpu_only",
-        LowMem => "low_mem",
-        Default => "default",
-        High => "high",
-        VeryHigh => "very_high",
-    }
-}
-
 fn slot_repo(s: &SlotConfig) -> String {
     s.hf_url
         .trim_start_matches("https://huggingface.co/")
@@ -750,24 +438,101 @@ fn slot_repo(s: &SlotConfig) -> String {
 /// dual-write so a fresh install is auditable after the fact (glassbox).
 /// Best-effort: any write failure is logged, never fatal (onboarding has
 /// already succeeded by the time this runs).
-fn write_setup_report(
-    hw: &HardwareProfile,
-    profile: &hardware::ProfileName,
-    models: &[(&str, &SlotConfig, &Path)],
-    primary_customized: bool,
-) {
+///
+/// Assembled AFTER the run rather than during it, from two things that are
+/// facts by then rather than intentions: the plan (whichever side answered
+/// it) and the slots `config.toml` actually holds. It used to be built from
+/// whatever the local downloader had in scope, which is how it could describe
+/// a download that had been skipped.
+async fn write_setup_report(state: &Arc<AppState>) {
+    let base = state.client_base_url();
+    let (hardware, profile) = match crate::setup_plan::hardware(&base).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-report: no hardware answer — report skipped");
+            return;
+        }
+    };
+    let slots = crate::state::ResolvedModelSlots::load_or_default();
+    // Describe each configured slot by the catalog row that names its file
+    // when there is one, and by the file itself when the user brought their
+    // own. A BYOM pick has no manifest row, and inventing one would put a size
+    // and a repo on a model nobody published.
+    //
+    // A read that FAILS is not an empty catalog. With no rows, `describe`
+    // below falls through to `quant: "custom"` for every slot — so a daemon
+    // that did not answer would produce a report calling three manifest
+    // models "custom", which reads as a fact and is not one. Skip the report
+    // instead, the same as the hardware branch above (ARCH principle 6).
+    let catalog = match crate::setup_plan::catalog(&base, None).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-report: no catalog answer — report skipped");
+            return;
+        }
+    };
+    // A slot the manifest does not define for this tier is legitimately
+    // `None`; only the ERROR is fatal to the report.
+    let embed_slot = match crate::setup_plan::slot(&base, "embed", None).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-report: no embed-slot answer — report skipped");
+            return;
+        }
+    };
+    let fast_slot = match crate::setup_plan::slot(&base, "fast", None).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "setup-report: no fast-slot answer — report skipped");
+            return;
+        }
+    };
+    let describe = |path: &std::path::Path| -> SlotConfig {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        catalog
+            .iter()
+            .map(|o| &o.slot)
+            .chain(fast_slot.iter())
+            .chain(embed_slot.iter())
+            .find(|sc| sc.file == name)
+            .cloned()
+            .unwrap_or(SlotConfig {
+                file: name.clone(),
+                base_name: name,
+                quant: "custom".to_string(),
+                ..Default::default()
+            })
+    };
+
+    let mut rows: Vec<(&str, SlotConfig, PathBuf)> = Vec::new();
+    if let Some(p) = slots.primary.as_ref() {
+        rows.push(("primary", describe(p), p.clone()));
+    }
+    if !slots.fast.as_os_str().is_empty() {
+        rows.push(("fast", describe(&slots.fast), slots.fast.clone()));
+    }
+    if slots.has_embed() {
+        rows.push(("embed", describe(&slots.embed), slots.embed.clone()));
+    }
+
     let now = chrono::Utc::now();
     let report = SetupReport {
         schema_version: 1,
         completed_at: now.to_rfc3339(),
         completed_at_unix: now.timestamp(),
         hardware: ReportHardware {
-            effective_memory_gb: hw.effective_vram_gb() as f64,
-            is_unified_memory: hw.is_unified_memory,
+            effective_memory_gb: hardware.effective_vram_gb() as f64,
+            is_unified_memory: hardware.is_unified_memory,
         },
-        profile: profile_str(profile).to_string(),
-        primary_customized,
-        models: models
+        profile: profile.as_str().to_string(),
+        primary_customized: rows
+            .iter()
+            .any(|(role, slot, _)| *role == "primary" && slot.quant == "custom"),
+        models: rows
             .iter()
             .map(|(role, slot, path)| ReportModel {
                 role: (*role).to_string(),
@@ -842,38 +607,4 @@ fn render_setup_report_md(r: &SetupReport) -> String {
 
 fn sovereign_root() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root()
-}
-
-/// Resolve the destination path for a model slot. Prefer the
-/// caller's existing config path when it points at a valid GGUF
-/// (BYOM placements, dev re-runs); otherwise fall back to the
-/// canonical `~/.svrnmesh/models/<slot.file>` location, where
-/// the downloader will fetch + validate as usual.
-fn pick_path(existing: Option<&Path>, canonical: PathBuf, _size_gb: f64) -> PathBuf {
-    if let Some(p) = existing {
-        if !p.as_os_str().is_empty() && is_valid_gguf_at(p) {
-            return p.to_path_buf();
-        }
-    }
-    canonical
-}
-
-/// True iff `path` exists and contains something that passes the
-/// GGUF magic-byte check (plus a 1 MB sentinel floor that catches
-/// HTML / LFS-pointer stubs).
-///
-/// We deliberately do NOT cross-check against the active profile's
-/// `size_gb`. The user's existing slot might be a different but
-/// perfectly valid model than what the current manifest profile
-/// expects (e.g. Qwen3-Embedding-0.6B locally where the new
-/// `very_high` profile would download a 4B variant) — forcing
-/// validation against the profile size would re-download every
-/// time the manifest's recommended slot changes. Trust what's on
-/// disk; let the runtime surface real load errors if anything
-/// truly broken slips through.
-fn is_valid_gguf_at(path: &Path) -> bool {
-    if !path.exists() {
-        return false;
-    }
-    sovereign_contracts::gguf_validator::validate_gguf(path, &GgufExpectation::unknown()).is_ok()
 }

@@ -24,6 +24,16 @@
 #   SOVEREIGN_DESKTOP_CARGO_RUNNER   cargo command to use (default `cargo`);
 #                                    the Windows leg sets `cargo-xwin`.
 #   SOVEREIGN_DESKTOP_SIDECAR_PROFILE  `release` (default) or `debug`.
+#   SOVEREIGN_SIDECAR_FEATURES       comma-separated cargo features for the
+#                                    daemon build. This is where the WINDOWS
+#                                    GPU BACKEND is now selected —
+#                                    `windows-vulkan` or `windows-cuda`. They
+#                                    were `sovereign-desktop` features until
+#                                    sv-surface svt-7 (2026-09-12), forwarded
+#                                    to a `sovereign-inference` the app no
+#                                    longer links; the process that loads the
+#                                    weights is this sidecar, so the backend
+#                                    is chosen on ITS build.
 #   CARGO_TARGET_DIR                 honoured; the container legs set it.
 #
 # Why release by default: this stages an artifact that ships inside an
@@ -81,6 +91,10 @@ mkdir -p "$DESKTOP_BIN_DIR"
 
 BUILD_ARGS=(build --target "$TARGET" -p sovereign-cli-daemon --bin "$SIDECAR_NAME")
 [[ "$PROFILE" == "release" ]] && BUILD_ARGS+=(--release)
+if [[ -n "${SOVEREIGN_SIDECAR_FEATURES:-}" ]]; then
+    BUILD_ARGS+=(--features "$SOVEREIGN_SIDECAR_FEATURES")
+    echo "stage-daemon-sidecar: features=$SOVEREIGN_SIDECAR_FEATURES"
+fi
 
 # Concurrent agents serialize on the cargo package lock (AGENTS.md
 # "Compilation and test feedback"). The wrapper is a no-cost pass-through for

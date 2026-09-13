@@ -257,7 +257,7 @@ crates/
 ├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
 ├── serving-policy           # Fair-share scheduling (SchedCore/EtaEwma/reciprocity) + pipeline alias resolution — tier-0, empty in-repo dep list, forbidden from naming either family
 ├── oplog                    # Op/OpId/Oplog/Journaled/SkippedLine — the append-only JSONL journal; tier-0, kernel-types its only in-repo dep, forbidden from naming corpus-engine* OR either family
-├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib. The desktop's --daemon-child re-entry was deleted 2026-09-11 — sv-surface svt-2 — and the crate is no longer a desktop dependency)
+├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib. The desktop's --daemon-child re-entry was deleted 2026-09-11 — sv-surface svt-2 — and the crate is no longer a desktop dependency, though the desktop SHIPS this binary as its Tauri sidecar and spawns its `setup` verb for first run). **Owns the Windows GPU backend selection since svt-7 (2026-09-12)**: `windows-vulkan` / `windows-cuda` forward to sovereign-inference from HERE, because this is the process that loads the weights; `scripts/stage-daemon-sidecar.sh` passes `SOVEREIGN_SIDECAR_FEATURES` through.
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
 ├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
@@ -5996,6 +5996,7 @@ or guest bind.
 | `/v1/documents`, `/v1/documents/legacy` | the document assets and the legacy-document listing + promotion over `ServingCore.state_store` + runtime (D9a; the desktop's nine document reads; ask-document's fall-through turn stays on the driver). Since 2026-09-11 the UPLOAD is a job here too: `POST /v1/documents` (`{path}` → 202 Pending record) + `GET /v1/documents/{id}/progress?after=N` (`DocumentIngestProgress`: the manager's `IngestProgress` frames with `asset_id` stamped, from an in-process log); and `POST /v1/documents/legacy` (`{path}` → `{source, chunks_created}`) is the old paperclip ingest. The desktop's `upload_document_asset` / `ingest_document` are call + poll. The ASK is a job as well: `POST /v1/documents/{id}/ask` (`{question, conversation_id}`; persists the user message, then route + execute + persist on the daemon's manager) + `GET /v1/documents/{id}/ask/{job_id}?after=N` (`AskProgress`: `OperationProgress` frames + a terminal `AskOutcome` — answered with the persisted message, fell_through for off-topic/empty-RAG which the client runs as an ordinary turn, or failed). `ask_document` on the desktop holds no manager. Since 2026-09-11 `manager_for` also hands the manager `runtime.lane().gliner`, so the T2 skeleton entity pass runs on the daemon's resident NER model rather than its LLM fallback — the module's own header asserted "a daemon holds none", which was never true: `sovereign-runtime-recipe` fills `LaneSources::gliner` for every host it commissions | `sovereign-mesh/src/documents_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `POST /internal/corpus/recipes/import`, `GET /internal/corpus/recipes/{corpus}/parameters` | the recipe-authoring writes and reads (thin-desktop order, 2026-09-11): validate a pasted recipe offline (`test_recipe`, sample size 0, staged beside the engine's own recipes dir) and install it through `RecipeRegistry::install_local_recipe` — the ONE decider for "a user published a recipe", which `svrn recipe publish` now calls as well; and the `[parameters]` block for the install form, resolved by `fetch_recipe` so a just-imported recipe answers with no reload. The desktop held a third copy of the install loop over a `CorpusEngine` of its own, resolving THIS process's default recipes dir rather than the daemon's. A validation failure is a 200 with `success: false` and the errors; a body that is not a recipe is a 400. DTOs in `daemon_wire::recipes` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `POST /internal/corpus/recipes/test`, `GET /internal/corpus/recipes/test/{job}/progress`, `POST /internal/corpus/recipes/harness`, `GET /internal/corpus/recipes/harness/{job}/progress` | the recipe-authoring RUNS (sv-surface svt-6, 2026-09-12) — the last thing the desktop needed a `CorpusEngine` for. `…/test` is the dry run: `sample_size == 0` is validation-only (static checks plus, when `offline` is false, one HTTP HEAD on the source URL) and answers `RecipeDryRunReport` INLINE; a sample ACQUIRES, so it is a job — 202 + `IngestJobAck`, 409 by recipe id. Both arms project through one `dry_run_report`, so a sampled run and a validation run cannot disagree about a field. `…/harness` is the deterministic authoring harness over a frozen sample, always a job because the first run captures; the sample lands under the DAEMON's `<data_dir>/harness/<id>`, and rung 6 (`enrich: true`) is `verify_atoms_at(<index_dir>/<id>)` — the corpus this daemon installed, in the index it serves retrieval from. The drive is `sovereign_authoring_harness::run_over_frozen_sample`, the SAME function `svrn recipe test` calls; what differs is rung 6, which is a parameter rather than a flag inside the drive. **The trailing `/progress` is load-bearing**: spelled `…/recipes/test/{job}`, axum prefers the static `test` over `{corpus}` and a recipe named `test` loses its `…/parameters` form — caught by `the_dry_run_progress_route_does_not_shadow_the_parameters_route`, which went red on exactly that. DTOs in `daemon_wire::recipes` (`RecipeDryRun*`, `RecipeHarness*`, `RecipeJobState`, `HarnessRunCardView`); client `TurnClient::{recipe_dry_run, recipe_dry_run_progress, recipe_harness, recipe_harness_progress}` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
+| `GET /v1/admin/hardware`, `GET /v1/admin/setup/catalog?profile=`, `GET /v1/admin/setup/slot?kind=`, `GET /internal/ner/model`, `POST /v1/admin/assets/download` (202), `GET /v1/admin/assets/download/{job}` | the daemon's WEIGHTS (sv-surface svt-7, 2026-09-12). `<data.dir>/models` belongs to the process serving from it, and until this landed a client probed that directory with its own filesystem calls, resolved the catalog with its own copy of `setup_planner`, and wrote into the root with a THIRD GGUF downloader. The four reads answer what this machine can run, what the tier's catalog offers, its single-pick fast/embed slots, and whether the GLiNER export is installed **under the id the daemon is configured for** — `configured_model_id()`, not the `DEFAULT_MODEL_ID` constant a client would repeat. The write is ONE job for both artifact kinds: `{kind: gguf|gliner}` over `setup_planner::download_gguf` into `<data.dir>/models/` or `gliner_ner::download_model` into the GLiNER root, answering `IngestJobAck` + a progress route in the IndexBuild pattern. Three refusals rather than guesses: an unknown `profile` or slot `kind` is a 400 naming the set; a `gguf` request names which of `url`/`file` is missing; and a `file` carrying a path separator or `..` is refused by SHAPE, because a client naming a destination outside the models root is the one thing this route must not honour. `AssetDownloadProgress.path` is populated only on `Complete` — the client writes that string into a model slot, so a path reported mid-download would configure a `.part`. The same four reads are ALSO what `svrn setup --plan --json` prints, in the same `daemon_wire` types, because on a first run there is no daemon to ask. DTOs in `daemon_wire::assets` + `daemon_wire::setup_plan`; client `TurnClient::{admin_hardware, setup_catalog, setup_slot, ner_model, asset_download, asset_download_progress}` | `assets_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `/internal/corpus/catalog`, `/notebooks`, `/diagnose`, `/{corpus}/health`, `/{corpus}/coverage-card`, `/{corpus}/retry-enrichment` | the corpus catalogue and the notebook shelf's five-source fold over `installed_indexes()` (the one decider), the atlas readers and conv-tiered buckets; in-flight state stays on `/internal/corpus/status` (D9a; nine desktop reads in corpus.rs, budget.rs, corpus_install.rs, recipe_testing.rs) | `sovereign-mesh/src/corpus_catalog_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
 | `POST /v1/research` (202), `GET /v1/research/{job}/progress?after=N`, `POST /v1/research/{job}/abort`, `GET /v1/research/capabilities`, `GET /v1/research/runs`, `GET /v1/research/active`, `GET /v1/research/runs/{run}/report` | deep research as a daemon JOB (2026-09-11). Until then `sovereign_core::deep_research::run` was linked into BOTH the desktop's `dr_start` and the CLI verb and served by no route. `POST` launches through `launch::prepare` (the ONE `RunConfig` assembly), one run at a time (a second is a 409 naming the first); the job's frame log (`ResearchFrame`: `started`, every CHANGED `live` run-dir snapshot, one terminal `report_ready`/`failed`) is cursored by `after`, and the answer carries the elapsed/quiet clocks a client's `heartbeat` is made of. The run-dir readers (poller, shelf, report + constitution check) came down from the desktop whole and still read the loop's ICD artifacts as the single state source. The loop's web queries are machine-formed (`port.rs` passes `user_formed: false` at both `egress::verify` sites), so the daemon can host it without weakening the egress boundary. `ResearchLauncher` is the seam the e2e test stubs (`tests/main/research_surface_e2e.rs` pins the job contract; the loop has its own tests in `sovereign-core`) | `sovereign-mesh/src/research_http.rs`; DTOs in `sovereign-contracts/src/daemon_wire/research.rs`; client `TurnClient::research_*` | router `localhost_only` (no daemon handle — `launch::prepare` reads `SetupConfig` itself) |
 
@@ -6674,7 +6675,8 @@ work pins the GPU while the user is chatting. Components:
   used to end "still in-process, and NOT this rung's work": the `Local` branch
   commissioned a `sovereign_mesh::EmbeddedDaemon`, claimed the data root's
   `RunLock`, and loaded GGUFs in this process on every Local boot. All of it is
-  gone from `state.rs` and `state/builders/inference.rs`. **There is one story
+  gone from `state.rs` and the `builders::inference` module (itself deleted at
+  svt-7). **There is one story
   now: the desktop is a client of a daemon it does not own, and the only
   question left is which port** (`AppState::client_port`).
 
@@ -6692,11 +6694,11 @@ work pins the GPU while the user is chatting. Components:
     catch a process that concluded `Local` while really being a client. That
     state is now unrepresentable: `AppState::is_attach_mode()` returns `true`,
     full stop, and the doc on it says why rather than leaving a bare constant.
-  * The in-process model load. `state/builders/inference.rs` is one path —
-    `build_daemon_provider` (renamed from `build_attach_provider`; there is no
-    attach/local fork left to name it against), an OpenAI-compatible client on
-    the daemon's `/v1`. It names the embedded llama.cpp loader type NOWHERE,
-    and `attach_construction_census` greps for that absence.
+  * The in-process model load. The `builders::inference` module was left with
+    one path — `build_daemon_provider` (renamed from `build_attach_provider`;
+    there is no attach/local fork left to name it against), an
+    OpenAI-compatible client on the daemon's `/v1` — and svt-7 deleted the
+    module outright when the slot it filled turned out to have no readers.
   * **`smoketest.rs` (302 lines) and the `Launch::Smoketest` arm.** The
     subprocess re-exec'd this binary to decode one token against the chat GGUF
     so a ggml backend crash (the Gemma-4-on-Metal SIGSEGV) killed the probe and
@@ -6920,6 +6922,107 @@ work pins the GPU while the user is chatting. Components:
   The `paddle-ocr` feature forward went too: it existed to make a
   `#[cfg(feature = "paddle-ocr")]` gate meaningful and there is no such gate in
   the desktop, and had not been for some time.
+
+- **svt-7 — the daemon owns its weights and its setup, and the list reaches
+  zero — 2026-09-12.** `sovereign-gliner`, `sovereign-inference` and
+  `sovereign-core` leave `src-tauri/Cargo.toml`, and
+  `grep -c 'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml`: **13 -> 0**.
+  The campaign's committed predicate check
+  (`quality/campaigns/sv-surface.toml`) EXITS 0 — it exited 1 with 24 rows at
+  `ffff8041e`, which is the rung that put the grep in the check so it could.
+  `cargo xtask lifecycle-gate`: 0 burning-down.
+
+  **First run had to be measured before it could be designed, and the answer
+  was not a route.** The sidecar cannot serve HTTP unconfigured: it exits 1
+  with no config off a TTY (`daemon_cmd/mod.rs`), refuses a config with no
+  `[models]` (`daemon_cmd/build/inference.rs`), and the app reaches it only
+  after the wizard wrote config (`serving_host::ensure_reachable`). Operator
+  call: the wizard SPAWNS the sidecar's own `setup` verb, which links nothing.
+  `svrn setup --plan --json` prints `{hardware, profile, catalog, fast, embed}`
+  and exits, touching no file; `svrn setup --yes --json [--primary <spec>]
+  [--data-dir]` is the SAME run with stdout reserved for one
+  `SetupProgressLine` per event and the human narration moved to stderr. That
+  redirection is one decision in `setup_cmd/emit.rs` rather than a guard at
+  each of the 111 `println!` sites — `say!` is the narration, `emit::line` is
+  the wire, so a new narration line cannot land on the wrong stream by
+  forgetting a guard. `--primary` is the non-interactive form of the picker
+  (a catalog file, a `.gguf` URL, or a `.gguf` on disk used in place), and an
+  unrecognised spec is refused with the tier's catalog listed rather than
+  demoted to the recommendation.
+
+  **`setup_flow.rs` stopped being a second wizard.** It ran its own hardware
+  probe, catalog resolve, three `download_gguf` calls and `config.toml` write
+  — in a process that owns neither the weights nor the config — and the two
+  copies had drifted (the CLI asked the user to pick a primary and this did
+  not; only one knew `--repair`). It resolves the pick into `--primary`,
+  spawns, maps each line onto the `SetupPhase` frames the UI already renders,
+  and keeps the three things that ARE the app's: the DesktopConfig beside
+  `config.toml`, the first-run marker, and the relaunch.
+
+  **Four types moved DOWN to `sovereign_contracts::daemon_wire::setup_plan`**,
+  each re-exported at its old path: `HardwareProfile` and `ProfileName` (from
+  `sovereign-inference/src/hardware.rs`), `SlotConfig` (from
+  `sovereign-core/src/models_manifest.rs`) and `PrimaryOption` (from
+  `setup_planner.rs`). Naming one used to cost a client the inference stack or
+  the runtime hub. `HardwareProfile::detect` became the free function
+  `hardware::detect_hardware` at 13 sites — an inherent impl cannot cross a
+  crate boundary. The tier's SPELLING had five copies (`setup_planner`'s order
+  array and its `resolve_slot` match, the desktop's
+  `profile_name_str`/`parse_profile_name`, `setup_flow`'s `profile_str`);
+  `ProfileName::{as_str, from_wire}` is the decider now and the serde form is
+  the manifest's own section key.
+
+  **`AppState.inference` is gone, and it is the principle-12 shape exactly.**
+  It held a `SplitInferenceProvider` over the daemon's `/v1` and had ZERO
+  readers — its last two touches were `= None` resets in `config_setup.rs`. A
+  count that reaches zero while the ability stays is drawn wrong, so the
+  ability went too: the `builders::inference` module is deleted. The one thing
+  that call carried and had a reason to live — the boot's refusal when no
+  embedding model is configured — is stated in `state.rs` as itself, same
+  sentence, same Settings pointer. `fast_exit_skip_destructors` went with the
+  C++ it existed to protect: no llama.cpp and no ONNX runtime are linked here
+  any more, so there are no static destructors to skip.
+
+  **The census pin got STRONGER, not deleted.**
+  `the_attach_provider_construction_is_pinned` held
+  `build_daemon_provider(slots)?` to exactly one call site; a floor of one
+  became a floor of none, and `the_desktop_names_no_inference_stack` pins it
+  at the place the ability is GRANTED — the manifest — rather than at the
+  sites that used it (ARCH principle 12: look where the ability is granted).
+  Its needles carry their call syntax because this crate's comments cite every
+  deleted type by name on purpose.
+
+  **The thirteenth row was a MOVE, and the reason is worth keeping.**
+  `corpus-engine-sections` was reached through `sovereign-tools-base` — the
+  one runtime-layer crate `[thin_surfaces].may_reach` permits — so what
+  tools-base links, every thin client links, by reachability rather than by
+  intent. The 2026-08-20 budget amendment that admitted the leaf was right
+  about the leaf (`regex` + `tracing`, reached DOWNWARD) and could not see
+  that. `rag::section` went back to `sovereign-tools`; `rag::chunk` did NOT,
+  because it carries no such edge and the corpus-engine-free studio bundle
+  would have lost a pure paragraph chunker for nothing. `standard_registry`
+  therefore registers `chunk` and not `section`, and `section` joined
+  `sovereign_tools::workflow_corpus_tools()` — the seam that has restored the
+  corpus/atlas tools to every host that links the crate since B:P9d. **Banked,
+  not funded:** `rag/chunk.rs` and `corpus-engine/src/chunkers/paragraph.rs`
+  are two paragraph chunkers both named `chunk_text` with different parameters
+  (ARCH principle 8), a behaviour-changing merge for a later order.
+
+  **`windows-vulkan` / `windows-cuda` moved to `sovereign-cli-daemon`.** They
+  were desktop features forwarding to a `sovereign-inference` the app no
+  longer has, selecting a GPU backend for a process that loads no models. The
+  build that needs them is the SIDECAR's:
+  `SOVEREIGN_SIDECAR_FEATURES=windows-vulkan scripts/stage-daemon-sidecar.sh`.
+  NOT VERIFIED on this host — the Windows legs are commented out in
+  `desktop-release.yml` and this is a macOS box; the cross-check path is
+  `scripts/windows-crosscheck.sh` plus a native run.
+
+  **One instrument bug, caught by running the check rather than reading it.**
+  The prose written into `quality/ARCH_LAYERS.toml` to record this burn-down
+  originally quoted the row key verbatim, and the campaign predicate is a bare
+  `grep -q` over that file — so the check stayed red with zero rows present, an
+  instrument failing for a reason that is not the fact it measures (ARCH
+  principle 5). The comment is reworded and says why.
 
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port

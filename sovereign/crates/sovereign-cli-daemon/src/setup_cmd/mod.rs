@@ -45,8 +45,6 @@ mod download;
 mod emit;
 mod fim;
 mod finish;
-#[cfg(test)]
-mod json_surface_tests;
 mod opencode;
 mod terminal;
 
@@ -804,6 +802,15 @@ fn hardware_label(hw: &HardwareProfile) -> String {
 fn _tty_gate() -> bool {
     io::stdin().is_terminal()
 }
+
+// BELOW the production code, deliberately. `setup_never_reads_or_writes_the_
+// process_default_config` isolates this file's production half by splitting on
+// the first `\n#[cfg(test)]\nmod ` — so a test-module DECLARATION placed up
+// with the other `mod` lines truncates the census to the header, and it passes
+// vacuously over ~1.5 KB. Its `prod.len() > 2000` guard is what caught that
+// (svt-7, 2026-09-12), which is the guard earning its keep on a real landing.
+#[cfg(test)]
+mod json_surface_tests;
 
 #[cfg(test)]
 mod download_failure_tests {

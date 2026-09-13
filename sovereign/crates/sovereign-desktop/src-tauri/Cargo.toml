@@ -5,7 +5,16 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-sovereign-core = { workspace = true }
+# `sovereign-core` LEFT HERE at svt-7 (2026-09-12), and with it the LAST of
+# the six. What it had been reduced to was contracts re-exports worn under the
+# core name plus ONE real thing: `models_manifest::{SlotConfig,
+# DEFAULT_MANIFEST}` — the bundled `models.toml`, read to render the setup
+# picker and to derive an embedding model's query-instruction prefix. Both
+# belonged to whoever loads the weights. `SlotConfig` moved DOWN to
+# `sovereign_contracts::daemon_wire::setup_plan` (5d6d0a4d8), the catalog is
+# `GET /v1/admin/setup/catalog` or `svrn setup --plan --json`, and the
+# query-prefix derivation went with the provider that used it — a
+# `SplitInferenceProvider` filling a slot NOTHING read (`state.rs`).
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
 sovereign-tools-base = { workspace = true }
@@ -21,7 +30,19 @@ sovereign-tools-base = { workspace = true }
 # DARK. It gates code only — no dependency hangs off it, so it cannot move a
 # dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
-sovereign-inference = { workspace = true }
+# `sovereign-inference` LEFT HERE at svt-7 (2026-09-12). Its 38 use sites were
+# three jobs, each of which had an owner on the other side of the wire:
+# `hardware::{detect_hardware, select_profile}` + `setup_planner::{
+# build_primary_catalog, resolve_slot, hf_download_url}` answered "what can
+# this machine run and what should it fetch" — which is the SERVING machine's
+# question, now `GET /v1/admin/{hardware,setup/catalog,setup/slot}` and, before
+# a daemon exists, a SPAWN of the sidecar's own `svrn setup --plan --json`
+# (`src/setup_plan.rs`); `setup_planner::download_gguf` wrote into a models
+# root this process does not own, now `POST /v1/admin/assets/download`; and
+# `remote::SplitInferenceProvider` filled `AppState.inference`, a slot with
+# zero readers. `fast_exit_skip_destructors` went with the C++ it existed to
+# protect — no llama.cpp is linked here, so there are no static destructors to
+# skip (`main.rs`, the `RunEvent` closure).
 # `sovereign-store` LEFT HERE at thin-desktop R2 (2026-09-12). The app opened
 # its OWN `SqliteStateStore` over `config.data_dir/sovereign.db` — a second
 # opener beside the daemon's, running migrations on a data root it does not
@@ -54,7 +75,19 @@ sovereign-inference = { workspace = true }
 # constructions; `[thin_surfaces].may_not_reach` in quality/ARCH_LAYERS.toml
 # pins the absence of the reach, and it is reachability over `cargo tree`, so
 # a type reached through one of these is a red gate and not a shortcut.
-sovereign-gliner = { workspace = true }
+# `sovereign-gliner` LEFT HERE at svt-7 (2026-09-12). Two call sites, both in
+# `atlas_commands.rs`: a filesystem probe for the GLiNER export under
+# `models_root()`, and a downloader that wrote there. The extractor loads in
+# the DAEMON and that root is under the data dir the daemon owns, so both
+# crossed — `GET /internal/ner/model` and the `kind: "gliner"` arm of
+# `POST /v1/admin/assets/download`. The probe also stopped asking about a
+# constant: the daemon answers for the id IT is configured to load
+# (`SOVEREIGN_GLINER_MODEL_ID`), which the app had no way to know.
+#
+# With these three lines gone, `cargo tree -p sovereign-desktop -e normal`
+# reaches none of corpus-engine, sovereign-core, sovereign-inference,
+# sovereign-store, sovereign-tools or sovereign-gliner, and every
+# `from = "sovereign-desktop"` row left quality/ARCH_LAYERS.toml.
 # `sovereign-workflow-host`, `sovereign-runtime-recipe` and `sovereign-mesh`
 # LEFT HERE at svt-3 (2026-09-11), with `corpus-engine-scip` and `arc-swap`
 # below. The runtime recipe and the workflow-author bundle went when the app
@@ -144,12 +177,14 @@ tower-http = { workspace = true }
 # conditional that no longer exists. The OCR decision belongs to whoever runs
 # the extractor, which is the daemon.
 
-# Windows GPU backend selectors — forwarded to sovereign-inference, passed by
-# the release matrix's Windows GPU legs (`cargo tauri build --features ...`).
-# No-op on macOS/Linux (which hardcode their backend per-OS). See
-# sovereign-inference/Cargo.toml for the backend matrix.
-windows-vulkan = ["sovereign-inference/windows-vulkan"]
-windows-cuda = ["sovereign-inference/windows-cuda"]
+# The `windows-vulkan` / `windows-cuda` forwards stood here and are GONE
+# (svt-7). They forwarded to `sovereign-inference`, which this crate no longer
+# has — and they were selecting a GPU backend for a process that loads no
+# models. The selection belongs to the build of the thing that does: the
+# SIDECAR. `scripts/stage-daemon-sidecar.sh` passes them to the
+# `sovereign-cli-daemon` build, and the release matrix's Windows GPU legs pass
+# `SOVEREIGN_SIDECAR_FEATURES` to that script rather than
+# `cargo tauri build --features windows-vulkan`.
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -210,7 +210,6 @@ pub const WORKFLOW_CORPUS_TOOL_IDS: &[&str] = &[
 /// subprocesses.
 pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry {
     use sovereign_tools_base::rag::chunk::ChunkTool;
-    use sovereign_tools_base::rag::section::SectionTool;
     use sovereign_tools_base::read_csv::ReadCsvTool;
     use sovereign_tools_base::read_file::ReadFileTool;
     use sovereign_tools_base::read_json::ReadJsonTool;
@@ -225,7 +224,6 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(WebFetchTool::new()));
     tools.register(Box::new(ChunkTool));
-    tools.register(Box::new(SectionTool));
     tools.register(Box::new(ReadJsonTool));
     tools.register(Box::new(ReadFileTool));
     tools.register(Box::new(ZipTool));

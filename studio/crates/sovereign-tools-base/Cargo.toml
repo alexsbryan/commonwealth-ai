@@ -11,22 +11,28 @@ license.workspace = true
 # those (extract, corpus_store/search, atlas_*) stay in `sovereign-tools` and
 # are injected via `extra_tools`.
 #
-# BUDGET AMENDED 2026-08-20 (noun-convergence rung 2). It used to read "no
-# corpus-engine", and it still forbids what that was written against: the
-# `corpus-engine` crate itself, whose closure drags LanceDB, Tantivy, rusqlite
-# and mmap. What it now permits is `corpus-engine-sections` — a leaf whose
-# entire dependency budget is `regex` + `tracing`. `tool:section` was always
-# calling corpus-engine's own `ChapterRegexDetector`; it reached it through
-# `sovereign_contracts::recipe::sections`, which is where the detectors were
-# parked so both callers could share one implementation. Parking them there
-# made the knowledge layer depend on the layer above it. They now live at the
-# bottom and both callers reach DOWN. Same one implementation, same weight —
-# what changed is the direction, not the budget's intent.
+# THE BUDGET IS WHOLE AGAIN (sv-surface svt-7, 2026-09-12). It reads "no
+# corpus-engine" and it means every crate of that family — the amendment that
+# stood here from 2026-08-20 permitting `corpus-engine-sections` is gone with
+# the module that needed it.
+#
+# Not because the amendment's reasoning was wrong: `corpus-engine-sections` IS
+# a `regex` + `tracing` leaf and reaching DOWN to it was the right direction.
+# What the amendment could not see is that this crate is on
+# `[thin_surfaces].may_reach` — the ONE runtime-layer crate a thin client may
+# link — so anything it reaches, every thin surface reaches too, by
+# reachability rather than by intent. `sovereign-desktop` uses nothing from
+# `rag`, and `corpus-engine-sections` was the last `from = "sovereign-desktop"`
+# row in quality/ARCH_LAYERS.toml, held open by this edge alone.
+#
+# Operator call 2026-09-12: MOVE, not allowlist. The `chunk` and `section`
+# workflow tools went back to `sovereign-tools`, beside `rag::{ingest, parse}`,
+# where the path `sovereign_tools::rag::{chunk, section}` already resolved.
+# A client-safe seam holds what a CLIENT needs; these are workflow tools and
+# no client runs them.
 
 [dependencies]
 sovereign-contracts = { workspace = true }
-# The section detectors — `regex`-only leaf, see the budget note above.
-corpus-engine-sections = { workspace = true }
 
 async-trait = { workspace = true }
 # `McpError` (mcp/transport.rs) derives thiserror::Error.

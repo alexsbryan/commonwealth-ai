@@ -318,15 +318,27 @@ pub async fn atlas_download_gliner_model(
         state.client_base_url(),
         &request,
         move |frame| {
+            // A frame with no `file` is the job before its first byte: the
+            // daemon has not named an artifact yet. Emitting it as `file: ""`
+            // would put a blank row in the pane that reads like a download of
+            // nothing — and this file's census (`atlas_meshapp_wire_census::
+            // the_conv_browse_surface_holds_no_store`) forbids exactly that
+            // swallow, by name, because a plausible answer in front of the
+            // user is worse than no answer (ARCH principle 6). Say nothing
+            // until there is something to say; the pane's own state is
+            // unchanged until the next frame.
+            let Some(file) = frame.file.as_deref() else {
+                return;
+            };
             let _ = app_for_cb.emit(
                 "gliner-download-progress",
                 serde_json::json!({
-                    "file": frame.file.clone().unwrap_or_default(),
+                    "file": file,
                     "downloaded": frame.downloaded,
-                    // The pane reads `total > 0` as "determinate". An absent
-                    // Content-Length stays 0 HERE rather than in the wire
-                    // shape, because that is what this pane's existing
-                    // indeterminate branch already means.
+                    // The pane reads `total > 0` as "determinate", so an
+                    // absent Content-Length becomes 0 at THIS sink, which
+                    // already means indeterminate there. The wire shape keeps
+                    // the absence (`AssetDownloadProgress.total: Option<u64>`).
                     "total": frame.total.unwrap_or(0),
                 }),
             );

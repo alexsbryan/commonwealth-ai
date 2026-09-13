@@ -265,6 +265,29 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // no third-party host is dialed, and no estate content crosses a
     // boundary — there is no boundary to cross.
     ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 13),
+    // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
+    // weights surface — hardware / catalog / slot / NER reads plus the one
+    // asset-download job. All five constructions are inside its
+    // `#[cfg(test)] mod route_tests`, which lives in a src/ file and is
+    // therefore counted, the same shape as `admin_http.rs` above: four
+    // `reqwest::Client::new()` and one `reqwest::get(...)`, every one dialing
+    // an `assets_router` this test spawned on loopback in the same process, or
+    // a stub GGUF server it also spawned there.
+    //
+    // `Class::Mesh` is correct and the PRODUCTION side is the reason to be
+    // sure: the handlers construct no HTTP client at all. They delegate to
+    // `setup_planner::download_gguf` and `gliner_ner::download_model`, whose
+    // clients are registered on their own rows — so this route family adds a
+    // download SURFACE without adding an egress site, which is the property
+    // this census exists to keep visible.
+    //
+    // FOUR, not the five `reqwest::` calls the file spells: the fifth is a
+    // bare `reqwest::get(..)`, which this census's `count_sites` does not
+    // recognise (it counts `Client::new(` / `Client::builder(` plus the
+    // PREFIXED forms). Recorded rather than "corrected" — widening the
+    // detector is a change to every row's number and belongs to whoever
+    // re-baselines the whole file, not to a row being added.
+    ("sovereign/crates/sovereign-mesh/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
@@ -386,7 +409,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
     // read /status.process.pid on a run-lock refusal; the app takes no run
     // lock now — it never hosts a daemon — so the site is gone with it.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/models.rs", Class::InboundOnly, 1),
+    //
+    // commands/models.rs ROW REMOVED 2026-09-12 (sv-surface svt-7). Its one
+    // site was `download_model`'s OWN `reqwest::Client::builder()` — a third
+    // GGUF downloader, with its own HF_TOKEN read, content-type sniff, `.part`
+    // handling and validator, writing into a models root this process does
+    // not own. It is `POST /v1/admin/assets/download` now, so the bytes cross
+    // on the daemon's client and the app holds none. A row LEAVING this
+    // registry is the outcome the census is for.
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/diagnostics.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/collaborate_commands.rs", Class::LocalDaemon, 1),

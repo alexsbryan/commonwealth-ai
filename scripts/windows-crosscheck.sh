@@ -20,7 +20,13 @@
 # Usage:
 #   scripts/windows-crosscheck.sh                          # cargo xwin check (fast)
 #   scripts/windows-crosscheck.sh --build                  # cargo xwin build (full)
-#   scripts/windows-crosscheck.sh --features windows-vulkan  # a GPU backend variant
+#
+# The GPU backend is NOT a flag here any more. `windows-vulkan` /
+# `windows-cuda` moved to `sovereign-cli-daemon` at sv-surface svt-7
+# (2026-09-12) — the desktop links no inference stack to forward them to — so
+# a GPU variant is checked by building the SIDECAR:
+#   SOVEREIGN_SIDECAR_FEATURES=windows-vulkan \
+#     scripts/stage-daemon-sidecar.sh x86_64-pc-windows-msvc
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

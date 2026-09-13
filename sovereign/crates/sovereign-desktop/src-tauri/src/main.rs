@@ -30,6 +30,7 @@ mod recipe_commands;
 mod routing_events;
 mod serving_host;
 mod setup_flow;
+mod setup_plan;
 mod state;
 mod tray;
 mod turn_report;
@@ -884,22 +885,20 @@ fn main() -> ExitCode {
         })
         .build(tauri::generate_context!())
         .expect("error building svrnmesh")
-        .run(|_app_handle, event| {
-            if let tauri::RunEvent::Exit = event {
-                // Nothing to stop, which is the point. Quitting used to have
-                // to kill a daemon child first — `_exit` runs no destructors,
-                // so the supervisor's `kill_on_drop` never fired, the child
-                // was orphaned to launchd, and it aborted on its next log line
-                // and filed a crash report on every voluntary quit
-                // (2026-08-05). The app starts no daemon now, so closing it
-                // stops none: the daemon owns its own lifetime (principle 12).
-
-                // Graceful shutdown: skip C++ static destructors so ggml-metal's
-                // device sweeper can't abort under `__cxa_finalize` at process
-                // exit (which pops a macOS crash dialog). Reuses the daemon's
-                // proven fast-exit path — the kernel reclaims Metal/KV/mmaps.
-                sovereign_inference::fast_exit_skip_destructors(0);
-            }
-        });
+        // Nothing to do at Exit, which is the point, and it took two
+        // removals to get here. Quitting used to have to kill a daemon child
+        // first — `_exit` ran no destructors, so the supervisor's
+        // `kill_on_drop` never fired, the child was orphaned to launchd, and
+        // it aborted on its next log line and filed a crash report on every
+        // voluntary quit (2026-08-05). Then the `_exit` itself stayed on, to
+        // skip the C++ static destructors ggml-metal registers, which could
+        // abort under `__cxa_finalize` and pop a macOS crash dialog.
+        //
+        // This build links no llama.cpp and no ONNX runtime — `sovereign-
+        // inference` and `sovereign-gliner` left src-tauri/Cargo.toml at
+        // sv-surface svt-7 — so there are no C++ static destructors to skip,
+        // and an ordinary Tauri teardown is correct. The daemon owns its own
+        // lifetime (ARCH principle 12); closing this window stops nothing.
+        .run(|_app_handle, _event| {});
     ExitCode::SUCCESS
 }

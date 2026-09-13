@@ -133,8 +133,12 @@ pub struct AppState {
     /// of these events and nothing else in this process raises them.
     pub routing_events: Arc<crate::routing_events::TauriRoutingEventSink>,
     pub config: RwLock<DesktopConfig>,
-    /// Reusable across Runtime rebuilds (model stays loaded).
-    pub inference: RwLock<Option<Arc<dyn InferenceProvider>>>,
+    // The `inference` slot stood here and is GONE (svt-7, 2026-09-12). It held
+    // a `SplitInferenceProvider` over the daemon's `/v1` and had ZERO readers
+    // — its only remaining touches were two `= None` resets, which is a count
+    // that reached zero with the ability fully intact on the other side (ARCH
+    // principle 12). Turns go over the wire through `TurnClient`; the app does
+    // not hold a provider to ask.
     // The `store` and `sqlite_store` slots stood here and are GONE
     // (thin-desktop R2, 2026-09-12). They held this process's own handles on
     // a `sovereign.db` — a SECOND opener beside the daemon's, and on an
@@ -279,7 +283,6 @@ impl AppState {
         Self {
             routing_events,
             config: RwLock::new(config),
-            inference: RwLock::new(None),
             install_progress: RwLock::new(HashMap::new()),
             bootstrap_mode: mode,
             turn_wire: TurnWires::default(),
@@ -390,8 +393,7 @@ pub async fn bootstrap_with_progress(
 
     // Model-slot paths live in `SetupConfig` (`~/.svrnmesh/config.toml`) —
     // the single source of truth, shared with the daemon. Resolve them once
-    // here; the CPU-compat policy may mutate this in memory, and the
-    // inference builder loads from it.
+    // here; the CPU-compat policy may mutate this in memory.
     let slots = ResolvedModelSlots::load()
         .map_err(|e| format!("No model configuration found ({e}). Complete setup first."))?;
 
@@ -473,10 +475,8 @@ pub async fn bootstrap_with_progress(
     // build. Until it lands the guard has NO owner: `sovereign/DEFAULTS_LEDGER.md`
     // carries the row, with the flip condition and a review-by.
 
-    // Inference is the DAEMON's, over HTTP, and there is one provider rather
-    // than two. `load_inference` returns the pair because the tiered-enrichment
-    // builders below take an owned handle each; both halves are now the same
-    // `Arc` (`SplitInferenceProvider`, `builders/inference.rs`).
+    // Inference is the DAEMON's, over HTTP, and this process holds no handle
+    // on it at all since svt-7 (see the slot's epitaph on `AppState`).
     //
     // What used to stand here was the split that in-process hosting needed: a
     // `raw_inference` for peers POSTing `/v1/chat/completions` at our own
@@ -484,12 +484,20 @@ pub async fn bootstrap_with_progress(
     // Slow-slot work to a beefier peer. Both belonged to the daemon this
     // process was; it is no longer one, and peer routing is served by the
     // daemon at the other end (svt-3).
-    // Kept for TWO things, neither of which is a reader: the `?` is the
-    // boot's refusal when no embedding model is configured, and the slot it
-    // fills is `state.inference`, which svt-7 retires with the
-    // `sovereign-inference` dependency itself. Both halves of the pair were
-    // the same `Arc` already (`builders/inference.rs` module note).
-    let _ = builders::inference::load_inference(&state.inference, &slots, &emit).await?;
+    // The provider construction stood here and is GONE (svt-7). It built a
+    // `SplitInferenceProvider` over the daemon's `/v1`, filled
+    // `state.inference` — and NOTHING read that slot. The count had reached
+    // zero with the ability fully intact on the daemon side, which is the
+    // shape ARCH principle 12 names: the app's two remaining writers only
+    // ever reset it to `None`.
+    //
+    // The `?` on it carried one thing worth keeping — the boot's refusal when
+    // no embedding model is configured — so that refusal is stated here
+    // directly rather than surviving as a side effect of a construction with
+    // no readers. Same sentence, same Settings pointer.
+    if !slots.has_embed() {
+        return Err("no embedding model configured (Settings → Embedding model)".to_string());
+    }
 
     // The database open stood here and is GONE (thin-desktop R2). It was
     // `builders::store::open_store`, and the builder file went with it —
@@ -537,13 +545,9 @@ pub async fn bootstrap_with_progress(
     //   `commands/recipe_testing.rs`'s rung-6 verify, which is
     //   `POST /internal/corpus/recipes/harness` now.
     //
-    // `load_inference` above STAYS, and so does the slot it fills, even
-    // though nothing reads `state.inference` today: the call carries the
-    // boot's "no embedding model configured (Settings -> Embedding model)"
-    // refusal, and `SplitInferenceProvider` is svt-7's to retire together
-    // with the `sovereign-inference` dependency line
-    // (`attach_construction_census::the_attach_provider_construction_is_pinned`
-    // pins it there by name).
+    // `load_inference` and the slot it filled went at svt-7; what it carried
+    // that had a reason to live — the boot's refusal when no embedding model
+    // is configured — is stated above as itself.
     emit(BootstrapPhase::WiringKnowledge);
 
     // The LocalCorpusManager stood here and is gone (thin-desktop, 2026-09-12).
@@ -614,9 +618,10 @@ pub async fn bootstrap_with_progress(
 /// [`bootstrap`], which is now byte-for-byte what it does (ARCH principle 8 —
 /// two names for one decider).
 ///
-/// What the callers actually want is unchanged and still happens: they set
-/// `state.inference` to `None` first, so bootstrap builds a fresh provider
-/// against whatever port and model ids the new config names.
+/// What the callers actually want is unchanged and still happens: bootstrap
+/// re-reads `SetupConfig`, so the next turn rides whatever port and model ids
+/// the new config names. (They used to also clear `state.inference`; that slot
+/// went at svt-7 and the app holds no provider to clear.)
 pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
     bootstrap(state).await
 }
