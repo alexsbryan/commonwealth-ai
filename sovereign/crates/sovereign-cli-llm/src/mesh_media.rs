@@ -470,7 +470,15 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
         eprintln!("The value is added on YOUR machine, after the caller is admitted as a");
         eprintln!("member, and displaces any copy of that header the caller sent.");
         eprintln!();
-        eprintln!("  printf '%%s' \"$KEY\" | svrn mesh media declare x-emby-token");
+        // `%` is not a format escape in Rust; `%%s` here printed a literal `%%s`
+        // and the help text shipped a printf that emitted `%s` instead of the
+        // key (caught 2026-09-12 by rendering it, not by reading it).
+        eprintln!("  printf 'MediaBrowser Token=\"%s\"' \"$KEY\" | \\");
+        eprintln!("    svrn mesh media declare authorization");
+        eprintln!();
+        eprintln!("(Jellyfin 12 removed X-Emby-Token, X-MediaBrowser-Token and ?api_key=;");
+        eprintln!(" `Authorization` is the only scheme its OpenAPI document declares. The");
+        eprintln!(" name is a filename here, so following that took a rename, not a release.)");
         eprintln!();
         eprintln!("The value is read from stdin so it never lands in your shell history,");
         eprintln!("stored 0600 under the secrets dir, and never printed back. It is NOT in");

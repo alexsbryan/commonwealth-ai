@@ -38,13 +38,50 @@ demo     = "Someone else's library, and I hold none of their keys"
 rung     = "hm-1"
 statement = "library.py returns a merged catalogue with no ~/.house-mesh/tokens.json present on the caller"
 target   = "catalogue non-empty; tokens.json absent"
-status   = "passed (mechanism); never-ran (against a live Jellyfin)"
+status   = "passed (mechanism); passed (paths, live Jellyfin 12.0.0); never-ran (merged catalogue end-to-end)"
 # LANDED 2026-09-11, commit c866c91cb. The mechanism is proven on the wire by
 # the predicate test; tokens.json is gone from ~/dev/house-mesh (664abcc) and
-# library.py is one fanout call again. What has NOT run is the same flow
-# against a real Jellyfin: the /Items query string and the stream path come
-# from Jellyfin's API docs, not from a run. That half stays never-ran and is
-# honest about it.
+# library.py is one fanout call again.
+#
+# 2026-09-12: the never-ran half met a live Jellyfin 12.0.0 and SPLIT. What ran,
+# from Alexs-MacBook-Pro (37f17554) with a Jellyfin 12.0.0 at 127.0.0.1:8096 and
+# `[iroh] media_origin` set:
+#   - `library.py check` over `POST /v1/mesh/media/fanout` returned a `served`
+#     row from PEER RuggedFox's Jellyfin 12.0.0 in 138-158 ms. Cross-node,
+#     real origin, no key held by the caller.
+#   - `/Items?Recursive=true&IncludeItemTypes=Movie&fields=ProviderIds` -> 200,
+#     3 items, each carrying `ProviderIds.Imdb`. library.py merges on that key,
+#     and it is present in the real payload rather than only in the docs.
+#   - `/Videos/{id}/stream?static=true` -> 200, `video/mp4`, 40416 bytes,
+#     `ftypisom`. A byte stream, not a redirect or a transcode job.
+#
+# AND IT FOUND A DEFECT, which is what the honest never-ran was protecting.
+# Jellyfin 12.0.0 removed `X-Emby-Token`, `X-MediaBrowser-Token` and
+# `?api_key=`: all three 401 on `/Items`, only `Authorization: MediaBrowser
+# Token="<key>"` returns 200, and its OpenAPI document declares exactly one
+# security scheme (`apiKey`, in header, named `Authorization`) with zero
+# mentions of the old names. Every example we shipped named `x-emby-token`, so
+# a housemate following the README on install evening would have declared a
+# header their own server ignores and read the resulting 401 as our bug.
+# Fixed in the README, `declared.rs`, `mesh_media.rs`'s help and
+# `iroh_identity_forward.rs`'s prose. The MECHANISM needed no change -- the
+# header name is a filename, so following a breaking upstream rename cost one
+# `svrn mesh media declare`, not a release. Two tests now pin the part that
+# made that free: a value with an inner space and quotes survives the store
+# (`a_value_with_inner_spaces_and_quotes_survives_the_store`) and reaches the
+# origin verbatim (`a_multi_word_declared_credential_reaches_the_origin_verbatim`).
+#
+# STILL never-ran: the merged catalogue END TO END over the mesh. Not for want
+# of trying -- it is unprovable on one machine BY CONSTRUCTION. `origin_fanout`
+# never asks this node (a `peers` entry naming self gets a `never_asked` row --
+# sovereign-mesh/src/origin_fanout.rs:22-25), so a catalogue can only come from
+# a peer, and the only other online member has no declaration. That is the
+# design working: the credential is the holder's to declare on the holder's own
+# machine, and no session on another box can do it for them. Closing this needs
+# one command run by whoever holds RuggedFox:
+#   printf 'MediaBrowser Token="%s"' "$KEY" | svrn mesh media declare authorization
+#   svrn daemon reload
+# then `python3 library.py list` from here returns the house catalogue.
 # Why this is the first rung despite P1 being the more visible verb: it deletes
 # a PRACTICE (25 people mailing each other API keys), and `Forward::Http` at
 # commonwealth-media/src/identity.rs:106-109 already carries the header vec.

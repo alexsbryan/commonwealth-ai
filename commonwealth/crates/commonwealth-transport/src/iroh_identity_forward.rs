@@ -233,7 +233,7 @@ fn compare_name(name: &str) -> String {
 /// Appending alone is NOT enough to make a declared header authoritative.
 /// `headers` carries two different things now: the verified identity, which
 /// lives in the `x-mesh-*` namespace the prefix rule already clears, and a
-/// publisher's own credential for its own origin (`X-Emby-Token`, an
+/// publisher's own credential for its own origin (`Authorization`, an
 /// `Authorization`), which does not. Append-only would leave the client's
 /// copy AHEAD of ours in the head, and which one an origin honours on a
 /// duplicate name is its business, not ours — Jellyfin, nginx and axum do not
@@ -774,6 +774,31 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(header_values(&out, "authorization"), vec!["holder"]);
         assert_eq!(stripped, 3, "all three client spellings are displaced");
+    }
+
+    /// A credential is not always one word. Jellyfin 12 authenticates only
+    /// `Authorization: MediaBrowser Token="<key>"` -- probed 2026-09-12
+    /// against a live 12.0.0, where `X-Emby-Token`, `X-MediaBrowser-Token` and
+    /// `?api_key=` each returned 401 on `/Items` and this returned 200 -- so
+    /// the inner space and the quotes are load-bearing bytes, not formatting.
+    /// `wire_value` keeps `' '..='~'` and trims only the ends, which is what
+    /// makes that true; a filter on `is_ascii_graphic` would silently drop the
+    /// space and hand the origin a credential it refuses.
+    #[test]
+    fn a_multi_word_declared_credential_reaches_the_origin_verbatim() {
+        let credential = r#"MediaBrowser Token="a-key-1234""#;
+        let declared = vec![("Authorization".to_string(), credential.to_string())];
+        let (out, stripped) = rewrite_head(
+            b"GET /Items HTTP/1.1\r\nHost: h\r\nAuthorization: MediaBrowser Token=\"the-viewers\"\r\n\r\n",
+            &declared,
+        );
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(
+            header_values(&out, "authorization"),
+            vec![credential],
+            "the space and both quotes survive, and the viewer's copy does not"
+        );
+        assert_eq!(stripped, 1);
     }
 
     /// The strip must not become a general-purpose header eater: a name the

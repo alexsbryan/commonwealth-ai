@@ -6,7 +6,8 @@
 //! A media origin authenticates nothing to the mesh — that is why
 //! [`crate::admit_media`] refuses a stranger rather than downgrading one. But
 //! most real origins authenticate to their OWN clients: Jellyfin wants an
-//! `X-Emby-Token`, and its API keys are per-server. Twenty-five housemates
+//! `Authorization: MediaBrowser Token="<key>"`, and its API keys are
+//! per-server. Twenty-five housemates
 //! federating twenty-five Jellyfins therefore had exactly two options before
 //! this module, and both are bad: turn authentication off, or mail everybody a
 //! copy of everybody's key.
@@ -38,12 +39,24 @@
 //! without the feature simply has an empty dir. Zero config change, zero
 //! rollout hazard, one fewer place to look.
 //!
+//! And it is why the header NAME being data rather than a field has already
+//! paid: Jellyfin 12.0.0 removed `X-Emby-Token`, `X-MediaBrowser-Token` and
+//! `?api_key=` outright — probed 2026-09-12 against a live 12.0.0, all three
+//! 401 and only `Authorization` 200, and its OpenAPI document declares one
+//! security scheme, `apiKey` in header `Authorization`, with zero mentions of
+//! the old names. A `x_emby_token: Option<String>` config field would have
+//! needed a code change and a release to follow that; a filename needed a
+//! rename by the person who holds the key.
+//!
 //! Layout, mirroring `secrets/mcp/`:
 //!
 //! ```text
-//!   ~/.svrnmesh/secrets/media/x-emby-token     0600   the value
+//!   ~/.svrnmesh/secrets/media/authorization    0600   the value
 //!   ~/.svrnmesh/secrets/media/                 0700
 //! ```
+//!
+//! For Jellyfin 12 the value is the whole credential the header carries,
+//! `MediaBrowser Token="<key>"`, not the bare key.
 
 use std::path::{Path, PathBuf};
 
@@ -168,6 +181,21 @@ mod tests {
         assert_eq!(
             read_declared_in(dir.path()),
             vec![("x-emby-token".to_string(), "abc123".to_string())]
+        );
+    }
+
+    /// Trimming is for the trailing newline an editor adds, not for the
+    /// credential's own shape. Jellyfin 12 wants `MediaBrowser Token="<key>"`
+    /// in one header value, so an inner space and two quotes have to survive
+    /// the store or the declaration is unusable on every current Jellyfin.
+    #[test]
+    fn a_value_with_inner_spaces_and_quotes_survives_the_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let credential = r#"MediaBrowser Token="a-key-1234""#;
+        write_declared_in(dir.path(), "Authorization", &format!("{credential}\n")).unwrap();
+        assert_eq!(
+            read_declared_in(dir.path()),
+            vec![("authorization".to_string(), credential.to_string())]
         );
     }
 
