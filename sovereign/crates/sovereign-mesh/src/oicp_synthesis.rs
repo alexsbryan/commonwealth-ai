@@ -9,12 +9,12 @@
 //! (local-side self-scoring) consume the same builder so the two
 //! views can't drift.
 
-use commonwealth_inference::oicp::{
+use sovereign_core::traits::{InferenceProvider, ResidentSlot};
+use sovereign_core::types::Speed;
+use sovereign_serving::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass, ModelStatus,
     ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
-use sovereign_core::traits::{InferenceProvider, ResidentSlot};
-use sovereign_core::types::Speed;
 
 /// This node's live residency for the slot backing `backing_model_id`,
 /// **read** from the provider rather than asserted.
@@ -473,7 +473,7 @@ fn manifest_of(provider_name: String, models: Vec<ProviderModel>) -> ProviderMan
         // `EMBEDDED_FEATURES` (mesh nodes run the embedded llama.cpp
         // path); the HTTP `/oicp/v1/capabilities` route derives from the
         // same const via `apply_v04_enrichment`.
-        features: commonwealth_api::routes_oicp::EMBEDDED_FEATURES
+        features: sovereign_api::routes_oicp::EMBEDDED_FEATURES
             .iter()
             .map(|s| s.to_string())
             .collect(),
@@ -624,15 +624,13 @@ mod self_manifest_tests {
     //! a hot-swap instead of picking the configured specialist.
     use super::{build_self_manifest, synthesize_code_slot_claims};
     use async_trait::async_trait;
-    use commonwealth_inference::oicp::{
-        Capability, CapabilityHint, CapabilityProfile, LatencyClass,
-    };
     use futures::Stream;
     use sovereign_core::traits::{InferenceProvider, ResidentSlot};
     use sovereign_core::types::{
         CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
     };
     use sovereign_core::Result;
+    use sovereign_serving::oicp::{Capability, CapabilityHint, CapabilityProfile, LatencyClass};
     use std::pin::Pin;
 
     /// Minimal stub that mimics the three-slot shape: fast + primary
@@ -800,7 +798,7 @@ mod self_manifest_tests {
         );
         assert_eq!(
             manifest.features,
-            commonwealth_api::routes_oicp::EMBEDDED_FEATURES
+            sovereign_api::routes_oicp::EMBEDDED_FEATURES
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(),

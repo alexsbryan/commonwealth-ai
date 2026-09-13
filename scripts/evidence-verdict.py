@@ -55,6 +55,11 @@ import argparse, ast, json, os, re, shlex, shutil, subprocess, sys, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# The four-verdict line this run ends with, so a runner reads the verdict
+# instead of grepping the counts line above it (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
 # Own config, own profile (see the file's header for why the repo's cannot be
 # reused): junit on, retries OFF, fail-fast off. Passed explicitly so every
 # commit, however old, runs under the same profile.
@@ -1098,6 +1103,26 @@ def main():
         if a.max and n >= a.max:
             break
     print("\n" + "  ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    # One decision, read off the counts the table above was printed from, worst
+    # first (`Verdict::rank`). UNSUPPORTED is the only FAILED arm: it is the one
+    # that says a commit's cited test cannot see the change it cites.
+    total = sum(counts.values())
+    if total == 0:
+        emit_judgement("evidence-verdict", "never-ran",
+                       f"{len(commits)} commit(s) selected and none was adjudicated "
+                       "(all already in the jsonl, or none cites a test)")
+    elif counts.get(UNSUPPORTED):
+        emit_judgement("evidence-verdict", "failed",
+                       f"{counts[UNSUPPORTED]} of {total} commits cite a test that passes with "
+                       "their own source hunks reverted")
+    elif counts.get(CNJ) or counts.get(NEVER_RAN):
+        emit_judgement("evidence-verdict", "could-not-judge",
+                       f"{counts.get(CNJ, 0)} could-not-judge and {counts.get(NEVER_RAN, 0)} "
+                       f"never-ran of {total}; {counts.get(VALIDATED, 0)} validated and no "
+                       "citation was shown empty")
+    else:
+        emit_judgement("evidence-verdict", "passed",
+                       f"all {total} commits' cited tests fail with the change reverted")
     return 0
 
 

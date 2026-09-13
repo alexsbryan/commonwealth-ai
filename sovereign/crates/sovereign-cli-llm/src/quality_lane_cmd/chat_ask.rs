@@ -234,6 +234,7 @@ async fn p_useful(
     crate::bench_cmd::live_runner::forced_choice_ab(
         judge,
         model,
+        "lane_chat_ask_usefulness",
         &usefulness_prompt(question, answer),
     )
     .await

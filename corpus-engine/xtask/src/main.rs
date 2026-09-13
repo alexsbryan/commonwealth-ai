@@ -12,6 +12,7 @@
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
 //!   cargo xtask instrument-gate                    Every command a quality surface reaches is in quality/instruments.toml
+//!   cargo xtask judge-funnel-gate                  One place builds a forced-choice judge body, and the census sees it
 //!   cargo xtask target-arch [--update-doc|--measure]  quality/TARGET_ARCHITECTURE.md renders from CONCEPTS.toml + ARCH_LAYERS.toml + the graph
 //!
 //! Ratchet contract (uniform across gates): baselines live in
@@ -29,6 +30,7 @@ mod concept_gate;
 mod docs_gate;
 mod env_gate;
 mod instrument_gate;
+mod judge_funnel_gate;
 mod layer_gate;
 mod layout_gate;
 mod lifecycle_gate;
@@ -57,6 +59,7 @@ fn main() {
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
         "instrument-gate" => instrument_gate::run(&args[1..]),
+        "judge-funnel-gate" => judge_funnel_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
         "lifecycle-gate" => lifecycle_gate::run(&args[1..]),
         "layout-gate" => layout_gate::run(&args[1..]),
@@ -124,6 +127,9 @@ fn print_usage() {
     );
     eprintln!(
         "  size-gate [--update-baseline|--tighten|--accept <crate>|--root <path>]  Code lines per crate may only shrink; comments/blanks excluded, tests counted apart"
+    );
+    eprintln!(
+        "  judge-funnel-gate              One place builds a forced-choice judge body, and it hands it to the call census"
     );
     eprintln!(
         "  api-gate [--update-baseline]   Diff hub-crate public APIs vs committed snapshots (pinned nightly)"

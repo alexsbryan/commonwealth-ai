@@ -23,7 +23,10 @@ pub(crate) async fn gate_longform(
     let chunks: &[String] = &evidence.chunks;
     // H1's verdict for this turn, for `with_native_verdict` at each of
     // this ladder's seven exits. Telemetry: nothing below reads it.
-    let native = evidence.native_verdict.as_ref();
+    // `None` both when the stage did not run and when it ran without an
+    // instrument — the gate does not distinguish those (see
+    // `NATIVE_VERDICT_NOT_COMPUTED`); the display stages do.
+    let native = evidence.native_admission.verdict();
     // T1 P1.4 — split the evidence by provenance once per turn. With no
     // Summary-class chunks (the common case, and every pre-P1.4
     // surface) `leaf_chunks == chunks` and the claim loop below is

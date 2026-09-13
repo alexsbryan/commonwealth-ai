@@ -777,7 +777,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("studio/crates/sovereign-recipe-author/src/http_tester.rs", Class::LocalDaemon, 1),
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
-    ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
+    ("sovereign/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 3),
     // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
     // plugin Step 5). What was left behind — the `/v1/models` reconstruction
     // probe, `embed_model_info` — had ZERO callers, so the file went with the
@@ -810,11 +810,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside
     // `gossip_client()`. The gossip round already replicated the row.
-    ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
-    ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),
-    ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
-    ("commonwealth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
-    ("commonwealth/crates/commonwealth-app/src/proxy.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-api/src/routes_knowledge.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
     // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
     // moved to the package crate later the same day (0eccf5664) — same two

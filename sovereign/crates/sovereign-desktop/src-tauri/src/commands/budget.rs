@@ -151,7 +151,7 @@ pub async fn set_mesh_quiesced(
 
 // ── Storage budget ───────────────────────────────────────────
 //
-// Mirror of `commonwealth_api::routes_internal::mesh_admin::
+// Mirror of `sovereign_api::routes_internal::mesh_admin::
 // StorageBudgetState`. Defined here as a flat serde struct so the
 // desktop crate doesn't depend on commonwealth-api types just for
 // this round-trip — keeps the TypeScript bridge simple. The wire

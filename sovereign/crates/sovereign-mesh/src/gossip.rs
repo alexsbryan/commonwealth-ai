@@ -38,11 +38,11 @@
 //! steps.
 use std::time::{Duration, Instant};
 
-use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use serde::{Deserialize, Serialize};
+use sovereign_api::state::AppState;
 use tracing::{debug, info, warn};
 
 use crate::capabilities::build_local_capabilities;
@@ -1051,7 +1051,7 @@ pub enum GossipError {
 
 // ── Wire types ───────────────────────────────────────────────
 //
-// Mirror of `commonwealth_api::routes_internal::{GossipRequest,
+// Mirror of `sovereign_api::routes_internal::{GossipRequest,
 // GossipResponse, MeshWire}`. Duplicated here (like `join::MeshWire`)
 // because the server-side type isn't re-exported and projecting
 // HashMap<NodeId, MemberRecord> → Vec<MemberRecord> for serde is
@@ -1061,12 +1061,12 @@ pub enum GossipError {
 // types. The request one existed because that side derived `Deserialize` only;
 // the RESPONSE one had no reason at all — `GossipResponse` already derived
 // both halves and was already re-exported. It was a pure duplicate.
-use commonwealth_api::routes_internal::{
+use sovereign_api::routes_internal::{
     GossipRequest as GossipRequestWire, GossipResponse as GossipResponseWire,
 };
 
 /// The gossip round's wire shape. A THIRD mirror of
-/// `commonwealth_api::routes_internal::MeshWire` (the others live in
+/// `sovereign_api::routes_internal::MeshWire` (the others live in
 /// `join.rs` and in the api crate itself); they must agree field for field or
 /// the round-trip 422s.
 ///

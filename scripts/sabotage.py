@@ -41,6 +41,11 @@ import argparse, json, os, re, shutil, signal, subprocess, sys, tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# The four-verdict line this run ends with, so a runner reads the verdict
+# instead of grepping the per-mutant table (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
 # Isolated from the shared target dir: a concurrent peer's nextest run deletes
 # target/nextest/*/junit.xml, and a six-hour batch job cannot have its report
 # vanish underneath it. Costs one cold build, then warm.
@@ -820,6 +825,8 @@ def main():
         bank = [m for m in bank if m["id"] == a.only or m.get("requirement") == a.only]
     if not bank:
         print("sabotage: selection matched no mutant — a zero-work run is not a pass", file=sys.stderr)
+        emit_judgement("sabotage", "never-ran",
+                       f"the selection {a.only!r} matched no mutant in {a.bank}")
         return 4
 
     env = dict(os.environ)
@@ -828,6 +835,9 @@ def main():
                            cwd=ROOT, capture_output=True, text=True).stdout.strip()
     if dirty and not a.allow_dirty:
         print(f"sabotage: mutation targets are dirty; refusing to write to them.\n{dirty}", file=sys.stderr)
+        emit_judgement("sabotage", "could-not-judge",
+                       "the mutation targets carry uncommitted work; planting into them would "
+                       "make the restore eat it, so nothing was adjudicated")
         return 2
 
     # STALE check first — cheap, and a lying bank invalidates everything after.
@@ -850,11 +860,17 @@ def main():
     if baseline is None:
         print("sabotage: the BASELINE run was killed by a signal — refusing to "
               "adjudicate against an unknown baseline", file=sys.stderr)
+        emit_judgement("sabotage", "could-not-judge",
+                       "the baseline suite was killed by a signal; every verdict here is "
+                       "relative to a baseline that was never established")
         return 2
     index_report((ROOT / "target" / "nextest" / PROFILE / "junit.xml").read_text()
                  if (ROOT / "target" / "nextest" / PROFILE / "junit.xml").is_file() else "")
     if not baseline:
         print("sabotage: no junit report from the baseline run — cannot adjudicate", file=sys.stderr)
+        emit_judgement("sabotage", "could-not-judge",
+                       "the baseline run produced no junit report, so no mutant's verdict has "
+                       "anything to be measured against")
         return 2
     red = {k for k, ok in baseline.items() if not ok}
     if red:
@@ -906,6 +922,9 @@ def main():
                            cwd=ROOT, capture_output=True, text=True).stdout.strip()
     if still and not a.allow_dirty:
         print(f'sabotage: RESTORE FAILED — tree still dirty:\n{still}', file=sys.stderr)
+        emit_judgement("sabotage", "could-not-judge",
+                       "a mutation was not restored — the tree still carries planted source, so "
+                       "the run's verdicts are about a tree nobody meant to have")
         return 2
 
     for m in bank:
@@ -929,7 +948,30 @@ def main():
     if a.json:
         Path(a.json).write_text(json.dumps({"counts": counts, "mutants": bank}, indent=1, default=str))
 
-    return 0 if all(m["verdict"] == m.get("expected", "CAUGHT") for m in bank) else 1
+    # One decision with the exit code, off the same per-mutant comparison —
+    # a mutant is judged against the verdict the bank EXPECTED of it, never
+    # against a second rule written here (ARCH principle 8).
+    off = [m for m in bank if m["verdict"] != m.get("expected", "CAUGHT")]
+    if not bank:
+        emit_judgement("sabotage", "never-ran",
+                       "the selection matched no mutant in the bank — nothing was adjudicated")
+        return 0
+    if not off:
+        emit_judgement("sabotage", "passed",
+                       f"all {len(bank)} mutants reached the verdict the bank expects of them")
+        return 0
+    # COULD-NOT-JUDGE is about the instrument, not the suite: a mutant whose
+    # build broke or whose declared test the report never named proves nothing
+    # either way, so a run made only of those has not FAILED (ARCH §18.2).
+    if all(m["verdict"] == "COULD-NOT-JUDGE" for m in off):
+        emit_judgement("sabotage", "could-not-judge",
+                       f"{len(off)} of {len(bank)} mutants could not be adjudicated (build broke, "
+                       "or the declared test never reached the report); none SURVIVED")
+        return 1
+    emit_judgement("sabotage", "failed",
+                   f"{len(off)} of {len(bank)} mutants did not reach their expected verdict: "
+                   + ", ".join(f"{m['id']}={m['verdict']}" for m in off[:6]))
+    return 1
 
 
 if __name__ == "__main__":

@@ -533,7 +533,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         "  Expires:  in {} (unix {expires_at_secs}), or when this daemon restarts",
         human_duration(expires_at_secs.saturating_sub(now))
     );
-    // Grants live in RAM by design (`commonwealth_knowledge::guest_grant`,
+    // Grants live in RAM by design (`sovereign_grants::guest_grant`,
     // "In memory, and that is deliberate"): restart-survival would cost a
     // revocation denylist. That is the right trade, but printing only the TTL
     // promises a window the daemon does not actually guarantee — a link minted

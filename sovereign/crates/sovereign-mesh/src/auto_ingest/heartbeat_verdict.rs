@@ -31,7 +31,7 @@ pub(super) enum HeartbeatOutcome {
 }
 
 /// What the donor should do after one heartbeat. Mirrors
-/// `commonwealth_knowledge::work_queue::HeartbeatResult` in vocabulary
+/// `sovereign_grants::work_queue::HeartbeatResult` in vocabulary
 /// (`Renewed`, and reclaimed-means-abort) WITHOUT depending on it:
 /// `commonwealth-knowledge` was deliberately dropped from this crate in
 /// cw-lift 1c (see Cargo.toml) and re-adding it to borrow two names

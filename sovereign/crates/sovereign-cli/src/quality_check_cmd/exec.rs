@@ -229,7 +229,7 @@ pub(super) struct InstrumentRun {
     /// distributed row the cohort could not place is `None` against a real
     /// submitter, which counts in the denominator and never in the
     /// numerator. That is what makes a dropped shard cost the share rather
-    /// than flatter it (`quality/campaigns/cw-lift.toml`,
+    /// than flatter it (`quality/campaigns/closed/cw-lift.toml`,
     /// `cw-work-ci-offload`).
     pub(super) node: Option<String>,
 }

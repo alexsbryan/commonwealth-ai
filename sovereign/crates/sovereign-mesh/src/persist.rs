@@ -16,7 +16,7 @@
 //! `HashMap<NodeId, MemberRecord>` can't serde_json-encode directly
 //! (NodeId is a byte array, not a string), so we flatten `members`
 //! to a `Vec<MemberRecord>` on write and reassemble on read — same
-//! trick as `commonwealth_api::routes_internal::MeshWire`.
+//! trick as `sovereign_api::routes_internal::MeshWire`.
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};

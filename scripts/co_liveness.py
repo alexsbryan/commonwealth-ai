@@ -68,6 +68,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# The four-verdict line a verify pass ends with (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
+
 # One implementation of the schema-forced daemon call, imported from where
 # it already lived. co-review.sh takes the same import; the gym owns it.
 sys.path.insert(0, str(REPO / "gym" / "comaintainer"))
@@ -838,6 +842,23 @@ def _cmd_verify(args) -> int:
           f"({len(picked)} judged)")
     if not args.dry_run:
         print(f"appended -> {log}")
+    # One decision off the same counts. DEAD is the failed arm and that is the
+    # finding this pass exists for: an item that no longer reproduces at HEAD
+    # and is still open is a backlog row nobody can act on.
+    if not picked:
+        emit_judgement("co-liveness", "never-ran",
+                       "no open item matched the selection — nothing was judged against HEAD")
+    elif counts["dead"]:
+        emit_judgement("co-liveness", "failed",
+                       f"{counts['dead']} of {len(picked)} open items no longer reproduce at "
+                       "HEAD and are still open")
+    elif counts["could-not-judge"]:
+        emit_judgement("co-liveness", "could-not-judge",
+                       f"{counts['could-not-judge']} of {len(picked)} items were not settled by "
+                       f"current state; {counts['alive']} still reproduce")
+    else:
+        emit_judgement("co-liveness", "passed",
+                       f"all {len(picked)} open items still reproduce at HEAD")
     return 0
 
 

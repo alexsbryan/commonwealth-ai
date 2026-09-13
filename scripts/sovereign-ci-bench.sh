@@ -347,6 +347,10 @@ run_lane() {
   [[ "$status" == "SKIP(daemon-down)" ]] && DAEMON_WAS_DOWN=1
   local secs=$(( $(date +%s) - t0 ))
   echo "── ${status}  [$kind] $name   (${secs}s)"
+  # The same verdict in the product's vocabulary, machine-readable, so a reader
+  # of this log does not have to grep the banner above (rung vl-2). The mapping
+  # lives beside `lane_verdict` in lib/ci-bench-verdict.sh — one decider.
+  lane_judgement "$name" "$status" "$secs"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
   local report_path=""
   local args=("$@")

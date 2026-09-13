@@ -7,7 +7,7 @@
 //! ask them all the same thing — `GET /Items?…`, whatever the origin speaks —
 //! and get back a row per member saying what it answered, or why it was not
 //! asked, in one round trip. That is `POST /v1/mesh/fanout`, and it is
-//! `commonwealth_api::fanout` (the peer half of the knowledge fan-out,
+//! `sovereign_api::fanout` (the peer half of the knowledge fan-out,
 //! extracted 2026-09-11) with a media origin at the far end of each row.
 //!
 //! **What it does not do.** No merge, no dedup, no item schema: item

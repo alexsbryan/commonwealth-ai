@@ -680,6 +680,13 @@ async fn elicit_logprob(
     candidates: &[String],
     system_prompt: &str,
 ) -> (Option<Vec<(String, f64)>>, u64) {
+    // judge-funnel: instrument-of-the-mechanism — this harness measures whether
+    // a model honours the forced-choice sentinel AT ALL, across a candidate set
+    // it varies per reasoning class. It builds the wire shape itself on purpose:
+    // an instrument that reached the production register would be measuring its
+    // own caller (ARCH principle 7), and it would stop being able to probe the
+    // shapes the register never sends. `cargo xtask judge-funnel-gate` reports
+    // this site separately rather than dropping it.
     let schema = serde_json::json!({
         "type": "string",
         "enum": candidates,

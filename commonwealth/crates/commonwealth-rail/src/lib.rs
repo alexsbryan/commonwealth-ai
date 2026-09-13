@@ -483,7 +483,7 @@ impl RingJournal {
     /// This is what every caller that sends ops over the wire uses. The
     /// budget itself is NOT decided here: it is derived from the receiver's
     /// body limit by the crate that owns that limit
-    /// (`commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES`), so
+    /// (`sovereign_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES`), so
     /// the rail stays a crate a ring app can lift without an HTTP server.
     pub fn ops_missing_from_within(
         &self,
@@ -546,7 +546,7 @@ impl RingJournal {
     /// own changed no bytes anywhere, and a prune with no seal behind it
     /// reports the deleted range as missing, forever, on every node. Neither
     /// half is worth anything alone. The two callers that seal — the rail
-    /// route an app reaches (`commonwealth_api::routes_rail::append`) and the
+    /// route an app reaches (`sovereign_api::routes_rail::append`) and the
     /// daemon's own KV pump (`sovereign_mesh::rail_kv_pump`) — reach this
     /// rather than each writing the sequence themselves, because a second
     /// spelling of "seal, then compact, and a refused compaction is not a

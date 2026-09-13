@@ -207,7 +207,7 @@ fn ingest_progress_view_reads_the_route_answer_field_for_field() {
 fn daemon_identity_is_the_status_routes_node_id() {
     // Field presence and type pinned from the route's side: this closure
     // fails to compile if `/status` stops carrying a `String` `node_id`.
-    let _pin = |s: commonwealth_api::routes_status::StatusResponse| -> String { s.node_id };
+    let _pin = |s: sovereign_api::routes_status::StatusResponse| -> String { s.node_id };
     let v: DaemonIdentity = serde_json::from_value(serde_json::json!({
         "node_id": "0123456789abcdef0123456789abcdef",
         "mesh": { "name": "m" },

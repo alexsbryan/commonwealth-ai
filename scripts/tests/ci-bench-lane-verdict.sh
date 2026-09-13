@@ -132,4 +132,36 @@ want "a daemon-down run does not excuse an unrelated non-zero exit" \
      "FAIL(3)" \
      "$(verdict3 unrelated 3 'bench: the golden file failed to parse' 1)"
 
+# ── the same decision, SAID (rung vl-2) ─────────────────────────────────────
+#
+# `lane_judgement` maps the status string above onto the four-verdict line the
+# product's own gate speaks. It must MAP, never re-derive: a second traversal
+# of the lane output is how the banner and the line come to disagree. So every
+# case here drives the real `lane_verdict` first and feeds it what came out.
+jverdict() { # jverdict <status> -> the `verdict` field of the emitted line
+    lane_judgement testlane "$1" 7 | python3 -c 'import json,sys; print(json.load(sys.stdin)["verdict"])'
+}
+
+want "a clean lane says passed"            "passed"          "$(jverdict PASS)"
+want "a stale-baseline lane still passes"  "passed"          "$(jverdict 'PASS(warn:setup)')"
+want "N regressed says failed"             "failed"          "$(jverdict 'FAIL(3reg)')"
+want "a non-zero exit says failed"         "failed"          "$(jverdict 'FAIL(2)')"
+want "a timeout could not judge"           "could-not-judge" "$(jverdict TIMEOUT)"
+want "nothing to adjudicate is not a pass" "could-not-judge" "$(jverdict 'SKIP(no-data)')"
+want "a dead daemon is not a finding"      "could-not-judge" "$(jverdict 'SKIP(daemon-down)')"
+
+# NEGATIVE CONTROL: an unrecognised status is reported as itself, never mapped
+# onto either side. Without this arm a renamed status would silently become a
+# pass or a fail depending on which `*` arm caught it (ARCH §18.3).
+want "an unknown status names itself rather than picking a side" "could-not-judge" \
+     "$(jverdict 'PASSABLE')"
+want "an unknown status carries its own name in the reason" "yes" \
+     "$(lane_judgement testlane PASSABLE 7 | grep -q 'status PASSABLE' && echo yes || echo no)"
+
+# The end-to-end tie: the REAL decider's output feeds the mapping, so a status
+# string that changes in `lane_verdict` and not here shows up as a mismatch.
+want "the all-errored run the ledger is about says could-not-judge, both ways" \
+     "could-not-judge" \
+     "$(jverdict "$(verdict all_errored_judgement 0 "$ALL_ERRORED")")"
+
 exit "$rc"

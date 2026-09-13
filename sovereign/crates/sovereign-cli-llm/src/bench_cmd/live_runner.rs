@@ -426,7 +426,7 @@ pub async fn classify_abstain(
          does not have the information?\n\n\
          Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information."
     );
-    forced_choice_ab(judge, model, &prompt)
+    forced_choice_ab(judge, model, "bench_abstain", &prompt)
         .await
         .map(|(a, b)| b > a)
 }
@@ -479,7 +479,7 @@ pub async fn classify_extraction(
          B = no, it does not (it only declines, hedges, or says the information \
          is unavailable)."
     );
-    forced_choice_ab(judge, model, &prompt)
+    forced_choice_ab(judge, model, "bench_extraction", &prompt)
         .await
         .map(|(a, b)| b > a)
 }
@@ -552,7 +552,7 @@ pub async fn classify_caveat(
          Answer with exactly one letter — A = yes, it disclosed the answer is not drawn from the provided sources, B = no, it presented the answer with no such provenance caveat.",
         answer.chars().take(1200).collect::<String>()
     );
-    forced_choice_ab(judge, model, &prompt)
+    forced_choice_ab(judge, model, "bench_caveat", &prompt)
         .await
         .map(|(a, b)| a > b)
 }
@@ -612,7 +612,7 @@ pub async fn judge_correctness(
         q = question.chars().take(300).collect::<String>(),
         a = answer.chars().take(800).collect::<String>(),
     );
-    forced_choice_ab(judge, model, &prompt)
+    forced_choice_ab(judge, model, "bench_correctness", &prompt)
         .await
         .map(|(a, b)| a > b)
 }
@@ -728,7 +728,7 @@ pub async fn verify_grounding(
         // gate and its calibration instrument together (2026-08-13, gate
         // big-O order land B).
         let prompt = sovereign_core::runtime::chunk_judge_prompt(c, &claim);
-        if let Some((a, b)) = forced_choice_ab(judge, model, &prompt).await {
+        if let Some((a, b)) = forced_choice_ab(judge, model, "bench_chunk_support", &prompt).await {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
             if support > max_support {
@@ -752,42 +752,49 @@ pub async fn verify_grounding(
     Some(vp)
 }
 
-/// One forced-choice A/B logprob pass. Returns `(p_A, p_B)`.
-/// `pub(crate)`: the P0.2 adjudicator (`bench enrichment-adjudicate`)
-/// reuses this exact register so its verdicts share the runner's
-/// forced-choice normalization.
+/// One forced-choice A/B logprob pass in the gate's own register. Returns
+/// `(p_A, p_B)`.
+///
+/// A DELEGATE, not an implementation. Until 2026-09-12 this function built its
+/// own `x_forced_choice` request body and parsed its own distribution beside
+/// the gate's — so the module header's claim that the two registers are
+/// byte-identical held only while nobody edited one side, and none of the
+/// bench's judge traffic reached `call_census` to be timed, traced or
+/// classified. Both are now the compiler's problem (rung vl-1;
+/// `cargo xtask judge-funnel-gate`).
+///
+/// `register` names which of the bench's scorers is asking. It rides the
+/// `grounding_gate` trace as `JudgeCall::Harness` — a bench process opens no
+/// census, so there is no row and there is no gate mechanism to borrow.
+///
+/// `pub(crate)`: the P0.2 adjudicator (`bench enrichment-adjudicate`) and the
+/// chat-ask quality lane reuse this exact register so their verdicts share the
+/// runner's forced-choice normalization.
 pub(crate) async fn forced_choice_ab(
     judge: &dyn InferenceProvider,
     model: &str,
+    register: &'static str,
     prompt: &str,
 ) -> Option<(f64, f64)> {
-    let req = CompletionRequest {
-        prompt: prompt.to_string(),
-        system_message: Some(sovereign_core::runtime::CHUNK_JUDGE_SYSTEM.into()),
-        preferred_speed: Speed::Slow,
-        max_tokens: Some(1),
-        structured_output: Some(serde_json::json!({
-            "type": "string", "enum": ["A", "B"], "x_forced_choice": true
-        })),
-        think_budget: Some(0),
-        enable_thinking: Some(false),
-        model_id: Some(model.to_string()),
-        ..Default::default()
-    };
-    match judge.complete(&req).await {
-        Ok(resp) => {
-            let m: std::collections::HashMap<String, f64> =
-                serde_json::from_str(resp.text.trim()).ok()?;
-            Some((
-                m.get("A").copied().unwrap_or(0.0),
-                m.get("B").copied().unwrap_or(0.0),
-            ))
-        }
-        Err(e) => {
-            eprintln!("    [judge] {e}");
-            None
-        }
+    let out = sovereign_core::runtime::forced_choice_ab(
+        judge,
+        sovereign_core::runtime::CHUNK_JUDGE_SYSTEM,
+        prompt,
+        None,
+        sovereign_core::runtime::JudgeRouting::PinnedSlot(model),
+        sovereign_core::runtime::JudgeCall::Harness(register),
+    )
+    .await;
+    if out.is_none() {
+        // The provider's own message went to the `grounding_gate` warn the
+        // funnel emits; that target is off by default, so name the switch
+        // rather than leave a bench operator with a silent `None`.
+        eprintln!(
+            "    [judge] {register}: forced-choice pass failed \
+             (RUST_LOG=grounding_gate=warn for the provider error)"
+        );
     }
+    out
 }
 
 #[cfg(test)]

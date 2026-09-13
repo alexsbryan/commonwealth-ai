@@ -7,15 +7,15 @@
 //! `hosted_corpora: vec![]`, defeating the whole knowledge fan-out.
 use std::sync::Arc;
 
-use commonwealth_api::state::AppState;
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
+use sovereign_api::state::AppState;
 use sovereign_mesh::gossip;
+use sovereign_meshapp_registry::registry::AppRegistry;
 use std::collections::HashMap;
 use std::time::Duration;
 

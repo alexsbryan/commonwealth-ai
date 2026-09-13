@@ -1890,71 +1890,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "commonwealth-api"
-version = "0.6.0"
-dependencies = [
- "arc-swap",
- "async-trait",
- "axum",
- "bytes",
- "chrono",
- "commonwealth-app",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-inference",
- "commonwealth-knowledge",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
- "corpus-engine-scip",
- "dirs 5.0.1",
- "ed25519-dalek 2.2.0",
- "futures",
- "hex",
- "http-body 1.0.1",
- "http-body-util",
- "kernel-types",
- "libc",
- "oicp-types",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serving-policy",
- "sha2 0.10.9",
- "sovereign-atos",
- "sovereign-core",
- "sovereign-tools",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tree-sitter",
- "zstd",
-]
-
-[[package]]
-name = "commonwealth-app"
-version = "0.6.0"
-dependencies = [
- "bytes",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "commonwealth-core"
 version = "0.6.0"
 dependencies = [
@@ -1984,45 +1919,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sysinfo 0.35.2",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "commonwealth-inference"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "axum",
- "bytes",
- "chrono",
- "commonwealth-core",
- "commonwealth-state",
- "corpus-engine",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "commonwealth-knowledge"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "bytes",
- "commonwealth-core",
- "commonwealth-state",
- "corpus-engine",
- "hex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
@@ -2104,28 +2000,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
- "tracing",
-]
-
-[[package]]
-name = "commonwealth-test-harness"
-version = "0.6.0"
-dependencies = [
- "async-trait",
- "axum",
- "bytes",
- "commonwealth-api",
- "commonwealth-app",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-inference",
- "commonwealth-state",
- "commonwealth-transport",
- "http-body-util",
- "serde",
- "serde_json",
- "tokio",
- "tower",
  "tracing",
 ]
 
@@ -12146,6 +12020,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-api"
+version = "0.6.0"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "axum",
+ "bytes",
+ "chrono",
+ "commonwealth-core",
+ "commonwealth-discovery",
+ "commonwealth-rail",
+ "commonwealth-state",
+ "commonwealth-transport",
+ "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
+ "corpus-engine-scip",
+ "dirs 5.0.1",
+ "ed25519-dalek 2.2.0",
+ "futures",
+ "hex",
+ "http-body 1.0.1",
+ "http-body-util",
+ "kernel-types",
+ "libc",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serving-policy",
+ "sha2 0.10.9",
+ "sovereign-atos",
+ "sovereign-core",
+ "sovereign-grants",
+ "sovereign-meshapp-registry",
+ "sovereign-serving",
+ "sovereign-tools",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml 0.8.2",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tree-sitter",
+ "zstd",
+]
+
+[[package]]
 name = "sovereign-atos"
 version = "0.6.0"
 dependencies = [
@@ -12616,6 +12542,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-grants"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "commonwealth-core",
+ "commonwealth-state",
+ "corpus-engine",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sovereign-inference"
 version = "0.6.0"
 dependencies = [
@@ -12657,15 +12602,11 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
- "commonwealth-api",
- "commonwealth-app",
  "commonwealth-core",
  "commonwealth-discovery",
- "commonwealth-inference",
  "commonwealth-media",
  "commonwealth-rail",
  "commonwealth-state",
- "commonwealth-test-harness",
  "commonwealth-transport",
  "commonwealth-work",
  "corpus-engine",
@@ -12688,13 +12629,17 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-api",
  "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-enrichment-catalog",
  "sovereign-gliner",
  "sovereign-inference",
+ "sovereign-mesh-test-harness",
  "sovereign-meshapp",
+ "sovereign-meshapp-registry",
+ "sovereign-serving",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12714,6 +12659,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-mesh-test-harness"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "commonwealth-core",
+ "commonwealth-discovery",
+ "commonwealth-state",
+ "commonwealth-transport",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "sovereign-api",
+ "sovereign-meshapp-registry",
+ "sovereign-serving",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
 name = "sovereign-meshapp"
 version = "0.6.0"
 dependencies = [
@@ -12726,6 +12693,19 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "sovereign-meshapp-registry"
+version = "0.6.0"
+dependencies = [
+ "bytes",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -12851,6 +12831,26 @@ dependencies = [
  "dirs 5.0.1",
  "libc",
  "sovereign-contracts",
+]
+
+[[package]]
+name = "sovereign-serving"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "chrono",
+ "commonwealth-core",
+ "commonwealth-state",
+ "corpus-engine",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

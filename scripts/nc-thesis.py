@@ -44,6 +44,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# The four-verdict line this run ends with (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
+
 # The five illegal constructions, transcribed from the bar's own `proof` field
 # in quality/campaigns/noun-convergence.toml. This is NOT a new standard — it
 # is the declared one, made countable. `fixture` is the basename under a
@@ -97,6 +101,10 @@ def main():
               f"wired into any compile_fail harness with a recorded .stderr. "
               f"The suite cannot be shown to be evaluating anything, so its "
               f"result is not a result (ARCH §18.2, §18.4).", file=sys.stderr)
+        emit_judgement("nc-thesis", "could-not-judge",
+                       f"the positive control `{POSITIVE_CONTROL}` is not wired into a "
+                       "compile_fail harness with a recorded .stderr, so the suite cannot be "
+                       "shown to be evaluating anything")
         return 4
 
     rows = []
@@ -131,6 +139,18 @@ def main():
         print("  .stderr. COVERAGE only: that the reds still FAIL is proven by the")
         print("  definition-of-done sweep, which builds and runs them as ordinary")
         print("  test targets. A green here over a red sweep is not a thesis.")
+    # The claim is COVERAGE of the declared list, so a partial reading is not a
+    # pass — and the exit code stays 0 either way, because in this protocol the
+    # RUNNER decides what a verdict costs, not the tool (lane_verdict.rs).
+    if proven == len(DECLARED):
+        emit_judgement("nc-thesis", "passed",
+                       f"all {len(DECLARED)} declared constructions have a wired fixture with a "
+                       "recorded .stderr")
+    else:
+        open_rows = [r["claim"] for r in rows if not r["proven"]]
+        emit_judgement("nc-thesis", "failed",
+                       f"{len(DECLARED) - proven} of {len(DECLARED)} declared constructions are "
+                       f"still constructible: {'; '.join(open_rows[:4])}")
     return 0
 
 

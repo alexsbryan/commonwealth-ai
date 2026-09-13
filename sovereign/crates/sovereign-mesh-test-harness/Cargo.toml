@@ -1,0 +1,32 @@
+[package]
+name = "sovereign-mesh-test-harness"
+description = "Integration test harness for the Commonwealth mesh — simulated nodes, mock servers, failure injection. Consumed only by sovereign-mesh (the `dst` feature), which is why it sits beside it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+commonwealth-core = { workspace = true }
+commonwealth-discovery = { workspace = true }
+sovereign-serving = { workspace = true }
+sovereign-api = { workspace = true }
+sovereign-meshapp-registry = { workspace = true }
+commonwealth-state = { workspace = true }
+commonwealth-transport = { workspace = true }
+tokio = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+axum = { workspace = true }
+tower = "0.5"
+http-body-util = "0.1"
+async-trait = { workspace = true }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[lints]
+workspace = true

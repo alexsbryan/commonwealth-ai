@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # cw-work-lift.sh — the instrument for the `cw-work-package-lift` bar
-# (quality/campaigns/cw-lift.toml). The campaign's CLAIM block asks for TWO
+# (quality/campaigns/closed/cw-lift.toml). The campaign's CLAIM block asks for TWO
 # lifts and this is the second: `commonwealth-work` plus a package-only work
 # peer BUILD and RUN outside this monorepo.
 #

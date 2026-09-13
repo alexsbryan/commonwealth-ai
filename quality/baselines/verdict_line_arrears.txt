@@ -1,0 +1,17 @@
+# instrument-gate baseline — registered scripts that decide in the four-verdict vocabulary and are still read on an exit code alone (rung vl-2).
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- instrument-gate --update-baseline
+# Bank improvements only (never adds, never raises — safe to run anytime):
+#   cargo run -p xtask -- instrument-gate --tighten
+co-sweep
+contract-nightly
+cw-rails-lift
+cw-work-lift
+daemon-concurrency-soak
+daemon-concurrency-soak-control
+daemon-concurrency-soak-selftest
+desktop-smoke
+desktop-soak-py
+oicp-conformance
+sovereign-lint
+sovereign-lint-scoped

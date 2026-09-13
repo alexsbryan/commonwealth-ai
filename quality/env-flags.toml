@@ -1471,6 +1471,15 @@ default = "ON (set =0 to restore the claim-ledger render)"
 status = "shipped"
 purpose = "drb1-t5: the deep-research deliverable is COMPOSED (one section per planned sub-question over the whole merged evidence window, plus a closing synthesis — AIQ teardown §1.6/§6.3) instead of being rebuilt from atomised claim rows. On-form: SOVEREIGN_DR_COMPOSED_REPORT=1 (also true, case-insensitive); every other value, including unset, leaves the claim-ledger render in place. Why it exists: measured on the logged t7a flight, the ledger shape scored 2.16/10 against the DRB-I reference's 9.32 on the benchmark's own criteria, with `## Findings` empty or near-empty on all nine deliverables because 127 of 137 claims landed could-not-judge — the page was the bookkeeping rather than the answer. What does NOT change when it is on: the gate. The audit runs over the COMPOSED text (so the audited artefact and the delivered artefact are one document), the corroboration floor, custody veto and containment witness are untouched, refuted claims are marked in place, and everything unverified is named in a closing Verification section. Read in exactly one place (deep_research::composed_report_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
 
+# ── daemon-lifecycle: returning freed allocator memory ──
+
+[[flag]]
+name = "SOVEREIGN_RSS_TRIM_MB"
+cluster = "daemon-lifecycle"
+default = "min(soft limit, 20480)"
+status = "guard"
+purpose = "RSS above which memory_watch calls malloc_trim(0) to hand freed glibc arena memory back to the OS. Added 2026-09-12 after a 20h daemon was measured holding 22,261 MB of which glibc had 20.76 GB from the OS with 15.91 GB FREE in bins and only 4.85 GB live — ten arenas over 500 MB were >95% free, 13.58 GB pinned by 26 MB of live data. glibc auto-trims only the MAIN arena, on free(), via M_TRIM_THRESHOLD; per-thread arenas are never trimmed on their own and nothing in this workspace called malloc_trim, so restart was the only recovery. One malloc_trim(0) on the live process took RSS 22,261 -> 7,876 MB (14.4 GB) with the daemon intact. Deliberately NOT the soft warn limit: that one is a RAM fraction asking 'are we near the ceiling' and resolved to 89,653 MB on the measured host, so it never fired and never would have. Capped at the legacy 20 GiB so a large host stops inheriting a threshold derived for the other question, and floored at the soft limit so a small host still trims below its own warn line. Non-glibc targets have no arenas of this shape and skip the block."
+
 # ── daemon-lifecycle: host headroom, the resource that actually runs out ──
 
 [[flag]]

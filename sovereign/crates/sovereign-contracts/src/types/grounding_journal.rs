@@ -162,6 +162,19 @@ pub enum GateCallMechanism {
     /// The quote-then-answer citation rehearsal
     /// (`citation::citation_grounded_answer`).
     Citation,
+    /// One forced-choice pass asking whether the retrieved passages contain
+    /// the facts the question needs
+    /// (`runtime::evidence_loop::judge_evidence_sufficiency`) — the retrieval
+    /// loop's own judge, and the reason this type's scope is "judge call"
+    /// rather than "call the gate made". It was invisible to every census
+    /// until 2026-09-12 because it built its own request body.
+    ///
+    /// Like [`Self::SentenceSweep`] it structurally cannot appear in a turn's
+    /// `calls` vec: the evidence loop runs during RETRIEVAL, before
+    /// `gate_answer` opens the census window. It is named so its calls carry a
+    /// mechanism in the `grounding_gate` trace and so that widening the census
+    /// window would pick them up for free instead of re-opening the blindness.
+    EvidenceSufficiency,
     /// One fast-slot per-sentence support check from the streaming pipeline
     /// scaffold (`pipeline::verify_sentence`, `SOVEREIGN_GATE_PIPELINE`,
     /// default off).
@@ -197,6 +210,7 @@ impl GateCallMechanism {
             GateCallMechanism::ShortGuardRetry => "short_guard_retry",
             GateCallMechanism::Citation => "citation",
             GateCallMechanism::SentenceSweep => "sentence_sweep",
+            GateCallMechanism::EvidenceSufficiency => "evidence_sufficiency",
         }
     }
 }
@@ -719,6 +733,7 @@ mod tests {
             GateCallMechanism::ShortGuardRetry,
             GateCallMechanism::Citation,
             GateCallMechanism::SentenceSweep,
+            GateCallMechanism::EvidenceSufficiency,
         ];
         let labels: HashSet<&str> = all.iter().map(|m| m.label()).collect();
         assert_eq!(labels.len(), all.len(), "two mechanisms share a name");

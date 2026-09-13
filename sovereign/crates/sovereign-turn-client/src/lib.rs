@@ -3304,7 +3304,7 @@ impl TurnClient {
     /// different owners:
     ///
     /// - the CLIENT port (9741 by convention) carries
-    ///   `commonwealth_api::server::client_router` — a superset of the
+    ///   `sovereign_api::server::client_router` — a superset of the
     ///   internal one — PLUS every router `EmbeddedDaemon` merges into it
     ///   (`mounted`): `corpus_catalog_http`, `lc_http`, `atlas_http`,
     ///   `meshapp_http`, `enrich_http`, `recipe_http`, `documents_http`,
@@ -3314,7 +3314,7 @@ impl TurnClient {
     ///   `/internal/meshapp/…` method in this file — which is nearly all
     ///   of them — reaches ONLY that port.
     /// - the INTERNAL port (9742) carries
-    ///   `commonwealth_api::server::internal_router`, the mesh PEER
+    ///   `sovereign_api::server::internal_router`, the mesh PEER
     ///   surface: gossip, join, scheduling, model/index transfer,
     ///   `/internal/corpus/install`, `/internal/contribution/…`. Only
     ///   [`Self::contribution_view`] and its neighbours below may be

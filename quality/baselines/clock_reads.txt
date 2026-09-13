@@ -3,20 +3,11 @@
 #   cargo run -p xtask -- clock-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clock-gate --tighten
-1	commonwealth/crates/commonwealth-api/src/admission.rs
-2	commonwealth/crates/commonwealth-api/src/auto_recover.rs
-1	commonwealth/crates/commonwealth-api/src/middleware/artifact_surface.rs
-4	commonwealth/crates/commonwealth-api/src/middleware/session_briefing.rs
-3	commonwealth/crates/commonwealth-api/src/routes_inference.rs
-2	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
-3	commonwealth/crates/commonwealth-api/src/state.rs
-2	commonwealth/crates/commonwealth-api/src/yield_hook.rs
-2	commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs
 1	commonwealth/crates/commonwealth-rail/src/lib.rs
 1	commonwealth/crates/commonwealth-state/src/activity.rs
 1	commonwealth/crates/commonwealth-state/src/contributions.rs
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
-1	commonwealth/crates/oicp-conformance/src/main.rs
+1	oicp-conformance/src/main.rs
 1	corpus-engine-archaeology/src/archaeology_eval.rs
 3	corpus-engine-notes/tests/main/propagation.rs
 1	corpus-engine-scip/src/scip_graph.rs
@@ -30,6 +21,14 @@
 1	corpus-engine/xtask/src/target_arch.rs
 2	kernel-types/src/judgement.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
+1	sovereign/crates/sovereign-api/src/admission.rs
+2	sovereign/crates/sovereign-api/src/auto_recover.rs
+1	sovereign/crates/sovereign-api/src/middleware/artifact_surface.rs
+4	sovereign/crates/sovereign-api/src/middleware/session_briefing.rs
+3	sovereign/crates/sovereign-api/src/routes_inference.rs
+2	sovereign/crates/sovereign-api/src/routes_internal/mesh_admin.rs
+3	sovereign/crates/sovereign-api/src/state.rs
+2	sovereign/crates/sovereign-api/src/yield_hook.rs
 2	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
@@ -66,8 +65,7 @@
 1	sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs
 1	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
 1	sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs
-1	sovereign/crates/sovereign-desktop/src-tauri/src/smoketest.rs
+2	sovereign/crates/sovereign-grants/src/shard_manager.rs
 1	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1	sovereign/crates/sovereign-inference/src/embedded/sampler.rs
 2	sovereign/crates/sovereign-mesh/src/daemon.rs
@@ -98,4 +96,3 @@
 1	studio/crates/sovereign-recipe-author/src/capability_request.rs
 1	studio/crates/sovereign-recipe-author/src/checkpoint.rs
 1	studio/crates/sovereign-recipe-author/src/project.rs
-1	studio/crates/sovereign-workflow-host/src/workflow_http.rs

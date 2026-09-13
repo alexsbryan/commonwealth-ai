@@ -494,9 +494,10 @@ pub async fn claim_violation_joint(
     let (prompt, stable_prefix_len) = family.claim_prompt(&chunks[split..seen], claim);
     let (a, b) = forced_choice_ab(
         &**inference,
+        CHUNK_JUDGE_SYSTEM,
         &prompt,
         stable_prefix_len,
-        posture,
+        JudgeRouting::Envelope(posture),
         GateCallMechanism::PerClaimJudge,
     )
     .await?;

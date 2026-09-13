@@ -22,6 +22,14 @@
 //!    MemoryMax: cgroup limits deliver SIGKILL with no drain — exactly
 //!    the corruption being avoided.
 //!
+//! 4. calls `malloc_trim(0)` above a separate, lower threshold
+//!    (`SOVEREIGN_RSS_TRIM_MB`), because glibc auto-trims only the
+//!    MAIN arena and per-thread arenas are never returned on their
+//!    own. Measured 2026-09-12: 15.91 GB of a 20 h daemon's 20.76 GB
+//!    was FREE-but-unreturned across 66 arenas, and one trim gave
+//!    back 14.4 GB with the process intact. Restart had been the
+//!    only recovery.
+//!
 //! **Both limits default ON, derived from total system RAM**
 //! (DAEMON_RESILIENCE.md P0.3). The defense originally shipped
 //! disabled-unless-env-set, and the only thing that set the env was
@@ -99,6 +107,72 @@ pub fn hard_limit_mb() -> Option<u64> {
         total_system_ram_mb(),
     )
 }
+
+/// RSS above which the sampler asks glibc to hand freed arena memory back
+/// to the OS.
+///
+/// A SEPARATE THRESHOLD FROM THE SOFT WARN, DELIBERATELY. The soft limit
+/// asks "are we near the box's ceiling", so a RAM fraction is right for it.
+/// This asks a different question — "are we holding far more than we are
+/// using" — and that stopped depending on RAM size the moment ARENAS were
+/// the reason. Measured 2026-09-12 on a 20 h daemon, 128 GB host: RSS
+/// 22,261 MB, of which glibc held 20.76 GB from the OS with **15.91 GB free
+/// in bins** against 4.85 GB actually live (which matched the loaded models
+/// almost exactly). Ten arenas over 500 MB were >95% free — 13.58 GB pinned
+/// by 26 MB of live data. The soft limit that day was 89,653 MB. It never
+/// fired and never would have.
+///
+/// Default: the soft limit CAPPED at the legacy 20 GiB, so a small host
+/// still trims below its own warn line while a large one stops inheriting a
+/// threshold derived for the other question.
+pub fn trim_threshold_mb() -> u64 {
+    trim_threshold_policy(
+        std::env::var("SOVEREIGN_RSS_TRIM_MB").ok().as_deref(),
+        soft_limit_mb(),
+    )
+}
+
+/// Pure policy so the precedence (explicit env > soft-limit-capped-at-legacy)
+/// is unit-testable without touching the environment or the host's RAM.
+fn trim_threshold_policy(raw: Option<&str>, soft_mb: u64) -> u64 {
+    let default = soft_mb.min(LEGACY_SOFT_MB);
+    parse_limit_mb(raw, Some(default)).unwrap_or(default)
+}
+
+/// Ask the allocator to return free arena memory to the OS. `true` when it
+/// released something.
+///
+/// WHY THIS EXISTS AT ALL. glibc auto-trims only the MAIN arena, on `free()`,
+/// via `M_TRIM_THRESHOLD`. Per-thread arenas are effectively never trimmed on
+/// their own, so a daemon that spreads allocation churn across dozens of them
+/// accumulates freed memory for its entire life and RESTART WAS THE ONLY
+/// RECOVERY. Nothing in this workspace called `malloc_trim` before this.
+/// Measured on the live daemon (`malloc_trim(0)` via gdb, 2026-09-12): RSS
+/// 22,261 MB -> 7,876 MB, **14.4 GB returned**, process intact — same pid,
+/// uptime unbroken, both models still resident, inference still answering.
+///
+/// Non-glibc targets have no per-thread arenas of this shape and no such
+/// call; the sampler skips the whole block there rather than pretending.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn trim_arenas() -> bool {
+    // SAFETY: `malloc_trim` takes no pointers and is safe to call from any
+    // thread; it takes the arena locks internally.
+    unsafe { libc::malloc_trim(0) == 1 }
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn trim_arenas() -> bool {
+    false
+}
+
+/// How often the trim may run while RSS stays above the threshold. The trim
+/// is housekeeping, not an alarm, and it takes the arena locks — so it gets
+/// its own floor rather than riding [`REWARN_EVERY`]. A trim that works
+/// drops RSS below the threshold and the next tick skips it anyway; this
+/// floor is for the case where the LIVE working set is legitimately above
+/// the threshold (a big model loaded), where trimming every 60 s would be
+/// pure lock contention for nothing.
+const TRIM_EVERY: Duration = Duration::from_secs(10 * 60);
 
 fn derived_soft_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
     total_ram_mb.map(|ram| ram * SOFT_PCT / 100)
@@ -404,6 +478,7 @@ pub async fn watch_loop(interval: Duration) {
         soft_from_env = std::env::var_os("SOVEREIGN_RSS_SOFT_LIMIT_MB").is_some(),
         hard_from_env = std::env::var_os("SOVEREIGN_RSS_HARD_LIMIT_MB").is_some(),
         interval_secs = interval.as_secs(),
+        trim_threshold_mb = trim_threshold_mb(),
         headroom_soft_mb = headroom_soft_mb(),
         headroom_hard_mb = headroom_hard_mb(),
         "memory-watch: armed"
@@ -439,6 +514,8 @@ pub async fn watch_loop(interval: Duration) {
         ticker.tick().await;
         let mut gate = WarnGate::new();
         let mut headroom_gate = WarnGate::new();
+        let trim_threshold = trim_threshold_mb();
+        let mut last_trim: Option<Instant> = None;
         let headroom_soft = headroom_soft_mb();
         let headroom_hard = headroom_hard_mb();
         loop {
@@ -532,6 +609,33 @@ pub async fn watch_loop(interval: Duration) {
                      see RUNBOOK memory section (canonical model config / RSS knobs)"
                 );
             }
+
+            // Hand freed arena memory back. This runs BELOW the soft warn on
+            // purpose: on a large host the warn line is a RAM fraction the
+            // daemon will never reach, and the memory worth reclaiming is
+            // already gone by then (see `trim_threshold_mb`).
+            let due = last_trim
+                .map(|t| Instant::now().duration_since(t) >= TRIM_EVERY)
+                .unwrap_or(true);
+            if rss_mb > trim_threshold && due {
+                last_trim = Some(Instant::now());
+                if let Ok((released, after)) =
+                    tokio::task::spawn_blocking(|| (trim_arenas(), current_rss_mb())).await
+                {
+                    if let Some(after_mb) = after {
+                        LATEST_RSS_MB.store(after_mb, Ordering::Relaxed);
+                    }
+                    tracing::info!(
+                        rss_before_mb = rss_mb,
+                        rss_after_mb = after,
+                        reclaimed_mb = after.map(|a| rss_mb.saturating_sub(a)),
+                        released,
+                        trim_threshold_mb = trim_threshold,
+                        "memory-watch: trimmed allocator arenas — glibc does not return \
+                         per-thread arena memory on its own"
+                    );
+                }
+            }
         }
     }
 }
@@ -605,6 +709,60 @@ fn peak_rss_mb() -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trim_threshold_caps_at_the_legacy_limit_on_a_large_host() {
+        // The regression this whole knob exists for: on the measured
+        // 128 GB host the soft limit derived to 89,653 MB, so a trim
+        // keyed on it would never have run at the 22 GB where 15.91 GB
+        // was reclaimable.
+        assert_eq!(super::trim_threshold_policy(None, 89_653), 20_480);
+    }
+
+    #[test]
+    fn trim_threshold_follows_the_soft_limit_on_a_small_host() {
+        // 16 GB box: soft is 11,468 MB, below the legacy cap, so the
+        // trim must stay UNDER the warn line rather than above it.
+        assert_eq!(super::trim_threshold_policy(None, 11_468), 11_468);
+    }
+
+    #[test]
+    fn trim_threshold_env_overrides_the_derivation() {
+        assert_eq!(super::trim_threshold_policy(Some("4096"), 89_653), 4_096);
+    }
+
+    #[test]
+    fn trim_threshold_rejects_garbage_rather_than_disabling_itself() {
+        // Same posture as hard_limit_policy: garbage falls back to the
+        // default. A typo must not silently switch the guard off.
+        assert_eq!(super::trim_threshold_policy(Some("lots"), 89_653), 20_480);
+        assert_eq!(super::trim_threshold_policy(Some("0"), 89_653), 20_480);
+    }
+
+    /// The call has to actually release, not just link. Allocation happens
+    /// on a SPAWNED THREAD on purpose: the main arena is the one glibc
+    /// already trims on `free()`, so touching it would prove nothing about
+    /// the per-thread arenas that are the entire bug.
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn trim_arenas_releases_memory_freed_on_a_non_main_arena() {
+        std::thread::spawn(|| {
+            let mut blocks: Vec<Vec<u8>> = (0..64).map(|_| vec![7u8; 4 * 1024 * 1024]).collect();
+            // Touch so the pages are really resident, then free.
+            for b in blocks.iter_mut() {
+                b[0] = 1;
+            }
+            drop(blocks);
+        })
+        .join()
+        .expect("allocating thread panicked");
+
+        assert!(
+            super::trim_arenas(),
+            "malloc_trim returned 0 after freeing 256 MB on a non-main arena — \
+             either the call is a no-op or glibc stopped honouring it"
+        );
+    }
+
     use super::*;
 
     #[test]

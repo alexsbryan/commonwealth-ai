@@ -1,0 +1,28 @@
+[package]
+name = "sovereign-serving"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+corpus-engine = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+# `toml` went with the forked `model_aliases` / `oicp_registry` modules
+# (nc-22c): the TOML parsing lives in `oicp-types` since cw-lift 4b
+# (2026-09-04), reached through the `commonwealth-core` re-export chain rather
+# than re-declared here.
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+tokio-stream = "0.1"
+tokio-util = { workspace = true }
+[lints]
+workspace = true

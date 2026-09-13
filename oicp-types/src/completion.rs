@@ -388,7 +388,7 @@ pub enum SamplingMode {
 }
 
 /// JSON-Schema view of a function the model may call. Mirrors
-/// `commonwealth_api::openai_types::ToolFunction` but lives in the
+/// `sovereign_api::openai_types::ToolFunction` but lives in the
 /// provider-neutral core so `InferenceProvider` implementations don't
 /// depend on the Commonwealth API crate.
 #[derive(Debug, Clone, Serialize, Deserialize)]

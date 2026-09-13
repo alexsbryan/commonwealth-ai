@@ -10,11 +10,22 @@ the layer under that. It answers who is in the group, how to reach them, how
 two machines reconcile when they disagree, and how a shared record of what
 happened stays honest.
 
-It is six crates and no binary. You build a peer against it; you do not run it.
-The one shipped consumer is [Sovereign](../sovereign/), which embeds it and
-exposes it as `sovereign mesh` — if you came here wanting to pool machines with
-people you trust, [Run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md)
-is the door, not this file.
+Mostly you build a peer against it rather than run it, and the one shipped
+consumer is [Sovereign](../sovereign/), which embeds it and exposes it as
+`sovereign mesh`. Since 2026-09-11 there is also one binary in the package —
+`cw-rails` ([`commonwealth-rails`](crates/commonwealth-rails)), a minimal daemon
+that joins a mesh and serves it, for someone writing a shim rather than
+embedding the library. If you came here wanting to pool machines with people you
+trust, [Run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md) is
+the door, not this file.
+
+The crate list lives in one place and it is not this file: `[[package]] name =
+"commonwealth"` in [`quality/ARCH_LAYERS.toml`](../quality/ARCH_LAYERS.toml),
+which `boundary-gate` reads on every push. The table below is a guide to what
+each crate is FOR, not a claim about which crates there are — this paragraph
+said "six crates and no binary" for a week after both halves of it stopped being
+true, because it was a second copy of a list nobody updates when the first one
+changes. See [BOUNDARY.md](BOUNDARY.md) for the property and what it excludes.
 
 Pre-release, AGPL-3.0-or-later.
 
@@ -23,6 +34,12 @@ Pre-release, AGPL-3.0-or-later.
 The package is two independent stacks. Nothing in the rail knows about a mesh,
 and nothing in the mesh knows about the rail. Take one and you never compile
 the other.
+
+That still holds between the two halves below, and it is no longer the whole
+package: `commonwealth-work` is written against BOTH (`commonwealth-core` +
+`commonwealth-rail-core`), and `commonwealth-media` and `commonwealth-rails`
+against the mesh half. They are consumers of the two stacks, not a third stack
+— which is why the independence claim survives them.
 
 ```
   the rail — a shared record                the mesh — a group of machines

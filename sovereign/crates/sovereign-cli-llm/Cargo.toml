@@ -101,7 +101,8 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # and `load_or_generate_node_key`, so this crate and the daemon cannot end
 # up on two versions of one logical type (ARCH §8.3).
 #
-# `commonwealth-knowledge` is ABSENT since cw-lift 1d, and its absence is the
+# `commonwealth-knowledge` (now `sovereign-grants`) is ABSENT since cw-lift
+# 1d, and its absence is the
 # claim: `svrn ring` is a ring-app client, and a ring-app client composes on
 # the rail without the knowledge layer. The last thing holding that dep was a
 # rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no

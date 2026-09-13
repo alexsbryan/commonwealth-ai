@@ -69,6 +69,62 @@ use sovereign_contracts::types::{
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, CompletionResponse};
 
+/// Who is asking — the two kinds of caller the one forced-choice register has.
+///
+/// **The census is a property of a TURN, and only one of these has one.** The
+/// gate opens a census in `gate_answer`; a bench process, a quality lane and
+/// the retrieval loop open none. Before this type existed the bench critic
+/// resolved that by not using the funnel at all — its own request body, its
+/// own parse, no timing, no failure classification, and nothing in the
+/// `grounding_gate` trace to price it with (2026-09-12, rung vl-1).
+///
+/// So every judge call crosses the funnel and is named, and only a
+/// [`Self::Gate`] call produces a census ROW — because only a gate turn has a
+/// census to put it in. The alternative considered and rejected was giving the
+/// bench's five scorers [`GateCallMechanism`] variants: that type's contract is
+/// one variant per GATE call site, and a coarse `BenchCritic` variant would have
+/// made five registers indistinguishable inside it — the exact blindness it was
+/// minted to end (ARCH principle 12: a gap in one thing is not a job for
+/// another).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JudgeCall {
+    /// A call the gate itself issues, inside a turn whose census is open.
+    Gate(GateCallMechanism),
+    /// A call a harness issues outside any turn: the bench critic's scorers,
+    /// a quality lane's classifier. The label is carried into the trace so
+    /// harness judge traffic is priced in the same units as the gate's own,
+    /// and it is deliberately open text — the set of harness registers grows
+    /// without a code change to this contract (ARCH principle 9), and it never
+    /// enters the wire type.
+    Harness(&'static str),
+}
+
+impl From<GateCallMechanism> for JudgeCall {
+    fn from(m: GateCallMechanism) -> Self {
+        JudgeCall::Gate(m)
+    }
+}
+
+impl JudgeCall {
+    /// The word the trace shows.
+    fn label(self) -> &'static str {
+        match self {
+            JudgeCall::Gate(m) => m.label(),
+            JudgeCall::Harness(l) => l,
+        }
+    }
+
+    /// Is this a JUDGEMENT, as opposed to synthesis or repair? Harness calls
+    /// are: the only register a harness reaches this funnel through is the
+    /// forced-choice one, which decides rather than writes.
+    fn is_judging(self) -> bool {
+        match self {
+            JudgeCall::Gate(m) => is_judging(m),
+            JudgeCall::Harness(_) => true,
+        }
+    }
+}
+
 /// Is this mechanism a JUDGEMENT, as opposed to synthesis or repair?
 ///
 /// The `judge_failure` counts are about the gate's ability to reach a
@@ -85,7 +141,8 @@ const fn is_judging(m: GateCallMechanism) -> bool {
         | GateCallMechanism::SpecificsScan
         | GateCallMechanism::BatchedSupport
         | GateCallMechanism::LocatedSpanTriage
-        | GateCallMechanism::SentenceSweep => true,
+        | GateCallMechanism::SentenceSweep
+        | GateCallMechanism::EvidenceSufficiency => true,
         GateCallMechanism::Surgery
         | GateCallMechanism::Rewrite
         | GateCallMechanism::Retry
@@ -186,8 +243,9 @@ impl CallCensus {
 pub(crate) async fn gate_call(
     inference: &dyn InferenceProvider,
     req: &CompletionRequest,
-    mechanism: GateCallMechanism,
+    call: impl Into<JudgeCall>,
 ) -> crate::error::Result<CompletionResponse> {
+    let call = call.into();
     // The turn's ADMISSION rides out on every gate call, stamped HERE
     // because this is already the one funnel every gate call crosses
     // (ARCH §10.6). A judge call is the tail of work the host accepted
@@ -208,7 +266,7 @@ pub(crate) async fn gate_call(
     // on a live tail without waiting for the turn to close (ARCH §9).
     tracing::debug!(
         target: "grounding_gate",
-        mechanism = mechanism.label(),
+        mechanism = call.label(),
         ms,
         prompt_chars,
         out_chars,
@@ -225,14 +283,14 @@ pub(crate) async fn gate_call(
         tracing::warn!(
             target: "grounding_gate",
             event = "gate_call_failed",
-            mechanism = mechanism.label(),
+            mechanism = call.label(),
             reason = reason.label(),
-            judging = is_judging(mechanism),
+            judging = call.is_judging(),
             ms,
             detail = %e,
             "gate model call failed"
         );
-        if is_judging(mechanism) {
+        if call.is_judging() {
             let _ = TURN_CALLS.try_with(|c| {
                 if let Ok(mut f) = c.failures.lock() {
                     f.push(reason);
@@ -241,6 +299,13 @@ pub(crate) async fn gate_call(
         }
     }
     let _ = TURN_CALLS.try_with(|c| {
+        // A harness call produces no row: the row's `mechanism` is the wire's
+        // gate vocabulary, and a harness register has no place in it. It has
+        // already been timed, traced and classified above — the parts a
+        // caller outside a turn can actually use.
+        let JudgeCall::Gate(mechanism) = call else {
+            return;
+        };
         let start_offset_ms = started
             .saturating_duration_since(c.opened)
             .as_millis()

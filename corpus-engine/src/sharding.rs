@@ -1252,9 +1252,9 @@ pub struct PartitionMergeReport {
 /// one implementation per rule). Two merge paths reach it:
 ///
 /// * [`merge_partitions_into_canonical`], the disk-derived one, and
-/// * `commonwealth_knowledge::ShardManager::merge_participants`, the
+/// * `sovereign_grants::ShardManager::merge_participants`, the
 ///   peer-pull one, which serves BOTH the fold-derived collector
-///   (`commonwealth_api::auto_recover::merge_from_fold_coverage`) and the
+///   (`sovereign_api::auto_recover::merge_from_fold_coverage`) and the
 ///   queue-mode coordinator (`ShardManager::coordinate_merge`).
 ///
 /// That second entry named `merge_from_fold_coverage` itself until cw-lift 5g

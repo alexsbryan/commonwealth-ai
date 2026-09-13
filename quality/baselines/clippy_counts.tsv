@@ -22,8 +22,8 @@
 6	commonwealth-knowledge/clippy::unwrap_used
 2	commonwealth-state/clippy::cognitive_complexity
 7	commonwealth-state/clippy::unwrap_used
-2	commonwealth-test-harness/clippy::expect_used
-15	commonwealth-test-harness/clippy::unwrap_used
+2	sovereign-mesh-test-harness/clippy::expect_used
+15	sovereign-mesh-test-harness/clippy::unwrap_used
 10	commonwealth-transport/clippy::expect_used
 5	commonwealth-transport/clippy::unwrap_used
 1	commonwealth-transport/clippy::while_let_loop

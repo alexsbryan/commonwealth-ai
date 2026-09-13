@@ -146,3 +146,35 @@ else
 fi
   printf '%s' "$status"
 }
+
+# lane_judgement <lane-name> <status> <secs>
+#
+# The same decision, SAID rather than left to be grepped. `lane_verdict` above
+# echoes a status string this repo's own runner then pattern-matches (`PASS*`),
+# and `sovereign-cli-shared/src/lane_verdict.rs` names that shape as the
+# problem: "every one of those greps is a coupling to wording nobody promised
+# to keep". So each lane also prints the four-verdict line the product's own
+# gate speaks (rung vl-2 of quality/campaigns/verifier-loop.toml).
+#
+# ONE DECIDER STILL. This maps `lane_verdict`'s output; it does not re-derive
+# it. A second traversal of the lane output deciding the line independently is
+# exactly how the two would come to disagree.
+#
+# The status strings are the closed set documented at the top of this file, and
+# an unrecognised one is reported as could-not-judge NAMING itself rather than
+# mapped to either side (ARCH §18.3).
+lane_judgement() {
+  local name="$1" status="$2" secs="${3:-0}" verdict reason
+  case "$status" in
+    PASS) verdict=passed; reason="a real baseline comparison ran and nothing regressed (${secs}s)" ;;
+    "PASS(warn:setup)") verdict=passed; reason="nothing regressed, but some bench was stale or first-run (${secs}s)" ;;
+    FAIL\(*reg\)) verdict=failed; reason="${status//[!0-9]/} item(s) regressed against the baseline (${secs}s)" ;;
+    FAIL*) verdict=failed; reason="the lane exited non-zero for a reason that is not N-regressed: ${status} (${secs}s)" ;;
+    TIMEOUT) verdict=could-not-judge; reason="the lane hit its cap after ${secs}s, so nothing was adjudicated" ;;
+    "SKIP(no-data)") verdict=could-not-judge; reason="the lane ran and adjudicated nothing (${secs}s)" ;;
+    "SKIP(daemon-down)") verdict=could-not-judge; reason="the daemon was unreachable, so the lane never got to adjudicate anything" ;;
+    *) verdict=could-not-judge; reason="the lane reported status ${status}, which this decider does not know" ;;
+  esac
+  python3 "$(dirname "${BASH_SOURCE[0]}")/judgement.py" \
+    --subject "ci-bench/${name}" --verdict "$verdict" --reason "$reason"
+}

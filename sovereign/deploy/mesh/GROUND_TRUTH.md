@@ -180,7 +180,7 @@ both files owe a fix in the same commit (§1.1).
 - **Nothing of it exists.** No `work` namespace, no `commonwealth-work` crate, no `WorkAct`,
   no `JobUnit`, no executor registry, no second queue of any kind. The design is
   `sovereign/deploy/mesh/WORK_PLANE.md`, re-cut onto the ring rail on 2026-09-09 and laddered
-  as cw-lift Phase 5 (`quality/campaigns/cw-lift.toml`, rungs 5a-5h). `docs/CMNWLTH_DESIGN.md`
+  as cw-lift Phase 5 (`quality/campaigns/closed/cw-lift.toml`, rungs 5a-5h). `docs/CMNWLTH_DESIGN.md`
   is the same ontology under other names and now carries a superseded-by header pointing at it.
 - **The 2026-09-04 design rested on machinery that mostly does not exist**, and the sixteen-row
   audit that says so is the first section of that file. What 5a landed is the audit, the

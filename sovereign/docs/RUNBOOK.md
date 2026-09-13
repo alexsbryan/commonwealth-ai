@@ -80,8 +80,40 @@ Runtime guard (`memory_watch.rs`, sampled every 60s):
 
 | Knob | Default | Meaning |
 |---|---|---|
-| `SOVEREIGN_RSS_SOFT_LIMIT_MB` | 20480 | `warn!` on upward crossing, re-warn ≤ every 15 min |
+| `SOVEREIGN_RSS_SOFT_LIMIT_MB` | 70% of RAM (Linux) / 50% (macOS); 20480 only when RAM is undetectable | `warn!` on upward crossing, re-warn ≤ every 15 min |
+| `SOVEREIGN_RSS_TRIM_MB` | `min(soft limit, 20480)` | `malloc_trim(0)` — hands freed glibc arena memory back to the OS, ≤ every 10 min |
 | `SOVEREIGN_RSS_HARD_LIMIT_MB` | unset (**off**) | graceful self-SIGTERM + **non-zero exit** → supervisor relaunches clean before jetsam SIGKILLs mid-write |
+
+**This table said the soft default was `20480` until 2026-09-12 and that had
+been wrong since 2026-07-19**, when the limit became RAM-derived. On a 128 GB
+host it resolves to 89,653 MB, so the alarm that caught `rss_mb=54426` on
+2026-07-13 (`peak_rss_mb=89369`, logged with `soft_limit_mb=20480`) has been
+effectively off on large-RAM boxes ever since. That is why the growth below
+went unreported three times.
+
+**Growth you cannot see in `inference.resident` is usually the allocator, not
+a leak.** glibc auto-trims only the MAIN arena, on `free()`; per-thread arenas
+are never returned on their own. Measured on a 20 h daemon 2026-09-12: RSS
+22,261 MB, glibc holding 20.76 GB from the OS of which **15.91 GB was free in
+bins** against 4.85 GB live — ten arenas over 500 MB were >95% free, 13.58 GB
+pinned by 26 MB of live data. `SOVEREIGN_RSS_TRIM_MB` now reclaims this
+automatically; the one-shot manual form, which returned 14.4 GB with the
+daemon intact, is:
+
+```
+# from INSIDE the toolbox — the toolbox shares the host PID namespace, but
+# only there do libc symbols resolve.
+gdb -p <pid> --batch -ex 'print (int) malloc_trim(0)' -ex detach
+```
+
+To see the split before trimming, dump glibc's own books — `<total type="rest">`
+is the free bytes, `<system type="current">` is what it holds from the OS:
+
+```
+gdb -p <pid> --batch -ex 'print (void*) fopen("/tmp/mi.xml","w")' \
+  -ex 'set $f = $' -ex 'print (int) malloc_info(0, $f)' \
+  -ex 'print (int) fclose($f)' -ex detach
+```
 
 Forensics: every shutdown logs signal source + peak RSS
 (`daemon: shutdown signal received`); ≥24 GiB peak is flagged as probable

@@ -241,18 +241,21 @@ pub(crate) struct KnowledgeQueryPlan {
     /// The pipeline's query embedding, retained for the gap-turn
     /// coverage probe (reuse, never re-embed).
     pub(crate) query_embedding: Vec<f32>,
-    /// H1's typed admission verdict, when the native grounding path ran
-    /// — which since 2026-08-11 is every turn by default. `None` whenever
-    /// the path did not run (opted out with
-    /// `SOVEREIGN_NATIVE_GROUNDING=0`, or no instrument), and `None` is
-    /// what keeps that behavior byte-identical to the incumbent: nothing
-    /// downstream reads this field unless it is `Some`.
+    /// What H1's admission stage did on this turn — which since
+    /// 2026-08-11 runs by default.
+    ///
+    /// Three states, not an `Option<GroundingVerdict>`: the stages
+    /// downstream distinguish "did not run" from "ran and could not
+    /// measure", and this field is the only place that distinction is
+    /// carried. `NotRun` is what keeps the opted-out arm byte-identical
+    /// to the incumbent.
     ///
     /// Carried as DATA for the same reason `general_knowledge` is: the
     /// stage that decided hands the decision forward typed, and no later
     /// stage re-derives answerability from a score, a prefix, or a
     /// string (`NATIVE_GROUNDING.md §6`).
-    pub(crate) grounding_verdict: Option<crate::types::GroundingVerdict>,
+    pub(crate) grounding_admission:
+        crate::runtime::grounding::native_grounding::admission::NativeAdmission,
 }
 
 /// Why a turn fell back to parametric general knowledge.

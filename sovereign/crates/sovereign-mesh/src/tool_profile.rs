@@ -64,8 +64,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use commonwealth_api::openai_types::{ChatCompletionRequest, ToolDefinition};
 use serde::Deserialize;
+use sovereign_api::openai_types::{ChatCompletionRequest, ToolDefinition};
 
 /// One named profile. Either allows all tools (wildcard) or a
 /// specific list. Stored in TOML as either:
@@ -348,7 +348,7 @@ pub fn apply<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_api::openai_types::{ChatCompletionRequest, ToolFunction};
+    use sovereign_api::openai_types::{ChatCompletionRequest, ToolFunction};
 
     fn td(name: &str) -> ToolDefinition {
         ToolDefinition {

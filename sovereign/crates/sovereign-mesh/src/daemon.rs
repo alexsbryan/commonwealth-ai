@@ -11,12 +11,12 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 
@@ -1130,7 +1130,7 @@ impl EmbeddedDaemon {
     /// `AppState` is `Clone` over an `Arc<AppStateInner>`, so this
     /// is cheap and the returned handle survives any subsequent
     /// state transitions.
-    pub async fn app_state(&self) -> Option<commonwealth_api::state::AppState> {
+    pub async fn app_state(&self) -> Option<sovereign_api::state::AppState> {
         match &*self.state.read().await {
             DaemonState::Running { app_state, .. } => Some(app_state.clone()),
             _ => None,
@@ -1172,7 +1172,7 @@ impl EmbeddedDaemon {
     /// `commonwealth-api` dep.
     pub async fn build_yield_hook(&self) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
         let state = self.app_state().await?;
-        Some(commonwealth_api::yield_hook::AppStateYieldHook::new(
+        Some(sovereign_api::yield_hook::AppStateYieldHook::new(
             state.inner.clone(),
         ))
     }
@@ -2955,7 +2955,7 @@ impl EmbeddedDaemon {
                 commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
             ),
         };
-        let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
+        let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
         let app_state = AppState::new_with_platform_and_engine(
             node_id,
             mesh,
@@ -3080,7 +3080,7 @@ impl EmbeddedDaemon {
             // its RPC tensor cache with a shard on request (`POST /internal/
             // rpc-warm`). Installed alongside local inference — a node that can
             // serve chat can serve as an RPC worker. See `rpc_warm_http`.
-            let warmer: Arc<dyn commonwealth_api::state::RpcShardWarmer> =
+            let warmer: Arc<dyn sovereign_api::state::RpcShardWarmer> =
                 Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
             app_state
                 .with_local_inference(adapter)
@@ -3097,7 +3097,7 @@ impl EmbeddedDaemon {
         // joiner on restart.
         let app_state = if self.persistence_enabled() {
             let data_dir = self.data_dir.clone();
-            let hook: commonwealth_api::state::MeshMutationHook = Arc::new(
+            let hook: sovereign_api::state::MeshMutationHook = Arc::new(
                 move |mesh: &commonwealth_core::mesh::Mesh, self_id: NodeId| {
                     if let Err(e) = persist::save(&data_dir, mesh, self_id) {
                         tracing::warn!(
@@ -3154,14 +3154,12 @@ impl EmbeddedDaemon {
                 );
             }
             let hook: Arc<dyn corpus_engine::YieldHook> =
-                commonwealth_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
+                sovereign_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
-            engine.set_foreground_signal(
-                commonwealth_api::yield_hook::AppStateForegroundSignal::new(
-                    app_state.inner.clone(),
-                ),
-            );
+            engine.set_foreground_signal(sovereign_api::yield_hook::AppStateForegroundSignal::new(
+                app_state.inner.clone(),
+            ));
             info!("foreground-yield: turn lease installed on corpus engine");
         }
 
@@ -3518,7 +3516,7 @@ impl EmbeddedDaemon {
         // peer as a local caller. The iroh acceptor forwards `GUEST_ALPN`
         // here, so a `sovereign://guest/…` bearer is actually read instead of
         // being skipped by the loopback arm — see
-        // `commonwealth_api::client_auth`.
+        // `sovereign_api::client_auth`.
         //
         // Bound HERE, before the serve task is spawned, because
         // `MeshIrohAccess::start` below needs the resolved port and the serve
@@ -3600,8 +3598,7 @@ impl EmbeddedDaemon {
         self.client_listener.send_replace(ClientListener::Pending);
         let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
-            let mut client_router =
-                commonwealth_api::server::client_router(app_state_clone.clone());
+            let mut client_router = sovereign_api::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
                 // Phase 5: daemon path leaves the spec-presence gate
                 // off (`FeatureRoot::new(None)`) so `tools/list`
@@ -3626,19 +3623,18 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router =
-                commonwealth_api::server::internal_router(app_state_clone.clone());
-            let peer_router = commonwealth_api::server::client_router_for(
+            let internal_router = sovereign_api::server::internal_router(app_state_clone.clone());
+            let peer_router = sovereign_api::server::client_router_for(
                 app_state_clone.clone(),
-                commonwealth_api::server::ClientSurface::Peer,
+                sovereign_api::server::ClientSurface::Peer,
             );
-            let guest_router = commonwealth_api::server::client_router_for(
+            let guest_router = sovereign_api::server::client_router_for(
                 app_state_clone.clone(),
-                commonwealth_api::server::ClientSurface::Guest,
+                sovereign_api::server::ClientSurface::Guest,
             );
-            let rail_router = commonwealth_api::server::client_router_for(
+            let rail_router = sovereign_api::server::client_router_for(
                 app_state_clone,
-                commonwealth_api::server::ClientSurface::Rail,
+                sovereign_api::server::ClientSurface::Rail,
             );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
@@ -4558,8 +4554,8 @@ fn takeover_serve_at(pid_path: &Path) {
 /// accumulate duplicate entries keyed on different random IDs.
 fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
     use commonwealth_core::ids::ModelId;
-    use commonwealth_inference::model::{ModelArchitecture, ModelInfo};
-    use commonwealth_inference::oicp::CapabilityProfile;
+    use sovereign_serving::model::{ModelArchitecture, ModelInfo};
+    use sovereign_serving::oicp::CapabilityProfile;
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -5407,8 +5403,8 @@ mod tests {
     /// Commonwealth's handler had nothing to list.
     #[test]
     fn register_local_model_slots_writes_info_for_all_three_slots() {
-        use commonwealth_api::state::AppState;
         use commonwealth_core::mesh::Mesh;
+        use sovereign_api::state::AppState;
 
         let mesh = Mesh {
             mesh_secret: [0u8; 32],
@@ -5423,7 +5419,7 @@ mod tests {
         };
         let node_id = commonwealth_core::ids::NodeId::generate();
         let mesh_store = Arc::new(commonwealth_state::MeshStore::in_memory().unwrap());
-        let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
+        let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
         let app_state =
             AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, None);
 

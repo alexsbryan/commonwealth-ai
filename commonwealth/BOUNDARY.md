@@ -1,13 +1,27 @@
 # The commonwealth package boundary
 
-`commonwealth/crates/commonwealth-{core,transport,state,discovery,rail-core,rail,work}`
-holds the **mesh substrate** — the crate set a third party could lift out of this
-monorepo and build a peer against, with no sovereign runtime, no corpus engine
-and no model. Seven crates, 22,159 lines across 54 files (16,651 across 41 in the
-four founding members; the rest is the rail and the work plane, admitted
-2026-09-04 and 2026-09-09). This document is the contract;
+`commonwealth/crates/` holds the **mesh substrate** — the crate set a third
+party could lift out of this monorepo and build a peer against, with no
+sovereign runtime, no corpus engine and no model.
+
+**Which crates those are is not written here.** The set lives in exactly one
+place, `[[package]] name = "commonwealth"` in `quality/ARCH_LAYERS.toml`, and
+this file describes what the package IS rather than keeping a second copy of
+its membership. That is deliberate and it is a correction: between 2026-09-04
+and 2026-09-11 the package was widened four times and this paragraph went on
+saying "seven crates, 22,159 lines across 54 files" while the declaration held
+nine and 37,363 — a second copy of a list, drifting, with the gate green the
+whole time because the gate reads the declaration. The fix is one list, not a
+checker over two (§10.6). Read the declaration; it is thirty lines and each
+admission carries its reason.
+
+The commentary below — roles, closures, what each widening cost — is
+commentary, and it is allowed to lag a crate without lying, because it no
+longer claims to be the set.
+
+This document is the contract for the PROPERTY;
 `cargo run -p xtask -- boundary-gate` enforces it (blocking, one of the eight
-pre-push ratchets), and the declaration lives in `quality/ARCH_LAYERS.toml`.
+pre-push ratchets).
 
 ## Why this is declared before the work, not after
 
@@ -35,6 +49,36 @@ than argued: the global leaf union already carried 158 crates, oplog's closure
 is 28, and the crates oplog adds that no existing leaf already carries number
 exactly one — oplog itself. A widening that admits a crate and nothing else is
 the cheapest shape this list can take.
+
+**And its third and fourth, on 2026-09-11** (cw-lift D1): `commonwealth-media`
+took it to eight and `commonwealth-rails` to nine, and the zero-exception
+property held through both — `boundary-gate` reads `commonwealth 9/9 crates
+present` with no new `[[exception]]` row and no new leaf, because media's whole
+internal surface is `commonwealth-core` + `commonwealth-transport` and the
+daemon's is those two plus `-media` and `-discovery`, every one already a
+member.
+
+`commonwealth-rails` is the first BINARY admitted here, and that changes what a
+green gate is worth. `cargo tree` cannot see a `build.rs`, a hand-spelled
+`path = "../.."`, or an `include_str!` escaping the crate root, and a daemon is
+where those appear. `boundary-gate` reads three of those four itself (build.rs,
+include_str escapes, runtime root escapes, over in-repo package and leaf
+directories); what only a LIFT can read is whether the copied closure actually
+resolves, builds and runs. It did, 2026-09-11: `scripts/cw-rails-lift.sh
+--sandbox` copied 7 in-repo crates out, resolved 518 packages, built in 22.1 s
+on a stock toolchain with none of this workspace's `.cargo/config.toml`,
+`clippy.toml` or `rust-toolchain.toml`, passed 37 tests in isolation, then
+JOINED a real mesh by invite and pulled HTTP 302 from another member's Jellyfin
+origin in 18 ms.
+
+**And the fourth widening made a correction the first three did not.**
+`[[forbid]] from = "commonwealth-rail*"` — written to cover the two rail crates
+— also matches `commonwealth-rails`, which is named after the RAILS and not the
+rail, and `forbidden_by` returns the FIRST match. So the daemon silently
+inherited four rules written for something else, including a ban on
+`commonwealth-core`, its own substrate, and its own rows were never reached.
+Each rule now names its two crates explicitly. A glob over crate names is a
+decider keyed on a prefix, and prefixes are not identity (§7.5).
 
 **And its second, on 2026-09-09** (cw-lift 5c): `commonwealth-work` took the
 package from six crates to seven, `boundary-gate` reads
@@ -88,6 +132,8 @@ purpose and two of them were not.
 | `commonwealth-rail-core` | 2,560 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest and its sealed floor. Zero I/O. |
 | `commonwealth-rail` | 740 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
 | `commonwealth-work` | 1,210 | **58 / 70** | The work plane: the `WorkAct` codec, the unit seal, the fold, the one lease predicate, the executor seam and (since 2026-09-10) `attribution` — the one reader of "what host am I", which three implementations had. TWO closures, like `commonwealth-transport`: 58 by default and 70 with the `process` feature, whose entire cost is tokio's twelve crates (`tokio`, `tokio-macros`, `mio`, `bytes`, `socket2`, `parking_lot` and friends, `signal-hook-registry`, `errno`, `scopeguard`, `smallvec`, `lock_api`). The core — codec, seal, fold, predicate — is zero I/O and zero clock, and that manifest split is how it is enforced rather than remembered. |
+| `commonwealth-media` | 1,148 | 268 | Federated media: who offers a library (`OriginKind`), who may reach one (`media_allow`), the viewer bridge whose port is derived from the peer key, and the catalogue fan-out. Its whole in-repo surface is `commonwealth-core` + `commonwealth-transport`. The closure is large for one reason — it forces `commonwealth-transport`'s `iroh` feature, which is 256 of the 268 — so the number prices the transport, not this crate. |
+| `commonwealth-rails` | 3,120 | 297 | The rails daemon a shim author installs: `cw-rails join <invite>` and `cw-rails run`. One iroh endpoint carrying the join handshake, the gossip round, the acceptor and every media bridge, plus `POST /internal/gossip` so full daemons stop marking this member Offline, and three loopback routes. The FIRST BINARY in this package, which is why the physical lift matters more here than anywhere else. Same `iroh` story as `-media` above; against `commonwealth-api`'s 694, which is the comparison that means something. |
 
 `commonwealth-work` measured 2026-09-09 the same way (`cargo tree -e normal -p
 <crate> --prefix none`, unique package names, the crate itself excluded); that
@@ -180,10 +226,13 @@ sandbox had to preserve the monorepo's directory shape to compile. The
 commonwealth package has no such embed today; the way to know it still does not
 is to lift it, not to read the gate.
 
-**So it is lifted on demand now, and not by hand.**
-`scripts/cw-work-lift.sh --sandbox` is the standing instrument for the
-`cw-work-package-lift` bar, and it does what the 1f' lift did once in a
-terminal: it walks the workspace-local closure from `commonwealth-work`
+**It WAS lifted on demand and is by hand again, 2026-09-11 — read the next
+section before you trust this paragraph.** `scripts/cw-work-lift.sh --sandbox`
+was the standing instrument for the `cw-work-package-lift` bar until the
+cw-lift campaign closed and its file moved to `quality/campaigns/closed/`,
+which `co-lineage.py` skips by construction. The script is unchanged and still
+correct; what it no longer has is a caller. It does what the 1f' lift did once
+in a terminal: it walks the workspace-local closure from `commonwealth-work`
 through `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]`,
 copies those crates to a scratch directory OUTSIDE this repository, synthesises
 a root workspace there, and builds, tests and RUNS them. Three things about it
@@ -239,6 +288,80 @@ Two further blind spots, both known:
   gates it behind a feature, but `sovereign-server` turns it on for the default
   build. The package boundary cannot see a feature another crate enables; the
   local-only-daemon claim is proven by building the daemon, not by this gate.
+
+## What is enforced, and what is not
+
+Written 2026-09-11, when closing the cw-lift campaign removed the physical
+lift's only trigger and nothing went red. The boundary has two tiers and they
+prove different things; conflating them is how a package rots while its gates
+stay green.
+
+**Tier 1 — the declaration, enforced on every push, blocking.** Three gates,
+none of which needs a human to remember anything:
+
+| Gate | What it reads | What it would catch |
+|---|---|---|
+| `boundary-gate` | the manifest graph of every `[[package]]`: normal + dev + build edges, `build.rs` presence, `include_str!` escapes, runtime root escapes, over in-repo package and leaf dirs | a package crate acquiring an edge to anything that is not a package crate or a shared leaf |
+| `layer-gate` | the `[[forbid]]` table, which since 2026-09-09 OUTRANKS package membership and the shared-leaf allowance alike | a `sovereign-*` edge that membership alone would permit because the target is a declared leaf — the `sovereign-contracts` case that the first red watch missed |
+
+This tier is what stops an edge being acquired BETWEEN lifts, and it is real:
+zero `[[exception]]` rows, held across four widenings.
+
+**A third gate was written for this on 2026-09-11 and then deleted the same
+day**, and the reason is worth more than the gate was. It checked that every
+crate in a `[[package]]`'s list is named in the doc that package declares, and
+it worked — it found this file stale by two crates and `corpus-mcp/README.md`
+stale by one. But a checker that keeps two copies of a list in agreement is
+policing a duplication instead of removing it, and the repo already has enough
+after-the-fact enforcement. The membership list now exists once, in the
+declaration, and this file stopped restating it. There is nothing left to
+check, which is the better shape (operator direction, 2026-09-11; ARCH §10.6,
+§7).
+
+**Tier 2 — the physical lift, enforced nowhere.** `scripts/cw-work-lift.sh
+--sandbox` and `scripts/cw-rails-lift.sh --sandbox` copy the closure out of this
+repository, synthesise a workspace, and build, test and RUN it. They read the
+four things `cargo tree` cannot: whether the copied set actually resolves,
+whether a hand-spelled `path = "../.."` survives flattening, whether the crates
+build without this workspace's `.cargo/config.toml`, and — for the rails daemon
+— whether the binary joins a real mesh and serves. Neither has a caller:
+
+- `cw-work-lift.sh` was reached by the `cw-work-package-lift` bar until
+  2026-09-11. The campaign closed, the file moved to `closed/`, and
+  `co-lineage.py`'s loader globs `*.toml` at the top level only.
+- `cw-rails-lift.sh` has NEVER had one. `quality/ARCH_LAYERS.toml:548` says
+  "this binary is BUILT AND RUN outside the monorepo by
+  `scripts/cw-rails-lift.sh`" as the reason a `[[forbid]]` row exists, and that
+  sentence describes a thing a person did once, not a thing that happens.
+- Neither appears in `quality/instruments.toml`, so `instrument-gate` cannot
+  see them either: it censuses commands reachable from a declared surface, and
+  these are reachable from none.
+
+**The rule this is an instance of** (`AGENTS.md`, the MCP retirement note): a
+tool is called only when something in a session's flow asks its question. If
+you cannot name the moment that calls it, it is inventory. Both scripts are
+inventory today, and both are registered in `quality/instruments.toml` as of
+2026-09-11 with `runs_in = ["by-hand"]`, which is the honest declaration and not
+a fix.
+
+**Why tier 2 cannot simply be moved to tier 1, stated rather than assumed.**
+`cw-work-lift.sh` could be: it is hermetic, takes ~60 s, and needs only a
+container image the operator declares. `cw-rails-lift.sh` cannot: its own
+pre-registration says a verdict of **3** is could-not-judge and its expected
+cause is NO INVITE — the lifted daemon cannot mint one, so its last step needs
+a live mesh and a member's word. An unattended runner would report
+could-not-judge forever, and a check that can only abstain is not a check.
+
+**What would restore tier 2, ranked.** (1) A `[[bar]]` on an ACTIVE campaign
+whose objective the lift serves — the mechanism that worked, lost only because
+the campaign carrying it closed. (2) A `weekly:` venue row for
+`cw-work-lift.sh`, the hermetic one, which needs `.github/workflows/weekly.yml`
+to actually run on this fleet (`GROUND_TRUTH.md` records hosted CI dead on a
+spending limit, so this is a real precondition and not a formality). (3) For
+the rails lift, a step in the release procedure rather than a gate, because its
+last act needs a person with an invite. None of the three is done; this section
+exists so the next reader finds the gap named rather than a green gate implying
+a coverage that is not there.
 
 ## When the gate fails
 

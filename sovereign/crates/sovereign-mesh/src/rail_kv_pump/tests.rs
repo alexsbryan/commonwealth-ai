@@ -73,7 +73,7 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
 /// added.
 #[tokio::test]
 async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
-    const KV: &str = commonwealth_inference::INFERENCE_APP_ID;
+    const KV: &str = sovereign_serving::INFERENCE_APP_ID;
     let key = SigningKey::from_bytes(&[2u8; 32]);
     let me = NodeId::from_u128(7);
     let dir = tempfile::tempdir().unwrap();

@@ -2508,6 +2508,19 @@ it is an experiment (then it should not be default-on). Resolve it with the
   not the span strip. Reconciliation is a backlog item (recorded
   2026-08-14); until it lands, the display claim is DARK-IN-EFFECT on
   hosts without a margin source.
+- **RECONCILED 2026-09-12** (campaign `verifier-loop`, rung vl-6): the
+  backlog item above landed. Display segmentation no longer reads H1's
+  verdict — `EvidenceContext::native_admission` carries a three-state
+  `NativeAdmission` (`NotRun` / `NoInstrument { reason }` / `Decided`)
+  and the segment, claim-address and stage-ledger sites all condition on
+  `ran()`. The two absences that used to share one `None` are now
+  distinct: an opted-out turn still carries no `answer_segments` field
+  (the incumbent arm stays byte-identical), while a turn H1 could not
+  measure is segmented against its sealed pool. This changes DISPLAY
+  only — `verdict()` is still the gate's single read, still `None` on
+  both of those turns, and the withhold decision is still
+  `evidence_early_decline` on both arms. The row above is no longer
+  DARK-IN-EFFECT on hosts without a margin source.
 
 ### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs` → **deleted**
 - **Lifespan: 2026-08-02 to 2026-08-02.** Shipped dark in the morning

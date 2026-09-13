@@ -1374,7 +1374,7 @@ impl Runtime {
             general_knowledge,
             demands,
             query_embedding,
-            grounding_verdict,
+            grounding_admission,
         } = plan;
         // The DRAFT carries the turn's admission too (order
         // `admission-continuation` (3)). A turn that has been admitted,
@@ -1385,11 +1385,11 @@ impl Runtime {
         // request, so they inherit it.
         let mut request = request;
         crate::runtime::admission::stamp(&mut request);
-        // H1's typed admission verdict, when the native path ran. `None`
-        // on every flag-off turn — the streaming path reads it, it never
-        // re-derives it. Traced at the boundary so "what did the router
-        // decide, and did it reach synthesis?" is one grep (ARCH §9).
-        if let Some(v) = grounding_verdict.as_ref() {
+        // H1's typed admission verdict, when the stage reached one. The
+        // streaming path reads it, it never re-derives it. Traced at the
+        // boundary so "what did the router decide, and did it reach
+        // synthesis?" is one grep (ARCH §9).
+        if let Some(v) = grounding_admission.verdict() {
             tracing::debug!(
                 decision = ?v.decision,
                 answerability = v.answerability,
@@ -1560,10 +1560,10 @@ impl Runtime {
             )
         };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
-            // H1's typed decision, when the native path ran. `None` on
-            // every incumbent turn — this is the KQ stream, the one
-            // surface the admission stage actually decides.
-            native_verdict: grounding_verdict.clone(),
+            // What the admission stage did on this turn. This is the KQ
+            // stream, the one surface it actually runs on — and the one
+            // surface whose released text can carry display segments.
+            native_admission: grounding_admission.clone(),
             chunks: gate_chunks,
             chunk_labels: gate_chunk_labels,
             chunk_locators: gate_chunk_locators,
@@ -2054,16 +2054,29 @@ impl Runtime {
             // an honest statement about WHERE TEXT APPEARS and is not
             // evidence that a proposition is supported.
             //
-            // `None` when the native path did not run — every flag-off
-            // turn. The wire field is then absent rather than empty, so
+            // `None` when the admission stage did not run — every
+            // flag-off turn, and every surface that has no admission stage
+            // at all. The wire field is then absent rather than empty, so
             // "not computed" and "computed, found nothing" stay
             // distinguishable (ARCH §18.3).
+            //
+            // The condition is `ran()` and NOT `verdict().is_some()`. This
+            // is a DISPLAY stage over the released text and the sealed
+            // pool (`segments_for_display` takes `&str` and `&[String]`
+            // and can reach nothing else), so it needs neither a margin
+            // nor an answerability score. Reading H1's absence as its own
+            // kept this field null on 794 of 794 banked turns and 17/17
+            // live desktop turns: the reranker slot this host rejects
+            // (ECONOMY §7.7) is H1's only margin source, so `NoInstrument`
+            // is the common case here and a gap in the MEASUREMENT was
+            // being answered as if it were the DISPLAY's (ARCH §12, note
+            // `e1e9e7a3`).
             // G4 — the native stack's post-gate stage: display segmentation
             // plus span resolution. Clocked across BOTH (the segment map and
             // the claim addresses below), because they are one mechanism
             // from the reader's side.
             let segments_started = std::time::Instant::now();
-            let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
+            let answer_segments = gate_evidence.native_admission.ran().then(|| {
                 let mut segs = crate::runtime::native_grounding::segments::segments_for_display(
                     &full_text,
                     &gate_evidence.chunks,
@@ -2121,9 +2134,11 @@ impl Runtime {
             // adjust a verdict would be the wrong-badge failure the
             // measurement priced. So a claim can gain a place to look;
             // it can never gain or lose its standing here.
+            // Same condition as the segments above, and for the same
+            // reason: `resolve_span` is pure over (claim text, pool).
             if let Some(claims) = gate_claims
                 .as_mut()
-                .filter(|_| gate_evidence.native_verdict.is_some())
+                .filter(|_| gate_evidence.native_admission.ran())
             {
                 for c in claims.iter_mut() {
                     if let crate::runtime::native_grounding::span_resolver::SpanResolution::Verbatim {
@@ -2147,12 +2162,14 @@ impl Runtime {
                     "native-grounding: holdings given evidence addresses (display only)"
                 );
             }
-            // Recorded ONLY when the native path actually produced a
-            // verdict — `answer_segments` is `None` on every turn where H1
-            // had no instrument, and on those turns this stage did not run.
-            // A row here on such a turn would claim the new stack served
-            // part of a turn it sat out (ARCH §18.3).
-            if gate_evidence.native_verdict.is_some() {
+            // Recorded ONLY when the admission stage ran — on a flag-off
+            // turn `answer_segments` is `None` and this stage did not run,
+            // and a row there would claim the new stack served part of a
+            // turn it sat out (ARCH §18.3). A turn that ran without an
+            // instrument DID get its segments, so it gets its row: the
+            // strip and the wire field now agree on every turn, which they
+            // did not while the two conditions differed.
+            if gate_evidence.native_admission.ran() {
                 crate::runtime::stage_ledger::Stage::new(
                     sovereign_contracts::types::StageId::Segments,
                     sovereign_contracts::types::StackOwner::Native,
@@ -3164,7 +3181,8 @@ impl Runtime {
         };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             // The deep/research path does not run the admission stage.
-            native_verdict: None,
+            native_admission:
+                crate::runtime::grounding::native_grounding::admission::NativeAdmission::NotRun,
             chunks: deep_chunks,
             chunk_labels: deep_chunk_labels,
             chunk_locators: deep_chunk_locators,

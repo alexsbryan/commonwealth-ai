@@ -50,14 +50,14 @@
 
 use std::sync::{Arc, Mutex};
 
-use commonwealth_api::auto_recover::{
-    merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
-};
-use commonwealth_api::state::AppState;
 use commonwealth_rail::{RingRail, SigningKey};
 use commonwealth_work::WORK_NAMESPACE;
 use corpus_engine::index::CorpusIndex;
 use corpus_engine::Corpus;
+use sovereign_api::auto_recover::{
+    merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
+};
+use sovereign_api::state::AppState;
 use sovereign_mesh::ingest_executor::fold_coverage_for;
 use tempfile::TempDir;
 

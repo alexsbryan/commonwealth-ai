@@ -22,7 +22,7 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
-use super::call_census::gate_call;
+use super::call_census::{gate_call, JudgeCall};
 use super::config::dbg;
 use super::search::SealedEvidenceSearch;
 use sovereign_contracts::types::GateCallMechanism;
@@ -79,41 +79,81 @@ pub(crate) struct GateVerdict {
     pub claim_evidence: Vec<String>,
 }
 
-/// One forced-choice A/B logprob pass on the primary (Critic) tier. Returns
-/// `(p_A, p_B)`. `stable_prefix_len` declares how many leading BYTES of
-/// `prompt` are byte-identical across sibling calls (the shared evidence
-/// window of a per-claim gate pass) so the engine's pinned-prefix cache can
+/// How a forced-choice judge call reaches a model.
+///
+/// **Closed set, so it is an enum** (ARCH principle 9), and the two arms are
+/// not a preference. [`Self::Envelope`] is the production route: SLOT_POLICY
+/// §7's Judge workload carrying the turn's sharding posture, so a judge call
+/// offloads only where the turn allows. [`Self::PinnedSlot`] is what a bench
+/// needs and production must never have — `RemoteApiProvider::build_request`
+/// routes on `model_id`, so without a pin every model under test collapses
+/// onto the daemon's default slot. One struct with an optional posture and an
+/// optional model id would make "both" and "neither" representable, and this
+/// call can do neither.
+#[derive(Debug, Clone, Copy)]
+pub enum JudgeRouting<'a> {
+    /// Privacy-gated OICP envelope. The pin it replaced was a latent privacy
+    /// hole — `primary` is a mesh-advertised alias and `locate_named_model`
+    /// load-balances named models across peers with no privacy check, so a
+    /// pinned judge could cross the network on a LocalOnly turn.
+    Envelope(ShardingPrivacy),
+    /// A slot pinned by name, for a harness that is measuring a NAMED model
+    /// rather than asking the turn's judge a question.
+    PinnedSlot(&'a str),
+}
+
+/// **The one forced-choice A/B logprob pass in this tree.** Returns
+/// `(p_A, p_B)`.
+///
+/// Every judge-side `x_forced_choice` request body is built here. Until
+/// 2026-09-12 there were three — this one, `bench_cmd/live_runner.rs`'s own
+/// copy, and an inline one in `runtime/evidence_loop` — and only this one
+/// reached [`gate_call`], so two thirds of the judge traffic the verifier loop
+/// issues was invisible to the census that prices judge cost and attributes
+/// judge failure. `cargo xtask judge-funnel-gate` is what keeps that at one
+/// (ARCH principle 8, and principle 10: structural, not remembered).
+///
+/// `stable_prefix_len` declares how many leading BYTES of `prompt` are
+/// byte-identical across sibling calls (the shared evidence window of a
+/// per-claim gate pass) so the engine's pinned-prefix cache can
 /// checkpoint/restore there instead of re-prefilling — `None` for one-off
 /// prompts.
 ///
-/// `mechanism` names which judge is asking — the two callers
-/// ([`claim_violation_joint`] over the shared window, [`claim_chunk_support`]
-/// over one passage) have very different prefill shapes, and a census that
-/// could not tell them apart is the blindness `call_census` exists to end.
-async fn forced_choice_ab(
+/// `call` names which judge is asking — the callers have very different
+/// prefill shapes, and a census that could not tell them apart is the
+/// blindness `call_census` exists to end. A [`GateCallMechanism`] converts
+/// into it, so a gate caller names its mechanism and nothing else changes.
+///
+/// `temperature: 0.0` is set for every caller including the two that left it
+/// unset before the collapse, and it cannot move a returned distribution:
+/// `embedded::model_slot::forced_choice_probs` gathers the candidates' RAW
+/// logits at the next-token position and softmaxes over just those, before
+/// the sampler the temperature would configure ever runs.
+pub async fn forced_choice_ab(
     inference: &dyn InferenceProvider,
+    system_message: &str,
     prompt: &str,
     stable_prefix_len: Option<usize>,
-    posture: ShardingPrivacy,
-    mechanism: GateCallMechanism,
+    routing: JudgeRouting<'_>,
+    call: impl Into<JudgeCall>,
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         stable_prefix_len,
-        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
+        system_message: Some(system_message.to_string()),
         // Critic role runs on the PRIMARY tier (role.rs: "a model
         // grading its own single pass is self-confirmation bias"; the
         // 4B's support distributions are squashed — measured 0.42-0.76
         // on known fabrications vs the primary critic's 0.96-0.98).
         preferred_speed: Speed::Slow,
-        // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
-        // path instead of pinning `model_id: "primary"`. The pin was a
-        // latent privacy hole — `primary` is a mesh-advertised alias and
-        // `locate_named_model` load-balances named models across peers
-        // with no privacy check, so a pinned judge could cross the network
-        // on a LocalOnly turn. The Judge envelope carries the session's
-        // sharding posture, so offload happens only when the turn allows.
-        oicp: Some(Workload::Judge.requirements(posture)),
+        oicp: match routing {
+            JudgeRouting::Envelope(posture) => Some(Workload::Judge.requirements(posture)),
+            JudgeRouting::PinnedSlot(_) => None,
+        },
+        model_id: match routing {
+            JudgeRouting::Envelope(_) => None,
+            JudgeRouting::PinnedSlot(m) => Some(m.to_string()),
+        },
         max_tokens: Some(1),
         structured_output: Some(serde_json::json!({
             "type": "string", "enum": ["A", "B"], "x_forced_choice": true
@@ -123,7 +163,7 @@ async fn forced_choice_ab(
         temperature: Some(0.0),
         ..Default::default()
     };
-    match gate_call(inference, &req, mechanism).await {
+    match gate_call(inference, &req, call).await {
         Ok(resp) => {
             let m: std::collections::HashMap<String, f64> =
                 serde_json::from_str(resp.text.trim()).ok()?;
@@ -494,9 +534,10 @@ pub(super) async fn claim_chunk_support(
     let prompt = chunk_judge_prompt(passage, claim);
     let (a, b) = forced_choice_ab(
         inference,
+        CHUNK_JUDGE_SYSTEM,
         &prompt,
         None,
-        posture,
+        JudgeRouting::Envelope(posture),
         GateCallMechanism::ChunkJudge,
     )
     .await?;

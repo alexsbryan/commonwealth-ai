@@ -94,6 +94,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = REPO_ROOT / "quality" / "twin-plants.toml"
 
+# The four-verdict line this run ends with, so a runner reads the verdict
+# instead of grepping the table above it (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
+
 # The tree the plants are applied to and the gate is run in. Defaults to this
 # checkout; `--worktree` points it at a detached worktree so a PEER'S
 # uncommitted work in this checkout cannot decide a verdict. Measured
@@ -567,10 +572,32 @@ def main() -> int:
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
-    if any(r.verdict == NOT_A_GATE for r in rows.values()):
+    # The judgement line and the exit code are ONE decision, read off the same
+    # counts in the same order — worst first, which is `Verdict::rank`. A
+    # second traversal deciding the line separately is how the two come to
+    # disagree (ARCH principle 8).
+    not_a_gate = [r.family for r in rows.values() if r.verdict == NOT_A_GATE]
+    cnj = [r.family for r in rows.values() if r.verdict == CANNOT_JUDGE]
+    never = [r.family for r in rows.values() if r.verdict == NEVER_RAN]
+    total = len(rows)
+    if not_a_gate:
+        emit_judgement("twin-census", "failed",
+                       f"{len(not_a_gate)} of {total} family censuses stayed GREEN with their "
+                       f"twin planted: {', '.join(sorted(not_a_gate))}")
         return 1
-    if any(r.verdict in (CANNOT_JUDGE, NEVER_RAN) for r in rows.values()):
+    if cnj:
+        emit_judgement("twin-census", "could-not-judge",
+                       f"{len(cnj)} of {total} families made no claim "
+                       f"({', '.join(sorted(cnj))}); no family was shown not to detect its twin")
         return 4
+    if never:
+        emit_judgement("twin-census", "never-ran",
+                       f"{len(never)} of {total} census runs reported zero tests "
+                       f"({', '.join(sorted(never))}) — nothing was measured")
+        return 4
+    emit_judgement("twin-census", "passed",
+                   f"all {total} family censuses went red on their planted twin and named "
+                   "the assertion that caught it")
     return 0
 
 

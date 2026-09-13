@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # cw-work-offload-share.sh — the instrument for the `cw-work-ci-offload` bar
-# (quality/campaigns/cw-lift.toml). It answers ONE question about the newest
+# (quality/campaigns/closed/cw-lift.toml). It answers ONE question about the newest
 # `svrn quality check` run:
 #
 #   what share of this repository's own CI ran on a node that did not submit it?
@@ -88,12 +88,33 @@ done
 
 command -v python3 >/dev/null 2>&1 || abstain "python3 is not on this host, so the summary cannot be read"
 
-# The newest run, by directory mtime. `ls -t` rather than sorting the stamp
-# text: the stamp is local time and a DST fold sorts two runs backwards once a
-# year, which is exactly the kind of quiet wrong answer this file is about.
+# The newest run that is a SUBMISSION, by directory mtime. `ls -t` rather than
+# sorting the stamp text: the stamp is local time and a DST fold sorts two runs
+# backwards once a year, which is exactly the kind of quiet wrong answer this
+# file is about.
+#
+# "that is a submission" is the 2026-09-11 correction and it is a §18.3 fix, not
+# a refinement. This bar asks whether CI ran on a node that did not submit it.
+# Every quality-check run writes `quality-check/v1` into the same directory —
+# `pre-push.sh` included — so taking the newest document meant an unrelated
+# LOCAL gate run became the subject, and the bar read 0.0: "no unit ran
+# elsewhere". That is a true sentence about the wrong run, and it demoted a met
+# bar (1.0 at 746104439, 4 of 4 rows on a non-submitting node) two hours after
+# it was stamped. A document with no `submitted_by` was never a cohort
+# submission and cannot answer this question at all, so it is skipped, and if
+# none survives we ABSTAIN. Absence of a distributed run is not a measurement
+# of zero distribution (§18.2).
 if [ -z "$SUMMARY" ]; then
   [ -d "$RUNS_DIR" ] || abstain "no $RUNS_DIR — this repo has no quality-check run to read"
-  SUMMARY="$(ls -1dt "$RUNS_DIR"/*/ 2>/dev/null | head -n 1)summary.json"
+  for d in $(ls -1dt "$RUNS_DIR"/*/ 2>/dev/null); do
+    [ -f "$d/summary.json" ] || continue
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("submitted_by") else 1)' \
+         "$d/summary.json" 2>/dev/null; then
+      SUMMARY="$d/summary.json"; break
+    fi
+    say "skipped $d — no \`submitted_by\`, so it is a local run and not a submission"
+  done
+  [ -n "$SUMMARY" ] || abstain "no run under $RUNS_DIR carries a \`submitted_by\` — this repo has no cohort submission to read, which is the absence of a distributed run, not a measurement of zero"
 fi
 [ -f "$SUMMARY" ] || abstain "no summary at $SUMMARY — no run has written one"
 

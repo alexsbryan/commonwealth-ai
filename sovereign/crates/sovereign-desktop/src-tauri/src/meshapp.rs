@@ -23,7 +23,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The four capabilities a mesh app can be granted. Mirrors
-/// `commonwealth_app::AppPermissions` (kept local to avoid a
+/// `sovereign_meshapp_registry::AppPermissions` (kept local to avoid a
 /// desktop → `commonwealth-app` dependency for a 4-bool struct; the
 /// gossip-path manifest type stays decoupled from the desktop host).
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]

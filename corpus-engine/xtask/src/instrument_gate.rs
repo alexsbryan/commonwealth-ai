@@ -107,7 +107,184 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     let observed = census(&root, &surfaces);
-    verify(&registry, &observed)
+    let closure = verify(&registry, &observed);
+    let spoken = verdict_line_census(&registry, &root, &common::baseline_flags(args));
+    // Both rules, both reported, worst code wins — a run that fixed one and
+    // broke the other must not read as half green.
+    closure.max(spoken)
+}
+
+// ─── Does a tool that DECIDES a verdict get to say so? ───────────────
+//
+// Rung `vl-2` of `quality/campaigns/verifier-loop.toml`, bar
+// `vl-judgement-line`. `sovereign-cli-shared/src/lane_verdict.rs` was written
+// because `scripts/lib/ci-bench-verdict.sh` reconstructs a four-verdict
+// decision by grepping a lane's prose — "every one of those greps is a
+// coupling to wording nobody promised to keep". The protocol fixed that for
+// the eight `svrn quality check` lanes and for nothing else: ten back-of-house
+// tools went on deciding passed / failed / could-not-judge / never-ran and
+// saying it only in a table.
+//
+// TWO RULES, and the second is a ratchet because the arrears are real:
+//
+//   A (hard, no baseline) — a row declaring `verdict = "judgement-line"` whose
+//     script never reaches the emitter. The runner would read `never-ran` from
+//     a tool that ran, which is worse than the exit code it replaced.
+//   B (ratchet) — a registered repo script that renders the four-verdict
+//     vocabulary, cannot emit the line, and is read on its exit code alone.
+//     Fourteen of these existed when the rule landed; the baseline is the
+//     list, `--tighten` banks a conversion and a NEW one is a failure.
+//
+// THE DENOMINATOR IS THE REGISTRY, and that is a narrowing worth stating.
+// Censusing the whole tree for the vocabulary returns 131 files — research
+// arms, one-shot probes, fixtures — and a rule over that set would be one
+// people silence. Being registered is what makes a tool something a runner
+// reaches, which is the property the bar is actually about. The cost of the
+// narrowing is that an unregistered tool is invisible here; the closure loop
+// above is what stops anything a quality surface reaches from staying that way.
+
+/// The two verdicts that mark the four-verdict vocabulary, in both
+/// separators and matched case-insensitively — a tool spells them
+/// `COULD-NOT-JUDGE` in its output, `could_not_judge` in a constant and
+/// `could-not-judge` on the wire, and all three are the same decision system.
+///
+/// PASS and FAIL are deliberately NOT here: they are in every script in this
+/// repo and say nothing about which system a tool is in. These two are the
+/// ones an exit code cannot express, which is the whole reason the protocol
+/// exists.
+const VERDICT_MARKERS: [&str; 4] = [
+    "could-not-judge",
+    "could_not_judge",
+    "never-ran",
+    "never_ran",
+];
+
+/// Does this source decide in the four-verdict vocabulary?
+fn renders_verdict(src: &str) -> bool {
+    let lower = src.to_ascii_lowercase();
+    VERDICT_MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// How a script reaches the protocol: the Python mirror, either spelling of
+/// the import it exposes, or the shell mapping beside `lane_verdict`.
+const EMITTER_MARKERS: [&str; 3] = ["judgement.py", "emit_judgement", "lane_judgement"];
+
+const ARREARS_BASELINE: &str = "verdict_line_arrears.txt";
+
+/// Resolve an instrument's command to a repo script, if it names one.
+fn script_of(command: &str, root: &Path) -> Option<String> {
+    for tok in command.split_whitespace() {
+        let t = tok.trim_start_matches("./");
+        if (t.ends_with(".py") || t.ends_with(".sh")) && root.join(t).is_file() {
+            return Some(t.to_string());
+        }
+    }
+    None
+}
+
+fn verdict_line_census(registry: &Registry, root: &Path, flags: &common::BaselineFlags) -> i32 {
+    let mut silent: Vec<(String, String)> = Vec::new();
+    let mut declared_but_mute: Vec<(String, String)> = Vec::new();
+    let mut speaking = 0usize;
+    let mut scripts = 0usize;
+    for i in &registry.instruments {
+        let Some(rel) = script_of(&i.command, root) else {
+            continue;
+        };
+        scripts += 1;
+        let Ok(src) = std::fs::read_to_string(root.join(&rel)) else {
+            continue;
+        };
+        let emits = EMITTER_MARKERS.iter().any(|m| src.contains(m));
+        let renders = renders_verdict(&src);
+        if emits {
+            speaking += 1;
+        }
+        if i.verdict == kernel_types::quality::VerdictSource::JudgementLine && !emits {
+            declared_but_mute.push((i.id.clone(), rel));
+        } else if renders && !emits {
+            silent.push((i.id.clone(), rel));
+        }
+    }
+
+    let path = common::baselines_dir(root).join(ARREARS_BASELINE);
+    let baseline = common::load_line_set(&path);
+    let current: std::collections::BTreeSet<String> =
+        silent.iter().map(|(id, _)| id.clone()).collect();
+    // The id -> script map, so a NEW row can be reported with the file a reader
+    // has to open. Looked up rather than defaulted: a `?` in its place would be
+    // a substitution in the one line that has to be actionable (ARCH §18.3).
+    let script_of_id: BTreeMap<&str, &str> = silent
+        .iter()
+        .map(|(id, rel)| (id.as_str(), rel.as_str()))
+        .collect();
+    let new: Vec<&String> = current.difference(&baseline).collect();
+    let fixed: Vec<&String> = baseline.difference(&current).collect();
+
+    eprintln!(
+        "instrument-gate: {scripts} registered script(s) · {speaking} say their verdict in the protocol · {} still read on an exit code alone (baseline {})",
+        current.len(),
+        baseline.len()
+    );
+
+    if flags.update || flags.tighten {
+        if flags.tighten && !new.is_empty() {
+            eprintln!(
+                "  ✗ --tighten refuses to bank a RAISE: {} new row(s) would enter the baseline",
+                new.len()
+            );
+            return 1;
+        }
+        if let Err(e) = common::write_line_set(
+            &path,
+            "instrument-gate",
+            "registered scripts that decide in the four-verdict vocabulary and are still read on \
+             an exit code alone (rung vl-2)",
+            &current,
+        ) {
+            eprintln!("  ✗ cannot write {}: {e}", path.display());
+            return 1;
+        }
+        eprintln!("  baseline written: {} row(s)", current.len());
+        return 0;
+    }
+
+    let mut bad = false;
+    for (id, rel) in &declared_but_mute {
+        bad = true;
+        eprintln!(
+            "  ✗ {id} declares `verdict = \"judgement-line\"` and {rel} never reaches the \
+             emitter — a runner would read never-ran from a tool that ran, which is worse than \
+             the exit code it replaced. Emit with `scripts/lib/judgement.py`."
+        );
+    }
+    for id in &new {
+        bad = true;
+        let rel = script_of_id[id.as_str()];
+        eprintln!(
+            "  ✗ {id} ({rel}) decides in the four-verdict vocabulary and can only be read on its \
+             exit code. Two of the four have no exit code to be. Emit the line \
+             (`scripts/lib/judgement.py`, or `lane_judgement` in a shell tool) and set \
+             `verdict = \"judgement-line\"` on its row."
+        );
+    }
+    if !fixed.is_empty() {
+        eprintln!(
+            "  {} row(s) left the arrears — bank it: cargo run -p xtask -- instrument-gate \
+             --tighten ({})",
+            fixed.len(),
+            fixed
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    if bad {
+        1
+    } else {
+        0
+    }
 }
 
 // ─── Keys ───────────────────────────────────────────────────────────
@@ -478,6 +655,45 @@ fn verify(registry: &Registry, observed: &BTreeMap<Key, Vec<String>>) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The verdict-line census reads a row's command to find its script, and
+    /// the shapes in this registry are not uniform: `python3 x.py`,
+    /// `./scripts/x.sh --flag`, a bare path, and plenty of rows that name no
+    /// script at all. A resolver that missed one would quietly shrink the
+    /// denominator, which is the failure mode a census cannot survive.
+    #[test]
+    fn a_rows_command_resolves_to_its_script_or_to_nothing() {
+        let root = common::repo_root();
+        assert_eq!(
+            script_of("python3 scripts/nc-thesis.py", &root).as_deref(),
+            Some("scripts/nc-thesis.py")
+        );
+        assert_eq!(
+            script_of("./scripts/sovereign-ci-bench.sh --quick", &root).as_deref(),
+            Some("scripts/sovereign-ci-bench.sh")
+        );
+        assert_eq!(
+            script_of("python3 scripts/co_liveness.py verify", &root).as_deref(),
+            Some("scripts/co_liveness.py")
+        );
+        // A cargo/xtask row names no script, and a path that does not exist is
+        // not a reference to anything — both resolve to nothing rather than to
+        // a string the census would then fail to read.
+        assert_eq!(script_of("cargo xtask env-gate", &root), None);
+        assert_eq!(script_of("python3 scripts/not-a-real-tool.py", &root), None);
+    }
+
+    /// The two markers that make the vocabulary detectable, and the two that
+    /// do not. PASS and FAIL are in every script in this repo and say nothing
+    /// about which decision system a tool is in.
+    #[test]
+    fn the_vocabulary_is_the_two_verdicts_an_exit_code_cannot_express() {
+        let has = renders_verdict;
+        assert!(has("status=\"SKIP(no-data)\"  # COULD-NOT-JUDGE"));
+        assert!(has("rec.update(verdict=NEVER_RAN, detail=...)"));
+        assert!(!has("echo \"PASS — everything is fine\""));
+        assert!(!has("if rc != 0: print(\"FAIL\")"));
+    }
 
     fn keys(line: &str) -> Vec<String> {
         keys_in_line(Path::new("/nonexistent"), line)

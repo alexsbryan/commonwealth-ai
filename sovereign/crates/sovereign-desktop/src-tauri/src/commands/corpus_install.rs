@@ -669,7 +669,7 @@ pub(crate) fn pretty_count(n: u64) -> String {
 }
 
 /// Wire-level DTO for the daemon's `/internal/corpus/status`
-/// response. Mirrors `commonwealth_api::routes_internal::CorpusStatusEntry`.
+/// response. Mirrors `sovereign_api::routes_internal::CorpusStatusEntry`.
 #[derive(Debug, serde::Deserialize)]
 struct CorpusStatusResponse {
     entries: Vec<CorpusStatusEntry>,

@@ -56,6 +56,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# The four-verdict line a judging subcommand ends with (`scripts/lib/judgement.py`).
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from judgement import emit as emit_judgement  # noqa: E402
 CAMPAIGNS_DIR = REPO / "quality" / "campaigns"
 FEATURES = REPO / ".sovereign" / "features"
 CO_DIR = Path.home() / ".sovereign" / "comaintainer"
@@ -1450,6 +1454,11 @@ def main(argv: list[str]) -> int:
         camps = load_campaigns()
     except DataError as exc:
         print(f"co-lineage: {exc}", file=sys.stderr)
+        # A malformed campaign file stops the LOADER, so every campaign is
+        # unreadable, not just the bad one — could-not-judge naming the file,
+        # never a silent empty list (ARCH principle 6).
+        emit_judgement("co-lineage", "could-not-judge",
+                       f"no campaign could be loaded: {exc}")
         return 3
 
     if args.command == "predicate":
@@ -1486,6 +1495,25 @@ def main(argv: list[str]) -> int:
         for c in targets:
             rc = measure_campaign(c, store=args.store)
             worst = max(worst, rc)
+        # The verdict is about whether the MEASUREMENT happened — the bar
+        # values themselves are telemetry here and gate nothing, which is
+        # measure_campaign's own last line.
+        instrumented = sum(1 for c in targets for b in c.bars if b.instrument)
+        if not targets:
+            emit_judgement("co-lineage", "never-ran",
+                           "no campaign was selected, so no bar was measured")
+        elif instrumented == 0:
+            emit_judgement("co-lineage", "never-ran",
+                           f"{len(targets)} campaign(s) selected and not one bar declares an "
+                           "instrument — nothing could be measured")
+        elif worst:
+            emit_judgement("co-lineage", "could-not-judge",
+                           f"of {instrumented} instrumented bar(s) across {len(targets)} "
+                           "campaign(s), at least one produced no stored row")
+        else:
+            emit_judgement("co-lineage", "passed",
+                           f"{instrumented} instrumented bar(s) across {len(targets)} "
+                           "campaign(s) each wrote a measurement row")
         return worst
 
     if not args.campaign:

@@ -73,7 +73,7 @@ Not eval banks — but they are the floor. Run before any of the above lights up
 | Suite | Run with | Notable |
 |---|---|---|
 | Sovereign unit tests | `cargo test` (workspace) at `sovereign/` | ~300 tests across crates: router, planner, inference, mesh, core. |
-| Commonwealth mesh + scheduler integration | `cargo test --test integration` / `--test scheduler_integration` at `commonwealth/crates/commonwealth-test-harness/` | Mesh formation, fault injection, graceful departure, knowledge assignment, portfolio balancing. |
+| Commonwealth mesh + scheduler integration | `cargo test --test integration` / `--test scheduler_integration` at `sovereign/crates/sovereign-mesh-test-harness/` | Mesh formation, fault injection, graceful departure, knowledge assignment, portfolio balancing. |
 | Commonwealth unit tests | `cargo test` at `commonwealth/` | API, discovery, inference, state. |
 | Corpus engine | `cargo test` at `corpus-engine/` | Filter pipeline, parquet ingest, watcher lifecycle, recipe back-compat, HTTP API pagination. |
 
@@ -104,7 +104,7 @@ Separate from the everyday CLIs above; used for longer experiments where you wan
 | Embed model / GPU backend / `n_seq_max` / quant | `cargo run -p sovereign-inference --example bench_embed` (see `BENCHMARKING.md`) | Apples-to-apples decode tok/s across Metal/Vulkan/ROCm. |
 | FastShort coalescer, `generate_sync_batched`, multi-seq chat decode | `cargo run --release -p sovereign-inference --example bench_decode_batch` | Constant-total-ctx sweep across `n_seq_max ∈ {1,2,4,8}` proves whether a chat-path change preserves the 2.1–2.8× short-call speedup. Run on Phase 1b enrichment regressions or after touching `embedded.rs::generate_sync_batched`. |
 | Chat UI (chunk rendering, indicators, slot positions) | `npm run test:ttfi` then `npm run report:ttfi`; `npm run test:e2e` for golden path | TTFI is the perceived-performance gate; the e2e specs cover correctness. |
-| Mesh, discovery, scheduler, knowledge assignment | `cargo test --test integration` and `--test scheduler_integration` in `commonwealth-test-harness` | Multi-node scenarios (formation, fault injection, graceful departure). |
+| Mesh, discovery, scheduler, knowledge assignment | `cargo test --test integration` and `--test scheduler_integration` in `sovereign-mesh-test-harness` | Multi-node scenarios (formation, fault injection, graceful departure). |
 | Corpus ingest, recipes, filter pipeline | `cargo test` in `corpus-engine/`; then `sovereign corpus diag <id>` after a real ingest | Unit tests for the filter pipeline; diag catches resume-cursor / dedup bugs that unit tests miss. |
 | Specs / approved feature contracts | `sovereign drift <feature-id>` | Detects on-disk drift from approved spec. |
 | "Did I break the daemon at all?" | `sovereign doctor` | Three-layer health. Cheap. Run before reporting a failure as a regression. |

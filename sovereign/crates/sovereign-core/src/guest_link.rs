@@ -61,7 +61,7 @@ impl GuestLink {
     /// Whether the link's own stated window is still open.
     ///
     /// **This is necessary and not sufficient.** The lender holds grants in
-    /// memory (`commonwealth_knowledge::guest_grant`), so a restart on their
+    /// memory (`sovereign_grants::guest_grant`), so a restart on their
     /// side ends the grant early and the only way to learn that is to be
     /// refused. A caller must treat a 401 as authoritative over this.
     pub fn is_live(&self, now_secs: u64) -> bool {

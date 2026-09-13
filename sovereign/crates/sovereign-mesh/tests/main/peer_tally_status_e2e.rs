@@ -29,18 +29,18 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use commonwealth_api::server::client_router;
-use commonwealth_api::state::{AppState, LocalInferenceService};
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
+use sovereign_api::server::client_router;
+use sovereign_api::state::{AppState, LocalInferenceService};
 use sovereign_core::error::Result as SovResult;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{id_to_hex, member_with_last_seen, spawn_router, TestProvider};

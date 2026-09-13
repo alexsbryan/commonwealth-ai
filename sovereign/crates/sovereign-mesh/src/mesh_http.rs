@@ -52,7 +52,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/media", get(crate::media_reach::mesh_media))
         .route("/v1/mesh/app", get(crate::media_reach::mesh_app))
         // The catalogue half: one request to every offering member, one
-        // attributed row each (`commonwealth_api::fanout` underneath).
+        // attributed row each (`sovereign_api::fanout` underneath).
         // One handler, two paths: `kind` defaults to media, so the older
         // spelling is the generic body with a field absent rather than a
         // second implementation that could drift from it.

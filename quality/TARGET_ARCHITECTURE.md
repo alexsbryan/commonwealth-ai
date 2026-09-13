@@ -67,23 +67,23 @@ it replaces: it described a `Question` no register row backs, and never
 mentioned five rows that exist.
 
 <!-- BEGIN GENERATED register -->
-**31 nouns.** 7 `holds`, 9 `partial`, 15 `target`; 24 are in the program, the rest are here for architectural completeness. Every row below is a `[[concept]]` in [`CONCEPTS.toml`](./CONCEPTS.toml) — the count, the markers and the owners are read from it, not typed here, so this section cannot claim a noun the register does not carry.
+**31 nouns.** 6 `holds`, 10 `partial`, 15 `target`; 25 are in the program, the rest are here for architectural completeness. Every row below is a `[[concept]]` in [`CONCEPTS.toml`](./CONCEPTS.toml) — the count, the markers and the owners are read from it, not typed here, so this section cannot claim a noun the register does not carry.
 
 | noun | what it is | status | owner (declared) | phase | totality |
 |---|---|---|---|---|---|
 | **`Measurement`** | one comparable observation. | `target` | `sovereign-eval` | 1 | The comparability fingerprint IS the key — lane, corpus, model attribution, prompt version, sample cap, scorer version, every field required. |
 | **`Baseline`** | the committed prior for one fingerprint. | `partial` | `sovereign-eval` | 1 | Stored under its fingerprint. |
-| **`Attribution`** | which engine computed this text. | `target` | `sovereign-contracts` | 1 | ONE answer to 'which engine computed this text': model identity, build, quantization, serving host. |
-| **`Verdict`** | the outcome of any check. | `target` | `sovereign-contracts` | 2 | Four states, one definition, workspace-wide: Passed \| Failed(Reason) \| CouldNotJudge(Reason) \| NeverRan(Reason). |
-| **`Judgement`** | a verdict with its evidence and calibration. | `target` | `sovereign-contracts` | 2 | A Judgement is MINTABLE ONLY BY A CALIBRATED JUDGE — private constructor, the CalibrationReceipt pattern gym_judge already ships (a capability token only judge_calibration can mint; `untrusted()` exists and warns on every call). |
+| **`Attribution`** | which engine computed this text. | `target` | `kernel-types` | 1 | ONE answer to 'which engine computed this text': model identity, build, quantization, serving host. |
+| **`Verdict`** | the outcome of any check. | `target` | `kernel-types` | 2 | Four states, one definition, workspace-wide: Passed \| Failed(Reason) \| CouldNotJudge(Reason) \| NeverRan(Reason). |
+| **`Judgement`** | a verdict with its evidence and calibration. | `target` | `kernel-types` | 2 | A Judgement is MINTABLE ONLY BY A CALIBRATED JUDGE — private constructor, the CalibrationReceipt pattern gym_judge already ships (a capability token only judge_calibration can mint; `untrusted()` exists and warns on every call). |
 | **`WireMessage`** | one definition per daemon-boundary message. | `target` | `sovereign-wire` | 3 | One definition per daemon-boundary message. |
 | **`SurfaceError`** | a structured error returned by a command, never a String. | `partial` | `sovereign-desktop` | 3 | A command returns a structured error, never a String. |
 | **`BootstrapMode`** | how this install was brought up — Attach or Local, distinguishable by the compiler. | `partial` | `sovereign-desktop` | 3 | The sum type survives into AppState. |
-| **`Origin`** | where a piece of knowledge came from. | `target` | `sovereign-contracts` | 4 | Every field non-optional, and the SOURCE IS A CLOSED SUM — Corpus{corpus, document, locator} \| Web{url, fetched_at} \| Attachment{asset, locator} \| ToolOutput{tool, call_hash} — plus served_by: Local \| Peer(node, name), and grain: Leaf \| Summary. |
-| **`Custody`** | where a piece of content stands, carried by the chunk. | `partial` | `sovereign-contracts` | 4 | The chunk-level custody class — where this content stands (PublicWeb \| Personal \| Peer \| ...) — is a REQUIRED, TYPED field of Evidence, stamped at retrieval from the corpus's current policy. |
+| **`Origin`** | where a piece of knowledge came from. | `target` | `kernel-types` | 4 | Every field non-optional, and the SOURCE IS A CLOSED SUM — Corpus{corpus, document, locator} \| Web{url, fetched_at} \| Attachment{asset, locator} \| ToolOutput{tool, call_hash} — plus served_by: Local \| Peer(node, name), and grain: Leaf \| Summary. |
+| **`Custody`** | where a piece of content stands, carried by the chunk. | `partial` | `kernel-types` | 4 | The chunk-level custody class — where this content stands (PublicWeb \| Personal \| Peer \| ...) — is a REQUIRED, TYPED field of Evidence, stamped at retrieval from the corpus's current policy. |
 | **`SharingPolicy`** | what a *corpus* permits the mesh. | `target` | `corpus-engine` | 4 | The corpus-level answer to 'may peers query this / may the bytes move' — one policy TYPE with one resolution decider, declared by the Recipe, stamped into the index meta, surfaced by the registry. |
 | **`Evidence`** | the retrieval unit, and the only thing a model may read. | `target` | `corpus-engine` | 4 | No public constructor, no Default, no public fields, and NO `Deserialize` — a derive that would put the back door straight back on. |
-| **`EvidenceSet`** | a sealed body of evidence for one turn. | `target` | `sovereign-contracts` | 4 | TWO seals, both carried: the CHUNK SET composition read, and the CORPUS SCOPE retrieval was bound to. |
+| **`EvidenceSet`** | a sealed body of evidence for one turn. | `target` | `corpus-engine` | 4 | TWO seals, both carried: the CHUNK SET composition read, and the CORPUS SCOPE retrieval was bound to. |
 | **`Draft`** | generated text, not yet released. | `target` · landed 2026-08-20, rung nc-11-answer. | `kernel-types` | 4 | A Draft cannot be returned to a surface. |
 | **`Answer`** | what the user sees. | `partial` · landed 2026-08-20, rung nc-11-answer. | `kernel-types` | 4 | Cannot exist without a Judgement. |
 | **`Citation`** | a pointer into the sealed `EvidenceSet`. | `target` · landed 2026-08-20, rung nc-11-answer. | `kernel-types` | 4 | A Citation points INTO the sealed EvidenceSet — it cannot cite what the seal does not contain. |
@@ -94,12 +94,12 @@ mentioned five rows that exist.
 | **`Command`** | one CLI promise. | `partial` | `sovereign/docs/cli-contract.toml` | 6 | The contract is GENERATIVE. |
 | **`Record`** | an immutable fact with provenance. | `target` | `sovereign-record` | 6 | Append-only; identity is a content hash, never a counter, sequence number, or address (ARCH_PRINCIPLES §7.5). |
 | **`Endpoint`** | a network surface with a declared exposure. | `target` | `sovereign-mesh` | 6 | Declaring an endpoint declares its exposure class (loopback \| mesh-internal \| private-lan \| token-authenticated). |
-| **`Gap`** | a demand for evidence the current corpus cannot meet. | `target` | `sovereign-contracts` | 6 | A Gap is a demand for evidence the current corpus cannot meet — statement, what would answer it, and the trail from claim to demand. |
+| **`Gap`** | a demand for evidence the current corpus cannot meet. | `partial` | `sovereign-contracts` | 6 | A Gap is a demand for evidence the current corpus cannot meet — statement, what would answer it, and the trail from claim to demand. |
 | **`Recipe`** | how a corpus is made. | `holds` | `corpus-engine` | — | Pure TOML declaring acquire → extract → filter → chunk → embed → index, plus custody. |
 | **`Corpus`** | an index plus its custody, produced by a `Recipe`. | `holds` | `corpus-engine` | — | An index plus its sharing policy, produced by a Recipe. |
-| **`Claim`** | one assertion extracted from a `Draft`; the unit the gate judges. | `holds` | `sovereign-core` | — | One assertion extracted from a Draft — the unit the gate judges. |
-| **`Atom`** | the enrichment ontology's unit (`AtomEnvelope`). | `holds` | `corpus-engine` | — | The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips. |
-| **`Tool`** | one manifest of tool identity, effect and scope (`ToolRegistry`). | `holds` | `sovereign-tools` | — | One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. |
+| **`Claim`** | one assertion extracted from a `Draft`; the unit the gate judges. | `target` | `kernel-types` | 4 | One assertion extracted from a Draft — the unit the gate judges. |
+| **`Atom`** | the enrichment ontology's unit (`AtomEnvelope`). | `holds` | `corpus-engine-vocab` | — | The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips. |
+| **`Tool`** | one manifest of tool identity, effect and scope (`ToolRegistry`). | `holds` | `sovereign-contracts` | — | One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. |
 | **`Peer`** | another node in the trust ring. | `holds` | `commonwealth-core` | — | Identity, transport, advertised capabilities. |
 | **`NodeCapability`** | what a peer advertises (OICP). | `holds` | `oicp-types` | — | The OICP manifest — what a node advertises. |
 
@@ -406,22 +406,29 @@ Read from [`ARCH_LAYERS.toml`](./ARCH_LAYERS.toml) — the same file `cargo xtas
 
 | tier | layer | crates (as declared, `*` is a pattern) |
 |---:|---|---|
-| 0 | **contract** | `oicp-types` · `kernel-types` · `sovereign-contracts` · `oicp-client` · `arch-layers` · `sovereign-time` |
+| 0 | **contract** | `oicp-types` · `kernel-types` · `sovereign-contracts` · `oicp-client` · `sovereign-turn-client` · `sovereign-service` · `arch-layers` · `sovereign-time` · `serving-policy` · `oplog` |
 | 1 | **knowledge** | `corpus-engine` · `corpus-engine-*` |
-| 2 | **mesh-foundation** | `commonwealth-core` · `commonwealth-state` · `commonwealth-transport` · `commonwealth-discovery` · `commonwealth-inference` · `commonwealth-knowledge` · `commonwealth-app` |
+| 2 | **mesh-foundation** | `commonwealth-core` · `commonwealth-state` · `commonwealth-transport` · `commonwealth-discovery` · `sovereign-serving` · `sovereign-grants` · `sovereign-meshapp-registry` · `commonwealth-rail-core` · `commonwealth-rail` · `commonwealth-work` · `commonwealth-media` · `commonwealth-rails` |
 | 3 | **runtime** | `sovereign-core` · `sovereign-inference` · `sovereign-store` · `sovereign-workflow` · `sovereign-tools-base` · `sovereign-recipe-author` · `sovereign-compute` · `sovereign-gliner` |
-| 4 | **capabilities** | `sovereign-tools` · `sovereign-enrichment-catalog` · `sovereign-work-atlas` · `sovereign-workflow-host` · `sovereign-atos` · `sovereign-eval` · `sovereign-meshapp` · `sovereign-authoring-harness` · `sovereign-agent-tools` |
-| 5 | **mesh-api** | `commonwealth-api` · `commonwealth-test-harness` · `sovereign-tdd` · `sovereign-mesh` |
-| 6 | **hosts** | `sovereign-cli*` · `sovereign-server` · `sovereign-desktop` · `sovereign-pipeline` · `sovereign-agent-bench` · `sovereign-studio` · `commonwealth-daemon` · `oicp-conformance` · `xtask` |
+| 4 | **capabilities** | `sovereign-tools` · `sovereign-enrichment-catalog` · `sovereign-enrichment-build` · `sovereign-runtime-recipe` · `sovereign-work-atlas` · `sovereign-workflow-host` · `sovereign-atos` · `sovereign-eval` · `sovereign-meshapp` · `sovereign-authoring-harness` · `sovereign-agent-tools` · `sovereign-tdd` |
+| 5 | **mesh-api** | `sovereign-api` · `sovereign-mesh-test-harness` · `sovereign-mesh` |
+| 6 | **hosts** | `sovereign-cli*` · `sovereign-server` · `sovereign-desktop` · `sovereign-mobile` · `sovereign-pipeline` · `sovereign-agent-bench` · `sovereign-studio` · `oicp-conformance` · `corpus-mcp` · `xtask` |
 
 **Back of house** — outside the ordered stack, not on top of it; may observe every layer, and nothing may depend on it: `sovereign-eval` · `sovereign-cli-dev` · `sovereign-agent-bench` · `sovereign-atos` · `corpus-engine-atos` · `corpus-engine-archaeology` · `xtask`.
 
-**4 grandfathered violation(s)** ride `[[exception]]` entries — each one says the boundary is drawn in the wrong place and the crate split has not been paid for, not that the edge is fine:
+**11 grandfathered violation(s)** ride `[[exception]]` entries — each one says the boundary is drawn in the wrong place and the crate split has not been paid for, not that the edge is fine:
 
-- `sovereign-cli-llm` → `sovereign-eval` — bench_cmd (51 files, ~31k lines) shares this bin-only crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs a [lib] over ~130k lines plus pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/main.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the sovereign_eval::authoring_harness alias) was repointed at sovereign-authoring-harness directly and no longer does.
-- `commonwealth-api` → `sovereign-core` — the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam
-- `commonwealth-api` → `sovereign-tools` — tool registry assembly for the embedded runtime; goal state is the OICP seam
-- `commonwealth-api` → `sovereign-atos` — feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds
+- `sovereign-mesh-test-harness` → `sovereign-api` — R6 debt the domains-1 move EXPOSED rather than created. The harness has always depended on the API it simulates against; while both were `commonwealth-*` the edge was intra-family and no rule looked at it. `commonwealth-api` became `sovereign-api` on 2026-09-11 and the same edge is now cross-family, which is what R6 has always said it is. Nothing about the code changed — only whether a gate could see it.
+- `sovereign-enrichment-catalog` → `corpus-engine` — the same unliftable `corpus-engine` named in the row below, reached by the third member of this package. The catalog reads the enrichment store's `config.json` and resolves index paths, which are corpus-engine's own; it clears when the row below does.
+- `sovereign-enrichment-build` → `corpus-engine` — the same unliftable `corpus-engine` named in the row below, reached by the other member of this package. The orchestrator IS an atlas writer — atoms, edges, the pipeline registry and the ANN seed table are all corpus-engine's — so this edge is the crate's purpose, not an accident, and it clears when the row below does.
+- `corpus-mcp` → `corpus-engine` — the host reads indexes through corpus-engine (`CorpusIndex::search`, `open_index_for_corpus`), and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down, in order: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy, `index/search.rs` has zero enrichment references across 1,245 lines — carved into a leaf the host and the engine both reach DOWN to; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. When (1) lands this row moves to the new leaf and the host's closure is clean.
+- `sovereign-cli-llm` → `sovereign-eval` — bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target.
+- `sovereign-api` → `sovereign-core` — the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam
+- `sovereign-api` → `sovereign-tools` — tool registry assembly for the embedded runtime; goal state is the OICP seam
+- `sovereign-api` → `sovereign-atos` — feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds
+- `sovereign-desktop` → `sovereign-mesh` — 11 desktop files name sovereign-mesh directly (mesh_commands, meshapp, health, state builders). svt-3 migrates them onto daemon routes through sovereign-turn-client.
+- `sovereign-desktop` → `sovereign-tools` — 8 desktop files name sovereign-tools, and it also arrives transitively via sovereign-runtime-recipe and sovereign-mesh — which is the whole argument for making this rule reachability: removing the direct edge alone would turn a direct-edge gate green with the MCP listener still linked. svt-3.
+- `sovereign-desktop` → `sovereign-workflow-host` — the workflow-author tool bundle the desktop runtime registers so a Workflow project's chat can compose a workflow. Same agent loop as recipe authoring; it moves to the daemon with the rest of the runtime in svt-3.
 <!-- END GENERATED layer-map -->
 
 Direction is one-way, enforced by `cargo xtask layer-gate` against

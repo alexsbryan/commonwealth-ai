@@ -27,7 +27,7 @@
 
 use crate::{
     arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
-    layer_gate, layout_gate, lifecycle_gate, lock_gate,
+    judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -85,6 +85,14 @@ pub fn run() -> i32 {
         // them is not.
         ("lifecycle-gate", Enforcement::Hard, &|| {
             lifecycle_gate::run(&no_args)
+        }),
+        // Hard, and it reads the working tree: ONE place builds a
+        // forced-choice judge request body, and it is the place that hands it
+        // to the call census. Two counts, not one — see the gate's own docs
+        // for why "everything reaches the funnel" alone passes a split
+        // register.
+        ("judge-funnel-gate", Enforcement::Hard, &|| {
+            judge_funnel_gate::run(&no_args)
         }),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)

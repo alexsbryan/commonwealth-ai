@@ -73,10 +73,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
-use commonwealth_api::state::{AppState, AppStateInner};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{Person, RailError, RingRail, Roster, RosterSource};
+use sovereign_api::state::{AppState, AppStateInner};
 
 /// A ring roster derived from mesh membership, plus the reverse lookup a
 /// caller needs to name a signer's node.
@@ -177,7 +177,7 @@ impl MeshRoster {
     /// (ARCH §10.6): the identity comes from what the daemon installed at
     /// startup and the membership from the live `Mesh`, and a caller that
     /// assembled those two itself would be free to assemble them differently.
-    pub async fn from_app_state(app_state: &commonwealth_api::state::AppState) -> Self {
+    pub async fn from_app_state(app_state: &sovereign_api::state::AppState) -> Self {
         let self_id = app_state.self_node_id();
         let self_pubkey = app_state.self_node_pubkey();
         let mesh = app_state.inner.mesh.read().await;
@@ -254,7 +254,7 @@ pub const DAEMON_OWN_NAMESPACES: &[&str] = &[
     sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
     // The five KV namespaces gossip Step 4 replicated, plus the tracked-article
     // watcher's. Each is a `MeshStore` app_id with a real cross-peer consumer.
-    commonwealth_inference::INFERENCE_APP_ID,
+    sovereign_serving::INFERENCE_APP_ID,
     commonwealth_state::CONTRIBUTIONS_APP_ID,
     commonwealth_state::PROCESSED_SHARDS_APP_ID,
     corpus_engine_notes::NOTES_APP_ID,

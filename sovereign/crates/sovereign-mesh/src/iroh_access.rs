@@ -226,7 +226,7 @@ fn env_kill_switch() -> bool {
 /// Members without a pubkey are not iroh-dialable and are left out entirely —
 /// counting them would make an IP-only peer look like a lost path.
 pub(crate) async fn observe_peer_paths(
-    app_state: &commonwealth_api::state::AppState,
+    app_state: &sovereign_api::state::AppState,
     endpoint: &Endpoint,
 ) -> Vec<crate::iroh_watchdog::PeerPathObservation> {
     let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();

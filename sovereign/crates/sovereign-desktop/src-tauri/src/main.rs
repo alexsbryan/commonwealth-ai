@@ -207,7 +207,7 @@ fn main() -> ExitCode {
                      sovereign_inference={glassbox},\
                      sovereign_mesh=info,\
                      commonwealth_discovery=info,\
-                     commonwealth_api=info,\
+                     sovereign_api=info,\
                      corpus_engine={glassbox},\
                      bootstrap=info,\
                      mesh_state=info,\

@@ -1,0 +1,239 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER in campaign.md carries the rung list, so
+# the plan survives without them.
+id        = "verifier-loop"
+objective = "Every operating point the inference verifier loop decides on is a number with a provenance chain - fitted from retained episodes, committed as data, read through one accessor, and load-bearing under perturbation - so the verification work already spread across 100 instruments and 366 verdict types pays into the answer a person reads instead of into target/"
+spec      = "sovereign/docs/specs/VERIFICATION_COMMONS.md §1-§4 (the verification episode as the unit of collection; §4 the mechanism of change). Its own header says 'design study, no code' — this campaign is its first execution. Constrained by sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md ('Model strata only demote. Bytes admit.') and by sovereign/bench/VERIFIER_ECONOMY_PREREG_20260819.md (two axes never averaged)."
+declared  = "2026-09-12"
+status    = "active"
+
+# ── THE PREDICATE ────────────────────────────────────────────────────────────
+# Three legs, and the third is the load-bearing one. A committed calibration
+# artifact that exists, and is even re-derivable, still proves nothing about
+# whether the runtime consults it: `grounding_gate_threshold()` (sovereign-core/src/runtime/grounding/config.rs:56)
+# returns the literal 0.9 today and would keep returning it with a perfect
+# artifact sitting beside it. So the predicate requires the decision to CHANGE
+# when the artifact changes.
+#
+# The denominator is not a list an author wrote. It is "every threshold the gate
+# actually consulted on this turn", reported by the turn itself — the same shape
+# as env-gate censusing env reads rather than trusting a registry by hand.
+#
+# Every bar below can sit at target while this sentence is false: judge calls
+# per turn can halve, fabrication can stay 0, gold rows can flow, the bank can
+# be live — and every threshold in force can still be a literal no artifact
+# governs. That is the sv-surface failure, declared before the fact this time.
+[predicate]
+statement = "On one real gated longform turn: every threshold the gate consulted is named in its decision line together with the committed artifact it resolved through; re-running that artifact's fit script over the episode bank on disk reproduces it byte-for-byte; and the same turn replayed against a perturbed artifact takes a different action"
+check     = "cargo test -p sovereign-core --test main verifier_loop_operating_point_roundtrip"
+# NOT BUILT. The test name is declared here before the data, per §18.6, and is
+# rung vl-8's deliverable - the END STATE, not the first move. Until it exists this
+# predicate reads NEVER-RAN, which is the honest verdict and not a pass.
+# (Said "rung vl-6" until 2026-09-12: the reorder that day renumbered the rungs
+# and three of these bar-to-rung citations were left pointing at the old numbers.
+# vl-6 is now the segments rung and builds no part of this predicate.)
+#
+# LEG 3 IS NOT ALSO A BAR (reordered 2026-09-12). The perturbation leg lived as
+# `vl-ruler-decides` in the first draft, which made two readers of one fact
+# (ARCH principle 8). It is stated here, once, and the predicate test owns it.
+
+# ── BARS ─────────────────────────────────────────────────────────────────────
+# Ordered as the ladder runs them: cheapest and most load-bearing first. The two
+# that open the campaign are net-negative or near-free in lines and both produce a
+# win you can watch on day one.
+
+[[bar]]
+id           = "vl-one-primitive"
+one_line     = "CLAIM: there is ONE place a judge decision constructs a forced-choice body, and the call census therefore sees every judge call in the system"
+derives_from = "ARCH principle 8 (one decider, one name) applied to the primitive every LLM judge in the tree sits on; and principle 1 (a decision invisible at tracing=debug is not finished) applied to the two thirds of judge traffic the census cannot see"
+status       = "open"
+floor        = 3.0
+floor_basis  = "2026-09-12, counted at HEAD 8750c0442: THREE judge-side sites construct an x_forced_choice body - sovereign-core/src/runtime/grounding/judge.rs:93 (fn forced_choice_ab), sovereign-cli-llm/src/bench_cmd/live_runner.rs:759 (pub(crate) fn forced_choice_ab, its own copy), and sovereign-core/src/runtime/evidence_loop/mod.rs:521-527 (inline, no fn, its own HashMap parse). Only the first calls gate_call (4 sites); the other two call it ZERO times, so two thirds of judge traffic is invisible to the census that prices judge cost and attributes judge failure. Engine-side x_forced_choice sites (embedded/gates.rs, grammar.rs, rpc_distribution.rs) are the OTHER side of the sentinel and are not in scope."
+target       = 1.0
+direction    = "lower_is_better"
+instrument   = "TO BUILD, rung vl-1, and it is a grep with a rule rather than a new subsystem: count of judge-side sites constructing an x_forced_choice request body, plus the count of those that do not reach gate_call. Both must be 1 and 0."
+goodhart     = "this can hit target while the predicate is still false if the callers share a function and still bypass the census - a shared register with the gate_call wrapper applied at only one call site leaves the same blindness under a better name"
+
+[[bar]]
+id           = "vl-judgement-line"
+one_line     = "CLAIM: a tool that decides a four-verdict outcome can SAY so - the back-of-house reports in the same vocabulary the product's gate does, instead of having its prose grepped"
+derives_from = "sovereign-cli-shared/src/lane_verdict.rs:1-35, which was written to replace scripts/lib/ci-bench-verdict.sh's reconstruction of a four-verdict decision by grepping a lane's prose, and names every one of those greps 'a coupling to wording nobody promised to keep'"
+status       = "open"
+floor        = 10.0
+floor_basis  = "2026-09-12: TEN tools render one of the four verdict spellings and emit no Judgement line - scripts/evidence-verdict.py, sabotage.py, twin-census.py, co-drift.py, co_liveness.py, co-lineage.py, nc-thesis.py, mesh-live-probe.py, gym/comaintainer/markers.py, and scripts/lib/ci-bench-verdict.sh (which GREPS for the spellings rather than emitting them). The denominator is the structural pattern - writes a four-verdict spelling to stdout and is reachable from a quality surface - not this list; the list is what the pattern currently returns. For scale: 8 of the 100 rows in quality/instruments.toml declare verdict = judgement-line and they are exactly the eight svrn quality check lanes."
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "TO BUILD, rung vl-2: the census above, run as part of instrument-gate. One print(json.dumps(...)) per tool satisfies it - sovereign-cli-shared/src/lane_verdict.rs:44 emit() is the shape and the protocol is language-agnostic by design."
+goodhart     = "this can hit target while the predicate is still false if a tool emits a line nothing reads - the win is the runner CONSUMING it, so each conversion lands with the tool registered in quality/instruments.toml or it is decoration"
+
+[[bar]]
+id           = "vl-register-priced"
+one_line     = "CLAIM: a judge or threshold change cannot land without a two-direction replay report - what it stopped getting wrong, and what it still catches against cases frozen before the change"
+derives_from = "ARCH_PRINCIPLES.md §7: 'A judge is never tuned in one direction... reported in the permissive direction only, a change is not failed, it is not judged (95b82f97)'"
+status       = "open"
+floor        = 0.0
+floor_basis  = "2026-09-12: `svrn bench judge-replay` exists and is well built (pinned replay_* seams, register fingerprint by system-turn hash and renderer bytes, bit-stable --render-only) and appears in NONE of the 100 rows of quality/instruments.toml. 12 of those 100 declare a negative_control."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "TO BUILD, rung vl-3: judge-replay registered with claim = judged, verdict = judgement-line, a venue, and a negative_control. The control needs no invention - commit 17ac931b8 is a register candidate REFUSED at the 3/3 should_flag bar and preserved for exactly this kind of trade decision; the report must still catch it."
+goodhart     = "this can hit target while the predicate is still false if the frozen cases no longer resemble production - a replay over a stale bank prices a change against a world that has moved, and reports it with full confidence. vl-bank-live is the pair that closes it, which is why it lands next."
+
+[[bar]]
+id           = "vl-bank-live"
+one_line     = "CLAIM: the episode bank the replay reads is this week's, not a dated diagnostic snapshot"
+derives_from = "sovereign/docs/specs/VERIFICATION_COMMONS.md §2: 'Every gated turn already computes a complete structured trace - and then discards it after rendering the answer. The unit is this trace, kept.'"
+status       = "open"
+floor        = 29.0
+floor_basis  = "AGE IN DAYS of the newest episode the replay can read - the clock is the denominator and nobody authors it. 29 at declaration: sovereign/bench/chaos_monkey/judge_replay_cases.py:59-60 names exactly two case sets, newest 2026-08-14. What exists in total is 1,049 forensics records (821 claim + 114 audit windows + 114 audit results) across five committed ledgers, ALL from 2026-08-13/14. The journal half cannot serve this: GROUNDING_STREAM is default=on but carries handles and NO text by design, and its 291 decision lines over 8 active days (2026-08-27..09-10) can replay nothing."
+target       = 7.0
+direction    = "lower_is_better"
+noise_band   = 1.0
+instrument   = "TO BUILD, rung vl-4: age in days of the newest episode judge_replay_cases resolves a case from. This is a SCHEDULING change more than a retention one - the replayable half comes from bench runs with SOVEREIGN_GATE_AUDIT_FORENSICS on, which is how all 1,049 existing records were made. Neither privacy default moves."
+goodhart     = "this can hit target while the predicate is still false if the bank grows without LABELS - the 821 existing claim records carry the incumbent's own verdict, not ground truth, so fitting on them fits the system to its own opinion"
+kill = """K2 - the text tier's default does not change. If freshness at scale cannot be had without moving verbatim corpus text off the machine that produced it, the campaign ships the handles tier alone and says what it could not fit.
+
+DECIDED 2026-09-12 (operator): FED LEDGERS ARE NOT TRACKED IN GIT, so this bar is a PER-HOST measurement and says so. `sovereign/bench/*/results/*.jsonl` is gitignored and the five August ledgers are tracked only because someone force-added them; tracking a fed one would commit verbatim corpus text and the model's drafts on every feed, which is exactly the content that made SOVEREIGN_GATE_AUDIT_FORENSICS default-unset. If CI ever needs to read the bank, the shape is a handles-only tier, not a relaxation here. The instrument is reproducible on any host that runs the feed, which is what keeps the number honest without sharing the text."""
+
+[[bar]]
+id           = "vl-gold-rows"
+one_line     = "CLAIM: the fit can read independently labelled claims - labels a person produced, at a grain the register judges, in a quantity someone measured the noise floor for"
+derives_from = "research/verifier-v0/findings/VERIFICATION_SCALING_AXES.md §8, 2026-09-08: judge ensembling predicted +0.02 AUC, measured -0.035 with the CI entirely below zero; every combiner tested loses to the best single judge on both metrics without exception. Independence cannot be bought by adding models, so the label has to come from a person."
+status       = "open"
+floor        = 100.0
+floor_basis  = "COUNT of independently labelled claims a fit can read. 100 at declaration, and the shape is worse than the count: research/deep-research/bank/labeled/claims.jsonl is 20 questions x 5 claims sharing one evidence window, so the effective independent n is nearer 20 than 100. The exemplar fit (sovereign/bench/calibration/h1-port/) used 4,207 scored samples, unclustered. Beside those 100 sit 821 UNLABELLED claim records in the forensics ledgers, each with its evidence window - that is the population the review queue labels."
+direction    = "higher_is_better"
+instrument   = "TO BUILD, rung vl-5: the count, reported together with the measured width of the operating point's interval at that n. NO TARGET IS DECLARED - see kill K5."
+goodhart     = "this can hit target while the predicate is still false if the labels are the system's own verdicts rebadged, or if they are TURN-grain while the register judges CLAIMS - a turn marked wrong does not say which of its four claims was wrong, and a bag-level label is not a claim label"
+kill = """K5 - NO TARGET IS DECLARED, because the number that would justify one has never been measured. ARCH principle 7: establish the noise floor at your sample size first. So rung vl-5's FIRST act is to measure the interval width at n=100 and at whatever n the queue reaches, and a target is ratified with the operator in a commit SEPARATE from that measurement (§18.6). A target picked now would be the same fabricated-fact-with-a-unit this campaign exists to stop.
+
+K6 - the labels come from the QUEUE, not from organic app usage, and a rung that ships only the app affordance has not moved this bar. The journal holds 291 decision lines over 8 active days; rated organically at any realistic fraction that never reaches a useful n. 821 banked claims with their windows already exist. sovereign/docs/specs/ATTESTED_RECORDS.md §3 names the mechanism as stratum 6 - 'Human - review queue - its verdicts become gold-set rows - the flywheel'. The precedent to avoid is ~/.sovereign/comaintainer/field-episodes.jsonl: the capture shape was built and all four of its records still read `seat_verdict: None`."""
+
+[[bar]]
+id           = "vl-rulers-earned"
+one_line     = "CLAIM: a threshold the gate decides on resolves through a committed fit, not a literal - and the denominator is censused from the code, never listed by an author"
+derives_from = "operator, 2026-09-12: 'the main product surface is the inference verifier loop... all energy this system puts into verification can bubble up to and contribute to that surface'"
+status       = "open"
+floor        = 0.0
+floor_basis  = "PERCENT of gate-decided thresholds resolving through a committed fit. 0, not 1: read at HEAD 8750c0442 on 2026-09-12, exactly ONE committed-fit reader exists in the workspace - sovereign-core/src/runtime/grounding/native_grounding/admission.rs:79 include_str!s sovereign/bench/calibration/h1-port/h1_admission_calibration.json, with one Platt fit, one effective_thresholds() accessor, env overrides deliberately retired, and TAU_SOURCE stamped on every event. Its decision path is enforced=false (telemetry only). Every other gate threshold is a literal: sovereign-core/src/runtime/grounding/config.rs:56 grounding_gate_threshold() returns 0.9 with an env override, and sovereign-cli-llm/src/bench_cmd/judge_replay.rs:9-10 records that the joint per-claim register's tau 'transfers from the singular chunk-judge register BY ANALOGY only (note d474ac24)' - 10-16 calls per longform turn on a borrowed number."
+target       = 100.0
+direction    = "higher_is_better"
+instrument   = "TO BUILD, rung vl-8: `cd corpus-engine && cargo xtask ruler-gate` - censuses the thresholds the gate ladder reads (same method as env-gate over env reads) and reports the share resolving through a committed calibration artifact whose derived_from hashes match files on disk. A threshold the census cannot classify is reported, never defaulted to either side."
+goodhart     = "this can hit target while the predicate is still false if the artifact is read at startup and a literal shadows it at the decision, or if the fit was taken over a bank the system labeled itself - a provenance chain to the system's own opinion is provenance with no independence in it"
+kill         = "K1 - ACCEPTED IN ADVANCE 2026-09-12 (operator), so an Uncalibrated landing on vl-8 is a result and not a miss: a threshold whose bank has too few labels to fit reports Uncalibrated, keeps the incumbent literal, and NAMES the substitution (ARCH principle 6). Ratifying this before the run is the point - the alternative to reporting Uncalibrated is a guessed operating point, and a bar agreed only after the data would read as a failure being rationalised. This is the LIKELY outcome at declaration and it is a legitimate landing: the only ground truth in the tree is 100 labeled claims in 20 clustered items (research/deep-research/bank/labeled/claims.jsonl - 20 questions x 5 claims sharing one evidence window), against the 4,207 scored samples the exemplar fit used. A guessed operating point is a fabricated fact with a unit attached; there is no arm of this campaign where one ships."
+
+[[bar]]
+id           = "vl-free-rejections"
+one_line     = "CLAIM: a claim that fails deterministic span integrity or normalization is rejected BEFORE any model call - no GPU, no judge, no latency"
+derives_from = "sovereign/docs/specs/ATTESTED_RECORDS.md §3: strata 1-2 'can reject on their own authority... and it is the part that needs no GPU'. Composed with sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md: bytes admit, models only demote."
+status       = "open"
+floor        = 0.0
+floor_basis  = "structural: PERCENT of audited claims rejected by a deterministic stratum before any model call. Zero today - sovereign-core/src/quote_verification.rs (638 lines) and sovereign-core/src/runtime/numeric_audit.rs (744 lines) both run POST-generation as freestanding special cases, not as strata ahead of the judge."
+direction    = "higher_is_better"
+instrument   = "TO BUILD, rung vl-9: share of audited claims killed by stratum 1 (span not verbatim in source) or stratum 2 (value does not parse from its span), read from the grounding journal's per-mechanism census. NO TARGET IS DECLARED and that is deliberate - see kill K4."
+goodhart     = "this can hit target while the predicate is still false if the strata reject claims the judge would have PASSED - a cheap rejection is only cheap if it is right, and the pair that catches it is vl-no-trade's timidity axis"
+kill = """K4 - NO CALL-REDUCTION TARGET IS DECLARED, because the measured mechanism for one does not exist. sovereign/bench/calibration/resolver-precision/resolver_precision_verdict.json reads `outcome: does_not_ship` - precision 0.7429 against a bar of 0.98 pinned before any data, n=130 - so certified-claims-skip-judge is CLOSED and 'per-claim verification stays exactly as it is'. The opposite direction is closed too: 77 of the 95 uncertified claims in that same artifact were verified by the incumbent, so rejecting on non-certification would false-reject 81% of them. What survives is rejection on deterministic INVALIDITY only. The achievable call reduction is an OPEN QUESTION the census answers first; a target declared before it would be a number with no derivation (ARCH principle 6)."""
+
+[[bar]]
+id           = "vl-no-trade"
+one_line     = "FLOOR, never traded: neither axis regresses to move any other bar - fabrication and timidity are reported together and never averaged"
+derives_from = "sovereign/bench/VERIFIER_ECONOMY_PREREG_20260819.md, restated by sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md: 'Two axes, never averaged. Fabrication alone is satisfied by admitting nothing.' Plus drb1-race's standing stop condition: 'the floor is never traded'."
+status       = "open"
+floor        = 0.0
+floor_basis  = "structural, and it binds to the EXISTING scorer rather than minting a threshold: ResultRow::is_blatant_confab and is_false_abstention (sovereign-eval/src/chaos_monkey/score.rs) are the deciders of record, and chaos-monkey is already a registered instrument with a committed baseline. This bar declares that this campaign may not move them, not a second copy of them."
+direction    = "near_zero"
+target       = 0.0
+instrument   = "EXISTS: `svrn bench gate chaos-monkey` against sovereign/bench/chaos_monkey/baselines/secret_agent/, plus the per-corpus faithfulness gate. No new scorer, no new threshold - ARCH principle 8."
+goodhart     = "this can hit target while the predicate is still false if the bank does not contain the shape the change broke - a floor held on cases nobody re-selected after the mechanism moved is a floor held against the previous system"
+kill         = "K3 - fabrication > 0 with instrument validation green means a SECOND DECIDER exists on the admission path (ARCH principle 8): find it and remove it, do not tune. Timidity regressed in order to reach fabrication 0 is a REJECTED row in sovereign/DEFAULTS_LEDGER.md and the demotion path is redesigned - the bar is not lowered."
+
+# ── THE LADDER ───────────────────────────────────────────────────────────────
+# REORDERED 2026-09-12 (operator: lowest effort + highest impact first, anchor to
+# wins), then vl-5 RESCOPED 2026-09-12 into three rungs after two measurements:
+# the per-segment UI already exists (AnswerProvenance.svelte renders a typed
+# SegmentKind with tests), and `answer_segments` is NULL on 794 of 794 banked
+# turns - so the click target is nearly free and has nothing behind it yet.
+# The labels come from the queue; the app click makes judgement possible in the
+# moment. Both are needed and only one of them produces n.
+#
+# The table owns STATUS (ARCH principle 8). campaign.md's Ladder owns the
+# RATIONALE. When the two disagree, the table is the record.
+
+[[rung]]
+id     = "vl-1"
+title  = "One forced-choice primitive, and the census finally sees every judge call"
+status = "done"
+sha    = ["7c19802d1"]
+demo   = "D1"
+moves  = ["vl-one-primitive"]
+note   = "NET-NEGATIVE lines. Two of three construction sites become callers of the canonical register; the two that call gate_call zero times start paying into the census. ~1 day. Nothing else in the campaign is cheaper per unit of visibility gained. LANDED 2026-09-12: 3 construction sites -> 1, 2 -> 0 bypassing the census; `cargo xtask judge-funnel-gate` holds it, watched red twice first."
+
+[[rung]]
+id     = "vl-2"
+title  = "The back-of-house reports in the product's vocabulary"
+status = "done"
+sha    = ["a6dd46ec0"]
+demo   = "D2"
+moves  = ["vl-judgement-line"]
+note   = "Ten tools, one print(json.dumps(...)) each, against a protocol that is language-agnostic by design. The operator's 'bubble up' made literal, and the smallest change in the plan. Each conversion lands WITH its instruments.toml row or it is decoration. LANDED 2026-09-12: 8 tools converted + ci-bench per-lane, each with its instruments.toml row; instrument-gate rule A (hard) + rule B (ratchet, 12 in arrears). TWO FINDINGS: the bar's lexical denominator is not reproducible (131 files carry the vocabulary, 45 write it to stdout, neither is the ten) so the denominator is the REGISTRY - 8 of 20; and gym/comaintainer/markers.py is a pure library with no stdout and cannot be converted."
+
+[[rung]]
+id     = "vl-3"
+title  = "A register change cannot land unpriced"
+status = "done"
+sha    = ["b69ebb1ea"]
+demo   = "D3"
+moves  = ["vl-register-priced"]
+note   = "The 13th of 100 instruments to carry a negative control, and the first guarding the product's judgement. The control already exists in history (17ac931b8, a candidate refused at the 3/3 bar). ~1 day. LANDED 2026-09-12: the report now COMPARES arms in both directions (catches lost/gained, false positives cured/added, never netted) and a candidate that surrenders a catch is failed whatever it cures. The control is the archive - 17ac931b8's frozen verdicts, whose AGGREGATE improved 6/10 vs 3/10 while losing the Kane-bridge catch - and it is watched red. Negative controls in the registry: 12/100 -> 13/112."
+
+[[rung]]
+id     = "vl-4"
+title  = "The bank is this week's"
+status = "done"
+sha    = ["4d0fe7d57"]
+demo   = "D3"
+moves  = ["vl-bank-live"]
+note   = "Pairs with vl-3: a registered replay over a 29-day-old bank prices changes against a world that moved. Scheduling more than retention - the forensics flag is how all 1,049 existing records were made. ~1-2 days. LANDED 2026-09-12: --bank-age measures the newest REPLAYABLE episode (audit records only - citation rows carry a ts and no evidence window), ledgers are discovered not listed, and feed_replay_bank.sh + run-if-stale is the schedule. First feed run closed it end to end: 29.6 -> 0.0 days, and the case builder resolved 4 byte-faithful per_claim_judge rows from today's ledger (0 mismatches). The fed ledger is gitignored, so the bar is measured PER HOST until the operator decides whether to track it."
+
+[[rung]]
+id     = "vl-5"
+title  = "The review queue - an afternoon of judgement becomes gold rows"
+status = "open"
+demo   = "D4"
+moves  = ["vl-gold-rows"]
+note   = "THE LOAD-BEARING HALF OF THE OLD vl-5, and it needs no desktop work at all: a reader over the 821 banked claim records, each already carrying its evidence window, that presents claim + window and records a verdict. Reads the same bank vl-4 just made fresh. First act is the noise floor at n=100 (K5), not a fit. ~2-3 days, mostly CLI + a store."
+
+[[rung]]
+id     = "vl-6"
+title  = "Segments populate - the prerequisite nobody had noticed"
+status = "done"
+sha    = ["3096c6eab"]
+demo   = "none"
+moves  = []
+note   = "SCAFFOLDING, and it says so: it moves no bar and unblocks D5. `answer_segments` is written at streaming.rs:2363 but ONLY when the native path produced a verdict, and it is null on 794 of 794 banked turns (checked 2026-09-12) - zero populated segments, zero addresses. Without it the app click has nothing to click. sovereign/bench/FABRICATED_QUOTE_PREREG_20260911.md carries the same item as its prerequisite 4 and prices it 'small', so this rung pays two campaigns. Do it BEFORE vl-7 or vl-7 demos a null. LANDED 2026-09-12: it was not scaffolding, it was a reported-absence bug. `Option<GroundingVerdict>` collapsed `Disabled` and `NoInstrument` into one `None`, so a DISPLAY stage read a MEASUREMENT slot absence as its own - and this host registers no reranker, H1's only margin source, so `NoInstrument` is EVERY turn here. `EvidenceContext::native_admission` is now a three-state `NativeAdmission` and the display sites read `ran()` while the gate keeps `verdict()`. Proven on one real SEP turn (conversation 4e095626): native_answerability `not_computed`, 17 segments, and the `segments` stage row (owner native, 18ms) that used to be suppressed on exactly these turns. FINDING for vl-7: ZERO of the 17 came back `grounded` - Verbatim needs a contiguous sentence and synthesis paraphrases, so the strip renders 14 not-found / 3 fuzzy on a well-grounded answer. The click target exists; the badge distribution is thin and is vl-7's input."
+
+[[rung]]
+id     = "vl-7"
+title  = "I said that was wrong, on the sentence"
+status = "open"
+demo   = "D5"
+moves  = ["vl-gold-rows"]
+note   = "The user-facing half, and cheaper than first estimated: AnswerProvenance.svelte already renders metadata.answer_segments and answerProvenance.ts already mirrors the typed SegmentKind with tests, so a claim-grain label is a click on an element that is on screen. One stream in the shape of next_edit_journal.rs (637 lines), which already records the editor's outcome. ~1-2 days AFTER vl-6. Lands in the thin-desktop migration's region - coordinate."
+
+[[rung]]
+id     = "vl-8"
+title  = "One earned operating point, and the census that names the rest"
+status = "open"
+demo   = "D6"
+moves  = ["vl-rulers-earned"]
+note   = "The predicate's rung. Was first in the draft ladder; it is here because at n=100-in-20-clusters it lands Uncalibrated, and landing that before any win is the wrong shape. After vl-5 it has a chance of landing a number. The joint per-claim register first - its tau is the borrowed one. Watched red first: ship the predicate test with the perturbation as a no-op and watch it fail. ~3-5 days."
+
+[[rung]]
+id     = "vl-9"
+title  = "Admission contains no model"
+status = "open"
+demo   = "D7"
+moves  = ["vl-free-rejections", "vl-no-trade"]
+note   = "Last and exploratory. Re-scoped before any work against resolver_precision_verdict.json (does_not_ship, 0.7429 vs 0.98): deterministic invalidity only, no call-reduction target until the census prices it. ~2-3 days. grounding/mod.rs has 25 lines of headroom under the 1,200 ceiling - budget a split, not a squeeze."

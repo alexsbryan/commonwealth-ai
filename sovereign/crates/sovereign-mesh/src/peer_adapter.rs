@@ -7,7 +7,7 @@
 //! the one backed by the actual mesh.
 //!
 //! **The arrow this reverses.** Until cw-lift 3b, `sovereign-cli-daemon` named
-//! `commonwealth_state::MeshStore` and `commonwealth_api::state::ConvergenceRecord`
+//! `commonwealth_state::MeshStore` and `sovereign_api::state::ConvergenceRecord`
 //! in its own bootstrap, so the local daemon could not link without the mesh
 //! substrate. Now the daemon names the port, and this crate — which exists to
 //! be the Commonwealth integration layer — supplies the mesh implementation of
@@ -24,9 +24,9 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use commonwealth_api::state::ConvergenceRecord;
 use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
+use sovereign_api::state::ConvergenceRecord;
 use sovereign_contracts::peer::{Convergence, PeerEntry, PeerStore, PeerStoreError};
 
 /// [`PeerStore`] backed by the ring-projected [`MeshStore`].
