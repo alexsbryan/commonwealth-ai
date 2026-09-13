@@ -3670,7 +3670,8 @@ only what the tools showed; a suspicion with no tool line is not a finding.
 If the record supports the report, return an empty list.
 
 For a number the report states, use `find_number` with the bare number;
-`search_seen` is for phrases and identifiers.
+`search_seen` is for phrases and identifiers. Only numbers of three or more
+digits, or with a unit, are worth a call -- a 5 or a 14 is in every output.
 
 Not in the record, and not a finding: the agent's context-size statusline
 ("Context is at 504k"), which the harness shows it directly; and its own
@@ -3731,8 +3732,12 @@ def text_tool_calls(content: str) -> list[dict]:
     """Tool calls the model wrote as text. Valid JSON inside <tool_call>
     tags is honoured; anything else is not a call."""
     out = []
-    for n, m in enumerate(re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", content, re.S)):
-        raw = m.group(1)
+    bodies = [m.group(1) for m in re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", content, re.S)]
+    if not bodies and content.strip().startswith("{") and content.strip().endswith("}"):
+        # The grammar-forced round returns the envelope as bare JSON with no
+        # tags (c01789ff: {"name": "findings", "arguments": {...}} as prose).
+        bodies = [content.strip()]
+    for n, raw in enumerate(bodies):
         # One recurring emission defect, repaired by name: `{"name="x"` for
         # `{"name":"x"` (every text-form call on 1c5bd750 and e92735ab).
         raw = re.sub(r'\{"name="', '{"name":"', raw, count=1)
@@ -4580,6 +4585,8 @@ def cmd_self_test(_a) -> int:
        [{"id": "text_0", "type": "function", "function": {"name": "search_seen", "arguments": '{"phrase": "x"}'}}],
        "the {\"name=\" emission and string arguments are repaired into a call")
     eq(text_tool_calls('<tool_call>{"nam":1}</tool_call>'), [], "anything else is not a call")
+    eq(text_tool_calls('{\n "name": "findings",\n "arguments": {"findings": []}\n}')[0]["function"]["name"],
+       "findings", "a bare JSON envelope with no tags is a call (the forced round's shape)")
     eq(numbers_in("the principle 12 failure, 1250-byte frames, Bloomberg 1981"), ["1250"],
        "a label, a year: not quantities; a hyphenated unit is not hex")
     eq(instrument_numbers("`sovereign-cli-llm` alone is 93k lines", 2,
