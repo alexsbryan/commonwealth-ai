@@ -180,7 +180,19 @@ pub(crate) async fn spawn_setup_run(
 ) -> Result<SetupProgressLine, String> {
     let bin = sidecar()?;
     let mut cmd = Command::new(&bin);
-    cmd.args(["setup", "--yes", "--json", "--data-dir"])
+    // `--wizard-only` is load-bearing. Without it the verb's finish step
+    // registers a launchd/systemd SERVICE for the binary it ran as — here the
+    // sidecar inside the app bundle — and then blocks up to 30 s waiting on
+    // the client port. The app already owns bringing that binary up
+    // (`serving_host::ensure_reachable` -> the bundled backend, spawned
+    // detached on relaunch), so a service would be a second owner of the
+    // same lifecycle (ARCH principle 12), one the operator never asked for.
+    // The flow this replaced wrote config and relaunched and registered
+    // nothing (checked: `install_service` has no site in the pre-svt-7
+    // setup_flow.rs). The terminal `done` line is emitted by the verb AFTER
+    // finish returns, so it still arrives on this path (setup_cmd/mod.rs).
+    // Found by the svt-7 first-run check, not by review.
+    cmd.args(["setup", "--yes", "--json", "--wizard-only", "--data-dir"])
         .arg(data_dir);
     if let Some(p) = primary {
         cmd.arg("--primary").arg(p);
