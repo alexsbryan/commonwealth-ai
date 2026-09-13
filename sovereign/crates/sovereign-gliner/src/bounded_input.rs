@@ -42,8 +42,9 @@ use crate::labeled::LabeledEntityExtractor;
 /// Per-text character ceiling. **Derived from the model, not chosen.**
 ///
 /// gline-rs's `Parameters::default()` sets `max_length: Some(512)`
-/// (`gline-rs-1.0.1/src/model/params.rs:23` and the `Default` impl at
-/// :33), and `sovereign-gliner` passes `Parameters::default()` verbatim at
+/// (`gline-rs-1.0.1/src/model/params.rs:23` for the field, `Some(512)` in
+/// the `Default` impl at :32), and `sovereign-gliner` passes
+/// `Parameters::default()` verbatim at
 /// `gliner_ner.rs`'s `GLiNER::<SpanMode>::new` call — a grep for
 /// `Parameters::new|with_max_length` across `sovereign-gliner/src` returns
 /// nothing (checked 2026-09-12), so 512 is what the v1 path runs.

@@ -77,7 +77,8 @@ row is where they come from.
 
 **Where 2,048 came from — the model, not a guess.** gline-rs's
 `Parameters::default()` sets `max_length: Some(512)`
-(`gline-rs-1.0.1/src/model/params.rs:23`, `Default` impl at :33) and
+(`gline-rs-1.0.1/src/model/params.rs:23`; `Some(512)` in the `Default`
+impl at :32) and
 `sovereign-gliner` passes `Parameters::default()` verbatim; a grep for
 `Parameters::new|with_max_length` across `sovereign-gliner/src` returns
 nothing (2026-09-12). The unit is WORDS from `RegexSplitter`
