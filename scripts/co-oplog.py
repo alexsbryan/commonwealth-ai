@@ -559,7 +559,8 @@ def is_commitment(text: str) -> bool:
 RX_CONDITIONAL = re.compile(
     r"\b(?:if you|say the word|should you|once you|when you|if that's|if you'd|"
     r"your call|whichever you|unless you"
-    r"|(?:when|once|after) (?:it|that|this|the [\w-]+(?: [\w-]+)?) (?:lands|finishes|clears|returns|completes))\b", re.I)
+    r"|(?:when|once|after) (?:it|they|that|this|those|these|both|the [\w-]+(?: [\w-]+)?) "
+    r"(?:lands?|finish(?:es)?|clears?|returns?|completes?|reports?))\b", re.I)
 
 # What a diff can carry: a change to the tree. A commitment whose verb is
 # not one of these -- verify, compare, report, read, come back, put in
@@ -3496,6 +3497,8 @@ def cmd_self_test(_a) -> int:
     eq(is_conditional("I'll land all three now."), False, "an unconditional one is")
     eq(is_conditional("I will verify the cut myself when the step-3 commit lands."), True,
        "a commitment contingent on an event is not due either")
+    eq(is_conditional("I'll report every verdict and path line verbatim when they land."), True,
+       "plural event condition (e92735ab turn 9): 'land' is the condition, not the act")
     eq(is_tree_act("I'll put it in front of you in the referee pass"), False,
        "a promised act is not a tree change")
     eq(is_tree_act("I'll wire the Stop hook next"), True, "a wiring is")
