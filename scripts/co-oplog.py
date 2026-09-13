@@ -3765,6 +3765,9 @@ def chat_tools(messages: list, tools: list, pin: str, timeout: float, max_tokens
     # prose. The system message names which tool is wanted instead.
     if force:
         messages = messages + [{"role": "user", "content": f"Use the `{force}` tool now."}]
+        # A findings envelope with several 'why' sentences overran 600
+        # tokens and arrived truncated (c01789ff, three launches).
+        max_tokens = max(max_tokens, 1600)
     body = {"model": pin, "messages": messages, "tools": tools,
             "tool_choice": ("required" if force else "auto"),
             "max_tokens": max_tokens, "temperature": 0}
@@ -3813,6 +3816,12 @@ class Investigation:
     def run_tool(self, name: str, args: dict) -> str:
         if name == "find_number":
             n = str(args.get("number", "")).replace(",", "").strip()
+            try:
+                if float(n) < 100:
+                    return (f"REFUSED: {n} is a two-digit number and occurs in nearly every output; "
+                            f"it cannot be traced. Spend the call on a larger number or a phrase.")
+            except ValueError:
+                pass
             hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines()
                     if n and re.search(r"(?<!\d)" + re.escape(n) + r"(?!\d)", l.replace(",", ""))]
             return "\n".join(hits[:12]) if hits else f"NOT SEEN: {n} appears in nothing the agent saw before turn {self.turn}"
@@ -3968,6 +3977,10 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
     # investigation. Anything else was not read off the record.
     findings, dropped = [], []
     results = [e["result"] for e in inv.log]
+    if raw_findings is None:
+        last = next((e["result"] for e in reversed(inv.log) if e["tool"].startswith("(forced")), "")
+        if last.strip().startswith("{") and not last.strip().endswith("}"):
+            inv.log.append({"tool": "(verdict truncated)", "args": {}, "result": "the findings envelope was cut off by max_tokens"})
     for f in raw_findings or []:
         claim, ev = str(f.get("claim", "")), str(f.get("evidence", ""))
         # A claim may be quoted in fragments joined by an ellipsis; each
