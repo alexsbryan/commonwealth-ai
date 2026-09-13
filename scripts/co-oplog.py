@@ -557,8 +557,8 @@ def is_commitment(text: str) -> bool:
     return bool(RX_PROMISSORY.search(text))
 
 RX_CONDITIONAL = re.compile(
-    r"\b(?:if you|say the word|should you|once you|when you|if that's|if you'd|"
-    r"your call|whichever you|unless you"
+    r"\b(?:if you|say the word|say which|say so|tell me which|tell me to|should you|once you|when you|"
+    r"if that's|if you'd|your call|whichever you|unless you"
     r"|(?:when|once|after) (?:it|they|that|this|those|these|both|the [\w-]+(?: [\w-]+)?) "
     r"(?:lands?|finish(?:es)?|clears?|returns?|completes?|reports?))\b", re.I)
 
@@ -3719,6 +3719,8 @@ def cmd_self_test(_a) -> int:
     eq(is_conditional("Say the word and I'll land all three the moment they clear."), True,
        "a commitment contingent on the operator is not due")
     eq(is_conditional("I'll land all three now."), False, "an unconditional one is")
+    eq(is_conditional("Say which, and I'll put it in the frame before we split."), True,
+       "'say which' is the operator's call (bb36c21e)")
     eq(is_conditional("I will verify the cut myself when the step-3 commit lands."), True,
        "a commitment contingent on an event is not due either")
     eq(is_conditional("I'll report every verdict and path line verbatim when they land."), True,
