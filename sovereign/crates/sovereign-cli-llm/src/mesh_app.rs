@@ -22,6 +22,21 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
     // ask everybody publishing this app the same thing. It is the media
     // fan-out's client with an app named, not a second one.
     if args.first().map(String::as_str) == Some("fanout") {
+        // `--help` asks about the SHAPE, not for a missing app. The app-name
+        // filter below rejects anything starting with `--`, so until
+        // 2026-09-12 `svrn mesh app fanout --help` answered "Which app?" and
+        // exited 1 — and the four flags `cmd_fanout` documents (--peers,
+        // --method, --timeout-ms, --json) were unreachable from the verb's own
+        // help. `cli_contract_flags::flags_missing_from_their_own_help_do_not_grow`
+        // reads that help and counted all four as undocumented; they were
+        // written, just behind a branch nothing could enter.
+        if sovereign_cli_shared::help::wants_help(&args[1..]) {
+            let named = args
+                .get(1)
+                .filter(|a| !a.starts_with("--"))
+                .map(String::as_str);
+            return crate::mesh_media::cmd_fanout(Some(named.unwrap_or("<app>")), &args[1..]).await;
+        }
         let Some(app) = args.get(1).filter(|a| !a.starts_with("--")) else {
             eprintln!("Which app? `svrn mesh app fanout chores /`");
             return 1;
@@ -30,7 +45,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
     }
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh app [<peer>] [<app>] [--json] [--no-probe]");
-        eprintln!("       svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--json]");
+        eprintln!("       svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!();
         eprintln!("With no <peer>: list the members that publish apps, as gossip knows them —");
         eprintln!("nothing is dialed. With a <peer>: print the base URL that reaches that");
