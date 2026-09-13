@@ -3826,11 +3826,14 @@ class Investigation:
             except ValueError:
                 pass
             # A status table prints 7,500 as "7.5k" (5ab14d6d turn 47:
-            # '7,500 chunks' NOT SEEN, the corpus table read '7.5k').
+            # '7,500 chunks' NOT SEEN, the corpus table read '7.5k'), and a
+            # test banner prints 966s as "elapsed: 966934ms" (ebda3345 t10).
             forms = [r"(?<!\d)" + re.escape(n) + r"(?!\d)"]
             try:
-                if float(n) >= 1000 and float(n) == int(float(n)):
-                    forms.append(r"(?<![\d.])" + re.escape(f"{int(n) / 1000:g}") + r"k\b")
+                if float(n) == int(float(n)):
+                    if float(n) >= 1000:
+                        forms.append(r"(?<![\d.])" + re.escape(f"{int(n) / 1000:g}") + r"k\b")
+                    forms.append(r"(?<![\d.])" + re.escape(n) + r"\d{3}\s*ms\b")
             except ValueError:
                 pass
             hits = [f"turn {i}: {l.strip()[:160]}" for i, l in self.seen_lines()
