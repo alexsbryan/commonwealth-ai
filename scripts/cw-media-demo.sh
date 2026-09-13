@@ -28,13 +28,42 @@ AUTH='MediaBrowser Client="cw-media-demo", Device="cli", DeviceId="cw-media-demo
 
 say() { printf '%s\n' "$*" >&2; }
 
+# `Authorization`, not `X-Emby-Authorization`: Jellyfin 12 reads only the
+# former, and its OpenAPI document declares exactly one security scheme
+# (`apiKey`, in header, named `Authorization`). The wizard steps below happen
+# to be anonymous under FirstTimeSetup, so the dead name went unnoticed; the
+# key step after them is authenticated and would have 401'd on it.
+# TOKEN is empty until `holder_key` authenticates.
+TOKEN=""
 api() { # method path [json]
-  local m="$1" p="$2" body="${3:-}"
+  local m="$1" p="$2" body="${3:-}" auth="$AUTH"
+  [ -n "$TOKEN" ] && auth="$AUTH, Token=\"$TOKEN\""
   if [ -n "$body" ]; then
-    curl -sS -f -X "$m" "http://$ORIGIN$p" -H "Content-Type: application/json" -H "X-Emby-Authorization: $AUTH" -d "$body"
+    curl -sS -f -X "$m" "http://$ORIGIN$p" -H "Content-Type: application/json" -H "Authorization: $auth" -d "$body"
   else
-    curl -sS -f -X "$m" "http://$ORIGIN$p" -H "X-Emby-Authorization: $AUTH"
+    curl -sS -f -X "$m" "http://$ORIGIN$p" -H "Authorization: $auth"
   fi
+}
+
+# The holder declares its OWN key for its OWN origin, on its own machine. No
+# viewer ever holds it -- that is the whole point of hm-1, and a holder who
+# skips this ships a library whose /Items answers 401 to every housemate.
+# The value is the WHOLE credential the header carries, not the bare key:
+# Jellyfin 12 dropped X-Emby-Token, X-MediaBrowser-Token and ?api_key=.
+holder_key() {
+  TOKEN="$(api POST /Users/AuthenticateByName '{"Username":"demo","Pw":"demo"}' \
+    | sed -n 's/.*"AccessToken":"\([^"]*\)".*/\1/p')"
+  [ -n "$TOKEN" ] || { say "could not authenticate as demo/demo -- skipping the declaration"; return 1; }
+  api GET /Auth/Keys | grep -q '"AppName":"cw-media-demo"' || api POST "/Auth/Keys?app=cw-media-demo" >/dev/null
+  # One line per key, then pick OURS by name. `AccessToken` precedes `AppName`
+  # inside an item, so a forward-looking grep reads the next key's token --
+  # exercised 2026-09-12 against a live 12.0.0 holding two app keys, and this
+  # form selects the right one where `grep -A2` selected the other.
+  local key
+  key="$(api GET /Auth/Keys | sed 's/},{/}\
+{/g' | grep '"AppName":"cw-media-demo"' | sed -n 's/.*"AccessToken":"\([^"]*\)".*/\1/p' | head -1)"
+  [ -n "$key" ] || { say "no API key came back -- skipping the declaration"; return 1; }
+  printf 'MediaBrowser Token="%s"' "$key" | "${SVRN:-svrn}" mesh media declare authorization
 }
 
 holder_up() {
@@ -86,15 +115,24 @@ holder_up() {
     say "wizard complete."
   fi
 
+  holder_key || say "declaration skipped -- viewers will get 401 from /Items until you run it by hand"
+
   cat >&2 <<EOF
 
 holder is up: http://$ORIGIN (loopback only; login demo / demo)
 library:      $ROOT/media
+credential:   declared as \`authorization\` under ~/.svrnmesh/secrets/media/
+              (0600, never leaves this machine, never printed back)
 
-declare it to the mesh — in ~/.svrnmesh/config.toml under [iroh]:
+one line left, and it is a config edit because publishing an ORIGIN is still a
+config line — \`svrn mesh media declare\` declares a CREDENTIAL, not an origin.
+In ~/.svrnmesh/config.toml under [iroh]:
   media_origin = "$ORIGIN"
 then:  svrn daemon stop; svrn daemon start
+
 a member then runs:  svrn mesh media <this node's name>
+and a shim fans out:  POST /v1/mesh/media/fanout {"path":"/Items?..."} — which
+now answers 200 for this node instead of 401, because of the declaration above.
 EOF
 }
 
