@@ -42,16 +42,40 @@ floor        = 0.0
 floor_basis  = "structural: PERCENT of catalogue fetches the caller serves while holding a credential file. Zero is the claim, not an aspiration — tokens.json is gone from ~/dev/house-mesh (664abcc) and library.py is one fanout call again."
 target       = 0.0
 direction    = "near_zero"
-instrument   = "`cargo test -p commonwealth-rails --test two_daemons house_mesh_publish_roundtrip` for the mechanism, plus the two conditions this bar was declared with and which the prose `target` used to carry: catalogue NON-EMPTY and tokens.json ABSENT on the caller. Both, or the run says nothing — an empty catalogue with no token file passes vacuously."
-goodhart     = "this can hit target while the predicate is still false if the caller holds the credential somewhere that is not a file — an env var, a shell history, a pasted header — because the absence of tokens.json is not the absence of a shared credential, only of one storage shape for it"
+instrument   = "`cargo test -p commonwealth-rails --test two_daemons house_mesh_publish_roundtrip` for the mechanism, plus the two conditions this bar was declared with and which the prose `target` used to carry: catalogue NON-EMPTY and tokens.json ABSENT on the caller. Both, or the run says nothing — an empty catalogue with no token file passes vacuously. The live-origin leg is `python3 library.py check` and `list` from a node holding no credential, against a peer running a real Jellyfin; `check` is not a substitute for `list`, because `check` asks an UNAUTHENTICATED path (`/System/Info/Public`) and so passes while every catalogue fetch 401s."
+goodhart     = "this can hit target while the predicate is still false if the caller holds the credential somewhere that is not a file — an env var, a shell history, a pasted header — because the absence of tokens.json is not the absence of a shared credential, only of one storage shape for it. A second way, found by running it 2026-09-12: a holder can have DECLARED and not be SERVING. `read_declared_in` is called once, at acceptor construction (sovereign-mesh/src/iroh_access.rs:620); `svrn mesh media declare` then tells the operator to `svrn daemon reload`, and reload answers `no config changes detected` because ConfigDiff (sovereign-mesh/src/admin_http.rs:299-342) tracks models plus a fixed restart list carrying iroh.enabled and iroh.transport but NOT media_origin, media_allow or iroh.apps. Three affirmative messages, nothing applied. Any verdict on this bar must read the FANOUT, never the declaration."
 status       = "open"
-kill         = "the live-Jellyfin half is NEVER-RAN and stays that way until someone runs it: the /Items query string and the stream path come from Jellyfin API docs, not from a run. A verdict that reports this bar met on the mechanism alone is reporting half a claim."
+kill         = "the live-Jellyfin half SPLIT on 2026-09-12 and one piece is still never-ran. The PATHS ran and passed; the MERGED CATALOGUE has not, and is unprovable on one machine by construction — `origin_fanout` never asks this node (sovereign-mesh/src/origin_fanout.rs:22-25), so a catalogue can only come from a peer. A verdict that reports this bar met on the mechanism, or on the paths, or on `library.py check`, is reporting part of a claim."
 # LANDED 2026-09-11, commit c866c91cb. The mechanism is proven on the wire by
 # the predicate test; tokens.json is gone from ~/dev/house-mesh (664abcc) and
-# library.py is one fanout call again. What has NOT run is the same flow
-# against a real Jellyfin: the /Items query string and the stream path come
-# from Jellyfin's API docs, not from a run. That half stays never-ran and is
-# honest about it.
+# library.py is one fanout call again.
+#
+# 2026-09-12, run from Alexs-MacBook-Pro (37f17554) against peer RuggedFox's
+# Jellyfin 12.0.0 and a local one. WHAT RAN AND PASSED:
+#   - `library.py check` over POST /v1/mesh/media/fanout -> `served` row from
+#     the PEER, 138-158 ms, caller holding no credential.
+#   - `/Items?Recursive=true&IncludeItemTypes=Movie&fields=ProviderIds` -> 200,
+#     items carrying ProviderIds.Imdb. library.py merges on that key and it is
+#     in the real payload, not only in the docs.
+#   - `/Videos/{id}/stream?static=true` through the peer bridge -> 200,
+#     122,048,071 bytes at 5.25 MB/s, and `Range: bytes=60000000-68388607` ->
+#     206 with exactly 8,388,608 bytes. Seeking is real, not a full re-read.
+#     The doc's un-suffixed `/Videos/{id}/stream` also serves (video/quicktime).
+#
+# WHAT THE RUN FOUND, which is why the never-ran was worth keeping honest:
+# Jellyfin 12.0.0 removed X-Emby-Token, X-MediaBrowser-Token and ?api_key=.
+# All three 401 on /Items; only `Authorization: MediaBrowser Token="<key>"`
+# returns 200, and its OpenAPI document declares one security scheme (apiKey,
+# in header, named Authorization) with zero mentions of the old names. Every
+# example shipped said x-emby-token. Fixed in 7f3ca83f8; the holder's own
+# script never declared anything at all, fixed in d515b6f0d.
+#
+# STILL NEVER-RAN, and it needs a second machine: the merged catalogue. The
+# fanout to RuggedFox returns `served 401 0B` because that holder has not
+# declared. One command there closes it, and it must be followed by a RESTART,
+# not the reload the verb suggests (see `goodhart`):
+#   printf 'MediaBrowser Token="%s"' "$KEY" | svrn mesh media declare authorization
+#   svrn daemon stop && svrn daemon start
 # Why this is the first rung despite P1 being the more visible verb: it deletes
 # a PRACTICE (25 people mailing each other API keys), and `Forward::Http` at
 # commonwealth-media/src/identity.rs:106-109 already carries the header vec.
