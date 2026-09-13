@@ -1309,10 +1309,10 @@ def turn_bundles(path: Path, cap: int = 3000) -> list[dict]:
             except Exception:
                 continue
             content = (rec.get("message") or {}).get("content")
-            if not isinstance(content, list):
-                continue
             when = rec.get("timestamp") or ""
             if rec.get("type") == "assistant":
+                if not isinstance(content, list):
+                    continue
                 for b in content:
                     if not isinstance(b, dict):
                         continue
@@ -1325,17 +1325,23 @@ def turn_bundles(path: Path, cap: int = 3000) -> list[dict]:
                         inp = json.dumps(b.get("input", {}))[:240]
                         events.append(("call", f"{nm}({inp})", when))
             elif rec.get("type") == "user":
-                for b in content:
-                    if isinstance(b, dict) and b.get("type") == "tool_result":
-                        c = b.get("content")
-                        if isinstance(c, list):
-                            c = " ".join(x.get("text", "") for x in c
-                                         if isinstance(x, dict))
-                        events.append(("result", str(c)[:600], when))
-                else:
-                    if not any(isinstance(b, dict) and b.get("type") == "tool_result"
-                               for b in content):
-                        events.append(("user", "", when))
+                # A string-shaped record is the OPERATOR and resets the pool.
+                # This read `isinstance(content, list)` and skipped them, so
+                # the pool never reset on an operator turn and accumulated
+                # across the whole session -- which is the entire reason
+                # bundles measured a median of 83,306 chars and "whole-turn
+                # evidence does not fit" looked like a fact about the window.
+                if user_text(content) is not None:
+                    events.append(("user", "", when))
+                    continue
+                if isinstance(content, list):
+                    for b in content:
+                        if isinstance(b, dict) and b.get("type") == "tool_result":
+                            c = b.get("content")
+                            if isinstance(c, list):
+                                c = " ".join(x.get("text", "") for x in c
+                                             if isinstance(x, dict))
+                            events.append(("result", str(c)[:600], when))
 
     # The pool resets on a USER message, never on a text block.
     #
@@ -1675,16 +1681,13 @@ def sprawl_session(path: Path) -> dict:
             except Exception:
                 continue
             content = (rec.get("message") or {}).get("content")
+            if rec.get("type") == "user":
+                t = user_text(content)
+                events.append(("user", t) if t else ("result", ""))
+                continue
             if not isinstance(content, list):
                 continue
-            if rec.get("type") == "user":
-                if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
-                    events.append(("result", ""))
-                    continue
-                txt = " ".join(b.get("text", "") for b in content
-                               if isinstance(b, dict) and b.get("type") == "text")
-                events.append(("user", strip_reminders(txt)))
-            elif rec.get("type") == "assistant":
+            if rec.get("type") == "assistant":
                 for b in content:
                     if not isinstance(b, dict):
                         continue
@@ -1751,17 +1754,14 @@ def sprawl_labels(path: Path, short_words: int = 30, overlap: float = 0.12) -> l
             except Exception:
                 continue
             content = (rec.get("message") or {}).get("content")
+            if rec.get("type") == "user":
+                t = user_text(content)
+                if t:
+                    events.append(("user", t))
+                continue
             if not isinstance(content, list):
                 continue
-            if rec.get("type") == "user":
-                if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
-                    continue
-                txt = strip_reminders(" ".join(
-                    b.get("text", "") for b in content
-                    if isinstance(b, dict) and b.get("type") == "text"))
-                if txt.strip():
-                    events.append(("user", txt))
-            elif rec.get("type") == "assistant":
+            if rec.get("type") == "assistant":
                 for b in content:
                     if isinstance(b, dict) and b.get("type") == "text":
                         t = strip_reminders(b.get("text", ""))
