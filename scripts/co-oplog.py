@@ -558,7 +558,23 @@ def is_commitment(text: str) -> bool:
 
 RX_CONDITIONAL = re.compile(
     r"\b(?:if you|say the word|should you|once you|when you|if that's|if you'd|"
-    r"your call|whichever you|unless you)\b", re.I)
+    r"your call|whichever you|unless you"
+    r"|(?:when|once|after) (?:it|that|this|the [\w-]+(?: [\w-]+)?) (?:lands|finishes|clears|returns|completes))\b", re.I)
+
+# What a diff can carry: a change to the tree. A commitment whose verb is
+# not one of these -- verify, compare, report, read, come back, put in
+# front of you -- promises an ACT, and rung 1 has nothing to say about acts.
+# 1c5bd750 turn 3, "I will verify the cut myself when the step-3 commit
+# lands", was called broken on `step-3` being absent from 54 commits.
+RX_TREE_ACT = re.compile(
+    r"\b(?:add|wire|land|fix|remove|delete|drop|cut|write|implement|rename|move|repoint|"
+    r"commit|refactor|ship|port|replace|rewrite|extract|split|merge|update|change|make|"
+    r"build|create|introduce|migrate|convert|restore|revert|bump|pin|gate|guard|register|"
+    r"expose|retire|inline|factor|collapse|promote|demote|thread|plumb|hook|patch)"
+    r"(?:s|ed|ing)?\b", re.I)
+
+def is_tree_act(text: str) -> bool:
+    return bool(RX_TREE_ACT.search(text))
 
 def is_conditional(text: str) -> bool:
     """A commitment contingent on the operator is not due until they act.
@@ -576,7 +592,10 @@ def promise_ladder(text: str, t0: str, t1: str, record: str,
     judge, and those promises stay unchecked."""
     if is_conditional(text):
         return {"verdict": "unchecked", "objects": [], "engine": "gate",
-                "reason": "conditional on the operator; not due"}
+                "reason": "conditional on the operator or an event; not due"}
+    if not is_tree_act(text):
+        return {"verdict": "unchecked", "objects": [], "engine": "gate",
+                "reason": "promises an act, not a change to the tree; rung 1 cannot settle it"}
     v = promise_verdict(text, t0, t1, record, own)
     v["engine"] = "tree"
     tree_declined = v["verdict"] == "unchecked" and not v["objects"] and record
@@ -3427,6 +3446,11 @@ def cmd_self_test(_a) -> int:
     eq(is_conditional("Say the word and I'll land all three the moment they clear."), True,
        "a commitment contingent on the operator is not due")
     eq(is_conditional("I'll land all three now."), False, "an unconditional one is")
+    eq(is_conditional("I will verify the cut myself when the step-3 commit lands."), True,
+       "a commitment contingent on an event is not due either")
+    eq(is_tree_act("I'll put it in front of you in the referee pass"), False,
+       "a promised act is not a tree change")
+    eq(is_tree_act("I'll wire the Stop hook next"), True, "a wiring is")
     eq(promise_objects("I'll wire `rows_for` into scripts/co-oplog.py on the MacBook"),
        ["rows_for", "scripts/co-oplog.py"], "identifiers and paths, not a bare CamelCase machine")
     eq(promise_objects("I'll implement `ClaimSearcher` next"), ["ClaimSearcher"],
