@@ -1740,7 +1740,38 @@ floor        = 21.0
 floor_basis  = "workspace crates in sovereign-desktop/src-tauri/Cargo.toml at 2df562caa, 2026-09-11; the daemon-hosting subset is sovereign-cli-daemon, sovereign-mesh, sovereign-runtime-recipe, corpus-engine, sovereign-gliner, sovereign-inference, sovereign-tools, commonwealth-core, commonwealth-state. Lifecycle code: 1,990 production lines, ~271 of which survive"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "TWO HALVES, and either alone is a green gate enforcing nothing. Both landed svt-4 (2026-09-11) and both watched red. (1) `cd corpus-engine && cargo xtask layer-gate` — the [thin_surfaces] pass in quality/ARCH_LAYERS.toml: no declared surface REACHES a daemon-assembling crate, transitively, over Cargo's own graph. (2) `cd corpus-engine && cargo xtask lifecycle-gate` — the census: no surface names the process-control API (starts / detaches / retains / reaps), with one sanctioned bring-up decider that may start and detach and may not retain or reap. Both run in `cargo xtask quality` and the CI gates job."
+# WAS PROSE UNTIL 2026-09-12, which is why this bar had zero measurement
+# rows while both its gates were green: `co-lineage measure` runs `instrument`
+# as a command and takes the last stdout line as the number, and a paragraph
+# emits nothing. The paragraph is kept here because it is the reason the bar
+# has TWO HALVES, and either alone is a green gate enforcing nothing. Both
+# landed svt-4 (2026-09-11) and both watched red.
+# 
+# (1) `cargo xtask layer-gate` - the [thin_surfaces] pass in
+# quality/ARCH_LAYERS.toml: no declared surface REACHES a daemon-assembling
+# crate, transitively, over Cargo's own graph.
+# (2) `cargo xtask lifecycle-gate` - the census: no surface names the
+# process-control API (starts / detaches / retains / reaps), with one
+# sanctioned bring-up decider that may start and detach and may not retain or
+# reap. Both run in `cargo xtask quality` and the CI gates job.
+# 
+# THE NUMBER is open violations across both halves plus the exception rows the
+# predicate counts: exception rows + (1 if layer-gate is red) + the
+# lifecycle-gate's own BURNING-DOWN count, which that gate prints and labels
+# "the bar's count". A red layer-gate contributes 1, not its finding count -
+# coarse, but monotone in the only direction that matters here, since any
+# nonzero means the bar is not met. An unparseable lifecycle line exits
+# non-zero and records could-not-judge rather than defaulting to 0 (ARCH
+# principle 6).
+instrument   = '''
+rows=$(grep -c 'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml || true)
+cd corpus-engine || exit 1
+cargo xtask layer-gate >/dev/null 2>&1; layer_red=$?
+bd=$(cargo xtask lifecycle-gate 2>&1 | sed -n 's/.*ledger: \([0-9][0-9]*\) site(s) BURNING-DOWN.*/\1/p')
+[ -n "$bd" ] || exit 1
+echo $(( rows + (layer_red == 0 ? 0 : 1) + bd ))
+'''
+timeout_s    = 900
 goodhart     = "a surface can stop MANAGING a daemon while still LINKING one — the management calls go and the crate edge stays, which is exactly the state the predicate caught on 2026-09-11"
 kill         = "K3 - in-process hosting is a DECLARED capability, not a fallback: a build that brings up a backend says so by name, with an owner and a reason. iOS is the standing case (no fork/exec, so a sidecar is impossible), and it is why the embedded sink is not retired. Anything else that cannot be served by a daemon the app does not own goes to the operator as a declared exception with a DEFAULTS_LEDGER row and a review-by date - never a silent in-process path."
 
@@ -1845,7 +1876,16 @@ floor        = 12.0
 floor_basis  = "attach_construction_census.rs at c7e7d6a73, 2026-09-10: 12 needles, each pinned by name and count; 14 was the first-run basis (2026-09-08) and lost one census error + one defect. Remaining consumer term, measured at 65b92cd15: 49 attach-time needle reads across 13 files, no fork on any of them. R1 (2026-09-12) took the census total 6 -> 5 by deleting four zero-reader constructions and R2 took it 5 -> 4 by repointing open_store's five readers onto routes; the live number is the census assertion, not this line"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "cargo test -p sovereign-desktop --test attach_construction_census"
+# The census prints `sv-attach-pure-client value=<n>` BEFORE it asserts, and
+# this reads that line - so the verdict is computed by the one decider
+# (co-lineage) from the number, never inferred from the test's exit code. A
+# census that only panics emits nothing to measure, which records
+# could-not-judge when the truth is a number that moved.
+instrument   = '''
+scripts/with-cargo-lock.sh cargo test -p sovereign-desktop --test attach_construction_census -- --nocapture 2>&1 \
+  | sed -n 's/^sv-attach-pure-client value=\([0-9][0-9]*\)$/\1/p' | tail -1
+'''
+timeout_s    = 2700
 goodhart     = "the census counts needles an author listed, so it reaches 0 when the LIST is exhausted, not when construction is. It also moved 14->12 by re-measuring with no code change — a number that moves when you look again is an opinion with a number attached"
 kill         = "K1 - a capability that genuinely cannot cross without a shim wider than a route goes to the operator as a DECLARED closed-set addition with a ledger row, never a silent in-process fallback. The K2/cw-lift precedent: the honest deliverable may be a profile, and the objective sentence survives it."
 
@@ -1896,7 +1936,38 @@ floor        = 0.0
 floor_basis  = "twin enumeration rung -1 (6 families); rung 1 deleted corpus status, rung 2 deleted model residency and STRUCK the GGUF row as not-a-twin (measured), rung 4 deleted the reading DTOs, STRUCK the health row as not-a-twin (measured), and deleted the mesh-status enum-string twin (reshaped by measurement from the 'up-convert DTO' premise): 0 remain"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "(per-family parity tests land at rungs 1-4; the enumeration is re-derived from the ladder rows' file:line at each rung's landing verdict)"
+# WAS PROSE UNTIL 2026-09-12 ("per-family parity tests land at rungs 1-4; the
+# enumeration is re-derived from the ladder rows' file:line at each rung's
+# landing verdict"), which described where the tests are without naming one,
+# so the bar could not be measured. THE NUMBER is how many of the four REAL
+# twin families still hold a second implementation - the four the rungs
+# deleted, named in sv-twin-census's own numbered list and each carrying the
+# one-decider test that landed with it:
+# 
+#   corpus status       sovereign-cli-llm    corpus_status_one_decider
+#   model residency     sovereign-cli-daemon model_residency_one_decider
+#   reading wire types  sovereign-desktop    reading_wire_types_census
+#   mesh member-status  sovereign-desktop    mesh_status_one_decider
+# 
+# GGUF and health are NOT in the list: both were struck as not-a-twin by
+# measurement (floor_basis), and counting them would re-inflate the
+# denominator with families the campaign proved it never had.
+# 
+# A family whose test binary will not BUILD makes no claim, so the instrument
+# exits non-zero and the row records could-not-judge - scoring an unbuildable
+# crate as a surviving twin would be a substitution (ARCH principle 6).
+instrument   = '''
+fail=0
+for t in "-p sovereign-cli-llm --test corpus_status_one_decider" \
+         "-p sovereign-cli-daemon --test model_residency_one_decider" \
+         "-p sovereign-desktop --test reading_wire_types_census" \
+         "-p sovereign-desktop --test mesh_status_one_decider"; do
+  scripts/with-cargo-lock.sh cargo test $t --no-run >/dev/null 2>&1 || exit 1
+  scripts/with-cargo-lock.sh cargo test $t >/dev/null 2>&1 || fail=$((fail+1))
+done
+echo $fail
+'''
+timeout_s    = 3600
 goodhart     = "twins are counted per FAMILY and families are enumerated by hand, so a capability nobody enumerated is twinned for free; 'HOLDING at 0' says the known six stayed dead, not that no seventh exists"
 kill         = "K2 - if parity cannot assert because the surfaces render different GRANULARITIES (not different answers), the instrument is re-derived, not the divergence forgiven."
 
@@ -1949,7 +2020,27 @@ floor_basis  = "rungs 1, 2 and 4 landed their controls, 2026-09-08/09; 0 before"
 # control per REAL twin family, which is 4.
 target       = 4.0
 direction    = "higher_is_better"
-instrument   = "scripts/twin-census.py over quality/twin-plants.toml (the runner refuses a dirty tree by its own rule, so a landing on an unclean tree records the by-hand plant -> red -> md5-verified restore instead)"
+# THE NUMBER is the proved-red count from scripts/twin-census.py's own
+# summary.json - families whose census went red on a planted twin AND named
+# the assertion that caught it. The registry is this bar's mechanization by
+# its own declaration, not by this file's assumption: quality/twin-plants.toml
+# [meta] reads claim = "quality/campaigns/sv-surface.toml - THE CLAIM,
+# construction 3".
+# 
+# Target 4 is therefore a FLOOR, not a ceiling - one control per real twin
+# family, the four the rungs deleted - and the registry has since grown past
+# it. direction = higher_is_better reads it that way.
+# 
+# `--worktree HEAD` is load-bearing twice over: the runner refuses a dirty
+# tree by its own rule, and the plants are MUTATIONS OF PRODUCTION SOURCE, so
+# measuring in this checkout would corrupt any soak or build sharing it.
+instrument   = '''
+scripts/twin-census.py --worktree HEAD >/dev/null 2>&1
+d=$(ls -1d target/twin-census/*/ 2>/dev/null | tail -1)
+[ -n "$d" ] || exit 3
+python3 -c "import json,sys;print(json.load(open(sys.argv[1]+'summary.json'))['counts']['proved-red'])" "$d"
+'''
+timeout_s    = 14400
 goodhart     = "each control plants the spelling its own census knows, so green means 'the planted twin is caught', never 'a twin cannot return' — the inherited needle-list weakness, recorded in the bar and still true"
 kill         = "K3 - a rung that mints a registry, taxonomy or order instead of a route + test is off-thesis; the operator's quality-campaign mandate ('no new machinery unless a bug needs one') governs here too."
 
@@ -1977,7 +2068,16 @@ floor        = 0.0
 floor_basis  = "sovereign-mobile src-tauri/tests/census.rs, 2026-09-09: no wire mirror in the crate, with two permanent plants keeping the detector proven (a planted PlantedServerEvent was watched red naming 're-declares 3 of TurnFrame'); the 1.0 basis was remote/dto.rs's ServerEvent mirror + remote/client.rs's inline DTOs, both deleted at 4e1f99f55"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "cargo test -p sovereign-mobile --test census; a second client crate or a re-minted wire mirror in any surface crate is a red review finding against this bar"
+# The census prints `sv-one-client value=<n>` BEFORE it asserts, for the same
+# reason sv-attach-pure-client does: the verdict is computed from the number
+# by the one decider, not read off an exit code. A second client crate or a
+# re-minted wire mirror in any surface crate is a red review finding against
+# this bar, which no census can see - that half stays human.
+instrument   = '''
+scripts/with-cargo-lock.sh cargo test -p sovereign-mobile --test census -- --nocapture 2>&1 \
+  | sed -n 's/^sv-one-client value=\([0-9][0-9]*\)$/\1/p' | tail -1
+'''
+timeout_s    = 1800
 goodhart     = "counting client families reaches 1 when the SPELLINGS converge; a single named client that still assembles the stack in-process satisfies it while the predicate stays false"
 kill         = "a surface needing a transport the client family cannot express (mobile's iroh bridge is the live candidate) grows the FAMILY, not a private client - a new seam is a recorded decision (TOPOLOGY law 8 shape)."
 
@@ -1993,20 +2093,42 @@ kill         = "a surface needing a transport the client family cannot express (
 
 [[rung]]
 id = "svt-5-predicate"
+title  = "The predicate counts the desktop exception rows"
+status = "done"
+sha    = ["ffff8041e"]
 moves = ["sv-no-daemon-management"]
 one_line = "The row-count grep joins the predicate check and is watched red with 24 rows (ffff8041e)"
 
 [[rung]]
 id = "svt-3-route-migration"
+title  = "sovereign-store leaves: conversations, chat-activity and the record route"
+status = "done"
+sha    = ["ed959fe29"]
 moves = ["sv-no-daemon-management", "sv-attach-pure-client"]
 one_line = "sovereign-store leaves: enabled_corpora on GET /v1/conversations/{id}, GET /v1/admin/chat-activity, POST .../messages/record, the correction hint on reenrich-note (ed959fe29)"
 
 [[rung]]
 id = "svt-6-engine"
+title  = "corpus-engine, the authoring harness and sovereign-tools leave the desktop"
+status = "partial"
+sha    = ["e8ee7c288", "a4bf4d074", "8a564321e", "d33ae773e"]
+# PARTIAL, not done: every dependency edge in this rung's one_line is cut and
+# the gates are green, but its last done-when clause is "desktop soak green"
+# and the soak is the run this rung has never had. A rung marked done on the
+# strength of the half that compiles is exactly the green-gate-enforcing-
+# nothing shape the predicate above exists to refuse (ARCH principle 5).
 moves = ["sv-no-daemon-management", "sv-attach-pure-client", "sv-capability-twins"]
 one_line = "corpus-engine, sovereign-authoring-harness and sovereign-tools leave: four boot chores deleted as daemon duplicates, POST /internal/corpus/recipes/{test,harness} as jobs, CorpusEngine::new and the slot gone, the 15 local_corpus DTOs moved to daemon_wire; desktop soak green"
 
 [[rung]]
 id = "svt-7-assets"
+title  = "sovereign-gliner, sovereign-inference and sovereign-core leave; the daemon owns setup and its weights"
+status = "partial"
+sha    = ["32c7689ae", "af11c397f", "c14c9b19d"]
+# PARTIAL on the same rule as svt-6. Two of the three done-when clauses are
+# discharged: the 24 exception rows are deleted (grep reads 0) and the
+# predicate check exits 0 - MEASURED 2026-09-12 in the sovereign-vulkan
+# toolbox, layer-gate and lifecycle-gate both clean, 0 sites BURNING-DOWN.
+# The third is "app run by hand and by soak", and neither run has happened.
 moves = ["sv-no-daemon-management", "sv-capability-twins", "sv-attach-pure-client"]
 one_line = "sovereign-gliner, sovereign-inference and sovereign-core leave: first run SPAWNS the sidecar's `setup --json` verb (the daemon cannot serve HTTP unconfigured, measured 2026-09-12); after setup one daemon asset-download job (gguf + gliner), GET /internal/ner/model, GET /v1/admin/hardware + setup catalog/slot; the 24 rows deleted as STALE, predicate check exit 0, app run by hand and by soak"

@@ -204,6 +204,14 @@ fn no_wire_mirror_in_this_crate() {
         }
     }
 
+    // The bar's NUMBER, printed before the assertion fires — `sv-surface`'s
+    // sv-one-client row reads this line through `co-lineage measure` and the
+    // verdict is computed there from the value, never from this test's exit
+    // code. A census that only panics emits nothing to measure, so a
+    // regression would record `could-not-judge` when the truth is a number
+    // that moved (ARCH principle 6).
+    println!("sv-one-client value={}", offences.len());
+
     assert!(
         offences.is_empty(),
         "sv-one-client: the client family must be the only consumer of the \

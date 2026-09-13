@@ -310,6 +310,19 @@ fn the_desktop_names_no_inference_stack() {
 #[test]
 fn the_attach_construction_floor_is_pinned() {
     let src = state_rs();
+
+    // The bar's NUMBER, printed before any assertion fires. `sv-surface`'s
+    // sv-attach-pure-client row reads this line through `co-lineage measure`,
+    // and the verdict is computed there from the value against the bar's
+    // target — never from this test's exit code. A census that only panics
+    // emits nothing to measure, so a regression records `could-not-judge`
+    // when the truth is a number that moved (ARCH principle 6).
+    let live: usize = FLOOR
+        .iter()
+        .map(|needle| src.match_indices(needle.hay).count())
+        .sum();
+    println!("sv-attach-pure-client value={live}");
+
     let mut total = 0usize;
     for needle in FLOOR {
         let found = src.match_indices(needle.hay).count();
