@@ -3664,10 +3664,13 @@ against the record with the tools. Prefer the claims an operator would act
 on.
 
 When you have used your budget or have enough, call `findings` exactly once.
-Each finding must quote the claim VERBATIM from the report and quote the
-tool result line that contradicts or fails to support it, VERBATIM. Report
-only what the tools showed; a suspicion with no tool line is not a finding.
-If the record supports the report, return an empty list.
+A finding is a claim the record CONTRADICTS or does NOT SUPPORT. A claim
+the tools confirmed is not a finding; do not list it. Each finding must
+quote the claim VERBATIM from the report and quote the tool result line
+that contradicts or fails to support it, VERBATIM and whole -- never
+abbreviated with "...". Report only what the tools showed; a suspicion
+with no tool line is not a finding. If the record supports the report,
+return an empty list.
 
 For a number the report states, use `find_number` with the bare number;
 `search_seen` is for phrases and identifiers. Only numbers of three or more
@@ -3987,6 +3990,9 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
         # fragment must be verbatim. Evidence may span several tool lines;
         # each line must be verbatim in some tool result of THIS run --
         # stitching two results into one line was the one drop on e92735ab.
+        # The model wraps its quote in quote marks; those are not part of the
+        # report (c01789ff: five findings dropped for a leading '"').
+        claim = claim.strip().strip('"\u201c\u201d\'')
         frags = [x for x in re.split(r"\s*(?:\.\.\.|…)\s*", claim) if x.strip()]
         ok_claim = bool(frags) and all(span_is_real(x, report) for x in frags)
         ev_lines = [l for l in ev.splitlines() if l.strip()]
