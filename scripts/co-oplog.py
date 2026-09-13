@@ -3752,7 +3752,9 @@ does not answer the ask, or answers a narrower or different one.
 
 First write SUSPICIONS (no tools): 3 to 6 lines, each naming a claim
 fragment verbatim, why you doubt it, and which tool settles it. One line
-must judge the report against the operator's own words. Then check the
+must judge the report against the operator's own words and the standing
+objective (`operator_asks`, `objective`): does this work serve what was
+asked, or something narrower, easier, or different? Then check the
 suspicions with tools. Every fact you use comes from a tool result or the
 story. Then call `findings` exactly once. Each finding quotes the claim
 VERBATIM from the report and the evidence VERBATIM and whole from a tool
@@ -3811,6 +3813,12 @@ INVESTIGATOR_TOOLS = [
                        "(300 chars each). Use it to zoom into a turn the summary story compressed.",
         "parameters": {"type": "object", "properties": {"from_turn": {"type": "integer"}, "to_turn": {"type": "integer"}},
                        "required": ["from_turn", "to_turn"]}}},
+    {"type": "function", "function": {
+        "name": "objective",
+        "description": "The standing objective this session's work serves, from its banked frame or its "
+                       "predecessor's: the outcome, its Done-when, and the goal. The throughline an "
+                       "off-track finding is judged against.",
+        "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
         "name": "operator_asks",
         "description": "Every message the operator sent before the report, verbatim (up to 600 chars each), "
@@ -3914,6 +3922,31 @@ def excerpt(line: str, at: int, width: int = 160) -> str:
         return l[:width]
     lo = at - 60
     return "…" + l[lo:lo + width]
+
+def frame_objective(sid: str, hops: int = 5) -> tuple[str, str, str]:
+    """(objective, goal, source sid) from the session's frame, following
+    `predecessor` while the frame carries no Objective. The throughline a
+    report is judged against: a session drifts from the standing objective
+    while every message stays consistent with the one before it (operator
+    2026-09-13), and the operator's asks inside one session cannot show
+    that -- the frame lineage can."""
+    seen = set()
+    while sid and sid not in seen and hops > 0:
+        seen.add(sid); hops -= 1
+        d = SESSIONS_DIR / sid
+        fm = d / "frame.md"
+        obj = goal = ""
+        if fm.exists():
+            t = fm.read_text(errors="replace")
+            m = re.search(r"^## Objective\s*\n(.*?)(?=^## |\Z)", t, re.M | re.S)
+            g = re.search(r"^## Goal\s*\n(.*?)(?=^## |\Z)", t, re.M | re.S)
+            obj = (m.group(1) if m else "").strip()
+            goal = (g.group(1) if g else "").strip()
+        if obj:
+            return obj, goal, sid
+        pred = d / "predecessor"
+        sid = pred.read_text().strip() if pred.exists() else ""
+    return "", "", ""
 
 class Investigation:
     """One report, one budget, one tool log."""
@@ -4038,6 +4071,13 @@ class Investigation:
                     keep.append(l)
             out = "\n".join(keep)
             return out[:12000] if out else f"NOTHING: no turns {lo}..{hi} before the report"
+        if name == "objective":
+            obj, goal, src = frame_objective(self.path.stem)
+            if not obj:
+                return "NO FRAME: this session and its predecessors banked no objective"
+            own = src == self.path.stem
+            return (f"OBJECTIVE (frame of {src[:8]}{'' if own else ', inherited by this session'}):\n{obj[:1500]}"
+                    + (f"\n\nGOAL:\n{goal[:600]}" if goal else ""))
         if name == "operator_asks":
             asks = [f"turn {i}: {' '.join(t.split())[:600]}" for i, t in self.obs["asks"] if i < self.turn]
             return "\n".join(asks[-12:]) if asks else "NO OPERATOR MESSAGE before this report"
@@ -5035,6 +5075,20 @@ def cmd_self_test(_a) -> int:
         ]) + "\n")
         _o = session_observations(_t)
         eq(len(_o["results"]), 2, "a task-notification and a bridge message are results")
+        # The throughline: an objective is read from the frame lineage.
+        _sd = Path(_d) / "sessions"
+        (_sd / "child").mkdir(parents=True); (_sd / "parent").mkdir()
+        (_sd / "child" / "frame.md").write_text("---\nschema: x\n---\n\n## Objective\n\n## Goal\n\nfinish the child\n")
+        (_sd / "child" / "predecessor").write_text("parent\n")
+        (_sd / "parent" / "frame.md").write_text("---\n---\n\n## Objective\n\nA verification layer. Done when: read by hand.\n\n## Goal\n\nrun it\n\n## State\n\nx\n")
+        _saved_sd = globals()["SESSIONS_DIR"]; globals()["SESSIONS_DIR"] = _sd
+        try:
+            eq(frame_objective("child"), ("A verification layer. Done when: read by hand.", "run it", "parent"),
+               "an empty Objective follows the predecessor")
+            eq(frame_objective("parent")[2], "parent", "a frame with an Objective is its own source")
+            eq(frame_objective("nobody"), ("", "", ""), "no frame, no objective")
+        finally:
+            globals()["SESSIONS_DIR"] = _saved_sd
         _t2 = Path(_d) / "n.jsonl"
         _t2.write_text("\n".join(json.dumps(r) for r in [
             {"type": "user", "message": {"content": "count the lines please"}},
