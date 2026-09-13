@@ -56,6 +56,75 @@ minted  = "2026-09-10"
 
 # ── sovereign-desktop ──────────────────────────────────────────────────────
 
+
+# ── RETIRED 2026-09-13: THIRTEEN DESKTOP PLANTS, BECAUSE THE TWIN BECAME
+#    UNCONSTRUCTIBLE — NOT BECAUSE THE CENSUS STOPPED MATTERING ────────────────
+#
+# Read this before adding any of them back. The first measurement of
+# sv-surface's sv-twin-census bar (2026-09-13) came back proved-red 7 /
+# could-not-judge 13: ten plants NO LONGER COMPILED and three had a `find`
+# anchor occurring 0x. The cause is sv-surface itself — svt-3, svt-6 and svt-7
+# deleted the crates, the AppState members and the constructors these plants
+# use to write their twin. A plant cannot plant what the crate graph will not
+# let anyone write.
+#
+# WHAT ACTUALLY GUARDS THESE FAMILIES NOW, and why it is STRONGER than a plant:
+# `[thin_surfaces]` in quality/ARCH_LAYERS.toml is an ALLOWLIST —
+#   may_reach = oicp-types, kernel-types, sovereign-contracts, oicp-client,
+#              sovereign-turn-client, sovereign-time, sovereign-tools-base
+# and its own comment says "every workspace crate a surface reaches outside
+# this list is a violation, HOWEVER IT REACHES IT". Every crate below is
+# outside it. `cargo xtask layer-gate` decides that over Cargo's own graph,
+# transitively, so it fires on the DEPENDENCY EDGE — before anyone could write
+# the call a census would have had to spot. A census plant proves one detector
+# catches one spelling in one file (the needle-list weakness this bar's
+# `goodhart` field records); the allowlist proves the crate cannot be reached
+# at all. That is ARCH principle 10 (structural, not remembered) and principle
+# 12 (each side owns what it owns): the census owned "is a twin written here",
+# the crate graph now owns "can this crate be reached", and the second subsumes
+# the first. The allowlist half was WATCHED RED on 2026-09-13 — 0 on a clean
+# tree, 1 against a copy of ARCH_LAYERS.toml carrying one planted
+# `from = "sovereign-desktop"` exception row.
+#
+# WHAT EACH ONE NEEDED THAT NO LONGER EXISTS:
+#   atlas-browse                 sovereign_tools
+#   meshapp-atoms                corpus_engine (read_atlas_atoms)
+#   conv-browse                  sovereign_store
+#   local-corpus-registry        require_manager -> LocalCorpusManager
+#   meshapp-explorer             sovereign_meshapp (load_graph)
+#   lessons-notes-wire           AppState.notes -> NoteStore
+#   insight-sink-wire            AppState.insight_service -> InsightService
+#   attach-floor                 every FLOOR needle's crate
+#   governance-oplog             corpus_engine
+#   recipe-project-composition   sovereign_tools
+#   local-corpus-ingest          require_manager -> LocalCorpusManager
+#   insight-gather               sovereign_core
+#   sv-desktop-d9b-consumer      AppState.corpus_engine -> CorpusEngine
+#
+# The removals: d36fdde0e (the insight service, the NER handle, the
+# local-corpus manager and the health monitor — "four things the app built and
+# nothing read"), e8ee7c288 (the app's corpus engine), dcfe5fe9c
+# (sovereign-meshapp), d33ae773e (corpus-engine, sovereign-tools, the authoring
+# harness), af11c397f (the exception list reaches zero).
+#
+# THE ONE THAT WAS TEMPTING AND IS REFUSED. `attach-floor` could be made red
+# without any crate: the census counts raw text (`src.match_indices`), so a
+# needle inside a COMMENT makes it fire and still compiles. That is precisely
+# the "weakened assertion" this file's own WRITING A PLANT section forbids — it
+# would prove the census detects a STRING, not a second implementation, and a
+# plant that proves the wrong thing is worse than no plant because the table
+# keeps printing proved-red. Every FLOOR needle names a crate outside the
+# allowlist, so there is no honest plant left to write for it.
+#
+# WHAT SURVIVES: the seven families below, all proved-red on 2026-09-13 —
+# turn-driver, reading-wire, conversation-wire, mcp-config-wire,
+# turn-capability, mobile-wire-mirror, mesh-loopback-layer. The bar's target is
+# 4 (one control per real twin family) and 7 clear it.
+#
+# ADD ONE BACK only together with the dependency edge that makes its twin
+# writable again — and if that edge lands, layer-gate goes red first, which is
+# the point.
+
 [[family]]
 id          = "turn-driver"
 crate       = "sovereign-desktop"
@@ -90,163 +159,6 @@ struct PlantedChunkDto {
     id: String,
     title: Option<String>,
 }'''
-
-[[family]]
-id          = "atlas-browse"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
-mustFail    = ["the_atlas_browse_surface_holds_no_reader"]
-breaks      = "a second atlas reader in the desktop — a FileAtlasReader constructed beside the daemon's"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/atlas_commands.rs"
-expect_red  = "constructs a FileAtlasReader again"
-find        = '''fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-replace     = '''#[allow(dead_code)]
-fn planted_local_atlas_reader(
-    index_dir: std::path::PathBuf,
-) -> sovereign_tools::atlas_view::FileAtlasReader {
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local reader D4 deleted.
-    sovereign_tools::atlas_view::FileAtlasReader::new(index_dir)
-}
-
-fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-
-[[family]]
-id          = "meshapp-atoms"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
-mustFail    = ["the_meshapp_atom_readers_read_the_wire"]
-breaks      = "the in-process atlas/atoms.json read in the MeshApp bridge — the one that answers nothing on an attached boot"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs"
-expect_red  = "opens atlas/atoms.json directly"
-find        = '''async fn wire_atoms('''
-replace     = '''#[allow(dead_code)]
-fn planted_local_atoms(atlas_dir: &std::path::Path) -> bool {
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — `load_atoms`, back.
-    corpus_engine::enrichment::atlas::read_atlas_atoms(atlas_dir).is_ok()
-}
-
-async fn wire_atoms('''
-
-[[family]]
-id          = "conv-browse"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
-mustFail    = ["the_conv_browse_surface_holds_no_store"]
-breaks      = "a conversation-tiered read running in the desktop again — the SqliteStateStore handle whose store, on an attached boot, is not the one the daemon enriched into"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/atlas_commands.rs"
-expect_red  = "runs the conv read"
-find        = '''fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-replace     = '''#[allow(dead_code)]
-async fn planted_local_conv_corpora(
-    store: &std::sync::Arc<sovereign_store::sqlite::SqliteStateStore>,
-) -> usize {
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the conv store read D4 deleted.
-    store
-        .list_conv_corpora_with_state_buckets()
-        .await
-        .unwrap_or_default()
-        .len()
-}
-
-fn atlas_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-
-[[family]]
-id          = "local-corpus-registry"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/local_corpus_wire_census.rs"
-mustFail    = ["the_registry_reads_read_the_wire"]
-breaks      = "a second LocalCorpusManager answering a registry question in the desktop — the one an attached boot's daemon cannot see"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
-expect_red  = "on a local LocalCorpusManager again"
-find        = '''    lc_client(&state)
-        .lc_list::<LocalCorpusConfig>()
-        .await
-        .map_err(|e| format!("lc_list: {e}"))
-}'''
-replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local list D5 deleted.
-    let manager = require_manager(&state).await?;
-    Ok(manager.list().await)
-}'''
-
-[[family]]
-id          = "meshapp-explorer"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/atlas_meshapp_wire_census.rs"
-mustFail    = ["the_meshapp_explorer_ops_read_the_wire"]
-breaks      = "the sovereign_meshapp projection running in the desktop again — the thirteen explorer reads that answer nothing on an attached boot"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/meshapp.rs"
-expect_red  = "runs the projection"
-find        = '''async fn wire_atoms('''
-replace     = '''#[allow(dead_code)]
-fn planted_local_graph(path: &std::path::Path) -> bool {
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the projection, here again.
-    sovereign_meshapp::load_graph(path).is_ok()
-}
-
-async fn wire_atoms('''
-
-[[family]]
-id          = "lessons-notes-wire"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/notes_sink_wire_census.rs"
-mustFail    = ["the_lesson_pane_holds_no_note_store"]
-breaks      = "a second NoteStore for the same lessons — the desktop's own notes.db beside the one the turn enforces from"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/lessons.rs"
-expect_red  = "takes a NoteStore handle off AppState again"
-find        = '''fn notes(state: &Arc<AppState>)'''
-replace     = '''#[allow(dead_code)]
-async fn planted_local_notes(state: &Arc<AppState>) -> bool {
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the AppState handle, back.
-    let Some(store) = state.notes.read().await.as_ref().map(Arc::clone) else {
-        return false;
-    };
-    store.read_notes(None, &[], &[], &[], 1, false).await.is_ok()
-}
-
-fn notes(state: &Arc<AppState>)'''
-
-[[family]]
-id          = "insight-sink-wire"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/notes_sink_wire_census.rs"
-mustFail    = ["the_sink_status_reads_the_daemons_registry"]
-breaks      = "the desktop's own insight sink registry — empty on an attached boot, and reported as the answer"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
-expect_red  = "reads this process's insight sink registry again"
-# Re-planted 2026-09-10: the old `replace` did not COMPILE — it called
-# `get_insight_service`, which D8 deleted (its own census assertion is what
-# pins the deletion). The handle comes off `AppState` directly now, which is
-# the same second registry by the same read. `sinks: Vec::new()` rather than
-# `vec![]` on purpose: the sibling assertion in this test bans the literal
-# `sinks: vec![]`, and a plant that trips two assertions cannot say which one
-# detected it (§18.1).
-find        = '''    let status = insight_client(&state)'''
-replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local registry, back.
-    // On an attached boot it is empty however many vaults the daemon has
-    // connected, and this reports that emptiness as the answer.
-    if let Some(service) = state.insight_service.read().await.clone() {
-        if service.sinks.any_connected().await {
-            return Ok(SinkStatusDto {
-                any_connected: true,
-                sinks: Vec::new(),
-            });
-        }
-    }
-    let status = insight_client(&state)'''
-
-[[family]]
-id          = "attach-floor"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/attach_construction_census.rs"
-mustFail    = ["the_attach_construction_floor_is_pinned"]
-breaks      = "a needle re-added to the attach-reachable bootstrap spine — the floor moving without a campaign rung row"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
-expect_red  = "sv-attach-pure-client: needle"
-find        = '''    let mut skills = SkillRegistry::new();'''
-replace     = '''    let mut skills = SkillRegistry::new();
-    // TWIN-CENSUS PLANT (scripts/twin-census.py) — a second construction on
-    // the attach-reachable spine, the growth the floor exists to catch.
-    let _planted_skills = SkillRegistry::new();'''
 
 [[family]]
 id          = "conversation-wire"
@@ -284,30 +196,6 @@ const PLANTED_CONVERSATIONS_ROUTE: &str = "/v1/conversations";'''
 # diagnostic, which is the rule this file states about `replace`.
 
 [[family]]
-id          = "governance-oplog"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d8_wire_census.rs"
-mustFail    = ["the_governance_panel_holds_no_oplog"]
-breaks      = "a second writer on a corpus's governance oplog — the desktop appending beside `svrn govern` into a file whose append takes no advisory lock"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/governance_commands.rs"
-expect_red  = "reaches a corpus's atlas dir with"
-find        = '''fn gov_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-replace     = '''/// TWIN-CENSUS PLANT (scripts/twin-census.py) — the local oplog reader,
-/// back. A read is enough: it is the same second handle on the same file
-/// the writes took, and it is what the eight commands were built over.
-#[allow(dead_code)]
-fn planted_local_oplog(dir: &std::path::Path) -> usize {
-    use corpus_engine::enrichment::GovernanceOpKind;
-    use corpus_engine::oplog::Oplog;
-    Oplog::<GovernanceOpKind>::new(dir)
-        .read_all()
-        .map(|ops| ops.len())
-        .unwrap_or(0)
-}
-
-fn gov_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-
-[[family]]
 # The needle is the FABRICATION, not the local read: `mcp_add_server` /
 # `mcp_remove_server` legitimately keep `SetupConfig`, so a plant spelling it
 # would fire on a sanctioned state. What no state sanctions is a connect flag
@@ -325,83 +213,6 @@ replace     = '''            // TWIN-CENSUS PLANT (scripts/twin-census.py) — t
             // folded out of a tool count, which is exactly the fact the
             // host declined to invent.
             connected: Some(s.live_tool_count > 0),'''
-
-[[family]]
-id          = "recipe-project-composition"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d8_wire_census.rs"
-mustFail    = ["the_recipe_workspace_composes_no_project"]
-breaks      = "the desktop resolving a project's artifact path itself — the §10.6 twin that wrote recipe.toml where an attached daemon never looks"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs"
-expect_red  = "composes the project itself with"
-find        = '''fn ra_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-replace     = '''/// TWIN-CENSUS PLANT (scripts/twin-census.py) — the desktop resolving the
-/// artifact path itself, the §10.6 twin D8 folded.
-#[allow(dead_code)]
-fn planted_artifact_path(artifact_id: &str) -> Option<std::path::PathBuf> {
-    sovereign_tools::recipe_author::local_recipes_dir()
-        .ok()
-        .map(|dir| dir.join(artifact_id).join("recipe.toml"))
-}
-
-fn ra_client(state: &AppState) -> sovereign_turn_client::TurnClient {'''
-
-[[family]]
-# Sits beside `local-corpus-registry`, which pins the D5 reads. This one pins
-# the JOB — the arm 069660fd9 could not cross, and the producer that pinned
-# `lc_cancel` and `lc_ocr_available` here with it.
-id          = "local-corpus-ingest"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/local_corpus_wire_census.rs"
-mustFail    = ["the_registry_reads_read_the_wire"]
-breaks      = "a second ingest running on this process's manager — the bespoke arm, writing an index the daemon is not the one writing"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
-# Re-spelled 2026-09-10: the assertion took the call into a `{}` placeholder
-# (one message for all eleven CROSSED_MANAGER_CALLS), so no substring can span
-# both the needle and the prose. The rule text is what is checkable in the
-# census source AND in the formatted failure; the call itself still prints
-# beside it.
-expect_red  = "on a local LocalCorpusManager again"
-find        = '''    let ack = lc_client(&state)
-        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)'''
-replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the bespoke arm, back:
-    // a second ingest, on this process's manager, into an index the daemon
-    // is not the one writing.
-    if with_ocr == Some(false) {
-        let manager = require_manager(&state).await?;
-        let _ = manager
-            .ingest(&corpus_id, with_ocr, Some(progress.clone()))
-            .await;
-    }
-    let ack = lc_client(&state)
-        .lc_ingest::<sovereign_contracts::daemon_wire::IngestJobAck>(&corpus_id, with_ocr)'''
-
-[[family]]
-id          = "insight-gather"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/notes_sink_wire_census.rs"
-mustFail    = ["the_gather_hop_reads_the_daemons_insight_store"]
-breaks      = "the local InsightService handle in the gather hop — a store nothing has clipped into since D2, on an attached boot"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/insight_commands.rs"
-expect_red  = "takes an InsightService handle off AppState again"
-find        = '''    let fetched = insight_client(&state)'''
-replace     = '''    // TWIN-CENSUS PLANT (scripts/twin-census.py) — the local service
-    // handle, back. This is the accessor every local insight read went
-    // through, and on an attached boot it holds none of the clipped rows.
-    #[allow(dead_code)]
-    async fn get_insight_service(
-        state: &AppState,
-    ) -> Result<Arc<sovereign_core::insight::InsightService>, String> {
-        state
-            .insight_service
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "Insight service not initialized.".to_string())
-    }
-    let fetched = insight_client(&state)'''
-
-# ── sovereign-core ─────────────────────────────────────────────────────────
 
 [[family]]
 id          = "turn-capability"
@@ -534,37 +345,3 @@ fn planted_sealed_nothing() -> Router {
 # `recipe_testing.rs`. All three tests failed, each naming its own file and
 # primitive; restored, re-green 3/3.
 
-[[family]]
-id          = "sv-desktop-d9b-consumer"
-crate       = "sovereign-desktop"
-census      = "sovereign/crates/sovereign-desktop/src-tauri/tests/d9b_consumer_census.rs"
-mustFail    = ["the_retired_local_primitives_do_not_return"]
-breaks      = "a repointed command re-deriving an answer the daemon serves — in attach, against a different store, index or registry than the turn is answered from, silently"
-target      = "sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs"
-# Re-spelled and re-planted 2026-09-10. The old `expect_red` quoted a message
-# that no longer exists: the offender line is built from a `{file}`/`{hay}`/
-# `{route}` format, so the checkable text is the prose between the
-# placeholders. And the plant is ADDITIVE now — the old one REPLACED the
-# `.corpus_diagnose()` call, which would also redden this census's positive
-# half (`every_repointed_command_reaches_the_family_client`). The twin this
-# family is named for is a second decider standing BESIDE the wire call, not
-# instead of it.
-expect_red  = "is back — that question is answered by"
-find        = '''#[tauri::command]
-pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {'''
-replace     = '''/// TWIN-CENSUS PLANT (scripts/twin-census.py) — the local index diagnosis,
-/// restored beside the wire call. In attach it describes the indexes THIS
-/// process has a second handle on, not the ones the turns are answered from.
-#[allow(dead_code)]
-async fn planted_local_diagnose(state: &AppState) -> Result<String, String> {
-    let engine = state
-        .corpus_engine
-        .read()
-        .await
-        .clone()
-        .ok_or_else(|| "Corpus engine not initialized".to_string())?;
-    Ok(engine.diagnose_indexes().await)
-}
-
-#[tauri::command]
-pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {'''
