@@ -1037,6 +1037,15 @@ dev host at the split: 41 corpora carry a meta, 41 pass the writer predicate,
 with a `chunks.lance` present. Before the split ~84 call sites each decided
 for themselves what "installed" meant and exactly one retrieval leg checked
 (§10.6, one question one decider).
+
+**`IndexInfo::indexes_built` is derived, not copied, since 2026-09-13.**
+`index::readiness::indexes_searchable` reads it as the aggregate flag OR all
+three sub-phase checkpoints (vector, content FTS, title FTS) with no ingest
+writing, and `build_indexes` now records the aggregate itself. Four build paths
+(catalog install, catalog ingest, the harness runner, `write.rs`'s partial
+rebuilds) had built every sub-index and never called `mark_indexes_built`, so
+`wikipedia-fetched` and `commonwealth-ai-architecture` were refused as "not
+finished building" on the 2026-09-13 chaos soak while fully searchable on disk.
 Before that, `corpus status` answered "is it installed?" by asking whether a
 directory existed — a second, wrong implementation that reported a
 zero-second-old ingest as an installed corpus, and reported the partition

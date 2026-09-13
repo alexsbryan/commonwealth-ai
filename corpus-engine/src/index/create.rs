@@ -985,6 +985,27 @@ impl CorpusIndex {
             cb(3, 3);
         }
 
+        // Record the aggregate here rather than trusting every caller to call
+        // `mark_indexes_built` afterwards — see `readiness::indexes_searchable`.
+        if let Ok(meta) = read_meta(&dir) {
+            if !meta.indexes_built && super::readiness::indexes_searchable(&meta) {
+                match self.mark_indexes_built() {
+                    Ok(()) => tracing::info!(
+                        corpus = %id,
+                        "build_indexes:aggregate_recorded — all sub-indexes built, indexes_built set"
+                    ),
+                    // Readiness is derived from the sub-phase flags either way,
+                    // so retrieval is unaffected — but the write failed and is
+                    // reported rather than swallowed.
+                    Err(e) => tracing::warn!(
+                        corpus = %id,
+                        error = %e,
+                        "build_indexes:aggregate_write_failed — indexes_built not persisted"
+                    ),
+                }
+            }
+        }
+
         Ok(())
     }
 }

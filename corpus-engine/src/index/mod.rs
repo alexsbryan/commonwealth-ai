@@ -10,6 +10,7 @@ mod provenance;
 pub use maintain::{MaintenanceStats, Retention};
 pub mod raptor;
 mod read;
+mod readiness;
 mod search;
 mod write;
 
@@ -854,6 +855,7 @@ impl CorpusIndex {
     pub async fn info(&self) -> Result<IndexInfo> {
         let index_dir = Path::new(self.db.uri());
         let meta = read_meta(index_dir)?;
+        let searchable = readiness::indexes_searchable(&meta);
         let chunk_count = self.chunk_count().await?;
         let index_size_bytes = dir_size(index_dir);
 
@@ -932,7 +934,7 @@ impl CorpusIndex {
             source_version: meta.source_version,
             update_manifest_url: meta.update_manifest_url,
             kind,
-            indexes_built: meta.indexes_built,
+            indexes_built: searchable,
             vector_index_built: meta.vector_index_built,
             canonical_fingerprint: meta.canonical_fingerprint,
             total_shards: meta.total_shards,
@@ -1697,6 +1699,53 @@ mod tests {
         assert!(hashes.contains("h-x"));
         assert!(hashes.contains("h-y"));
         assert!(hashes.contains("h-z"));
+    }
+
+    /// A corpus whose three sub-indexes are all built is searchable even when
+    /// the aggregate flag was never written. Four build paths finished
+    /// `build_indexes` without calling `mark_indexes_built`, and retrieval then
+    /// refused `wikipedia-fetched` and `commonwealth-ai-architecture` as "not
+    /// finished building" (2026-09-13 chaos soak). A stalled ingest that never
+    /// built anything stays unsearchable.
+    #[tokio::test]
+    async fn sub_indexes_built_without_the_aggregate_flag_is_searchable() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+        {
+            let mut meta = read_meta(&index_dir).unwrap();
+            meta.ingestion_in_progress = false;
+            write_meta(&index_dir, &meta).unwrap();
+        }
+        assert!(
+            !idx.info().await.unwrap().indexes_built,
+            "a stopped ingest with no indexes must not read as searchable"
+        );
+
+        {
+            let mut meta = read_meta(&index_dir).unwrap();
+            meta.vector_index_built = true;
+            meta.content_fts_built = true;
+            meta.title_fts_built = true;
+            write_meta(&index_dir, &meta).unwrap();
+        }
+        assert!(idx.info().await.unwrap().indexes_built);
+    }
+
+    /// The build records the aggregate itself, so no caller can forget it.
+    #[tokio::test]
+    async fn build_indexes_records_the_aggregate_flag() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        let index_dir = dir.path().join("test-corpus");
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+        {
+            let mut meta = read_meta(&index_dir).unwrap();
+            meta.ingestion_in_progress = false;
+            write_meta(&index_dir, &meta).unwrap();
+        }
+        idx.build_indexes(true, true, None).await.unwrap();
+        assert!(read_meta(&index_dir).unwrap().indexes_built);
     }
 
     #[tokio::test]

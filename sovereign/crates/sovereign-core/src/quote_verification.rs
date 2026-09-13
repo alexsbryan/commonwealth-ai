@@ -151,6 +151,11 @@ pub fn verify_quotes(
                 i = close + 1;
                 continue;
             }
+            tracing::debug!(
+                target: "quote_verification",
+                offset = i,
+                "quote_verification:unclosed_quote — no close before a blank line; passed through as text"
+            );
         }
         out.push(c);
         i += 1;
@@ -320,11 +325,23 @@ fn is_double_quote_open(c: char) -> bool {
 /// Find the next character index in `chars[from..]` that closes a
 /// double-quote span. Mirrors `is_double_quote_open` for symmetric
 /// detection — the model often mixes `"..."` and `"..."`.
+/// The close of a quoted span, or `None` when a blank line comes first. A
+/// quotation does not run across paragraphs: pairing across one let an unclosed
+/// quote capture the next paragraph's opener, and the demotion then swallowed
+/// everything between, a `Grounded in the source:` header included (2026-09-13
+/// chaos soak, step 239).
 fn find_double_quote_close(chars: &[char], from: usize) -> Option<usize> {
-    chars[from..]
-        .iter()
-        .position(|&c| c == '"' || c == '\u{201C}' || c == '\u{201D}')
-        .map(|p| p + from)
+    let mut line_is_blank = false;
+    for (offset, &c) in chars[from..].iter().enumerate() {
+        match c {
+            '"' | '\u{201C}' | '\u{201D}' => return Some(from + offset),
+            '\n' if line_is_blank => return None,
+            '\n' => line_is_blank = true,
+            c if c.is_whitespace() => {}
+            _ => line_is_blank = false,
+        }
+    }
+    None
 }
 
 // ─── Tests ────────────────────────────────────────────────────
@@ -604,6 +621,43 @@ mod tests {
         );
         assert_eq!(fixed.verified_count, 1);
         assert!(fixed.rewritten.contains(&format!("\"{sentence}\"")));
+    }
+
+    /// An unclosed quote must not pair with the next paragraph's opener. The
+    /// 2026-09-13 chaos soak (step 239), reconstructed from the rewritten
+    /// answer: the model opened a quote in its value line and never closed it,
+    /// so the span ran to the excerpt's opening mark and the demotion swallowed
+    /// the `Grounded in the source:` header.
+    #[test]
+    fn an_unclosed_quote_does_not_capture_the_next_paragraph() {
+        let excerpt = "Research in Agricultural Engineering Current issue 2026/2 Archive Search";
+        let answer = format!(
+            "Current issue year and number for \"Research in Agricultural Engineering: \
+             2026, Issue 2\n\nGrounded in the source:\n  \"{excerpt}\""
+        );
+        let r = verify_quotes(
+            &answer,
+            &[format!("Journal home. {excerpt} Contact.")],
+            &[],
+            20,
+        );
+        assert!(
+            !r.rewritten
+                .contains("[unverified excerpt: Research in Agricultural Engineering: 2026"),
+            "the value line must not be demoted as a quote: {}",
+            r.rewritten
+        );
+        assert!(
+            r.rewritten.contains("\n\nGrounded in the source:\n"),
+            "{}",
+            r.rewritten
+        );
+        assert_eq!(
+            r.verified_count, 1,
+            "the real excerpt still verifies: {}",
+            r.rewritten
+        );
+        assert_eq!(r.demoted_count, 0, "{}", r.rewritten);
     }
 
     /// The widening must not reach the failure this guard exists for. A
