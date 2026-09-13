@@ -143,17 +143,27 @@ def sovereign_bin():
 
 
 def daemon_exe_path():
-    """Filesystem path of the running daemon's executable, or None."""
+    """Filesystem path of the running daemon's executable, or None.
+
+    Resolved from /proc/<pid>/exe of the process whose comm IS the daemon.
+    Until 2026-09-13 this took `ps -o comm=` of the first `pgrep -f` match —
+    a bare NAME, not a path — so realpath() anchored it under the cwd (the
+    repo) and the provenance check passed for ANY daemon. Under heaptrack the
+    first match was the wrapper shell and it logged "heaptrack is inside this
+    tree". A relative answer is now refused as not-measured.
+    """
     try:
-        pid = subprocess.run(
-            ["pgrep", "-f", "sovereign-cli-daemon daemon run"],
+        pids = subprocess.run(
+            ["pgrep", "-x", "sovereign-cli-d"],
             capture_output=True, text=True, timeout=10).stdout.split()
-        if not pid:
-            return None
-        out = subprocess.run(["ps", "-o", "comm=", "-p", pid[0]],
-                             capture_output=True, text=True, timeout=10)
-        p = out.stdout.strip()
-        return p or None
+        for pid in pids:
+            try:
+                exe = os.readlink(f"/proc/{pid}/exe")
+            except OSError:
+                continue
+            if os.path.isabs(exe):
+                return exe
+        return None
     except Exception:  # noqa: BLE001
         return None
 
