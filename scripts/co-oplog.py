@@ -3866,8 +3866,19 @@ class Investigation:
             # Messages and patches both: the model quotes commit subjects as
             # often as code, and a subject-only hit answered "0 in the
             # patches" twice on d6c0c747.
-            msg_hits = [h for h in self.own if nd and nd in git("show", "--no-patch", "--format=%s%n%b", h)]
-            patch_hits = [h for h in self.own if nd and nd in git("show", "--format=", h)]
+            # A sha the report names is answered from history, not from this
+            # session's commits: "the owner committed it as 4dff5b52c"
+            # (03e54838) was NOT FOUND among the session's own 37 by
+            # construction, and the commit exists.
+            if re.fullmatch(r"[0-9a-f]{7,40}", nd):
+                subj = git("log", "-1", "--format=%h %s", nd).strip()
+                return (f"{nd!r}: EXISTS in history as {subj}" + ("" if any(nd.startswith(h[:7]) or h.startswith(nd[:7]) for h in self.own) else " (not one of this session's commits)")
+                        if subj else f"NOT FOUND: {nd!r} is no commit in this repository")
+            # Case-insensitive: 'compass' was NOT FOUND against a commit body
+            # reading 'Compass: two door rows' (bb36c21e).
+            ndl = nd.lower()
+            msg_hits = [h for h in self.own if nd and ndl in git("show", "--no-patch", "--format=%s%n%b", h).lower()]
+            patch_hits = [h for h in self.own if nd and ndl in git("show", "--format=", h).lower()]
             if not msg_hits and not patch_hits:
                 return f"NOT FOUND: {nd!r} is in no commit message and no patch of this session's {len(self.own)} commit(s)"
             parts = []
@@ -3940,7 +3951,12 @@ def evidence_class(claim: str, evidence: str, results: list[str] = ()) -> str:
                     return "superseded"
         return "red"
     nums = _claim_numbers(claim)
-    ev_nums = _claim_numbers(evidence)
+    # The quoted line is one line of a tool result that may hold the number
+    # elsewhere, truncated (00e8b4a8: three findings on '503', each quoting
+    # the first 160 chars of a search_seen hit FOR 503; 995d04b9: '12,413'
+    # quoted against a later 4-test run while turn 29 read pass 12413).
+    # A number the whole record carries is not missing.
+    ev_nums = _claim_numbers(evidence) | set().union(*(_claim_numbers(r) for r in results)) if results else _claim_numbers(evidence)
     hedged = bool(RX_APPROX.search(claim))
     def near(n: str) -> bool:
         # "about 280 lines" against "285 total" (e92735ab t86): a hedged
@@ -4783,6 +4799,12 @@ def cmd_self_test(_a) -> int:
        "corroboration", "e92735ab: a hedged number within 5% is met")
     eq(evidence_class("two files, 280 lines: the quickstart and library.py", "turn 54: 150 README.md 135 library.py 285 total"),
        "number", "and the same number unhedged is not")
+    eq(evidence_class("Test sweep 12,413 pass, 2 fail", "turn 30: test result: ok. 4 passed; 0 failed",
+                      ["turn 29: pass: 12413 fail: 2", "turn 30: test result: ok. 4 passed; 0 failed"]),
+       "corroboration", "995d04b9: the number is elsewhere in the record")
+    eq(evidence_class("Test sweep 12,413 pass, 2 fail", "turn 30: test result: ok. 4 passed; 0 failed",
+                      ["turn 29: pass: 12433 fail: 2", "turn 30: test result: ok. 4 passed; 0 failed"]),
+       "number", "and stays a finding when it is nowhere")
     eq(evidence_class("Context is at 514k and the red threshold is 500k",
                       "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
        "excluded", "b31822b1: the statusline is not the agent's claim")
