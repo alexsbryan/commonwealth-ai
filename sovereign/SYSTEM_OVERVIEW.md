@@ -9219,6 +9219,55 @@ red for four commits before anyone ran it, and the fix is that
 `scripts/pre-push.sh` runs it. It now does, which is why this table
 exists at all.
 
+**Settled by §10.1u, later the same day.** Every row above marked
+"this landing" or naming a commit is now baselined — at `origin/main`,
+where all of it already is, so none of the peer-uncommitted rows were
+banked with it. The turn-client split stays OWED; baselining freezes a
+debt, it does not pay one.
+
+### 10.1u Size RE-PINNED at `origin/main` 94e602d83 — 2026-09-12 (verifier-loop vl-1..vl-6)
+
+§10.1t declined to touch the baseline four hours earlier, for a reason
+that was right at the time: peer edits sat uncommitted in the shared tree
+and `--update-baseline` on a working tree would have banked them. Pinning
+at `origin/main` is immune to that — the peer's uncommitted lines are not
+on `origin/main`, so they cannot enter the freeze. `instruction_surface.txt`
+came back byte-identical, which is the check that says so.
+
+**The re-pin had to be re-keyed, and that is the part worth reading.** The
+domains rename (`904145b64`, `cd9250aab`) is in this push, so `origin/main`
+still spells six crates under `commonwealth/crates/`. Copying its baselines
+verbatim would have made every file in those six read as a NEW oversized
+file — the §10.1d "path re-key, no debt" failure, at ten times the size. The
+baseline installed here is `origin/main`'s MEASUREMENT under this tree's
+PATHS: `commonwealth-api` → `sovereign-api`, `commonwealth-app` →
+`sovereign-meshapp-registry`, `commonwealth-inference` → `sovereign-serving`,
+`commonwealth-knowledge` → `sovereign-grants`, `commonwealth-test-harness` →
+`sovereign-mesh-test-harness`, `commonwealth/crates/oicp-conformance` →
+`oicp-conformance`. Ten keys in `oversized.txt`, twelve in `lines.tsv`.
+
+What the separation bought: `arch-gate` 6 findings → 2, `size-gate` 33 keys
+→ 11. Everything that dropped out was already public and nobody in this push
+had to answer for it.
+
+What is left is this push's own, and is accepted here:
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| Approach band, 4 new entrants | `corpus-engine/xtask/src/instrument_gate.rs` (816), `sovereign-cli-daemon/src/memory_watch.rs` (943), `sovereign-core/src/runtime/grounding/judge.rs` (805), `sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs` (709 → 841) | Files 197 → 201, lines 193702 → 197106. Each crossed 800 for a named reason: vl-2's instrument registry gate, `8750c0442`'s arena-trim watcher, vl-1's forced-choice register, and vl-6's three-state `NativeAdmission` with its two regression tests. All four sit 360-395 lines under the 1200 ceiling; `admission.rs` splits its projection out when the admission stage grows a second consumer. |
+| xtask gates | `corpus-engine/xtask` (+336), `::tests` (+111) | The three ratchets vl-2 and vl-3 added — instrument-gate, judge-funnel-gate, judge-replay-control. Gates that hold a bar are the campaign's deliverable, not incidental growth. |
+| Feed + schedule scripts | `scripts` (+306) | vl-4's `feed_replay_bank.sh` and its run-if-stale venue — the mechanism that keeps the judge-replay bank from aging past the world it prices against. |
+| Judge register + display segments | `sovereign-core` (+55), `::tests` (+47), `sovereign-contracts` (+2), `::tests` (+1), `sovereign-cli-llm` (+25), `sovereign-cli-shared::tests` (+53) | vl-1's `JudgeCall::Harness` and the census that reaches it, vl-6's `NativeAdmission`, and the lane-verdict emitters vl-2 converted. Net across the four vl rungs is under 200 lines of crate code. |
+| Arena trim | `sovereign-cli-daemon` (+44), `::tests` (+35) | `8750c0442` — glibc never trims per-thread arenas, so daemon RSS only ever went up. |
+
+Nine already-baselined files moved a few lines each in the re-freeze — five
+shrank (`sovereign-api/src/server.rs` −3, `state.rs` −2,
+`knowledge_query.rs` −1, `sovereign-mesh/src/daemon.rs` −4,
+`oicp_synthesis.rs` −2) and four grew (`streaming.rs` +18 and
+`grounding/tests.rs` +4, both vl-6; `mechanism_fidelity.rs` +7,
+`chat_ask.rs` +1). The oversized SET is unchanged at 180: no file crossed
+1200 in this push, and none dropped below it.
+
 ### 10.1s Fan-in ACCEPTED — `sovereign-contracts` 27 → 28 (thin-desktop landing, 2026-09-11)
 
 One crate was added to the dependents of `sovereign-contracts`, and it is the
