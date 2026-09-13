@@ -767,7 +767,7 @@ there is no peer that reads `invite_key_hash` for auth.
 
 **Review by:** 2026-10-01.
 
-### `[models].fast_context_size` — per-slot KV windows, shipped UNSET (2026-08-25)
+### `[models].fast_context_size` — per-slot KV windows, shipped UNSET (2026-08-25); FLIPPED ON THE 64 GB DEV HOST 2026-09-12, settle pending
 
 **What is dark.** The mechanism, not the value. Until now `[models].context_size`
 was one global applied to every `LlamaContext` this daemon builds — the fast
@@ -803,6 +803,28 @@ measurement — the trace lines exist precisely so this does not need its own ru
 **Review by 2026-09-25.** If unmeasured by then the honest options are to take
 the measurement or to delete the key; a per-slot knob nobody sizes is the
 withering this ledger exists to stop.
+
+**Measured 2026-09-12 (the flip condition's first half).** Over `daemon.err`
+2026-09-10..12, 175 completed `slot="fast"` calls: p50 399, p99 10,130,
+p100 10,130 `tokens_used`; none above 16,384. The one known larger consumer is
+deep research's round leg at ~21,014 tokens (`deep_research/port.rs`, the
+2026-08-27 death at a 16,384 window). Set on this host:
+`fast_context_size = 32768` — covers both, KV ceiling 16,896 -> 4,224 MiB
+(`kv budget: slot context built slot="fast"` on the 01:51Z boot). What forced
+the measurement: with the key unset the fast slot inherited the primary's
+131,072 and the daemon's physical footprint was 65.9 GB on a 64 GB host
+(`vmmap --summary`: MALLOC_LARGE 47.8 GB, 46.0 GB swapped out), two jetsam
+SIGTERMs in one evening, every desktop soak aborting on its own memory rule.
+After the flip: 60.2 GB. Still over the host — the remainder is NOT this key
+(primary KV 10,496 MiB at 131,072 plus ~25 GB of ggml Metal buffers
+unaccounted at the daemon's log level); that is the daemon memory order, not
+this row. **Not yet settled:** the second half — zero `NoKvCacheSlot` on the
+fast slot over a real soak — has no soak yet, because no soak fits beside the
+daemon at this footprint. Zero such lines in the window read since the flip.
+Settles when a soak runs at this value; reverts to a larger window if a
+`NoKvCacheSlot` names the fast slot. Setup (`setup_cmd/finish.rs`) still
+writes it unset for new installs; a default for the product is a separate
+decision once the sum is known.
 
 
 
