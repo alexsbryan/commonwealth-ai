@@ -3448,6 +3448,23 @@ def session_observations(path: Path) -> dict:
                             idx += 1
                     elif b.get("type") == "tool_use":
                         see(json.dumps(b.get("input", {})))
+            elif rec.get("type") == "attachment":
+                # A subagent's report reaches the agent as a queued
+                # task-notification, not as a tool_result block: the
+                # heaviest-turn backtest called '234 files and 67,537
+                # lines' (8c5078a9 t3), '21.1 and 25.7 Mbit/s' (e92735ab
+                # t13), 'delivered 948' (2e83a54a t7) and '4,904-line
+                # daemon.rs' (cea8e256 t5) NOT SEEN; every one was in a
+                # worker's report on an attachment line.
+                # A peer session's message arrives the same way with
+                # commandMode 'prompt' (e92735ab t13: the speed-test figures
+                # came over the bridge). Every queued_command is something
+                # the agent was shown.
+                att = rec.get("attachment") or {}
+                if att.get("type") == "queued_command":
+                    t = str(att.get("prompt") or "")
+                    if t:
+                        results.append((idx, t)); see(t)
     return {"nums": nums, "results": results, "asks": asks}
 
 def instrument_numbers(text: str, turn: int, obs: dict) -> dict:
@@ -3831,7 +3848,9 @@ class Investigation:
         if name == "find_number":
             n = str(args.get("number", "")).replace(",", "").strip()
             try:
-                if float(n) < 100:
+                # A bare integer under 100 is in every output; a decimal is
+                # not ('21.1 Mbit/s' was REFUSED on e92735ab t13).
+                if float(n) < 100 and "." not in n:
                     return (f"REFUSED: {n} is a two-digit number and occurs in nearly every output; "
                             f"it cannot be traced. Spend the call on a larger number or a phrase.")
             except ValueError:
@@ -3865,7 +3884,12 @@ class Investigation:
             # four calls this way). Answer the number too.
             nums = numbers_in(ph)
             if not hits and nums:
-                out += "\n(the number alone) " + self.run_tool("find_number", {"number": nums[0]})
+                alone = self.run_tool("find_number", {"number": nums[0]})
+                # A phrase miss over a number hit is a presence (c01789ff t4:
+                # '2,152' NOT SEEN, the table read 2152; classed absent).
+                if not alone.startswith(("NOT SEEN", "REFUSED")):
+                    return f"the phrase {ph!r} was not seen as written, but its number {nums[0]} was:\n" + alone
+                out += "\n(the number alone) " + alone
             return out
         if name == "own_commits":
             if not self.own:
@@ -3972,9 +3996,14 @@ def evidence_class(claim: str, evidence: str, results: list[str] = ()) -> str:
     hedged = bool(RX_APPROX.search(claim))
     def near(n: str) -> bool:
         # "about 280 lines" against "285 total" (e92735ab t86): a hedged
-        # claim is met by a record number within 5%.
+        # claim is met by a record number within 5%. "344 seconds" against
+        # "secs=344.07" (e92735ab t13): any claim is met by a record number
+        # that rounds to it at the claim's own precision.
         try:
             v = float(n)
+            places = len(n.split(".")[1]) if "." in n else 0
+            if any(round(float(e), places) == v for e in ev_nums):
+                return True
             return hedged and any(abs(float(e) - v) <= 0.05 * v for e in ev_nums)
         except ValueError:
             return False
@@ -4817,8 +4846,28 @@ def cmd_self_test(_a) -> int:
     eq(evidence_class("Test sweep 12,413 pass, 2 fail", "turn 30: test result: ok. 4 passed; 0 failed",
                       ["turn 29: pass: 12433 fail: 2", "turn 30: test result: ok. 4 passed; 0 failed"]),
        "number", "and stays a finding when it is nowhere")
-    eq(excerpt("x" * 300 + " 503 more", 301), "…" + "x" * 60 + " 503 more", "excerpt: a late match is centred, not cut")
+    eq(excerpt("x" * 300 + " 503 more", 301), "…" + "x" * 59 + " 503 more", "excerpt: a late match is centred, not cut")
     eq(excerpt("  early 503 here", 8), "early 503 here", "excerpt: an early match keeps the line head")
+    eq(evidence_class("My sustained pull over 344 seconds read 25.0 Mbit/s", "turn 12: secs=344.07 rate=25.0 Mbit/s"),
+       "corroboration", "e92735ab t13: 344 is met by 344.07")
+    eq(evidence_class("My sustained pull over 344 seconds read 25.0 Mbit/s", "turn 12: secs=349.07 rate=25.0 Mbit/s"),
+       "number", "and not by 349.07")
+    # A worker's report is part of what the agent saw.
+    with _tf.TemporaryDirectory() as _d:
+        _t = Path(_d) / "s.jsonl"
+        _t.write_text("\n".join(json.dumps(r) for r in [
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "x" * 130}]}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "task-notification",
+                                                  "prompt": "<task-notification>panel/src is 234 tracked files / 67,537 LOC</task-notification>"}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                                                  "prompt": "<cross-session-message>run1: 21.1 Mbit/s</cross-session-message>"}},
+            {"type": "attachment", "attachment": {"type": "output_style", "prompt": "99999 not a report"}},
+        ]) + "\n")
+        _o = session_observations(_t)
+        eq(len(_o["results"]), 2, "a task-notification and a bridge message are results")
+        eq(_o["results"][0][0], 1, "at the block index where it arrived")
+        eq("67537" in _o["nums"], True, "and its numbers were seen")
+        eq("99999" in _o["nums"], False, "other attachments are not")
     eq(evidence_class("Context is at 514k and the red threshold is 500k",
                       "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
        "excluded", "b31822b1: the statusline is not the agent's claim")
