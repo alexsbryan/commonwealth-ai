@@ -556,6 +556,16 @@ def is_commitment(text: str) -> bool:
     the model's class is still recorded, it just does not reach the rung."""
     return bool(RX_PROMISSORY.search(text))
 
+RX_CONDITIONAL = re.compile(
+    r"\b(?:if you|say the word|should you|once you|when you|if that's|if you'd|"
+    r"your call|whichever you|unless you)\b", re.I)
+
+def is_conditional(text: str) -> bool:
+    """A commitment contingent on the operator is not due until they act.
+    "Say the word and I'll land all three" (8e6fdcec, turn 14) was called
+    broken against a session where the word was never said."""
+    return bool(RX_CONDITIONAL.search(text))
+
 def promise_ladder(text: str, t0: str, t1: str, record: str,
                    pin: str | None, timeout: float, own: list[str] | None = None) -> dict:
     """Tree rung first; the judge only where the tree cannot speak.
@@ -564,6 +574,9 @@ def promise_ladder(text: str, t0: str, t1: str, record: str,
     never sees it. One naming none goes to the judge, whose BROKEN must cite
     a term the promise used (`resolve_receipt`). `pin=None` disables the
     judge, and those promises stay unchecked."""
+    if is_conditional(text):
+        return {"verdict": "unchecked", "objects": [], "engine": "gate",
+                "reason": "conditional on the operator; not due"}
     v = promise_verdict(text, t0, t1, record, own)
     v["engine"] = "tree"
     tree_declined = v["verdict"] == "unchecked" and not v["objects"] and record
@@ -3072,7 +3085,29 @@ def cmd_bs_calibrate(a) -> int:
 # the abstentions are the number most likely to drift (bar 3, bar 4).
 
 SESSIONS_DIR = Path.home() / ".svrnmesh" / "sessions"
-LIVE_WINDOW_S = 3600   # a transcript touched within the hour is a session still running
+LIVE_WINDOW_S = 3600   # a session whose last record is within the hour is still running
+
+def transcript_live(path: Path) -> bool:
+    """By the transcript's own clock, not the file's mtime: the harness
+    rewrites a finished transcript (8e6fdcec read as live a day after its
+    last message), so mtime says nothing about whether anyone is typing."""
+    last = ""
+    try:
+        with path.open(errors="replace") as fh:
+            for line in fh:
+                if '"timestamp"' in line:
+                    m = re.search(r'"timestamp":\s*"([^"]+)"', line)
+                    if m:
+                        last = m.group(1)
+    except OSError:
+        return False
+    if not last:
+        return False
+    try:
+        t = _dt.datetime.fromisoformat(last.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (_dt.datetime.now(_dt.timezone.utc) - t).total_seconds() < LIVE_WINDOW_S
 INTEGRITY_K = 3   # the prior: one broken promise in a three-promise session is not -1.0
 
 def integrity(held: int, broken: int, k: int = INTEGRITY_K) -> float | None:
@@ -3119,8 +3154,7 @@ def session_card(path: Path, pin: str | None, batch: int, timeout: float,
     # A session whose transcript is still growing has not come due: its
     # promises are OPEN, not broken. First replay card (c01789ff) called two
     # promises broken in a session that was mid-sentence in another window.
-    import time as _t
-    live = (_t.time() - path.stat().st_mtime) < LIVE_WINDOW_S
+    live = transcript_live(path)
     frame = SESSIONS_DIR / sid / "frame.md"
     contradictions = (frame_contradictions(frame.read_text(), corpora or installed_corpora())
                       if frame.exists() else None)
@@ -3214,10 +3248,9 @@ def cmd_replay(a) -> int:
     src = TRANSCRIPTS / a.project
     seen = set(a.exclude.split(",")) if a.exclude else set()
     files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
-    import time as _t
     files = [f for f in files if not any(f.stem.startswith(x) for x in seen)
              and f.stat().st_size >= a.min_bytes
-             and (a.include_live or _t.time() - f.stat().st_mtime >= LIVE_WINDOW_S)][:a.last]
+             and (a.include_live or not transcript_live(f))][:a.last]
     corpora = installed_corpora()
     cards = []
     for i, f in enumerate(files, 1):
@@ -3391,6 +3424,9 @@ def cmd_self_test(_a) -> int:
        "advice is not a commitment")
     eq(is_commitment("Committed as `c8a612784`."), False, "a report is not a commitment")
     eq(is_commitment("I'll wire the per-session aggregation next."), True, "first-person future is")
+    eq(is_conditional("Say the word and I'll land all three the moment they clear."), True,
+       "a commitment contingent on the operator is not due")
+    eq(is_conditional("I'll land all three now."), False, "an unconditional one is")
     eq(promise_objects("I'll wire `rows_for` into scripts/co-oplog.py on the MacBook"),
        ["rows_for", "scripts/co-oplog.py"], "identifiers and paths, not a bare CamelCase machine")
     eq(promise_objects("I'll implement `ClaimSearcher` next"), ["ClaimSearcher"],
