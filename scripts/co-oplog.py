@@ -3303,6 +3303,30 @@ def cmd_self_test(_a) -> int:
                    {"anchor": "`answer_segments`", "quantifier": "not_exists",
                     "predicate": "is gone"})["anchor"],
        "answer_segments", "backticks come off the anchor before the tree sees it")
+    # The promise ladder, by its minting inputs (session d6c0c747, 2026-09-13).
+    eq(is_commitment("Seven, roughly in order of what I'd actually do first."), False,
+       "advice is not a commitment")
+    eq(is_commitment("Committed as `c8a612784`."), False, "a report is not a commitment")
+    eq(is_commitment("I'll wire the per-session aggregation next."), True, "first-person future is")
+    eq(promise_objects("I'll wire `rows_for` into scripts/co-oplog.py on the MacBook"),
+       ["rows_for", "scripts/co-oplog.py"], "identifiers and paths, not a bare CamelCase machine")
+    eq(promise_objects("I'll implement `ClaimSearcher` next"), ["ClaimSearcher"],
+       "a backticked CamelCase type is an object")
+    eq(promise_verdict("Meanwhile, the four changes I'd argue for.", "a", "b", "feat: x\n+four")["verdict"],
+       "unchecked", "a promise naming no identifier is not the tree's to settle")
+    eq(promise_verdict("I'll add `helm_chart` next", "a", "b", "feat: helm\n+fn helm_chart()")["verdict"],
+       "kept", "the object in the patch is kept")
+    eq(promise_verdict("I'll add `helm_chart` next", "a", "b", "feat: other\n+fn other()")["verdict"],
+       "broken", "every object absent from the whole patch is broken")
+    eq(promise_verdict("I'll add `helm_chart` next", "a", "b", "")["verdict"],
+       "unchecked", "an empty interval cannot break anything")
+    eq(resolve_receipt("BROKEN", "four", "HEAD~1", "HEAD", "the four changes")[0], False,
+       "a number word is not a receipt")
+    eq(resolve_receipt("BROKEN", "juxtaposition", "HEAD~1", "HEAD", "emit the label")[0], False,
+       "a term the promise never used is not a receipt")
+    eq(integrity(0, 0), None, "no decided commitment is never-ran, not zero")
+    eq(integrity(1, 1), 0.0, "one held one broken is level")
+    eq(round(integrity(17, 2), 2), 0.68, "the prior k=3 keeps a short session off the rails")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
