@@ -1701,6 +1701,105 @@ def cmd_bs_preference(a) -> int:
         print(f"    {p['claim'][:96]}")
     return 0
 
+# ---- state-anchored claims --------------------------------------------
+#
+# The claim that cost the most on 2026-09-13 needed no judge at all. A
+# handoff frame recorded the agent-sessions corpus as "INGESTED (7.5k chunks,
+# tiered RAPTOR+GLiNER, done)" while its own `_enrichment_state.json` said
+# stalled. The daemon resumed that stalled pass on every boot for twelve
+# hours; GLiNER batches a whole conversation per call with no length cap, so
+# onnxruntime's arena grew 20 GB -> 80 GB in eight minutes with zero
+# requests. Two jetsams, every soak abort that night, and hours of a peer's
+# diagnosis, from one false `done` that a string comparison would have caught
+# at the moment it was written.
+#
+# So: the claims that hurt are mostly not subtle rhetoric. They are
+# assertions about system state that the system ALREADY RECORDS, and each
+# noun has exactly one canonical source. No model, no calibration, nothing to
+# rephrase around (ARCH 10).
+
+FRAME_ROOT = Path.home() / ".svrnmesh" / "sessions"
+INDEX_ROOT = Path.home() / ".svrnmesh" / "indexes"
+# `done|complete|finished` assert completion outright. The rest are
+# PARTICIPLES and appear just as readily in progressive constructions --
+# "still being ingested" tripped this on the first run of its own negative
+# control, which is why the control is there.
+RX_DONE = re.compile(r"\b(done|complete[d]?|finished|ingested|enriched|landed|shipped)\b", re.I)
+RX_PROGRESSIVE = re.compile(
+    r"\b(still|being|currently|in progress|mid-|resum\w+|pending|underway|not yet)\b", re.I)
+RX_SHA = re.compile(r"\b([0-9a-f]{7,40})\b")
+
+def corpus_phase(corpus_id: str) -> tuple[str, str] | None:
+    """(phase, message) from the corpus's own state file, or None."""
+    for d in INDEX_ROOT.glob(f"{corpus_id}*"):
+        f = d / "_enrichment_state.json"
+        if f.exists():
+            try:
+                st = json.loads(f.read_text())
+            except Exception:
+                continue
+            return str(st.get("phase", "?")), str(st.get("message", ""))[:160]
+    return None
+
+def installed_corpora() -> list[str]:
+    return sorted({d.name for d in INDEX_ROOT.glob("*") if d.is_dir()})
+
+def frame_contradictions(text: str, corpora: list[str]) -> list[dict]:
+    """Claims in a frame that its own state records contradict."""
+    out = []
+    for line in text.split("\n"):
+        if not RX_DONE.search(line) or RX_PROGRESSIVE.search(line):
+            continue
+        for cid in corpora:
+            short = cid.split("-")[0]
+            if len(short) < 5 or short not in line:
+                continue
+            got = corpus_phase(cid)
+            if got and got[0].lower() not in ("complete", "completed", "done"):
+                out.append({"kind": "corpus", "subject": cid, "phase": got[0],
+                            "record": got[1], "line": " ".join(line.split())[:150]})
+            break
+    return out
+
+def cmd_frame_check(a) -> int:
+    """Check frame claims against the records the system already keeps.
+
+    Deterministic. A contradiction here is not a judgement and cannot be
+    argued with: the frame says one thing and the artifact's own state file
+    says another."""
+    frames = sorted(FRAME_ROOT.glob("*/frame.md"), key=lambda q: q.stat().st_mtime, reverse=True)
+    if a.session:
+        frames = [f for f in frames if f.parent.name.startswith(a.session)]
+    else:
+        frames = frames[:a.frames]
+    corpora = installed_corpora()
+    hits, checked = [], 0
+    for f in frames:
+        try:
+            t = f.read_text()
+        except Exception:
+            continue
+        checked += 1
+        for h in frame_contradictions(t, corpora):
+            h["frame"] = f.parent.name[:8]
+            hits.append(h)
+    # A bare hex check was here and is CUT. It matched session ids, note ids
+    # and UUID fragments -- 151 "contradictions" over 40 frames, essentially
+    # all false, because hex SHAPE is not the same as a thing claimed to be a
+    # commit. A gate that fires on everything teaches people to ignore it,
+    # which is the one failure mode worse than not having it (ARCH 5). It
+    # comes back only with a way to tell a claimed commit from a coincidence.
+    print(f"\nframe-check — {checked} frame(s), {len(corpora)} installed corpora, no model\n")
+    if not hits:
+        print("  no contradictions")
+        return 0
+    for h in hits:
+        print(f"  {h['frame']}  CORPUS {h['subject']}")
+        print(f"    frame says : {h['line']}")
+        print(f"    state says : phase={h['phase']}  {h['record']}")
+    print(f"\n  {len(hits)} contradiction(s)")
+    return 0
+
 # ---- the sprawl axis ---------------------------------------------------
 #
 # A SECOND PAIR. Every form in bs-forms.toml measures claim against evidence;
@@ -2084,6 +2183,38 @@ def cmd_self_test(_a) -> int:
        "a whole sentence never appears verbatim in source", "count is gated like mentions")
     eq(plan_problem("in_diff", "the whole claim sentence as a grep pattern"),
        "", "in_diff is not gated -- a diff contains prose")
+
+    # frame-check's positive control. The case that minted it -- a frame
+    # reading "agent-sessions ... done" against a state file reading stalled
+    # -- cannot be replayed, because the corpus was wiped during the
+    # incident. So it is RECONSTRUCTED here and watched failing, rather than
+    # asserted to work (ARCH 5).
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as _d:
+        _root = Path(_d) / "indexes"
+        (_root / "widget-corpus-abc123").mkdir(parents=True)
+        (_root / "widget-corpus-abc123" / "_enrichment_state.json").write_text(json.dumps(
+            {"corpus_id": "widget-corpus", "phase": "stalled",
+             "message": "stalled — daemon likely restarted mid-pipeline"}))
+        (_root / "gadget-corpus-def456").mkdir(parents=True)
+        (_root / "gadget-corpus-def456" / "_enrichment_state.json").write_text(json.dumps(
+            {"corpus_id": "gadget-corpus", "phase": "complete", "message": ""}))
+        _saved = globals()["INDEX_ROOT"]
+        globals()["INDEX_ROOT"] = _root
+        try:
+            _c = installed_corpora()
+            _bad = frame_contradictions(
+                "- widget-corpus INGESTED (7.5k chunks, tiered, done)", _c)
+            eq(len(_bad), 1, "frame-check fires on done-vs-stalled")
+            eq(_bad[0]["phase"] if _bad else None, "stalled", "it reports the recorded phase")
+            eq(len(frame_contradictions(
+                "- gadget-corpus INGESTED (done)", _c)), 0,
+               "and stays silent when the record agrees")
+            eq(len(frame_contradictions(
+                "- widget-corpus is still being ingested", _c)), 0,
+               "and silent with no completion claim")
+        finally:
+            globals()["INDEX_ROOT"] = _saved
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
@@ -2149,6 +2280,10 @@ def main() -> int:
     bp.add_argument("--pin", default=DEFAULT_PIN)
     bp.add_argument("--timeout", type=float, default=120.0)
     bp.set_defaults(fn=cmd_bs_preference)
+    fc = sub.add_parser("frame-check", help="frame claims against the records the system already keeps")
+    fc.add_argument("--session")
+    fc.add_argument("--frames", type=int, default=40)
+    fc.set_defaults(fn=cmd_frame_check)
     sl = sub.add_parser("sprawl-labels", help="harvest sprawl ground truth from operator pushback")
     sl.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     sl.add_argument("--session")
