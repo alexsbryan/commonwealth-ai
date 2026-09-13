@@ -1902,12 +1902,15 @@ def cmd_counts(a) -> int:
             v = {"verdict": "not-mine", "why": "ran is corroboration-only"}
         else:
             v = {"verdict": "not-mine", "why": f"routed {r}, no instrument"}
-        if v["verdict"] == "broken":
-            caught += 1
-            print(f"PASS {name}")
-        else:
-            missed += 1
-            print(f"FAIL {name} [{r}/{v['verdict']}] {s['false_claim'][:64]}")
+        # stdout is the contract and carries only the name, so a name is the
+        # same string run to run and the solve loop can diff them. The
+        # reason -- which guard declined, or what the receipt was -- goes to
+        # stderr, where a reader inspecting the passes one by one finds it.
+        status = "PASS" if v["verdict"] == "broken" else "FAIL"
+        caught += status == "PASS"; missed += status == "FAIL"
+        print(f"{status} {name}")
+        print(f"  {name} [{r}/{v['verdict']}] {v.get('why', '')} :: {s['false_claim'][:72]}",
+              file=sys.stderr)
     tot = caught + missed
     print(f"# caught {caught}/{tot} known-false claims "
           f"({caught/tot:.0%})" if tot else "# no cases", file=sys.stderr)
@@ -2129,6 +2132,22 @@ FORM_SCHEMA = {
     "required": ["anchor", "quantifier", "predicate"],
 }
 
+def govern_form(claim: str, f: dict) -> dict:
+    """The verbatim rule, applied to what the model returned.
+
+    The anchor and the predicate must both be VERBATIM from the claim,
+    checked in code. A paraphrased anchor is one the model composed, and
+    adjudicating a composed anchor against the tree measures the model's
+    imagination; a paraphrased predicate is the same defect one field over,
+    and it is the field the presence guard in `instrument_form` reads."""
+    a = (f.get("anchor") or "").strip().strip("`'\"")
+    if a and a.lower() not in claim.lower():
+        return {"quantifier": None, "why": f"anchor {a!r} is not verbatim in the claim"}
+    pr = (f.get("predicate") or "").strip().strip("`'\"")
+    if pr and pr.lower() not in claim.lower():
+        return {"quantifier": None, "why": f"predicate {pr!r} is not verbatim in the claim"}
+    return {**f, "anchor": a, "predicate": pr}
+
 def claim_form(claim: str, pin: str, timeout: float) -> dict:
     """(anchor, quantifier, predicate) or a refusal. Never a verdict."""
     try:
@@ -2136,15 +2155,26 @@ def claim_form(claim: str, pin: str, timeout: float) -> dict:
         f = json.loads(raw)
     except (DaemonDown, json.JSONDecodeError) as e:
         return {"quantifier": None, "why": f"not extracted ({e})"}
-    a = (f.get("anchor") or "").strip().strip("`'\"")
-    # The anchor must be VERBATIM from the claim, checked in code. A
-    # paraphrased anchor is one the model composed, and adjudicating a
-    # composed anchor against the tree measures the model's imagination.
-    if a and a.lower() not in claim.lower():
-        return {"quantifier": None, "why": f"anchor {a!r} is not verbatim in the claim"}
-    f["anchor"] = a
+    f = govern_form(claim, f)
     f["engine"] = model
     return f
+
+# WHAT A GREP AT A SHA CAN SETTLE: presence, absence, count of an identifier
+# in SOURCE TEXT. Every predicate here is one of those relations. A predicate
+# outside this set ranges over something else -- a run's output, a row's
+# contents, a component's behaviour -- and the grep answers a question the
+# claim did not ask.
+#
+# Failing input: "no transcript row carried `answer_segments`". Identifier-
+# shaped anchor, `not_exists`, `git grep` at the parent sha returns 991, and
+# the claim was TRUE: it quantifies over runtime transcript rows, the grep
+# over source. Reported as the session's one catch; spurious. The predicate
+# is `carried`, which is not here, so the instrument now declines it.
+TREE_PRESENCE = re.compile(
+    r"\b(?:exists?|present|absent|gone|missing|removed|deleted|dropped|defined|"
+    r"declared|remains?|left|only|sole|no other|no such|nowhere|anywhere|appears?|"
+    r"mentioned|referenced|occurs?|occurrences?|lives?|is there|are there|"
+    r"there is|there are|there was|there were|no longer)\b")
 
 def instrument_form(claim: str, form: dict, sha: str) -> dict:
     """Adjudicate an EXTRACTED form against the tree at the sha.
@@ -2175,6 +2205,13 @@ def instrument_form(claim: str, form: dict, sha: str) -> dict:
             r"|\w+::[\w:]+|[A-Z][A-Z0-9_]{3,})", a):
         return {"verdict": "not-mine",
                 "why": f"anchor {a!r} is not an identifier a tree can answer about"}
+    # THE PREDICATE MUST BE A RELATION THE TREE CAN SETTLE (`TREE_PRESENCE`).
+    # An identifier-shaped anchor is necessary, not sufficient: a claim can
+    # name a real symbol and still quantify over what a run produced.
+    pr = (form.get("predicate") or "").lower()
+    if not TREE_PRESENCE.search(pr):
+        return {"verdict": "not-mine",
+                "why": f"predicate {pr!r} is not presence in the tree; needs the run, not the grep"}
     lines = [l for l in git("grep", "-cF", a, sha).splitlines() if l.strip()]
     total = 0
     for l in lines:
@@ -2896,6 +2933,27 @@ def cmd_self_test(_a) -> int:
                "and silent with no completion claim")
         finally:
             globals()["INDEX_ROOT"] = _saved
+    # The form instrument's guards, each with the input that minted it.
+    # The one live catch of the --form run, watched declining: the anchor is
+    # identifier-shaped and in the tree, and the predicate is about a row.
+    _row = "no transcript row carried answer_segments — the native path did not run on this arm"
+    eq(instrument_form(_row, {"anchor": "answer_segments", "quantifier": "not_exists",
+                              "predicate": "carried"}, "HEAD")["verdict"],
+       "not-mine", "a claim about what a row carried is not the grep's to settle")
+    # And the same anchor with a presence predicate still adjudicates, so the
+    # guard narrows the instrument rather than closing it.
+    eq(instrument_form("instrument_form is gone",
+                       {"anchor": "instrument_form", "quantifier": "not_exists",
+                        "predicate": "is gone"}, "HEAD")["verdict"],
+       "broken", "a presence predicate over a present identifier is refuted")
+    eq(govern_form("no transcript row carried answer_segments",
+                   {"anchor": "answer_segments", "quantifier": "not_exists",
+                    "predicate": "was absent"})["quantifier"],
+       None, "a composed predicate is refused, like a composed anchor")
+    eq(govern_form("`answer_segments` is gone",
+                   {"anchor": "`answer_segments`", "quantifier": "not_exists",
+                    "predicate": "is gone"})["anchor"],
+       "answer_segments", "backticks come off the anchor before the tree sees it")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
