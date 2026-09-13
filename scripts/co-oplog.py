@@ -147,6 +147,35 @@ def demark(line: str) -> str:
     """A markdown line reduced to the prose a claim would be written in."""
     return RX_EMPHASIS.sub("", RX_LEADER.sub("", line)).strip()
 
+# A user record's `content` is a STRING when the operator typed it and a LIST
+# when it carries tool results. Every reader here guarded on `isinstance(
+# content, list)` until 2026-09-13 and therefore skipped EVERY REAL OPERATOR
+# MESSAGE in the archive -- measured on 40 sessions: 33 user messages seen,
+# all 33 harness interrupts, zero operator turns. The audience split this
+# order is built on ("97% narration, 3% operator-facing") was counting
+# end-of-file blocks and interrupts, not operator turns.
+#
+# One extractor, used by every reader (ARCH 8).
+RX_HARNESS = re.compile(
+    r"^\s*(?:\[Request interrupted|<command-name>|<local-command-caveat>"
+    r"|<command-message>|Caveat: The messages below)", re.I)
+
+def user_text(content) -> str | None:
+    """The operator's own words, or None for a tool result or harness noise."""
+    if isinstance(content, str):
+        t = strip_reminders(content)
+    elif isinstance(content, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+            return None
+        t = strip_reminders(" ".join(b.get("text", "") for b in content
+                                     if isinstance(b, dict) and b.get("type") == "text"))
+    else:
+        return None
+    t = t.strip()
+    if not t or RX_HARNESS.match(t):
+        return None
+    return t
+
 def sentences(text: str) -> list[str]:
     """Line first, then sentence. A markdown table row or bullet is a claim
     on its own; run whole-text sentence splitting and a nine-row table
@@ -191,10 +220,10 @@ def turns(path: Path) -> list[tuple[int, str, str, str]]:
             except Exception:
                 continue
             content = (rec.get("message") or {}).get("content")
-            if not isinstance(content, list):
-                continue
             when = rec.get("timestamp") or ""
             if rec.get("type") == "assistant":
+                if not isinstance(content, list):
+                    continue
                 for b in content:
                     if not isinstance(b, dict):
                         continue
@@ -206,9 +235,8 @@ def turns(path: Path) -> list[tuple[int, str, str, str]]:
                     elif b.get("type") == "tool_use":
                         events.append(("tool", 0, "", when))
             elif rec.get("type") == "user":
-                is_result = any(isinstance(b, dict) and b.get("type") == "tool_result"
-                                for b in content)
-                events.append(("result" if is_result else "user", 0, "", when))
+                events.append(("user" if user_text(content) else "result",
+                               0, "", when))
 
     out = []
     for n, (kind, idx, text, when) in enumerate(events):
@@ -1512,6 +1540,25 @@ def cmd_bs_ablate(a) -> int:
                               "claim": sent, "evidence_full": rest,
                               "evidence_thin": thin,
                               "kept": a.keep})
+    # THE CONTROL ARM. Ablation alone cannot say whether an inert verdict is
+    # the judge ignoring evidence or the claim genuinely surviving the cut.
+    # So each pair also carries evidence from a DIFFERENT turn entirely --
+    # same length band, no relation to the claim.
+    #
+    # This is the positive control, and it is the whole test: a judge that
+    # reads evidence must rule differently on foreign evidence than on the
+    # claim's own. If the `tightened` rate is the same for "two thirds of my
+    # own evidence removed" and "someone else's evidence instead", the judge
+    # is scoring the claim's surface and the ablation number means nothing on
+    # its own. A threshold picked after seeing the ablation number would be
+    # the tuning this order exists to catch; a control needs no threshold.
+    if pairs:
+        import random as _r
+        _r.seed(a.seed + 1)
+        donors = [q["evidence_full"] for q in pairs]
+        for i, q in enumerate(pairs):
+            j = (i + 1 + _r.randrange(len(pairs) - 1)) % len(pairs) if len(pairs) > 1 else i
+            q["evidence_foreign"] = donors[j]
     random.seed(a.seed)
     if len(pairs) > a.n:
         pairs = random.sample(pairs, a.n)
@@ -1537,6 +1584,7 @@ def cmd_bs_preference(a) -> int:
     dev = {f["id"] for f in forms if f["deviation"]}
     pairs = json.loads(Path(a.bank).read_text())["pairs"][:a.n]
     tightened = inert = viol = unjudged = 0
+    ctl_tightened = ctl_n = 0
     bad = []
     for p in pairs:
         full = bs_check(p["claim"], p["evidence_full"], a.pin, a.timeout, forms)
@@ -1552,6 +1600,12 @@ def cmd_bs_preference(a) -> int:
             bad.append((p, full["form"], thin["form"]))
         else:
             inert += 1
+        if p.get("evidence_foreign"):
+            fo = bs_check(p["claim"], p["evidence_foreign"], a.pin, a.timeout, forms)
+            if fo["form"] is not None:
+                ctl_n += 1
+                if not fd and fo["form"] in dev:
+                    ctl_tightened += 1
     judged = tightened + inert + viol
     if not judged:
         print("VOID: nothing judged (daemon)")
@@ -1560,8 +1614,16 @@ def cmd_bs_preference(a) -> int:
     print(f"  tightened when evidence was cut    {tightened}/{judged}  ({tightened/judged:.0%})")
     print(f"  INERT, verdict never moved         {inert}/{judged}  ({inert/judged:.0%})")
     print(f"  INCOHERENT, less evidence read as more support  {viol}/{judged}  ({viol/judged:.0%})")
-    print(f"\n  A high INERT share means the judge is scoring the claim's surface,")
-    print(f"  not the step from evidence to conclusion.")
+    if ctl_n:
+        own = tightened / judged
+        ctl = ctl_tightened / ctl_n
+        print(f"\n  CONTROL — same claims against FOREIGN evidence ({ctl_n} judged)")
+        print(f"    tightened on foreign evidence      {ctl_tightened}/{ctl_n}  ({ctl:.0%})")
+        print(f"    tightened on its own cut evidence  {tightened}/{judged}  ({own:.0%})")
+        print(f"    separation                         {own - ctl:+.0%}")
+        print(f"\n  Separation at or below zero means the judge does not distinguish")
+        print(f"  the claim's own evidence from a stranger's, so it is scoring the")
+        print(f"  claim's surface and the ablation number says nothing on its own.")
     for p, ff, tf in bad[:5]:
         print(f"\n  [incoherent] full={ff} thin={tf}")
         print(f"    {p['claim'][:96]}")
@@ -1657,6 +1719,111 @@ def sprawl_session(path: Path) -> dict:
             "items_per_block": round(sum(blocks) / len(blocks), 2) if blocks else 0.0,
             "claims_per_call": round(sum(blocks) / calls, 3) if calls else None,
             "over_bound": over}
+
+# The Bro axis gets the same escape the BS axis got from ablation: an answer
+# key derived from structure instead of from an annotator.
+#
+# The operator labels sprawl every time they push back. "Not seven, three
+# tops." "Just anchor to the principle." "Plain recommendations." Those are
+# ground truth that already exists, and the SIGNATURE is readable without
+# reading the words, which keeps it out of ARCH 9's keyword-list trap:
+#
+#   a long operator-facing block, then a SHORT operator reply, then the
+#   assistant answering the SAME question again.
+#
+# The re-answer is what separates a correction from a new task. A short reply
+# that moves on to something else is not a trim; a short reply followed by a
+# second pass at the same subject is.
+
+def topic_tokens(text: str) -> set:
+    return {t.lower() for t in re.findall(r"[A-Za-z_][A-Za-z0-9_.:/-]{4,}", text or "")}
+
+def jaccard(a: set, b: set) -> float:
+    return len(a & b) / len(a | b) if (a or b) else 0.0
+
+def sprawl_labels(path: Path, short_words: int = 30, overlap: float = 0.12) -> list[dict]:
+    """Turns the operator visibly trimmed. Structural, not lexical."""
+    events = []
+    with path.open() as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            content = (rec.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            if rec.get("type") == "user":
+                if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+                    continue
+                txt = strip_reminders(" ".join(
+                    b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"))
+                if txt.strip():
+                    events.append(("user", txt))
+            elif rec.get("type") == "assistant":
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "text":
+                        t = strip_reminders(b.get("text", ""))
+                        if len(t) >= 200:
+                            events.append(("asst", t))
+
+    out = []
+    for i in range(len(events) - 2):
+        (k0, a0), (k1, u), (k2, a1) = events[i], events[i + 1], events[i + 2]
+        if (k0, k1, k2) != ("asst", "user", "asst"):
+            continue
+        if len(u.split()) > short_words:
+            continue                       # a full new instruction, not a trim
+        t0, t1 = topic_tokens(a0), topic_tokens(a1)
+        j = jaccard(t0, t1)
+        if j < overlap:
+            continue                       # moved on; not a re-answer
+        out.append({"trimmed_words": len(a0.split()),
+                    "reply_words": len(u.split()),
+                    "reanswer_words": len(a1.split()),
+                    "topic_overlap": round(j, 3),
+                    "shrank": len(a1.split()) < len(a0.split()),
+                    "offered_before": offered(a0), "offered_after": offered(a1),
+                    "reply": " ".join(u.split())[:120]})
+    return out
+
+def cmd_sprawl_labels(a) -> int:
+    """Harvest sprawl ground truth from operator pushback. No daemon, no
+    annotator -- the label is the operator's own next message."""
+    src_dir = TRANSCRIPTS / a.project
+    files = sorted(src_dir.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    if a.session:
+        files = [f for f in files if f.stem.startswith(a.session)]
+    else:
+        files = files[:a.sessions]
+    rows = []
+    for f in files:
+        try:
+            for r in sprawl_labels(f, a.short_words, a.overlap):
+                r["session"] = f.stem[:8]
+                rows.append(r)
+        except Exception as e:
+            print(f"  skip {f.stem[:8]}: {e}", file=sys.stderr)
+    if not rows:
+        print("no trims found")
+        return 4
+    import statistics as st
+    shrank = sum(1 for r in rows if r["shrank"])
+    print(f"\n{len(rows)} operator trims across {len(files)} session(s)\n")
+    print(f"  trimmed turn, median words     {int(st.median([r['trimmed_words'] for r in rows]))}")
+    print(f"  re-answer, median words        {int(st.median([r['reanswer_words'] for r in rows]))}")
+    print(f"  the re-answer was SHORTER      {shrank}/{len(rows)}  ({shrank/len(rows):.0%})")
+    print(f"  median topic overlap           {st.median([r['topic_overlap'] for r in rows]):.2f}")
+    print()
+    for r in sorted(rows, key=lambda x: -x["trimmed_words"])[:a.show]:
+        arrow = "shorter" if r["shrank"] else "LONGER"
+        print(f"  {r['session']}  {r['trimmed_words']:>5}w -> {r['reanswer_words']:>5}w ({arrow}), "
+              f"items {r['offered_before']}->{r['offered_after']}")
+        print(f"    trim: {r['reply']}")
+    if a.json:
+        print(json.dumps(rows, indent=2))
+    return 0
 
 def cmd_sprawl(a) -> int:
     src_dir = TRANSCRIPTS / a.project
@@ -1883,6 +2050,15 @@ def main() -> int:
     bp.add_argument("--pin", default=DEFAULT_PIN)
     bp.add_argument("--timeout", type=float, default=120.0)
     bp.set_defaults(fn=cmd_bs_preference)
+    sl = sub.add_parser("sprawl-labels", help="harvest sprawl ground truth from operator pushback")
+    sl.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    sl.add_argument("--session")
+    sl.add_argument("--sessions", type=int, default=40)
+    sl.add_argument("--short-words", type=int, default=30)
+    sl.add_argument("--overlap", type=float, default=0.12)
+    sl.add_argument("--show", type=int, default=10)
+    sl.add_argument("--json", action="store_true")
+    sl.set_defaults(fn=cmd_sprawl_labels)
     sp = sub.add_parser("sprawl", help="response-vs-ask counts: items offered, bounds exceeded, per unit of work")
     sp.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
     sp.add_argument("--session", help="one session id prefix; default is the most recent N")
