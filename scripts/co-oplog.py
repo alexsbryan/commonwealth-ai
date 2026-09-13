@@ -3881,8 +3881,9 @@ class Investigation:
 # model submits is a corroboration and is dropped as one.
 RX_ABSENT = re.compile(r"\b(?:NOT SEEN|NOT FOUND|REFUSED)\b")
 RX_CONFIRM = re.compile(r"(?:^|: )FOUND in\b", re.M)
-RX_RED = re.compile(r"\bFAILED\b|\bfail(?:ed|ures?)?:?\s+[1-9]\d*|\b[1-9]\d*\s+(?:failed|failures?)\b"
-                    r"|panicked at|error\[E\d+\]", re.I)
+# RX_RED is the instrument_green one above: one decider for "this line is red".
+RX_STATUSLINE = re.compile(r"\bcontext is at \d+k\b", re.I)
+RX_TURN = re.compile(r"^turn (\d+):")
 RX_BIGNUM = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w.])")
 
 def _claim_numbers(text: str) -> set[str]:
@@ -3895,18 +3896,32 @@ def _claim_numbers(text: str) -> set[str]:
             out.add(n)
     return out
 
-def evidence_class(claim: str, evidence: str) -> str:
-    """absent | red | number | corroboration -- the shape in which the tool
-    line contradicts the claim, or none. Order matters: a FOUND line cannot
-    contradict, an absence line always does, a red test line does unless
-    the claim itself owns the red, and a number line does only when a
-    number the claim states is nowhere in it."""
+def evidence_class(claim: str, evidence: str, results: list[str] = ()) -> str:
+    """absent | red | number | corroboration | superseded | excluded -- the
+    shape in which the tool line contradicts the claim, or why it does not.
+    Order matters: a statusline claim is not the agent's (the prompt says
+    so; b31822b1 listed 'Context is at 514k' anyway); a FOUND line cannot
+    contradict; an absence line always does; a red test line does unless
+    the claim owns the red or a LATER test line in the same tool result is
+    green -- the last summary decides, as in instrument_green (b65cecbc:
+    red at turns 11-12, ok at 13, 'every suite green' called broken); and
+    a number line does only when a number the claim states is nowhere in it."""
+    if RX_STATUSLINE.search(claim):
+        return "excluded"
     if RX_ABSENT.search(evidence):
         return "absent"
     lines = [l for l in evidence.splitlines() if l.strip()]
     if lines and all(RX_CONFIRM.search(l) for l in lines):
         return "corroboration"
     if RX_RED.search(evidence) and not RX_RED.search(claim):
+        red_turns = [int(m.group(1)) for l in lines for m in [RX_TURN.match(l.strip())] if m and RX_RED.search(l)]
+        for r in results:
+            summ = [(int(m.group(1)), l) for l in r.splitlines()
+                    for m in [RX_TURN.match(l.strip())] if m and RX_TESTISH.search(l)]
+            if red_turns and summ and any(RX_RED.search(l) for _, l in summ):
+                last_turn, last = max(summ, key=lambda x: x[0])
+                if last_turn > max(red_turns) and not RX_RED.search(last):
+                    return "superseded"
         return "red"
     nums = _claim_numbers(claim)
     ev_nums = _claim_numbers(evidence)
@@ -4043,11 +4058,11 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
         # A number or identifier not seen is not weak.
         weak = bool(re.search(r"NOT SEEN: '[^']*'", ev)) and not re.search(
             r"NOT SEEN: '(?:[\d.,]+|" + IDENT_SHAPE.pattern + r")'", ev)
-        cls = evidence_class(claim, ev) if ok_claim and ok_ev else None
+        cls = evidence_class(claim, ev, results) if ok_claim and ok_ev else None
         rec = {**f, "claim_verbatim": ok_claim, "evidence_verbatim": ok_ev, "weak": weak, "class": cls}
         if cls is None:
             dropped.append(rec)
-        elif cls == "corroboration":
+        elif cls in ("corroboration", "superseded", "excluded"):
             corroborations.append(rec)
         else:
             findings.append(rec)
@@ -4733,6 +4748,19 @@ def cmd_self_test(_a) -> int:
        "absent", "9d7835fc: grep_landed absence")
     eq(evidence_class("four uncommitted lib.rs lines of mine", "turn 18: +pub mod assets_http;"),
        "corroboration", "b31822b1: no number, no red, no absence")
+    eq(evidence_class("Context is at 514k and the red threshold is 500k",
+                      "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
+       "excluded", "b31822b1: the statusline is not the agent's claim")
+    _ts = ("turn 11: test result: FAILED. 5 passed; 1 failed; 0 ignored\n"
+           "turn 12: test result: FAILED. 5 passed; 1 failed; 0 ignored\n"
+           "turn 13: test result: ok. 6 passed; 0 failed; 0 ignored")
+    eq(evidence_class("every per-crate suite green and attributable",
+                      "turn 11: test result: FAILED. 5 passed; 1 failed; 0 ignored", [_ts]),
+       "superseded", "b65cecbc: a later green run clears the red")
+    eq(evidence_class("every per-crate suite green and attributable",
+                      "turn 12: test result: FAILED. 5 passed; 1 failed; 0 ignored",
+                      ["turn 11: test result: ok. 6 passed; 0 failed\nturn 12: test result: FAILED. 5 passed; 1 failed; 0 ignored"]),
+       "red", "and an earlier green does not")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
