@@ -1,0 +1,3 @@
+# DEAD CODE — SCIP SCHEMA TRAP: symbols.kind and refs.ref_kind in scip_graph.db are JUNK. 288,909 of 325,873 rows are kind='unknown', there…
+
+DEAD CODE — SCIP SCHEMA TRAP: symbols.kind and refs.ref_kind in scip_graph.db are JUNK. 288,909 of 325,873 rows are kind='unknown', there are ZERO kind='function' rows, and ref_kind is hardcoded 'direct'. The only reliable discriminator is the qualified_name descriptor grammar. quality/DELETION.md §6.

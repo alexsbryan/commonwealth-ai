@@ -1,0 +1,3 @@
+# Hand-port of common/speculative.cpp into sovereign-inference surfaced KV-rollback off-by-one bug on first run in measure_acceptance (Risk 3…
+
+Hand-port of common/speculative.cpp into sovereign-inference surfaced KV-rollback off-by-one bug on first run in measure_acceptance (Risk 3 in original plan, materialized as predicted). Correct port achievable but 2-4 days careful work that buys nothing the llama-server harness does not already provide. Use bench_sd_ab.sh (delegates SD loop to upstream battle-tested implementation) for any future SD measurement on this hardware.

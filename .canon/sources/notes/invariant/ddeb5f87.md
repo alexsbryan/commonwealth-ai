@@ -1,0 +1,11 @@
+# TEMPERATURE 0.0 IS NOT DETERMINISM ON THE LOCAL DAEMON, AND A SMALL AGREEMENT SAMPLE IS NOT EVIDENCE THAT IT IS (measured 2026-08-27, canon…
+
+TEMPERATURE 0.0 IS NOT DETERMINISM ON THE LOCAL DAEMON, AND A SMALL AGREEMENT SAMPLE IS NOT EVIDENCE THAT IT IS (measured 2026-08-27, canon repo, commit a57897d).
+
+WHAT HAPPENED. The canon two-up bar asks the comparison stage about one pair per model call, at `temperature: 0.0` (canon-cli/src/model.rs:506). Two runs agreed on 12 of 12 pairs held at identical inputs, which reads as determinism and would have justified n=1 arms. The third run reproduced 16 of 17 and flipped one pair (P2) from not-seen to SEEN — same prompt, same binary, same candidate indices, same endpoint. The 12/12 was not evidence of silence; it was too small a sample to show the flip. Endpoint is commonwealth at localhost:9741, Qwen3.8-27B; batching changes reduction order, so greedy sampling still wobbles.
+
+WHY IT MATTERS. Both arms of the prompt experiment would have been single runs, and the arm delta that decided the change was +2 pairs. A one-pair endpoint wobble is not distinguishable from a one-pair prompt effect at n=1. The pre-registered check ("if the replicate does not reproduce EXACTLY, the design is void") is the only reason this was caught rather than shipped as a result.
+
+WHAT TO DO. For any A/B over this endpoint, run n>=3 per unit and let majority decide, and PRINT the count of units that did not answer the same way every time — that count is the instrument's noise floor and no delta smaller than it is readable. In canon this is `CANON_BAR_TWO_UP_RUNS=3` in crates/canon-cli/tests/draft_bar.rs. Observed floor: 1 flipped pair of 21 on the shipped prompt, rising to 3 of 21 on the arm that made the stage more willing to call a tension — i.e. the intervention itself moved the noise, which is a cost worth barring in the NEXT pre-registration.
+
+RELATED AND NOT CONTRADICTED: note 680940ce says the deep-research compose replay is a zero-noise instrument where n=1 suffices forever. That is a different pipeline (both halves deterministic by construction, no live model call in the compared leg). This note does not weaken it; it says the property must be MEASURED per instrument and never assumed from the temperature setting.

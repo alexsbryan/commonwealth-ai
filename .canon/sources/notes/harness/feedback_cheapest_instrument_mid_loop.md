@@ -1,0 +1,9 @@
+# Operator wants quick iterations — mid-loop signal from the cheapest instrument that catches a direction change; full instruments run at…
+
+Operator, 2026-08-13, after a day of hour-long adversarial harvests: "It feels like we're still running really long instruments to get signal — I wanted quicker iterations."
+
+Why: the full 67-turn harvest feeds a bar that reads ~6 of those turns; every tuning loop that waits an hour for a 6-turn signal is paying 10x. The iteration drag compounds across a multi-land day.
+
+How to apply: two-tier instruments. ITERATION arms run the frozen probes + known movers only (~6 turns, minutes) or, better, offline replay over stored artifacts (see backlog `judge-replay-harness` — recompute verdicts from the forensics ledger, ~1-2 min, no drafting). LAND arms — the full bank — run once, at gate time, never between. Reports always name which tier ran. Same principle beyond judges: one warm turn for a latency direction-check mid-loop; the 5-run distribution only when transitioning a bar. Related: [[full-suite-not-repeated-filters]] (the test-gate analogue).
+
+Restated by the operator 2026-08-24 as "we should always strive to use the right tool at the right moment", after I broke it in the other direction. Told to run a canon prompt A/B on the 4B for throughput, I used the 4B for the VERDICT run too. It sits at recall 0.18 on the maple-house bar against the 27B's 0.64 (floor 0.30), so the bar KILLed the run and the session produced no measurement. The 4B was the right tool for the LOOP and earned it — two root-cause bugs in an hour that the 27B had been masking. The rule is symmetric: cheap instrument mid-loop is not a licence to carry it into the gate, and the gate model is not a licence to iterate slowly. Name which tier a number came from before reporting it.

@@ -8,7 +8,6 @@ draft-runs/
 # endpoint configured" instead of calling a port on this laptop (canon
 # requirements doc, entry 17).
 config
-# `sources/` holds notes exported by scripts/canon-export-notes.py. This repo is
-# PUBLIC and those notes were never in git; ignored until the operator decides
-# whether they are published, so no grab-bag commit can publish them first.
-sources/
+# `sources/` is committed: it is the history canon rules cite (canon
+# LOAD_TEST_DESIGN entry 6). scripts/canon-export-notes.py redacts it first,
+# because this repository is public.

@@ -1,0 +1,17 @@
+# THE SSE model FIELD CANNOT ATTRIBUTE A RUN TO A SLOT — it is a verbatim echo of the string the CLIENT requested. Any guard built on it is…
+
+THE SSE `model` FIELD CANNOT ATTRIBUTE A RUN TO A SLOT — it is a verbatim echo of the string the CLIENT requested. Any guard built on it is vacuous. Measured live on RuggedFox 2026-07-28.
+
+WHAT HAPPENED. First real `svrn mesh bench` run against the restarted daemon. `/status` reported the primary (Qwen3.5-122B-A10B-UD-Q5_K_XL) `resident: false` with the compute child in `lifecycle: "starting"`. The canary got a hard error — `{"message":"local inference failed: Compute slot unavailable: ... child not serving (starting)","type":"backend_error"}` — and yet the three timed streaming trials that followed SUCCEEDED, returning ~79-102 tok/s. That rate is impossible for a 122B (measured local ~14.8 tok/s, distributed 36/12 ~17.3-17.9). Something else answered.
+
+AND EVERY SSE FRAME SAID `"model":"commonwealth/primary"`. Verified by hand with curl: the server echoes `model_for_stream` straight from the request. So the wrong-slot guard — the one the plan calls out as "THE Fast-slot trap, caught at runtime rather than avoided by convention" — passed cleanly on the exact failure it exists to catch. `scripts/measure-distributed-decode.sh` has the SAME hole (its guard 1 compares served_model against primary_id and explicitly accepts the `commonwealth/primary` alias); it never caught this because it only ever ran when the primary WAS up.
+
+THE SIGNAL THAT ACTUALLY ATTRIBUTES: `mesh_bench::primary_is_serving(status_body, primary_model_id)`, checked before AND after the timed trials. It must understand TWO hosting modes, and reading only the obvious field is a worse bug than the one it fixes:
+  - IN-PROCESS: `inference.resident[role=primary].resident == true`.
+  - COMPUTE CHILD: `inference.compute_children[]` with matching `model_id` and `lifecycle == "serving"`. THIS IS LOAD-BEARING — `ComputeRoutedProvider::resident_slots()` (sovereign-compute/src/manager.rs) just forwards `self.inner.resident_slots()`, the IN-PROCESS engine's view, and the in-process engine never loaded the model. So a perfectly healthy child-hosted primary reports `resident: false` FOREVER. A guard reading only that field refuses every honest run on this config — worse than accepting dishonest ones. Caught before shipping only by asking "can this ever be true here?"; `ChildLifecycle` is snake_case (starting|warming|serving|degraded|restarting|failed) and only `serving` counts, because during `starting`/`warming` is exactly when something else answers.
+
+CONSEQUENCE FOR THE CANARY: it must wait for `primary_is_serving`, NOT for "I got tokens". Stopping at first tokens hands the timed trials to whatever is currently answering — which is the hijack. Bounded at 20 × 30s.
+
+RE-BASELINE ANY tok/s NUMBER TAKEN THROUGH `POST /v1/chat/completions` WITH `model: "commonwealth/primary"` WITHOUT A RESIDENCY CHECK. The response looks correct at every layer a client can see. Related: project_oicp_fast_slot_hijack (ALL HTTP Normal-class traffic served by the 4B pre-2026-07-23).
+
+SEPARATE OPEN QUESTION FOR THE DAEMON (not fixed here, out of week 2's scope): a request naming `commonwealth/primary` is answered by a different model, successfully and silently, while the primary's child is starting. The canary got a clean 503-shaped error on the same slot at the same moment, so the non-streaming and streaming paths disagree about whether the slot is available. Worth deciding whether the streaming path should refuse too.

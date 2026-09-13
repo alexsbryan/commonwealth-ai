@@ -1,0 +1,7 @@
+# Operator wants footguns DELETED, not routed around — a fix that leaves the trip wire in place is not a fix (2026-09-04)
+
+Operator, 2026-09-04, on the chat-ask-refusal fix (commit a4f8f2a95): "I want the structural fix, I feel like we have this proclivity to tune the system away from footguns and say it's fixed, but then we leave the footguns there so when we make minor changes elsewhere we hit the trip wires again and the bad times roll again."
+
+Why: The fix had correctly proved the mechanism (a word-conjunction check `answer_supported_by_quote` rejecting a correct paraphrase) and then rerouted the failing case to another path, leaving the check byte-identical and the `longform_chars = 1800` path selector and the silent `PASSAGE_CHAR_BUDGET` truncation in place. That is the repo's recurring pattern: a plausible fix that makes the symptom go away while the constant that produced it stays armed for the next minor change.
+
+How to apply: When a defect traces to a threshold, keyword list, or fallback, the order's deliverable is to REMOVE or REPLACE the decider with the one the system already trusts (one decider, one name), and to make the remaining thresholds unable to change the answer (they may change cost). A "fix" that adds a fall-through, a special case, or a tuned constant is a mitigation and must be labelled as such in the report, with the footgun named and an order for its removal. Related: [[ground-in-reuse-before-building]], [[no-helpful-noise-merit-roi-only]], ARCH §2.4, §7, §10.6, §18.3.

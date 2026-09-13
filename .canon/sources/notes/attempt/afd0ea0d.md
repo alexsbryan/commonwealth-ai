@@ -1,0 +1,11 @@
+# chat-ask-refusal: TWO of the three pre-registered hypotheses are FALSIFIED by the trace (2026-09-04), and the third was right about the…
+
+chat-ask-refusal: TWO of the three pre-registered hypotheses are FALSIFIED by the trace (2026-09-04), and the third was right about the wrong half. Recording the falsifications because they are results, and because each one is the obvious guess someone will make again.
+
+H1 — "the evidence window truncates or reorders so the chunk is absent or buried". FALSE. The citation stage's build_passages renders 20 of 20 retrieved chunks in retrieval order, 10,216 chars against PASSAGE_CHAR_BUDGET = 28,000, so the break-on-budget branch never fires. The tour's gate table row is passage [2] of 20, at char offset 456 of 10,216 — near the TOP of the window, not buried. Evidence: forensics record kind:"citation", fields n_chunks=20 / passage_chars=10216 / passages.
+
+H3 — "the model splits a two-part question and answers only the part it can quote". FALSE. The captured reply carries a complete, correct PART/QUOTE/ANSWER block for BOTH parts. The model quoted the 02-journey.svg img-alt sentence for the gate's role and paraphrased it accurately. Nothing about the refusal originates with the model; the released text is composed in Rust by multiquote_outcome (citation.rs:546, `The passages do not answer: {}.`), which is also the answer to "template, post-processor, or model": POST-PROCESSOR.
+
+H2 — "the register requires a verbatim quotable sentence and a markdown table row or img-alt text is treated as unquotable". Right family, wrong half. The QUOTABILITY half is fine: locate_quote_in_chunks matched the img-alt quote EXACT in chunk 4 (quote_present=true). It is the SUPPORT half that fails — answer_supported_by_quote, whose all-content-words conjunction rejects a correct paraphrase (see the mechanism note). The order's own guidance "if H2, the fix is likely in what counts as locatable evidence" should read: what counts as SUPPORTED.
+
+Consequence for anyone re-opening this: do not go looking at retrieval, at prompt_budget/truncate_merged, or at the model. The defect is entirely inside grounding/citation.rs, between a failed word-overlap test and the sentence the code then writes about the corpus.
