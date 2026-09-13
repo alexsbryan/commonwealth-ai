@@ -1792,6 +1792,192 @@ def cmd_bs_preference(a) -> int:
         print(f"    {p['claim'][:96]}")
     return 0
 
+# ---- routing: which referent can settle this claim ---------------------
+#
+# The analytical correction of 2026-09-13. A verdict is a comparison against
+# a REFERENT, and there are five, not one. Claim type determines which
+# referent can settle it; the referent determines the instrument; and only
+# two of the five need a model at all.
+#
+#   record  an authoritative file the system already keeps   string compare
+#   ran     what the agent ran and saw this session          parse
+#   code    the tree at the commit the claim was made against  grep/symbols
+#   prose   only the agent's own words around it             model
+#   none    nothing can settle it (taste, plan, preference)  never graded
+#
+# Value is concentrated at the top and so is tractability, which is not a
+# coincidence: a claim with an authoritative record is expensive precisely
+# BECAUSE nobody checks it cheaply and it compounds -- inherited by a frame,
+# acted on by someone else, hours later. That is the shape of the incident
+# that cost this host a night. Rhetorical overreach is the cheap failure,
+# because a reader sees it in the moment.
+#
+# Routing is a SURFACE decision and surface is the right basis for it. That
+# is why a hand-written router bank does not carry the defect that poisoned
+# the judge bank, where surface was used to label an INFERENCE.
+
+REFERENTS = ("record", "ran", "code", "prose", "none")
+
+RX_COUNTS = re.compile(
+    r"\b(?:pass(?:ed|es|ing)?|fail(?:ed|s|ing)?|error(?:s)?|warning(?:s)?|exit(?:ed|s)?"
+    r"|green|red|0 errors|timed out)\b", re.I)
+RX_MEASURED = re.compile(
+    r"\b[0-9][0-9,.]*\s*(?:%|[KMGT]B|ms|s\b|sec|seconds|minutes|tests|lines|rows|files"
+    r"|chunks|tokens|commits)\b", re.I)
+RX_CODEISH = re.compile(
+    r"`[^`]{2,}`|\b\w+\.(?:rs|py|sh|toml|md|json|ts|mjs)\b|\b\w+::\w+"
+    r"|\b[a-z0-9]+_[a-z0-9_]+\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b")
+
+def route(claim: str, corpora: list[str] | None = None) -> tuple[str, str]:
+    """(referent, the anchor that decided it). Mechanical, order matters.
+
+    `record` first because it is the only one that is BOTH the cheapest
+    instrument and the costliest miss. `none` last, and it is a real answer:
+    a claim nothing can settle is recorded and never graded, rather than
+    handed to a model that will always find something to say."""
+    if RX_DONE.search(claim) and not RX_PROGRESSIVE.search(claim):
+        for cid in (corpora or []):
+            # The whole id, or a hyphenated prefix of at least two segments.
+            # Matching one segment made `conversation-history-<hash>` fire on
+            # any claim containing "per-conversation" -- measured 2026-09-13,
+            # 5 of 5 sampled `record` routes were that, precision ~0.
+            for k in (cid, "-".join(cid.split("-")[:2])):
+                if len(k) >= 12 and k in claim:
+                    return "record", cid
+    if RX_COUNTS.search(claim) or RX_MEASURED.search(claim):
+        m = RX_COUNTS.search(claim) or RX_MEASURED.search(claim)
+        return "ran", m.group(0)
+    m = RX_CODEISH.search(claim)
+    if m:
+        return "code", m.group(0)
+    if referent(claim):
+        return "prose", referent(claim)
+    return "none", ""
+
+# The router's known-answer input. Each case is unambiguous BY SURFACE, which
+# is the property that makes a hand bank legitimate here and illegitimate for
+# the judge. A control failure voids the run; it never condemns a candidate.
+ROUTER_CONTROL = [
+    ("widget-corpus is ingested and done", "record"),
+    ("The suite came back 4,451 pass, 0 fail", "ran"),
+    ("Full workspace lint: 0 errors in 59s", "ran"),
+    ("`is_attach_mode()` has one branch left", "code"),
+    ("state.rs is the construction spine", "code"),
+    ("The constraint was never the substrate", "none"),
+    ("I'd rather ship the simpler one", "none"),
+]
+
+def router_control() -> list[str]:
+    """Failures, empty when the instrument is sound."""
+    bad = []
+    for claim, want in ROUTER_CONTROL:
+        got, _ = route(claim, ["widget-corpus-abc123"])
+        if got != want:
+            bad.append(f"{claim[:52]!r} -> {got}, want {want}")
+    return bad
+
+# THE ROUTE IS A HYPOTHESIS, NOT A VERDICT.
+#
+# Three instruments tonight routed on incidental tokens -- a hex check that
+# fired on session ids, a referent gate that admitted "0/n", a router that
+# sent "Picked up frame `5ab14d6d`" to `code` on a backticked session id.
+# Better patterns will not end that; natural prose is full of tokens that
+# look like anchors.
+#
+# So the instrument DECLINES when its anchor does not resolve, and a declined
+# claim falls through to the next referent rather than getting a verdict from
+# the wrong one. A wrong route then costs a cheap failed lookup instead of a
+# wrong answer, and the router's precision stops being load-bearing -- which
+# matters, because measured against real claims it is about 45%.
+#
+# Declining is NOT abstaining. `not-mine` says the instrument has no standing
+# here; it never means the claim is fine (ARCH 6: absence is reported, never
+# defaulted).
+
+def instrument_record(claim: str, anchor: str) -> dict:
+    """Corpus completion against the corpus's own state file."""
+    got = corpus_phase(anchor)
+    if got is None:
+        return {"verdict": "not-mine", "why": f"no state record for {anchor}"}
+    phase, msg = got
+    if phase.lower() in ("complete", "completed", "done"):
+        return {"verdict": "holds", "why": f"{anchor} phase={phase}"}
+    return {"verdict": "broken", "why": f"{anchor} phase={phase} — {msg}",
+            "receipt": f"{INDEX_ROOT}/{anchor}/_enrichment_state.json"}
+
+def instrument_ran(claim: str, anchor: str, evidence: str) -> dict:
+    """A claimed run outcome against the tool output of the same turn.
+
+    CORROBORATION ONLY — it can confirm, it cannot accuse, and the asymmetry
+    is a rule rather than a setting:
+
+        an instrument that cannot tell "not mine" from "unsupported" must
+        not be allowed to accuse.
+
+    `instrument_record` can tell them apart: the state file exists or it does
+    not. This one cannot. Measured 2026-09-13 over 1,668 `ran`-routed claims,
+    the accusing version returned `unsupported` on 1,022 of them (61%), and
+    the reasons were never the claim: the anchor was the bare word `error` in
+    one case, and in others the agent was QUOTING an earlier number rather
+    than asserting a fresh measurement, so naturally this turn's output does
+    not contain it. A 61% accusation rate is a broken instrument, not a
+    finding, and accusation is the expensive error.
+
+    It is promoted the day it can establish that the anchor is a run outcome
+    in the claim's own grammar, and that the run it names is this turn's."""
+    if not evidence.strip():
+        return {"verdict": "not-mine", "why": "no tool output in this turn"}
+    tok = " ".join(anchor.split()).lower()
+    if tok and tok in " ".join(evidence.split()).lower():
+        return {"verdict": "holds", "why": f"`{anchor}` appears in this turn's output"}
+    return {"verdict": "not-mine",
+            "why": f"`{anchor}` is not in this turn's output, and this instrument "
+                   f"cannot tell an unsupported claim from an anchor it misread"}
+
+INSTRUMENTS = {"record": "instrument_record", "ran": "instrument_ran"}
+
+def cmd_route(a) -> int:
+    """Route real claims and report the distribution. Exits 4 -- INSTRUMENT
+    BROKEN, not candidate failed -- if the control does not hold."""
+    bad = router_control()
+    if bad:
+        print("CONTROL FAILED — the router is broken, this run says nothing "
+              "about the claims:")
+        for b in bad:
+            print(f"  {b}")
+        return 4
+    corpora = installed_corpora()
+    src_dir = TRANSCRIPTS / a.project
+    files = sorted(src_dir.glob("*.jsonl"), key=lambda q: q.stat().st_mtime,
+                   reverse=True)[:a.sessions]
+    from collections import Counter
+    c, examples = Counter(), {}
+    for f in files:
+        try:
+            rows = turns(f)
+        except Exception:
+            continue
+        for _i, text, _w, aud in rows:
+            if aud != "operator":
+                continue
+            for s in sentences(text):
+                r, anchor_tok = route(s, corpora)
+                c[r] += 1
+                examples.setdefault(r, (s, anchor_tok))
+    tot = sum(c.values())
+    print(f"\nrouting — {tot:,} operator-facing claims over {len(files)} sessions "
+          f"(control held)\n")
+    for r in REFERENTS:
+        n = c.get(r, 0)
+        print(f"  {r:<8} {n:>6}  ({n/tot:>4.0%})")
+        if r in examples:
+            s, tok = examples[r]
+            print(f"           e.g. [{tok[:28]}] {' '.join(s.split())[:78]}")
+    need_model = c.get("prose", 0)
+    print(f"\n  needs a model: {need_model}/{tot} ({need_model/tot:.0%}). "
+          f"The rest is deterministic or never graded.")
+    return 0
+
 # ---- state-anchored claims --------------------------------------------
 #
 # The claim that cost the most on 2026-09-13 needed no judge at all. A
@@ -2231,6 +2417,8 @@ def cmd_self_test(_a) -> int:
     eq(len(sentences("```\nthe only impl is Fake in here.rs\n```")), 0, "fences dropped")
     eq(len(sentences("| a row of a table that is long enough to be a claim | x |")), 1, "table row")
     eq(DECIDABLE_AT["evaluative"], "never", "evaluative never decidable")
+    for _f in router_control():
+        fails.append(f"router control: {_f}")
     eq(TOKENS_PER_ENTRY >= 40, True, "entry budget fits the daemon's pretty JSON")
     eq("none" in CLASSES, True, "none is a real class, not a gap-filler")
     eq(interval_evidence("abc", "abc"), ("", 0), "an empty interval yields no evidence")
@@ -2379,6 +2567,10 @@ def main() -> int:
     bp.add_argument("--pin", default=DEFAULT_PIN)
     bp.add_argument("--timeout", type=float, default=120.0)
     bp.set_defaults(fn=cmd_bs_preference)
+    rt = sub.add_parser("route", help="which referent can settle each claim; exits 4 if its control fails")
+    rt.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    rt.add_argument("--sessions", type=int, default=40)
+    rt.set_defaults(fn=cmd_route)
     fc = sub.add_parser("frame-check", help="frame claims against the records the system already keeps")
     fc.add_argument("--session")
     fc.add_argument("--frames", type=int, default=40)
