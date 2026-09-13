@@ -49,7 +49,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{actor_prefix, short_id, short_stamp, AdmittedOp, OpId, Payload, PayloadError, Person, Roster};
+use crate::{
+    actor_prefix, short_id, short_stamp, AdmittedOp, OpId, Payload, PayloadError, Person, Roster,
+};
 
 /// One member vouching for a key, signed under their own.
 ///
