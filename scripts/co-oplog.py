@@ -967,6 +967,19 @@ def bs_check(claim: str, evidence: str, pin: str, timeout: float,
                                         BS_QUOTE_SCHEMA, timeout)
             got = json.loads(raw)
             verdict, span = got.get("verdict", ""), got.get("span", "")
+            # An EMPTY span with `overruns` is the prompt's own contract:
+            # nothing in the evidence bears on the claim, which is a finding,
+            # not an abstention. The code rejected it as unjudgeable while
+            # the prompt invited it -- measured 2026-09-13, 31 of 40 claims
+            # came back empty and every one was discarded. Prompt and code
+            # disagreeing is one decider with two minds (ARCH 8).
+            #
+            # An empty span with `follows` stays rejected, and must: nothing
+            # bears on the claim AND the claim follows is not a position.
+            if verdict == "overruns" and not " ".join((span or "").split()):
+                return {"form": "no_support", "deviation": True, "arch": 5,
+                        "span": "", "reason": "nothing in the evidence bears on this claim",
+                        "engine": model}
             if verdict != "hedged" and not span_is_real(span, evidence):
                 # Not an accusation and not an exoneration: a verdict whose
                 # span does not occur in the evidence was not read off the
@@ -1359,7 +1372,12 @@ Admitted {admitted} · dropped {len(dropped)} · {len(dropped)/max(1, admitted+l
     print(f"wrote {drops} — {len(dropped)} dropped at intake, {admitted} admitted")
     return 0
 
-def turn_bundles(path: Path, cap: int = 3000) -> list[dict]:
+# 16,000 chars (~4k tokens) holds 73% of bundles whole, measured over 20
+# sessions AFTER the reset fix (median 5,140, p75 17,805). The old default of
+# 3,000 was chosen when every bundle looked like 83k because the pool never
+# reset on an operator turn, and at that size the cap silently handed the
+# judge the most RECENT tool output rather than the relevant output.
+def turn_bundles(path: Path, cap: int = 16000) -> list[dict]:
     """Per assistant text block: the block, and the tool output the agent had
     just seen when it wrote it.
 
@@ -1602,7 +1620,17 @@ def cmd_bs_ablate(a) -> int:
             for sent in sents:
                 if referent(sent) is None:
                     continue
-                rest = " ".join(s for s in sents if s != sent).strip()
+                # `tools` is what the agent actually RAN and SAW; `block` is
+                # its own prose about it. The prose source was chosen when
+                # whole-turn bundles looked too large to fit, which was the
+                # reader bug in 41f516370 -- and it matters: on the prose
+                # source the judge returned "nothing here bears on this
+                # claim" for 31 of 40 claims, which is a statement about the
+                # EVIDENCE, not about the judge.
+                if a.evidence == "tools":
+                    rest = b["evidence"]
+                else:
+                    rest = " ".join(s for s in sents if s != sent).strip()
                 if len(re.split(r"(?<=[.!?])\s+", rest)) < 4:
                     continue          # too short to ablate meaningfully
                 thin = ablate(rest, a.keep)
@@ -1642,6 +1670,69 @@ def cmd_bs_ablate(a) -> int:
                  "annotator, and the claim text is never altered.",
          "pairs": pairs}, indent=2) + "\n")
     print(f"wrote {a.out} — {len(pairs)} ablation pairs (keeping {a.keep:.0%} of evidence)")
+    return 0
+
+def span_overlap(span: str, evidence: str) -> float:
+    """Best token overlap between the quoted span and any window of the
+    evidence. Separates a near-miss (the model read it and paraphrased) from
+    a fabrication (it did not read it at all) -- two failures that look
+    identical to a substring test and want opposite fixes."""
+    s = [t.lower() for t in re.findall(r"\w+", span or "")]
+    e = [t.lower() for t in re.findall(r"\w+", evidence or "")]
+    if not s or not e:
+        return 0.0
+    ss, best, w = set(s), 0.0, len(s)
+    for i in range(max(1, len(e) - w + 1)):
+        win = set(e[i:i + w])
+        best = max(best, len(ss & win) / len(ss))
+    return best
+
+def cmd_bs_spans(a) -> int:
+    """Why the quote gate rejects. One call per claim, span only.
+
+    A rejected span that shares most of its tokens with some window of the
+    evidence is a PARAPHRASE -- the judge read and would not copy. One that
+    shares almost nothing is a FABRICATION -- it never read. The fix differs:
+    the first wants a looser check, the second wants a different model."""
+    forms = bs_forms()
+    pairs = json.loads(Path(a.bank).read_text())["pairs"][:a.n]
+    exact = 0
+    empty_verdicts: dict[str, int] = {}
+    buckets = {"paraphrase (>=0.7)": 0, "partial (0.3-0.7)": 0,
+               "fabricated (<0.3)": 0, "empty": 0}
+    worst = []
+    for q in pairs:
+        r = bs_check(q["claim"], q["evidence_full"], a.pin, a.timeout, forms)
+        span = r.get("span") or ""
+        ev = q["evidence_full"]
+        if span_is_real(span, ev):
+            exact += 1
+            continue
+        if len(" ".join(span.split())) < 10:
+            buckets["empty"] += 1
+            empty_verdicts[r.get("form") or "not-judged"] = \
+                empty_verdicts.get(r.get("form") or "not-judged", 0) + 1
+            continue
+        ov = span_overlap(span, ev)
+        if ov >= 0.7:
+            buckets["paraphrase (>=0.7)"] += 1
+        elif ov >= 0.3:
+            buckets["partial (0.3-0.7)"] += 1
+        else:
+            buckets["fabricated (<0.3)"] += 1
+            if len(worst) < 4:
+                worst.append((span, ov))
+    n = len(pairs)
+    print(f"\nquote-gate diagnosis — {n} claims\n")
+    print(f"  span is a verbatim substring   {exact}/{n}  ({exact/n:.0%})")
+    for k, v in buckets.items():
+        print(f"  {k:<28}   {v}/{n}  ({v/n:.0%})")
+    if empty_verdicts:
+        print(f"\n  empty-span verdicts: {empty_verdicts}")
+    print(f"\n  paraphrase-heavy => the judge reads and will not copy; loosen the check.")
+    print(f"  fabrication-heavy => it never read the evidence; change the model.")
+    for s, ov in worst:
+        print(f"\n  [overlap {ov:.2f}] {' '.join(s.split())[:110]}")
     return 0
 
 def cmd_bs_preference(a) -> int:
@@ -2271,9 +2362,17 @@ def main() -> int:
     bm.add_argument("--n", type=int, default=400)
     bm.add_argument("--seed", type=int, default=7)
     bm.add_argument("--keep", type=float, default=0.34, help="fraction of evidence sentences kept")
+    bm.add_argument("--evidence", choices=["block", "tools"], default="tools",
+                    help="`tools` = what the agent ran and saw; `block` = its own prose about it")
     bm.add_argument("--exclude", default="")
     bm.add_argument("--out", default="quality/report-audit/bs-pairs.json")
     bm.set_defaults(fn=cmd_bs_ablate)
+    bsp = sub.add_parser("bs-spans", help="why the quote gate rejects: paraphrase or fabrication")
+    bsp.add_argument("--bank", default="quality/report-audit/bs-pairs.json")
+    bsp.add_argument("--n", type=int, default=40)
+    bsp.add_argument("--pin", default=DEFAULT_PIN)
+    bsp.add_argument("--timeout", type=float, default=120.0)
+    bsp.set_defaults(fn=cmd_bs_spans)
     bp = sub.add_parser("bs-preference", help="score the judge's evidence-sensitivity on ablation pairs")
     bp.add_argument("--bank", default="quality/report-audit/bs-pairs.json")
     bp.add_argument("--n", type=int, default=60)
