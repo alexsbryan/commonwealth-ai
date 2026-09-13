@@ -4009,6 +4009,56 @@ def cmd_investigate(a) -> int:
                   f"| {f.get('claim','')[:80]} | {f.get('evidence','')[:80]}")
     return 0
 
+def cmd_investigate_all(a) -> int:
+    """The backtest in the form that has a chance of being worth refereeing:
+    one investigation per session's final report, findings with receipts,
+    written beside the card. Every finding is then read by hand."""
+    src = TRANSCRIPTS / a.project
+    seen = set(a.exclude.split(",")) if a.exclude else set()
+    files = sorted(src.glob("*.jsonl"), key=lambda q: q.stat().st_mtime, reverse=True)
+    files = [f for f in files if not any(f.stem.startswith(x) for x in seen)
+             and f.stat().st_size >= a.min_bytes and not transcript_live(f)][:a.last]
+    summary = []
+    for i, f in enumerate(files, 1):
+        ts = turns(f)
+        ops = [(k, t, w) for k, t, w, aud in ts if aud == "operator"]
+        if not ops:
+            print(f"  {i:>2}/{len(files)} {f.stem[:8]}  no operator-facing block", flush=True)
+            continue
+        turn, text, when = ops[-1]
+        sha = sha_at(when)
+        t1 = sha_at(ts[-1][2])
+        start = sha_at(ts[0][2])
+        rows = [{"turn": turn, "text": sent, "audience": "operator"} for sent in sentences(text)]
+        leads = evidence_lane(f, rows)["findings"]
+        r = investigate(f, turn, text, sha, t1, a.pin, a.timeout, a.budget, start, leads)
+        r["session"] = f.stem
+        r["leads"] = len(leads)
+        r["report"] = text
+        d = SESSIONS_DIR / f.stem
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "investigation.json").write_text(json.dumps(r, indent=1))
+        if "error" in r:
+            print(f"  {i:>2}/{len(files)} {f.stem[:8]}  could-not-judge: {r['error']}", flush=True)
+            summary.append({"session": f.stem, "error": r["error"]})
+            continue
+        n_strong = sum(1 for x in r["findings"] if not x.get("weak"))
+        n_weak = sum(1 for x in r["findings"] if x.get("weak"))
+        print(f"  {i:>2}/{len(files)} {f.stem[:8]}  turn {turn:>3}  leads={r['leads']}  calls={r['calls']}  "
+              f"{r['seconds']:>6.1f}s  findings={n_strong}+{n_weak}w  dropped={len(r['dropped'])}"
+              + ("" if r["submitted"] else "  NO VERDICT"), flush=True)
+        summary.append({"session": f.stem, "turn": turn, "leads": r["leads"], "calls": r["calls"],
+                        "seconds": r["seconds"], "strong": n_strong, "weak": n_weak,
+                        "dropped": len(r["dropped"]), "submitted": r["submitted"],
+                        "findings": r["findings"]})
+    if a.out:
+        Path(a.out).write_text(json.dumps(summary, indent=1))
+        print(f"written {a.out}")
+    tot = sum(x.get("strong", 0) for x in summary)
+    print(f"\ninvestigate-all — {len(summary)} report(s) · {tot} strong finding(s) · "
+          f"{sum(x.get('weak', 0) for x in summary)} weak · {sum(1 for x in summary if 'error' in x)} could-not-judge")
+    return 0
+
 # ---- the card: what the operator sees at session end --------------------
 #
 # Order §"What you actually see", moment 3. Composed from instruments that
@@ -4699,6 +4749,16 @@ def main() -> int:
     iv.add_argument("--budget", type=int, default=8)
     iv.add_argument("--verbose", action="store_true")
     iv.set_defaults(fn=cmd_investigate)
+    ia = sub.add_parser("investigate-all", help="one investigation per session's final report over the last N")
+    ia.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
+    ia.add_argument("--last", type=int, default=40)
+    ia.add_argument("--exclude", default="")
+    ia.add_argument("--min-bytes", type=int, default=200_000)
+    ia.add_argument("--pin", default=DEFAULT_PIN)
+    ia.add_argument("--timeout", type=float, default=240.0)
+    ia.add_argument("--budget", type=int, default=8)
+    ia.add_argument("--out", default="")
+    ia.set_defaults(fn=cmd_investigate_all)
     br = sub.add_parser("bro", help="the Bro axis: unasked spans and leaps per operator-facing block, as juxtapositions")
     br.add_argument("session")
     br.add_argument("--project", default="-Users-alexsbryan-dev-commonwealth-ai")
