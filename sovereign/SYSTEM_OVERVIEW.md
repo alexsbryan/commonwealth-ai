@@ -5865,7 +5865,50 @@ no roster route at all, so a deployed app cannot add a key to the ring,
 including its own. `roster add` then reads the roster back *through the running
 daemon* and fails if the daemon does not report it — the one way that command
 can look like it worked and do nothing is writing to a directory the daemon
-does not read (§18.1). `ring dev` is a foreground server, so it is the one
+does not read (§18.1).
+
+**And since ring-apps ra-1, a roster row can say WHY it is there.** `Roster`
+was a name and some keys, so the only answer to "why is Alex in this ring" was
+whoever typed the command remembering. Two halves, landed together:
+
+- `Introduce { person, key, reason }` (`commonwealth-rail-core/src/introduce.rs`)
+  — an act a member signs under their own key, written by `svrn ring introduce
+  <person> --key <hex> --reason <why> --ring <ns>`. **Deliberately not a
+  `RailAct` variant**: a variant is a branch inside `admit`, which is the rail
+  deciding what an act means. It rides as an ordinary opaque `Payload` on a
+  `Record`, and admission carries it exactly the way it carries an expense.
+- `Roster.vouches: BTreeMap<key, Vouch { op, by, at }>` — keyed by KEY, not by
+  person, because two laptops can join on two evenings on two people's word.
+  `#[serde(default, skip_serializing_if)]`: a `roster.json` written before this
+  reads as warrant-unknown rather than failing to parse, and a roster with no
+  vouches serializes to exactly the bytes it did before.
+
+`trace(roster, admitted_ops, person, key) -> VouchStatus` is the one resolver.
+It takes **admitted** ops, so "exists, verifies, signed by a member" is
+discharged by `admit` rather than re-checked (§10.6), and the eight non-`Traced`
+variants are the ways a well-formed-looking row still resolves to nothing: op
+refused by admission, not an introduction, introduces another key, voided by a
+correction, a key vouching for itself, an introducer whose own row is dated
+*later* than the op they signed, and a row whose stored signer disagrees with
+the op. `svrn ring roster show` (`list` is the same command) prints the rail's
+own sentence under each key, and `roster add --on <op-id>` refuses a warrant
+that does not resolve — the `Vouch` is minted from the signed op, so the
+operator names an op id and nothing else.
+
+**`Introduce` is evidence, never admission, and that is the whole cut.** An
+introduction arriving from a peer moves no roster row:
+`a_peers_introduction_arrives_readable_and_changes_no_roster_row`
+(`commonwealth-rail/src/tests.rs`) asserts on the roster FILE BYTES after
+ring-sync delivers one, and was watched failing with `ingest_all` taught to
+fold it in. `svrn ring roster add` is still the only writer of a roster, the
+roster is still not a function of the op set, and the reference app's
+no-re-division test is unchanged.
+
+**A daemon older than the CLI drops warrants silently** — serde ignores an
+unknown field, so it reads `roster.json`, re-serializes it without `vouches`,
+and every row reads warrant-unknown with the reason sitting on disk. `roster
+show` compares against the file its own writer maintains and says so, exiting
+non-zero, rather than rendering a confident wrong answer (§18.3). `ring dev` is a foreground server, so it is the one
 declared capability no journey can drive; `cli-contract.toml` says so rather
 than listing it uncovered.
 

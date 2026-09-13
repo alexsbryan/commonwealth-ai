@@ -49,7 +49,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AdmittedOp, OpId, Payload, PayloadError, Person, Roster};
+use crate::{actor_prefix, short_id, short_stamp, AdmittedOp, OpId, Payload, PayloadError, Person, Roster};
 
 /// One member vouching for a key, signed under their own.
 ///
@@ -217,32 +217,48 @@ impl std::fmt::Display for VouchStatus {
             Self::Unknown => write!(f, "warrant unknown — added before anyone had to say why"),
             Self::Traced {
                 op, by, at, reason, ..
-            } => write!(f, "introduced by {by}, op {op}, {at} — {reason}"),
+            } => write!(
+                f,
+                "introduced by {by}, op {}, {} — {reason}",
+                short_id(op.as_str()),
+                short_stamp(*at)
+            ),
             Self::NotHeld { op } => write!(
                 f,
-                "warrant unresolved — op {op} is not admitted on this node (not held, or refused)"
+                "warrant unresolved — op {} is not admitted on this node (not held, or refused)",
+                short_id(op.as_str())
             ),
-            Self::NotAnIntroduction { op } => {
-                write!(f, "warrant unresolved — op {op} is not an introduction")
-            }
+            Self::NotAnIntroduction { op } => write!(
+                f,
+                "warrant unresolved — op {} is not an introduction",
+                short_id(op.as_str())
+            ),
             Self::NamesAnother { op, person, key } => write!(
                 f,
-                "warrant unresolved — op {op} introduces {person} ({key}), not this row"
+                "warrant unresolved — op {} introduces {person} ({}), not this row",
+                short_id(op.as_str()),
+                actor_prefix(key)
             ),
-            Self::Withdrawn { op } => {
-                write!(f, "warrant withdrawn — op {op} was voided by a correction")
-            }
+            Self::Withdrawn { op } => write!(
+                f,
+                "warrant withdrawn — op {} was voided by a correction",
+                short_id(op.as_str())
+            ),
             Self::SelfVouch { op } => write!(
                 f,
-                "warrant unresolved — op {op} vouches for the key that signed it"
+                "warrant unresolved — op {} vouches for the key that signed it",
+                short_id(op.as_str())
             ),
             Self::IntroducerNotClaimedYet { op, by_actor } => write!(
                 f,
-                "warrant unresolved — {by_actor} signed op {op} before the ring claimed them"
+                "warrant unresolved — {} signed op {} before the ring claimed them",
+                actor_prefix(by_actor),
+                short_id(op.as_str())
             ),
             Self::DisagreesWithTheOp { op } => write!(
                 f,
-                "warrant unresolved — this row's signer and date are not what op {op} says"
+                "warrant unresolved — this row's signer and date are not what op {} says",
+                short_id(op.as_str())
             ),
         }
     }

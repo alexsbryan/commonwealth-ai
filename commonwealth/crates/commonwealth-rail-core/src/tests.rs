@@ -1174,3 +1174,14 @@ fn a_payload_that_is_not_the_introduce_shape_is_not_an_introduction() {
         );
     }
 }
+
+/// The two renderings every surface that shows an op to a person uses. The
+/// leap day is where a hand-rolled civil-from-days conversion goes wrong.
+#[test]
+fn a_stamp_reads_as_a_date_a_person_can_match_to_a_conversation() {
+    assert_eq!(short_stamp(0), "1970-01-01 00:00");
+    assert_eq!(short_stamp(1_788_048_000), "2026-08-30 00:00");
+    assert_eq!(short_stamp(1_709_164_800), "2024-02-29 00:00");
+    assert_eq!(short_id("ring-0123456789abcdef"), "ring-0123456…");
+    assert_eq!(short_id("short"), "short");
+}

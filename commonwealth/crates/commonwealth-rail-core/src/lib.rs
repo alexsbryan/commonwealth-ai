@@ -401,6 +401,47 @@ fn actor_prefix(actor: &str) -> String {
     actor.chars().take(12).collect()
 }
 
+// ── Rendering the two fields every reader shortens ───────────
+//
+// An op id is 40-odd characters and a timestamp is an integer, and every
+// surface that shows either to a person cuts them the same way. These were
+// `short_id` and `short_stamp` in `svrn ring`'s own module until the roster
+// warrant needed the same two — and a sentence the rail composes must not
+// spell a date differently from the log line printed above it (ARCH §10.6).
+
+/// Enough of an op id to recognise, short enough to read in a sentence.
+pub fn short_id(id: &str) -> String {
+    if id.chars().count() > 12 {
+        format!("{}…", id.chars().take(12).collect::<String>())
+    } else {
+        id.to_string()
+    }
+}
+
+/// `YYYY-MM-DD HH:MM` in UTC. Enough to order a conversation about the
+/// journal, without a date library.
+pub fn short_stamp(ts: i64) -> String {
+    let days = ts.div_euclid(86_400);
+    let secs = ts.rem_euclid(86_400);
+    // Civil-from-days (Howard Hinnant's algorithm), shifted to the 0000-03-01
+    // era so leap years fall at the end of the cycle.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!(
+        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
+        secs / 3600,
+        (secs % 3600) / 60
+    )
+}
+
 // ── Signing without holding key material ─────────────────────
 
 /// How the rail gets a signature, without ever seeing a private key.

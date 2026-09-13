@@ -69,6 +69,7 @@ pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("new") => run_new(&args[1..]),
         Some("roster") => run_roster(&args[1..]).await,
+        Some("introduce") => run_introduce(&args[1..]).await,
         Some("dev") => run_dev(&args[1..]).await,
         Some("log") => run_log(&args[1..]).await,
         Some("seal") => run_seal(&args[1..]).await,
@@ -76,13 +77,18 @@ pub async fn run(args: &[String]) -> i32 {
             eprintln!(
                 "usage:\n\
                  \x20 svrn ring new <dir> [--name <title>]\n\
-                 \x20 svrn ring roster add <person> (--key <node-pubkey-hex> | --self) --ring <ns>\n\
-                 \x20 svrn ring roster list --ring <ns>\n\
+                 \x20 svrn ring roster add <person> (--key <node-pubkey-hex> | --self) [--on <op-id>] --ring <ns>\n\
+                 \x20 svrn ring roster show --ring <ns>\n\
+                 \x20 svrn ring introduce <person> --key <node-pubkey-hex> --reason <why> --ring <ns>\n\
                  \x20 svrn ring dev <ns> [--dir <bundle-dir>] [--port <n>]\n\
                  \x20 svrn ring log <ns> [--json]\n\
                  \x20 svrn ring seal <ns>\n\n\
                  new     scaffold a ring app (index.html, app.js, its reducer and its tests).\n\
-                 roster  bind a person's name to the node key they sign with.\n\
+                 roster  bind a person's name to the node key they sign with, and show why\n\
+                 \x20       each key is here.\n\
+                 introduce\n\
+                 \x20       vouch for a key on the journal, so the row that admits it can name\n\
+                 \x20       the act instead of somebody's memory. It admits NOBODY by itself.\n\
                  dev     mint a rail grant and serve the app at http://127.0.0.1:4318/.\n\
                  log     the acts on this journal, in the order every node applies them,\n\
                  \x20       and everything the rail could not account for.\n\
@@ -231,11 +237,18 @@ async fn run_roster(args: &[String]) -> i32 {
     // Subcommand first, then the ring: a bare `svrn ring roster` should print
     // the shape of the command, not a complaint about one flag of it.
     let sub = args.first().map(String::as_str);
-    if !matches!(sub, Some("add") | Some("list")) {
+    // `show` and `list` are ONE command under two spellings, not two views.
+    // The demo asks for `show`, the ring's first users learned `list`, and a
+    // second renderer of the same roster is how the terminal and the campaign
+    // end up disagreeing about what a row says (ARCH §10.6).
+    if !matches!(sub, Some("add") | Some("list") | Some("show")) {
         eprintln!(
             "usage:\n\
-             \x20 svrn ring roster add <person> (--key <hex> | --self) --ring <ns>\n\
-             \x20 svrn ring roster list --ring <ns>"
+             \x20 svrn ring roster add <person> (--key <hex> | --self) [--on <op-id>] --ring <ns>\n\
+             \x20 svrn ring roster show --ring <ns>\n\n\
+             --on names the `svrn ring introduce` op this key is being admitted on,\n\
+             so the row can say WHY it is there. Without it the row reads as\n\
+             warrant-unknown, which is what every row written before today says."
         );
         return 2;
     }
@@ -292,6 +305,21 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
         return 2;
     }
 
+    // The warrant, BEFORE the file is touched: a row that names an op which
+    // does not resolve is precisely the failure this rung exists to prevent,
+    // and it must be refused rather than written and explained later.
+    let person_name = commonwealth_rail::Person::from(person);
+    let vouch = match flag(args, "--on") {
+        None => None,
+        Some(op_id) => match resolve_warrant(namespace, &person_name, &key, op_id).await {
+            Ok(v) => Some(v),
+            Err(refusal) => {
+                eprintln!("ring roster add: {refusal}");
+                return 2;
+            }
+        },
+    };
+
     let journal = match ring_journal(namespace) {
         Ok(j) => j,
         Err(e) => {
@@ -313,15 +341,13 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
             return 1;
         }
     };
-    let entry = roster
-        .members
-        .entry(commonwealth_rail::Person::from(person))
-        .or_default();
-    if entry.iter().any(|k| k == &key) {
-        println!("{person} already signs with that key in `{namespace}`.");
+    // ONE writer of both halves of a row, so a warrant naming a key no row
+    // carries cannot be written. A key already in the ring is left exactly as
+    // it is — re-running an add must not quietly restate why somebody is here.
+    if !roster.bind_key(person_name, key.clone(), vouch) {
+        println!("{person} already signs with that key in `{namespace}`, warrant and all.");
         return 0;
     }
-    entry.push(key.clone());
 
     if let Err(e) = journal.set_roster(&roster) {
         eprintln!("ring roster add: write {}: {e}", path.display());
@@ -364,43 +390,242 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
     0
 }
 
-async fn roster_list(namespace: &str) -> i32 {
-    match rail_log(namespace).await {
-        Ok(v) => {
-            let members = v
-                .get("roster")
-                .and_then(|r| r.get("members"))
-                .and_then(|m| m.as_object())
-                .cloned()
-                .unwrap_or_default();
-            if members.is_empty() {
-                println!(
-                    "`{namespace}` has no roster yet — every op will fold to an unknown-signer gap.\n\
-                     Add yourself: svrn ring roster add <you> --self --ring {namespace}"
-                );
-                return 0;
-            }
-            for (person, keys) in members {
-                let keys: Vec<String> = keys
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|k| k.as_str().map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                println!("{person}");
-                for k in keys {
-                    println!("  {k}");
-                }
-            }
-            0
+/// The roster the DAEMON loaded, and the admission it computed over the same
+/// journal, in one read.
+///
+/// Typed rather than walked as JSON: the roster is a `Roster`, so a row's
+/// warrant reaches this command by being part of the type instead of by a
+/// second hand-written reader of the wire shape. And the two halves come from
+/// ONE answer — a roster read at one moment and an admission read at another
+/// could disagree about who was a member when.
+async fn roster_and_admission(
+    namespace: &str,
+) -> Result<(commonwealth_rail::Roster, commonwealth_rail::Admission), String> {
+    let v = rail_log(namespace).await?;
+    let roster: commonwealth_rail::Roster = serde_json::from_value(
+        v.get("roster").cloned().ok_or_else(|| {
+            format!("the daemon's log answer carried no `roster` — this build and that daemon do not agree on the shape of `{RAIL_LOG_PATH}`")
+        })?,
+    )
+    .map_err(|e| format!("the daemon's roster is a shape this build cannot read: {e}"))?;
+    let admission = sovereign_cli_shared::rail::admission_from_wire(&v)?;
+    Ok((roster, admission))
+}
+
+/// Resolve the op a `roster add --on` is acting on, or refuse in a sentence.
+///
+/// Resolution goes through the DAEMON for the same reason the read-back below
+/// does: the roster that decides which acts are readable is the one the
+/// daemon loaded, and folding the file here would resolve a warrant against a
+/// membership the running node does not have.
+///
+/// The [`Vouch`](commonwealth_rail::Vouch) is MINTED from the op — the
+/// operator names an op id and nothing else, so the signer and the date on
+/// the row are read off the signed act rather than typed by the person the
+/// row is about (ARCH §18.1).
+async fn resolve_warrant(
+    namespace: &str,
+    person: &commonwealth_rail::Person,
+    key: &str,
+    op_id: &str,
+) -> Result<commonwealth_rail::Vouch, String> {
+    let (roster, admission) = roster_and_admission(namespace).await.map_err(|e| {
+        format!(
+            "--on names an op that has to be resolved before a warrant can be written, \n\
+             and the daemon did not answer: {e}"
+        )
+    })?;
+    let op = commonwealth_rail::OpId::from_raw(op_id);
+    match commonwealth_rail::trace_op(&roster, &admission.ops, person, key, &op) {
+        commonwealth_rail::VouchStatus::Traced { by_actor, at, .. } => {
+            Ok(commonwealth_rail::Vouch {
+                op,
+                by: by_actor,
+                at,
+            })
         }
+        // The refusal is the RAIL's sentence. A row is written with a warrant
+        // that resolves or it is not written at all.
+        other => Err(format!(
+            "{other}\n\
+             Write the introduction first: svrn ring introduce {person} --key {key} \
+             --reason <why> --ring {namespace}"
+        )),
+    }
+}
+
+/// `svrn ring roster show|list <ns>` — who is in this ring, and why.
+async fn roster_list(namespace: &str) -> i32 {
+    let (roster, admission) = match roster_and_admission(namespace).await {
+        Ok(pair) => pair,
         Err(e) => {
-            eprintln!("ring roster list: {e}");
-            1
+            eprintln!("ring roster show: {e}");
+            return 1;
+        }
+    };
+    if roster.members.is_empty() {
+        println!(
+            "`{namespace}` has no roster yet — every op will fold to an unknown-signer gap.\n\
+             Add yourself: svrn ring roster add <you> --self --ring {namespace}"
+        );
+        return 0;
+    }
+    // A daemon older than this CLI has no `vouches` field, and serde DROPS an
+    // unknown field silently — so it reads the file, re-serializes it without
+    // the warrants, and every row below reads "warrant unknown" when the
+    // reason is sitting on disk. That is this repo's characteristic failure:
+    // a well-formed answer that is wrong. Detected against the file this
+    // command's own writer maintains, and NAMED rather than papered over by
+    // rendering the file's warrants against the daemon's members (ARCH §18.3).
+    let on_disk = ring_journal(namespace).and_then(|j| {
+        let path = j.roster_path();
+        j.roster_file()
+            .map(|r| (path, r))
+            .map_err(|e| e.to_string())
+    });
+    let skew = match &on_disk {
+        Ok((path, file)) if roster.vouches.is_empty() && !file.vouches.is_empty() => {
+            eprintln!(
+                "WARNING: {} carries warrants and the running daemon reported none, so every\n\
+                 row below will read as warrant-unknown. That daemon is older than this CLI —\n\
+                 restart it (svrn daemon stop && svrn daemon start) and run this again.\n",
+                path.display()
+            );
+            true
+        }
+        Ok(_) => false,
+        // COULD-NOT-JUDGE is not "no skew" (ARCH §18.3). The rows still
+        // print — they are the daemon's answer and they are worth reading —
+        // but a reader is told the cross-check did not run.
+        Err(e) => {
+            eprintln!(
+                "NOTE: `{namespace}`'s roster file could not be read, so this command cannot\n\
+                 tell whether the daemon is reporting every warrant on disk: {e}\n"
+            );
+            false
+        }
+    };
+    for (person, keys) in &roster.members {
+        println!("{person}");
+        for k in keys {
+            println!("  {k}");
+            // The warrant sentence is composed by the rail, for the same
+            // reason the gap sentences are: this line and the app's page must
+            // say the same thing about the same row (ARCH §10.6). A row with
+            // no warrant says so and is not an error — it is every row
+            // written before warrants existed.
+            println!(
+                "    {}",
+                commonwealth_rail::trace(&roster, &admission.ops, person, k)
+            );
         }
     }
+    // The rows printed either way — a roster is worth reading even when the
+    // reasons are missing — but a caller must not read exit 0 as "these rows
+    // have no warrants".
+    i32::from(skew)
+}
+
+// ── introduce ────────────────────────────────────────────────
+
+/// The act, or the sentence saying why there is not one.
+///
+/// Pure and separate from [`run_introduce`] so the refusals have a test: the
+/// command's other half is one POST, and a test that reached it would write
+/// to whichever daemon the operator happens to be running.
+fn introduce_act(
+    namespace: &str,
+    person: &str,
+    key: &str,
+    reason: &str,
+) -> Result<commonwealth_rail::RailAct, String> {
+    if key.is_empty() {
+        return Err(format!(
+            "--key <hex> is required — an introduction is about a KEY, and a name with\n\
+             no key vouches for nobody. Use what their\n\
+             `svrn ring roster add <them> --self --ring {namespace}` printed."
+        ));
+    }
+    if hex::decode(key).map(|b| b.len()) != Ok(32) {
+        return Err(format!(
+            "`{key}` is not a node public key — expected 64 hex characters.\n\
+             Use what their `svrn ring roster add <them> --self --ring {namespace}` printed."
+        ));
+    }
+    // A reason is required and may not be blank. An introduction whose reason
+    // is empty is the PGP failure mode arriving early: a signature nobody can
+    // weigh, which is worth as much as no signature at all.
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(
+            "--reason <why> is required. The ring reads it to decide whether to admit\n\
+             this key — \"she fixed the boiler\", \"bought the drill off me\"."
+                .to_string(),
+        );
+    }
+    let payload =
+        commonwealth_rail::Introduce::new(commonwealth_rail::Person::from(person), key, reason)
+            .payload()
+            .map_err(|e| e.to_string())?;
+    Ok(commonwealth_rail::RailAct::Record { payload })
+}
+
+/// `svrn ring introduce <person> --key <hex> --reason <why> --ring <ns>`
+///
+/// Writes ONE act to the journal and touches no roster. That is the whole
+/// point: an introduction is evidence a person acts on, and the operator
+/// running `roster add --on <op>` is the one who admits anybody. An
+/// introduction arriving from a peer moves nothing at all — there is no
+/// roster route (`sovereign-mesh/src/ring_roster.rs`).
+async fn run_introduce(args: &[String]) -> i32 {
+    let Some(person) = positional(args) else {
+        eprintln!(
+            "ring introduce: who? `svrn ring introduce dee --key <hex> --reason <why> --ring <ns>`"
+        );
+        return 2;
+    };
+    let Some(namespace) = flag(args, "--ring") else {
+        eprintln!("ring introduce: which ring? pass --ring <namespace>");
+        return 2;
+    };
+    // The daemon's own ring derives its roster from mesh membership, so an
+    // introduction there is evidence for a decision nobody makes — the same
+    // reason `roster add` refuses it.
+    if let Some(why) = refuse_derived_roster(namespace) {
+        eprintln!("ring introduce: {why}");
+        return 2;
+    }
+    let key = flag(args, "--key").unwrap_or_default();
+    let reason = flag(args, "--reason").unwrap_or_default();
+    let act = match introduce_act(namespace, person, key, reason) {
+        Ok(act) => act,
+        Err(refusal) => {
+            eprintln!("ring introduce: {refusal}");
+            return 2;
+        }
+    };
+    let v = match rail_append(namespace, &act).await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ring introduce: {e}");
+            return 1;
+        }
+    };
+    let Some(id) = v.get("id").and_then(|i| i.as_str()) else {
+        eprintln!(
+            "ring introduce: the daemon's answer carried no `id` — this build and that daemon \n\
+             do not agree on the shape of `{RAIL_APPEND_PATH}`"
+        );
+        return 1;
+    };
+    println!("{person} ← {key}");
+    println!("  ring:   {namespace}");
+    println!("  op:     {id}");
+    println!("  reason: {reason}");
+    println!();
+    println!("  Nobody is in the ring yet — an introduction is evidence, not admission.");
+    println!("  Admit them on it: svrn ring roster add {person} --key {key} --on {id} --ring {namespace}");
+    0
 }
 
 // ── log ──────────────────────────────────────────────────────
@@ -520,49 +745,62 @@ fn op_line(op: &serde_json::Value) -> String {
     format!("{when}  {who:<12}{mark} {what}")
 }
 
-fn short_id(id: &str) -> String {
-    if id.len() > 12 {
-        format!("{}…", &id[..12])
-    } else {
-        id.to_string()
-    }
-}
-
-/// `YYYY-MM-DD HH:MM` in UTC. Enough to order a conversation about the
-/// journal, without a date library.
-pub(crate) fn short_stamp(ts: i64) -> String {
-    let days = ts.div_euclid(86_400);
-    let secs = ts.rem_euclid(86_400);
-    // Civil-from-days (Howard Hinnant's algorithm), shifted to the 0000-03-01
-    // era so leap years fall at the end of the cycle.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!(
-        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
-        secs / 3600,
-        (secs % 3600) / 60
-    )
-}
+/// The two renderings a person reads — **the rail's**, not this module's.
+///
+/// Both were defined here until the roster warrant needed the same two. A
+/// warrant sentence is composed in `commonwealth-rail-core` (the gap
+/// sentences already are, for the same reason), and a date spelled one way in
+/// that sentence and another way in the log line printed above it would be
+/// two answers to one question (ARCH §10.6).
+pub(crate) use commonwealth_rail::{short_id, short_stamp};
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const KEY: &str = "4242424242424242424242424242424242424242424242424242424242424242";
+
+    /// **An introduction the ring cannot weigh is refused at the terminal.**
+    /// Each of these is an input that makes this check fail, which is what
+    /// makes it a check (ARCH §18.1).
     #[test]
-    fn a_stamp_reads_as_a_date_a_person_can_match_to_a_conversation() {
-        assert_eq!(short_stamp(0), "1970-01-01 00:00");
-        assert_eq!(short_stamp(1_788_048_000), "2026-08-30 00:00");
-        // A leap day, because the civil-from-days arithmetic is where this
-        // kind of hand-rolled conversion goes wrong.
-        assert_eq!(short_stamp(1_709_164_800), "2024-02-29 00:00");
+    fn an_introduction_without_a_key_or_a_reason_is_refused() {
+        for (key, reason, expect) in [
+            ("", "she fixed the boiler", "--key <hex> is required"),
+            ("nothex", "she fixed the boiler", "not a node public key"),
+            (&KEY[..60], "she fixed the boiler", "not a node public key"),
+            (KEY, "", "--reason <why> is required"),
+            // Blank is not a reason. An empty attestation is the PGP failure
+            // mode: a signature nobody can weigh.
+            (KEY, "   ", "--reason <why> is required"),
+        ] {
+            let Err(refusal) = introduce_act("house", "dee", key, reason) else {
+                panic!("key {key:?} with reason {reason:?} was accepted");
+            };
+            assert!(
+                refusal.contains(expect),
+                "{key:?}/{reason:?} refused with the wrong sentence: {refusal}"
+            );
+        }
+    }
+
+    /// And the act it does build is a `Record` carrying the introduction —
+    /// never a `RailAct` variant of its own, because a variant is a branch
+    /// inside `admit` and the rail does not know what an act means.
+    #[test]
+    fn an_introduction_is_an_ordinary_record_the_rail_does_not_interpret() {
+        let act = introduce_act("house", "dee", KEY, "  she fixed the boiler  ").unwrap();
+        let commonwealth_rail::RailAct::Record { payload } = &act else {
+            panic!("an introduction must ride as a Record: {act:?}");
+        };
+        assert_eq!(
+            commonwealth_rail::Introduce::from_payload(payload),
+            Some(commonwealth_rail::Introduce::new(
+                commonwealth_rail::Person::from("dee"),
+                KEY,
+                "she fixed the boiler"
+            ))
+        );
     }
 
     /// The three facts this line must not silently drop.
