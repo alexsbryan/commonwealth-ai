@@ -1185,3 +1185,90 @@ fn a_stamp_reads_as_a_date_a_person_can_match_to_a_conversation() {
     assert_eq!(short_id("ring-0123456789abcdef"), "ring-0123456…");
     assert_eq!(short_id("short"), "short");
 }
+
+/// **The bar, counted rather than asserted.** `ra-introduction-is-traceable`
+/// is a FRACTION — rows written through the introduction path that resolve to
+/// an existing, verifying, same-ring `Introduce` — and its goodhart line says
+/// 1.0 over one row proves nothing. So this builds the chain a ring actually
+/// grows by: alex founds it, alex brings bo, bo brings cy, cy brings dee.
+/// Three rows carry a warrant, three resolve, and each one names the person
+/// who vouched rather than a key.
+#[test]
+fn every_row_written_through_the_introduction_path_traces_to_its_signer() {
+    let keys = [("alex", 1u8), ("bo", 2), ("cy", 3), ("dee", 4)];
+    let mut roster = Roster::default();
+    roster.bind_key(p("alex"), actor_of(&key(1)), None);
+
+    // Each introduction is signed by the person admitted on the one before,
+    // which is the chain SPKI/SDSI calls a linked local name.
+    let mut ops = Vec::new();
+    for (i, (who, seed)) in keys.iter().enumerate().skip(1) {
+        let (by_name, by_seed) = keys[i - 1];
+        let ts = 200 + i as i64;
+        let op = introduce(
+            &key(by_seed),
+            ts,
+            0,
+            who,
+            &actor_of(&key(*seed)),
+            &format!("{by_name} knows {who}"),
+        );
+        roster.bind_key(
+            p(who),
+            actor_of(&key(*seed)),
+            Some(Vouch {
+                op: op.id.clone(),
+                by: actor_of(&key(by_seed)),
+                at: ts,
+            }),
+        );
+        ops.push(op);
+    }
+
+    let a = admit(&ops, &[], &roster, NS, &Ed25519Verifier);
+    assert!(a.is_complete(), "{:?}", a.gaps);
+
+    let rows: Vec<(Person, String, VouchStatus)> = roster
+        .members
+        .iter()
+        .flat_map(|(person, ks)| {
+            ks.iter()
+                .map(|k| (person.clone(), k.clone(), trace(&roster, &a.ops, person, k)))
+        })
+        .collect();
+    let written_here: Vec<_> = rows
+        .iter()
+        .filter(|(_, k, _)| roster.vouch_for(k).is_some())
+        .collect();
+    let traced = written_here
+        .iter()
+        .filter(|(_, _, s)| s.is_traced())
+        .count();
+
+    assert_eq!(written_here.len(), 3, "three rows carry a warrant");
+    assert_eq!(
+        traced,
+        written_here.len(),
+        "ra-introduction-is-traceable = {traced}/{}: {:?}",
+        written_here.len(),
+        written_here
+            .iter()
+            .filter(|(_, _, s)| !s.is_traced())
+            .map(|(who, _, s)| format!("{who}: {s}"))
+            .collect::<Vec<_>>()
+    );
+    // And each one names a PERSON, which is the whole point of asking.
+    for (who, k, status) in &written_here {
+        let VouchStatus::Traced { by, .. } = status else {
+            unreachable!()
+        };
+        let expected = keys[keys.iter().position(|(n, _)| n == &who.as_str()).unwrap() - 1].0;
+        assert_eq!(by, &p(expected), "{who} ({k}) was brought in by {expected}");
+    }
+    // The founder is the denominator's honest exclusion: no warrant, not a
+    // failure, and NOT counted as traced.
+    assert_eq!(
+        trace(&roster, &a.ops, &p("alex"), &actor_of(&key(1))),
+        VouchStatus::Unknown
+    );
+}
