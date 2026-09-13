@@ -3941,7 +3941,16 @@ def evidence_class(claim: str, evidence: str, results: list[str] = ()) -> str:
         return "red"
     nums = _claim_numbers(claim)
     ev_nums = _claim_numbers(evidence)
-    if nums and any(n not in ev_nums for n in nums):
+    hedged = bool(RX_APPROX.search(claim))
+    def near(n: str) -> bool:
+        # "about 280 lines" against "285 total" (e92735ab t86): a hedged
+        # claim is met by a record number within 5%.
+        try:
+            v = float(n)
+            return hedged and any(abs(float(e) - v) <= 0.05 * v for e in ev_nums)
+        except ValueError:
+            return False
+    if nums and any(n not in ev_nums and not near(n) for n in nums):
         return "number"
     return "corroboration"
 
@@ -4770,6 +4779,10 @@ def cmd_self_test(_a) -> int:
        "corroboration", "b31822b1: no number, no red, no absence")
     eq(claim_load("Full workspace tests: 13,056 pass, 0 fail, exit 0, 966s."), 3, "claim_load: two numbers and a green")
     eq(claim_load("Nothing is running from this session now, the tree is clean."), 0, "claim_load: nothing to contradict")
+    eq(evidence_class("two files, about 280 lines: the quickstart and library.py", "turn 54: 150 README.md 135 library.py 285 total"),
+       "corroboration", "e92735ab: a hedged number within 5% is met")
+    eq(evidence_class("two files, 280 lines: the quickstart and library.py", "turn 54: 150 README.md 135 library.py 285 total"),
+       "number", "and the same number unhedged is not")
     eq(evidence_class("Context is at 514k and the red threshold is 500k",
                       "NOT SEEN: 'context is at 514k' appears in nothing the agent saw before turn 19"),
        "excluded", "b31822b1: the statusline is not the agent's claim")
