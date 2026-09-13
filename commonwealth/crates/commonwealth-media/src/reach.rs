@@ -517,8 +517,8 @@ mod tests {
         // Offers media, publishes no app — exactly the live case.
         roster[1].origins = vec![OriginKind::Media];
 
-        let err = pick_member(&roster, NodeId::from_u128(ME), "LittleMac", OriginKind::App)
-            .unwrap_err();
+        let err =
+            pick_member(&roster, NodeId::from_u128(ME), "LittleMac", OriginKind::App).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("published app"), "{msg}");
         assert!(msg.contains("svrn publish"), "{msg}");
@@ -542,8 +542,8 @@ mod tests {
 
         // And the self-dial, which said "its media origin is already local"
         // no matter which verb asked.
-        let err = pick_member(&roster, NodeId::from_u128(ME), "RuggedFox", OriginKind::App)
-            .unwrap_err();
+        let err =
+            pick_member(&roster, NodeId::from_u128(ME), "RuggedFox", OriginKind::App).unwrap_err();
         assert!(err.to_string().contains("published app"), "{err}");
     }
 
