@@ -515,3 +515,37 @@ fn every_row_written_through_the_introduction_path_traces_to_its_signer() {
         VouchStatus::Unknown
     );
 }
+
+/// **The demo's line, pinned.** *Ask why Alex is in this ring and get a name,
+/// an op id and a date.* The sentence is composed HERE and not by the
+/// terminal, for the reason the gap sentences are: the CLI, an app's page and
+/// a 422 body must say the same words about the same row (ARCH §10.6). So the
+/// shape of that sentence is this crate's to keep.
+#[test]
+fn a_traced_row_renders_as_a_name_an_op_and_a_date() {
+    let dee = actor_of(&key(4));
+    let intro = introduce(&key(1), 1_788_048_000, 0, "dee", &dee, "sold me the drill");
+    let mut roster = founder();
+    roster.bind_key(
+        p("dee"),
+        dee.clone(),
+        Some(Vouch {
+            op: intro.id.clone(),
+            by: actor_of(&key(1)),
+            at: 1_788_048_000,
+        }),
+    );
+    let a = admit(&[intro.clone()], &[], &roster, NS, &Ed25519Verifier);
+    assert_eq!(
+        trace(&roster, &a.ops, &p("dee"), &dee).to_string(),
+        format!(
+            "introduced by alex, op {}, 2026-08-30 00:00 — sold me the drill",
+            short_id(intro.id.as_str())
+        )
+    );
+    // And the row nobody vouched for says so in words, not by being absent.
+    assert_eq!(
+        trace(&roster, &a.ops, &p("alex"), &actor_of(&key(1))).to_string(),
+        "warrant unknown — added before anyone had to say why"
+    );
+}
