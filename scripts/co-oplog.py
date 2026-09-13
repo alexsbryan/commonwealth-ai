@@ -3874,6 +3874,47 @@ class Investigation:
             return f"{nd!r}: {len(files)} file(s) at {self.sha[:10]}" + ("\n" + "\n".join(files[:8]) if files else "")
         return f"unknown tool {name}"
 
+# The record can only CONTRADICT a claim in three shapes, and code names
+# which one a finding is -- the model does not get to say "this is a
+# finding" (c01789ff 5th launch: two findings, both tool lines confirming
+# the claim; d6c0c747: two, both 'FOUND in the PATCH'). Anything else the
+# model submits is a corroboration and is dropped as one.
+RX_ABSENT = re.compile(r"\b(?:NOT SEEN|NOT FOUND|REFUSED)\b")
+RX_CONFIRM = re.compile(r"(?:^|: )FOUND in\b", re.M)
+RX_RED = re.compile(r"\bFAILED\b|\bfail(?:ed|ures?)?:?\s+[1-9]\d*|\b[1-9]\d*\s+(?:failed|failures?)\b"
+                    r"|panicked at|error\[E\d+\]", re.I)
+RX_BIGNUM = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w.])")
+
+def _claim_numbers(text: str) -> set[str]:
+    """Numbers of three or more digits in a claim, commas stripped. Two-digit
+    numbers are in every output and prove nothing either way."""
+    out = set()
+    for m in RX_BIGNUM.finditer(text):
+        n = m.group().replace(",", "")
+        if len(n.replace(".", "")) >= 3:
+            out.add(n)
+    return out
+
+def evidence_class(claim: str, evidence: str) -> str:
+    """absent | red | number | corroboration -- the shape in which the tool
+    line contradicts the claim, or none. Order matters: a FOUND line cannot
+    contradict, an absence line always does, a red test line does unless
+    the claim itself owns the red, and a number line does only when a
+    number the claim states is nowhere in it."""
+    if RX_ABSENT.search(evidence):
+        return "absent"
+    lines = [l for l in evidence.splitlines() if l.strip()]
+    if lines and all(RX_CONFIRM.search(l) for l in lines):
+        return "corroboration"
+    if RX_RED.search(evidence) and not RX_RED.search(claim):
+        return "red"
+    nums = _claim_numbers(claim)
+    ev_nums = _claim_numbers(evidence)
+    if nums and any(n not in ev_nums for n in nums):
+        return "number"
+    return "corroboration"
+
+
 def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | None,
                 pin: str, timeout: float, budget: int = 8, start: str | None = None,
                 leads: list[dict] | None = None) -> dict:
@@ -3978,7 +4019,7 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
     # VALIDATION IN CODE. A finding stands only if the claim is verbatim in
     # the report and the evidence line is verbatim in a tool result of this
     # investigation. Anything else was not read off the record.
-    findings, dropped = [], []
+    findings, dropped, corroborations = [], [], []
     results = [e["result"] for e in inv.log]
     if raw_findings is None:
         last = next((e["result"] for e in reversed(inv.log) if e["tool"].startswith("(forced")), "")
@@ -4002,12 +4043,18 @@ def investigate(path: Path, turn: int, report: str, sha: str | None, t1: str | N
         # A number or identifier not seen is not weak.
         weak = bool(re.search(r"NOT SEEN: '[^']*'", ev)) and not re.search(
             r"NOT SEEN: '(?:[\d.,]+|" + IDENT_SHAPE.pattern + r")'", ev)
-        (findings if ok_claim and ok_ev else dropped).append(
-            {**f, "claim_verbatim": ok_claim, "evidence_verbatim": ok_ev, "weak": weak})
+        cls = evidence_class(claim, ev) if ok_claim and ok_ev else None
+        rec = {**f, "claim_verbatim": ok_claim, "evidence_verbatim": ok_ev, "weak": weak, "class": cls}
+        if cls is None:
+            dropped.append(rec)
+        elif cls == "corroboration":
+            corroborations.append(rec)
+        else:
+            findings.append(rec)
     findings.sort(key=lambda f: f["weak"])
     return {"turn": turn, "calls": calls, "seconds": round(time.time() - t0, 1),
-            "findings": findings, "dropped": dropped, "log": inv.log,
-            "submitted": raw_findings is not None}
+            "findings": findings, "dropped": dropped, "corroborations": corroborations,
+            "log": inv.log, "submitted": raw_findings is not None}
 
 def cmd_investigate(a) -> int:
     path = resolve(a.project, a.session)
@@ -4030,15 +4077,18 @@ def cmd_investigate(a) -> int:
     if "error" in r:
         print(f"could-not-judge: {r['error']}"); return 3
     print(f"session {path.stem[:8]} · turn {turn} · {r['leads']} lead(s) · {r['calls']} tool call(s) · {r['seconds']}s · "
-          f"{len(r['findings'])} finding(s) · {len(r['dropped'])} dropped (not verbatim)"
+          f"{len(r['findings'])} finding(s) · {len(r['corroborations'])} corroboration(s) submitted as findings · "
+          f"{len(r['dropped'])} dropped (not verbatim)"
           + ("" if r["submitted"] else " · NO VERDICT SUBMITTED"))
     for f in r["findings"]:
-        print(f"\n  {'weak ' if f.get('weak') else ''}claim:    \"{' '.join(f['claim'].split())[:140]}\"")
+        print(f"\n  {'weak ' if f.get('weak') else ''}{f['class']} claim:    \"{' '.join(f['claim'].split())[:140]}\"")
         print(f"  evidence: [{f['tool']}] {' '.join(f['evidence'].split())[:160]}")
         print(f"  why:      {f['why'][:160]}")
     if a.verbose:
         for e in r["log"]:
             print(f"\n  > {e['tool']}({json.dumps(e['args'])[:80]})\n    " + e["result"][:400].replace("\n", "\n    "))
+        for f in r["corroborations"]:
+            print(f"\n  corroboration: {f.get('claim','')[:80]} | {f.get('evidence','')[:80]}")
         for f in r["dropped"]:
             print(f"\n  dropped: claim_verbatim={f['claim_verbatim']} evidence_verbatim={f['evidence_verbatim']} "
                   f"| {f.get('claim','')[:80]} | {f.get('evidence','')[:80]}")
@@ -4080,18 +4130,21 @@ def cmd_investigate_all(a) -> int:
         n_strong = sum(1 for x in r["findings"] if not x.get("weak"))
         n_weak = sum(1 for x in r["findings"] if x.get("weak"))
         print(f"  {i:>2}/{len(files)} {f.stem[:8]}  turn {turn:>3}  leads={r['leads']}  calls={r['calls']}  "
-              f"{r['seconds']:>6.1f}s  findings={n_strong}+{n_weak}w  dropped={len(r['dropped'])}"
+              f"{r['seconds']:>6.1f}s  findings={n_strong}+{n_weak}w  "
+              f"corroborations={len(r['corroborations'])}  dropped={len(r['dropped'])}"
               + ("" if r["submitted"] else "  NO VERDICT"), flush=True)
         summary.append({"session": f.stem, "turn": turn, "leads": r["leads"], "calls": r["calls"],
                         "seconds": r["seconds"], "strong": n_strong, "weak": n_weak,
-                        "dropped": len(r["dropped"]), "submitted": r["submitted"],
-                        "findings": r["findings"]})
+                        "corroborations": len(r["corroborations"]), "dropped": len(r["dropped"]),
+                        "submitted": r["submitted"], "findings": r["findings"]})
     if a.out:
         Path(a.out).write_text(json.dumps(summary, indent=1))
         print(f"written {a.out}")
     tot = sum(x.get("strong", 0) for x in summary)
     print(f"\ninvestigate-all — {len(summary)} report(s) · {tot} strong finding(s) · "
-          f"{sum(x.get('weak', 0) for x in summary)} weak · {sum(1 for x in summary if 'error' in x)} could-not-judge")
+          f"{sum(x.get('weak', 0) for x in summary)} weak · "
+          f"{sum(x.get('corroborations', 0) for x in summary)} corroboration(s) submitted as findings · "
+          f"{sum(1 for x in summary if 'error' in x)} could-not-judge")
     return 0
 
 # ---- the card: what the operator sees at session end --------------------
@@ -4651,6 +4704,35 @@ def cmd_self_test(_a) -> int:
     eq(integrity(0, 0), None, "no decided commitment is never-ran, not zero")
     eq(integrity(1, 1), 0.0, "one held one broken is level")
     eq(round(integrity(17, 2), 2), 0.68, "the prior k=3 keeps a short session off the rails")
+    # evidence_class, each arm with the run that minted it.
+    eq(evidence_class("full sweep is 13,258 pass, 0 fail",
+                      "turn 22: pass: 13233 fail: 4"), "red", "1c5bd750 t51: red run under a green claim")
+    eq(evidence_class("the tree is clean, and the frame is banked as completed.",
+                      "turn 22: 24169-test result: FAILED. 399 passed; 3 failed; 9 ignored"),
+       "red", "1c5bd750 t52: red run, claim owns no red")
+    eq(evidence_class("that lane ran 399 passed; 3 failed as expected",
+                      "turn 22: 24169-test result: FAILED. 399 passed; 3 failed; 9 ignored"),
+       "corroboration", "a claim that owns its red is confirmed by the red line")
+    eq(evidence_class("It came out of 63 chunks in 1,491 seconds",
+                      "turn 13: charter draft exit=0 wall_secs=1491"),
+       "corroboration", "c01789ff: the number is in the line")
+    eq(evidence_class("That produced 197 candidates: 175 rules, 17 records and 5 questions.",
+                      "turn 13: 1789319124.json | chunks 63 | candidates 197 {'rule': 175, 'record': 17, 'question': 5}"),
+       "corroboration", "c01789ff: every stated number is in the line; extra numbers do not contradict")
+    eq(evidence_class("13,258 pass, 0 fail", "turn 22: pass: 13233 fail: 0"), "number",
+       "a stated number absent from the line")
+    eq(evidence_class("capped the NER seam with MAX_CHUNK_CHARS",
+                      "'MAX_CHUNK_CHARS': FOUND in the PATCH (code) of 0fc59d295 2c34e96b0"),
+       "corroboration", "d6c0c747: FOUND cannot contradict")
+    eq(evidence_class("landed 300 lines in 2c34e96b0",
+                      "'2c34e96b0': FOUND in the commit MESSAGE of 2c34e96b0"),
+       "corroboration", "FOUND cannot contradict even with a number it does not carry")
+    eq(evidence_class("NIP-42 relay auth exists", "NOT SEEN: 'nip-42' appears in nothing the agent saw before turn 2"),
+       "absent", "85b2bda8: absence")
+    eq(evidence_class("renamed it house", "NOT FOUND in MESSAGE or PATCH for needle 'rename.*house'"),
+       "absent", "9d7835fc: grep_landed absence")
+    eq(evidence_class("four uncommitted lib.rs lines of mine", "turn 18: +pub mod assets_http;"),
+       "corroboration", "b31822b1: no number, no red, no absence")
     for f in fails:
         print("FAIL", f)
     print(f"co-oplog self-test: {len(fails)} failure(s)")
